@@ -109,8 +109,7 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
-    k.key_encrypted AS api_key_encrypted,
-    k.key_org_encrypted AS api_key_org_encrypted
+    k.key_encrypted AS api_key_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
 WHERE om.disabled_at IS NULL
@@ -1279,13 +1278,6 @@ WHERE candidates.indexed IS NULL
             AND definitions.deployment_id = candidates.deployment_id
             AND definitions.deleted IS FALSE
       )
-  )
-  -- An external MCP URN resolves to no tool definition, so a version that still
-  -- selects one has tools the index could never cover.
-  AND NOT EXISTS (
-      SELECT 1
-      FROM unnest(candidates.tool_urns) selected(tool_urn)
-      WHERE selected.tool_urn LIKE 'tools:externalmcp:%'
   )
 -- Rotate the bounded scan each tick so already-running permanent-failure
 -- workflows cannot remain at the front and starve the rest of the backlog.

@@ -30,9 +30,7 @@ import { StatusDot, type StatusDotTone } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { isKnownEnumValue } from "@/lib/enum";
 import { mapWithConcurrency } from "@/lib/bounded-concurrency";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
@@ -242,6 +240,32 @@ function SettingsLink({
   );
 }
 
+// Validate without rewriting: RFC 8707 resource identifiers are exact.
+function isCanonicalResource(resource: string): boolean {
+  if (
+    !/^https?:\/\//i.test(resource) ||
+    // oxlint-disable-next-line no-control-regex -- Resource identifiers must reject control characters.
+    /[?#\s\\\u0000-\u001f\u007f]/.test(resource) ||
+    /%(?![0-9a-f]{2})/i.test(resource)
+  )
+    return false;
+  try {
+    const url = new URL(resource);
+    const authority = resource.split("/")[2] ?? "";
+    if (!url.hostname || !authority || /[@%]/.test(authority)) return false;
+    if (url.protocol === "https:") return true;
+    return (
+      /^localhost(?::\d*)?$/.test(authority) ||
+      url.hostname === "[::1]" ||
+      /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/.test(url.hostname) ||
+      (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d+)?$/.test(authority) &&
+        authority.split(":")[0] === url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** How many stale-binding reads run at once. */
 const MAX_CONCURRENT_STALE_READS = 3;
 
@@ -261,7 +285,7 @@ export function IdentityChainingField({
   /** Speakeasy's issuer URL, which vendors trust for Speakeasy-signed grants. */
   speakeasyIssuerUrl?: string;
   linkedClients: RemoteSessionClient[];
-  /** The remote MCP server URL; the executor matches it exactly. */
+  /** The remote MCP endpoint URL, used only if no canonical resource is advertised. */
   resource: string;
   /** Reuses the server's protected resource metadata probe for advertised scopes. */
   remoteMcpServerId?: string;
@@ -281,6 +305,11 @@ export function IdentityChainingField({
     remoteMcpServerId,
     remoteMcpServerId !== undefined,
   );
+  const resolvingResource =
+    prm.status === "loading" || (!!remoteMcpServerId && prm.status === "idle");
+  const resolvedResource = prm.metadata?.resource ?? resource;
+  const validResource = isCanonicalResource(resolvedResource);
+  const resourceReady = !resolvingResource && validResource;
   // One sign-in can serve many services; offer only clients of this one.
   const clientIssuers = useRemoteSessionIssuersByIds([
     ...new Set(linkable.map((client) => client.remoteSessionIssuerId)),
@@ -290,7 +319,7 @@ export function IdentityChainingField({
   const authorizationServers = prm.metadata?.authorizationServers;
   // Offer nothing until every client's authorization server is known.
   const resolvingClients =
-    prm.status === "loading" ||
+    resolvingResource ||
     (!!authorizationServers?.length && clientIssuers.isLoading);
   const candidates = resolvingClients
     ? []
@@ -324,11 +353,14 @@ export function IdentityChainingField({
   const picked =
     candidates.find((client) => client.id === selectedId) ?? candidates[0];
 
-  const target = picked && {
-    userSessionIssuerId: userSessionIssuer.id,
-    remoteSessionIssuerId: picked.remoteSessionIssuerId,
-    resource,
-  };
+  const target =
+    picked && resourceReady
+      ? {
+          userSessionIssuerId: userSessionIssuer.id,
+          remoteSessionIssuerId: picked.remoteSessionIssuerId,
+          resource: resolvedResource,
+        }
+      : undefined;
 
   const queryClient = useQueryClient();
   const readKey = ["identityChaining", "readEMA", gramProject, target];
@@ -336,6 +368,7 @@ export function IdentityChainingField({
     queryKey: readKey,
     enabled: target != null,
     retry: false,
+    throwOnError: false,
     queryFn: ({ signal }) => {
       if (!target) throw new Error("No client selected");
       return buildRemoteSessionClientsReadEMAMutation(core).mutationFn({
@@ -347,11 +380,13 @@ export function IdentityChainingField({
   const knownState =
     read.data != null &&
     isKnownEnumValue(IdentityChainingPreparationState, read.data.state);
-  const staleTargets = staleIssuerIds.map((remoteSessionIssuerId) => ({
-    userSessionIssuerId: userSessionIssuer.id,
-    remoteSessionIssuerId,
-    resource,
-  }));
+  const staleTargets = (resourceReady ? staleIssuerIds : []).map(
+    (remoteSessionIssuerId) => ({
+      userSessionIssuerId: userSessionIssuer.id,
+      remoteSessionIssuerId,
+      resource: resolvedResource,
+    }),
+  );
   // One read per issuer that could still hold a binding, a few at a time, so
   // a sign-in with many linked issuers doesn't fire them all at once.
   const staleReads = useQuery({
@@ -361,11 +396,12 @@ export function IdentityChainingField({
       gramProject,
       "stale",
       userSessionIssuer.id,
-      resource,
+      resolvedResource,
       staleIssuerIds,
     ],
     enabled: staleTargets.length > 0,
     retry: false,
+    throwOnError: false,
     queryFn: ({ signal }) =>
       mapWithConcurrency(
         staleTargets,
@@ -526,7 +562,6 @@ export function IdentityChainingField({
   const orgAdmin = hasScope("org:admin", organization.id);
   // Organization-wide acceptance is withheld from people who can't read the organization.
   const acceptanceKnown = orgAdmin || hasScope("org:read", organization.id);
-  const oktaView = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const vendor = serviceName(vendorIssuer.data?.name, resource);
   const signIn = {
     name: trustedIssuerId
@@ -536,7 +571,6 @@ export function IdentityChainingField({
   };
   const oktaLookup =
     orgAdmin &&
-    oktaView.status === "enabled" &&
     listed.some(
       (provider) =>
         provider.kind === "external" && !!provider.remoteSessionIssuerId,
@@ -680,6 +714,20 @@ export function IdentityChainingField({
   );
 
   const error = read.error ?? prepare.error ?? unlink.error;
+
+  if (!resolvingResource && !validResource) {
+    if (onlyWhenOn) return null;
+    return frame(
+      <SettingsSection.Body>
+        <Text muted small>
+          Identity chaining is unavailable for this server. Its resource
+          identifier must be an HTTPS URL (or HTTP loopback URL) without a
+          query, fragment, or user information. Ask the server administrator to
+          advertise a valid resource in its protected resource metadata.
+        </Text>
+      </SettingsSection.Body>,
+    );
+  }
 
   if (
     onlyWhenOn &&

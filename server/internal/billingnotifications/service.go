@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/email"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -31,17 +30,15 @@ type Service struct {
 	logger            *slog.Logger
 	db                *pgxpool.Pool
 	sender            Sender
-	features          feature.Provider
 	orgHosts          *orghost.Resolver
 	resolveRecipients func(context.Context, accessrepo.DBTX, string, string, *string) ([]string, error)
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, features feature.Provider, orgHosts *orghost.Resolver) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, orgHosts *orghost.Resolver) *Service {
 	return &Service{
 		logger:            logger.With(attr.SlogComponent("billing-notifications")),
 		db:                db,
 		sender:            sender,
-		features:          features,
 		orgHosts:          orgHosts,
 		resolveRecipients: ResolveRecipients,
 	}
@@ -165,16 +162,6 @@ func (s *Service) SendAccessPaused(ctx context.Context, input SendAccessPausedIn
 		}
 		if trialErr != nil {
 			return fmt.Errorf("get demoted trial: %w", trialErr)
-		}
-		if s.features == nil {
-			return nil
-		}
-		enabled, flagErr := s.features.IsFlagEnabled(ctx, feature.FlagPaygSelfServeBilling, input.OrganizationID, feature.OrgProjectGroups(organization.Slug, ""))
-		if flagErr != nil || !enabled {
-			if flagErr != nil {
-				s.logger.WarnContext(ctx, "evaluate PAYG email rollout", attr.SlogOrganizationID(input.OrganizationID), attr.SlogError(flagErr))
-			}
-			return nil
 		}
 	}
 

@@ -37,10 +37,10 @@ export function AttachedUserSessionsPanel(
   return (
     <Stack gap={3} className="rounded-lg border p-4">
       <Stack gap={1}>
-        <Text variant="subheading">Attached user sessions</Text>
+        <Text variant="subheading">Your accounts for agents</Text>
         <Text small muted>
-          Connect your upstream account, then choose which agents can use it on
-          this MCP server. Agent credential policies are managed separately.
+          Connect your account on this server, then pick which of your agents
+          can use it.
         </Text>
       </Stack>
       <Stack direction="horizontal" gap={2}>
@@ -61,10 +61,6 @@ export function AttachedUserSessionsPanel(
           Refresh accounts
         </Button>
       </Stack>
-      <Text small muted>
-        After connecting in the new tab, refresh accounts here. Only your own
-        upstream sessions are available.
-      </Text>
       {props.isLoading ? (
         <Text role="status">Loading accounts and agents…</Text>
       ) : props.isError ? (
@@ -75,7 +71,7 @@ export function AttachedUserSessionsPanel(
       ) : props.sessions.length === 0 ? (
         <Text small muted>
           {props.emptyMessage ??
-            "No upstream accounts connected for this server yet."}
+            "No upstream accounts connected for this server yet. Select Connect account to add one."}
         </Text>
       ) : (
         <>
@@ -116,12 +112,8 @@ export function AttachedUserSessionsPanel(
         </>
       )}
       <Text small muted>
-        To replace an account for the same upstream client, detach the old
-        account first. Reconnecting an account also requires detaching and
-        reattaching its agents to authorize the new grant. Detaching removes an
-        agent's access through this binding; it does not revoke the shared
-        upstream session. Revoking that session stops access for every agent
-        using it. Other credentials or bindings may still grant access.
+        After you connect in the new tab, select Refresh accounts. Unchecking an
+        agent stops it using this account; it does not sign the account out.
       </Text>
     </Stack>
   );

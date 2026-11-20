@@ -76,13 +76,6 @@ function RedeployDetails({
           "packages carry over",
         )}
       </li>
-      <li>
-        {countedLine(
-          preview.external_mcps,
-          "external MCP source is dropped",
-          "external MCP sources are dropped",
-        )}
-      </li>
       <li>The customer sees this in their deployments and audit log</li>
     </ul>
   );

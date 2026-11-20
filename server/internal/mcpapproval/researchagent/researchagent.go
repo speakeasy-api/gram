@@ -558,8 +558,9 @@ func (r *Runner) executeTool(ctx context.Context, reportID uuid.UUID, call openr
 			UserConfig: nil,
 			GramEmail:  "",
 			// The report id keys the fetch tool's per-run budget.
-			GramChatID: reportID.String(),
-			MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+			GramChatID:  reportID.String(),
+			MCPClient:   toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
+			Credentials: nil,
 		}
 		if err := tool.executor.Call(ctx, env, strings.NewReader(call.Function.Arguments), &out); err != nil {
 			return fmt.Sprintf("tool error: %s", err.Error()), false

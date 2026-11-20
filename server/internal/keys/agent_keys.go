@@ -129,7 +129,7 @@ func (s *Service) listAgentKeys(ctx context.Context, agentIDRaw string) (*gen.Li
 		}
 		keys = append(keys, key)
 	}
-	return &gen.ListKeysResult{Keys: keys}, nil
+	return &gen.ListKeysResult{Keys: keys, NextCursor: nil}, nil
 }
 
 func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) (*gen.Key, error) {

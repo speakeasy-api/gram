@@ -41,6 +41,10 @@ type Client struct {
 	// listRootMcpServers endpoint.
 	ListRootMcpServersDoer goahttp.Doer
 
+	// ReconcileDomain Doer is the HTTP client used to make requests to the
+	// reconcileDomain endpoint.
+	ReconcileDomainDoer goahttp.Doer
+
 	// CheckHealth Doer is the HTTP client used to make requests to the checkHealth
 	// endpoint.
 	CheckHealthDoer goahttp.Doer
@@ -79,6 +83,7 @@ func NewClient(
 		UpdateDomainDoer:       doer,
 		SetRootMcpEndpointDoer: doer,
 		ListRootMcpServersDoer: doer,
+		ReconcileDomainDoer:    doer,
 		CheckHealthDoer:        doer,
 		DeleteDomainDoer:       doer,
 		ListMcpEndpointsDoer:   doer,
@@ -229,6 +234,30 @@ func (c *Client) ListRootMcpServers() goa.Endpoint {
 		resp, err := c.ListRootMcpServersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "listRootMcpServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReconcileDomain returns an endpoint that makes HTTP requests to the domains
+// service reconcileDomain server.
+func (c *Client) ReconcileDomain() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReconcileDomainRequest(c.encoder)
+		decodeResponse = DecodeReconcileDomainResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReconcileDomainRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReconcileDomainDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "reconcileDomain", err)
 		}
 		return decodeResponse(resp)
 	}

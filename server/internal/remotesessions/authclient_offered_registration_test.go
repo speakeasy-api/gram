@@ -342,7 +342,7 @@ func TestRefreshAuthClientRemoteSession_RefreshesWithoutASignInLink(t *testing.T
 
 	stored, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: registration})
 	require.NoError(t, err)
-	plain, err := testenv.NewEncryptionClient(t).Decrypt(stored.AccessTokenEncrypted)
+	plain, err := testenv.NewEncryptionClient(t).Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err)
 	require.Equal(t, "offered-refreshed-access", plain, "the rotated token is persisted on the grant")
 

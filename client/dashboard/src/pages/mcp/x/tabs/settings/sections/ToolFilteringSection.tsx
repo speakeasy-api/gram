@@ -121,7 +121,7 @@ export function ToolFilteringSection({
   return (
     <SettingsSection>
       <SettingsSection.Header>
-        <SettingsSection.Title>Tool Filtering</SettingsSection.Title>
+        <SettingsSection.Title>Tool filtering</SettingsSection.Title>
         <SettingsSection.Description>
           Filter the tools exposed by this server based on their tags. All tools
           are returned by default unless filtering is enabled and a `tags` query

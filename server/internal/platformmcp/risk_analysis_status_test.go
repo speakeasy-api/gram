@@ -148,13 +148,15 @@ func TestRiskAnalysisStatusToolServesLiveAndRefusals(t *testing.T) {
 	finishedAt := riskAnalysisTestNow.Add(-90 * time.Second)
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateIdle, RunningSince: nil, LastRunStartedAt: &finishedAt, LastRunAt: &finishedAt, LastRunOutcome: "completed"}, err: nil, projectID: uuid.Nil, calls: 0}
 	service := testRiskAnalysisStatusService(t, project, describer)
-	// The live call and the unavailable-describer call each resolve the project; the
-	// schema violation between them is rejected before resolution.
-	resolution := riskProjectCall{organizationID: "<ORG_ID>", projectID: "", projectSlug: "project"}
+	// The live call and the unavailable-describer call each resolve the project
+	// by the ID its slug names; the schema violation between them is rejected
+	// before resolution.
+	resolution := riskProjectCall{organizationID: "<ORG_ID>", projectID: project.ID.String(), projectSlug: ""}
 	service.projects = &stubRiskProjects{project: project, expected: []riskProjectCall{resolution, resolution}, calls: nil, err: nil}
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-analysis-status-test", Version: "0.0.1"}, nil)
 	reg := newRegistrar(server)
+	reg.withProjects(slugProjects{"project": project.ID})
 	registerRiskAnalysisStatusTool(reg, service)
 	descriptor := descriptorByName(t, reg, "get_risk_analysis_status")
 	require.True(t, descriptor.Annotations.ReadOnlyHint)
@@ -237,9 +239,11 @@ func TestRiskAnalysisStatusToolLiveWhenPolicyReadsUnavailable(t *testing.T) {
 	startedAt := riskAnalysisTestNow.Add(-12 * time.Second)
 	describer := &stubAnalysisDescriber{status: analysisstatus.Status{State: analysisstatus.StateRunning, RunningSince: &startedAt, LastRunStartedAt: nil, LastRunAt: nil, LastRunOutcome: ""}, err: nil, projectID: uuid.Nil, calls: 0}
 	service := testRiskAnalysisStatusService(t, project, describer)
+	service.projects = &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectID: project.ID.String(), projectSlug: ""}}, calls: nil, err: nil}
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "risk-analysis-status-independent-test", Version: "0.0.1"}, nil)
 	reg := newRegistrar(server)
+	reg.withProjects(slugProjects{"project": project.ID})
 	require.NotPanics(t, func() { registerRiskToolsWithMutations(reg, nil, service, nil) })
 
 	descriptor := descriptorByName(t, reg, "get_risk_analysis_status")

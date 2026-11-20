@@ -687,13 +687,13 @@ func BuildGetMetaMcpServerUsagePayload(telemetryGetMetaMcpServerUsageBody string
 	return v, nil
 }
 
-// BuildGetOrganizationGatewayOverviewPayload builds the payload for the
-// telemetry getOrganizationGatewayOverview endpoint from CLI flags.
-func BuildGetOrganizationGatewayOverviewPayload(telemetryGetOrganizationGatewayOverviewBody string, telemetryGetOrganizationGatewayOverviewSessionToken string) (*telemetry.GetOrganizationGatewayOverviewPayload, error) {
+// BuildGetProjectGatewayOverviewPayload builds the payload for the telemetry
+// getProjectGatewayOverview endpoint from CLI flags.
+func BuildGetProjectGatewayOverviewPayload(telemetryGetProjectGatewayOverviewBody string, telemetryGetProjectGatewayOverviewSessionToken string, telemetryGetProjectGatewayOverviewProjectSlugInput string) (*telemetry.GetProjectGatewayOverviewPayload, error) {
 	var err error
-	var body GetOrganizationGatewayOverviewRequestBody
+	var body GetProjectGatewayOverviewRequestBody
 	{
-		err = json.Unmarshal([]byte(telemetryGetOrganizationGatewayOverviewBody), &body)
+		err = json.Unmarshal([]byte(telemetryGetProjectGatewayOverviewBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
 		}
@@ -705,26 +705,33 @@ func BuildGetOrganizationGatewayOverviewPayload(telemetryGetOrganizationGatewayO
 	}
 	var sessionToken *string
 	{
-		if telemetryGetOrganizationGatewayOverviewSessionToken != "" {
-			sessionToken = &telemetryGetOrganizationGatewayOverviewSessionToken
+		if telemetryGetProjectGatewayOverviewSessionToken != "" {
+			sessionToken = &telemetryGetProjectGatewayOverviewSessionToken
 		}
 	}
-	v := &telemetry.GetOrganizationGatewayOverviewPayload{
+	var projectSlugInput *string
+	{
+		if telemetryGetProjectGatewayOverviewProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetProjectGatewayOverviewProjectSlugInput
+		}
+	}
+	v := &telemetry.GetProjectGatewayOverviewPayload{
 		From: body.From,
 		To:   body.To,
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
-// BuildGetOrganizationGatewayUsagePayload builds the payload for the telemetry
-// getOrganizationGatewayUsage endpoint from CLI flags.
-func BuildGetOrganizationGatewayUsagePayload(telemetryGetOrganizationGatewayUsageBody string, telemetryGetOrganizationGatewayUsageSessionToken string) (*telemetry.GetOrganizationGatewayUsagePayload, error) {
+// BuildGetProjectGatewayUsagePayload builds the payload for the telemetry
+// getProjectGatewayUsage endpoint from CLI flags.
+func BuildGetProjectGatewayUsagePayload(telemetryGetProjectGatewayUsageBody string, telemetryGetProjectGatewayUsageSessionToken string, telemetryGetProjectGatewayUsageProjectSlugInput string) (*telemetry.GetProjectGatewayUsagePayload, error) {
 	var err error
-	var body GetOrganizationGatewayUsageRequestBody
+	var body GetProjectGatewayUsageRequestBody
 	{
-		err = json.Unmarshal([]byte(telemetryGetOrganizationGatewayUsageBody), &body)
+		err = json.Unmarshal([]byte(telemetryGetProjectGatewayUsageBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
 		}
@@ -736,15 +743,22 @@ func BuildGetOrganizationGatewayUsagePayload(telemetryGetOrganizationGatewayUsag
 	}
 	var sessionToken *string
 	{
-		if telemetryGetOrganizationGatewayUsageSessionToken != "" {
-			sessionToken = &telemetryGetOrganizationGatewayUsageSessionToken
+		if telemetryGetProjectGatewayUsageSessionToken != "" {
+			sessionToken = &telemetryGetProjectGatewayUsageSessionToken
 		}
 	}
-	v := &telemetry.GetOrganizationGatewayUsagePayload{
+	var projectSlugInput *string
+	{
+		if telemetryGetProjectGatewayUsageProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetProjectGatewayUsageProjectSlugInput
+		}
+	}
+	v := &telemetry.GetProjectGatewayUsagePayload{
 		From: body.From,
 		To:   body.To,
 	}
 	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

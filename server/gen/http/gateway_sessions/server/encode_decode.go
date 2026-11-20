@@ -40,6 +40,7 @@ func DecodeListGatewaySessionsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		var payload *gatewaysessions.ListGatewaySessionsPayload
 		var (
 			gatewayID     *string
+			projectID     *string
 			search        *string
 			serverID      *string
 			providerID    *string
@@ -60,6 +61,13 @@ func DecodeListGatewaySessionsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		}
 		if gatewayID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("gateway_id", *gatewayID, goa.FormatUUID))
+		}
+		projectIDRaw := qp.Get("project_id")
+		if projectIDRaw != "" {
+			projectID = &projectIDRaw
+		}
+		if projectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
 		}
 		searchRaw := qp.Get("search")
 		if searchRaw != "" {
@@ -149,7 +157,7 @@ func DecodeListGatewaySessionsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListGatewaySessionsPayload(gatewayID, search, serverID, providerID, status, createdAfter, createdBefore, sort, cursor, limit, sessionToken, apikeyToken)
+		payload = NewListGatewaySessionsPayload(gatewayID, projectID, search, serverID, providerID, status, createdAfter, createdBefore, sort, cursor, limit, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -344,16 +352,25 @@ func DecodeListGatewaySessionFacetsRequest(mux goahttp.Muxer, decoder func(*http
 		var payload *gatewaysessions.ListGatewaySessionFacetsPayload
 		var (
 			gatewayID    *string
+			projectID    *string
 			sessionToken *string
 			apikeyToken  *string
 			err          error
 		)
-		gatewayIDRaw := r.URL.Query().Get("gateway_id")
+		qp := r.URL.Query()
+		gatewayIDRaw := qp.Get("gateway_id")
 		if gatewayIDRaw != "" {
 			gatewayID = &gatewayIDRaw
 		}
 		if gatewayID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("gateway_id", *gatewayID, goa.FormatUUID))
+		}
+		projectIDRaw := qp.Get("project_id")
+		if projectIDRaw != "" {
+			projectID = &projectIDRaw
+		}
+		if projectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -366,7 +383,7 @@ func DecodeListGatewaySessionFacetsRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListGatewaySessionFacetsPayload(gatewayID, sessionToken, apikeyToken)
+		payload = NewListGatewaySessionFacetsPayload(gatewayID, projectID, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

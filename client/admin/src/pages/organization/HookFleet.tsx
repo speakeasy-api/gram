@@ -207,7 +207,7 @@ export function HookFleetView({
             <ul className="divide-y rounded-lg border text-sm">
               {data.versions.map((v) => (
                 <li
-                  key={v.version}
+                  key={`${v.version}/${v.status}`}
                   className="flex items-center justify-between gap-2 px-3 py-2"
                 >
                   <span className="flex items-center gap-2">

@@ -1,15 +1,17 @@
-package oops
+package oops_test
 
 import (
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,13 +19,13 @@ func TestMCPErrHandle_IncludesMCPID(t *testing.T) {
 	t.Parallel()
 	logger, logBuf := captureLogger()
 
-	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		rpcCtx, ok := contextvalues.GetRPCContext(r.Context())
 		if !ok {
-			return E(CodeUnexpected, nil, "unexpected error")
+			return oops.E(oops.CodeUnexpected, nil, "unexpected error")
 		}
 		rpcCtx.ID = mcpjsonrpc.StringID("req-1")
-		return E(CodeUnauthorized, nil, "unauthorized")
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/test", nil)
@@ -47,8 +49,8 @@ func TestMCPErrHandle_UsesNullMCPIDWhenMissing(t *testing.T) {
 	t.Parallel()
 	logger, logBuf := captureLogger()
 
-	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
-		return E(CodeUnauthorized, nil, "unauthorized")
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/test", nil)
@@ -69,9 +71,9 @@ func TestMCPErrHandle_UsesNullMCPIDWhenMissing(t *testing.T) {
 func TestMCPError_MarshalJSON(t *testing.T) {
 	t.Parallel()
 
-	err := &MCPError{
+	err := &oops.MCPError{
 		ID:      mcpjsonrpc.NumberID(1),
-		Code:    MCPCodeMethodNotFound,
+		Code:    oops.MCPCodeMethodNotFound,
 		Message: "tools/unknown: Method not found",
 		Data:    nil,
 	}
@@ -91,8 +93,8 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 	require.Equal(t, "tools/unknown: Method not found", errorBody["message"])
 	require.NotContains(t, errorBody, "data")
 
-	err.Data = &MCPErrorData{
-		Code:      MCPErrorDataCode("typed_code"),
+	err.Data = &oops.MCPErrorData{
+		Code:      oops.MCPErrorDataCode("typed_code"),
 		Supported: nil,
 		Requested: "",
 	}
@@ -120,7 +122,7 @@ func TestMCPError_MarshalJSONFor_ID(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := &MCPError{ID: tc.id, Code: MCPCodeInvalidParams}
+			err := &oops.MCPError{ID: tc.id, Code: oops.MCPCodeInvalidParams}
 			bs, marshalErr := err.MarshalJSONFor(tc.revision)
 			require.NoError(t, marshalErr)
 			var response struct {
@@ -137,20 +139,20 @@ func TestCodeMCPCode(t *testing.T) {
 
 	tests := []struct {
 		name string
-		code Code
-		want MCPCode
+		code oops.Code
+		want oops.MCPCode
 	}{
-		{"unauthorized_uses_server_defined_code", CodeUnauthorized, MCPCodeUnauthorized},
-		{"forbidden_uses_server_defined_code", CodeForbidden, MCPCodeForbidden},
-		{"bad_request_is_invalid_request", CodeBadRequest, MCPCodeInvalidRequest},
-		{"parse_error_is_parse_error", CodeParseError, MCPCodeParseError},
-		{"conflict_is_invalid_request", CodeConflict, MCPCodeInvalidRequest},
-		{"unsupported_media_is_invalid_request", CodeUnsupportedMedia, MCPCodeInvalidRequest},
-		{"method_not_allowed_is_server_error", CodeMethodNotAllowed, MCPCodeServerError},
-		{"not_found_is_resource_not_found", CodeNotFound, MCPCodeResourceNotFound},
-		{"invalid_is_invalid_params", CodeInvalid, MCPCodeInvalidParams},
-		{"not_implemented_is_method_not_found", CodeNotImplemented, MCPCodeMethodNotFound},
-		{"unexpected_defaults_to_internal", CodeUnexpected, MCPCodeInternalError},
+		{"unauthorized_uses_server_defined_code", oops.CodeUnauthorized, oops.MCPCodeUnauthorized},
+		{"forbidden_uses_server_defined_code", oops.CodeForbidden, oops.MCPCodeForbidden},
+		{"bad_request_is_invalid_request", oops.CodeBadRequest, oops.MCPCodeInvalidRequest},
+		{"parse_error_is_parse_error", oops.CodeParseError, oops.MCPCodeParseError},
+		{"conflict_is_invalid_request", oops.CodeConflict, oops.MCPCodeInvalidRequest},
+		{"unsupported_media_is_invalid_request", oops.CodeUnsupportedMedia, oops.MCPCodeInvalidRequest},
+		{"method_not_allowed_is_server_error", oops.CodeMethodNotAllowed, oops.MCPCodeServerError},
+		{"not_found_is_resource_not_found", oops.CodeNotFound, oops.MCPCodeResourceNotFound},
+		{"invalid_is_invalid_params", oops.CodeInvalid, oops.MCPCodeInvalidParams},
+		{"not_implemented_is_method_not_found", oops.CodeNotImplemented, oops.MCPCodeMethodNotFound},
+		{"unexpected_defaults_to_internal", oops.CodeUnexpected, oops.MCPCodeInternalError},
 	}
 
 	for _, tt := range tests {
@@ -164,7 +166,7 @@ func TestCodeMCPCode(t *testing.T) {
 	t.Run("auth_codes_are_in_server_defined_range", func(t *testing.T) {
 		t.Parallel()
 
-		for _, c := range []MCPCode{MCPCodeUnauthorized, MCPCodeForbidden} {
+		for _, c := range []oops.MCPCode{oops.MCPCodeUnauthorized, oops.MCPCodeForbidden} {
 			require.GreaterOrEqual(t, int(c), -32099, "server-defined codes must be >= -32099")
 			require.LessOrEqual(t, int(c), -32000, "server-defined codes must be <= -32000")
 		}
@@ -179,11 +181,11 @@ func TestNewMCPErrorFromCause(t *testing.T) {
 	t.Run("returns_existing_mcp_error", func(t *testing.T) {
 		t.Parallel()
 
-		existing := &MCPError{ID: mcpjsonrpc.ID{Number: 0, String: ""}, Code: MCPCodeMethodNotFound, Message: "missing", Data: nil}
-		err := NewMCPErrorFromCause(id, mcpversions.Version20251125, existing)
+		existing := &oops.MCPError{ID: mcpjsonrpc.ID{Number: 0, String: ""}, Code: oops.MCPCodeMethodNotFound, Message: "missing", Data: nil}
+		err := oops.NewMCPErrorFromCause(id, mcpversions.Version20251125, existing)
 
 		require.NotSame(t, existing, err, "the caller's value is adjusted on a copy")
-		require.Equal(t, MCPCodeMethodNotFound, err.Code)
+		require.Equal(t, oops.MCPCodeMethodNotFound, err.Code)
 		require.Equal(t, "missing", err.Message)
 		require.Equal(t, id, err.ID)
 		require.False(t, existing.ID.IsSet(), "the caller's value keeps the id it was built with")
@@ -192,20 +194,20 @@ func TestNewMCPErrorFromCause(t *testing.T) {
 	t.Run("maps_shareable_error_code", func(t *testing.T) {
 		t.Parallel()
 
-		err := NewMCPErrorFromCause(id, mcpversions.Version20251125, E(CodeNotFound, nil, "mcp server not found"))
+		err := oops.NewMCPErrorFromCause(id, mcpversions.Version20251125, oops.E(oops.CodeNotFound, nil, "mcp server not found"))
 
 		require.Equal(t, id, err.ID)
-		require.Equal(t, MCPCodeResourceNotFound, err.Code)
+		require.Equal(t, oops.MCPCodeResourceNotFound, err.Code)
 		require.Equal(t, "mcp server not found", err.Message)
 	})
 
 	t.Run("defaults_unknown_error_to_internal", func(t *testing.T) {
 		t.Parallel()
 
-		err := NewMCPErrorFromCause(id, mcpversions.Version20251125, errors.New("boom"))
+		err := oops.NewMCPErrorFromCause(id, mcpversions.Version20251125, errors.New("boom"))
 
 		require.Equal(t, id, err.ID)
-		require.Equal(t, MCPCodeInternalError, err.Code)
+		require.Equal(t, oops.MCPCodeInternalError, err.Code)
 		require.Equal(t, "Internal error", err.Message)
 	})
 }
@@ -224,7 +226,7 @@ func TestCodeMCPCodeFor_LegacyRevisionsKeepRetiredResourceNotFound(t *testing.T)
 		mcpversions.Version20250618,
 		mcpversions.Version20251125,
 	} {
-		require.Equal(t, MCPCodeResourceNotFound, CodeNotFound.MCPCodeFor(revision), "revision %s", revision)
+		require.Equal(t, oops.MCPCodeResourceNotFound, oops.CodeNotFound.MCPCodeFor(revision), "revision %s", revision)
 	}
 }
 
@@ -233,7 +235,7 @@ func TestCodeMCPCodeFor_LegacyRevisionsKeepRetiredResourceNotFound(t *testing.T)
 func TestCodeMCPCodeFor_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, MCPCodeInvalidParams, CodeNotFound.MCPCodeFor(mcpversions.Version20260728))
+	require.Equal(t, oops.MCPCodeInvalidParams, oops.CodeNotFound.MCPCodeFor(mcpversions.Version20260728))
 }
 
 // TestCodeMCPCodeFor_UnresolvedRevisionIsLegacy covers the error paths that
@@ -242,8 +244,8 @@ func TestCodeMCPCodeFor_ModernRevisionReplacesRetiredResourceNotFound(t *testing
 func TestCodeMCPCodeFor_UnresolvedRevisionIsLegacy(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, MCPCodeResourceNotFound, CodeNotFound.MCPCodeFor(""))
-	require.Equal(t, MCPCodeResourceNotFound, CodeNotFound.MCPCodeFor("not-a-revision"))
+	require.Equal(t, oops.MCPCodeResourceNotFound, oops.CodeNotFound.MCPCodeFor(""))
+	require.Equal(t, oops.MCPCodeResourceNotFound, oops.CodeNotFound.MCPCodeFor("not-a-revision"))
 }
 
 // TestCodeMCPCodeFor_OnlyResourceNotFoundIsRevisionConditional guards the
@@ -253,17 +255,17 @@ func TestCodeMCPCodeFor_UnresolvedRevisionIsLegacy(t *testing.T) {
 func TestCodeMCPCodeFor_OnlyResourceNotFoundIsRevisionConditional(t *testing.T) {
 	t.Parallel()
 
-	for _, code := range []Code{
-		CodeUnauthorized,
-		CodeForbidden,
-		CodeBadRequest,
-		CodeConflict,
-		CodeFailedPrecondition,
-		CodeUnsupportedMedia,
-		CodeMethodNotAllowed,
-		CodeInvalid,
-		CodeNotImplemented,
-		CodeUnexpected,
+	for _, code := range []oops.Code{
+		oops.CodeUnauthorized,
+		oops.CodeForbidden,
+		oops.CodeBadRequest,
+		oops.CodeConflict,
+		oops.CodeFailedPrecondition,
+		oops.CodeUnsupportedMedia,
+		oops.CodeMethodNotAllowed,
+		oops.CodeInvalid,
+		oops.CodeNotImplemented,
+		oops.CodeUnexpected,
 	} {
 		require.Equal(t, code.MCPCode(), code.MCPCodeFor(mcpversions.Version20260728), "code %s", code)
 	}
@@ -275,9 +277,9 @@ func TestCodeMCPCodeFor_OnlyResourceNotFoundIsRevisionConditional(t *testing.T) 
 func TestNewMCPErrorFromCause_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T) {
 	t.Parallel()
 
-	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, E(CodeNotFound, nil, "unknown tool"))
+	err := oops.NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, oops.E(oops.CodeNotFound, nil, "unknown tool"))
 
-	require.Equal(t, MCPCodeInvalidParams, err.Code)
+	require.Equal(t, oops.MCPCodeInvalidParams, err.Code)
 	require.Equal(t, "unknown tool", err.Message)
 }
 
@@ -287,10 +289,10 @@ func TestNewMCPErrorFromCause_ModernRevisionReplacesRetiredResourceNotFound(t *t
 func TestNewMCPErrorFromCause_PreservesExplicitCodeOnModernRevision(t *testing.T) {
 	t.Parallel()
 
-	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeForbidden, Message: "explicit", Data: nil}
-	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
+	existing := &oops.MCPError{ID: mcpjsonrpc.NullID(), Code: oops.MCPCodeForbidden, Message: "explicit", Data: nil}
+	err := oops.NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
 
-	require.Equal(t, MCPCodeForbidden, err.Code)
+	require.Equal(t, oops.MCPCodeForbidden, err.Code)
 }
 
 // TestNewMCPErrorFromCause_DoesNotMutateTheCallersError covers the lifetime
@@ -301,14 +303,14 @@ func TestNewMCPErrorFromCause_PreservesExplicitCodeOnModernRevision(t *testing.T
 func TestNewMCPErrorFromCause_DoesNotMutateTheCallersError(t *testing.T) {
 	t.Parallel()
 
-	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeResourceNotFound, Message: "explicit", Data: nil}
+	existing := &oops.MCPError{ID: mcpjsonrpc.NullID(), Code: oops.MCPCodeResourceNotFound, Message: "explicit", Data: nil}
 
-	modern := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
-	require.Equal(t, MCPCodeInvalidParams, modern.Code)
-	require.Equal(t, MCPCodeResourceNotFound, existing.Code, "the caller's value is untouched")
+	modern := oops.NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
+	require.Equal(t, oops.MCPCodeInvalidParams, modern.Code)
+	require.Equal(t, oops.MCPCodeResourceNotFound, existing.Code, "the caller's value is untouched")
 
-	legacy := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-2"), mcpversions.Version20251125, existing)
-	require.Equal(t, MCPCodeResourceNotFound, legacy.Code, "a legacy request after a modern one still gets the retired code")
+	legacy := oops.NewMCPErrorFromCause(mcpjsonrpc.StringID("req-2"), mcpversions.Version20251125, existing)
+	require.Equal(t, oops.MCPCodeResourceNotFound, legacy.Code, "a legacy request after a modern one still gets the retired code")
 }
 
 // TestNewMCPErrorFromCause_RemapsExplicitRetiredCodeOnModernRevision covers the
@@ -318,10 +320,10 @@ func TestNewMCPErrorFromCause_DoesNotMutateTheCallersError(t *testing.T) {
 func TestNewMCPErrorFromCause_RemapsExplicitRetiredCodeOnModernRevision(t *testing.T) {
 	t.Parallel()
 
-	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeResourceNotFound, Message: "explicit", Data: nil}
-	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
+	existing := &oops.MCPError{ID: mcpjsonrpc.NullID(), Code: oops.MCPCodeResourceNotFound, Message: "explicit", Data: nil}
+	err := oops.NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
 
-	require.Equal(t, MCPCodeInvalidParams, err.Code)
+	require.Equal(t, oops.MCPCodeInvalidParams, err.Code)
 }
 
 // TestNewMCPErrorFromCause_KeepsExplicitRetiredCodeOnLegacyRevision is the
@@ -329,10 +331,10 @@ func TestNewMCPErrorFromCause_RemapsExplicitRetiredCodeOnModernRevision(t *testi
 func TestNewMCPErrorFromCause_KeepsExplicitRetiredCodeOnLegacyRevision(t *testing.T) {
 	t.Parallel()
 
-	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeResourceNotFound, Message: "explicit", Data: nil}
-	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20251125, existing)
+	existing := &oops.MCPError{ID: mcpjsonrpc.NullID(), Code: oops.MCPCodeResourceNotFound, Message: "explicit", Data: nil}
+	err := oops.NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20251125, existing)
 
-	require.Equal(t, MCPCodeResourceNotFound, err.Code)
+	require.Equal(t, oops.MCPCodeResourceNotFound, err.Code)
 }
 
 // TestMCPErrHandle_ModernRevisionUsesMandatedStatusForRemappedNotFound covers
@@ -345,13 +347,13 @@ func TestMCPErrHandle_ModernRevisionUsesMandatedStatusForRemappedNotFound(t *tes
 	t.Parallel()
 	logger, _ := captureLogger()
 
-	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
 			rpcCtx.ID = mcpjsonrpc.StringID("req-1")
 			rpcCtx.ProtocolVersion = mcpversions.Version20260728
 		}
 
-		return C(CodeNotFound)
+		return oops.C(oops.CodeNotFound)
 	})
 
 	rec := httptest.NewRecorder()
@@ -367,13 +369,13 @@ func TestMCPErrHandle_LegacyRevisionKeepsNotFoundStatus(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
 
-	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
 			rpcCtx.ID = mcpjsonrpc.StringID("req-1")
 			rpcCtx.ProtocolVersion = mcpversions.Version20251125
 		}
 
-		return C(CodeNotFound)
+		return oops.C(oops.CodeNotFound)
 	})
 
 	rec := httptest.NewRecorder()
@@ -392,14 +394,14 @@ func TestMCPErrHandle_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T
 	logger, _ := captureLogger()
 
 	var holderInstalled bool
-	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		rpcCtx, ok := contextvalues.GetRPCContext(r.Context())
 		holderInstalled = ok
 		if ok {
 			rpcCtx.ProtocolVersion = mcpversions.Version20260728
 		}
 
-		return C(CodeNotFound)
+		return oops.C(oops.CodeNotFound)
 	})
 
 	rec := httptest.NewRecorder()
@@ -409,11 +411,11 @@ func TestMCPErrHandle_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T
 
 	var response struct {
 		Error struct {
-			Code MCPCode `json:"code"`
+			Code oops.MCPCode `json:"code"`
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Equal(t, MCPCodeInvalidParams, response.Error.Code)
+	require.Equal(t, oops.MCPCodeInvalidParams, response.Error.Code)
 }
 
 // TestMCPErrHandle_UnmandatedCodesKeepGramStatusOnModernRevision pins the
@@ -427,20 +429,20 @@ func TestMCPErrHandle_UnmandatedCodesKeepGramStatusOnModernRevision(t *testing.T
 	logger, _ := captureLogger()
 
 	for _, tt := range []struct {
-		code Code
+		code oops.Code
 		want int
 	}{
-		{code: CodeUnauthorized, want: http.StatusUnauthorized},
-		{code: CodeForbidden, want: http.StatusForbidden},
-		{code: CodeMethodNotAllowed, want: http.StatusMethodNotAllowed},
+		{code: oops.CodeUnauthorized, want: http.StatusUnauthorized},
+		{code: oops.CodeForbidden, want: http.StatusForbidden},
+		{code: oops.CodeMethodNotAllowed, want: http.StatusMethodNotAllowed},
 	} {
-		handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 			if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
 				rpcCtx.ID = mcpjsonrpc.StringID("req-1")
 				rpcCtx.ProtocolVersion = mcpversions.Version20260728
 			}
 
-			return C(tt.code)
+			return oops.C(tt.code)
 		})
 
 		rec := httptest.NewRecorder()
@@ -459,12 +461,12 @@ func TestMCPErrHandle_ModernRevisionUsesMandatedStatusForNullID(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
 
-	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
 			rpcCtx.ProtocolVersion = mcpversions.Version20260728
 		}
 
-		return C(CodeNotFound)
+		return oops.C(oops.CodeNotFound)
 	})
 
 	rec := httptest.NewRecorder()
@@ -486,16 +488,16 @@ func TestMCPErrHandle_ModernRevisionMapsNotImplementedToNotFound(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
 
-	require.Equal(t, http.StatusNotImplemented, StatusCodes[CodeNotImplemented],
+	require.Equal(t, http.StatusNotImplemented, oops.StatusCodes[oops.CodeNotImplemented],
 		"this test's premise: the Speakeasy status differs from the mandated one")
 
-	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
 			rpcCtx.ID = mcpjsonrpc.StringID("req-1")
 			rpcCtx.ProtocolVersion = mcpversions.Version20260728
 		}
 
-		return C(CodeNotImplemented)
+		return oops.C(oops.CodeNotImplemented)
 	})
 
 	rec := httptest.NewRecorder()
@@ -511,16 +513,16 @@ func TestMCPErrHandle_ModernRevisionMapsInvalidToBadRequest(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
 
-	require.Equal(t, http.StatusUnprocessableEntity, StatusCodes[CodeInvalid],
+	require.Equal(t, http.StatusUnprocessableEntity, oops.StatusCodes[oops.CodeInvalid],
 		"this test's premise: the Speakeasy status differs from the mandated one")
 
-	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
 			rpcCtx.ID = mcpjsonrpc.StringID("req-1")
 			rpcCtx.ProtocolVersion = mcpversions.Version20260728
 		}
 
-		return C(CodeInvalid)
+		return oops.C(oops.CodeInvalid)
 	})
 
 	rec := httptest.NewRecorder()
@@ -537,20 +539,20 @@ func TestMCPErrHandle_LegacyRevisionKeepsGramStatusesForMandatedCodes(t *testing
 	logger, _ := captureLogger()
 
 	for _, tt := range []struct {
-		code Code
+		code oops.Code
 		want int
 	}{
-		{code: CodeNotFound, want: http.StatusNotFound},
-		{code: CodeNotImplemented, want: http.StatusNotImplemented},
-		{code: CodeInvalid, want: http.StatusUnprocessableEntity},
+		{code: oops.CodeNotFound, want: http.StatusNotFound},
+		{code: oops.CodeNotImplemented, want: http.StatusNotImplemented},
+		{code: oops.CodeInvalid, want: http.StatusUnprocessableEntity},
 	} {
-		handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 			if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
 				rpcCtx.ID = mcpjsonrpc.StringID("req-1")
 				rpcCtx.ProtocolVersion = mcpversions.Version20251125
 			}
 
-			return C(tt.code)
+			return oops.C(tt.code)
 		})
 
 		rec := httptest.NewRecorder()
@@ -563,7 +565,7 @@ func TestMCPErrHandle_LegacyRevisionKeepsGramStatusesForMandatedCodes(t *testing
 func TestNewMissingRequiredClientCapabilityError_MarshalsSpecShape(t *testing.T) {
 	t.Parallel()
 
-	mcpErr := NewMissingRequiredClientCapabilityError(mcpjsonrpc.NumberID(7), map[string]json.RawMessage{
+	mcpErr := oops.NewMissingRequiredClientCapabilityError(mcpjsonrpc.NumberID(7), map[string]json.RawMessage{
 		"elicitation": json.RawMessage(`{}`),
 	})
 
@@ -582,4 +584,44 @@ func TestNewMissingRequiredClientCapabilityError_MarshalsSpecShape(t *testing.T)
 	status, ok := mcpErr.Code.MandatedHTTPStatus()
 	require.True(t, ok)
 	require.Equal(t, http.StatusBadRequest, status)
+}
+
+func TestMCPErrHandle_ConnectionReferenceOnlyAddsALine(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="x"`)
+		contextvalues.SetConnectionReference(r.Context(), "ref-1")
+		return oops.E(oops.CodeUnauthorized, nil, "Reconnect it")
+	})
+	req := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("{}"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Equal(t, `Bearer resource_metadata="x"`, rec.Header().Get("WWW-Authenticate"))
+	var body struct {
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, int(oops.MCPCodeUnauthorized), body.Error.Code)
+	require.Equal(t, "Reconnect it\nReference: ref-1", body.Error.Message)
+}
+
+func TestMCPErrHandle_NoReferenceLeavesTheMessageAlone(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := oops.MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		return oops.E(oops.CodeUnauthorized, nil, "Reconnect it")
+	})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("{}")))
+
+	require.Contains(t, rec.Body.String(), `"message":"Reconnect it"`)
+	require.NotContains(t, rec.Body.String(), "Reference")
 }

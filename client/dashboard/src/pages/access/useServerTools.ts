@@ -1,6 +1,7 @@
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
+import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { platformEndpointSlug } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
@@ -35,7 +36,7 @@ export type ToolSource =
   | { status: "dynamic" }
   | { status: "none" };
 
-/** The tools of one server in the role editor's tool access sheet. */
+/** The tools of one server, for the role editor's tool rows. */
 export function useServerTools(
   entry: ServerWithProject | undefined,
 ): ToolSource {
@@ -91,6 +92,14 @@ export function useServerTools(
   );
   // Connect on the Speakeasy origin: a custom domain would need its own session.
   const platformSlug = platformEndpointSlug(endpoints.data?.mcpEndpoints ?? []);
+  const previewEnabled = needsLive && !!mcpServer.data && !!platformSlug;
+  // Keep the non-navigating preview while the editor has unsaved role changes.
+  const dashboardToken = useUserSessionToken({
+    target: { kind: "mcpServer", id: previewEnabled ? server?.id : undefined },
+    userSessionIssuerId: mcpServer.data?.userSessionIssuerId,
+    project: projectRef,
+    throwOnError: false,
+  });
   const live = useRemoteMcpToolConnection({
     mcpUrl: platformSlug ? `${getServerURL()}/mcp/${platformSlug}` : undefined,
     mcpServerId: server?.id,
@@ -100,7 +109,8 @@ export function useServerTools(
     tunneledMcpServerId: mcpServer.data?.tunneledMcpServerId,
     visibility: mcpServer.data?.visibility,
     project: projectRef,
-    enabled: needsLive && !!mcpServer.data && !!platformSlug,
+    enabled: previewEnabled,
+    dashboardToken,
   });
   const liveTools = useMemo(
     () =>
@@ -134,6 +144,8 @@ export function useServerTools(
   if (!platformSlug) return { status: "needs-connect", connect: undefined };
   if (live.loading) return { status: "loading" };
   if (live.needsAuth) return { status: "needs-connect", connect: live.connect };
+  if (dashboardToken.isError)
+    return { status: "error", retry: dashboardToken.refetch };
   if (live.isError) return { status: "error", retry: live.refetch };
   return { status: "ready", tools: liveTools ?? [] };
 }

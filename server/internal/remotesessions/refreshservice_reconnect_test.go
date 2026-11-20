@@ -56,9 +56,9 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 			reconnect := func() repo.RemoteSession {
 				_, err := testrepo.New(env.db).SoftDeleteAttachmentSourceFixture(ctx, env.session.ID)
 				require.NoError(t, err)
-				replacement, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+				replacement, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 					SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID,
-					RemoteSessionClientID: env.clientID, AccessTokenEncrypted: env.session.AccessTokenEncrypted,
+					RemoteSessionClientID: env.clientID, AccessTokenEncrypted: env.session.AccessTokenEncrypted.String,
 					AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 					RefreshTokenEncrypted: env.session.RefreshTokenEncrypted, Scopes: []string{},
 				})

@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -529,14 +530,17 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					t.Helper()
 					refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
 					require.True(t, ok, "got %v", err)
-					require.Equal(t, tc.message, refused.Message)
+					body, _ := contextvalues.SplitConnectionReference(refused.Message)
+					require.Equal(t, tc.message, body)
 					require.Equal(t, tc.fixable, errors.Is(err, codemode.ErrConsentRequired))
 				}
+				callReferenceLine := ""
 				ran := false
 				mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
 					ran = true
 					_, callErr := host.Call(runCtx, "source--tool_000", json.RawMessage(`{}`))
 					requireRefusal(callErr)
+					_, callReferenceLine = contextvalues.SplitConnectionReference(callErr.Error())
 					_, describeErr := host.Describe(runCtx, "source--tool_000")
 					requireRefusal(describeErr)
 					search, searchErr := host.Search(runCtx, codemode.SearchArgs{Query: "", Server: "source", Limit: 10})
@@ -567,14 +571,15 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 				w := g.post(t, connection.token, "execute", map[string]any{"code": "call"})
 				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 				require.True(t, ran, w.Body.String())
-				requireSetupChangedRow(t, rec, g.serverID, tc.fixable)
+				row := requireSetupChangedRow(t, rec, g.serverID, tc.fixable)
+				require.Equal(t, contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), callReferenceLine)
 			})
 		}
 	}
 }
 
 // requireSetupChangedRow finds the one refused call recorded for a stale choice.
-func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recording, serverID uuid.UUID, fixable bool) {
+func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recording, serverID uuid.UUID, fixable bool) mcpconnectionattempts.Row {
 	t.Helper()
 	var rows []mcpconnectionattempts.Row
 	for _, row := range rec.Rows() {
@@ -590,6 +595,7 @@ func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recordi
 	}
 	require.Equal(t, want.String(), rows[0].Reason)
 	require.Equal(t, string(who), rows[0].WhoFixes)
+	return rows[0]
 }
 
 // An approved catalog refuses the call before dialing, and that refusal is recorded.
@@ -676,6 +682,58 @@ func TestStaleNoAuthDirectServerKeepsReconnectChallenge(t *testing.T) {
 			require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 		})
 	}
+}
+
+// An administrator detached the only auth client a server offered, leaving the
+// association it was copied from. Under enforcement the server needs no upstream
+// authentication, so a session recorded from typed state reaches the upstream.
+// One recorded from the association, as a stale read of the enforcement state
+// would, names no auth client and fails closed until it reconnects.
+func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSelectionFixture(t)
+	issuerID := createUserSessionIssuer(t, ctx, f.ti.conn, f.projectID)
+	upstream := newRecordingUpstream(t, "ping")
+	slug := "leftover-" + uuid.NewString()[:8]
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "leftover", "", []uuid.UUID{issuerID})
+	f.associate(t, ctx, server.ID, registration)
+	fixtures := authclientfixtures.New(f.ti.conn)
+	authClient, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: f.orgID, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server.ID, AuthClientID: authClient, Source: "admin"}))
+	require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, server.ID))
+	_, err = productfeaturesrepo.New(f.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, f.ti.service.Service, nil)
+	call := func(bearer string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug, bytes.NewReader(makeMetaRPCBody(t, "tools/call", map[string]any{"name": "ping", "arguments": map[string]any{}}))).WithContext(t.Context())
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	w := call(f.issue(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString())))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	upstream.requireToolCallAuth(t, "", "the typed session reaches the upstream with no credential")
+	toolCalls := func() int {
+		n := 0
+		for _, req := range upstream.journal() {
+			if req.rpcMethod == mcpversions.MethodToolsCall {
+				n++
+			}
+		}
+		return n
+	}
+	calls := toolCalls()
+
+	w = call(f.issueFrom(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString()), nil, false))
+	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	require.Equal(t, calls, toolCalls(), "the refused session's tool call never reaches the upstream")
 }
 
 func TestStaleNoAuthEnforcedRealPermitAllowsReconnect(t *testing.T) {

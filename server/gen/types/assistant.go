@@ -25,6 +25,8 @@ type Assistant struct {
 	Name string
 	// The model identifier used by the assistant.
 	Model string
+	// The reasoning effort used by the assistant.
+	ReasoningEffort string
 	// The system instructions for the assistant.
 	Instructions string
 	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset

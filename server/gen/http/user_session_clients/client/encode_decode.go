@@ -20,6 +20,496 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildCreateUserSessionClientRequest instantiates a HTTP request object with
+// method and path set to call the "userSessionClients" service
+// "createUserSessionClient" endpoint
+func (c *Client) BuildCreateUserSessionClientRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateUserSessionClientUserSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessionClients", "createUserSessionClient", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateUserSessionClientRequest returns an encoder for requests sent to
+// the userSessionClients createUserSessionClient server.
+func EncodeCreateUserSessionClientRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessionclients.CreateUserSessionClientPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessionClients", "createUserSessionClient", "*usersessionclients.CreateUserSessionClientPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewCreateUserSessionClientRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("userSessionClients", "createUserSessionClient", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateUserSessionClientResponse returns a decoder for responses
+// returned by the userSessionClients createUserSessionClient endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeCreateUserSessionClientResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateUserSessionClientResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateUserSessionClientResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			res := NewCreateUserSessionClientResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateUserSessionClientUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			return nil, NewCreateUserSessionClientUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateUserSessionClientForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			return nil, NewCreateUserSessionClientForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateUserSessionClientBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			return nil, NewCreateUserSessionClientBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateUserSessionClientNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			return nil, NewCreateUserSessionClientNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateUserSessionClientConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			return nil, NewCreateUserSessionClientConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateUserSessionClientUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			return nil, NewCreateUserSessionClientUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateUserSessionClientInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			return nil, NewCreateUserSessionClientInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateUserSessionClientInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+				}
+				err = ValidateCreateUserSessionClientInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+				}
+				return nil, NewCreateUserSessionClientInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateUserSessionClientUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+				}
+				err = ValidateCreateUserSessionClientUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+				}
+				return nil, NewCreateUserSessionClientUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessionClients", "createUserSessionClient", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateUserSessionClientGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "createUserSessionClient", err)
+			}
+			err = ValidateCreateUserSessionClientGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "createUserSessionClient", err)
+			}
+			return nil, NewCreateUserSessionClientGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessionClients", "createUserSessionClient", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateUserSessionClientRedirectURIsRequest instantiates a HTTP request
+// object with method and path set to call the "userSessionClients" service
+// "updateUserSessionClientRedirectURIs" endpoint
+func (c *Client) BuildUpdateUserSessionClientRedirectURIsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateUserSessionClientRedirectURIsUserSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessionClients", "updateUserSessionClientRedirectURIs", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateUserSessionClientRedirectURIsRequest returns an encoder for
+// requests sent to the userSessionClients updateUserSessionClientRedirectURIs
+// server.
+func EncodeUpdateUserSessionClientRedirectURIsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessionclients.UpdateUserSessionClientRedirectURIsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessionClients", "updateUserSessionClientRedirectURIs", "*usersessionclients.UpdateUserSessionClientRedirectURIsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateUserSessionClientRedirectURIsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateUserSessionClientRedirectURIsResponse returns a decoder for
+// responses returned by the userSessionClients
+// updateUserSessionClientRedirectURIs endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeUpdateUserSessionClientRedirectURIsResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateUserSessionClientRedirectURIsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateUserSessionClientRedirectURIsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			res := NewUpdateUserSessionClientRedirectURIsUserSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			return nil, NewUpdateUserSessionClientRedirectURIsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateUserSessionClientRedirectURIsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			return nil, NewUpdateUserSessionClientRedirectURIsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateUserSessionClientRedirectURIsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			return nil, NewUpdateUserSessionClientRedirectURIsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateUserSessionClientRedirectURIsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			return nil, NewUpdateUserSessionClientRedirectURIsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateUserSessionClientRedirectURIsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			return nil, NewUpdateUserSessionClientRedirectURIsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			return nil, NewUpdateUserSessionClientRedirectURIsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateUserSessionClientRedirectURIsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			return nil, NewUpdateUserSessionClientRedirectURIsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+				}
+				err = ValidateUpdateUserSessionClientRedirectURIsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+				}
+				return nil, NewUpdateUserSessionClientRedirectURIsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateUserSessionClientRedirectURIsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+				}
+				err = ValidateUpdateUserSessionClientRedirectURIsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+				}
+				return nil, NewUpdateUserSessionClientRedirectURIsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessionClients", "updateUserSessionClientRedirectURIs", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			err = ValidateUpdateUserSessionClientRedirectURIsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessionClients", "updateUserSessionClientRedirectURIs", err)
+			}
+			return nil, NewUpdateUserSessionClientRedirectURIsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessionClients", "updateUserSessionClientRedirectURIs", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListUserSessionClientsRequest instantiates a HTTP request object with
 // method and path set to call the "userSessionClients" service
 // "listUserSessionClients" endpoint

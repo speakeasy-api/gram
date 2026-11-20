@@ -53,7 +53,6 @@ const REDEPLOY_PREVIEW = {
   openapi_assets: 2,
   function_assets: 3,
   packages: 4,
-  external_mcps: 5,
 };
 
 function shortDate(iso: string): string {
@@ -159,7 +158,6 @@ describe("Projects redeploy", () => {
       "3 function sources redeploy their runners",
     );
     expect(dialog.textContent).toContain("4 packages carry over");
-    expect(dialog.textContent).toContain("5 external MCP sources are dropped");
     expect(dialog.textContent).toContain(
       "The customer sees this in their deployments and audit log",
     );
@@ -184,7 +182,6 @@ describe("Projects redeploy", () => {
       openapi_assets: 1,
       function_assets: 1,
       packages: 1,
-      external_mcps: 1,
     });
 
     const { dialog } = await openRedeployDialog();
@@ -194,7 +191,6 @@ describe("Projects redeploy", () => {
       "1 function source redeploys its runner",
     );
     expect(dialog.textContent).toContain("1 package carries over");
-    expect(dialog.textContent).toContain("1 external MCP source is dropped");
   });
 
   it("does nothing when the operator cancels", async () => {

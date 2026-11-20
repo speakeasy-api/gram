@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   },
   sdk: { name: "sdk" },
   projectSlug: "project-one",
+  projectId: "project-one-id",
   routeProjectSlug: "project-one" as string | undefined,
   scopeOverride: null as string | null,
   search: "?range=30d&from=2025-01-01&to=2025-01-31&tab=ignored",
@@ -35,6 +36,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => mocks.organization,
+  useProject: () => ({ id: mocks.projectId, slug: mocks.projectSlug }),
   useSession: () => mocks.session,
 }));
 vi.mock("@/hooks/useRBACScopeOverride", () => ({
@@ -79,6 +81,7 @@ describe("useAgentIdentityCandidates", () => {
     mocks.session.user.id = "user-one";
     mocks.session.organizationOverride = false;
     mocks.session.impersonatorEmail = undefined;
+    mocks.projectId = "project-one-id";
     mocks.projectSlug = "project-one";
     mocks.routeProjectSlug = "project-one";
     mocks.scopeOverride = null;
@@ -110,8 +113,10 @@ describe("useAgentIdentityCandidates", () => {
         "[]",
         "",
         null,
+        "project-one-id",
       ],
       enabled: false,
+      staleTime: 30_000,
       retry: false,
       throwOnError: false,
     });
@@ -125,7 +130,13 @@ describe("useAgentIdentityCandidates", () => {
     )({ signal, pageParam: "next-cursor" });
     expect(mocks.fetchRegisteredAgents).toHaveBeenCalledWith(
       mocks.sdk,
-      { cursor: "next-cursor", limit: 50, search: "", sortOrder: "asc" },
+      {
+        projectId: "project-one-id",
+        cursor: "next-cursor",
+        limit: 50,
+        search: "",
+        sortOrder: "asc",
+      },
       signal,
     );
     const getNextPage = mocks.queryOptions!.getNextPageParam as (page: {
@@ -134,6 +145,37 @@ describe("useAgentIdentityCandidates", () => {
     expect(getNextPage({ nextCursor: "next" })).toBe("next");
     expect(getNextPage({})).toBeUndefined();
     expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it("separates project caches and keeps the org shell unscoped", async () => {
+    const { rerender } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    const key = () => mocks.queryOptions!.queryKey as unknown[];
+    expect(key().at(-1)).toBe("project-one-id");
+
+    mocks.routeProjectSlug = "project-two";
+    rerender();
+    expect(queryEnabled()).toBe(false);
+
+    mocks.projectSlug = "project-two";
+    mocks.projectId = "project-two-id";
+    rerender();
+    expect(queryEnabled()).toBe(true);
+    expect(key().at(-1)).toBe("project-two-id");
+
+    mocks.routeProjectSlug = undefined;
+    rerender();
+    expect(queryEnabled()).toBe(true);
+    expect(key().at(-1)).toBeUndefined();
+    await (
+      mocks.queryOptions!.queryFn as (context: object) => Promise<unknown>
+    )({});
+    expect(mocks.fetchRegisteredAgents).toHaveBeenLastCalledWith(
+      mocks.sdk,
+      expect.objectContaining({ projectId: undefined }),
+      undefined,
+    );
   });
 
   it.each([
@@ -184,7 +226,8 @@ describe("useAgentIdentityCandidates", () => {
   });
 
   it("maps names and canonical URNs without exposing them to intent ranking", () => {
-    // Links follow the request project, not the one in the URL.
+    // On org routes, links use the request project as a fallback.
+    mocks.routeProjectSlug = undefined;
     mocks.projectSlug = "request-project";
     mocks.queryData = {
       pages: [{ items: [{ id: "agent/one", name: "Release Agent" }] }],
@@ -201,7 +244,6 @@ describe("useAgentIdentityCandidates", () => {
       title: "Release Agent",
       detail: "Agent identity",
       keywords: ["agent", "agent/one", "agent:agent/one"],
-      fuzzyOnly: true,
       icon: "bot",
       group: "Identities",
       verbs: ["open"],
@@ -212,7 +254,7 @@ describe("useAgentIdentityCandidates", () => {
       "/acme/projects/request-project/identities/agent%3Aagent%2Fone/overview?range=30d&from=2025-01-01&to=2025-01-31",
     );
   });
-  it("includes later pages and stops fetching when closed or pagination fails", async () => {
+  it("includes later pages and retries failed pagination on the next open", async () => {
     mocks.queryData = {
       pages: [
         { items: [{ id: "first", name: "Build Agent" }] },
@@ -240,10 +282,11 @@ describe("useAgentIdentityCandidates", () => {
     mocks.isFetchNextPageError = true;
     rerender({ enabled: true });
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
-    mocks.isFetchNextPageError = false;
     rerender({ enabled: false });
     expect(result.current).toEqual([]);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+    rerender({ enabled: true });
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(2);
   });
 
   it("does not offer the project-scoped alias in the org shell despite the request default", () => {
@@ -298,7 +341,6 @@ describe("useAgentIdentityCandidates", () => {
     expect(aliases).toHaveLength(1);
     expect(aliases[0]).toMatchObject({
       title: "Worker · Permissions",
-      fuzzyOnly: true,
       keywords: expect.arrayContaining(["inference", "permissions"]),
     });
     void aliases[0]!.run("open");
@@ -327,7 +369,6 @@ describe("useAgentIdentityCandidates", () => {
     expect(signIns).toHaveLength(1);
     expect(signIns[0]).toMatchObject({
       title: "Worker · MCP sign-in",
-      fuzzyOnly: true,
       kind: "person",
       keywords: expect.arrayContaining(["mcp", "reconnect"]),
     });

@@ -12,7 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
-	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
@@ -29,21 +29,21 @@ type CollectOpenRouterCreditsMetrics struct {
 	db         *pgxpool.Pool
 	repo       *repo.Queries
 	openRouter openrouter.Provisioner
-	keys       *cutover.Sealer
+	enc        *encryption.Client
 }
 
 func NewCollectOpenRouterCreditsMetrics(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	openRouterProvisioner openrouter.Provisioner,
-	keys *cutover.Sealer,
+	enc *encryption.Client,
 ) *CollectOpenRouterCreditsMetrics {
 	return &CollectOpenRouterCreditsMetrics{
 		logger:     logger.With(attr.SlogComponent("collect_openrouter_credits_metrics")),
 		db:         db,
 		repo:       repo.New(db),
 		openRouter: openRouterProvisioner,
-		keys:       keys,
+		enc:        enc,
 	}
 }
 
@@ -89,7 +89,7 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 				)
 				return nil
 			}
-			apiKey, decErr := c.keys.Open(gctx, row.OrganizationID, openrouter.OrgEncryptedKeyColumn, cutover.Ciphertexts{Legacy: row.ApiKeyEncrypted.String, Org: row.ApiKeyOrgEncrypted}, nil)
+			apiKey, decErr := c.enc.Decrypt(row.ApiKeyEncrypted.String)
 			if decErr != nil {
 				c.logger.ErrorContext(gctx, "decrypt openrouter key for usage polling",
 					attr.SlogOrganizationID(row.OrganizationID),

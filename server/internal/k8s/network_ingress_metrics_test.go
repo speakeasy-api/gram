@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,9 +15,11 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type telemetryNetworkIngressProvisioner struct {
@@ -50,6 +53,10 @@ func TestNetworkIngressDeletionTelemetry(t *testing.T) {
 		{"pending", ErrNetworkIngressDeletionPending, networkIngressErrorCodeDeletionPending, networkIngressResultPending},
 		{"wrapped pending", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressDeletionPending), networkIngressErrorCodeDeletionPending, networkIngressResultPending},
 		{"rejected credentials", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressProviderCredentialsRejected), NetworkIngressErrorProviderCredentialsRejected, networkIngressResultError},
+		{"missing permission", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressProviderForbidden), NetworkIngressErrorProviderForbidden, networkIngressResultError},
+		{"rate limited", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressProviderRateLimited), NetworkIngressErrorProviderRateLimited, networkIngressResultError},
+		{"provider API unavailable", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressProviderAPIUnavailable), NetworkIngressErrorProviderAPIUnavailable, networkIngressResultError},
+		{"pending with rate limit", errors.Join(ErrNetworkIngressDeletionPending, ErrNetworkIngressProviderRateLimited), NetworkIngressErrorProviderRateLimited, networkIngressResultError},
 		{"invalid desired state", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressInvalidDesiredState), NetworkIngressErrorInvalidDesiredState, networkIngressResultError},
 		{"unsupported provider", fmt.Errorf("%s: %w", sensitive, ErrNetworkIngressUnsupportedProvider), NetworkIngressErrorUnsupportedProvider, networkIngressResultError},
 		{"kubernetes API", fmt.Errorf("%s: %w", sensitive, k8serrors.NewForbidden(schema.GroupResource{Resource: "ingresses"}, "private-resource", errors.New(sensitive))), NetworkIngressErrorKubernetes, networkIngressResultError},
@@ -128,6 +135,92 @@ func TestNetworkIngressDeletionTelemetry(t *testing.T) {
 	}
 }
 
+func TestNetworkIngressKubernetesFailureNamesTheCallButNotItsData(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "private-provider-request-sentinel"
+	conflict := k8serrors.NewConflict(schema.GroupResource{Group: "tailscale.com", Resource: "tailnets"}, "private-resource", errors.New(sensitive))
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+		telemetryNetworkIngressProvisioner{err: fmt.Errorf("delete Tailnet: %w", conflict)}, logger, nil)
+
+	err := provisioner.Delete(t.Context(), NetworkIngressResourceNames{})
+	require.ErrorIs(t, err, conflict)
+
+	var log map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+	require.Equal(t, NetworkIngressErrorKubernetes, log[string(attr.NetworkIngressErrorCodeKey)])
+	require.Equal(t, "Conflict", log[string(attr.NetworkIngressKubernetesReasonKey)])
+	require.InDelta(t, 409, log[string(attr.NetworkIngressKubernetesStatusCodeKey)], 0)
+	require.Equal(t, "tailnets.tailscale.com", log[string(attr.NetworkIngressKubernetesResourceKey)])
+	require.NotContains(t, logs.String(), sensitive)
+	require.NotContains(t, logs.String(), "private-resource")
+}
+
+func TestNetworkIngressKubernetesFailureNamesTheKindOfAnInvalidObject(t *testing.T) {
+	t.Parallel()
+
+	invalid := k8serrors.NewInvalid(schema.GroupKind{Group: "tailscale.com", Kind: "ProxyGroup"}, "private-resource", nil)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+		telemetryNetworkIngressProvisioner{err: invalid}, logger, nil)
+
+	require.ErrorIs(t, provisioner.Delete(t.Context(), NetworkIngressResourceNames{}), invalid)
+
+	var log map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+	require.Equal(t, "Invalid", log[string(attr.NetworkIngressKubernetesReasonKey)])
+	require.Equal(t, "ProxyGroup.tailscale.com", log[string(attr.NetworkIngressKubernetesResourceKey)])
+	require.NotContains(t, logs.String(), "private-resource")
+}
+
+func TestNetworkIngressKubernetesFailureDropsUnexpectedStatusFields(t *testing.T) {
+	t.Parallel()
+
+	const sensitive = "private provider request sentinel"
+	custom := &k8serrors.StatusError{ErrStatus: metav1.Status{
+		Status:  metav1.StatusFailure,
+		Code:    http.StatusForbidden,
+		Reason:  metav1.StatusReason(sensitive),
+		Message: sensitive,
+		Details: &metav1.StatusDetails{Kind: sensitive, Group: "tailscale.com", Name: sensitive},
+	}}
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+		telemetryNetworkIngressProvisioner{err: custom}, logger, nil)
+
+	require.ErrorIs(t, provisioner.Delete(t.Context(), NetworkIngressResourceNames{}), custom)
+
+	var log map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+	require.Equal(t, NetworkIngressErrorKubernetes, log[string(attr.NetworkIngressErrorCodeKey)])
+	require.Equal(t, string(metav1.StatusReasonUnknown), log[string(attr.NetworkIngressKubernetesReasonKey)])
+	require.InDelta(t, http.StatusForbidden, log[string(attr.NetworkIngressKubernetesStatusCodeKey)], 0)
+	require.NotContains(t, log, string(attr.NetworkIngressKubernetesResourceKey))
+	require.NotContains(t, logs.String(), sensitive)
+}
+
+func TestNetworkIngressNonKubernetesFailureHasNoKubernetesFields(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	provisioner := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale,
+		telemetryNetworkIngressProvisioner{err: ErrNetworkIngressProviderRateLimited}, logger, nil)
+
+	err := provisioner.Delete(t.Context(), NetworkIngressResourceNames{})
+	require.ErrorIs(t, err, ErrNetworkIngressProviderRateLimited)
+
+	var log map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &log))
+	require.NotContains(t, log, string(attr.NetworkIngressKubernetesReasonKey))
+	require.NotContains(t, log, string(attr.NetworkIngressKubernetesStatusCodeKey))
+	require.NotContains(t, log, string(attr.NetworkIngressKubernetesResourceKey))
+}
+
 func TestNetworkIngressObservationErrorTelemetry(t *testing.T) {
 	t.Parallel()
 
@@ -143,6 +236,11 @@ func TestNetworkIngressObservationErrorTelemetry(t *testing.T) {
 			{"none with an error", errors.New("sensitive"), networkIngressErrorCodeNone, networkIngressErrorCodeInternal},
 			{"untyped pending observation", errors.New("sensitive"), networkIngressErrorCodeDeletionPending, networkIngressErrorCodeInternal},
 			{"typed error takes precedence", ErrNetworkIngressProviderCredentialsRejected, NetworkIngressErrorInvalidCredentials, NetworkIngressErrorProviderCredentialsRejected},
+			{"bounded provider observation", errors.New("sensitive"), NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderRateLimited},
+			{"unapproved service observation", errors.New("sensitive"), NetworkIngressErrorProviderServiceNotApproved, NetworkIngressErrorProviderServiceNotApproved},
+			{"missing certificate observation", errors.New("sensitive"), NetworkIngressErrorProviderCertificateUnavailable, NetworkIngressErrorProviderCertificateUnavailable},
+			{"unavailable encryption key observation", errors.New("sensitive"), NetworkIngressErrorEncryptionKeyUnavailable, NetworkIngressErrorEncryptionKeyUnavailable},
+			{"missing permission is not rejected credentials", ErrNetworkIngressProviderForbidden, NetworkIngressErrorProviderForbidden, NetworkIngressErrorProviderForbidden},
 			{"replacement pending", ErrNetworkIngressReplacementPending, "", networkIngressErrorCodeReplacementPending},
 			{"deletion pending outside delete", ErrNetworkIngressDeletionPending, "", networkIngressErrorCodeDeletionPending},
 		} {
@@ -168,4 +266,54 @@ func TestNetworkIngressObservationErrorTelemetry(t *testing.T) {
 			})
 		}
 	}
+}
+
+type telemetryCredentialedProvisioner struct {
+	telemetryNetworkIngressProvisioner
+	received []byte
+}
+
+func (p *telemetryCredentialedProvisioner) DeleteWithCredentials(_ context.Context, _ NetworkIngressResourceNames, credentials []byte) error {
+	p.received = credentials
+	return p.err
+}
+
+func TestObservedProvisionerExposesCredentialedTeardownOnlyWhenWrapped(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+	logger := testenv.NewLogger(t)
+	metrics := NewNetworkIngressMetrics(logger, provider)
+
+	plain := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale, telemetryNetworkIngressProvisioner{err: nil}, logger, metrics)
+	_, ok := plain.(NetworkIngressCredentialedDeleter)
+	require.False(t, ok, "a provider without credentialed teardown must not gain one by being observed")
+
+	inner := &telemetryCredentialedProvisioner{telemetryNetworkIngressProvisioner: telemetryNetworkIngressProvisioner{err: nil}, received: nil}
+	wrapped := ObserveNetworkIngressProvisioner(NetworkIngressProviderTailscale, inner, logger, metrics)
+	deleter, ok := wrapped.(NetworkIngressCredentialedDeleter)
+	require.True(t, ok)
+	require.NoError(t, deleter.DeleteWithCredentials(t.Context(), NetworkIngressResourceNames{}, []byte("creds")))
+	require.Equal(t, []byte("creds"), inner.received)
+
+	var data metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &data))
+	deletes := int64(0)
+	for _, scope := range data.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != networkIngressOperationsMetric {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				if op, found := point.Attributes.Value(attr.NetworkIngressOperationKey); found && op.AsString() == networkIngressOperationDelete {
+					deletes += point.Value
+				}
+			}
+		}
+	}
+	require.EqualValues(t, 1, deletes, "the credentialed teardown is recorded as one delete operation")
 }

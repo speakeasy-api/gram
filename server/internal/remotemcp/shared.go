@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/secretmask"
 )
 
 // Headers handles encryption and decryption of header values.
@@ -141,8 +142,8 @@ func (h *Headers) UpdateServerHeader(ctx context.Context, params repo.UpdateServ
 	return h.revealHeader(header, true)
 }
 
-// revealHeaders decrypts each secret header's value, redacting it when the
-// caller is a management read rather than the proxy.
+// revealHeaders decrypts each secret header's value for the proxy, or masks it
+// without decrypting when the caller is a management read.
 func (h *Headers) revealHeaders(headers []repo.RemoteMcpServerHeader, redacted bool) ([]repo.RemoteMcpServerHeader, error) {
 	result := make([]repo.RemoteMcpServerHeader, len(headers))
 	for i, header := range headers {
@@ -162,13 +163,16 @@ func (h *Headers) revealHeader(header repo.RemoteMcpServerHeader, redacted bool)
 		return header, nil
 	}
 
+	// encryptValue never encrypts an empty value, so stored ciphertext always
+	// holds one and a management read can mask it without decrypting.
+	if redacted {
+		header.Value = pgtype.Text{String: secretmask.Value, Valid: true}
+		return header, nil
+	}
+
 	decrypted, err := h.enc.Decrypt(header.Value.String)
 	if err != nil {
 		return repo.RemoteMcpServerHeader{}, fmt.Errorf("decrypt header %s: %w", header.Name, err)
-	}
-
-	if redacted {
-		decrypted = redactValue(decrypted)
 	}
 
 	header.Value = pgtype.Text{String: decrypted, Valid: true}
@@ -187,12 +191,4 @@ func (h *Headers) encryptValue(isSecret bool, value pgtype.Text) (pgtype.Text, e
 	}
 
 	return pgtype.Text{String: encrypted, Valid: true}, nil
-}
-
-func redactValue(val string) string {
-	if val == "" {
-		return "<EMPTY>"
-	}
-
-	return "***"
 }

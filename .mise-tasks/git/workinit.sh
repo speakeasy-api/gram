@@ -55,6 +55,10 @@ mise run git:workmcp || echo "Warning: MCP setup failed; run 'mise run git:workm
 # no-op when the key pair was copied from the main worktree above.
 mise run zero:tunnel-identity
 
+# Private network names are the same in every worktree of a checkout, so a
+# value copied from the main worktree is kept; this only fills in a missing one.
+mise run zero:network-ingress
+
 # Ports are randomized, so `wt list`'s URL column can't derive them from the
 # branch name. Store the dashboard port as a per-branch var for it to read.
 # Best-effort: this is display metadata, and the script runs under `set -e` as a

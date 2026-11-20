@@ -40,6 +40,9 @@ vi.mock("@gram/client/react-query/customDomainMcpEndpoints", () => ({
 vi.mock("@gram/client/react-query/registerDomain", () => ({
   useRegisterDomainMutation: () => ({ mutate: vi.fn() }),
 }));
+vi.mock("@gram/client/react-query/reconcileDomain", () => ({
+  useReconcileDomainMutation: () => ({ mutate: vi.fn() }),
+}));
 vi.mock("@gram/client/react-query/deleteDomain", () => ({
   useDeleteDomainMutation: () => ({ mutate: vi.fn() }),
 }));

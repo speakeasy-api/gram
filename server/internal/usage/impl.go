@@ -24,9 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -64,7 +63,6 @@ type Service struct {
 	stripeClient    stripeclient.Client
 	stripeHandler   stripeWebhookHandler
 	stripeMetrics   stripeWebhookMetricsRecorder
-	featureFlags    feature.Provider
 	productFeatures productFeatureCacheUpdater
 	trial           trialemails.Notifier
 	now             func() time.Time
@@ -87,7 +85,7 @@ type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -114,7 +112,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		stripeMetrics:   newStripeWebhookMetrics(otel.GetMeterProvider(), logger),
-		featureFlags:    featureFlags,
 		productFeatures: productFeatures,
 		trial:           trialNotifier,
 		now:             time.Now,
@@ -146,7 +143,6 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		stripeClient:    stripeClient,
 		stripeHandler:   nil,
 		stripeMetrics:   nil,
-		featureFlags:    nil,
 		productFeatures: nil,
 		trial:           nil,
 		now:             time.Now,
@@ -236,7 +232,7 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	}
 
 	// we force a refresh of the state of the organization since customer tier may have changed witha subscription update
-	refreshedOrg, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID)
+	refreshedOrg, err := orgaccount.Describe(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").LogError(ctx, logger)
 	}
@@ -344,7 +340,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -407,31 +403,12 @@ func (s *Service) platformHostBaseURL(ctx context.Context, fallback *url.URL) st
 	return requestorigin.PlatformHostBaseURL(ctx, serverURL, fallback.String())
 }
 
-func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckoutPayload) (res string, err error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
-		return "", oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return "", err
-	}
-
-	baseURL := s.platformHostBaseURL(ctx, s.serverURL)
-	successURL := fmt.Sprintf("%s/%s/billing", baseURL, authCtx.OrganizationSlug)
-
-	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, baseURL, successURL)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").LogError(ctx, s.logger)
-	}
-	return checkoutURL, nil
-}
-
 func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTopUpCheckoutPayload) (res string, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return "", err
 	}
 
@@ -450,7 +427,7 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return "", err
 	}
 

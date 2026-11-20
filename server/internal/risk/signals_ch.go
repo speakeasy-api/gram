@@ -52,7 +52,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -456,7 +456,7 @@ func (s *Service) GetRiskMcpServerCounts(ctx context.Context, payload *gen.GetRi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -525,7 +525,7 @@ func (s *Service) filterMCPServerCountsByRead(ctx context.Context, authCtx *cont
 			grantID = server.ToolsetID.UUID.String()
 		}
 		grantIDByServer[server.ID.String()] = grantID
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, grantID, authCtx.ProjectID.String()))
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDFrom(grantID), authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 	}
 	allowedIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {

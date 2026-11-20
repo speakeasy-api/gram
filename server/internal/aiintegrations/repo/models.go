@@ -25,7 +25,7 @@ type AiIntegrationConfig struct {
 	// @access: restricted
 	ExternalOrganizationID pgtype.Text
 	// @access: secret-restricted
-	ApiKeyEncrypted string
+	ApiKeyEncrypted pgtype.Text
 	// @access: secret-restricted
 	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
@@ -36,6 +36,9 @@ type AiIntegrationConfig struct {
 	ID uuid.UUID
 	// @access: confidential
 	Deleted bool
+	// Provider settings JSON; holds admin emails and customer directory structure.
+	// @access: opaque-restricted
+	Settings []byte
 }
 
 type AiIntegrationSync struct {

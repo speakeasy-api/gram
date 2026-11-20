@@ -94,7 +94,80 @@ var (
 	// ErrPlatformCredentialUnusable means the platform credential managed
 	// KEKs depend on is missing or misconfigured.
 	ErrPlatformCredentialUnusable = errors.New("orgencryption: platform encryption credential unusable")
+
+	// ErrTransitionNotAllowed means a transition does not start from the use
+	// case's current transition state, such as rolling back from org_kms.
+	ErrTransitionNotAllowed = errors.New("orgencryption: transition not allowed from the current transition state")
+
+	// ErrFinalizeBlocked means a finalize precondition does not hold yet. The
+	// wrapped message says which one.
+	ErrFinalizeBlocked = errors.New("orgencryption: finalize preconditions not met")
+
+	// ErrFenced means a write was refused because the transition state moved
+	// to a newer generation after the writer decided. The writer decides
+	// again and seals the same plaintext again; it never repeats a call to a
+	// provider.
+	ErrFenced = errors.New("orgencryption: transition state changed since the decision, decide again")
+
+	// ErrDecisionExpired means a Decision was held longer than MaxDecisionHold
+	// before sealing. The writer decides again and seals the same plaintext.
+	ErrDecisionExpired = errors.New("orgencryption: transition decision expired, decide again")
+
+	// ErrOrganizationEncryptionUnavailable means the use case is past
+	// platform_key but this process has no organization encryption, so it
+	// can neither seal nor open the organization-key copy.
+	ErrOrganizationEncryptionUnavailable = errors.New("orgencryption: organization encryption is not configured in this process")
+
+	// ErrUnreadable means a stored value does not decrypt: it is corrupt,
+	// sealed for another organization, use case or column, or only its
+	// platform-key copy remains after the use case stopped reading it.
+	// Retrying cannot help. Every other error from Cipher.Open, such as
+	// ErrKeyUnavailable or ErrSuspended, may clear on its own.
+	ErrUnreadable = errors.New("orgencryption: stored value does not decrypt")
+
+	// ErrMissing means the row holds no copy of the value.
+	ErrMissing = errors.New("orgencryption: stored value is not set")
 )
+
+// keyProblems are the errors that mean an organization key could not be used:
+// an unreachable, revoked, suspended, disabled or misconfigured key, a process
+// without organization encryption serving an enrolled organization, or
+// transition state that kept moving under a write.
+var keyProblems = []error{
+	ErrKeyUnavailable,
+	ErrSuspended,
+	ErrNotProvisioned,
+	ErrInvalidKey,
+	ErrInvalidState,
+	ErrPlatformCredentialUnusable,
+	ErrOrganizationEncryptionUnavailable,
+	ErrConcurrentChange,
+	ErrFenced,
+	ErrDecisionExpired,
+}
+
+// IsUnreadable reports whether err from opening a value means the stored
+// value itself is missing or does not decrypt, so retrying cannot help and
+// the value must be replaced. Every other error from opening one, including
+// key problems and database failures, may clear on its own: callers treat it
+// as retryable and never as a reason to replace the value or sign in again.
+func IsUnreadable(err error) bool {
+	return errors.Is(err, ErrUnreadable) || errors.Is(err, ErrMissing)
+}
+
+// IsKeyProblem reports whether err from opening, sealing or storing a value,
+// or from a usability check, is a problem with the organization key rather
+// than with the value or the database. Callers use it to say so in their
+// messages; deciding whether an error is retryable is IsUnreadable's job.
+func IsKeyProblem(err error) bool {
+	for _, problem := range keyProblems {
+		if errors.Is(err, problem) {
+			return true
+		}
+	}
+
+	return false
+}
 
 // requireUsableState fails closed unless a configuration in state may encrypt
 // and decrypt: active and switching may, suspended may not, and any other

@@ -50,7 +50,7 @@ export function ChangeIssuerConfirmDialog({
   let summary: string;
   if (impact.isError) {
     summary = replacing
-      ? "Couldn't check whether the authorization server changes too. You can still change the issuer."
+      ? "Couldn't check whether the authorization server changes too. You can still change the MCP Authentication Provider."
       : "Couldn't check where clients will sign in. You can still require sign-in.";
   } else if (!replacing) {
     summary = candidateIssuerUrl
@@ -70,15 +70,17 @@ export function ChangeIssuerConfirmDialog({
       onOpenChange={onOpenChange}
       title={
         replacing
-          ? "Change user session issuer?"
+          ? "Change MCP Authentication Provider?"
           : "Require sign-in for this server?"
       }
       description={
         replacing
-          ? `Everyone connected to this server will need to sign in again. Their sessions belong to the current issuer and stop working once the server uses ${candidate.slug}.`
+          ? `Everyone connected to this server will need to sign in again. Their sessions belong to the current MCP Authentication Provider and stop working once the server uses ${candidate.slug}.`
           : `Clients connected to this server will need to sign in through ${candidate.slug} before they can use it again.`
       }
-      confirmLabel={replacing ? "Change issuer" : "Require sign-in"}
+      confirmLabel={
+        replacing ? "Change MCP Authentication Provider" : "Require sign-in"
+      }
       pendingLabel="Saving…"
       confirmVariant="primary"
       onConfirm={onConfirm}

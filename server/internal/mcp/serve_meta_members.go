@@ -259,23 +259,29 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		members []metaMember
 		err     error
 	)
-	if gate.agentID == uuid.Nil && !gate.organizationGateway {
+	storedMembership := !gate.organizationGateway && !gate.agentMembership
+	if storedMembership {
 		ctx, members, gate.deniedMembers, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
 	} else {
 		issuer := uuid.Nil
 		scopeProjectID := uuid.Nil
 		if gate.organizationGateway {
-			issuer = gate.userSessionIssuerID
 			scopeProjectID = gate.projectID
+			if gate.caller.kind == gatewayCallerPerson {
+				issuer = gate.userSessionIssuerID
+			}
 		}
-		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway, issuer, scopeProjectID)
+		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway && gate.caller.kind == gatewayCallerPerson, issuer, scopeProjectID)
 	}
 	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
 	}
 	if err == nil && gate.catalog != nil {
 		members, gate.unapprovedMembers = gate.catalog.approvedMembers(members)
-		gate.hiddenMembers, _ = gate.catalog.approvedMembers(gate.hiddenMembers)
+		// A hidden member stays reported as hidden whether or not the
+		// catalog approved it; approved ones take their approved slug.
+		approvedHidden, unapprovedHidden := gate.catalog.approvedMembers(gate.hiddenMembers)
+		gate.hiddenMembers = slices.Concat(approvedHidden, unapprovedHidden)
 	}
 	if err == nil && gate.catalog != nil {
 		ids := make([]uuid.UUID, 0, len(members))
@@ -637,7 +643,7 @@ func memberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, projectID u
 	if toolsetID.Valid {
 		resourceID = toolsetID.UUID
 	}
-	return authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String())
+	return authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(projectID)).Connect()
 }
 
 // findNamedMember resolves the server a call names and records the one

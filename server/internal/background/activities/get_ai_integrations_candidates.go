@@ -9,16 +9,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
-	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 )
 
 type GetAIIntegrationsCandidates struct {
 	integrations *aiintegrations.Store
 }
 
-func NewGetAIIntegrationsCandidates(logger *slog.Logger, db *pgxpool.Pool, keys *cutover.Sealer) *GetAIIntegrationsCandidates {
+func NewGetAIIntegrationsCandidates(logger *slog.Logger, db *pgxpool.Pool, encryptionClient *encryption.Client) *GetAIIntegrationsCandidates {
 	return &GetAIIntegrationsCandidates{
-		integrations: aiintegrations.NewStore(logger, db, keys),
+		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
 	}
 }
 

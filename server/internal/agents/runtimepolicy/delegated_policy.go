@@ -24,10 +24,15 @@ const (
 	DelegatedPolicyVersion5 DelegatedPolicyVersion = 5
 
 	DelegatedPolicyVersion6 DelegatedPolicyVersion = 6
-
 	DelegatedPolicyVersion7 DelegatedPolicyVersion = 7
 
-	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion7
+	// DelegatedPolicyVersion8 records the implication closure in which
+	// mcp:read and mcp:write no longer imply mcp:connect. Versions 1 through 7
+	// keep recording that connect (see delegatedPolicyClosure). No issuer
+	// persists version 8 yet, so replicas that predate it never read one.
+	DelegatedPolicyVersion8 DelegatedPolicyVersion = 8
+
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion8
 
 	// IssuedDelegatedPolicyVersion preserves the general delegated/MCP issuance
 	// contract. Reader support (Current) does not advance existing issuers.
@@ -103,7 +108,7 @@ func NewDelegatedPolicy(version DelegatedPolicyVersion, requested []authz.Grant)
 	}
 	sortDelegatedPolicyGrants(wireRequested)
 
-	effective, err := delegatedPolicyClosure(wireRequested)
+	effective, err := delegatedPolicyClosure(version, wireRequested)
 	if err != nil {
 		return DelegatedPolicy{}, err
 	}
@@ -203,7 +208,7 @@ func validateDecodedDelegatedPolicy(version DelegatedPolicyVersion, policy Deleg
 		return DelegatedPolicy{}, err
 	}
 
-	expected, err := delegatedPolicyClosure(policy.Requested)
+	expected, err := delegatedPolicyClosure(version, policy.Requested)
 	if err != nil {
 		return DelegatedPolicy{}, err
 	}
@@ -258,17 +263,51 @@ func validateStoredDelegatedPolicyGrant(version DelegatedPolicyVersion, grant De
 	if definition.safeSince == 0 || definition.safeSince > RuntimeScopeRegistryVersion(version) {
 		return fmt.Errorf("scope %q is not agent-runtime-safe", grant.Scope)
 	}
-	if err := authz.ValidateSelector(grant.Scope, grant.Selector); err != nil {
+	if err := validateStoredDelegatedSelector(grant.Scope, grant.Selector); err != nil {
 		return fmt.Errorf("validate delegated policy selector: %w", err)
 	}
 	return nil
 }
 
-func delegatedPolicyClosure(requested []DelegatedPolicyGrant) ([]DelegatedPolicyGrant, error) {
+// storedOnlyLimitScopes are the scopes a stored delegated policy may still
+// carry a tool or disposition limit on, from before limits moved to connect.
+var storedOnlyLimitScopes = []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite, authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite}
+
+// validateStoredDelegatedSelector is authz.ValidateSelector for a policy read
+// back from a key or session. A stored policy must keep decoding at its
+// version, so it may still limit viewing or managing a server to some tools
+// or dispositions. A new policy cannot: NewDelegatedPolicy uses
+// authz.ValidateSelector.
+func validateStoredDelegatedSelector(scope authz.Scope, selector authz.Selector) error {
+	if !slices.Contains(storedOnlyLimitScopes, scope) {
+		if err := authz.ValidateSelector(scope, selector); err != nil {
+			return fmt.Errorf("validate selector: %w", err)
+		}
+		return nil
+	}
+	unlimited := maps.Clone(selector)
+	delete(unlimited, authz.SelectorKeyTool)
+	if disposition, ok := unlimited[authz.SelectorKeyDisposition]; ok {
+		if err := authz.ValidateSelector(authz.ScopeMCPConnect, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   authz.WildcardResource,
+			authz.SelectorKeyDisposition:  disposition,
+		}); err != nil {
+			return fmt.Errorf("validate stored disposition limit: %w", err)
+		}
+		delete(unlimited, authz.SelectorKeyDisposition)
+	}
+	if err := authz.ValidateSelector(scope, unlimited); err != nil {
+		return fmt.Errorf("validate selector without stored limits: %w", err)
+	}
+	return nil
+}
+
+func delegatedPolicyClosure(version DelegatedPolicyVersion, requested []DelegatedPolicyGrant) ([]DelegatedPolicyGrant, error) {
 	effective := make([]DelegatedPolicyGrant, 0, len(requested))
 	seen := make(map[string]struct{}, len(requested))
 	for _, grant := range requested {
-		for _, scope := range authz.ScopeImplicationClosure(grant.Scope) {
+		for _, scope := range delegatedScopeClosure(version, grant.Scope) {
 			implied := DelegatedPolicyGrant{Scope: scope, Selector: cloneSelector(grant.Selector)}
 			key, err := delegatedPolicyGrantKey(implied)
 			if err != nil {
@@ -283,6 +322,45 @@ func delegatedPolicyClosure(requested []DelegatedPolicyGrant) ([]DelegatedPolicy
 	}
 	sortDelegatedPolicyGrants(effective)
 	return effective, nil
+}
+
+// delegatedScopeClosure is the implication closure a delegated policy of
+// version records in Effective. Versions 1 through 7 keep mcp:read and
+// mcp:write implying mcp:connect, as authz did when they were defined:
+// credentials store their policy and decoding recomputes this closure, so a
+// narrower one would reject every stored policy that requested read or write,
+// and replicas that predate version 8 recompute the wider closure for policies
+// issued at those versions. A stored policy is only a ceiling, so the connect
+// it records still needs a live mcp:connect grant from the agent and its owner
+// before it allows anything.
+//
+// Versions 1 through 8 also predate MCP blocks following Implies in reverse,
+// when mcp:blocked_read implied no other block, so they keep recording an MCP
+// block on its own. Evaluation still applies the wider rule: a stored
+// mcp:blocked_read takes mcp:write away whatever the policy records, because
+// checks expand blocks when they are evaluated, not when they are stored.
+func delegatedScopeClosure(version DelegatedPolicyVersion, scope authz.Scope) []authz.Scope {
+	if version <= DelegatedPolicyVersion8 && slices.Contains(legacyIndependentMCPBlocks, scope) {
+		return []authz.Scope{scope}
+	}
+	closure := authz.ScopeImplicationClosure(scope)
+	if version >= DelegatedPolicyVersion8 || slices.Contains(closure, authz.ScopeMCPConnect) {
+		return closure
+	}
+	if !slices.Contains(closure, authz.ScopeMCPRead) && !slices.Contains(closure, authz.ScopeMCPWrite) {
+		return closure
+	}
+	closure = append(closure, authz.ScopeMCPConnect)
+	slices.Sort(closure)
+	return closure
+}
+
+// legacyIndependentMCPBlocks are the MCP blocks whose closure stored policies
+// of versions 1 through 8 record as the block alone.
+var legacyIndependentMCPBlocks = []authz.Scope{
+	authz.ScopeMCPBlockedRead,
+	authz.ScopeMCPBlockedWrite,
+	authz.ScopeMCPBlockedConnect,
 }
 
 func runtimeGrants(version DelegatedPolicyVersion, effective []DelegatedPolicyGrant) []authz.Grant {

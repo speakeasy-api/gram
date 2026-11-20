@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // The client families client_family can hold. New ones can be appended.
@@ -31,9 +33,6 @@ const (
 
 	// maxClientVersionBytes bounds a stored version. Real ones are far shorter.
 	maxClientVersionBytes = 32
-
-	// maxForwardedForBytes keeps the end of the header, which holds the only hop we read.
-	maxForwardedForBytes = 128
 )
 
 // clientFamilies is checked in order, so an editor's Electron User-Agent reads as the
@@ -46,7 +45,7 @@ var clientFamilies = []struct {
 	{FamilyClaudeCode, []string{"claude-code", "claude-cli"}},
 	{FamilyClaudeAI, []string{"claude-user", "claude-ai"}},
 	{FamilyCodexCLI, []string{"codex-cli-rs", "codex-cli", "codex-mcp-client", "codex"}},
-	{FamilyOpenAIConnector, []string{"openai-mcp", "chatgpt-user", "chatgpt"}},
+	{FamilyOpenAIConnector, []string{"openai-mcp", "openai-connectors", "chatgpt-user", "chatgpt"}},
 	{FamilyCursor, []string{"cursor"}},
 	{FamilyCopilot, []string{"copilot"}},
 	{FamilyZed, []string{"zed"}},
@@ -58,6 +57,39 @@ var clientFamilies = []struct {
 	{FamilyScript, []string{"python-httpx", "python-requests", "aiohttp", "node-fetch", "undici", "axios", "node", "libcurl", "curl", "wget", "go-http-client", "okhttp", "java"}},
 	{FamilyBrowser, []string{"mozilla"}},
 }
+
+// productFamilies maps an aivendors product to its family. It is keyed per product, not per
+// vendor, because one vendor host (claude.ai, chatgpt.com) serves several products.
+var productFamilies = map[string]string{
+	"claude-code":        FamilyClaudeCode,
+	"claude":             FamilyClaudeAI,
+	"chatgpt":            FamilyOpenAIConnector,
+	"codex":              FamilyCodexCLI,
+	"vscode":             FamilyVSCode,
+	"zed":                FamilyZed,
+	"notion":             FamilyNotion,
+	"github-copilot-cli": FamilyCopilot,
+}
+
+// vendorHostedRedirect lists families whose documents redirect only to the vendor's own host,
+// so a script-like User-Agent there is the vendor's backend. A localhost redirect could be any program.
+var vendorHostedRedirect = map[string]bool{FamilyClaudeAI: true, FamilyOpenAIConnector: true}
+
+// genericFamily is a family that names no client app.
+func genericFamily(family string) bool {
+	return family == "" || family == FamilyOther || family == FamilyScript
+}
+
+// documentFamilies is keyed by catalog entry URL, literal or pattern, as admission.CatalogPreset returns it.
+var documentFamilies = func() map[string]string {
+	families := make(map[string]string)
+	for _, entry := range aivendors.CIMDDocuments() {
+		if family, ok := productFamilies[entry.Product.ID]; ok {
+			families[entry.Document.URL] = family
+		}
+	}
+	return families
+}()
 
 // clientVersionShape is what a version may look like, so caller text never reaches the column.
 var clientVersionShape = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}(-[a-zA-Z0-9.]{1,16})?$`)
@@ -144,24 +176,28 @@ func validClientVersion(version string) bool {
 // requestClient is what a row keeps from its request until the writer reads it. It is bounded
 // and copied, so a row holds no large header, and it is never stored or logged.
 type requestClient struct {
-	present      bool
-	userAgent    string
-	forwardedFor string
+	present   bool
+	userAgent string
+	ipAddress string
+
+	// appFamily is the family the row's admitted catalog client_id names.
+	appFamily string
 
 	// reported reads what the MCP session said about itself. It runs on the writer.
 	reported func() (name, version string)
 }
 
-// FromRequest keeps what the request says about its client, for the writer to read. It parses
-// nothing here, so hostile headers can't affect the request. Without a request it sets nothing.
+// FromRequest captures bounded client metadata, including the public listener's
+// resolved IP. Classification and hashing run on the writer.
+// Without a request it sets nothing.
 func FromRequest(r *http.Request) Option {
 	if r == nil {
 		return Option{apply: nil}
 	}
 	userAgent := strings.Clone(r.UserAgent()[:min(len(r.UserAgent()), maxUserAgentBytes)])
-	forwardedFor := lastForwardedFor(r)
+	ipAddress := publicClientIP(r)
 	return Option{apply: func(row *Row) {
-		row.client.present, row.client.userAgent, row.client.forwardedFor = true, userAgent, forwardedFor
+		row.client.present, row.client.userAgent, row.client.ipAddress = true, userAgent, ipAddress
 	}}
 }
 
@@ -176,20 +212,44 @@ func ReportedClient(read func() (name, version string)) Option {
 	return Option{apply: func(row *Row) { row.client.reported = read }}
 }
 
-// stampClient reads a row's request on the writer: its family, version and device key.
+// stampClient reads a row's request on the writer: its family, version and device key. A reported
+// name comes first, then a User-Agent that names a client, then the catalog client_id.
 func (r *Recorder) stampClient(row *Row) {
 	client := row.client
-	row.client = requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil}
+	row.client = requestClient{present: false, userAgent: "", ipAddress: "", appFamily: "", reported: nil}
+	// reportedUnknown is a session that reported a name no family knows, with reportedVersion.
+	reportedUnknown, reportedVersion := false, ""
 	if client.reported != nil {
-		row.ClientFamily, row.ClientVersion = classifyReported(client.reported())
+		name, version := client.reported()
+		row.ClientFamily, row.ClientVersion = classifyReported(name, version)
+		if name != "" && row.ClientFamily == "" {
+			reportedUnknown, reportedVersion = true, version
+		}
+	}
+	if genericFamily(row.ClientFamily) && client.present {
+		// A browser User-Agent is generic too, so it can't replace a name the session reported.
+		family, version := classifyUserAgent(client.userAgent)
+		if row.ClientFamily == "" || !genericFamily(family) && family != FamilyBrowser {
+			row.ClientFamily, row.ClientVersion = family, version
+		}
+	}
+	// An admitted catalog client_id beats a runtime User-Agent, whose version isn't the app's.
+	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther ||
+		row.ClientFamily == FamilyScript && vendorHostedRedirect[client.appFamily]) {
+		switch {
+		case reportedUnknown && !vendorHostedRedirect[client.appFamily]:
+			// Any local program can present this client_id, and this one named itself something else.
+			row.ClientFamily, row.ClientVersion = FamilyOther, ""
+		case validClientVersion(reportedVersion):
+			row.ClientFamily, row.ClientVersion = client.appFamily, reportedVersion
+		default:
+			row.ClientFamily, row.ClientVersion = client.appFamily, ""
+		}
 	}
 	if !client.present {
 		return
 	}
-	if row.ClientFamily == "" {
-		row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
-	}
-	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, connectionIP(client.forwardedFor))
+	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, client.ipAddress)
 }
 
 // classifyReported returns no family for a name it does not know, so the User-Agent gets its turn.

@@ -65,7 +65,7 @@ func seedAnonymousConnection(t *testing.T, ctx context.Context, ti *testInstance
 
 	accessCiphertext, err := ti.enc.Encrypt([]byte("upstream-access"))
 	require.NoError(t, err)
-	params := remotesessions_repo.UpsertRemoteSessionParams{
+	params := remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   issuerID,
 		RemoteSessionClientID: clientID,
@@ -79,7 +79,7 @@ func seedAnonymousConnection(t *testing.T, ctx context.Context, ti *testInstance
 		params.RefreshTokenEncrypted = conv.ToPGText(refreshCiphertext)
 		params.RefreshExpiresAt = conv.ToPGTimestamptz(time.Now().Add(time.Hour))
 	}
-	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, params)
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, params)
 	require.NoError(t, err)
 }
 

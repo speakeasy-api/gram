@@ -81,7 +81,7 @@ func TestAssistantClientCredentialsBoundRequest(t *testing.T) {
 				if tc.denied {
 					return AssistantWorkloadToken{}, refuseWorkloadGrant("policy", errors.New("denied"))
 				}
-				return AssistantWorkloadToken{AssistantID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
+				return AssistantWorkloadToken{AssistantID: uuid.New(), AgentID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
 			})
 			r := newTokenDispatchRequest(t, url.Values{"resource": {tc.resource}, "scope": {tc.scope}})
 			w := httptest.NewRecorder()

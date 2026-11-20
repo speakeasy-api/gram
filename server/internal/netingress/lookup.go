@@ -29,6 +29,7 @@ type Ingress struct {
 
 type ingressRepository interface {
 	GetActiveIngressByAttestor(context.Context, repo.GetActiveIngressByAttestorParams) (repo.GetActiveIngressByAttestorRow, error)
+	GetActiveIngressesByDNSName(context.Context, string) ([]repo.GetActiveIngressesByDNSNameRow, error)
 	GetIngressServingState(context.Context, repo.GetIngressServingStateParams) (repo.GetIngressServingStateRow, error)
 }
 
@@ -55,6 +56,27 @@ func (l *IngressLookup) ByAttestor(ctx context.Context, namespace, serviceAccoun
 		return Ingress{}, fmt.Errorf("lookup private network ingress: %w", err)
 	}
 	return ingressFromRow(row, namespace, serviceAccount)
+}
+
+// ByDNSName resolves the gateway-hosted ingress serving host. Exactly one
+// enabled gateway ingress may own a DNS name; anything else fails closed.
+func (l *IngressLookup) ByDNSName(ctx context.Context, host string) (Ingress, error) {
+	canonical, err := requestorigin.CanonicalHost(host)
+	if err != nil || canonical == "" {
+		return Ingress{}, fmt.Errorf("%w: invalid request host", ErrIngressUnavailable)
+	}
+	rows, err := l.repo.GetActiveIngressesByDNSName(ctx, canonical)
+	if err != nil {
+		return Ingress{}, fmt.Errorf("lookup private network ingress by host: %w", err)
+	}
+	if len(rows) != 1 {
+		return Ingress{}, ErrIngressUnavailable
+	}
+	row := rows[0]
+	return ingressFromRow(repo.GetActiveIngressByAttestorRow{
+		ID: row.ID, OrganizationID: row.OrganizationID, Provider: row.Provider,
+		DnsName: row.DnsName, IdentityRequired: row.IdentityRequired,
+	}, row.AttestorNamespace, row.AttestorServiceAccount)
 }
 
 // Recheck compares every field that can alter serving authority. This does not

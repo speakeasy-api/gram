@@ -46,7 +46,7 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, []string{"chat:read"}, bySlug[string(authz.ScopeChatWrite)].SubScopes)
 	require.True(t, bySlug[string(authz.ScopeChatWrite)].Sensitive)
 	require.Equal(t, "destructive_admin", *bySlug[string(authz.ScopeOrgAdmin)].Sensitivity)
-	require.Equal(t, []string{"mcp:connect", "mcp:read"}, bySlug[string(authz.ScopeMCPWrite)].SubScopes)
+	require.Equal(t, []string{"mcp:read"}, bySlug[string(authz.ScopeMCPWrite)].SubScopes)
 	require.False(t, bySlug[string(authz.ScopeEnvironmentRead)].Sensitive)
 	for _, scope := range result.Scopes {
 		require.NotEmpty(t, scope.Label, scope.Slug)
@@ -90,6 +90,11 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, "project", bySlug[string(authz.ScopeLogRead)].ResourceType)
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeLogRead)].Visibility)
 	require.Nil(t, bySlug[string(authz.ScopeLogRead)].ExclusionScope)
+	for _, scope := range []authz.Scope{authz.ScopeMemoryRead, authz.ScopeMemoryWrite} {
+		require.Equal(t, "project", bySlug[string(scope)].ResourceType)
+		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
+		require.Nil(t, bySlug[string(scope)].ExclusionScope)
+	}
 	for _, scope := range []authz.Scope{authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer} {
 		require.Equal(t, "agent", bySlug[string(scope)].ResourceType)
 		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)

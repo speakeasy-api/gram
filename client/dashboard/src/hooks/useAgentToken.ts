@@ -24,6 +24,8 @@ export type UseAgentToken = {
   hasExistingAgentKey: boolean;
   /** Mint an additional agent key. Existing agent keys keep working. */
   generate: () => void;
+  /** Like generate, but resolves with the minted secret and its key id. */
+  generateAsync: () => Promise<{ token: string; id: string }>;
 };
 
 /**
@@ -37,7 +39,7 @@ export type UseAgentToken = {
  */
 export function useAgentToken(opts: {
   /** Builds the text to copy once a token is minted (e.g. a managed.json). */
-  buildCopyText: (token: string) => string;
+  buildCopyText?: (token: string) => string;
 }): UseAgentToken {
   const { buildCopyText } = opts;
   const queryClient = useQueryClient();
@@ -61,6 +63,10 @@ export function useAgentToken(opts: {
     onSuccess: async (data) => {
       if (!data.key) return;
       setGeneratedToken(data.key);
+      if (!buildCopyText) {
+        await invalidateAllListAPIKeys(queryClient);
+        return;
+      }
       // Best-effort: drop the payload straight onto the clipboard. Clipboard
       // writes need transient user activation, which a slow request can outlive,
       // so this may reject — the caller can still surface a manual copy path.
@@ -76,21 +82,27 @@ export function useAgentToken(opts: {
     },
   });
 
-  const generate = () => {
-    createKeyMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: {
-        createKeyForm: {
-          // Unique per mint (to the second): the (org, name) unique index would
-          // otherwise reject a second key minted the same day.
-          name: `device-agent ${new Date()
-            .toISOString()
-            .slice(0, 19)
-            .replace("T", " ")}`,
-          scopes: [AGENT_SCOPE],
-        },
+  const createRequest = () => ({
+    security: { sessionHeaderGramSession: "" },
+    request: {
+      createKeyForm: {
+        // The (org, name) unique index rejects a repeated name, so a short
+        // random suffix keeps two mints in the same second apart.
+        name: `device-agent ${new Date()
+          .toISOString()
+          .slice(0, 19)
+          .replace("T", " ")} ${crypto.randomUUID().slice(0, 4)}`,
+        scopes: [AGENT_SCOPE],
       },
-    });
+    },
+  });
+
+  const generate = () => createKeyMutation.mutate(createRequest());
+
+  const generateAsync = async () => {
+    const data = await createKeyMutation.mutateAsync(createRequest());
+    if (!data.key) throw new Error("agent token: empty key in response");
+    return { token: data.key, id: data.id };
   };
 
   return {
@@ -101,5 +113,6 @@ export function useAgentToken(opts: {
     canGenerate,
     hasExistingAgentKey,
     generate,
+    generateAsync,
   };
 }

@@ -20,6 +20,45 @@ func TestCatalogAdmits_EnabledEntries(t *testing.T) {
 	}
 }
 
+func TestCatalogAdmitsPiMetadataDocuments(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		clientID string
+		reason   AdmitReason
+	}{
+		{"https://pi.dev/oauth/client.json", AdmitCatalogExact},
+		{"https://pi.dev/oauth/epMNJ6P1xGQ9/client.json", AdmitCatalogPattern},
+	} {
+		t.Run(tc.clientID, func(t *testing.T) {
+			t.Parallel()
+			decision := Evaluate(ModePresets, tc.clientID)
+			require.Equal(t, OutcomeAdmit, decision.Outcome)
+			require.Equal(t, tc.reason, decision.Admit)
+			preset, ok := CatalogPreset(tc.clientID)
+			require.True(t, ok)
+			require.Equal(t, "pi", preset.VendorKey)
+		})
+	}
+
+	for _, clientID := range []string{
+		"http://pi.dev/oauth/client.json",
+		"https://pi.dev.evil.example/oauth/client.json",
+		"https://other.example/oauth/epMNJ6P1xGQ9/client.json",
+		"https://pi.dev/oauth//client.json",
+		"https://pi.dev/oauth/a/b/client.json",
+		"https://pi.dev/oauth/client.json/",
+		"https://pi.dev/oauth/epMNJ6P1xGQ9/other.json",
+		"https://pi.dev/oauth/epMNJ6P1xGQ9/client.json?extra=1",
+		"https://pi.dev/oauth/client.json#fragment",
+	} {
+		t.Run(clientID, func(t *testing.T) {
+			t.Parallel()
+			require.False(t, catalogAdmits(clientID))
+		})
+	}
+}
+
 func TestCatalogAdmits_RejectsUnknown(t *testing.T) {
 	t.Parallel()
 

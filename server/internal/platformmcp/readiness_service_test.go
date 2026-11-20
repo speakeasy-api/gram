@@ -59,7 +59,7 @@ func TestMissingReadinessNormalizesToAStableRepairProjection(t *testing.T) {
 	t.Parallel()
 
 	readiness := normalizedReadiness(Readiness{}, false)
-	output := readinessToolOutput("project", "registration", readiness, false)
+	output := readinessToolOutput("project", "mcp", readiness, false)
 
 	require.Equal(t, ReadinessDegraded, readiness.State)
 	require.Equal(t, "readiness_unavailable", readiness.EvidenceCode)
@@ -71,7 +71,7 @@ func TestMissingReadinessNormalizesToAStableRepairProjection(t *testing.T) {
 func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testing.T) {
 	t.Parallel()
 
-	output := readinessToolOutput("project", "registration", Readiness{
+	output := readinessToolOutput("project", "mcp", Readiness{
 		State:        ReadinessUnauthorized,
 		EvidenceCode: "provider_authorization_rejected",
 		CheckedAt:    time.Date(2026, time.August, 7, 0, 0, 0, 0, time.UTC),
@@ -80,7 +80,7 @@ func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testin
 	}, true)
 
 	require.Equal(t, "project", output.ProjectSlug)
-	require.Equal(t, "registration", output.RegistrationID)
+	require.Equal(t, "mcp", output.MCPID)
 	require.Equal(t, ReadinessUnauthorized, output.State)
 	require.Equal(t, "fresh", output.Freshness)
 	require.NotEmpty(t, output.Actions)
@@ -98,7 +98,7 @@ func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testin
 func TestReadinessToolOutputUsesCategorySpecificActions(t *testing.T) {
 	t.Parallel()
 
-	output := readinessToolOutput("project", "registration", Readiness{
+	output := readinessToolOutput("project", "mcp", Readiness{
 		State:        ReadinessUnsupported,
 		EvidenceCode: "redirect_rejected",
 	}, true)
@@ -110,7 +110,7 @@ func TestReadinessToolOutputUsesCategorySpecificActions(t *testing.T) {
 func TestReadyStateSuppressesStaleFailureEvidence(t *testing.T) {
 	t.Parallel()
 
-	output := readinessToolOutput("project", "registration", Readiness{
+	output := readinessToolOutput("project", "mcp", Readiness{
 		State:        ReadinessReady,
 		EvidenceCode: "provider_authorization_rejected",
 	}, true)
@@ -122,7 +122,7 @@ func TestReadyStateSuppressesStaleFailureEvidence(t *testing.T) {
 func TestGuideUnavailableKeepsContactSupportRepairAction(t *testing.T) {
 	t.Parallel()
 
-	output := readinessToolOutput("project", "registration", Readiness{
+	output := readinessToolOutput("project", "mcp", Readiness{
 		State:        ReadinessGuideUnavailable,
 		EvidenceCode: "guide_missing",
 	}, true)

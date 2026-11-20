@@ -35,7 +35,9 @@ func NewLogger(opts ...LoggerOption) *Logger {
 }
 
 type auditEntry struct {
-	Params      repo.InsertAuditLogParams
+	Params repo.InsertAuditLogParams
+
+	// OutboxEvent is the webhook the entry publishes; nil records it without one, for actions that change nothing.
 	OutboxEvent *outbox.EventDef[events.AuditLogCreatedPayloadV1]
 }
 
@@ -53,7 +55,7 @@ func (l *Logger) log(ctx context.Context, dbtx repo.DBTX, entry auditEntry) erro
 		return fmt.Errorf("log %s: %w", entry.Params.Action, err)
 	}
 
-	if l.skipOutbox {
+	if l.skipOutbox || entry.OutboxEvent == nil {
 		return nil
 	}
 	return PublishWebhook(ctx, dbtx, entry.Params, row, CategoryConfiguration, entry.OutboxEvent)

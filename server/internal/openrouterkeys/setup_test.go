@@ -29,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -343,7 +342,7 @@ func (s *stubProvisioner) RemoveCauseCalls() []string {
 	return append([]string(nil), s.removeCauseCalls...)
 }
 
-type provisionerFactory func(*slog.Logger, trace.TracerProvider, *pgxpool.Pool, *cutover.Sealer) openrouter.Provisioner
+type provisionerFactory func(*slog.Logger, trace.TracerProvider, *pgxpool.Pool, *encryption.Client) openrouter.Provisioner
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
@@ -377,7 +376,6 @@ func newTestServiceWithOptions(t *testing.T, factory provisionerFactory, options
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	enc := testenv.NewEncryptionClient(t)
-	keys := testenv.NewAIProviderKeys(t)
 	stub := &stubProvisioner{
 		mu:           sync.Mutex{},
 		logger:       logger,
@@ -389,7 +387,7 @@ func newTestServiceWithOptions(t *testing.T, factory provisionerFactory, options
 	}
 	var provisioner openrouter.Provisioner = stub
 	if factory != nil {
-		provisioner = factory(logger, tracerProvider, conn, keys)
+		provisioner = factory(logger, tracerProvider, conn, enc)
 		stub = nil
 	}
 
@@ -401,7 +399,7 @@ func newTestServiceWithOptions(t *testing.T, factory provisionerFactory, options
 	}
 
 	return ctx, &testInstance{
-		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), provisioner, keys, coordinator, options...),
+		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), provisioner, enc, coordinator, options...),
 		conn:        conn,
 		enc:         enc,
 		provisioner: stub,

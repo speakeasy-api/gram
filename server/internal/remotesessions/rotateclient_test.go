@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
@@ -18,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	orgencryptionrepo "github.com/speakeasy-api/gram/server/internal/orgencryption/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -379,4 +382,41 @@ func TestUpdateClient_NewSecretClearsUpstreamRejection(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, updated.UpstreamRejectedAt, "a new secret clears the marker")
 	require.Nil(t, updated.ClientSecretExpiresAt, "a pasted-in secret carries no expiry, so the old deadline cannot flag it as expired")
+}
+
+func TestRotateClientKeyOutageRegistersNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	registration, registrations := newRegistrationServer(t)
+	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "rotate-key-outage")
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rotate-key-outage-usi", issuerID, clientID)
+
+	fixtureAuth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	n, err := testrepo.New(ti.conn).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+		OrganizationID:       conv.ToPGText(fixtureAuth.ActiveOrganizationID),
+		RegistrationEndpoint: conv.ToPGText(registration.URL + "/register"),
+		ClientID:             clientID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	// The organization's client secrets are past platform_key and this
+	// process has no organization encryption to seal the replacement with.
+	_, err = orgencryptionrepo.New(ti.conn).CreateEncryptionTransition(ctx, orgencryptionrepo.CreateEncryptionTransitionParams{
+		OrganizationID:          fixtureAuth.ActiveOrganizationID,
+		UseCase:                 string(orgencryption.UseCaseOAuthClientSecrets),
+		State:                   string(orgencryption.TransitionStateDualWrite),
+		PlatformCopiesClearedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.RotateClient(ctx, &orgclientsgen.RotateClientPayload{
+		ID:           clientID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.Zero(t, registrations.Load(), "nothing is registered when the replacement's secret could not be stored")
 }

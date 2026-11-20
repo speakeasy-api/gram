@@ -21,9 +21,18 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 	if !ok || auth == nil || auth.ProjectID == nil || len(ids) == 0 || authz.CheckSensitiveContentAccess(ctx) != nil {
 		return visible, nil
 	}
-	checks := make([]authz.Check, len(ids))
-	for i, id := range ids {
-		checks[i] = authz.ChatReadCheck(id)
+	checks := make([]authz.Check, 0, len(ids))
+	for _, raw := range ids {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, fmt.Errorf("parse conversation reference: %w", err)
+		}
+		// The nil uuid names no chat, so it gets no check; the loop below
+		// finds no row for it and leaves it out.
+		if id == uuid.Nil {
+			continue
+		}
+		checks = append(checks, authz.Chat(authz.ChatIDFrom(raw)).Read())
 	}
 	granted, err := s.authz.Filter(ctx, checks)
 	if err != nil {
@@ -46,7 +55,7 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 			return nil, fmt.Errorf("load conversation reference: %w", err)
 		}
 		grant := allowed[raw]
-		if err := s.authorizeChatAccess(ctx, auth, chat, chatAccessRead, &grant); err == nil {
+		if err := s.access.authorizeChatAccess(ctx, auth, chat, chatAccessRead, &grant); err == nil {
 			visible = append(visible, raw)
 		}
 	}

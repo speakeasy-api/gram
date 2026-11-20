@@ -240,6 +240,38 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 		"shadow-MCP guard must deny when no cached MCP list is available")
 }
 
+// Without a blocking policy the project is in the built-in blocklist mode,
+// which allows servers until an administrator denies one. A missing MCP
+// list must not turn that into a block of every MCP call.
+func TestClaude_PreToolUse_BuiltInBlocklistAllowsWithoutMCPList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	ti.service.riskScanner = &stubResultScanner{}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_pretooluse_builtin"
+	userEmail := "claude-builtin@example.com"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{"foo": "bar"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be a *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision,
+		"the built-in blocklist must not fail closed when no MCP list is available")
+}
+
 // When the MCP list snapshot is missing from the cache (SessionStart hasn't
 // finished yet, or the 12h inactivity TTL elapsed), the guard fails closed
 // and surfaces a retry/restart hint to the user. Failing open would let a

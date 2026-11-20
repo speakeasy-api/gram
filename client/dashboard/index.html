@@ -1,5 +1,6 @@
 <!doctype html>
-<html lang="en" class="dark:scheme-dark">
+<!-- Browser translation mutates React-managed text nodes and can break DOM updates. -->
+<html lang="en" translate="no" class="dark:scheme-dark">
   <head>
     <meta charset="UTF-8" />
     <!-- Slack's link-preview proxy rejects SVG (HTTP 415) and then draws a
@@ -60,11 +61,6 @@
     <link
       rel="preconnect"
       href="https://browser-intake-datadoghq.com"
-      crossorigin
-    />
-    <link
-      rel="preconnect"
-      href="https://static.clairedefermat.com"
       crossorigin
     />
     <!-- Fonts live in src/fonts (not public/) so they build to hashed

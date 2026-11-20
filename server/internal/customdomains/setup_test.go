@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
@@ -61,10 +63,22 @@ type stubTemporalClient struct {
 	reconcileStartErr error
 	reconcileErr      error
 	reconcile         func(context.Context, uuid.UUID) error
+	reconcileStatus   enums.WorkflowExecutionStatus
 }
 
 func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	return nil, nil
+}
+
+func (s *stubTemporalClient) GetReconcileWorkflowInfo(ctx context.Context, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	if s.reconcileStatus == enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+		return nil, nil
+	}
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status: s.reconcileStatus,
+		},
+	}, nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {

@@ -113,9 +113,17 @@ type Client struct {
 	// the getShadowMCPInventoryServer endpoint.
 	GetShadowMCPInventoryServerDoer goahttp.Doer
 
+	// FindShadowMCPInventoryServers Doer is the HTTP client used to make requests
+	// to the findShadowMCPInventoryServers endpoint.
+	FindShadowMCPInventoryServersDoer goahttp.Doer
+
 	// UpdateShadowMCPInventoryServerName Doer is the HTTP client used to make
 	// requests to the updateShadowMCPInventoryServerName endpoint.
 	UpdateShadowMCPInventoryServerNameDoer goahttp.Doer
+
+	// SetShadowMCPOfficialServer Doer is the HTTP client used to make requests to
+	// the setShadowMCPOfficialServer endpoint.
+	SetShadowMCPOfficialServerDoer goahttp.Doer
 
 	// ListShadowMCPInventoryUsers Doer is the HTTP client used to make requests to
 	// the listShadowMCPInventoryUsers endpoint.
@@ -197,6 +205,18 @@ type Client struct {
 	// revokeTemporaryGrant endpoint.
 	RevokeTemporaryGrantDoer goahttp.Doer
 
+	// ListAccessRequests Doer is the HTTP client used to make requests to the
+	// listAccessRequests endpoint.
+	ListAccessRequestsDoer goahttp.Doer
+
+	// DecideAccessRequest Doer is the HTTP client used to make requests to the
+	// decideAccessRequest endpoint.
+	DecideAccessRequestDoer goahttp.Doer
+
+	// WithdrawAccessRequest Doer is the HTTP client used to make requests to the
+	// withdrawAccessRequest endpoint.
+	WithdrawAccessRequestDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -241,7 +261,9 @@ func NewClient(
 		UpdateMemberRolesDoer:                    doer,
 		ListShadowMCPInventoryDoer:               doer,
 		GetShadowMCPInventoryServerDoer:          doer,
+		FindShadowMCPInventoryServersDoer:        doer,
 		UpdateShadowMCPInventoryServerNameDoer:   doer,
+		SetShadowMCPOfficialServerDoer:           doer,
 		ListShadowMCPInventoryUsersDoer:          doer,
 		ListShadowMCPInventoryServersForUserDoer: doer,
 		ResolveShadowMCPInventoryRequestDoer:     doer,
@@ -262,6 +284,9 @@ func NewClient(
 		ListTemporaryGrantsDoer:                  doer,
 		RenewTemporaryGrantDoer:                  doer,
 		RevokeTemporaryGrantDoer:                 doer,
+		ListAccessRequestsDoer:                   doer,
+		DecideAccessRequestDoer:                  doer,
+		WithdrawAccessRequestDoer:                doer,
 		RestoreResponseBody:                      restoreBody,
 		scheme:                                   scheme,
 		host:                                     host,
@@ -846,6 +871,30 @@ func (c *Client) GetShadowMCPInventoryServer() goa.Endpoint {
 	}
 }
 
+// FindShadowMCPInventoryServers returns an endpoint that makes HTTP requests
+// to the access service findShadowMCPInventoryServers server.
+func (c *Client) FindShadowMCPInventoryServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFindShadowMCPInventoryServersRequest(c.encoder)
+		decodeResponse = DecodeFindShadowMCPInventoryServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFindShadowMCPInventoryServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FindShadowMCPInventoryServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "findShadowMCPInventoryServers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // UpdateShadowMCPInventoryServerName returns an endpoint that makes HTTP
 // requests to the access service updateShadowMCPInventoryServerName server.
 func (c *Client) UpdateShadowMCPInventoryServerName() goa.Endpoint {
@@ -865,6 +914,30 @@ func (c *Client) UpdateShadowMCPInventoryServerName() goa.Endpoint {
 		resp, err := c.UpdateShadowMCPInventoryServerNameDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "updateShadowMCPInventoryServerName", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetShadowMCPOfficialServer returns an endpoint that makes HTTP requests to
+// the access service setShadowMCPOfficialServer server.
+func (c *Client) SetShadowMCPOfficialServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetShadowMCPOfficialServerRequest(c.encoder)
+		decodeResponse = DecodeSetShadowMCPOfficialServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetShadowMCPOfficialServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetShadowMCPOfficialServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "setShadowMCPOfficialServer", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -1345,6 +1418,78 @@ func (c *Client) RevokeTemporaryGrant() goa.Endpoint {
 		resp, err := c.RevokeTemporaryGrantDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "revokeTemporaryGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAccessRequests returns an endpoint that makes HTTP requests to the
+// access service listAccessRequests server.
+func (c *Client) ListAccessRequests() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAccessRequestsRequest(c.encoder)
+		decodeResponse = DecodeListAccessRequestsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAccessRequestsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAccessRequestsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAccessRequests", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DecideAccessRequest returns an endpoint that makes HTTP requests to the
+// access service decideAccessRequest server.
+func (c *Client) DecideAccessRequest() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDecideAccessRequestRequest(c.encoder)
+		decodeResponse = DecodeDecideAccessRequestResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDecideAccessRequestRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DecideAccessRequestDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "decideAccessRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// WithdrawAccessRequest returns an endpoint that makes HTTP requests to the
+// access service withdrawAccessRequest server.
+func (c *Client) WithdrawAccessRequest() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeWithdrawAccessRequestRequest(c.encoder)
+		decodeResponse = DecodeWithdrawAccessRequestResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildWithdrawAccessRequestRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.WithdrawAccessRequestDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "withdrawAccessRequest", err)
 		}
 		return decodeResponse(resp)
 	}

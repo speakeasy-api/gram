@@ -1373,6 +1373,61 @@ func (q *Queries) RenameIssuanceProfile(ctx context.Context, arg RenameIssuanceP
 	return i, err
 }
 
+const undoServerBackfillAuthClientDetaches = `-- name: UndoServerBackfillAuthClientDetaches :many
+UPDATE mcp_server_auth_clients msac
+SET source = 'backfill',
+    updated_at = clock_timestamp()
+FROM mcp_auth_clients ac
+WHERE msac.mcp_server_id = $1
+  AND msac.project_id = $2
+  AND msac.organization_id = $3
+  AND msac.source = 'admin'
+  AND msac.deleted IS TRUE
+  AND ac.id = msac.auth_client_id
+  AND ac.organization_id = msac.organization_id
+  AND ac.remote_session_client_id = $4
+  AND ac.source = 'backfill'
+  AND ac.deleted IS FALSE
+RETURNING msac.auth_client_id
+`
+
+type UndoServerBackfillAuthClientDetachesParams struct {
+	McpServerID           uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionClientID uuid.NullUUID
+}
+
+// Undoes administrator detaches of one upstream OAuth client's backfilled
+// auth clients from one MCP server, for an explicit attach of that client.
+// The deleted links become source 'backfill' retirements, which the backfill
+// relinks while the association they were derived from stands. Returns the
+// auth clients whose detach was undone, once per undone row.
+func (q *Queries) UndoServerBackfillAuthClientDetaches(ctx context.Context, arg UndoServerBackfillAuthClientDetachesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, undoServerBackfillAuthClientDetaches,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionClientID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var auth_client_id uuid.UUID
+		if err := rows.Scan(&auth_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, auth_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAuthClient = `-- name: UpdateAuthClient :one
 UPDATE mcp_auth_clients
 SET name = $1,

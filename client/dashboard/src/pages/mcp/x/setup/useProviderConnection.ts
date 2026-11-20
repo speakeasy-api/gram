@@ -1,3 +1,24 @@
+import {
+  oktaConnection,
+  oktaSelectionForUrl,
+} from "@/pages/catalog/provider-setup/okta";
+import {
+  snowflakeConnection,
+  snowflakeSelectionForUrl,
+} from "@/pages/catalog/provider-setup/snowflake";
+import {
+  salesforceConnection,
+  salesforceInstance,
+  salesforceInstanceConfiguration,
+  salesforceInstanceHeader,
+  salesforceLogin,
+  salesforceScopes,
+  SalesforceInstanceConfigurationError,
+  salesforceSelectionForUrl,
+} from "@/pages/catalog/provider-setup/salesforce";
+import { providerSourceFingerprint } from "./provider-setup";
+import { invalidateRemoteMcpSourceViews } from "../tabs/settings/sections/sourceInvalidation";
+import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders";
 import { useServerClientConfiguration } from "@/lib/remote-identity/queries/useServerClientConfiguration";
 import { invalidateIdentityConfiguration } from "@/lib/remote-identity/queries/invalidateIdentityConfiguration";
 import { mcpServerVisibilityUpdateForm } from "@/lib/mcp-server-visibility";
@@ -22,6 +43,7 @@ import { isNotFoundError } from "@/lib/route-errors";
 import { scopesFor } from "@/pages/catalog/provider-setup/provider-data";
 import {
   validate,
+  ready,
   type Action,
   type State,
   type FieldName,
@@ -76,6 +98,106 @@ const providers = {
   },
 };
 
+type SelectedProviderConnection =
+  | ReturnType<typeof salesforceConnection>
+  | ReturnType<typeof snowflakeConnection>
+  | ReturnType<typeof oktaConnection>;
+function selectedProviderConnection(
+  provider: State["provider"],
+  values: State["values"],
+): SelectedProviderConnection {
+  switch (provider) {
+    case "okta":
+      return oktaConnection(values);
+    case "snowflake":
+      return snowflakeConnection(values);
+    case "salesforce":
+      return salesforceConnection(values);
+    case "github":
+    case "slack":
+      return null;
+  }
+}
+function providerOAuthConfig(
+  s: State,
+  selected: SelectedProviderConnection,
+): {
+  name: string;
+  issuer: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+} {
+  if (selected) return selected;
+  switch (s.provider) {
+    case "salesforce":
+      return salesforceLogin();
+    case "okta":
+      return {
+        name: "Okta",
+        issuer: "https://okta.invalid",
+        authorizationEndpoint: "https://okta.invalid/oauth2/v1/authorize",
+        tokenEndpoint: "https://okta.invalid/oauth2/v1/token",
+      };
+    case "snowflake":
+      return {
+        name: "Snowflake",
+        issuer: "https://snowflake.invalid",
+        authorizationEndpoint: "https://snowflake.invalid/oauth/authorize",
+        tokenEndpoint: "https://snowflake.invalid/oauth/token-request",
+      };
+    case "github":
+    case "slack":
+      return providers[s.provider];
+  }
+}
+function providerScopes(provider: State["provider"], access: string): string[] {
+  switch (provider) {
+    case "okta":
+      // Leave the client unpinned so the existing sign-in flow discovers scopes.
+      return [];
+    case "slack":
+      return scopesFor({ values: { access } });
+    case "salesforce":
+      return salesforceScopes();
+    case "snowflake":
+      return ["session:role:all"];
+    case "github":
+      return [];
+  }
+}
+function providerTokenMethods(provider: State["provider"]): string[] {
+  switch (provider) {
+    case "okta":
+      return ["none", "client_secret_basic"];
+    case "salesforce":
+      return ["none", "client_secret_post"];
+    case "github":
+    case "slack":
+    case "snowflake":
+      return ["client_secret_post"];
+  }
+}
+function sourceValues(
+  provider: State["provider"],
+  source: { url: string; instanceUrl?: string },
+): Partial<State["values"]> {
+  switch (provider) {
+    case "okta":
+      return oktaSelectionForUrl(source.url) ?? {};
+    case "snowflake":
+      return snowflakeSelectionForUrl(source.url) ?? {};
+    case "salesforce":
+      return {
+        salesforceDomain: "",
+        ...salesforceSelectionForUrl(source.url),
+        instanceUrl: source.instanceUrl ?? "",
+      };
+    case "github":
+    case "slack":
+      return {};
+  }
+}
+
 export type ProviderConnection = {
   next: () => void;
   signIn: () => void;
@@ -89,6 +211,7 @@ export type ProviderConnection = {
   loading: boolean;
   callbackUrl?: string;
   savedClientId?: string;
+  savedTokenEndpointAuthMethod?: string;
   recovery?: "signin" | "credentials" | "settings" | "permissions";
   retryLoad: () => void;
   cancelSignIn: () => void;
@@ -117,13 +240,24 @@ export function useProviderConnection(
   s: State,
   dispatch: Dispatch<Action>,
   server: McpServer,
+  source?: { url: string; instanceUrl?: string },
+  onConfigured?: () => Promise<void>,
 ): ProviderConnection {
   const providerKey = s.provider;
-  const config = providers[providerKey];
+  if (providerKey === "salesforce" && source?.instanceUrl)
+    source = {
+      ...source,
+      instanceUrl: salesforceInstance(source.instanceUrl) ?? source.instanceUrl,
+    };
+  const configurableSource = ["salesforce", "snowflake", "okta"].includes(
+    providerKey,
+  );
+  const selectedConnection = selectedProviderConnection(providerKey, s.values);
+  const config = providerOAuthConfig(s, selectedConnection);
   const name = config.name;
   const access = s.values.access;
   const requestedScopes = useMemo(
-    () => (providerKey === "slack" ? scopesFor({ values: { access } }) : []),
+    () => providerScopes(providerKey, access),
     [access, providerKey],
   );
   const sdk = useSdkClient();
@@ -160,7 +294,58 @@ export function useProviderConnection(
     open: openPopup,
   } = useOAuthPopup(() => checkOnReturn.current());
   const generation = useRef(0);
+  const activeSave = useRef<number | null>(null);
   const hydrated = useRef(false);
+  const appliedSource = useRef(source ? { ...source } : undefined);
+  const observedSource = useRef({ ...source, id: server.remoteMcpServerId });
+  useEffect(() => {
+    if (!configurableSource || !source) return;
+    const previous = observedSource.current;
+    const id = server.remoteMcpServerId;
+    const changed =
+      previous.id !== id ||
+      previous.url !== source.url ||
+      (previous.instanceUrl ?? "") !== (source.instanceUrl ?? "");
+    if (changed) {
+      observedSource.current = { ...source, id };
+      const applied = appliedSource.current;
+      // URL and header queries can refresh separately after our own writes.
+      const ownRefresh =
+        previous.id === id &&
+        applied &&
+        [previous.url, applied.url].includes(source.url) &&
+        [previous.instanceUrl ?? "", applied.instanceUrl ?? ""].includes(
+          source.instanceUrl ?? "",
+        );
+      if (!ownRefresh) {
+        generation.current++;
+        cancelPopup();
+        if (activeSave.current === null) setPhase("idle");
+        setToolCount(null);
+        setFailure(null);
+        appliedSource.current = { ...source };
+        dispatch({
+          type: "source",
+          values: sourceValues(providerKey, source),
+          sourceFingerprint: providerSourceFingerprint(id, source),
+        });
+        return;
+      }
+    }
+    if (!s.sourceFingerprint && appliedSource.current)
+      dispatch({
+        type: "connection",
+        sourceFingerprint: providerSourceFingerprint(id, appliedSource.current),
+      });
+  }, [
+    providerKey,
+    configurableSource,
+    server.remoteMcpServerId,
+    source,
+    s.sourceFingerprint,
+    dispatch,
+    cancelPopup,
+  ]);
   useEffect(
     () => () => {
       generation.current++;
@@ -175,6 +360,11 @@ export function useProviderConnection(
     server.remoteMcpServerId,
     server.environmentId,
     server.updatedAt,
+    ...(providerKey === "salesforce"
+      ? [config.issuer]
+      : configurableSource
+        ? [config.issuer, source?.url, source?.instanceUrl]
+        : []),
   ]);
   const currentTarget = useRef(targetKey);
   const observedClient = useRef<string | null>(null);
@@ -224,6 +414,11 @@ export function useProviderConnection(
         authorized: false,
         tested: false,
         ...(!status.data ? { saved: false } : {}),
+        ...(providerKey === "snowflake" &&
+        status.data &&
+        !sameScopes(status.data.client.scope, requestedScopes)
+          ? { saved: false, configChanged: true }
+          : {}),
       });
       if (!preparing) {
         generation.current++;
@@ -232,11 +427,41 @@ export function useProviderConnection(
       }
     }
     observedClient.current = fingerprint;
-  }, [status.isSuccess, status.data, preparing, dispatch, cancelPopup]);
+  }, [
+    status.isSuccess,
+    status.data,
+    preparing,
+    dispatch,
+    cancelPopup,
+    providerKey,
+    requestedScopes,
+  ]);
   useEffect(() => {
     if (!status.isSuccess || hydrated.current) return;
+    if (providerKey === "okta" && status.data && !s.configChanged) {
+      const savedAppType =
+        status.data.client.tokenEndpointAuthMethod === "none"
+          ? "native"
+          : "web";
+      dispatch({
+        type: "field",
+        field: "oktaAppType",
+        value: savedAppType,
+        source: "configuration",
+      });
+      if (s.values.oktaAppType !== savedAppType) return;
+    }
     hydrated.current = true;
-    if (status.data) {
+    if (
+      status.data &&
+      (!configurableSource ||
+        (!s.configChanged &&
+          selectedConnection &&
+          selectedConnection.url === appliedSource.current?.url &&
+          ("instanceUrl" in selectedConnection
+            ? (selectedConnection.instanceUrl ?? "")
+            : "") === (appliedSource.current?.instanceUrl ?? "")))
+    ) {
       if (providerKey === "slack" && !s.accessChosen)
         dispatch({
           type: "field",
@@ -246,14 +471,24 @@ export function useProviderConnection(
             ? "all"
             : "read",
         });
+      const scopeMismatch =
+        (providerKey === "snowflake" || s.accessChosen) &&
+        !sameScopes(status.data.client.scope, requestedScopes);
       dispatch({
         type: "connection",
-        saved: true,
+        saved:
+          !["snowflake", "okta"].includes(providerKey) ||
+          (!scopeMismatch &&
+            (providerKey !== "okta" ||
+              status.data.client.tokenEndpointAuthMethod ===
+                oktaConnection(s.values)?.authMethod)),
         authorized: false,
         tested: false,
         configChanged:
-          s.accessChosen &&
-          !sameScopes(status.data.client.scope, requestedScopes),
+          scopeMismatch ||
+          (providerKey === "okta" &&
+            status.data.client.tokenEndpointAuthMethod !==
+              oktaConnection(s.values)?.authMethod),
       });
     }
   }, [
@@ -262,7 +497,12 @@ export function useProviderConnection(
     dispatch,
     providerKey,
     s.accessChosen,
+    s.values.oktaAppType,
+    s.values,
     requestedScopes,
+    selectedConnection,
+    configurableSource,
+    s.configChanged,
   ]);
 
   const revokeSessions = useCallback(
@@ -284,8 +524,204 @@ export function useProviderConnection(
     [sdk, queryClient],
   );
 
+  const prepareProviderSource = useCallback(
+    async (
+      run: number,
+      write: boolean,
+      registerRollback?: (rollback: () => Promise<void>) => void,
+    ) => {
+      if (!configurableSource) return;
+      const selected = selectedProviderConnection(providerKey, s.values);
+      const selectedInstance =
+        selected && "instanceUrl" in selected
+          ? selected.instanceUrl
+          : undefined;
+      const id = server.remoteMcpServerId;
+      if (
+        !selected ||
+        !id ||
+        (providerKey === "salesforce" && s.values.path !== "own")
+      )
+        throw new ConfigurationChanged();
+      const target = await sdk.mcpServers.get({ id: server.id });
+      if (
+        generation.current !== run ||
+        target.remoteMcpServerId !== id ||
+        target.environmentId !== server.environmentId ||
+        target.userSessionIssuerId !== server.userSessionIssuerId
+      )
+        throw new ConfigurationChanged();
+      const upstream = await sdk.remoteMcp.getServer({ id });
+      if (generation.current !== run) throw new ConfigurationChanged();
+      const { headers } = await sdk.remoteMcp.listServerHeaders({
+        remoteMcpServerId: id,
+      });
+      if (generation.current !== run) throw new ConfigurationChanged();
+      if (
+        headers.some((header) => header.name.toLowerCase() === "authorization")
+      )
+        throw new ConfigurationChanged();
+      const { header: instance, instanceUrl: currentInstance } =
+        providerKey === "salesforce"
+          ? salesforceInstanceConfiguration(headers)
+          : { header: undefined, instanceUrl: "" };
+      const expected = appliedSource.current;
+      if (
+        !expected ||
+        upstream.url !== expected.url ||
+        currentInstance !== (expected.instanceUrl ?? "")
+      )
+        throw new ConfigurationChanged();
+      const changeUrl = upstream.url !== selected.url;
+      const changeInstance = currentInstance !== (selectedInstance ?? "");
+      if (!changeUrl && !changeInstance) return;
+      if (!write) throw new ConfigurationChanged();
+      const { mcpServers } = await sdk.mcpServers.list();
+      if (generation.current !== run) throw new ConfigurationChanged();
+      if (
+        mcpServers.some(
+          (item) => item.id !== server.id && item.remoteMcpServerId === id,
+        )
+      )
+        throw new ConfigurationChanged();
+      const originalSource = {
+        url: upstream.url,
+        instanceUrl: currentInstance,
+      };
+      if (providerKey === "salesforce")
+        registerRollback?.(async () => {
+          if (generation.current !== run) throw new ConfigurationChanged();
+          const latestTarget = await sdk.mcpServers.get({ id: server.id });
+          const latestRemote = await sdk.remoteMcp.getServer({ id });
+          const latestHeaders = await sdk.remoteMcp.listServerHeaders({
+            remoteMcpServerId: id,
+          });
+          const latestInstance = salesforceInstanceConfiguration(
+            latestHeaders.headers,
+          );
+          const latestLinks = await sdk.mcpServers.list();
+          const applied = appliedSource.current;
+          if (
+            generation.current !== run ||
+            latestLinks.mcpServers.some(
+              (item) => item.id !== server.id && item.remoteMcpServerId === id,
+            ) ||
+            latestTarget.remoteMcpServerId !== id ||
+            latestTarget.environmentId !== server.environmentId ||
+            !applied ||
+            latestRemote.url !== applied.url ||
+            latestInstance.instanceUrl !== (applied.instanceUrl ?? "")
+          )
+            throw new ConfigurationChanged();
+          if (latestRemote.url !== originalSource.url) {
+            await sdk.remoteMcp.updateServer({
+              updateServerForm: { id, url: originalSource.url },
+            });
+            appliedSource.current = {
+              ...appliedSource.current!,
+              url: originalSource.url,
+            };
+          }
+          if (latestInstance.instanceUrl !== originalSource.instanceUrl) {
+            if (instance) {
+              const form = {
+                name: instance.name,
+                description: instance.description,
+                value: instance.value,
+                isRequired: instance.isRequired,
+                isSecret: false,
+              };
+              if (latestInstance.header)
+                await sdk.remoteMcp.updateServerHeader({
+                  updateServerHeaderForm: {
+                    ...form,
+                    id: latestInstance.header.id,
+                  },
+                });
+              else
+                await sdk.remoteMcp.createServerHeader({
+                  createServerHeaderForm: { ...form, remoteMcpServerId: id },
+                });
+            } else if (latestInstance.header)
+              await sdk.remoteMcp.deleteServerHeader({
+                id: latestInstance.header.id,
+              });
+          }
+          appliedSource.current = originalSource;
+          dispatch({
+            type: "connection",
+            sourceFingerprint: providerSourceFingerprint(id, originalSource),
+          });
+        });
+      if (changeInstance) {
+        if (selectedInstance) {
+          const form = {
+            name: instance?.name ?? salesforceInstanceHeader,
+            description: instance?.description,
+            value: selectedInstance,
+            isRequired: true,
+            isSecret: false,
+          };
+          if (instance)
+            await sdk.remoteMcp.updateServerHeader({
+              updateServerHeaderForm: { ...form, id: instance.id },
+            });
+          else
+            await sdk.remoteMcp.createServerHeader({
+              createServerHeaderForm: { ...form, remoteMcpServerId: id },
+            });
+        } else if (instance)
+          await sdk.remoteMcp.deleteServerHeader({ id: instance.id });
+        if (generation.current !== run) throw new ConfigurationChanged();
+        // Retain completed writes so a failed later operation can be retried.
+        appliedSource.current = {
+          ...expected,
+          instanceUrl: selectedInstance ?? "",
+        };
+        dispatch({
+          type: "connection",
+          sourceFingerprint: providerSourceFingerprint(
+            id,
+            appliedSource.current,
+          ),
+        });
+      }
+      if (generation.current !== run) throw new ConfigurationChanged();
+      if (changeUrl) {
+        await sdk.remoteMcp.updateServer({
+          updateServerForm: { id, url: selected.url },
+        });
+        if (generation.current !== run) throw new ConfigurationChanged();
+        appliedSource.current = {
+          url: selected.url,
+          instanceUrl: selectedInstance ?? "",
+        };
+        dispatch({
+          type: "connection",
+          sourceFingerprint: providerSourceFingerprint(
+            id,
+            appliedSource.current,
+          ),
+        });
+      }
+      if (generation.current !== run) throw new ConfigurationChanged();
+    },
+    [
+      providerKey,
+      configurableSource,
+      s.values,
+      server.id,
+      server.remoteMcpServerId,
+      server.environmentId,
+      server.userSessionIssuerId,
+      sdk,
+      dispatch,
+    ],
+  );
+
   const checkConnection = useCallback(async () => {
     const run = generation.current;
+    await prepareProviderSource(run, false);
     const result = await unwrapAsync(
       remoteSessionsTestServerConnection(
         sdk,
@@ -335,6 +771,7 @@ export function useProviderConnection(
     providerKey,
     status.data?.client.id,
     revokeSessions,
+    prepareProviderSource,
   ]);
 
   useEffect(() => {
@@ -478,18 +915,44 @@ export function useProviderConnection(
   };
 
   const save = async () => {
+    if (activeSave.current !== null) return;
     const run = generation.current;
     if (s.saved && !s.values.clientId && !s.values.clientSecret) {
-      dispatch({ type: "goto", step: "test" });
+      if (onConfigured) {
+        setPhase("saving");
+        setFailure(null);
+        try {
+          await onConfigured();
+        } catch {
+          if (generation.current === run)
+            fail(
+              "save",
+              `Couldn’t finish the ${name} connection. Try saving again.`,
+            );
+          return;
+        } finally {
+          setPhase("idle");
+        }
+      }
+      if (generation.current === run) dispatch({ type: "goto", step: "test" });
       return;
     }
     if (Object.keys(validate(s)).length) {
       dispatch({ type: "next" });
       return;
     }
+    activeSave.current = run;
     setPhase("saving");
     setFailure(null);
+    if (configurableSource)
+      dispatch({ type: "connection", configChanged: true });
+    let rollbackSource: (() => Promise<void>) | undefined;
+    let identityCommitted = false;
     try {
+      await prepareProviderSource(run, true, (rollback) => {
+        rollbackSource = rollback;
+      });
+      if (generation.current !== run) return;
       let current = await sdk.mcpServers.get({ id: server.id });
       if (generation.current !== run) return;
       const issuer = current.userSessionIssuerId
@@ -540,13 +1003,23 @@ export function useProviderConnection(
         latest.remoteMcpServerId !== current.remoteMcpServerId ||
         latest.environmentId !== current.environmentId
       ) {
-        fail(
-          "save",
-          "This server’s identity changed. Reload its settings before saving credentials.",
-          "settings",
-        );
-        return;
+        throw new ConfigurationChanged();
       }
+      const issuerDigest =
+        configurableSource && !provider
+          ? Array.from(
+              new Uint8Array(
+                await crypto.subtle.digest(
+                  "SHA-256",
+                  new TextEncoder().encode(config.issuer),
+                ),
+              ),
+            )
+              .slice(0, 8)
+              .map((byte) => byte.toString(16).padStart(2, "0"))
+              .join("")
+          : "";
+      if (generation.current !== run) return;
       const result = await sdk.remoteSessions.commitServerIdentityConfiguration(
         {
           commitServerIdentityConfigurationForm: {
@@ -557,13 +1030,14 @@ export function useProviderConnection(
               ? undefined
               : {
                   issuer: config.issuer,
-                  slug: `${providerKey}-${server.id.slice(0, 8)}`,
+                  slug: `${providerKey}-${server.id.slice(0, 8)}${issuerDigest ? `-${issuerDigest}` : ""}`,
                   name,
                   authorizationEndpoint: config.authorizationEndpoint,
                   tokenEndpoint: config.tokenEndpoint,
                   authorizationResponseIssParameterSupported:
                     providerKey === "github",
-                  tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+                  tokenEndpointAuthMethodsSupported:
+                    providerTokenMethods(providerKey),
                   responseTypesSupported: ["code"],
                   codeChallengeMethodsSupported: ["S256"],
                   grantTypesSupported: ["authorization_code", "refresh_token"],
@@ -571,16 +1045,22 @@ export function useProviderConnection(
             clientMode: "manual",
             clientConfiguration: {
               clientId: s.values.clientId.trim(),
-              clientSecret: s.values.clientSecret.trim(),
-              tokenEndpointAuthMethod: "client_secret_post",
-              scope: requestedScopes,
+              clientSecret:
+                providerKey === "salesforce" ||
+                (providerKey === "okta" && s.values.oktaAppType === "native")
+                  ? undefined
+                  : s.values.clientSecret.trim(),
+              tokenEndpointAuthMethod:
+                selectedConnection?.authMethod ?? "client_secret_post",
+              scope: providerKey === "okta" ? undefined : requestedScopes,
             },
           },
         },
       );
-      if (generation.current !== run) return;
       if (result.status !== "registered" && result.status !== "linked")
         throw new Error(`Couldn’t save ${name} app credentials.`);
+      identityCommitted = true;
+      if (generation.current !== run) return;
       // A disabled catalog install must serve its private OAuth endpoint before sign-in.
       if (current.visibility === "disabled")
         await sdk.mcpServers.update({
@@ -589,6 +1069,19 @@ export function useProviderConnection(
           },
         });
       if (generation.current !== run) return;
+      // Native account-specific sources can finish their existing catalog
+      // handoff only after provider configuration is committed.
+      try {
+        await onConfigured?.();
+      } catch {
+        if (generation.current === run)
+          fail(
+            "save",
+            `${name} credentials were saved, but the connection handoff couldn’t be finished. Try again.`,
+          );
+        return;
+      }
+      if (generation.current !== run) return;
       dispatch({ type: "field", field: "clientId", value: "" });
       dispatch({ type: "field", field: "clientSecret", value: "" });
       dispatch({
@@ -596,6 +1089,7 @@ export function useProviderConnection(
         saved: true,
         authorized: false,
         tested: false,
+        ...(configurableSource ? { configChanged: false } : {}),
       });
       dispatch({ type: "goto", step: "test" });
       await Promise.all([
@@ -608,8 +1102,25 @@ export function useProviderConnection(
       ]);
     } catch (err) {
       if (generation.current !== run) return;
+      if (!identityCommitted && rollbackSource) {
+        try {
+          await rollbackSource();
+        } catch {
+          fail(
+            "save",
+            "Salesforce connection settings may be partially saved. Review the upstream URL and MCP-Instance-URL in identity settings before retrying credentials.",
+            "settings",
+          );
+          return;
+        }
+      }
+      if (err instanceof SalesforceInstanceConfigurationError) {
+        fail("save", err.message, "settings");
+        return;
+      }
       const identityConflict =
-        err instanceof GramError && err.statusCode === 409;
+        err instanceof ConfigurationChanged ||
+        (err instanceof GramError && err.statusCode === 409);
       fail(
         "save",
         identityConflict
@@ -618,13 +1129,22 @@ export function useProviderConnection(
         identityConflict ? "settings" : undefined,
       );
     } finally {
-      setPhase("idle");
+      if (activeSave.current === run) {
+        activeSave.current = null;
+        setPhase("idle");
+      }
+      if (configurableSource) {
+        await Promise.all([
+          invalidateRemoteMcpSourceViews(queryClient),
+          invalidateAllRemoteMcpServerHeaders(queryClient),
+        ]);
+      }
     }
   };
 
   const signIn = async () => {
     const run = generation.current;
-    if (pending) return;
+    if (pending || (configurableSource && !ready(s))) return;
     setFailure(null);
     const slug = server.platformEndpointSlug;
     if (!slug) {
@@ -664,6 +1184,7 @@ export function useProviderConnection(
             );
             throw new Error("Missing credentials");
           }
+          await prepareProviderSource(run, false);
           if (providerKey === "slack") await syncPermissions(requestedScopes);
           if (generation.current !== run)
             throw new Error("Setup target changed");
@@ -676,8 +1197,13 @@ export function useProviderConnection(
           if (generation.current === run && status.data?.client)
             fail(
               "signin",
-              `Couldn’t start ${name} sign-in. Try again.`,
-              err instanceof ConfigurationChanged ? "settings" : undefined,
+              err instanceof SalesforceInstanceConfigurationError
+                ? err.message
+                : `Couldn’t start ${name} sign-in. Try again.`,
+              err instanceof ConfigurationChanged ||
+                err instanceof SalesforceInstanceConfigurationError
+                ? "settings"
+                : undefined,
             );
           throw err;
         }
@@ -692,7 +1218,7 @@ export function useProviderConnection(
 
   const test = async () => {
     const run = generation.current;
-    if (pending) return;
+    if (pending || (configurableSource && !ready(s))) return;
     setPhase("testing");
     setFailure(null);
     setToolCount(null);
@@ -712,11 +1238,16 @@ export function useProviderConnection(
           recoveryFor(result),
         );
       }
-    } catch {
+    } catch (err) {
       if (generation.current === run)
         fail(
           "test",
-          `Couldn’t initialize ${name} and list its tools. Check app permissions, sign in again, and retry.`,
+          err instanceof SalesforceInstanceConfigurationError
+            ? err.message
+            : `Couldn’t initialize ${name} and list its tools. Check app permissions, sign in again, and retry.`,
+          err instanceof SalesforceInstanceConfigurationError
+            ? "settings"
+            : undefined,
         );
     } finally {
       if (generation.current === run) setPhase("idle");
@@ -802,5 +1333,6 @@ export function useProviderConnection(
     loading: status.isLoading || status.isError,
     callbackUrl: status.data?.client.callbackUrl,
     savedClientId: status.data?.client.clientId,
+    savedTokenEndpointAuthMethod: status.data?.client.tokenEndpointAuthMethod,
   };
 }

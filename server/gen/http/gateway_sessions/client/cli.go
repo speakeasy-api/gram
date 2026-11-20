@@ -18,13 +18,23 @@ import (
 
 // BuildListGatewaySessionsPayload builds the payload for the gatewaySessions
 // listGatewaySessions endpoint from CLI flags.
-func BuildListGatewaySessionsPayload(gatewaySessionsListGatewaySessionsGatewayID string, gatewaySessionsListGatewaySessionsSearch string, gatewaySessionsListGatewaySessionsServerID string, gatewaySessionsListGatewaySessionsProviderID string, gatewaySessionsListGatewaySessionsStatus string, gatewaySessionsListGatewaySessionsCreatedAfter string, gatewaySessionsListGatewaySessionsCreatedBefore string, gatewaySessionsListGatewaySessionsSort string, gatewaySessionsListGatewaySessionsCursor string, gatewaySessionsListGatewaySessionsLimit string, gatewaySessionsListGatewaySessionsSessionToken string, gatewaySessionsListGatewaySessionsApikeyToken string) (*gatewaysessions.ListGatewaySessionsPayload, error) {
+func BuildListGatewaySessionsPayload(gatewaySessionsListGatewaySessionsGatewayID string, gatewaySessionsListGatewaySessionsProjectID string, gatewaySessionsListGatewaySessionsSearch string, gatewaySessionsListGatewaySessionsServerID string, gatewaySessionsListGatewaySessionsProviderID string, gatewaySessionsListGatewaySessionsStatus string, gatewaySessionsListGatewaySessionsCreatedAfter string, gatewaySessionsListGatewaySessionsCreatedBefore string, gatewaySessionsListGatewaySessionsSort string, gatewaySessionsListGatewaySessionsCursor string, gatewaySessionsListGatewaySessionsLimit string, gatewaySessionsListGatewaySessionsSessionToken string, gatewaySessionsListGatewaySessionsApikeyToken string) (*gatewaysessions.ListGatewaySessionsPayload, error) {
 	var err error
 	var gatewayID *string
 	{
 		if gatewaySessionsListGatewaySessionsGatewayID != "" {
 			gatewayID = &gatewaySessionsListGatewaySessionsGatewayID
 			err = goa.MergeErrors(err, goa.ValidateFormat("gateway_id", *gatewayID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var projectID *string
+	{
+		if gatewaySessionsListGatewaySessionsProjectID != "" {
+			projectID = &gatewaySessionsListGatewaySessionsProjectID
+			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -146,6 +156,7 @@ func BuildListGatewaySessionsPayload(gatewaySessionsListGatewaySessionsGatewayID
 	}
 	v := &gatewaysessions.ListGatewaySessionsPayload{}
 	v.GatewayID = gatewayID
+	v.ProjectID = projectID
 	v.Search = search
 	v.ServerID = serverID
 	v.ProviderID = providerID
@@ -163,13 +174,23 @@ func BuildListGatewaySessionsPayload(gatewaySessionsListGatewaySessionsGatewayID
 
 // BuildListGatewaySessionFacetsPayload builds the payload for the
 // gatewaySessions listGatewaySessionFacets endpoint from CLI flags.
-func BuildListGatewaySessionFacetsPayload(gatewaySessionsListGatewaySessionFacetsGatewayID string, gatewaySessionsListGatewaySessionFacetsSessionToken string, gatewaySessionsListGatewaySessionFacetsApikeyToken string) (*gatewaysessions.ListGatewaySessionFacetsPayload, error) {
+func BuildListGatewaySessionFacetsPayload(gatewaySessionsListGatewaySessionFacetsGatewayID string, gatewaySessionsListGatewaySessionFacetsProjectID string, gatewaySessionsListGatewaySessionFacetsSessionToken string, gatewaySessionsListGatewaySessionFacetsApikeyToken string) (*gatewaysessions.ListGatewaySessionFacetsPayload, error) {
 	var err error
 	var gatewayID *string
 	{
 		if gatewaySessionsListGatewaySessionFacetsGatewayID != "" {
 			gatewayID = &gatewaySessionsListGatewaySessionFacetsGatewayID
 			err = goa.MergeErrors(err, goa.ValidateFormat("gateway_id", *gatewayID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var projectID *string
+	{
+		if gatewaySessionsListGatewaySessionFacetsProjectID != "" {
+			projectID = &gatewaySessionsListGatewaySessionFacetsProjectID
+			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -189,6 +210,7 @@ func BuildListGatewaySessionFacetsPayload(gatewaySessionsListGatewaySessionFacet
 	}
 	v := &gatewaysessions.ListGatewaySessionFacetsPayload{}
 	v.GatewayID = gatewayID
+	v.ProjectID = projectID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 

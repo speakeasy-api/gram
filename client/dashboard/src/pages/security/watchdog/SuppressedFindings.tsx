@@ -11,7 +11,7 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskListDismissedResults } from "@gram/client/react-query/riskListDismissedResults.js";
 import { useRiskListExclusions } from "@gram/client/react-query/riskListExclusions.js";
 import { keepPreviousData } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";

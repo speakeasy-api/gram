@@ -93,14 +93,6 @@ func seedSummaryPackageTool(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, err)
 }
 
-func addSummaryToolsetVersion(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsetsrepo.Toolset, version int64, urns []urn.Tool) {
-	t.Helper()
-	_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
-		ToolsetID: toolset.ID, Version: version, ToolUrns: urns, ResourceUrns: []urn.Resource{},
-	})
-	require.NoError(t, err)
-}
-
 func describeSummaryToolset(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, toolset toolsetsrepo.Toolset) *types.Toolset {
 	t.Helper()
 	described, err := mv.DescribeToolset(ctx, testenv.NewLogger(t), ti.conn, mv.ProjectID(projectID), mv.ToolsetSlug(toolset.Slug), nil, nil)
@@ -118,7 +110,6 @@ func TestMcpServerSummary_CountsOnlyToolsTheToolsetServes(t *testing.T) {
 	live := urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets")
 	sameName := urn.NewTool(urn.ToolKindHTTP, "mirror", "list_pets")
 	packaged := urn.NewTool(urn.ToolKindHTTP, "vendor", "get_rates")
-	external := urn.NewTool(urn.ToolKindExternalMCP, "acme", "search")
 	prompt := urn.NewTool(urn.ToolKindPrompt, "prompts", "greet")
 	never := urn.NewTool(urn.ToolKindHTTP, "gone", "never_deployed")
 	unregisteredPlatform := urn.NewTool(urn.ToolKindPlatform, "nowhere", "missing")
@@ -141,7 +132,7 @@ func TestMcpServerSummary_CountsOnlyToolsTheToolsetServes(t *testing.T) {
 	require.NoError(t, err)
 
 	toolset := seedSummaryToolset(t, ctx, ti, orgID, projectID, []urn.Tool{
-		removed, renamedOld, live, sameName, packaged, external, prompt, never, platform, unregisteredPlatform,
+		removed, renamedOld, live, sameName, packaged, prompt, never, platform, unregisteredPlatform,
 	})
 	server := seedSummaryServer(t, ctx, ti, projectID, toolset.ID)
 
@@ -153,14 +144,6 @@ func TestMcpServerSummary_CountsOnlyToolsTheToolsetServes(t *testing.T) {
 	for _, forOrg := range []bool{false, true} {
 		require.Equal(t, len(described.Tools), listSummaryServers(t, ctx, ti, forOrg)[server.ID.String()].Toolset.ToolCount)
 	}
-
-	// An external MCP URN counts for nothing, on the summary and the toolset page alike.
-	proxy := urn.NewTool(urn.ToolKindExternalMCP, "zeta", "proxy")
-	addSummaryToolsetVersion(t, ctx, ti, toolset, 2, []urn.Tool{live, packaged, external, prompt, platform, proxy})
-	got := getSummaryServer(t, ctx, ti, server.ID).Toolset
-	require.Equal(t, want, got.ToolCount)
-	require.False(t, got.ExternalMcpProxyOnly)
-	require.Len(t, describeSummaryToolset(t, ctx, ti, projectID, toolset).Tools, want)
 }
 
 func TestMcpServerSummary_NoDeploymentCountsOnlyPlatformTools(t *testing.T) {

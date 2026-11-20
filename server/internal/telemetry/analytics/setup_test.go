@@ -52,6 +52,7 @@ type testInstance struct {
 	db             *pgxpool.Pool
 	organizationID string
 	projectID      string
+	userID         string
 }
 
 // newTestService builds the service against a cloned database, a real
@@ -85,6 +86,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		db:             conn,
 		organizationID: authCtx.ActiveOrganizationID,
 		projectID:      authCtx.ProjectID.String(),
+		userID:         authCtx.UserID,
 	}
 }
 

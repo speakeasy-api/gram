@@ -32,7 +32,7 @@ import (
 // resolve to the empty disposition, leaving a pure tool-name match.
 //
 // An inspected listing (see [toolsListInspection]) keeps the tools this filter
-// would drop and marks them instead.
+// would drop and marks them instead, each with a [ToolUnavailableReason].
 //
 // The filter leaves cache labelling to the proxy, which marks every tools/list
 // result relayed through a chain with this filter attached caller-varying with
@@ -66,8 +66,8 @@ var _ proxy.ToolsListResponseInterceptor = (*ToolsListMCPConnectFilterIntercepto
 // a single Remote MCP Server. mcpServerID is the [authz.Check] ResourceID, the
 // mcp_servers row id (NOT the remote_mcp_servers id), so the filter resolves
 // grants against the same row as the handler's upfront server-level
-// `mcp:connect` check and as [authz.MCPToolCallCheck] does for the paired
-// tools/call enforcement.
+// `mcp:connect` check and as [authz.MCPServerRef.ToolCall] does for the
+// paired tools/call enforcement.
 func NewToolsListMCPConnectFilterInterceptor(authzEngine *authz.Engine, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
 	return &ToolsListMCPConnectFilterInterceptor{
 		authz:       authzEngine,
@@ -85,7 +85,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 }
 
 // InterceptToolsListResponse implements [proxy.ToolsListResponseInterceptor].
-// It builds one [authz.MCPToolCallCheck] per tool, hands the batch to
+// It builds one [authz.MCPServerRef.ToolCall] check per tool, hands the batch to
 // [authz.Engine.FindMatched] for per-tool match indicators (one challenge-log
 // entry for the batch, not N), and rebuilds the tool slice in input order
 // keeping only authorized entries, or marking the rest in an inspected listing.
@@ -123,11 +123,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 
 	checks := make([]authz.Check, len(tools))
 	for idx, t := range tools {
-		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-			Tool:        strings.TrimSpace(t.Name),
-			Disposition: dispositions[strings.TrimSpace(t.Name)],
-			ProjectID:   i.projectID,
-		})
+		checks[idx] = authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID)).ToolCall(strings.TrimSpace(t.Name), dispositions[strings.TrimSpace(t.Name)])
 	}
 
 	matched, err := i.authz.FindMatched(ctx, checks)
@@ -144,6 +140,16 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		}
 	}
 
+	// Only an inspected listing explains its marks. The reasons come from the
+	// grants already on the context, so they cost no extra round trip.
+	var reasons []authz.DenialReason
+	if inspecting {
+		reasons, err = i.authz.DenialReasons(ctx, checks)
+		if err != nil {
+			return fmt.Errorf("explain unavailable tools: %w", err)
+		}
+	}
+
 	allowed := make([]*mcp.Tool, 0, len(tools))
 	unchanged := true
 	for idx, t := range tools {
@@ -151,7 +157,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		case matched[idx]:
 			allowed = append(allowed, t)
 		case inspecting:
-			allowed = append(allowed, markToolUnavailable(t))
+			allowed = append(allowed, markToolUnavailable(t, toolUnavailableReason(reasons[idx])))
 			unchanged = false
 		default:
 			unchanged = false

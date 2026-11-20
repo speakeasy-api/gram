@@ -17,12 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-const (
-	SystemRoleAdmin  = "admin"
-	SystemRoleMember = "member"
-	WildcardResource = "*"
-)
-
 type RoleGrant struct {
 	Scope     string
 	Selectors []Selector
@@ -77,8 +71,8 @@ func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
 // roles. These are seeded when an organization is provisioned. Existing grants
 // for a built-in role are preserved, and custom roles are never touched.
 var SystemRoleGrants = map[string][]*RoleGrant{
-	SystemRoleAdmin:  roleGrantsForScopes(adminScopes),
-	SystemRoleMember: roleGrantsForScopes(memberScopes),
+	SystemRoleAdmin:  roleGrantsForScopes(systemRoleScopes[SystemRoleAdmin]),
+	SystemRoleMember: roleGrantsForScopes(systemRoleScopes[SystemRoleMember]),
 }
 
 // SystemRoleAssistantGrants returns the assistant-kind grants from a built-in

@@ -31,9 +31,12 @@ func TestInsertAgentEvents(t *testing.T) {
 			Source:             "claude-code",
 			Provider:           "anthropic",
 			Surface:            "claude-code",
+			Product:            "claude-code",
+			Client:             "desktop",
 			UserID:             "",
 			UserEmail:          "dev@example.com",
 			ExternalUserID:     "acct-1",
+			AgentID:            "agent-1",
 			AccountType:        "",
 			BillingMode:        "",
 			ExternalOrgID:      "",
@@ -79,7 +82,7 @@ func TestInsertAgentEvents(t *testing.T) {
 
 		rows, err := conn.Query(t.Context(), `
 			SELECT record_id, event_id, event_type, roles, cost_usd, input_tokens, department_name,
-			       toString(attributes.nested.k), duration_nano
+			       toString(attributes.nested.k), duration_nano, product, client, agent_id
 			FROM agent_events
 			WHERE organization_id = ?
 			ORDER BY record_id
@@ -89,6 +92,7 @@ func TestInsertAgentEvents(t *testing.T) {
 
 		type got struct {
 			recordID, eventID, eventType, department, nested string
+			product, client, agentID                         string
 			roles                                            []string
 			cost                                             float64
 			inputTokens, durationNano                        int64
@@ -96,7 +100,7 @@ func TestInsertAgentEvents(t *testing.T) {
 		var out []got
 		for rows.Next() {
 			var g got
-			require.NoError(t, rows.Scan(&g.recordID, &g.eventID, &g.eventType, &g.roles, &g.cost, &g.inputTokens, &g.department, &g.nested, &g.durationNano))
+			require.NoError(t, rows.Scan(&g.recordID, &g.eventID, &g.eventType, &g.roles, &g.cost, &g.inputTokens, &g.department, &g.nested, &g.durationNano, &g.product, &g.client, &g.agentID))
 			out = append(out, g)
 		}
 		require.NoError(t, rows.Err())
@@ -111,6 +115,9 @@ func TestInsertAgentEvents(t *testing.T) {
 		require.Equal(t, "Platform", out[0].department)
 		require.Equal(t, "v", out[0].nested, "JSON attributes are queryable by path")
 		require.Equal(t, int64(1_500_000_000), out[0].durationNano)
+		require.Equal(t, "claude-code", out[0].product)
+		require.Equal(t, "desktop", out[0].client)
+		require.Equal(t, "agent-1", out[0].agentID)
 		require.Equal(t, "toolu_1", out[1].eventID)
 		require.Empty(t, out[1].roles, "a nil slice lands as an empty array")
 	})

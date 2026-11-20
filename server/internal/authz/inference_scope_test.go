@@ -27,7 +27,7 @@ func TestInferenceExecuteRequiresExplicitProjectGrant(t *testing.T) {
 		got, _ := matchingGrant([]Grant{NewGrant(scope, WildcardResource)}, InferenceExecuteCheck("project_a").expand())
 		require.Nil(t, got, scope)
 	}
-	got, _ := matchingGrant([]Grant{grant}, ChatWriteCheck("chat_a").expand())
+	got, _ := matchingGrant([]Grant{grant}, Chat(ChatIDFrom("chat_a")).Write().expand())
 	require.Nil(t, got)
 	require.Equal(t, []Scope{ScopeInferenceExecute}, ScopeImplicationClosure(ScopeInferenceExecute))
 	for role, grants := range SystemRoleGrants {
@@ -35,7 +35,7 @@ func TestInferenceExecuteRequiresExplicitProjectGrant(t *testing.T) {
 			require.NotEqual(t, string(ScopeInferenceExecute), g.Scope, role)
 		}
 	}
-	require.NoError(t, ValidateGrantSurface(GrantSurfaceAccess, []*RoleGrant{{Scope: string(ScopeInferenceExecute)}}))
+	require.NoError(t, ValidateGrantSource(GrantSourceRoles, []*RoleGrant{{Scope: string(ScopeInferenceExecute)}}))
 }
 
 func TestInferenceSelector(t *testing.T) {

@@ -2,8 +2,10 @@ package demoseed
 
 import (
 	"context"
+	"encoding/base32"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -44,6 +46,12 @@ func (s *seeder) seedOrg(ctx context.Context) error {
 	}
 	if err := s.orgFeaturesAndUsers(ctx); err != nil {
 		return err
+	}
+	domainID := s.det("custom-domain")
+	// Ten base32 characters give each tenant a stable, valid DNS target label.
+	targetToken := strings.ToLower(base32.StdEncoding.EncodeToString(domainID[:]))[:10]
+	if err := s.q.OrgSeedCustomDomain(ctx, repo.OrgSeedCustomDomainParams{ID: domainID, OrgID: s.orgID(), Domain: s.spec.CustomDomain, DnsTargetToken: pgtype.Text{String: targetToken, Valid: true}}); err != nil {
+		return fmt.Errorf("seed custom domain diagnostics: %w", err)
 	}
 	return s.orgMemberships(ctx)
 }
@@ -107,7 +115,7 @@ func (s *seeder) orgMetadata(ctx context.Context) error {
 func (s *seeder) orgPurge(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
-	return runOrgSteps([]orgStep{
+	if err := runOrgSteps([]orgStep{
 		// Killswitch aggregates retain canonical MCP server keys in immutable
 		// snapshots. Clear every org-scoped aggregate and replay receipt before
 		// the referenced servers/toolsets, including rows created by local
@@ -218,6 +226,9 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 			return s.q.OrgDeleteExternalOAuthServerMetadata(ctx, repo.OrgDeleteExternalOAuthServerMetadataParams{ProjectID: proj, OrgID: org})
 		}},
 		{"delete toolsets", func() error { return s.q.OrgDeleteToolsets(ctx, org) }},
+		// Domain SET NULL references must be gone before deleting their domain:
+		// root endpoints require it and toolset slugs can collide without it.
+		{"delete custom domains", func() error { return s.q.OrgDeleteCustomDomains(ctx, org) }},
 		// environments.project_id is NOT NULL but its FK is ON DELETE SET NULL,
 		// so the projects delete below fails outright on any environment row.
 		// The demo tenant seeds none, but the local development tenant does
@@ -246,11 +257,11 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete seeded direct user grants", func() error {
 			return s.q.OrgDeleteGrantsByID(ctx, repo.OrgDeleteGrantsByIDParams{
 				OrgID: org,
-				Ids: []uuid.UUID{
+				Ids: append([]uuid.UUID{
 					s.det("github-direct-grant"), s.det("github-wildcard-grant"),
 					s.det("inference-owner-grant"),
 					s.det("auth-client-github-token-use"), s.det("auth-client-github-token-block"),
-				},
+				}, s.globalToolBlockIDs()...),
 			})
 		}},
 		// Workload trust is organization-scoped: an organization-tier issuer or
@@ -277,6 +288,13 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete sigint custom signals", func() error {
 			return s.q.OrgDeleteSigintCustomSignals(ctx, org)
 		}},
+	}); err != nil {
+		return err
+	}
+	if err := runOrgSteps(s.channelsPurgeSteps(ctx)); err != nil {
+		return err
+	}
+	return runOrgSteps([]orgStep{
 		{"delete projects", func() error { return s.q.OrgDeleteProjects(ctx, org) }},
 	})
 }
@@ -372,8 +390,13 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 	// authz.ShouldEnforce is false and chatVisibilityScope falls back to
 	// own-sessions-only, hiding every seeded chat (owned by the seeded users).
 	if err := s.q.OrgInsertFeatures(ctx, repo.OrgInsertFeaturesParams{
-		OrgID:    org,
-		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence"},
+		OrgID: org,
+		// upstream_auth_enforced: the seeded org runs on typed upstream auth, so
+		// the demo and local orgs do not exercise the legacy resolver. The seed
+		// sets the feature directly, skipping the admin enable endpoint's audit
+		// record and blocker checks (see docs/rbac.md); upstreamAuthReadiness
+		// fails the run if the typed auth it records is incomplete.
+		Features: []string{"logs", "tool_io_logs", "session_capture", "skills", "rbac", "signals_intelligence", "upstream_auth_enforced"},
 	}); err != nil {
 		return fmt.Errorf("insert demo features: %w", err)
 	}
@@ -388,7 +411,7 @@ func (s *seeder) orgFeaturesAndUsers(ctx context.Context) error {
 		return fmt.Errorf("insert demo hooks_fail_open feature: %w", err)
 	}
 
-	for _, u := range demoUsers {
+	for _, u := range demoMembers() {
 		id := s.userID(u.handle)
 		if err := s.q.OrgUpsertUser(ctx, repo.OrgUpsertUserParams{
 			ID:          id,
@@ -429,7 +452,7 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
-	for i, u := range demoUsers {
+	for i, u := range demoMembers() {
 		id := s.userID(u.handle)
 		if err := s.q.OrgInsertMembership(ctx, repo.OrgInsertMembershipParams{
 			OrgID:              org,
@@ -446,7 +469,8 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	// Existing fictional owners exercise name/initials rendering without
 	// adding external avatar dependencies. The two active release agents
 	// receive only project/server-scoped direct grants alongside their inert
-	// attachments.
+	// attachments. The fifth belongs to the agent owner persona, whose only
+	// way into its sessions and tool logs is owning it.
 	if err := s.q.OrgInsertManagedAgents(ctx, repo.OrgInsertManagedAgentsParams{
 		Agent1: s.det("managed-agent-1"),
 		OrgID:  org,
@@ -456,6 +480,8 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 		Agent3: s.det("managed-agent-3"),
 		Owner3: s.userID(demoUsers[2].handle),
 		Agent4: s.det("managed-agent-4"),
+		Agent5: s.ownerAgentID(),
+		Owner5: s.userID(demoAgentOwner.handle),
 	}); err != nil {
 		return fmt.Errorf("insert demo managed agents: %w", err)
 	}
@@ -476,7 +502,7 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	if adminURN == "" || memberURN == "" {
 		return nil
 	}
-	for _, u := range demoUsers {
+	for _, u := range demoMembers() {
 		id := s.userID(u.handle)
 		role := memberURN
 		if id == s.userID("lucas") || id == s.userID("priya") {

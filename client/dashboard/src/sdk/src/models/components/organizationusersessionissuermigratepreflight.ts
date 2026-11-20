@@ -11,13 +11,21 @@ import {
   UserSessionIssuerFieldMismatch,
   UserSessionIssuerFieldMismatch$inboundSchema,
 } from "./usersessionissuerfieldmismatch.js";
+import {
+  UserSessionIssuerMigrationClient,
+  UserSessionIssuerMigrationClient$inboundSchema,
+} from "./usersessionissuermigrationclient.js";
+import {
+  UserSessionIssuerMigrationServerImpact,
+  UserSessionIssuerMigrationServerImpact$inboundSchema,
+} from "./usersessionissuermigrationserverimpact.js";
 
 /**
  * Authoritative impact summary for consolidating one user_session_issuer onto another.
  */
 export type OrganizationUserSessionIssuerMigratePreflight = {
   /**
-   * True when no hard blocker is present.
+   * True when no hard blocker is present, including no server impact with blocker impact_severity.
    */
   canMigrate: boolean;
   /**
@@ -37,9 +45,21 @@ export type OrganizationUserSessionIssuerMigratePreflight = {
    */
   consentCount: number;
   /**
+   * Clients the source binds that consolidation would not carry to the target because nothing signs in through them afterwards. A deleted client is never carried and not listed. Users' grants for them still move to the target, so attaching a client to the target later makes its grants usable again.
+   */
+  droppedClientLinks: Array<UserSessionIssuerMigrationClient>;
+  /**
    * Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.
    */
   emaBindingConflictCount: number;
+  /**
+   * True when the consolidation was run and rolled back to compute server_impacts and dropped_client_links. False when a hard blocker stopped it, in which case both are empty.
+   */
+  impactPreviewed: boolean;
+  /**
+   * Live MCP servers already on the target that the source's unscoped sign-ins would reach for the first time. Informational; not part of the fingerprint.
+   */
+  newlyReachableServerCount: number;
   /**
    * Whether a Platform MCP catalog registration owns either issuer. True blocks migration.
    */
@@ -53,15 +73,23 @@ export type OrganizationUserSessionIssuerMigratePreflight = {
    */
   remoteSessionCount: number;
   /**
+   * The MCP servers whose upstream OAuth clients consolidation would change, and those it would pin. A server whose clients do not change and that is not pinned is not listed.
+   */
+  serverImpacts: Array<UserSessionIssuerMigrationServerImpact>;
+  /**
    * User sessions that would move.
    */
   sessionCount: number;
+  /**
+   * Live sign-ins on the source with no tool selection. Every MCP server on their issuer accepts them, so after consolidation they also reach the target's servers. Informational; not part of the fingerprint.
+   */
+  unscopedSessionCount: number;
   /**
    * Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected. Besides the issuer settings, this reports authorization_server_mode, use_authentication_host, and issuer_url (the shared authorization server's issuer identifier, empty when not served) whenever they differ: repointed MCP servers then direct clients to a different authorization server, so anything configured with the source's values, such as an identity provider or a federated platform, must be updated.
    */
   warnings: Array<UserSessionIssuerFieldMismatch>;
   /**
-   * Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.
+   * Stable fingerprint of the current warnings, server impacts, and dropped client links. Empty when there are none; otherwise pass this exact value to migrateIssuer to confirm them. Counts that change on their own, such as unscoped_session_count, are not part of it.
    */
   warningsFingerprint: string;
 };
@@ -76,11 +104,20 @@ export const OrganizationUserSessionIssuerMigratePreflight$inboundSchema:
         client_count: z.int(),
         conflicting_client_ids: z.array(z.string()),
         consent_count: z.int(),
+        dropped_client_links: z.array(
+          UserSessionIssuerMigrationClient$inboundSchema,
+        ),
         ema_binding_conflict_count: z.int(),
+        impact_previewed: z.boolean(),
+        newly_reachable_server_count: z.int(),
         platform_owned: z.boolean(),
         principal_binding_conflict_count: z.int(),
         remote_session_count: z.int(),
+        server_impacts: z.array(
+          UserSessionIssuerMigrationServerImpact$inboundSchema,
+        ),
         session_count: z.int(),
+        unscoped_session_count: z.int(),
         warnings: z.array(UserSessionIssuerFieldMismatch$inboundSchema),
         warnings_fingerprint: z.string(),
       }),
@@ -91,11 +128,16 @@ export const OrganizationUserSessionIssuerMigratePreflight$inboundSchema:
           "client_count": "clientCount",
           "conflicting_client_ids": "conflictingClientIds",
           "consent_count": "consentCount",
+          "dropped_client_links": "droppedClientLinks",
           "ema_binding_conflict_count": "emaBindingConflictCount",
+          "impact_previewed": "impactPreviewed",
+          "newly_reachable_server_count": "newlyReachableServerCount",
           "platform_owned": "platformOwned",
           "principal_binding_conflict_count": "principalBindingConflictCount",
           "remote_session_count": "remoteSessionCount",
+          "server_impacts": "serverImpacts",
           "session_count": "sessionCount",
+          "unscoped_session_count": "unscopedSessionCount",
           "warnings_fingerprint": "warningsFingerprint",
         });
       }),

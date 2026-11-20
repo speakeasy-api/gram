@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -28,7 +27,7 @@ func TestTransactionalEndpointWritesApplyHostedRules(t *testing.T) {
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-existing")
+	toolset := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-existing")
 	serverID := toolset.ID
 	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: serverID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText("hosted server"),
@@ -80,9 +79,6 @@ func TestTransactionalEndpointWritesApplyHostedRules(t *testing.T) {
 	require.Equal(t, endpoint.ID.String(), updated.ID, "the endpoint keeps its identity")
 	require.NoError(t, tx.Commit(ctx))
 
-	stored, err := legacyalias.Get(ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
-	require.NoError(t, err)
-	require.Equal(t, authCtx.OrganizationSlug+"-renamed", stored.Slug.String, "the alias follows its endpoint")
 	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: serverID})
 	require.NoError(t, err)
 	require.Len(t, endpoints, 2)
@@ -93,7 +89,7 @@ func TestTransactionalEndpointWritesAllowIndependentToolsetBackedServer(t *testi
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-independent")
+	toolset := seedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-independent")
 	serverID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
 
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam

@@ -17,17 +17,22 @@ const (
 	// UseCaseTailscaleGatewayState is the use case for Tailscale gateway state.
 	UseCaseTailscaleGatewayState UseCase = "tailscale-gateway-state"
 
-	// UseCaseAIProviderKeys is the use case for AI provider and model
-	// credentials: AI integration API keys and webhook signing secrets,
-	// customer model provider keys, and provisioned OpenRouter keys.
-	UseCaseAIProviderKeys UseCase = "ai-provider-keys"
+	// UseCaseOAuthClientSecrets is the use case for the client secrets of
+	// remote session clients, the OAuth clients Speakeasy uses upstream.
+	UseCaseOAuthClientSecrets UseCase = "oauth-client-secrets" //nolint:gosec // G101: a use case name, not a credential
+
+	// UseCaseOAuthSessionTokens is the use case for the upstream OAuth tokens
+	// and related values Speakeasy stores for remote sessions, trusted issuer
+	// sessions and EMA credentials.
+	UseCaseOAuthSessionTokens UseCase = "oauth-session-tokens" //nolint:gosec // G101: a use case name, not a credential
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
 // here before calling any entry point with its name.
 var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
-	UseCaseAIProviderKeys,
+	UseCaseOAuthClientSecrets,
+	UseCaseOAuthSessionTokens,
 }
 
 // ParseUseCase returns the registered use case named value.

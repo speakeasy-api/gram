@@ -91,7 +91,9 @@ func analyticsTenant(principal Principal, project ResolvedProject) analytics.Ten
 // DescribeAnalyticsCatalogInput names the project the rollout flag and
 // project:read are checked against; the catalog is the same for every project.
 type DescribeAnalyticsCatalogInput struct {
-	ProjectID string `json:"project_id"`
+	ProjectSlug string `json:"project_slug"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 }
 
 // AnalyticsLookup is a per-project map a dimension reads through at query time.
@@ -299,7 +301,9 @@ func analyticsNames[T ~string](values []T) []string {
 
 // ListAnalyticsDimensionValuesInput asks what one dimension holds in a window.
 type ListAnalyticsDimensionValuesInput struct {
-	ProjectID string `json:"project_id"`
+	ProjectSlug string `json:"project_slug"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID string `json:"-"`
 	Dataset   string `json:"dataset"`
 	Dimension string `json:"dimension"`
 	From      string `json:"from"`
@@ -392,7 +396,9 @@ type AnalyticsOrderBy struct {
 // RunAnalyticsQueryInput is a query against one dataset, mirroring the
 // analytics RPC's payload.
 type RunAnalyticsQueryInput struct {
-	ProjectID  string             `json:"project_id"`
+	ProjectSlug string `json:"project_slug"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID  string             `json:"-"`
 	Dataset    string             `json:"dataset"`
 	From       string             `json:"from"`
 	To         string             `json:"to"`

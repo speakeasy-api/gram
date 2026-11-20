@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Role delivery", "role-delivery")
+	enableAutoAddServers(t, ctx, conn, plugin)
 	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, LimitValue: 10})
 	require.NoError(t, err)
 	require.NotEmpty(t, servers)
@@ -53,10 +55,10 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: true})
 	accessReads := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "audience-delivery-access-key")
 	session := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}, accessReads)
-	readArgs := map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String()}
+	readArgs := map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String()}
 	before := callSkillsTool[GetPluginOutput](t, ctx, session, "get_plugin", readArgs)
 	require.Empty(t, before.Servers)
-	choices := callSkillsTool[ListPluginAssignmentsOutput](t, ctx, session, "list_plugin_assignments", map[string]any{"project_id": project.ID.String()})
+	choices := callSkillsTool[ListPluginAssignmentsOutput](t, ctx, session, "list_plugin_assignments", map[string]any{"project_slug": project.Slug})
 	var reference string
 	for _, choice := range choices.Assignments {
 		if choice.DisplayName == role.WorkosName {
@@ -64,7 +66,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, reference)
-	args := map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String(), "assignment_references": []string{reference}, "expected_assignment_version": before.AssignmentVersion, "idempotency_key": "assign-existing-use", "confirmed": true}
+	args := map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String(), "assignment_references": []string{reference}, "expected_assignment_version": before.AssignmentVersion, "idempotency_key": "assign-existing-use", "confirmed": true}
 	type audienceResult struct {
 		SetPluginAssignmentsOutput
 		PublicationRequest string `json:"publication_request"`
@@ -76,7 +78,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.Equal(t, "enqueued", assigned.PublicationRequest)
 	require.False(t, assigned.Receipt.Replayed)
 
-	accessArgs := map[string]any{"project_id": project.ID.String(), "mcp_id": serverID}
+	accessArgs := map[string]any{"project_slug": project.Slug, "mcp_id": serverID}
 	accessBefore := callSkillsTool[GetMCPAccessOutput](t, ctx, session, "get_mcp_access", accessArgs)
 	require.Len(t, accessBefore.Roles, 1)
 	require.Equal(t, role.WorkosName, accessBefore.Roles[0].Name)
@@ -84,7 +86,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.NotEmpty(t, accessBefore.Roles[0].Version)
 	require.Equal(t, []MCPMatchingPlugin{{PluginID: plugin.ID.String(), Name: plugin.Name, Slug: plugin.Slug}}, accessBefore.Roles[0].MatchingPlugins)
 
-	removed := callSkillsTool[RemovePluginServerOutput](t, ctx, session, "remove_plugin_server", map[string]any{"project_id": project.ID.String(), "plugin_id": plugin.ID.String(), "membership_id": after.Servers[0].MembershipID, "confirmed": true})
+	removed := callSkillsTool[RemovePluginServerOutput](t, ctx, session, "remove_plugin_server", map[string]any{"project_slug": project.Slug, "plugin_id": plugin.ID.String(), "membership_id": after.Servers[0].MembershipID, "confirmed": true})
 	require.True(t, removed.Removed)
 	accessAfter := callSkillsTool[GetMCPAccessOutput](t, ctx, session, "get_mcp_access", accessArgs)
 	require.Equal(t, project.ID.String(), accessAfter.ProjectID)
@@ -120,6 +122,7 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Role signal", "role-signal")
+	enableAutoAddServers(t, ctx, conn, plugin)
 	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, LimitValue: 10})
 	require.NoError(t, err)
 	require.NotEmpty(t, servers)
@@ -145,8 +148,8 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	service.WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())
 	accessReads := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "audience-signal-access-key")
 	session := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}, accessReads)
-	before := callSkillsTool[GetPluginOutput](t, ctx, session, "get_plugin", map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String()})
-	choices := callSkillsTool[ListPluginAssignmentsOutput](t, ctx, session, "list_plugin_assignments", map[string]any{"project_id": project.ID.String()})
+	before := callSkillsTool[GetPluginOutput](t, ctx, session, "get_plugin", map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String()})
+	choices := callSkillsTool[ListPluginAssignmentsOutput](t, ctx, session, "list_plugin_assignments", map[string]any{"project_slug": project.Slug})
 	var reference string
 	for _, choice := range choices.Assignments {
 		if choice.DisplayName == role.WorkosName {
@@ -154,7 +157,7 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 		}
 	}
 	require.NotEmpty(t, reference)
-	args := map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String(), "assignment_references": []string{reference}, "expected_assignment_version": before.AssignmentVersion, "idempotency_key": "assign-signal", "confirmed": true}
+	args := map[string]any{"project_slug": project.Slug, "plugin": plugin.ID.String(), "assignment_references": []string{reference}, "expected_assignment_version": before.AssignmentVersion, "idempotency_key": "assign-signal", "confirmed": true}
 
 	assigned := callSkillsTool[SetPluginAssignmentsOutput](t, ctx, session, "set_plugin_assignments", args)
 	require.Equal(t, string(plugindelivery.ProjectPublicationEmissionDisabled), assigned.PublicationRequest)
@@ -171,4 +174,15 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	require.False(t, unchanged.Receipt.Replayed)
 	require.Equal(t, "not_requested", unchanged.PublishSignal)
 	require.Len(t, signaler.recorded(), 1, "a replay or an unchanged audience must not signal again")
+}
+
+// enableAutoAddServers opts a seeded plugin in to automatic server adding, so
+// role audiences deliver servers to it.
+func enableAutoAddServers(t *testing.T, ctx context.Context, conn *pgxpool.Pool, plugin pluginsrepo.Plugin) {
+	t.Helper()
+	_, err := pluginsrepo.New(conn).UpdatePlugin(ctx, pluginsrepo.UpdatePluginParams{
+		ID: plugin.ID, OrganizationID: plugin.OrganizationID, ProjectID: plugin.ProjectID, Name: plugin.Name, Slug: plugin.Slug,
+		Description: plugin.Description, AutoSyncEnabled: pgtype.Bool{}, AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
 }

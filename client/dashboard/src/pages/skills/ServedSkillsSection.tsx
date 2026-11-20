@@ -3,7 +3,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
@@ -227,10 +227,10 @@ export function ServedSkillsSection({
     body = (
       <InlineEmptyState
         icon="sparkles"
-        heading="No skills served yet"
+        heading="Give connected agents skills"
         description={
           canAdd
-            ? `Add a project skill to serve it to agents connected to ${surfaceName}.`
+            ? `Add a project skill and every agent that connects to ${surfaceName} loads it.`
             : `Agents connected to ${surfaceName} don't load any skills yet.`
         }
         action={addControl ?? undefined}
@@ -242,7 +242,6 @@ export function ServedSkillsSection({
 
   return (
     <Page.Section>
-      <Page.Section.Title>Skills</Page.Section.Title>
       <Page.Section.Description>
         Skills agents load over MCP when they connect to {surfaceName}.
       </Page.Section.Description>

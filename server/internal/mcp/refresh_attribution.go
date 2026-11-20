@@ -10,7 +10,7 @@ import (
 
 func requestApp(ctx context.Context) mcpconnectionattempts.App {
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok && clientID != "" {
-		return mcpconnectionattempts.AppOf(clientID)
+		return mcpconnectionattempts.AppOf(clientID, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	return mcpconnectionattempts.AppUnverified
 }
@@ -20,7 +20,7 @@ func (a *issuerGateAuthentication) refreshAttribution(ctx context.Context) remot
 }
 
 func consentRefreshAttribution(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) remotesessions.RefreshAttribution {
-	return remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(state.ClientID))).InAttempt(state.connectionAttempt(endpoint)).FromRequest(r)
+	return remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(state.ClientID, mcpconnectionattempts.ClientIDAdmitted))).InAttempt(state.connectionAttempt(endpoint)).FromRequest(r)
 }
 
 func (g *metaGateContext) connectionScope(ctx context.Context) mcpconnectionattempts.Scope {

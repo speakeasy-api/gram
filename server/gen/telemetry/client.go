@@ -26,8 +26,8 @@ type Client struct {
 	GetObservabilityOverviewEndpoint         goa.Endpoint
 	GetMcpNetworkTrafficEndpoint             goa.Endpoint
 	GetMetaMcpServerUsageEndpoint            goa.Endpoint
-	GetOrganizationGatewayOverviewEndpoint   goa.Endpoint
-	GetOrganizationGatewayUsageEndpoint      goa.Endpoint
+	GetProjectGatewayOverviewEndpoint        goa.Endpoint
+	GetProjectGatewayUsageEndpoint           goa.Endpoint
 	GetProjectOverviewEndpoint               goa.Endpoint
 	GetUnproxiedMcpServerUsageEndpoint       goa.Endpoint
 	GetUnproxiedMcpServerToolUsageEndpoint   goa.Endpoint
@@ -57,7 +57,7 @@ type Client struct {
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getMcpNetworkTraffic, getMetaMcpServerUsage, getOrganizationGatewayOverview, getOrganizationGatewayUsage, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageClients, getToolUsageClientToolBreakdown, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, getOrgMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getMcpNetworkTraffic, getMetaMcpServerUsage, getProjectGatewayOverview, getProjectGatewayUsage, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageClients, getToolUsageClientToolBreakdown, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, getOrgMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:                       searchLogs,
 		SearchToolCallsEndpoint:                  searchToolCalls,
@@ -70,8 +70,8 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		GetObservabilityOverviewEndpoint:         getObservabilityOverview,
 		GetMcpNetworkTrafficEndpoint:             getMcpNetworkTraffic,
 		GetMetaMcpServerUsageEndpoint:            getMetaMcpServerUsage,
-		GetOrganizationGatewayOverviewEndpoint:   getOrganizationGatewayOverview,
-		GetOrganizationGatewayUsageEndpoint:      getOrganizationGatewayUsage,
+		GetProjectGatewayOverviewEndpoint:        getProjectGatewayOverview,
+		GetProjectGatewayUsageEndpoint:           getProjectGatewayUsage,
 		GetProjectOverviewEndpoint:               getProjectOverview,
 		GetUnproxiedMcpServerUsageEndpoint:       getUnproxiedMcpServerUsage,
 		GetUnproxiedMcpServerToolUsageEndpoint:   getUnproxiedMcpServerToolUsage,
@@ -350,9 +350,9 @@ func (c *Client) GetMetaMcpServerUsage(ctx context.Context, p *GetMetaMcpServerU
 	return ires.(*GetMetaMcpServerUsageResult), nil
 }
 
-// GetOrganizationGatewayOverview calls the "getOrganizationGatewayOverview"
-// endpoint of the "telemetry" service.
-// GetOrganizationGatewayOverview may return the following errors:
+// GetProjectGatewayOverview calls the "getProjectGatewayOverview" endpoint of
+// the "telemetry" service.
+// GetProjectGatewayOverview may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -364,18 +364,18 @@ func (c *Client) GetMetaMcpServerUsage(ctx context.Context, p *GetMetaMcpServerU
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetOrganizationGatewayOverview(ctx context.Context, p *GetOrganizationGatewayOverviewPayload) (res *GetObservabilityOverviewResult, err error) {
+func (c *Client) GetProjectGatewayOverview(ctx context.Context, p *GetProjectGatewayOverviewPayload) (res *GetObservabilityOverviewResult, err error) {
 	var ires any
-	ires, err = c.GetOrganizationGatewayOverviewEndpoint(ctx, p)
+	ires, err = c.GetProjectGatewayOverviewEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*GetObservabilityOverviewResult), nil
 }
 
-// GetOrganizationGatewayUsage calls the "getOrganizationGatewayUsage" endpoint
-// of the "telemetry" service.
-// GetOrganizationGatewayUsage may return the following errors:
+// GetProjectGatewayUsage calls the "getProjectGatewayUsage" endpoint of the
+// "telemetry" service.
+// GetProjectGatewayUsage may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -387,9 +387,9 @@ func (c *Client) GetOrganizationGatewayOverview(ctx context.Context, p *GetOrgan
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetOrganizationGatewayUsage(ctx context.Context, p *GetOrganizationGatewayUsagePayload) (res *GetMetaMcpServerUsageResult, err error) {
+func (c *Client) GetProjectGatewayUsage(ctx context.Context, p *GetProjectGatewayUsagePayload) (res *GetMetaMcpServerUsageResult, err error) {
 	var ires any
-	ires, err = c.GetOrganizationGatewayUsageEndpoint(ctx, p)
+	ires, err = c.GetProjectGatewayUsageEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

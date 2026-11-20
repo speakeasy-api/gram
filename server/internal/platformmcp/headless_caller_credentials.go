@@ -20,7 +20,9 @@ import (
 const operationChooseMCPHeadlessCallerCredential = "choose_mcp_headless_caller_credential" //nolint:gosec // G101 false positive: a tool name, not a credential.
 
 type ChooseMCPHeadlessCallerCredentialInput struct {
-	ProjectID           string `json:"project_id" jsonschema:"explicit project ID that owns the configured MCP"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID           string `json:"-"`
 	MCPID               string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp"`
 	UserSessionClientID string `json:"user_session_client_id,omitempty" jsonschema:"the OAuth client that signs in without a browser; or set workload_issuer_id and workload_subject instead"`
 	WorkloadIssuerID    string `json:"workload_issuer_id,omitempty" jsonschema:"the workload issuer of a workload caller"`

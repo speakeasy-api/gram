@@ -126,6 +126,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		AuthorizerImpersonated:   nil,
 		SignInID:                 nil,
 		FreshLoginForced:         false,
+		AccountSwitches:          0,
 		AgentAuthorizationTarget: nil,
 		Endpoint:                 endpointRef,
 		ClientID:                 "",
@@ -253,6 +254,7 @@ func (s *Service) firstPartyIDPAuthorizationURL(ctx context.Context, endpoint *R
 		LoginHint:       "",
 		ScreenHint:      "",
 		Prompt:          prompt,
+		OrganizationID:  "",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("identity resolver: %w", err)

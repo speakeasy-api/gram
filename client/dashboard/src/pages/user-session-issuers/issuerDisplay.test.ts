@@ -1,11 +1,16 @@
 // @vitest-environment node
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import type { UserSessionIssuerMigrationServerImpact } from "@gram/client/models/components/usersessionissuermigrationserverimpact.js";
 import { describe, expect, it } from "vitest";
 import {
   authorizationServerModeLabel,
   changesIssuerUrl,
   consolidationTargets,
   describeMismatch,
+  describeServerImpact,
+  impactServerName,
+  providerLabel,
+  serverImpactRemedy,
   settingValue,
   unavailableReason,
 } from "./issuerDisplay";
@@ -155,5 +160,142 @@ describe("display helpers", () => {
       ]),
     ).toBe(true);
     expect(changesIssuerUrl([])).toBe(false);
+  });
+});
+
+describe("describeServerImpact", () => {
+  const google = {
+    remoteSessionClientId: "google",
+    clientId: "google-app",
+    providerIssuer: "https://accounts.google.com/",
+  };
+  const slack = {
+    remoteSessionClientId: "slack",
+    clientId: "slack-app",
+    providerIssuer: "https://slack.com",
+  };
+  function impact(
+    overrides: Partial<UserSessionIssuerMigrationServerImpact>,
+  ): UserSessionIssuerMigrationServerImpact {
+    return {
+      mcpServerId: "server",
+      mcpServerName: "",
+      mcpServerSlug: "",
+      projectId: "project",
+      projectName: "Project",
+      impactSeverity: "warning",
+      reasons: [],
+      clientsBefore: [],
+      clientsAfter: [],
+      pinnedClientIds: [],
+      hosted: false,
+      ...overrides,
+    };
+  }
+
+  it("leads with the reason that blocks the move", () => {
+    expect(
+      describeServerImpact(
+        impact({
+          reasons: ["provider_not_in_metadata", "gains_client"],
+          clientsAfter: [google],
+        }),
+      ),
+    ).toBe(
+      "Would use an OAuth client for accounts.google.com, which its upstream doesn't accept.",
+    );
+  });
+
+  it("names both providers when they change", () => {
+    expect(
+      describeServerImpact(
+        impact({
+          reasons: ["changes_provider", "pinned"],
+          clientsBefore: [slack],
+          clientsAfter: [slack, google],
+        }),
+      ),
+    ).toBe("Would switch from slack.com to slack.com and accounts.google.com.");
+  });
+
+  it("names only the provider with several clients", () => {
+    const portSlack = {
+      remoteSessionClientId: "slack-2",
+      clientId: "slack-app-2",
+      providerIssuer: "https://idp.corp.com:8443",
+    };
+    expect(
+      describeServerImpact(
+        impact({
+          reasons: ["multiple_clients_for_provider", "changes_clients"],
+          clientsAfter: [
+            google,
+            { ...portSlack, remoteSessionClientId: "slack-1" },
+            portSlack,
+          ],
+        }),
+      ),
+    ).toBe("Would use more than one OAuth client for idp.corp.com:8443.");
+  });
+
+  it("describes each kind of change", () => {
+    expect(
+      describeServerImpact(
+        impact({ reasons: ["gains_client"], clientsAfter: [google] }),
+      ),
+    ).toBe("Would start asking people to connect accounts.google.com.");
+    expect(
+      describeServerImpact(
+        impact({ reasons: ["loses_client"], clientsBefore: [slack] }),
+      ),
+    ).toBe("Would stop asking people to connect slack.com.");
+    expect(
+      describeServerImpact(
+        impact({
+          reasons: ["changes_clients"],
+          clientsBefore: [slack],
+          clientsAfter: [{ ...slack, remoteSessionClientId: "slack-2" }],
+        }),
+      ),
+    ).toBe("Would use a different OAuth client for slack.com.");
+  });
+
+  it("says a pinned server keeps its client", () => {
+    expect(describeServerImpact(impact({ reasons: ["pinned"] }))).toBe(
+      "Keeps its current OAuth client.",
+    );
+  });
+
+  it("names a server without a name by its slug, then a plain noun", () => {
+    expect(impactServerName(impact({ mcpServerSlug: "slack" }))).toBe("slack");
+    expect(impactServerName(impact({}))).toBe("Unnamed MCP server");
+  });
+
+  it("labels a provider it can't parse by its raw value", () => {
+    expect(providerLabel({ providerIssuer: "not a url" })).toBe("not a url");
+    expect(providerLabel({ providerIssuer: "" })).toBe("an unknown provider");
+  });
+});
+
+describe("serverImpactRemedy", () => {
+  it("fits the remedy to how the server gets its OAuth clients", () => {
+    expect(
+      serverImpactRemedy({
+        hosted: true,
+        reasons: ["multiple_clients_for_provider"],
+      }),
+    ).toMatch(/^Remove the extra OAuth client/);
+    expect(
+      serverImpactRemedy({
+        hosted: false,
+        reasons: ["multiple_clients_for_provider", "changes_clients"],
+      }),
+    ).toMatch(/^Keep one OAuth client for that provider/);
+    expect(
+      serverImpactRemedy({
+        hosted: false,
+        reasons: ["provider_not_in_metadata", "gains_client"],
+      }),
+    ).toMatch(/^Choose an OAuth client its upstream accepts/);
   });
 });

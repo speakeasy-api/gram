@@ -6,16 +6,18 @@ import (
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func projectPolicy() TargetPolicy {
-	return TargetPolicy{ProjectID: "11111111-1111-4111-8111-111111111111", ProjectSlug: "default"}
+	return TargetPolicy{ProjectSlug: "default"}
 }
 
 // The assistant is provisioned per project and only ever acts in its own, so
@@ -27,18 +29,35 @@ func TestTargetPolicyReplacesTheProjectArgument(t *testing.T) {
 	tool := Tool{
 		descriptor: platformmcp.Descriptor{
 			Name:        "find_mcp",
-			InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"project_slug":{"type":"string"},"query":{"type":"string"}},"required":[]}`),
+			InputSchema: []byte(`{"type":"object","properties":{"project_slug":{"type":"string"},"query":{"type":"string"}},"required":[]}`),
 			Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeExplicit},
 		},
 	}
 
-	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_id":"someone-elses-project","query":"server"}`))
+	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_slug":"someone-elses-project","query":"server"}`))
 	require.NoError(t, err)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(arguments, &decoded))
-	require.Equal(t, projectPolicy().ProjectID, decoded["project_id"], "the policy's project wins over the model's")
+	require.Equal(t, projectPolicy().ProjectSlug, decoded["project_slug"], "the policy's project wins over the model's")
 	require.Equal(t, "server", decoded["query"], "other arguments are untouched")
+}
+
+// Every project-scoped tool takes the project by slug, so a turn whose auth
+// context carries no project slug has nothing to scope the call to.
+func TestTargetPolicyRequiresTheAssistantProjectSlug(t *testing.T) {
+	t.Parallel()
+
+	projectID := uuid.New()
+	slug := "assistant-project"
+	withSlug := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ProjectID: &projectID, ProjectSlug: &slug})
+	policy, err := targetPolicyFromContext(withSlug)
+	require.NoError(t, err)
+	require.Equal(t, TargetPolicy{ProjectSlug: slug}, policy)
+
+	withoutSlug := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ProjectID: &projectID})
+	_, err = targetPolicyFromContext(withoutSlug)
+	require.Error(t, err)
 }
 
 // A field the policy fills must not be advertised: asking for it invites a
@@ -50,14 +69,14 @@ func TestDefaultableTargetPolicyInjectsAssistantProject(t *testing.T) {
 	tool := Tool{
 		descriptor: platformmcp.Descriptor{
 			Name:        "list_risk_policies",
-			InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"project_slug":{"type":"string"},"cursor":{"type":"string"}},"required":[]}`),
+			InputSchema: []byte(`{"type":"object","properties":{"project_slug":{"type":"string"},"cursor":{"type":"string"}},"required":[]}`),
 			Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeDefaultable},
 		},
 	}
 
 	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_slug":"other","cursor":"next"}`))
 	require.NoError(t, err)
-	require.JSONEq(t, `{"project_id":"11111111-1111-4111-8111-111111111111","cursor":"next"}`, string(arguments))
+	require.JSONEq(t, `{"project_slug":"default","cursor":"next"}`, string(arguments))
 
 	var schema struct {
 		Properties map[string]json.RawMessage `json:"properties"`
@@ -274,7 +293,7 @@ func TestAssistantToolsetListsPluginReadsAndWithholdsPluginMutations(t *testing.
 // the assistant, that field is supplied by policy: hidden from the model and
 // overwritten on every call. The schemas here are inferred from the same input
 // types the live registration infers from, so a read that stopped declaring
-// project_id would fail the precondition rather than pass vacuously.
+// project_slug would fail the precondition rather than pass vacuously.
 func TestPluginReadSchemasHideAndInjectTheAssistantProject(t *testing.T) {
 	t.Parallel()
 
@@ -296,8 +315,9 @@ func TestPluginReadSchemasHideAndInjectTheAssistantProject(t *testing.T) {
 			Required   []string                   `json:"required"`
 		}
 		require.NoError(t, json.Unmarshal(inputSchema, &live))
-		require.Contains(t, live.Properties, "project_id", "%q declares the project it reads", read.name)
-		require.Contains(t, live.Required, "project_id", read.name)
+		require.Contains(t, live.Properties, "project_slug", "%q declares the project it reads", read.name)
+		require.Contains(t, live.Required, "project_slug", read.name)
+		require.NotContains(t, live.Properties, "project_id", "%q names its project by slug only", read.name)
 
 		tool := Tool{descriptor: platformmcp.Descriptor{
 			Name:        read.name,
@@ -310,14 +330,14 @@ func TestPluginReadSchemasHideAndInjectTheAssistantProject(t *testing.T) {
 			Required   []string                   `json:"required"`
 		}
 		require.NoError(t, json.Unmarshal(tool.assistantInputSchema(), &advertised))
-		require.NotContains(t, advertised.Properties, "project_id", "%q takes its project from the assistant's policy", read.name)
-		require.NotContains(t, advertised.Required, "project_id", read.name)
+		require.NotContains(t, advertised.Properties, "project_slug", "%q takes its project from the assistant's policy", read.name)
+		require.NotContains(t, advertised.Required, "project_slug", read.name)
 
-		arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_id":"someone-elses-project"}`))
+		arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_slug":"someone-elses-project"}`))
 		require.NoError(t, err)
 		var decoded map[string]any
 		require.NoError(t, json.Unmarshal(arguments, &decoded))
-		require.Equal(t, projectPolicy().ProjectID, decoded["project_id"], "%q acts in the assistant's project, not the model's", read.name)
+		require.Equal(t, projectPolicy().ProjectSlug, decoded["project_slug"], "%q acts in the assistant's project, not the model's", read.name)
 	}
 }
 

@@ -41,6 +41,9 @@ var ErrConsentRequired = errors.New("consent required")
 type ConnectionRequiredError struct {
 	// Server is the member slug to pass to Connect.
 	Server string
+
+	// ReferenceLine is the line a person gives their admin, empty when there is none.
+	ReferenceLine string
 }
 
 func (e *ConnectionRequiredError) Error() string {

@@ -361,13 +361,16 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, replayed.Code)
 }
 
-func TestOAuthPageContentSecurityPolicyOnlyAllowsHTTPRedirectOrigins(t *testing.T) {
+func TestOAuthPageContentSecurityPolicyAllowsSafeRedirectSources(t *testing.T) {
 	t.Parallel()
 
 	policy := oauthPageContentSecurityPolicy("https://client.example/callback?next=unexpected", "nonce")
 	require.Contains(t, policy, "form-action 'self' https://client.example")
 	require.NotContains(t, policy, "/callback")
 	require.NotContains(t, policy, "?next")
+
+	policy = oauthPageContentSecurityPolicy("com.example.client:/oauth/callback", "nonce")
+	require.Contains(t, policy, "form-action 'self' com.example.client:;")
 
 	policy = oauthPageContentSecurityPolicy("javascript:alert(1)", "nonce")
 	require.Contains(t, policy, "form-action 'self';")

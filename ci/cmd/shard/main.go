@@ -25,6 +25,23 @@
 //
 //	go run ./ci/cmd/shard -i 5/5 -isolate example.com/mod/slow ./server
 //
+// On a pull request, -changed narrows the run to the packages a change
+// reaches in one step: the packages the listed files belong to and the
+// packages importing one of those directly. The file holds one path per line,
+// relative to the module root. Paths named by -full-on, and files that do not
+// belong to a package, select the whole suite instead. -scope names the paths
+// the suite can depend on, so that files outside them (a changeset, another
+// product's sources) are ignored rather than counted as unknown. -readers
+// names the packages whose tests read a file they do not import:
+//
+//	git diff --name-only HEAD^1 HEAD > changed.txt
+//	go run ./ci/cmd/shard -i 1/2 -changed changed.txt -full-on go.mod,server/migrations/ ./server
+//
+// The plan subcommand prints how many shards such a selection needs, so CI
+// starts only that many runners:
+//
+//	go run ./ci/cmd/shard plan -max 5 -changed changed.txt ./server
+//
 // The timings subcommand builds a timings file from the JUnit reports that CI
 // uploads for each shard:
 //
@@ -48,6 +65,7 @@ import (
 )
 
 const usage = `Usage: shard -i <index>/<total> [flags] [packages...]
+       shard plan -max <shards> [flags] [packages...]
        shard timings [-o file] <junit files or directories...>
 
 Prints the test packages assigned to one shard, one import path per line.
@@ -71,6 +89,9 @@ type pkg struct {
 	Dir          string
 	TestGoFiles  []string
 	XTestGoFiles []string
+	Imports      []string
+	TestImports  []string
+	XTestImports []string
 
 	// sourceBytes is the size of the package's test sources.
 	sourceBytes int64
@@ -85,6 +106,10 @@ func run(argv []string, stdout, stderr io.Writer) error {
 		return runTimings(argv[1:], stdout, stderr)
 	}
 
+	if len(argv) > 0 && argv[0] == "plan" {
+		return runPlan(argv[1:], stdout, stderr)
+	}
+
 	fs := flag.NewFlagSet("shard", flag.ContinueOnError)
 	// Errors are reported by the caller so they are not printed twice.
 	fs.SetOutput(io.Discard)
@@ -93,6 +118,10 @@ func run(argv []string, stdout, stderr io.Writer) error {
 	tags := fs.String("tags", "", "comma-separated build tags to pass to 'go list'")
 	isolateList := fs.String("isolate", "", "comma-separated import paths that each get a shard of their own, taking the last shards")
 	timingsPath := fs.String("timings", "", "timings file to weight packages by (default: the checked-in ci/cmd/shard/timings.txt)")
+	changedPath := fs.String("changed", "", "file listing changed paths relative to the module root; selects only the packages they belong to and those packages' direct importers")
+	scope := fs.String("scope", "", "comma-separated paths (a trailing slash matches a directory tree) the suite can depend on; changed files outside them are ignored (default: every path)")
+	fullOn := fs.String("full-on", "", "comma-separated paths (a trailing slash matches a directory tree) whose change selects every package")
+	readers := fs.String("readers", "", "comma-separated <file>=<package directory> pairs: a change to the file also selects that package")
 
 	if err := fs.Parse(argv); err != nil {
 		fs.SetOutput(stderr)
@@ -131,9 +160,33 @@ func run(argv []string, stdout, stderr io.Writer) error {
 
 	measured := weigh(pkgs, timings)
 
+	chosen, err := selectPackages(pkgs, *changedPath, *scope, *fullOn, *readers, stderr)
+	if err != nil {
+		return err
+	}
+	if !chosen.everything {
+		fmt.Fprintf(stderr, "testing %d of %d test packages: the ones the change touches and their direct importers\n", len(chosen.pkgs), len(pkgs))
+	} else if *changedPath != "" {
+		fmt.Fprintf(stderr, "testing every package: %s\n", chosen.reason)
+	}
+	pkgs = chosen.pkgs
+
 	var isolated []string
 	if *isolateList != "" {
 		isolated = strings.Split(*isolateList, ",")
+	}
+	if !chosen.everything {
+		// A narrowed run does not isolate: the plan subcommand sizes it
+		// without reserving shards, and the reason to isolate a package (it
+		// dominates a full run) does not hold for a handful of packages.
+		isolated = nil
+
+		measured = 0
+		for _, p := range pkgs {
+			if _, ok := timings[p.ImportPath]; ok {
+				measured++
+			}
+		}
 	}
 
 	selected, err := pick(pkgs, isolated, index, total)
@@ -212,7 +265,7 @@ func expandPattern(pattern string) string {
 // listTestPackages returns the packages matching patterns that have test files,
 // each with the size of its test sources.
 func listTestPackages(tags string, patterns []string, stderr io.Writer) ([]pkg, error) {
-	args := []string{"list", "-json=ImportPath,Dir,TestGoFiles,XTestGoFiles"}
+	args := []string{"list", "-json=ImportPath,Dir,TestGoFiles,XTestGoFiles,Imports,TestImports,XTestImports"}
 	if tags != "" {
 		args = append(args, "-tags="+tags)
 	}

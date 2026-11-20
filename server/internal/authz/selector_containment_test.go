@@ -7,10 +7,11 @@ import (
 
 func TestGrantsContainSelectorWildcards(t *testing.T) {
 	t.Parallel()
-	broad := NewGrant(ScopeMCPWrite, "*")
+	broad := NewGrant(ScopeMCPConnect, "*")
 	candidate := NewSelector(ScopeMCPConnect, "*")
 	require.True(t, GrantsContainSelector([]Grant{broad}, ScopeMCPConnect, candidate))
-	require.False(t, GrantsContainSelector([]Grant{NewGrant(ScopeMCPWrite, "one-server")}, ScopeMCPConnect, candidate))
+	require.False(t, GrantsContainSelector([]Grant{NewGrant(ScopeMCPConnect, "one-server")}, ScopeMCPConnect, candidate))
+	require.False(t, GrantsContainSelector([]Grant{NewGrant(ScopeMCPWrite, "*")}, ScopeMCPConnect, candidate), "mcp:write does not contain mcp:connect")
 	broad.Selector[SelectorKeyTool] = "allowed-tool"
 	require.False(t, GrantsContainSelector([]Grant{broad}, ScopeMCPConnect, candidate))
 	candidate[SelectorKeyTool] = "allowed-tool"
@@ -18,6 +19,6 @@ func TestGrantsContainSelectorWildcards(t *testing.T) {
 	candidate[SelectorKeyTool] = "other-tool"
 	require.False(t, GrantsContainSelector([]Grant{broad}, ScopeMCPConnect, candidate))
 	// Delegation support must not relax runtime's concrete-resource requirement.
-	_, err := GrantsAuthorize([]Grant{broad}, MCPCheck(ScopeMCPConnect, "*", "example-project"))
+	_, err := GrantsAuthorize([]Grant{broad}, mcpCheck(ScopeMCPConnect, "*", "example-project"))
 	require.ErrorIs(t, err, ErrInvalidCheck)
 }

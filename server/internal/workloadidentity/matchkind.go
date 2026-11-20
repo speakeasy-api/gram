@@ -145,7 +145,7 @@ func ValidateSubjectRule(kind MatchKind, subject string, allowWildcard bool) err
 		if strings.Contains(subject, WildcardSuffix) {
 			return ErrExactSubjectHasWildcard
 		}
-		return nil
+		return validateURISubject(subject)
 	case MatchKindWildcard:
 		if !allowWildcard {
 			return ErrWildcardNotPermitted
@@ -163,7 +163,7 @@ func ValidateSubjectRule(kind MatchKind, subject string, allowWildcard bool) err
 		if stem != strings.TrimRight(stem, " \t\r\n") {
 			return ErrWildcardStemTrailingWhitespace
 		}
-		return nil
+		return validateURISubject(stem)
 	default:
 		return fmt.Errorf("%w: %q", ErrMatchKindUnknown, kind)
 	}

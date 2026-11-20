@@ -40,9 +40,9 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 		require.Contains(t, ScopeCategories, entry.Category, "%s: category", entry.Scope)
 		require.NotEmpty(t, entry.ResourceType, "%s: resource type", entry.Scope)
 
-		surface, ok := GrantSurfaceForScope(entry.Scope)
-		require.True(t, ok, "%s: grant surface", entry.Scope)
-		require.NotEmpty(t, surface)
+		owner, ok := ScopeGrantSource(entry.Scope)
+		require.True(t, ok, "%s: grant source", entry.Scope)
+		require.NotEmpty(t, owner)
 
 		visibility, ok := ScopeVisibilityFor(entry.Scope)
 		require.True(t, ok)
@@ -61,13 +61,14 @@ func TestScopeCatalog_EntriesAreComplete(t *testing.T) {
 func TestScopeCatalog_SensitiveSet(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, []Scope{ScopeOrgAdmin, ScopeChatRead, ScopeChatWrite, ScopeLogRead}, SensitiveScopes())
+	require.Equal(t, []Scope{ScopeOrgAdmin, ScopeChannelsReadAll, ScopeChatRead, ScopeChatWrite, ScopeLogRead}, SensitiveScopes())
 
 	reasons := []struct {
 		scope Scope
 		want  Sensitivity
 	}{
 		{scope: ScopeOrgAdmin, want: SensitivityDestructiveAdmin},
+		{scope: ScopeChannelsReadAll, want: SensitivityConversations},
 		{scope: ScopeChatRead, want: SensitivityConversations},
 		{scope: ScopeChatWrite, want: SensitivityConversations},
 		{scope: ScopeLogRead, want: SensitivityToolLogs},
@@ -104,7 +105,7 @@ func TestScopeCatalog_SubScopesMatchExpansions(t *testing.T) {
 
 	write, ok := ScopeEntryFor(ScopeMCPWrite)
 	require.True(t, ok)
-	require.Equal(t, []string{"mcp:connect", "mcp:read"}, write.SubScopes())
+	require.Equal(t, []string{"mcp:read"}, write.SubScopes(), "mcp:write does not imply mcp:connect")
 
 	chatWrite, ok := ScopeEntryFor(ScopeChatWrite)
 	require.True(t, ok)

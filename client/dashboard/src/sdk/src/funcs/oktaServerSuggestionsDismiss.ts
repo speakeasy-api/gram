@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * dismiss oktaServerSuggestions
  *
  * @remarks
- * Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin and the okta-connections rollout.
+ * Dismiss a suggestion currently made to the organization. Remembered until restored, even across Okta reconnects. Requires org:admin.
  */
 export function oktaServerSuggestionsDismiss(
   client: GramCore,

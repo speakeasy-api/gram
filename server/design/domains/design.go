@@ -22,6 +22,8 @@ var CustomDomain = Type("CustomDomain", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("is_updating", Boolean, "The custom domain is actively being registered")
+	Attribute("is_reconciling", Boolean, "The custom domain ingress configuration is being applied")
+	Attribute("reconciliation_status", String, "The latest domain ingress reconciliation state. One of: not_started, applying, reconciled, failed.")
 	Attribute("ip_allowlist", ArrayOf(String), "IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.")
 	Attribute("health_status", String, "The latest observed domain health status. One of: unknown, healthy, unhealthy.")
 	Attribute("health_issue", String, "The reason the domain was last observed as unhealthy. One of: dns_not_found, dns_target_mismatch, resource_missing, certificate_missing, certificate_not_ready, certificate_expired, certificate_invalid, check_failed.")
@@ -56,7 +58,7 @@ var CustomDomain = Type("CustomDomain", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist", "suggested_record_type")
+	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "is_reconciling", "reconciliation_status", "ip_allowlist", "suggested_record_type")
 })
 
 // DomainDNSConfig describes the DNS targets custom domains must point at.
@@ -229,6 +231,26 @@ var _ = Service("domains", func() {
 		Meta("openapi:operationId", "listRootMcpServers")
 		Meta("openapi:extension:x-speakeasy-name-override", "listRootMcpServers")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RootMcpServers", "type": "query"}`)
+	})
+
+	Method("reconcileDomain", func() {
+		Description("Reapply the configured ingress state for the organization's verified custom domain")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(CustomDomain)
+
+		HTTP(func() {
+			POST("/rpc/domain.reconcile")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "reconcileDomain")
+		Meta("openapi:extension:x-speakeasy-name-override", "reconcileDomain")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReconcileDomain"}`)
 	})
 
 	Method("checkHealth", func() {

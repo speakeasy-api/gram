@@ -27,7 +27,6 @@ type Endpoints struct {
 	GetInferenceSpendCaps     goa.Endpoint
 	GetUsageTiers             goa.Endpoint
 	CreateCustomerSession     goa.Endpoint
-	CreateCheckout            goa.Endpoint
 	GetStripeCheckoutStatus   goa.Endpoint
 	CreateStripeCheckout      goa.Endpoint
 	GetStripeSubscription     goa.Endpoint
@@ -54,7 +53,6 @@ func NewEndpoints(s Service) *Endpoints {
 		GetInferenceSpendCaps:     NewGetInferenceSpendCapsEndpoint(s, a.APIKeyAuth),
 		GetUsageTiers:             NewGetUsageTiersEndpoint(s),
 		CreateCustomerSession:     NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
-		CreateCheckout:            NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
 		GetStripeCheckoutStatus:   NewGetStripeCheckoutStatusEndpoint(s, a.APIKeyAuth),
 		CreateStripeCheckout:      NewCreateStripeCheckoutEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscription:     NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
@@ -79,7 +77,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetInferenceSpendCaps = m(e.GetInferenceSpendCaps)
 	e.GetUsageTiers = m(e.GetUsageTiers)
 	e.CreateCustomerSession = m(e.CreateCustomerSession)
-	e.CreateCheckout = m(e.CreateCheckout)
 	e.GetStripeCheckoutStatus = m(e.GetStripeCheckoutStatus)
 	e.CreateStripeCheckout = m(e.CreateStripeCheckout)
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
@@ -325,29 +322,6 @@ func NewCreateCustomerSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.CreateCustomerSession(ctx, p)
-	}
-}
-
-// NewCreateCheckoutEndpoint returns an endpoint function that calls the method
-// "createCheckout" of service "usage".
-func NewCreateCheckoutEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*CreateCheckoutPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.CreateCheckout(ctx, p)
 	}
 }
 

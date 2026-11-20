@@ -215,8 +215,8 @@ func TestRemoteSessionRecheck_LeavesRenewableGrantsToTheRefreshSweep(t *testing.
 	sess := storedSession(t, ctx, fx)
 	refreshCiphertext, err := fx.ti.enc.Encrypt([]byte("refresh-aim261"))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
-		AccessTokenEncrypted:   sess.AccessTokenEncrypted,
+	_, err = remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionTokensIfUnchangedFixture(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedFixtureParams{
+		AccessTokenEncrypted:   sess.AccessTokenEncrypted.String,
 		AccessExpiresAt:        sess.AccessExpiresAt,
 		RefreshTokenEncrypted:  conv.ToPGText(refreshCiphertext),
 		AuthorizationExpiresAt: sess.AuthorizationExpiresAt,

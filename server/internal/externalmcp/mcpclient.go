@@ -203,7 +203,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 	if messageLimit <= 0 {
 		messageLimit = defaultMaxMessageBytes
 	}
-	//nolint:exhaustruct // atomic.Bool must retain its documented zero value.
+	//nolint:exhaustruct_v5 // atomic.Bool must retain its documented zero value.
 	bodyLimitRT := &bodyLimitRoundTripper{base: authRT, messageLimit: messageLimit, totalLimit: opts.MaxResponseBytes}
 	httpClient.Transport = bodyLimitRT
 

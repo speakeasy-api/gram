@@ -203,3 +203,41 @@ func TestListUnattributedHookInstalls(t *testing.T) {
 	require.Equal(t, "legacy_unkeyed", found.EndpointGeneration)
 	require.Equal(t, "claude", found.Harness)
 }
+
+func TestListHookVersionMix(t *testing.T) {
+	t.Parallel()
+
+	org := "org-" + uuid.NewString()
+	project := uuid.NewString()
+	now := time.Now().UTC()
+	today := now.Truncate(24 * time.Hour)
+	yesterday := today.Add(-12 * time.Hour)
+
+	insertHookRow(t, project, hookRow{org: org, email: "a@example.com", hostname: "a", hookSource: "claude-code",
+		version: "0.2.0", generation: "ingest_binary", source: "hook", at: yesterday.Add(-time.Hour)})
+	insertHookRow(t, project, hookRow{org: org, email: "a@example.com", hostname: "a", hookSource: "claude-code",
+		version: "0.4.0", generation: "ingest_binary", source: "hook", at: yesterday})
+	insertHookRow(t, project, hookRow{org: org, email: "b@example.com", hostname: "b", hookSource: "claude-code",
+		version: "0.4.0", generation: "ingest_binary", source: "hook", at: yesterday})
+	for range 2 {
+		insertHookRow(t, project, hookRow{org: org, email: "c@example.com", hostname: "c", hookSource: "cursor",
+			generation: "legacy_keyed", source: "hook", at: yesterday})
+	}
+	insertHookRow(t, project, hookRow{org: org, email: "d@example.com", hostname: "d", hookSource: "claude-code",
+		version: "0.1.0", generation: "ingest_binary", source: "hook", at: today.Add(-10 * 24 * time.Hour)})
+
+	q := newHookInstallsQueries(t)
+	rows, err := q.ListHookVersionMix(t.Context(), today.Add(-7*24*time.Hour), today)
+	require.NoError(t, err)
+
+	got := []repo.HookVersionMixRow{}
+	for _, row := range rows {
+		if row.OrganizationID == org {
+			got = append(got, row)
+		}
+	}
+	require.Equal(t, []repo.HookVersionMixRow{
+		{OrganizationID: org, BinaryVersion: "", EndpointGeneration: "legacy_keyed", Installs: 1, Events: 2, LegacyEvents: 2},
+		{OrganizationID: org, BinaryVersion: "0.4.0", EndpointGeneration: "ingest_binary", Installs: 2, Events: 3, LegacyEvents: 0},
+	}, got)
+}

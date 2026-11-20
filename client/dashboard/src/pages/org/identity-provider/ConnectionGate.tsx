@@ -40,12 +40,15 @@ export function ConnectionGate({
   icon,
   purpose,
   children,
+  setupHref = (search) => search,
 }: {
   connection: OktaIdentityProviderConnection;
   requires: GateRequirement;
   icon: IconName;
   purpose: string;
   children: ReactNode;
+  /** Resolves an Okta workspace link; pages outside the identity page make it absolute. */
+  setupHref?: (search: string) => string;
 }): JSX.Element {
   if (!isConnectionChecked(connection)) {
     return (
@@ -53,7 +56,7 @@ export function ConnectionGate({
         icon={icon}
         action={
           <Button asChild>
-            <Link to={oktaViewHref("setup")}>Go to Okta setup</Link>
+            <SetupLink setupHref={setupHref}>Go to Okta setup</SetupLink>
           </Button>
         }
         heading="Verify the connection first"
@@ -71,9 +74,9 @@ export function ConnectionGate({
         icon={icon}
         action={
           <Button asChild>
-            <Link to={oktaViewHref("setup", CONNECTION_SECTION_ID)}>
+            <SetupLink setupHref={setupHref} sectionId={CONNECTION_SECTION_ID}>
               Re-verify the connection
-            </Link>
+            </SetupLink>
           </Button>
         }
         heading="The connection needs attention"
@@ -82,4 +85,22 @@ export function ConnectionGate({
     );
   }
   return <>{children}</>;
+}
+
+/** A link to Okta setup. */
+function SetupLink({
+  setupHref,
+  sectionId,
+  children,
+  ...props
+}: {
+  setupHref: (search: string) => string;
+  sectionId?: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <Link {...props} to={setupHref(oktaViewHref("setup", sectionId))}>
+      {children}
+    </Link>
+  );
 }

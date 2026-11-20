@@ -7,10 +7,13 @@ import (
 )
 
 // Resolver abstracts DNS lookups for testability. The lookup method signatures
-// match the corresponding methods on [net.Resolver]. Use [NewNetResolver] for
+// follow [net.Resolver], with an explicit record lookup for DNS configuration
+// auditing. Use [NewNetResolver] for
 // production and [NewMockResolver] for tests.
 type Resolver interface {
 	LookupAddr(ctx context.Context, addr string) ([]string, error)
+	// LookupCNAMERecord returns the immediate CNAME target, or empty for no record.
+	LookupCNAMERecord(ctx context.Context, host string) (string, error)
 	LookupCNAME(ctx context.Context, host string) (string, error)
 	LookupHost(ctx context.Context, host string) ([]string, error)
 	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)

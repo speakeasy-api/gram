@@ -222,12 +222,10 @@ infinite scrolling and "load more" user interfaces.
 > those hooks may be more suitable.
 
 ```tsx
-import { useAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.js";
+import { useAdminListMemoryEvalRunsInfinite } from "@gram/admin-client/react-query/adminListMemoryEvalRuns.js";
 
 export function Example() {
-  const { data, error, status, fetchNextPage, hasNextPage } = useAdminListOrganizationActivityInfinite({
-    organizationId: "<id>",
-  });
+  const { data, error, status, fetchNextPage, hasNextPage } = useAdminListMemoryEvalRunsInfinite({});
 
   return (
     <div>

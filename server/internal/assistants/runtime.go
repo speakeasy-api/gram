@@ -231,17 +231,18 @@ func runtimeRequestContext(parent context.Context, maxTimeSeconds int, fallback 
 // assistant-scoped JWT from the /turn request, so the auth token is not
 // included.
 type threadBootstrap struct {
-	AssistantID    string             `json:"assistant_id"`
-	ProjectID      string             `json:"project_id"`
-	Model          string             `json:"model"`
-	Instructions   string             `json:"instructions,omitempty"`
-	CompletionsURL string             `json:"completions_url"`
-	ChatID         string             `json:"chat_id"`
-	MCPServers     []runtimeMCPServer `json:"mcp_servers"`
-	History        []runtimeMessage   `json:"history,omitempty"`
-	ContextWindow  uint64             `json:"context_window,omitempty"`
-	Compaction     CompactionPolicy   `json:"compaction"`
-	SourceRefJSON  json.RawMessage    `json:"source_ref_json,omitempty"`
+	ReasoningEffort string             `json:"reasoning_effort"`
+	AssistantID     string             `json:"assistant_id"`
+	ProjectID       string             `json:"project_id"`
+	Model           string             `json:"model"`
+	Instructions    string             `json:"instructions,omitempty"`
+	CompletionsURL  string             `json:"completions_url"`
+	ChatID          string             `json:"chat_id"`
+	MCPServers      []runtimeMCPServer `json:"mcp_servers"`
+	History         []runtimeMessage   `json:"history,omitempty"`
+	ContextWindow   uint64             `json:"context_window,omitempty"`
+	Compaction      CompactionPolicy   `json:"compaction"`
+	SourceRefJSON   json.RawMessage    `json:"source_ref_json,omitempty"`
 }
 
 type runtimeMCPServer struct {

@@ -1,4 +1,7 @@
-import { startLoginRedirect, redirectOnUnauthorized } from "@/lib/adminAuth";
+import {
+  redirecting,
+  redirectingClient as sharedRedirectingClient,
+} from "@/lib/adminSdkClient";
 export { isRedirectingToLogin, redirectOnUnauthorized } from "@/lib/adminAuth";
 
 import {
@@ -143,7 +146,6 @@ import {
 } from "@tanstack/react-query";
 
 import { GramCore } from "@gram/admin-client/core";
-import { HTTPClient } from "@gram/admin-client/lib/http";
 import { buildAdminGetSessionQuery } from "@gram/admin-client/react-query/adminGetSession.core";
 import {
   buildAdminListOrganizationActivityInfiniteQuery,
@@ -157,8 +159,6 @@ import { buildSetAdminOrganizationOnboardingStackMutation } from "@gram/admin-cl
 import type { AdminOnboardingStack } from "@gram/admin-client/models/components/adminonboardingstack";
 import type { SetOrganizationOnboardingStackRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingstackrequestbody";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
-import { adminSetOrganizationProviderSetup } from "@gram/admin-client/funcs/adminSetOrganizationProviderSetup";
-import type { SetOrganizationProviderSetupRequestBody } from "@gram/admin-client/models/components/setorganizationprovidersetuprequestbody";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/models/operations/admingetorganizationfeatures";
@@ -168,21 +168,7 @@ import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/mod
 // fetch defaults preserve the ambient first-party gram_admin cookie; do not set
 // credentials, mode, Authorization, or Cookie here.
 const mutationClient = new GramCore({ serverURL: window.location.origin });
-const redirectingHTTPClient = new HTTPClient().addHook("response", (response) =>
-  startLoginRedirect(response),
-);
-const redirectingClient = new GramCore({
-  serverURL: window.location.origin,
-  httpClient: redirectingHTTPClient,
-});
-
-async function redirecting<T>(operation: Promise<T>): Promise<T> {
-  try {
-    return await operation;
-  } catch (error) {
-    return redirectOnUnauthorized(error);
-  }
-}
+const redirectingClient = sharedRedirectingClient();
 
 function createAdminSessionQuery() {
   const generated = buildAdminGetSessionQuery(redirectingClient);
@@ -501,14 +487,6 @@ export function setAdminOrganizationFeature(
   request: SetOrganizationFeatureRequestBody,
 ): Promise<ProductFeatures> {
   return generatedFeatureMutation.mutationFn({ request });
-}
-
-export function setAdminOrganizationProviderSetup(
-  request: SetOrganizationProviderSetupRequestBody,
-): Promise<ProductFeatures> {
-  return unwrapAsync(
-    adminSetOrganizationProviderSetup(mutationClient, request),
-  );
 }
 
 type SetFeatureMutationOptions = Omit<

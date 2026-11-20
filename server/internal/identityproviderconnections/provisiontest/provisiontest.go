@@ -22,6 +22,7 @@ import (
 	extkeysrepo "github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
@@ -178,6 +179,7 @@ func NewProvisioner(t *testing.T, conn *pgxpool.Pool, kmsClients gcpkms.Provisio
 		gcpauth.NewIdentity(gcpauth.NewStubResolver()),
 		kmsClients,
 		audit.NewLogger(),
+		clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)),
 		identityproviderconnections.Config{
 			KeyRing:               KeyRing,
 			SigningCredentialID:   credentialID,

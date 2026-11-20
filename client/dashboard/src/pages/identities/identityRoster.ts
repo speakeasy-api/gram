@@ -76,6 +76,8 @@ export type RegisteredAgentPage = {
 };
 
 export type RegisteredAgentPageRequest = {
+  /** Restrict the roster to this project; omit for the organization inventory. */
+  projectId?: string;
   cursor?: string;
   limit?: number;
   /** Case-insensitive substring match on the agent name, applied by the server. */
@@ -106,6 +108,7 @@ export async function fetchRegisteredAgents(
   try {
     const page = await client.agents.list(
       {
+        projectId: request.projectId,
         cursor: request.cursor,
         limit: request.limit,
         search: request.search?.trim() || undefined,

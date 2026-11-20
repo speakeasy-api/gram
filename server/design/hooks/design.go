@@ -155,6 +155,7 @@ var HookIngestSession = Type("HookIngestSession", func() {
 	Attribute("turn_id", String, "Generation, request, or turn identifier.")
 	Attribute("cwd", String, "Current working directory when the event fired.")
 	Attribute("model", String, "Model identifier reported by the local agent.")
+	Attribute("surface", String, "Product surface that sent the event, set when it changes how the server handles the event. \"cowork\" is Claude Cowork. Its Stop hook also ships the session transcript, so the server keys the event's conversation row by the id the transcript shares (the prompt id in turn_id, or the tool call id) and each prompt and tool call is stored once. Cowork cannot show the acknowledgement link, so a warned prompt there is confirmed by sending the same message again. Unknown values are ignored.")
 })
 
 var HookIngestEvent = Type("HookIngestEvent", func() {
@@ -276,6 +277,24 @@ var HookDeliveryFailedEventType = Type("HookDeliveryFailedEventType", String, fu
 	Enum(vocab.Any(vocab.FailedEventTypes)...)
 })
 
+var HookInstallFailureCause = Type("HookInstallFailureCause", String, func() {
+	Description("Why a bootstrap script could not install the hooks binary.")
+	Enum(vocab.Any(vocab.InstallFailureCauses)...)
+})
+
+var HookInstallFailureData = Type("HookInstallFailureData", func() {
+	Description("Bootstrap install failure report, sent with event type client.install_failed. A plugin's bootstrap script sends one, best effort, when it cannot download the hooks binary or the download fails its checksum. It is diagnostic only and never counts as agent activity.")
+	Required("cause", "attempted_at")
+	Attribute("cause", HookInstallFailureCause, "Why the install failed.")
+	Attribute("attempted_at", String, "RFC3339 time of the failed install, on the device clock.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("version", String, "speakeasy-hooks version the script tried to install.", func() { MaxLength(64) })
+	Attribute("os", String, "Operating system of the device.", func() { MaxLength(32) })
+	Attribute("arch", String, "CPU architecture of the device.", func() { MaxLength(32) })
+	Attribute("harness", String, "Coding agent harness the hook ran under.", func() { MaxLength(64) })
+})
+
 var HookDeliveryFailureData = Type("HookDeliveryFailureData", func() {
 	Description("Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.")
 	Required("failed_event_type", "delivery_phase", "cause", "attempted_at")
@@ -338,6 +357,7 @@ var HookIngestData = Type("HookIngestData", func() {
 	Attribute("mcp_attribution", ArrayOf(HookMCPAttributionEntry), "Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).")
 	Attribute("prompt_attachments", ArrayOf(HookPromptAttachmentEntry), "Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).")
 	Attribute("delivery_failure", HookDeliveryFailureData, "Device-side delivery failure report. Required on client.delivery_failed, where it must be the only block and the payload carries no session; rejected on every other event type.")
+	Attribute("install_failure", HookInstallFailureData, "Bootstrap install failure report. Required on client.install_failed, where it must be the only block and the payload carries no session; rejected on every other event type.")
 })
 
 var IngestHookPayload = Type("IngestHookPayload", func() {
@@ -355,8 +375,8 @@ var IngestHookPayload = Type("IngestHookPayload", func() {
 var IngestHookResult = Type("IngestHookResult", func() {
 	Description("Provider-neutral decision returned by the unified hook endpoint.")
 	Required("decision")
-	Attribute("decision", String, "Whether the local hook should allow or deny the action.", func() {
-		Enum("allow", "deny")
+	Attribute("decision", String, "Whether the local hook should allow or deny the action. \"ask\" (tool calls from Claude Cowork only) asks the person to allow the call in the agent's own permission prompt; a client that does not support it must deny.", func() {
+		Enum("allow", "deny", "ask")
 	})
 	Attribute("reason", String, "Machine-readable decision reason.")
 	Attribute("message", String, "User-facing decision message.")

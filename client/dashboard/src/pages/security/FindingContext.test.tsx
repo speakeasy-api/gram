@@ -48,6 +48,11 @@ vi.mock("@gram/client/react-query/loadChat.js", () => ({
   }),
 }));
 
+// Temporary access reads the viewer's grants; these tests cover masking.
+vi.mock("@/components/temporary-access", () => ({
+  ActiveTemporaryAccess: () => null,
+}));
+
 vi.mock("@gram/client/react-query/riskUnmaskResult.js", () => ({
   useRiskUnmaskResultMutation: () => ({
     // Every audited reveal succeeds.

@@ -75,11 +75,11 @@ func TestEncodeCeiling_CarriesTheOrganizationsDeviceAgentGrants(t *testing.T) {
 
 	// Hooks reach any project in the organization and none outside it. The
 	// agent's own grants are what bound them to particular projects.
-	require.True(t, authz.GrantsSatisfy(grants, authz.HooksIngestCheck("org-123", uuid.NewString())))
-	require.False(t, authz.GrantsSatisfy(grants, authz.HooksIngestCheck("org-other", uuid.NewString())), "hooks must be scoped to its organization")
+	require.True(t, authz.GrantsSatisfy(grants, authz.Org(authz.OrgIDFrom("org-123")).HooksIngest(authz.ProjectIDFrom(uuid.NewString()))))
+	require.False(t, authz.GrantsSatisfy(grants, authz.Org(authz.OrgIDFrom("org-other")).HooksIngest(authz.ProjectIDFrom(uuid.NewString()))), "hooks must be scoped to its organization")
 
 	require.True(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: uuid.NewString(), Dimensions: nil}))
-	require.False(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: uuid.NewString(), Dimensions: nil}), "the ceiling must not reach MCP")
+	require.False(t, authz.GrantsSatisfy(grants, authz.MCPServers(authz.ProjectIDFrom(uuid.NewString())).Connect()), "the ceiling must not reach MCP")
 }
 
 func TestCeiling_LeavesTheHooksProjectToTheAgentsGrant(t *testing.T) {
@@ -94,7 +94,7 @@ func TestCeiling_LeavesTheHooksProjectToTheAgentsGrant(t *testing.T) {
 	// A request passes only when both sets allow it, so the agent's
 	// project-bounded grant is what decides.
 	allowed := func(project string) bool {
-		check := authz.HooksIngestCheck("org-123", project)
+		check := authz.Org(authz.OrgIDFrom("org-123")).HooksIngest(authz.ProjectIDFrom(project))
 		return authz.GrantsSatisfy(ceiling, check) && authz.GrantsSatisfy(agentGrants, check)
 	}
 	require.True(t, allowed(granted))

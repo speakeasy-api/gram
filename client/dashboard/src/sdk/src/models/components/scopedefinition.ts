@@ -107,6 +107,9 @@ export const Slug = {
   OrgBlockedAdmin: "org:blocked_admin",
   OrgDeviceAgentSync: "org:device_agent_sync",
   OrgHooksIngest: "org:hooks_ingest",
+  ChannelsConnect: "channels:connect",
+  ChannelsAdmin: "channels:admin",
+  ChannelsReadAll: "channels:read_all",
   ProjectRead: "project:read",
   ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
@@ -138,6 +141,8 @@ export const Slug = {
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
   ChatWrite: "chat:write",
+  MemoryRead: "memory:read",
+  MemoryWrite: "memory:write",
   InferenceExecute: "inference:execute",
   LogRead: "log:read",
   AgentRead: "agent:read",
@@ -210,6 +215,10 @@ export type ScopeDefinition = {
    */
   subScopes: Array<string>;
   /**
+   * Whether an administrator can give this scope for a limited time with createTemporaryGrant.
+   */
+  temporaryGrantable: boolean;
+  /**
    * Whether this scope is a first-class permission or an internal storage/evaluation scope.
    */
   visibility: ScopeDefinitionVisibility;
@@ -261,6 +270,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
     sensitivity: z.optional(Sensitivity$inboundSchema),
     slug: Slug$inboundSchema,
     sub_scopes: z.array(z.string()),
+    temporary_grantable: z.boolean(),
     visibility: ScopeDefinitionVisibility$inboundSchema,
   }),
   z.transform((v) => {
@@ -269,6 +279,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
       "exclusion_scope": "exclusionScope",
       "resource_type": "resourceType",
       "sub_scopes": "subScopes",
+      "temporary_grantable": "temporaryGrantable",
     });
   }),
 );

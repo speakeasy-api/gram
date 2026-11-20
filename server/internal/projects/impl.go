@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
@@ -105,7 +106,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting project by slug").LogError(ctx, s.logger, attr.SlogProjectSlug(slug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: proj.ID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(proj.ID)).Read()); err != nil {
 		var shareableErr *oops.ShareableError
 		if errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden {
 			return nil, oops.C(oops.CodeNotFound)
@@ -136,7 +137,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		return nil, oops.E(oops.CodeForbidden, nil, "organization does not match active organization context")
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: payload.OrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(payload.OrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -201,7 +202,7 @@ func (s *Service) UpdateProject(ctx context.Context, payload *gen.UpdateProjectP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -270,7 +271,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 
 	checks := make([]authz.Check, len(projectIDs))
 	for i, id := range projectIDs {
-		checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
+		checks[i] = authz.Project(authz.ProjectIDFrom(id)).Read()
 	}
 	allowedProjectIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {
@@ -306,7 +307,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -372,7 +373,7 @@ func (s *Service) ListAllowedOrigins(ctx context.Context, payload *gen.ListAllow
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -404,7 +405,7 @@ func (s *Service) UpsertAllowedOrigin(ctx context.Context, payload *gen.UpsertAl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -446,7 +447,7 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 		return oops.E(oops.CodeInvalid, err, "invalid project id").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -530,12 +531,14 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 	}
 
 	// Check that the API key is from the speakeasy-team organization
-	const speakeasyTeamOrgID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
-	if authCtx.ActiveOrganizationID != speakeasyTeamOrgID {
+	if authCtx.ActiveOrganizationID != constants.SpeakeasyTeamOrganizationID {
 		return oops.E(oops.CodeUnauthorized, nil, "only speakeasy-team can set organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: payload.OrganizationID, Dimensions: nil}); err != nil {
+	// The caller acts in speakeasy-team and changes another organization, so
+	// the permission checked is admin of the caller's own organization: grants
+	// are loaded for it, and the engine refuses an org check about any other.
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 

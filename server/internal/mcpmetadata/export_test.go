@@ -12,8 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -80,8 +80,8 @@ func TestService_ExportMcpMetadata_McpNotEnabled(t *testing.T) {
 	require.Error(t, err, "should return error for toolset with MCP disabled")
 	require.Contains(t, err.Error(), "MCP server not found", "error should indicate server not found")
 
-	// A legacy alias without a canonical server is not hosted.
-	wrapperless, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	// A toolset without a canonical server is not hosted at its slug.
+	_, err = toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Test Wrapperless Toolset",
@@ -90,9 +90,8 @@ func TestService_ExportMcpMetadata_McpNotEnabled(t *testing.T) {
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err, "create toolset")
-	testenv.SetLegacyAlias(t, ctx, ti.conn, wrapperless.ProjectID, wrapperless.ID, "wrapperless-mcp-slug", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
-		McpSlug: new(types.Slug("wrapperless-mcp-slug")),
+		McpSlug: new(types.Slug("test-wrapperless-mcp")),
 	})
 	require.Error(t, err, "should return error for toolset without a canonical server")
 	require.Contains(t, err.Error(), "MCP server not found", "error should indicate server not found")
@@ -158,10 +157,10 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 	})
 	require.NoError(t, err, "activate custom domain")
 
-	// A platform-domain legacy alias is exported under the organization's custom domain.
-	createServedToolset(t, ctx, ti, servedToolsetOptions{
+	// An endpoint on the custom domain is exported under it.
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
 		name: "Test Custom Domain Export", slug: "test-custom-domain", mcpSlug: "custom-domain-mcp",
-		description: "A toolset with custom domain", legacyAlias: true,
+		description: "A toolset with custom domain", customDomainID: uuid.NullUUID{UUID: customDomain.ID, Valid: true},
 	})
 
 	// Export the MCP metadata
@@ -173,4 +172,60 @@ func TestService_ExportMcpMetadata_WithCustomDomain(t *testing.T) {
 	// Verify the server URL uses the custom domain
 	require.Contains(t, result.ServerURL, customDomain.Domain, "server URL should contain custom domain")
 	require.Equal(t, "https://mcp.example.com/mcp/custom-domain-mcp", result.ServerURL, "server URL should use custom domain")
+
+	endpointsRepo := mcpendpoints_repo.New(ti.conn)
+	endpoints, err := endpointsRepo.ListMCPEndpointsByMCPServerID(ctx, mcpendpoints_repo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: toolset.ID})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+	_, err = endpointsRepo.UpdateMCPEndpointAddress(ctx, mcpendpoints_repo.UpdateMCPEndpointAddressParams{
+		CustomDomainID: endpoints[0].CustomDomainID, Slug: endpoints[0].Slug, IsDomainRoot: pgtype.Bool{Bool: true, Valid: true},
+		ID: endpoints[0].ID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err, "map endpoint to domain root")
+
+	result, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{
+		McpSlug: new(types.Slug("custom-domain-mcp")),
+	})
+	require.NoError(t, err, "export domain-root mcp metadata")
+	require.Equal(t, "https://mcp.example.com", result.ServerURL, "domain-root endpoint is served at the bare domain")
+}
+
+func TestService_ExportMcpMetadata_PrefersLiveCustomDomainEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domainsRepo := customdomains_repo.New(ti.conn)
+	customDomain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID, Domain: "primary.example.com",
+		IngressName: pgtype.Text{String: "test-ingress", Valid: true}, CertSecretName: pgtype.Text{String: "test-cert", Valid: true}, IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	_, err = domainsRepo.UpdateCustomDomain(ctx, customdomains_repo.UpdateCustomDomainParams{
+		ID: customDomain.ID, Verified: true, Activated: true,
+		IngressName: pgtype.Text{String: "test-ingress", Valid: true}, CertSecretName: pgtype.Text{String: "test-cert", Valid: true},
+	})
+	require.NoError(t, err)
+
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{name: "Primary", slug: "primary", mcpSlug: "primary-platform"})
+	endpoints := mcpendpoints_repo.New(ti.conn)
+	endpoint, err := endpoints.CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID: toolset.ProjectID, CustomDomainID: uuid.NullUUID{UUID: customDomain.ID, Valid: true},
+		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: "primary-domain",
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug("primary-platform"))})
+	require.NoError(t, err)
+	require.Equal(t, "https://primary.example.com/mcp/primary-domain", result.ServerURL)
+
+	_, err = endpoints.UpdateMCPEndpointAddress(ctx, mcpendpoints_repo.UpdateMCPEndpointAddressParams{
+		ID: endpoint.ID, ProjectID: toolset.ProjectID, CustomDomainID: endpoint.CustomDomainID, Slug: endpoint.Slug,
+		IsDomainRoot: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	result, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpSlug: new(types.Slug("primary-platform"))})
+	require.NoError(t, err)
+	require.Equal(t, "https://primary.example.com", result.ServerURL)
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -428,23 +427,4 @@ func createGCPCredentialDirect(t *testing.T, ctx context.Context, ti *testInstan
 	require.NoError(t, err)
 
 	return mv.BuildGcpIamCredentialView(ec, gcp)
-}
-
-// createPlatformGCPAmbientCredential is a fixture: a platform (organization_id
-// NULL, project_id NULL) GCP credential using the ambient attached identity.
-func createPlatformGCPAmbientCredential(t *testing.T, ctx context.Context, ti *testInstance, name string) *adminecgen.GcpIamCredential {
-	t.Helper()
-
-	cred, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
-		SessionToken:              nil,
-		Name:                      name,
-		ImpersonateServiceAccount: nil,
-		WifPoolID:                 nil,
-		WifProviderID:             nil,
-		WifProjectNumber:          nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, cred)
-
-	return cred
 }

@@ -18,11 +18,13 @@ type fakeWorkloadVerifier struct {
 	err     error
 	token   string
 	source  string
+	host    string
 }
 
-func (f *fakeWorkloadVerifier) Verify(_ context.Context, token, source string) (Ingress, error) {
+func (f *fakeWorkloadVerifier) Verify(_ context.Context, token, source, host string) (Ingress, error) {
 	f.token = token
 	f.source = source
+	f.host = host
 	return f.ingress, f.err
 }
 
@@ -56,6 +58,7 @@ func TestMiddlewareStampsPrivateOriginAndStripsAttestation(t *testing.T) {
 	handler.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusNoContent, response.Code)
+	require.Equal(t, "PRIVATE.EXAMPLE.TS.NET:443", verifier.host, "the verifier receives the raw request host")
 	require.Equal(t, "projected-token", verifier.token)
 	require.Equal(t, "192.0.2.1", verifier.source)
 	require.True(t, gotOriginOK)

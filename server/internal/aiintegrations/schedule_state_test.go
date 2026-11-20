@@ -193,7 +193,7 @@ func TestStreamForScheduleCoversEveryRegisteredSchedule(t *testing.T) {
 
 	// Every schedule any provider runs must have a registered stream —
 	// adding a schedule without one is a bug this test catches.
-	for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance} {
+	for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance, ProviderGeminiCompliance} {
 		for _, sched := range syncSchedulesFor(provider) {
 			stream := streamForSchedule(sched.schedule)
 			require.NotEmpty(t, stream.name, "schedule %s has no stream name", sched.schedule)

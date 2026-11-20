@@ -127,7 +127,7 @@ func TestCredential_SendsClientAudience(t *testing.T) {
 	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
 	require.NoError(t, err)
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "gram-client",
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretPost, Valid: true},
@@ -476,7 +476,7 @@ func TestCredential_RejectsPublicClient(t *testing.T) {
 
 	f := newFixture(t, func(int) tokenResponse { return bearerToken("token") })
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "public-client",
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodNone, Valid: true},
 		Scope:                   []string{},
@@ -496,7 +496,7 @@ func TestCredential_RejectsExpiredClientSecret(t *testing.T) {
 	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
 	require.NoError(t, err)
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "gram-client",
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true, InfinityModifier: pgtype.Finite},
@@ -599,7 +599,7 @@ func TestCredential_DoesNotFindGlobalClient(t *testing.T) {
 	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
 	require.NoError(t, err)
 
-	client, err := q.CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		RemoteSessionIssuerID: issuer.ID, ClientID: "global-client",
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretBasic, Valid: true},
@@ -932,4 +932,19 @@ func TestServedUntil(t *testing.T) {
 			require.Equal(t, tc.want, servedUntil(now, tc.reported))
 		})
 	}
+}
+
+func TestNewCacheKeys_FollowSecretGeneration(t *testing.T) {
+	t.Parallel()
+
+	client := repo.GetClientCredentialsGrantClientRow{ClientID: uuid.New(), ClientSecretEncrypted: pgtype.Text{String: "platform-copy", Valid: true}, ClientSecretGeneration: 3}
+
+	resealed := client
+	resealed.ClientSecretEncrypted = pgtype.Text{}
+	resealed.ClientSecretOrgEncrypted = pgtype.Text{String: "organization-copy", Valid: true}
+	require.Equal(t, newCacheKeys(client, ""), newCacheKeys(resealed, ""), "sealing the same secret again keeps cached credentials")
+
+	replaced := client
+	replaced.ClientSecretGeneration++
+	require.NotEqual(t, newCacheKeys(client, ""), newCacheKeys(replaced, ""), "a replaced secret mints again")
 }

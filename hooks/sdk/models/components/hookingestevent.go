@@ -27,6 +27,7 @@ const (
 	TypeSkillActivated       Type = "skill.activated"
 	TypeNotificationReported Type = "notification.reported"
 	TypeClientDeliveryFailed Type = "client.delivery_failed"
+	TypeClientInstallFailed  Type = "client.install_failed"
 )
 
 func (e Type) ToPointer() *Type {
@@ -65,6 +66,8 @@ func (e *Type) UnmarshalJSON(data []byte) error {
 	case "notification.reported":
 		fallthrough
 	case "client.delivery_failed":
+		fallthrough
+	case "client.install_failed":
 		*e = Type(v)
 		return nil
 	default:

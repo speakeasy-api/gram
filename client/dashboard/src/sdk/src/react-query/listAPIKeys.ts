@@ -59,7 +59,7 @@ export type ListAPIKeysQueryError =
  * listKeys keys
  *
  * @remarks
- * List all api keys for an organization
+ * List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
  */
 export function useListAPIKeys(
   request?: ListAPIKeysRequest | undefined,
@@ -82,7 +82,7 @@ export function useListAPIKeys(
  * listKeys keys
  *
  * @remarks
- * List all api keys for an organization
+ * List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
  */
 export function useListAPIKeysSuspense(
   request?: ListAPIKeysRequest | undefined,
@@ -109,6 +109,9 @@ export function setListAPIKeysData(
   queryKeyBase: [
     parameters: {
       agentId?: string | undefined;
+      cursor?: string | undefined;
+      limit?: number | undefined;
+      search?: string | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -124,6 +127,9 @@ export function invalidateListAPIKeys(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       agentId?: string | undefined;
+      cursor?: string | undefined;
+      limit?: number | undefined;
+      search?: string | undefined;
       gramSession?: string | undefined;
     }]
   >,

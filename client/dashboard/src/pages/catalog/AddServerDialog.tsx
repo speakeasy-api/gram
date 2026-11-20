@@ -1,12 +1,27 @@
-import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
+import { pendingAccountProvider } from "./account-provider";
+import { effectiveAction } from "@/pages/security/server-guardrails/server-guardrail-policy";
+import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
-import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
+import {
+  catalogServerHasGuidedSetup,
+  providerSetupInstallTarget,
+} from "@/pages/mcp/x/setup/provider-setup";
+import { salesforceSetupInstallServer } from "./provider-setup/salesforce";
 import { useNavigate } from "react-router";
 import { CatalogLogo } from "./CatalogLogo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
+import {
+  ShadowMCPReplacementNotice,
+  ShadowMCPReplacementOption,
+} from "./ShadowMCPReplacement";
+import {
+  shadowMCPReplacementQuestions,
+  useShadowMCPReplacement,
+  type ShadowMCPReplacementState,
+} from "./useShadowMCPReplacement";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
 import {
@@ -21,7 +36,6 @@ import {
 } from "@/lib/remote-identity";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
@@ -45,7 +59,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type CompletePhase,
   type ConfigurePhase,
@@ -69,7 +83,6 @@ export interface AddServerDialogProps {
   servers: CatalogServer[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onServersAdded?: () => void;
   onInstallFinished?: (result: {
     projectSlug?: string;
     status: "succeeded" | "failed";
@@ -84,8 +97,10 @@ export interface AddServerDialogProps {
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
-  /** Catalog-only handoff; headless, gateway and plugin callers retain their workflow. */
+  /** Catalog-only handoff; headless and plugin callers retain their workflow. */
   openProviderSetup?: boolean;
+  /** Keep the selected gateway when native Snowflake needs guided setup first. */
+  attachToGatewayId?: string;
   /** When true, starts the install as soon as the default configuration is ready. */
   autoStartInstall?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
@@ -182,17 +197,16 @@ export function AddServerDialog({
   servers,
   open,
   onOpenChange,
-  onServersAdded,
   onInstallFinished,
   projectSlug,
   bulk,
   openProviderSetup = false,
+  attachToGatewayId,
   autoStartInstall,
   headless,
 }: AddServerDialogProps): JSX.Element | null {
   const navigate = useNavigate();
   const routes = useRoutes();
-  const providerSetupRollout = useProviderSetupRollout();
   const setupHandoffRef = useRef(false);
 
   // Fetch server details (including remotes) when dialog opens
@@ -203,6 +217,52 @@ export function AddServerDialog({
     beforeInstall,
   } = useEnrichedServers(servers, open, projectSlug);
 
+  const [salesforceIdentity, setSalesforceIdentity] = useState<
+    Pick<ServerConfig, "identityMode" | "name"> | undefined
+  >();
+  const salesforceEntry = useMemo(() => {
+    if (
+      !openProviderSetup ||
+      bulk ||
+      headless ||
+      autoStartInstall ||
+      enrichedServers.length !== 1
+    )
+      return null;
+    return salesforceSetupInstallServer(enrichedServers[0]!);
+  }, [openProviderSetup, bulk, headless, autoStartInstall, enrichedServers]);
+  const guidedSalesforce =
+    !!salesforceEntry &&
+    (salesforceIdentity?.identityMode ?? "user") === "user";
+  const installServers = useMemo(
+    () =>
+      guidedSalesforce && salesforceEntry ? [salesforceEntry] : enrichedServers,
+    [guidedSalesforce, salesforceEntry, enrichedServers],
+  );
+  const initialConfiguration = useMemo(() => {
+    if (
+      (!openProviderSetup && !attachToGatewayId) ||
+      bulk ||
+      headless ||
+      autoStartInstall ||
+      enrichedServers.length !== 1
+    )
+      return undefined;
+    const server = enrichedServers[0]!;
+    if (!catalogServerHasGuidedSetup(server)) return undefined;
+    if (salesforceEntry && salesforceIdentity) return salesforceIdentity;
+    return { identityMode: "user" as const };
+  }, [
+    openProviderSetup,
+    attachToGatewayId,
+    bulk,
+    headless,
+    autoStartInstall,
+    enrichedServers,
+    salesforceEntry,
+    salesforceIdentity,
+  ]);
+
   // Use enriched servers (with remotes) for the workflow. Callers that run
   // without a visible dialog can never answer the selectRemotes phase, so
   // multi-remote servers install every endpoint for them.
@@ -212,10 +272,31 @@ export function AddServerDialog({
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
-  const releaseState = useRemoteMcpInstallWorkflow({
-    servers: enrichedServers,
-    beforeInstall,
+  // Adding a server people already reach directly offers to replace that
+  // Shadow MCP version. Nobody answers the question in a headless or
+  // auto-started install, so those add the server only.
+  // Unproxied servers (e.g. Figma) never pass through Speakeasy, so they
+  // cannot stand in for a Shadow MCP server.
+  const proxiedServers = useMemo(
+    () => enrichedServers.filter((server) => !isFigmaCatalogServer(server)),
+    [enrichedServers],
+  );
+  const shadowReplacement = useShadowMCPReplacement({
+    servers: proxiedServers,
     projectSlug,
+    enabled: open && !headless && !autoStartInstall,
+  });
+  const workflow = useRemoteMcpInstallWorkflow({
+    servers: installServers,
+    initialConfiguration,
+    beforeInstall,
+    accountSetupEnabled:
+      !!(openProviderSetup || attachToGatewayId) &&
+      !bulk &&
+      !headless &&
+      !autoStartInstall,
+    projectSlug,
+    shadowMCPReplacements: shadowReplacement.selected,
     autoSelectRemotes: !!(autoStartInstall || headless),
     offerGuardrails:
       mcpScoped &&
@@ -225,6 +306,26 @@ export function AddServerDialog({
       // Unproxied servers (e.g. Figma) never pass through Speakeasy.
       enrichedServers.some((server) => !isFigmaCatalogServer(server)),
   });
+  const releaseState = useMemo<RemoteMcpInstallWorkflow>(
+    () =>
+      salesforceEntry && workflow.phase === "configure"
+        ? {
+            ...workflow,
+            updateServerConfig: (index, updates) => {
+              if (
+                updates.identityMode &&
+                (updates.identityMode === "user") !== guidedSalesforce
+              ) {
+                setSalesforceIdentity({
+                  identityMode: updates.identityMode,
+                  name: workflow.serverConfigs[index]!.name,
+                });
+              } else workflow.updateServerConfig(index, updates);
+            },
+          }
+        : workflow,
+    [salesforceEntry, guidedSalesforce, workflow],
+  );
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);
   const finishedRef = useRef(false);
@@ -232,8 +333,10 @@ export function AddServerDialog({
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
+      setSalesforceIdentity(undefined);
       setupHandoffRef.current = false;
       releaseState.reset();
+      shadowReplacement.reset();
       autoStartRef.current = false;
       finishedRef.current = false;
     }
@@ -309,6 +412,7 @@ export function AddServerDialog({
   useEffect(() => {
     autoStartRef.current = false;
     finishedRef.current = false;
+    setSalesforceIdentity(undefined);
   }, [projectSlug, serversKey]);
 
   useEffect(() => {
@@ -337,8 +441,6 @@ export function AddServerDialog({
 
   useEffect(() => {
     if (
-      providerSetupRollout !== "enabled" ||
-      !openProviderSetup ||
       !open ||
       headless ||
       autoStartInstall ||
@@ -351,12 +453,33 @@ export function AddServerDialog({
       releaseState.statuses,
     );
     if (!target) return;
+    const status = releaseState.statuses[0]!;
+    const pendingAccount = pendingAccountProvider(status.remoteUrl);
+    if (!openProviderSetup && !(attachToGatewayId && pendingAccount)) return;
+    const params = new URLSearchParams();
+    if (attachToGatewayId && pendingAccount)
+      params.set("attachToGateway", attachToGatewayId);
+    if (status.setupPolicy) {
+      params.set("customizePolicy", "true");
+      const prefill = new URLSearchParams(
+        policyNewPrefillQuery({
+          categories: status.setupPolicy.categories,
+          action: effectiveAction(status.setupPolicy),
+          score: status.setupPolicy.score,
+          mcpServerIds: [status.mcpServerId!],
+          name: `${status.name} guardrail`,
+        }),
+      );
+      for (const [key, value] of prefill) params.set(key, value);
+    }
     setupHandoffRef.current = true;
     onOpenChange(false);
-    void navigate(routes.mcp.details.setup.href(target));
+    void navigate(
+      routes.mcp.details.setup.href(target) + (params.size ? `?${params}` : ""),
+    );
   }, [
-    providerSetupRollout,
     openProviderSetup,
+    attachToGatewayId,
     open,
     headless,
     autoStartInstall,
@@ -366,24 +489,6 @@ export function AddServerDialog({
     navigate,
     routes,
   ]);
-
-  // Notify parent when all installs are done
-  const allInstallsDone =
-    releaseState.phase === "complete" &&
-    releaseState.statuses.length > 0 &&
-    releaseState.statuses.every(
-      (s) => s.status === "completed" || s.status === "failed",
-    );
-  const prevAllDoneRef = useRef(false);
-  useEffect(() => {
-    if (allInstallsDone && !prevAllDoneRef.current) {
-      prevAllDoneRef.current = true;
-      onServersAdded?.();
-    }
-    if (!allInstallsDone) {
-      prevAllDoneRef.current = false;
-    }
-  }, [allInstallsDone, onServersAdded]);
 
   useEffect(() => {
     if (!open || !onInstallFinished || finishedRef.current) return;
@@ -552,6 +657,7 @@ export function AddServerDialog({
           releaseState={releaseState}
           isSingle={isSingle}
           bulk={bulk}
+          shadowReplacement={shadowReplacement}
           onClose={() => onOpenChange(false)}
         />
       </Dialog.Content>
@@ -611,11 +717,13 @@ function PhaseContent({
   releaseState,
   isSingle,
   bulk,
+  shadowReplacement,
   onClose,
 }: {
   releaseState: RemoteMcpInstallWorkflow;
   isSingle: boolean;
   bulk?: boolean;
+  shadowReplacement: ShadowMCPReplacementState;
   onClose: () => void;
 }) {
   switch (releaseState.phase) {
@@ -631,6 +739,7 @@ function PhaseContent({
         <ConfigurePhaseContent
           releaseState={releaseState}
           bulk={bulk}
+          shadowReplacement={shadowReplacement}
           onClose={onClose}
         />
       );
@@ -831,10 +940,12 @@ function SelectRemotesPhaseContent({
 function ConfigurePhaseContent({
   releaseState,
   bulk,
+  shadowReplacement,
   onClose,
 }: {
   releaseState: ConfigurePhase;
   bulk?: boolean;
+  shadowReplacement: ShadowMCPReplacementState;
   onClose: () => void;
 }) {
   const project = useProject();
@@ -864,16 +975,33 @@ function ConfigurePhaseContent({
       );
   // When every server came through the selectRemotes phase and none needs
   // header values, there is nothing left to configure — install immediately.
+  const shadowQuestions = shadowMCPReplacementQuestions(
+    shadowReplacement.candidates,
+    new Set(
+      releaseState.serverConfigs.flatMap((config) =>
+        config.remotes.map((remote) => remote.url),
+      ),
+    ),
+  );
+  // A matching Shadow MCP server is a question to ask, so the step waits for
+  // the lookup and stays when there is one.
   const nothingToConfigure =
-    singleRemoteConfigs.length === 0 && !hasHeaderInputs && !hasIdentityChoices;
+    singleRemoteConfigs.length === 0 &&
+    !hasHeaderInputs &&
+    !hasIdentityChoices &&
+    !shadowReplacement.isLoading &&
+    shadowQuestions.length === 0;
 
   const userIdentityPermissionBlocked =
     !canCreateIdentity &&
     releaseState.serverConfigs.some((config) => config.identityMode === "user");
+  // Adding before the Shadow MCP lookup answers would skip the replace
+  // question; a failed lookup ends loading and adds the server only.
   const canSubmit =
     releaseState.canInstall &&
     missingRequiredHeaders === 0 &&
-    !userIdentityPermissionBlocked;
+    !userIdentityPermissionBlocked &&
+    !shadowReplacement.isLoading;
 
   // With guardrails on offer, finishing Configure moves to that step; the
   // install itself starts from there.
@@ -936,6 +1064,10 @@ function ConfigurePhaseContent({
           rbacLoading={rbacLoading}
         />
         {!bulk && <HeaderValueSections releaseState={releaseState} />}
+        <ShadowMCPReplacementOption
+          state={shadowReplacement}
+          questions={shadowQuestions}
+        />
         {releaseState.installBlockedReason && (
           <InstallBlockedWarning reason={releaseState.installBlockedReason} />
         )}
@@ -958,7 +1090,9 @@ function ConfigurePhaseContent({
               // Skipping header values is not a way around the identity
               // permission check: the same install runs either way.
               disabled={
-                !releaseState.canInstall || userIdentityPermissionBlocked
+                !releaseState.canInstall ||
+                userIdentityPermissionBlocked ||
+                shadowReplacement.isLoading
               }
               onClick={() => advance()}
             >
@@ -1530,6 +1664,11 @@ function CompletePhaseContent({
       ) : null}
 
       <GuardrailOutcomeNotice outcome={releaseState.guardrail} />
+
+      <ShadowMCPReplacementNotice
+        outcomes={releaseState.shadowReplacements}
+        projectSlug={releaseState.projectSlug}
+      />
 
       {/* Per-server results — only shown if something failed */}
       {!allSucceeded && (

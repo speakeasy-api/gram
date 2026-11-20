@@ -375,7 +375,7 @@ func Lookup(id string) (Descriptor, bool) {
 	defer registryMu.RUnlock()
 	d, ok := registry[id]
 	if !ok {
-		return Descriptor{}, false //nolint:exhaustruct // zero descriptor for the not-found case
+		return Descriptor{}, false //nolint:exhaustruct_v5 // zero descriptor for the not-found case
 	}
 	return d.clone(), true
 }

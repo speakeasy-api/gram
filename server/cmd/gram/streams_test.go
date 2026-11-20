@@ -63,3 +63,13 @@ func TestShutdownPubSubPublishersStopsAllPublishersBeforeClosingClient(t *testin
 	require.ErrorIs(t, err, closeErr)
 	require.True(t, clientClosed.Load())
 }
+
+func TestCheckPystreamsStubAllowsOnlyLocal(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, checkPystreamsStub("local", true))
+	for _, env := range []string{"", "dev", "prod", "Local"} {
+		require.Error(t, checkPystreamsStub(env, true), "environment %q", env)
+		require.NoError(t, checkPystreamsStub(env, false), "environment %q", env)
+	}
+}

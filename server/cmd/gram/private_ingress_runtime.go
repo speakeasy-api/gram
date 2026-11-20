@@ -2,10 +2,12 @@ package gram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -32,10 +34,10 @@ import (
 	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
-	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
@@ -53,13 +55,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
+// connectionRecorderDrainTimeout bounds the connection outcome writer's drain, so a
+// stalled ClickHouse leaves the cleanups that run after it their share of the budget.
+const connectionRecorderDrainTimeout = 30 * time.Second
+
 type privateIngressRuntime struct {
-	DB         *pgxpool.Pool
-	Redis      *redis.Client
-	Temporal   *tenv.Environment
-	Kubernetes *k8s.KubernetesClients
-	Runtime    *mcpServerRuntime
-	cleanup    []func(context.Context) error
+	DB       *pgxpool.Pool
+	Redis    *redis.Client
+	Temporal *tenv.Environment
+	Runtime  *mcpServerRuntime
+	cleanup  []func(context.Context) error
+
+	// TokenReviewer verifies attestation tokens: Kubernetes TokenReview in a
+	// cluster, or the HMAC-signed local tokens in local development.
+	TokenReviewer netingress.TokenReviewer
 }
 
 func (r *privateIngressRuntime) Close(ctx context.Context) {
@@ -81,7 +90,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err := validatePrivateIngressTemporalConfig(c); err != nil {
 		return nil, err
 	}
-	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Kubernetes: nil, Runtime: nil, cleanup: nil}
+	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Runtime: nil, cleanup: nil, TokenReviewer: nil}
 	defer func() {
 		if err != nil {
 			r.Close(ctx)
@@ -143,17 +152,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, fmt.Errorf("create private ingress encryption client: %w", err)
 	}
-	// Organization encryption is not configured in this process, so it reads and
-	// writes AI provider keys with the application key alone; every row keeps
-	// that copy while organizations move.
-	aiProviderKeys := cutover.New(logger, enc, cutover.AIProviderKeys, nil)
 	env := environments.NewEnvironmentEntries(logger, db, enc, metadatarepo.New(db))
-	r.Kubernetes, err = k8s.InitializeK8sClient(ctx, logger, c.String("environment"), "", "", "")
+	r.TokenReviewer, err = newPrivateIngressTokenReviewer(ctx, logger, c.String("environment"), c.String("netingress-local-token-key-file"))
 	if err != nil {
-		return nil, fmt.Errorf("create private ingress Kubernetes client: %w", err)
-	}
-	if r.Kubernetes.Clientset == nil {
-		return nil, fmt.Errorf("private network ingress listener requires an in-cluster Kubernetes client")
+		return nil, err
 	}
 	r.Temporal, stop, err = newTemporalClient(logger, meterProvider, temporalClientOptions{
 		address: c.String("temporal-address"), namespace: c.String("temporal-namespace"), taskQueue: c.String("temporal-task-queue"),
@@ -170,7 +172,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if c.String("environment") == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, aiProviderKeys)
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc)
 	}
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
 	if err != nil {
@@ -219,17 +221,18 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled,
 		toolIOLogsEnabled, tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	r.cleanup = append(r.cleanup, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine, featureFlags)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine)
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
 	r.cleanup = append(r.cleanup, stop)
-	chatWriter = chatWriter.WithTurnStream(chat.NewTurnStream(redisClient))
+	turnStream := chat.NewTurnStream(redisClient)
+	chatWriter = chatWriter.WithTurnStream(turnStream)
 	efficacySignaler := background.NewThrottledSignaler(&background.TemporalSkillEfficacySignaler{TemporalEnv: r.Temporal, Logger: logger}, background.SkillEfficacySignalCooldown, logger)
 	analysisSignaler := background.NewThrottledSignaler(&background.TemporalChatAnalysisSignaler{TemporalEnv: r.Temporal, Logger: logger}, background.ChatAnalysisSignalCooldown, logger)
 	r.cleanup = append(r.cleanup, efficacySignaler.Shutdown, analysisSignaler.Shutdown)
 	chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 	chatWriter.AddObserver(analysis.NewObserver(logger, analysisSignaler))
-	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, aiProviderKeys, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
-	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
+	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL).WithFeatureFlags(featureFlags)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
 		// The approval routes are not served behind private ingress, so
@@ -274,7 +277,8 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	assistantsCore.SetWakeCanceller(triggerApp)
 	assistantsCore.SetDashboardIngestor(triggerApp)
 	assistantsCore.SetChatMessageWriter(chatWriter)
-	if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+	assistantsCore.SetTurnStream(turnStream)
+	if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
 		return nil, err
 	}
 	assistantsCore.SetAssetStorage(assetStorage)
@@ -293,6 +297,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+	if err != nil {
+		return nil, err
+	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
@@ -302,9 +310,13 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")))
-	r.cleanup = append(r.cleanup, connectionRecorder.Shutdown)
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
+	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs))
+	r.cleanup = append(r.cleanup, func(ctx context.Context) error {
+		drainCtx, cancel := context.WithTimeout(ctx, connectionRecorderDrainTimeout)
+		defer cancel()
+		return connectionRecorder.ShutdownAndWait(drainCtx)
+	})
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder, orgEncryption)
 	if err != nil {
 		return nil, err
 	}
@@ -348,4 +360,33 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	return r, nil
+}
+
+// newPrivateIngressTokenReviewer returns the attestation token reviewer. A
+// local token key selects the HMAC reviewer, which is accepted only in the
+// local environment; otherwise tokens are reviewed by the cluster.
+func newPrivateIngressTokenReviewer(ctx context.Context, logger *slog.Logger, environment, localKeyFile string) (netingress.TokenReviewer, error) {
+	if localKeyFile != "" {
+		if environment != "local" {
+			return nil, errors.New("local attestation tokens are only accepted in the local environment")
+		}
+		key, err := netingress.ReadLocalTokenKey(localKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("load local attestation key: %w", err)
+		}
+		reviewer, err := netingress.NewLocalTokenReviewer(key)
+		if err != nil {
+			return nil, fmt.Errorf("create local attestation reviewer: %w", err)
+		}
+		return reviewer, nil
+	}
+
+	clients, err := k8s.InitializeK8sClient(ctx, logger, environment, "", "", "")
+	if err != nil {
+		return nil, fmt.Errorf("create private ingress Kubernetes client: %w", err)
+	}
+	if clients.Clientset == nil {
+		return nil, errors.New("private network ingress listener requires an in-cluster Kubernetes client, or a local token key in local development")
+	}
+	return clients.Clientset.AuthenticationV1().TokenReviews(), nil
 }

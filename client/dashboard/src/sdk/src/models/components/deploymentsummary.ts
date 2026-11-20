@@ -14,13 +14,13 @@ export type DeploymentSummary = {
    */
   createdAt: Date;
   /**
-   * The number of external MCP server assets.
+   * Always 0: deployments no longer include external MCP servers. Optional, and kept so older clients that required it keep working.
    */
-  externalMcpAssetCount: number;
+  externalMcpAssetCount?: number | undefined;
   /**
-   * The number of tools in the deployment generated from external MCP servers.
+   * Always 0: deployments no longer include external MCP servers. Optional, and kept so older clients that required it keep working.
    */
-  externalMcpToolCount: number;
+  externalMcpToolCount?: number | undefined;
   /**
    * The number of Functions assets.
    */
@@ -61,8 +61,8 @@ export const DeploymentSummary$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    external_mcp_asset_count: z.int(),
-    external_mcp_tool_count: z.int(),
+    external_mcp_asset_count: z.optional(z.int()),
+    external_mcp_tool_count: z.optional(z.int()),
     functions_asset_count: z.int(),
     functions_tool_count: z.int(),
     id: z.string(),

@@ -21,6 +21,7 @@ type Client struct {
 	ListMcpServersEndpoint          goa.Endpoint
 	ListMcpServersForOrgEndpoint    goa.Endpoint
 	UpdateMcpServerEndpoint         goa.Endpoint
+	SetSetupGuideCompletedEndpoint  goa.Endpoint
 	ListToolFiltersEndpoint         goa.Endpoint
 	SetToolMetadataBatchEndpoint    goa.Endpoint
 	AddToolMetadataBatchEndpoint    goa.Endpoint
@@ -32,13 +33,14 @@ type Client struct {
 }
 
 // NewClient initializes a "mcpServers" service client given the endpoints.
-func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForOrg, updateMcpServer, listToolFilters, setToolMetadataBatch, addToolMetadataBatch, listToolMetadata, setToolMetadata, deleteToolMetadata, deleteMcpServer, getMcpServerUsageImpact goa.Endpoint) *Client {
+func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForOrg, updateMcpServer, setSetupGuideCompleted, listToolFilters, setToolMetadataBatch, addToolMetadataBatch, listToolMetadata, setToolMetadata, deleteToolMetadata, deleteMcpServer, getMcpServerUsageImpact goa.Endpoint) *Client {
 	return &Client{
 		CreateMcpServerEndpoint:         createMcpServer,
 		GetMcpServerEndpoint:            getMcpServer,
 		ListMcpServersEndpoint:          listMcpServers,
 		ListMcpServersForOrgEndpoint:    listMcpServersForOrg,
 		UpdateMcpServerEndpoint:         updateMcpServer,
+		SetSetupGuideCompletedEndpoint:  setSetupGuideCompleted,
 		ListToolFiltersEndpoint:         listToolFilters,
 		SetToolMetadataBatchEndpoint:    setToolMetadataBatch,
 		AddToolMetadataBatchEndpoint:    addToolMetadataBatch,
@@ -163,6 +165,30 @@ func (c *Client) ListMcpServersForOrg(ctx context.Context, p *ListMcpServersForO
 func (c *Client) UpdateMcpServer(ctx context.Context, p *UpdateMcpServerPayload) (res *types.McpServer, err error) {
 	var ires any
 	ires, err = c.UpdateMcpServerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.McpServer), nil
+}
+
+// SetSetupGuideCompleted calls the "setSetupGuideCompleted" endpoint of the
+// "mcpServers" service.
+// SetSetupGuideCompleted may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) SetSetupGuideCompleted(ctx context.Context, p *SetSetupGuideCompletedPayload) (res *types.McpServer, err error) {
+	var ires any
+	ires, err = c.SetSetupGuideCompletedEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

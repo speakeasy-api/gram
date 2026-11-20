@@ -2,15 +2,11 @@ package mcp
 
 import (
 	"encoding/json"
-	"errors"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
-)
-
-var (
-	errToolsetNotFound = errors.New("toolset not found")
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 // ToolMode specifies whether tools should be loaded statically or dynamically.
@@ -80,6 +76,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 			securityKeys:          ot.SecurityKeys,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Token:                 ot.Token,
+			shared:                false,
 		}
 	}
 
@@ -121,5 +118,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 }

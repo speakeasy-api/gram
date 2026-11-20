@@ -123,7 +123,7 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
 	stored := resource(member.URL)
-	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   issuerID,
 		RemoteSessionClientID: clientID,

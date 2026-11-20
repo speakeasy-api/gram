@@ -75,7 +75,7 @@ func (j httpTransferCookieJar) Clear(name string) {
 // set writes a host-only cookie. The __Host- prefix requires Secure, Path=/
 // and no Domain; browsers accept Secure cookies on http://localhost too.
 func (j httpTransferCookieJar) set(name, value string, maxAge int) {
-	//nolint:exhaustruct // only these fields matter; the rest stay unset
+	//nolint:exhaustruct_v5 // only these fields matter; the rest stay unset
 	http.SetCookie(j.w, &http.Cookie{
 		Name:     name,
 		Value:    value,

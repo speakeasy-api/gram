@@ -46,6 +46,28 @@ func BuildGetGatewayPayload(organizationsGetGatewaySessionToken string) (*organi
 	return v, nil
 }
 
+// BuildGetProjectGatewayPayload builds the payload for the organizations
+// getProjectGateway endpoint from CLI flags.
+func BuildGetProjectGatewayPayload(organizationsGetProjectGatewaySessionToken string, organizationsGetProjectGatewayProjectSlugInput string) (*organizations.GetProjectGatewayPayload, error) {
+	var sessionToken *string
+	{
+		if organizationsGetProjectGatewaySessionToken != "" {
+			sessionToken = &organizationsGetProjectGatewaySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if organizationsGetProjectGatewayProjectSlugInput != "" {
+			projectSlugInput = &organizationsGetProjectGatewayProjectSlugInput
+		}
+	}
+	v := &organizations.GetProjectGatewayPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildSendInvitePayload builds the payload for the organizations sendInvite
 // endpoint from CLI flags.
 func BuildSendInvitePayload(organizationsSendInviteBody string, organizationsSendInviteSessionToken string) (*organizations.SendInvitePayload, error) {

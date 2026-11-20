@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // State is an assistant's workload identity configuration state.
@@ -32,23 +34,29 @@ var (
 	ErrInvalidIdentity = errors.New("invalid assistant identity")
 	ErrActorIneligible = errors.New("assistant identity requires a user actor")
 	ErrNotFound        = errors.New("assistant identity resource not found")
-	// ErrAgentUnauthorized covers both an agent the actor may not authorize
-	// and one that does not exist, so neither can be told apart.
-	ErrAgentUnauthorized = errors.New("actor cannot authorize the selected agent")
+	// ErrOwnerUnavailable means a staff-provisioned assistant has no creator
+	// who is still an active member of its organization to own its agent.
+	ErrOwnerUnavailable = errors.New("assistant creator is not an active organization member")
 )
 
-// ProvisionParams identifies the assistant and the authenticated user who
-// configures its identity. ActorUserID is supplied by the authorized service,
-// never taken from a request body.
+// ProvisionParams identifies the assistant and who configures its identity:
+// either the authenticated user ActorUserID, or Staff. The actor is supplied
+// by the authorized service, never taken from a request body.
 type ProvisionParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 	AssistantID    uuid.UUID
 	ActorUserID    string
-	// AgentID points the assistant at an existing agent instead of creating
-	// one. AgentName names a new agent. At most one is set.
-	AgentID   uuid.UUID
-	AgentName string
+	// Staff provisions on a Speakeasy staff member's behalf. ActorUserID is
+	// then empty, the agent's owner must be the assistant's creator, and the
+	// owner's authority alone decides whether the agent inherits inference.
+	Staff *StaffActor
+}
+
+// StaffActor is the Speakeasy staff member recorded as the audit actor.
+type StaffActor struct {
+	Principal   urn.Principal
+	DisplayName *string
 }
 
 // AssistantState is the configuration state of one assistant. AgentID is set

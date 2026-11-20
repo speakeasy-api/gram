@@ -153,6 +153,7 @@ async fn thread_turn_inner(
         .ok_or((StatusCode::UNAUTHORIZED, "missing auth_token".into()))?;
     // Authenticate every invocation, including warm turns and duplicate requests,
     // before allocating admission/thread entries. Tokens remain opaque.
+    let bootstrap_started_at = std::time::Instant::now();
     let bootstrap = host
         .gram_client
         .fetch_bootstrap(&thread_id, &TokenRegistry::new(token.clone()))
@@ -238,13 +239,26 @@ async fn thread_turn_inner(
         return Ok(Json(ThreadTurnResponse::deduped()));
     }
 
-    let thread = match ensure_thread(&host, &thread_id, bootstrap, token.clone()).await {
+    let thread = match ensure_thread(
+        &host,
+        &thread_id,
+        bootstrap,
+        bootstrap_started_at,
+        token.clone(),
+    )
+    .await
+    {
         Ok(thread) => thread,
         Err(error) => {
             if let Some(key) = &idempotency_key {
                 host.seen.remove(key);
             }
-            return Err((StatusCode::SERVICE_UNAVAILABLE, error.to_string()));
+            let status = if matches!(error, RunnerError::InvocationBusy) {
+                StatusCode::TOO_MANY_REQUESTS
+            } else {
+                StatusCode::SERVICE_UNAVAILABLE
+            };
+            return Err((status, error.to_string()));
         }
     };
 
@@ -290,6 +304,76 @@ mod tests {
             serde_json::json!({"input":"test", "auth_token":token, "assistant_id":hint}),
         )
         .unwrap()
+    }
+
+    #[tokio::test]
+    async fn busy_reasoning_effort_mismatch_returns_http_429() {
+        let bootstrap_app = Router::new().route(
+            "/rpc/assistants.getThreadBootstrap",
+            post(|headers: HeaderMap| async move {
+                assert_eq!(headers.get("authorization").unwrap(), "Bearer opaque-valid");
+                Json(serde_json::json!({
+                    "assistant_id": "assistant", "project_id": "project", "model": "test",
+                    "chat_id": "chat", "reasoning_effort": "high",
+                    "completions_url": "http://127.0.0.1/completions"
+                }))
+            }),
+        );
+        let bootstrap_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bootstrap_addr = bootstrap_listener.local_addr().unwrap();
+        let bootstrap_task = tokio::spawn(async move {
+            axum::serve(bootstrap_listener, bootstrap_app)
+                .await
+                .unwrap();
+        });
+        let host = build_host(
+            Arc::new(SpanIdentity::default()),
+            format!("http://{bootstrap_addr}"),
+            String::new(),
+            DEFAULT_THREAD_IDLE_TTL,
+        )
+        .await
+        .unwrap();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let busy = Arc::new(ConfiguredThread {
+            thread_id: "T".into(),
+            chat_id: "chat".into(),
+            reasoning_effort: "medium".into(),
+            idle_since: Arc::new(std::sync::Mutex::new(None)),
+            inbox_tx: tx,
+            task_handle: std::sync::Mutex::new(None),
+            cancellation: CancellationController::new(),
+        });
+        let cell = Arc::new(tokio::sync::OnceCell::new());
+        assert!(cell.set(busy.clone()).is_ok());
+        host.threads.insert("T".into(), cell);
+
+        let app = Router::new()
+            .route("/threads/{thread_id}/turn", post(thread_turn))
+            .with_state(host.clone());
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let response = reqwest::Client::new()
+            .post(format!("http://{addr}/threads/T/turn"))
+            .header(IDEMPOTENCY_HEADER, "retryable-event")
+            .json(&serde_json::json!({"input": "test", "auth_token": "opaque-valid"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.text().await.unwrap(), "assistant invocation busy");
+        assert!(Arc::ptr_eq(
+            host.threads.get("T").unwrap().get().unwrap(),
+            &busy
+        ));
+        assert!(
+            host.seen.is_empty(),
+            "busy effort changes must remain retryable"
+        );
+        assert!(rx.try_recv().is_err(), "no input may reach the busy driver");
+        task.abort();
+        bootstrap_task.abort();
     }
 
     #[tokio::test]
@@ -377,6 +461,7 @@ mod tests {
         let warm = Arc::new(ConfiguredThread {
             thread_id: "T".into(),
             chat_id: "chat".into(),
+            reasoning_effort: "medium".into(),
             idle_since: Arc::new(std::sync::Mutex::new(Some(std::time::Instant::now()))),
             inbox_tx: tx,
             task_handle: std::sync::Mutex::new(None),

@@ -57,10 +57,6 @@ func (r *Relay) notifyAgentBlock(ctx context.Context, effect *wire.BlockEffect, 
 	if effect == nil || !effect.Requestable || effect.V > wire.BlockEffectVersion || strings.TrimSpace(effect.RequestToken) == "" {
 		return
 	}
-	socket := agentSocketPath()
-	if socket == "" {
-		return
-	}
 	base := agenthooks.EventOf(typed)
 	report := agentBlockReport{
 		V:                1,
@@ -87,10 +83,24 @@ func (r *Relay) notifyAgentBlock(ctx context.Context, effect *wire.BlockEffect, 
 	// notify of its own 300ms.
 	requestCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), agentBlockNotifyTimeout)
 	defer cancel()
+	// Try each candidate socket until one accepts the connection. Only a
+	// failed dial moves on, so the report still reaches at most one daemon.
+	for _, socket := range agentSocketPaths() {
+		if socket != "" && r.postAgentBlock(requestCtx, socket, body) {
+			return
+		}
+	}
+}
+
+// postAgentBlock sends one report to socket. It reports whether a connection
+// was made, whatever the outcome after that.
+func (r *Relay) postAgentBlock(requestCtx context.Context, socket string, body []byte) (connected bool) {
 	client := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-				return dialAgentSocket(dialCtx, socket)
+				conn, err := dialAgentSocket(dialCtx, socket)
+				connected = connected || err == nil
+				return conn, err
 			},
 			// One-shot client, same as socketIdentityEmail: without this the
 			// transport pools the socket connection for the process lifetime.
@@ -104,19 +114,20 @@ func (r *Relay) notifyAgentBlock(ctx context.Context, effect *wire.BlockEffect, 
 	}
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, "http://speakeasy-agent"+agentBlockReportPath, bytes.NewReader(body))
 	if err != nil {
-		return
+		return true
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		r.debugf("agent block notify skipped: %v", err)
-		return
+		r.debugf("agent block notify skipped: socket=%s %v", socket, err)
+		return connected
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<10))
 	if resp.StatusCode != http.StatusAccepted {
 		r.debugf("agent block notify status=%d", resp.StatusCode)
 	}
+	return true
 }
 
 // decodeBlockEffect reads the response's "block" effect into its wire type,

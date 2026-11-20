@@ -12,6 +12,10 @@ import {
 
 export type CreateTemporaryGrantForm = {
   /**
+   * Denied authorization challenges this grant answers. Each must be an unresolved deny of this scope by this principal that the grant's selector covers and that no exclusion still blocks; they are resolved as temporary_grant in the same transaction. Only accepted with a grant to one member (user:<id>).
+   */
+  challengeIds?: Array<string> | undefined;
+  /**
    * When the grant stops authorizing new requests. At least five minutes and at most 24 hours from now.
    */
   expiresAt: Date;
@@ -35,6 +39,7 @@ export type CreateTemporaryGrantForm = {
 
 /** @internal */
 export type CreateTemporaryGrantForm$Outbound = {
+  challenge_ids?: Array<string> | undefined;
   expires_at: string;
   principal_urn: string;
   reason?: string | undefined;
@@ -48,6 +53,7 @@ export const CreateTemporaryGrantForm$outboundSchema: z.ZodMiniType<
   CreateTemporaryGrantForm
 > = z.pipe(
   z.object({
+    challengeIds: z.optional(z.array(z.string())),
     expiresAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
     principalUrn: z.string(),
     reason: z.optional(z.string()),
@@ -56,6 +62,7 @@ export const CreateTemporaryGrantForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      challengeIds: "challenge_ids",
       expiresAt: "expires_at",
       principalUrn: "principal_urn",
     });

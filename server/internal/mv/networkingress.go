@@ -3,6 +3,8 @@ package mv
 import (
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	gen "github.com/speakeasy-api/gram/server/gen/network_ingress"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -17,6 +19,7 @@ func BuildNetworkIngressView(ingress networkingressrepo.NetworkIngress) *gen.Net
 		OrganizationID:        ingress.OrganizationID,
 		Provider:              ingress.Provider,
 		Hostname:              ingress.Hostname,
+		Runtime:               networkIngressRuntime(ingress.Runtime),
 		EndpointNamespaceKind: ingress.EndpointNamespaceKind,
 		CustomDomainID:        conv.FromNullableUUID(ingress.CustomDomainID),
 		Enabled:               ingress.Enabled,
@@ -25,9 +28,20 @@ func BuildNetworkIngressView(ingress networkingressrepo.NetworkIngress) *gen.Net
 		Status:                ingress.Status,
 		DNSName:               conv.FromPGText[string](ingress.DnsName),
 		LastError:             conv.FromPGText[string](ingress.LastError),
+		StatusDetail:          nil,
 		HealthCheckedAt:       conv.PtrEmpty(conv.FromPGTimestamptz(ingress.HealthCheckedAt)),
 		ConnectedSince:        conv.PtrEmpty(conv.FromPGTimestamptz(ingress.ConnectedSince)),
 		CreatedAt:             ingress.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:             ingress.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+// networkIngressRuntime names an ingress's runtime for clients: only
+// "gateway" is the tailnet gateway; anything else, including NULL, is the
+// operator.
+func networkIngressRuntime(runtime pgtype.Text) string {
+	if runtime.Valid && runtime.String == "gateway" {
+		return "gateway"
+	}
+	return "operator"
 }

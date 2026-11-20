@@ -16,7 +16,6 @@ import (
 )
 
 type assistantRuntimeManagementStub struct {
-	assistantIdentityManagementFunc
 	update func(context.Context, *genassistants.UpdateAssistantPayload) (*types.Assistant, error)
 }
 
@@ -118,6 +117,18 @@ func TestAssistantRuntimeRefusalIsBounded(t *testing.T) {
 	require.NotContains(t, text, "private")
 }
 
+func TestAssistantRuntimeRefusalWhenAssistantsDisabled(t *testing.T) {
+	t.Parallel()
+	result, ok := assistantRuntimeToolResult(oops.E(oops.CodeNotImplemented, nil, "assistants are not available on this deployment"))
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	content, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, content.Text, unavailableCode)
+	require.Contains(t, content.Text, "not available on this deployment")
+	require.NotContains(t, content.Text, "temporarily")
+}
+
 func TestAssistantRuntimeToolContract(t *testing.T) {
 	t.Parallel()
 	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
@@ -132,13 +143,15 @@ func TestAssistantRuntimeToolContract(t *testing.T) {
 	require.Equal(t, ProjectScopeExplicit, a.Meta.ProjectScope)
 	require.Equal(t, externalOnly, a.Meta.Audiences)
 	require.Empty(t, live.For(AudienceAssistant))
-	for _, field := range []string{"project_id", "assistant_id", "runtime_version", "expected_runtime_version", "confirmed"} {
+	for _, field := range []string{"project_slug", "assistant_id", "runtime_version", "expected_runtime_version", "confirmed"} {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	require.Contains(t, a.Description, "assistant:write")
 	require.Contains(t, a.Description, "organization administrator")
 	require.NotContains(t, a.Description, "project:write")
 	require.Contains(t, a.Description, "not authorization")
+	require.Contains(t, a.Description, "none is incompatible")
+	require.Contains(t, a.Description, "set_assistant_reasoning_effort")
 }
 
 func TestAssistantRuntimePermissionDescription(t *testing.T) {
@@ -151,4 +164,15 @@ func TestAssistantRuntimePermissionDescription(t *testing.T) {
 	require.Contains(t, content.Text, "assistant:write")
 	require.Contains(t, content.Text, "organization administrator")
 	require.NotContains(t, content.Text, "project:write")
+}
+
+func TestAssistantRuntimeReasoningCompatibilityRefusalGuidance(t *testing.T) {
+	t.Parallel()
+	result, ok := assistantRuntimeToolResult(oops.C(oops.CodeBadRequest))
+	require.True(t, ok)
+	content, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	text := content.Text
+	require.Contains(t, text, "Kit requires reasoning effort low, medium, or high")
+	require.Contains(t, text, "change its effort first")
 }

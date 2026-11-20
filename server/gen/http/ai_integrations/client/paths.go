@@ -37,6 +37,11 @@ func DeleteConfigAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.deleteConfig"
 }
 
+// ListOrgUnitsAiIntegrationsPath returns the URL path to the aiIntegrations service listOrgUnits HTTP endpoint.
+func ListOrgUnitsAiIntegrationsPath() string {
+	return "/rpc/aiIntegrations.listOrgUnits"
+}
+
 // ListSchedulesAiIntegrationsPath returns the URL path to the aiIntegrations service listSchedules HTTP endpoint.
 func ListSchedulesAiIntegrationsPath() string {
 	return "/rpc/aiIntegrations.listSchedules"
