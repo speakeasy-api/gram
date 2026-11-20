@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -48,6 +49,12 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	}
 	if permit.Subject.Kind == urn.SessionSubjectKindUser {
 		return authClientConnectionOwner{owner: permit.Subject.ID, attachedSession: uuid.Nil, authorizer: false}, nil
+	}
+	if permit.Subject.Kind == urn.SessionSubjectKindWorkload {
+		// Match the owner already bound by live workload admission. Token
+		// acquisition independently rechecks workload ownership and reach.
+		owner, _ := authz.AdmittedWorkloadOwner(ctx)
+		return authClientConnectionOwner{owner: owner, attachedSession: uuid.Nil, authorizer: false}, nil
 	}
 	// An agent key with no attachment for this registration is served by its
 	// validated authorizer's own connection; the mcp:auth check names that

@@ -92,6 +92,8 @@ type MandatoryAuthorization struct {
 	key           *apiKeyAdmission
 	// narrowedProject is a project a credential minted from a key is bound to.
 	narrowedProject *uuid.UUID
+	// workloadOwner is resolved by live admission, not credential claims.
+	workloadOwner string
 }
 
 // Caller is the kind of caller evaluated.
@@ -142,6 +144,7 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false},
 		key:             nil,
 		narrowedProject: nil,
+		workloadOwner:   "",
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -183,6 +186,9 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		return m.decide(MandatoryPolicySourceNone, MandatoryDenyReasonNoPolicy), nil
 	}
 	m.authorization = authorization
+	if m.caller == MandatoryCallerWorkload {
+		m.workloadOwner, _ = AdmittedWorkloadOwner(ctx)
+	}
 	return m, nil
 }
 
@@ -267,6 +273,12 @@ func (m MandatoryAuthorization) DecideAuthClientAdmission(organizationID string,
 	}
 	if m.admittedByVisibility(visibility) {
 		return visibilityAdmission(), nil
+	}
+	if m.caller == MandatoryCallerWorkload {
+		// Only this check binds the admitted workload owner as a connection
+		// owner. The workload still has no represented principal and the
+		// credential ceiling, assigned agent and owner policies all apply.
+		m.authorization.representedUser = m.workloadOwner
 	}
 	return m.Decide(organizationID, use)
 }

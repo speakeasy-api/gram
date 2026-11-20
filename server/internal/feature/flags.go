@@ -210,31 +210,10 @@ const (
 	// is enabled.
 	FlagWorkloadPlatformGitHubActions Flag = "workload-platform-github-actions"
 
-	// FlagAuthClientResolver makes the typed auth client resolver
-	// authoritative for an organization's direct proxied servers. Off, the
-	// upstream client choice keeps serving and is the rollback.
-	//
-	// Precondition: the organization's backfill is complete and its choices
-	// are mapped onto auth clients (AIM-595), including the ones issuance
-	// writes. Until then an OAuth choice with no auth client falls back to the
-	// upstream client choice, so the flag only takes effect for mapped
-	// choices. Evaluated
-	// locally with the organization id as the distinct id, so the PostHog flag
-	// must be person-aggregated and match distinct_id in a list of
-	// organization ids.
-	FlagAuthClientResolver Flag = "auth-client-resolver"
-
-	// FlagAuthClientResolverShadow runs the typed auth client resolver beside
-	// the upstream client choice, without acquiring credentials or writing,
-	// and logs where they disagree. Ignored while FlagAuthClientResolver is on.
-	// Targeted the same way as FlagAuthClientResolver.
-	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
-
 	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
 	// check beside today's decision for an organization's MCP requests and
-	// records where they disagree, without changing any response. Auth clients
-	// are only evaluated where FlagAuthClientResolver or its shadow is on.
-	// Targeted the same way as FlagAuthClientResolver.
+	// records where they disagree, without changing any response.
+	// Targeted locally with the organization ID as the distinct ID.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
 	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
@@ -246,7 +225,7 @@ const (
 	// wherever a request reads the server's associations and no credential
 	// choice governs; elsewhere the request is recorded as a governing choice
 	// or as not having read the associations, and keeps the column.
-	// Targeted the same way as FlagAuthClientResolver.
+	// Targeted locally with the organization ID as the distinct ID.
 	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
 
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
@@ -256,8 +235,7 @@ const (
 	// do not protect owner blocks, so enable it only once every replica reads
 	// them; that release is then the rollback floor. Off, unavailable or
 	// failing, no such grant is written; reading and enforcing existing ones,
-	// and protecting existing blocks, never depend on it. Targeted the same
-	// way as FlagAuthClientResolver.
+	// and protecting existing blocks, never depend on it. Targeted locally with the organization ID as the distinct ID.
 	FlagAuthClientUpstreamSelectorWrites Flag = "auth-client-upstream-selector-writes"
 
 	// FlagPlatformMCPDiscoveryMode picks the tool surface a Platform MCP

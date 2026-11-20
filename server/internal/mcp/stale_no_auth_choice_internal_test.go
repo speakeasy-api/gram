@@ -154,9 +154,9 @@ func TestAgentKeyStaleChoiceGetsOwnerCopy(t *testing.T) {
 	f.service.logger = slog.New(slog.NewJSONHandler(&buf, nil))
 	f.service.staleNoAuthLog = newOnceLog()
 	agent := urn.NewAgentSubject(uuid.New())
-	choices := &memberChoices{selector: &upstreamSelector{service: f.service, organizationID: f.orgID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID}, enforced: true, profile: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
+	choices := &memberChoices{selector: &upstreamSelector{service: f.service, organizationID: f.orgID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID}, profile: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
 	members := []metaMember{{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}
-	choices.apply(t.Context(), f.service.logger, members, true)
+	choices.apply(t.Context(), f.service.logger, members)
 	require.Empty(t, buf.String(), "nothing is logged until the member is called")
 	gate := &metaGateContext{organizationID: f.orgID, memberChoices: choices, authentication: &issuerGateAuthentication{subject: agent}}
 	message := f.service.memberFailureMessage(t.Context(), f.service.logger, gate, members[0], members[0].upstreamUnavailable)

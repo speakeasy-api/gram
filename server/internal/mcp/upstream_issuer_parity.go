@@ -199,23 +199,6 @@ func upstreamIssuerSource(fromAssociations bool, keys upstreamIssuerKeys) string
 	return upstreamIssuerSourceColumn
 }
 
-// resolverModeUnknown labels a comparison whose organization's resolver mode
-// could not be read.
-const resolverModeUnknown = "unknown"
-
-// resolverModeLabel is the recorded name of an organization's typed auth
-// client resolver mode.
-func resolverModeLabel(mode feature.AuthClientResolverMode) string {
-	switch mode {
-	case feature.AuthClientResolverEnforced:
-		return "enforced"
-	case feature.AuthClientResolverShadow:
-		return "shadow"
-	default:
-		return "off"
-	}
-}
-
 // sameRoutedUpstream reports whether two routings of one token map reached
 // the same result: the same credential, or no credential, or a fail-closed
 // refusal for the same reason.
@@ -265,11 +248,10 @@ type upstreamIssuerParity struct {
 // window. Agreement and governing choices log nothing.
 func (s *Service) recordUpstreamIssuerParity(ctx context.Context, logger *slog.Logger, p upstreamIssuerParity) {
 	s.metrics.RecordUpstreamIssuerParity(ctx, mcpmetrics.UpstreamIssuerParity{
-		Surface:      p.surface,
-		Site:         p.site,
-		Outcome:      string(p.outcome),
-		Source:       upstreamIssuerSource(p.fromAssociations, p.keys),
-		ResolverMode: s.resolverModeLabelFor(ctx, p.organizationID),
+		Surface: p.surface,
+		Site:    p.site,
+		Outcome: string(p.outcome),
+		Source:  upstreamIssuerSource(p.fromAssociations, p.keys),
 	})
 	if p.outcome == upstreamIssuerMatch || p.outcome == upstreamIssuerChoice {
 		return
@@ -546,14 +528,4 @@ func reconsentConsenter(state AuthnChallengeState) string {
 		return state.Subject.String()
 	}
 	return state.ID
-}
-
-// resolverModeLabelFor is the recorded name of the organization's resolver
-// mode as requests use it, enforcement included.
-func (s *Service) resolverModeLabelFor(ctx context.Context, organizationID string) string {
-	mode, err := s.authClientMode(ctx, organizationID)
-	if err != nil {
-		return resolverModeUnknown
-	}
-	return resolverModeLabel(mode)
 }

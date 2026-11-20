@@ -11,7 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -63,7 +62,6 @@ func TestTypedMemberRegistrationsDecideMemberClients(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newAuthClientFixture(t, pool)
-			f.service.features = new(feature.InMemory)
 			f.service.authEnforcement = authenforcement.NewGate(pool)
 			if tc.enforced {
 				f.enforce()

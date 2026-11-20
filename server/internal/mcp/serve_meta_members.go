@@ -95,11 +95,6 @@ type metaMember struct {
 	// authentication for this member.
 	upstreamNoAuth bool
 
-	// typedAuthClient reports that chosenClientID is the registration of a
-	// typed auth client the resolver checked against the member, which
-	// authorizes it without a sign-in link.
-	typedAuthClient bool
-
 	// upstreamUnavailable is why the credential cannot reach this member
 	// under its choices, nil otherwise.
 	upstreamUnavailable error
@@ -238,7 +233,7 @@ func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slo
 		if surface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) {
 			ctx = withTypedConsentAuth(ctx)
 		}
-		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID)
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID, false)
 	} else {
 		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	}
@@ -279,7 +274,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 				issuer = gate.userSessionIssuerID
 			}
 		}
-		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway && gate.caller.kind == gatewayCallerPerson, issuer, scopeProjectID)
+		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway && gate.caller.kind == gatewayCallerPerson, issuer, scopeProjectID, true)
 	}
 	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
@@ -306,10 +301,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		}
 	}
 	if err == nil && gate.memberChoices != nil {
-		if gate.catalog == nil {
-			gate.memberChoices.apply(ctx, logger, members, false)
-		} else if gate.catalogRef.Mode != toolfilter.CatalogModeCached || gate.execute {
-			gate.memberChoices.apply(ctx, logger, members, true)
+		if gate.catalog == nil || gate.catalogRef.Mode != toolfilter.CatalogModeCached || gate.execute {
+			gate.memberChoices.apply(ctx, logger, members)
 		}
 	}
 	return ctx, members, err
@@ -326,9 +319,10 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 //
 // userSessionIssuerID limits legacy sign-in eligibility to the gateway's clients;
 // uuid.Nil skips issuer matching for the agent gateway and Platform MCP.
-// Enforced typed offers replace this check for proxied members; pending setup
-// retains it. A nonzero scopeProjectID restricts candidates before admission
-// and credential association for project gateways.
+// In serving, typed offers decide proxied members, and pending setup is not
+// eligible without an offer. The consent preview retains its legacy check.
+// A nonzero scopeProjectID restricts candidates before admission for project
+// gateways.
 //
 // organizationGateway drops servers backed by a toolset with Platform tools,
 // mirroring automatic plugin delivery: those toolsets serve assistants and
@@ -343,6 +337,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	organizationGateway bool,
 	userSessionIssuerID uuid.UUID,
 	scopeProjectID uuid.UUID,
+	serving bool,
 ) (context.Context, []metaMember, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
 	ctx, err := s.authz.PrepareContext(ctx)
@@ -404,9 +399,12 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	var offers map[uuid.UUID]configuredAuthOffer
 	var offerMetadata gatewayOfferMetadata
 	if userSessionIssuerID != uuid.Nil {
-		enforced, err := s.typedConsentAuth(ctx, organizationID)
-		if err != nil {
-			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway auth client mode").LogError(ctx, logger)
+		enforced := serving
+		if !serving {
+			enforced, err = s.typedConsentAuth(ctx, organizationID)
+			if err != nil {
+				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway consent auth choices").LogError(ctx, logger)
+			}
 		}
 		if enforced {
 			ids := make([]uuid.UUID, 0, len(members))
@@ -430,7 +428,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 
 	var clients []remotesessions.Client
 	typedConsent := authzSurface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx)
-	if userSessionIssuerID != uuid.Nil {
+	if !serving && userSessionIssuerID != uuid.Nil {
 		if typedConsent {
 			applyTypedMemberRegistrations(members, offers)
 		}
@@ -449,6 +447,8 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		}
 	}
 	shadow := s.newMandatoryShadow(ctx, organizationID)
+	var servingClientsErr error
+	servingClientsLoaded := false
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
 		offer, known := offers[member.serverID]
@@ -456,8 +456,13 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			if !known {
 				continue
 			}
-			// Without a live offer, retain legacy transport and issuer checks,
-			// including after an auth-client link was deleted (pending=false).
+			// An unanswered upstream requirement is not a serving offer. A
+			// server that needs no auth may still serve with no enabled client.
+			if serving && len(offer.clients) == 0 && offer.pending {
+				continue
+			}
+			// Keep the existing transport checks for members that need no
+			// credential and for the legacy consent preview.
 			if len(offer.clients) > 0 {
 				supported := gatewayOfferCapability(member, offer, offerMetadata)
 				if supported {
@@ -468,8 +473,11 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		}
 		var supported, needsOAuth bool
 		if known && !offer.pending && member.backend == metaMemberBackendProxied {
-			// Check detached offers against legacy source headers without decrypting credentials.
-			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], memberNeedsSignIn(member))
+			// A detached typed offer cannot use a legacy association to
+			// serve. The listed association count is only an indication
+			// that the member needs sign-in, not a credential choice.
+			needsSignIn := memberNeedsSignIn(member) || serving && member.upstreamIssuer.association.Providers > 0
+			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], needsSignIn)
 		} else {
 			supported, needsOAuth, err = s.derivedMemberAuth(ctx, shadow, authzSurface, member)
 			if errors.Is(err, errMemberToolsetDenied) {
@@ -481,13 +489,26 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
 			}
 		}
-		if !supported {
+		if !supported || (serving && known && len(offer.clients) == 0 && needsOAuth) {
 			continue
 		}
-		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
-			return (!typedConsent || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
-		}) {
-			continue
+		if needsOAuth && userSessionIssuerID != uuid.Nil {
+			if serving && !servingClientsLoaded {
+				// Typed proxied members were handled above. Only hosted
+				// serving needs sign-in bindings; never attach legacy associations
+				// to a typed member. A binding lookup failure hides only the
+				// hosted OAuth members, not the rest of the gateway.
+				servingClientsLoaded = true
+				clients, servingClientsErr = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
+				if servingClientsErr != nil {
+					logger.WarnContext(ctx, "list hosted gateway sign-in clients", attr.SlogError(servingClientsErr))
+				}
+			}
+			if servingClientsErr != nil || !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+				return (!typedConsent || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
+			}) {
+				continue
+			}
 		}
 		eligible = append(eligible, member)
 	}
@@ -544,7 +565,6 @@ func (s *Service) admitMetaMembers(
 	organizationID string,
 	candidates []metaMemberCandidate,
 ) (context.Context, []metaMember, []metaMember, error) {
-	shadow := s.newMandatoryShadow(ctx, organizationID)
 	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember
@@ -602,7 +622,6 @@ func (s *Service) admitMetaMembers(
 			chosenClientID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			upstreamNoAuth:                 false,
 			upstreamUnavailable:            nil,
-			typedAuthClient:                false,
 			associatedClients:              nil,
 			typedRegistrations:             false,
 		}
