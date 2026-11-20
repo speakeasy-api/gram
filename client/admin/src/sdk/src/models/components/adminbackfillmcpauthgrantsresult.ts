@@ -9,7 +9,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AdminBackfillMCPAuthGrantsResult = {
   /**
-   * How many principals gained the mcp:auth grant.
+   * Legacy response field; the retired endpoint does not grant access.
    */
   granted: number;
 };

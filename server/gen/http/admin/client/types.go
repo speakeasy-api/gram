@@ -3098,7 +3098,7 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 // BackfillMcpAuthGrantsResponseBody is the type of the "admin" service
 // "backfillMcpAuthGrants" endpoint HTTP response body.
 type BackfillMcpAuthGrantsResponseBody struct {
-	// How many principals gained the mcp:auth grant.
+	// Legacy response field; the retired endpoint does not grant access.
 	Granted *int64 `form:"granted,omitempty" json:"granted,omitempty" xml:"granted,omitempty"`
 }
 
