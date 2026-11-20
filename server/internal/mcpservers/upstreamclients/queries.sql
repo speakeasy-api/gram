@@ -398,6 +398,26 @@ WHERE mcp_server_id = @mcp_server_id::uuid
   AND project_id = @project_id::uuid
   AND deleted IS FALSE;
 
+-- name: RequireHostedUpstreamAssignment :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE
+WHERE id = @server_id AND project_id = @project_id AND toolset_id IS NOT NULL AND NOT deleted;
+
+-- name: ListHostedUpstreamAssignments :many
+-- Preserve the server row even without a live placement so readers can
+-- distinguish an explicit no-auth setting from missing configuration.
+SELECT s.id AS server_id, s.project_id, s.requires_upstream_auth, s.user_session_issuer_id,
+       a.remote_session_client_id AS registration_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND NOT p.deleted
+JOIN organization_metadata AS org ON org.id = p.organization_id AND org.disabled_at IS NULL
+LEFT JOIN mcp_server_remote_session_clients AS a
+    ON a.mcp_server_id = s.id AND a.project_id = s.project_id
+   AND a.organization_id = org.id AND NOT a.deleted
+WHERE s.id = ANY(@server_ids::uuid[]) AND p.organization_id = @organization_id::text
+  AND s.toolset_id IS NOT NULL AND NOT s.deleted
+ORDER BY s.id, a.remote_session_client_id;
+
 -- name: ListServerAssociatedClients :many
 -- The live clients associated with each of the given servers, for consent to
 -- offer a server only its own clients.

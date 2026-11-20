@@ -258,6 +258,47 @@ WITH due AS (
         AND (c.project_id = bp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = bp.organization_id)))
         AND (i.project_id = bp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = bp.organization_id)))
       UNION
+      -- Hosted OAuth is reached only through an exact, unambiguous placement.
+      SELECT sign_in.id, FALSE, hosted.project_id, hosted.id
+      FROM mcp_server_remote_session_clients AS assignment
+      JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
+        AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+      JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
+      JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
+      JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
+      LEFT JOIN projects AS sp ON sp.id = sign_in.project_id AND NOT sp.deleted
+      WHERE assignment.remote_session_client_id = c.id AND NOT assignment.deleted
+        AND COALESCE(sp.organization_id, sign_in.organization_id) = hp.organization_id
+        AND (c.project_id = hp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = hp.organization_id)))
+        AND (i.project_id = hp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = hp.organization_id)))
+        AND NOT i.deleted
+        AND NOT EXISTS (
+          SELECT 1 FROM mcp_server_remote_session_clients AS sibling
+          WHERE sibling.mcp_server_id = hosted.id AND sibling.project_id = hosted.project_id
+            AND sibling.organization_id = hp.organization_id AND NOT sibling.deleted
+            AND sibling.remote_session_client_id <> c.id
+        )
+        AND (
+          sign_in.id = hosted.user_session_issuer_id
+          OR (sign_in.project_id IS NULL AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS disabled
+            WHERE disabled.organization_id = hp.organization_id AND NOT disabled.deleted
+              AND disabled.feature_name = 'organization_gateway_disabled'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = hp.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> sign_in.id
+          ))
+          OR EXISTS (
+            SELECT 1 FROM meta_mcp_server_members AS membership
+            JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+              AND gateway.project_id = membership.project_id AND NOT gateway.deleted
+            WHERE membership.mcp_server_id = hosted.id AND membership.project_id = hosted.project_id
+              AND NOT membership.deleted AND gateway.user_session_issuer_id = sign_in.id
+          )
+        )
+        AND COALESCE(s.resource, '') = ''
+      UNION
       SELECT reached.id, FALSE, offer.project_id, offering.id
       FROM user_session_issuers AS minted_by
       LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
@@ -406,6 +447,47 @@ WITH due AS (
         AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
         AND (c.project_id = bp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = bp.organization_id)))
         AND (i.project_id = bp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = bp.organization_id)))
+      UNION
+      -- Hosted OAuth is reached only through an exact, unambiguous placement.
+      SELECT sign_in.id, FALSE, hosted.project_id, hosted.id
+      FROM mcp_server_remote_session_clients AS assignment
+      JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
+        AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+      JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
+      JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
+      JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
+      LEFT JOIN projects AS sp ON sp.id = sign_in.project_id AND NOT sp.deleted
+      WHERE assignment.remote_session_client_id = c.id AND NOT assignment.deleted
+        AND COALESCE(sp.organization_id, sign_in.organization_id) = hp.organization_id
+        AND (c.project_id = hp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = hp.organization_id)))
+        AND (i.project_id = hp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = hp.organization_id)))
+        AND NOT i.deleted
+        AND NOT EXISTS (
+          SELECT 1 FROM mcp_server_remote_session_clients AS sibling
+          WHERE sibling.mcp_server_id = hosted.id AND sibling.project_id = hosted.project_id
+            AND sibling.organization_id = hp.organization_id AND NOT sibling.deleted
+            AND sibling.remote_session_client_id <> c.id
+        )
+        AND (
+          sign_in.id = hosted.user_session_issuer_id
+          OR (sign_in.project_id IS NULL AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS disabled
+            WHERE disabled.organization_id = hp.organization_id AND NOT disabled.deleted
+              AND disabled.feature_name = 'organization_gateway_disabled'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = hp.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> sign_in.id
+          ))
+          OR EXISTS (
+            SELECT 1 FROM meta_mcp_server_members AS membership
+            JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+              AND gateway.project_id = membership.project_id AND NOT gateway.deleted
+            WHERE membership.mcp_server_id = hosted.id AND membership.project_id = hosted.project_id
+              AND NOT membership.deleted AND gateway.user_session_issuer_id = sign_in.id
+          )
+        )
+        AND COALESCE(s.resource, '') = ''
       UNION
       SELECT reached.id, FALSE, offer.project_id, offering.id
       FROM user_session_issuers AS minted_by
@@ -870,6 +952,47 @@ WHERE s.id = $1
         AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
         AND (c.project_id = bp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = bp.organization_id)))
         AND (i.project_id = bp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = bp.organization_id)))
+      UNION
+      -- Hosted OAuth is reached only through an exact, unambiguous placement.
+      SELECT sign_in.id, FALSE, hosted.project_id, hosted.id
+      FROM mcp_server_remote_session_clients AS assignment
+      JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
+        AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+      JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
+      JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
+      JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
+      LEFT JOIN projects AS sp ON sp.id = sign_in.project_id AND NOT sp.deleted
+      WHERE assignment.remote_session_client_id = c.id AND NOT assignment.deleted
+        AND COALESCE(sp.organization_id, sign_in.organization_id) = hp.organization_id
+        AND (c.project_id = hp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = hp.organization_id)))
+        AND (i.project_id = hp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = hp.organization_id)))
+        AND NOT i.deleted
+        AND NOT EXISTS (
+          SELECT 1 FROM mcp_server_remote_session_clients AS sibling
+          WHERE sibling.mcp_server_id = hosted.id AND sibling.project_id = hosted.project_id
+            AND sibling.organization_id = hp.organization_id AND NOT sibling.deleted
+            AND sibling.remote_session_client_id <> c.id
+        )
+        AND (
+          sign_in.id = hosted.user_session_issuer_id
+          OR (sign_in.project_id IS NULL AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS disabled
+            WHERE disabled.organization_id = hp.organization_id AND NOT disabled.deleted
+              AND disabled.feature_name = 'organization_gateway_disabled'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = hp.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> sign_in.id
+          ))
+          OR EXISTS (
+            SELECT 1 FROM meta_mcp_server_members AS membership
+            JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+              AND gateway.project_id = membership.project_id AND NOT gateway.deleted
+            WHERE membership.mcp_server_id = hosted.id AND membership.project_id = hosted.project_id
+              AND NOT membership.deleted AND gateway.user_session_issuer_id = sign_in.id
+          )
+        )
+        AND COALESCE(s.resource, '') = ''
       UNION
       SELECT reached.id, FALSE, offer.project_id, offering.id
       FROM user_session_issuers AS minted_by
@@ -3796,6 +3919,47 @@ WHERE s.id = $1
         AND (c.project_id = bp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = bp.organization_id)))
         AND (i.project_id = bp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = bp.organization_id)))
       UNION
+      -- Hosted OAuth is reached only through an exact, unambiguous placement.
+      SELECT sign_in.id, FALSE, hosted.project_id, hosted.id
+      FROM mcp_server_remote_session_clients AS assignment
+      JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
+        AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+      JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
+      JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
+      JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
+      LEFT JOIN projects AS sp ON sp.id = sign_in.project_id AND NOT sp.deleted
+      WHERE assignment.remote_session_client_id = c.id AND NOT assignment.deleted
+        AND COALESCE(sp.organization_id, sign_in.organization_id) = hp.organization_id
+        AND (c.project_id = hp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = hp.organization_id)))
+        AND (i.project_id = hp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = hp.organization_id)))
+        AND NOT i.deleted
+        AND NOT EXISTS (
+          SELECT 1 FROM mcp_server_remote_session_clients AS sibling
+          WHERE sibling.mcp_server_id = hosted.id AND sibling.project_id = hosted.project_id
+            AND sibling.organization_id = hp.organization_id AND NOT sibling.deleted
+            AND sibling.remote_session_client_id <> c.id
+        )
+        AND (
+          sign_in.id = hosted.user_session_issuer_id
+          OR (sign_in.project_id IS NULL AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS disabled
+            WHERE disabled.organization_id = hp.organization_id AND NOT disabled.deleted
+              AND disabled.feature_name = 'organization_gateway_disabled'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = hp.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> sign_in.id
+          ))
+          OR EXISTS (
+            SELECT 1 FROM meta_mcp_server_members AS membership
+            JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+              AND gateway.project_id = membership.project_id AND NOT gateway.deleted
+            WHERE membership.mcp_server_id = hosted.id AND membership.project_id = hosted.project_id
+              AND NOT membership.deleted AND gateway.user_session_issuer_id = sign_in.id
+          )
+        )
+        AND COALESCE(s.resource, '') = ''
+      UNION
       SELECT reached.id, FALSE, offer.project_id, offering.id
       FROM user_session_issuers AS minted_by
       LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
@@ -3930,6 +4094,47 @@ CROSS JOIN LATERAL (
         AND (source.project_id = bp.id OR (source.project_id IS NULL AND source.organization_id = bp.organization_id))
         AND (c.project_id = bp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = bp.organization_id)))
         AND (i.project_id = bp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = bp.organization_id)))
+      UNION
+      -- Hosted OAuth is reached only through an exact, unambiguous placement.
+      SELECT sign_in.id, FALSE, hosted.project_id, hosted.id
+      FROM mcp_server_remote_session_clients AS assignment
+      JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
+        AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+      JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
+      JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
+      JOIN user_session_issuers AS sign_in ON sign_in.id = s.user_session_issuer_id AND NOT sign_in.deleted
+      LEFT JOIN projects AS sp ON sp.id = sign_in.project_id AND NOT sp.deleted
+      WHERE assignment.remote_session_client_id = c.id AND NOT assignment.deleted
+        AND COALESCE(sp.organization_id, sign_in.organization_id) = hp.organization_id
+        AND (c.project_id = hp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = hp.organization_id)))
+        AND (i.project_id = hp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = hp.organization_id)))
+        AND NOT i.deleted
+        AND NOT EXISTS (
+          SELECT 1 FROM mcp_server_remote_session_clients AS sibling
+          WHERE sibling.mcp_server_id = hosted.id AND sibling.project_id = hosted.project_id
+            AND sibling.organization_id = hp.organization_id AND NOT sibling.deleted
+            AND sibling.remote_session_client_id <> c.id
+        )
+        AND (
+          sign_in.id = hosted.user_session_issuer_id
+          OR (sign_in.project_id IS NULL AND NOT EXISTS (
+            SELECT 1 FROM organization_features AS disabled
+            WHERE disabled.organization_id = hp.organization_id AND NOT disabled.deleted
+              AND disabled.feature_name = 'organization_gateway_disabled'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM user_session_issuers AS other
+            WHERE other.organization_id = hp.organization_id AND other.project_id IS NULL
+              AND NOT other.deleted AND other.id <> sign_in.id
+          ))
+          OR EXISTS (
+            SELECT 1 FROM meta_mcp_server_members AS membership
+            JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+              AND gateway.project_id = membership.project_id AND NOT gateway.deleted
+            WHERE membership.mcp_server_id = hosted.id AND membership.project_id = hosted.project_id
+              AND NOT membership.deleted AND gateway.user_session_issuer_id = sign_in.id
+          )
+        )
+        AND COALESCE(s.resource, '') = ''
       UNION
       SELECT reached.id, FALSE, offer.project_id, offering.id
       FROM user_session_issuers AS minted_by
@@ -4652,6 +4857,58 @@ func (q *Queries) GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx context.C
 		&i.TrustedUserSessionIssuerCount,
 	)
 	return i, err
+}
+
+const getHostedRemoteLoginPlacement = `-- name: GetHostedRemoteLoginPlacement :one
+SELECT link.id
+FROM mcp_server_remote_session_clients AS link
+JOIN mcp_servers AS server ON server.id = link.mcp_server_id AND server.project_id = link.project_id
+JOIN projects AS project ON project.id = link.project_id AND project.organization_id = link.organization_id
+JOIN organization_metadata AS org ON org.id = project.organization_id AND org.disabled_at IS NULL
+JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
+JOIN remote_session_issuers AS upstream ON upstream.id = client.remote_session_issuer_id
+JOIN user_session_issuers AS issuer ON issuer.id = $1::uuid
+WHERE link.mcp_server_id = $2::uuid AND link.project_id = $3::uuid AND link.organization_id = $4::text
+  AND link.remote_session_client_id = $5::uuid AND NOT link.deleted
+  AND NOT server.deleted AND NOT project.deleted AND server.toolset_id IS NOT NULL
+  AND server.visibility IN ('public', 'private')
+  AND (NOT $6::boolean OR server.user_session_issuer_id = issuer.id)
+  AND NOT issuer.deleted AND (issuer.project_id = project.id OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
+  AND NOT client.deleted AND client.credential_owner = 'subject'
+  AND (client.project_id = project.id OR (client.project_id IS NULL AND client.organization_id = project.organization_id))
+  AND upstream.id = $7::uuid AND NOT upstream.deleted AND (upstream.project_id = project.id OR (upstream.project_id IS NULL AND (upstream.organization_id IS NULL OR upstream.organization_id = project.organization_id)))
+  AND NOT EXISTS (
+    SELECT 1 FROM mcp_server_remote_session_clients AS other
+    WHERE other.mcp_server_id = link.mcp_server_id AND NOT other.deleted AND other.id <> link.id
+  )
+`
+
+type GetHostedRemoteLoginPlacementParams struct {
+	UserSessionIssuerID   uuid.UUID
+	McpServerID           uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+	DirectServer          bool
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// Find the single live registration authorized by this hosted server. This
+// does not consult the registrations linked to the downstream issuer. For a
+// gateway, its issuer and member authorization are checked separately.
+func (q *Queries) GetHostedRemoteLoginPlacement(ctx context.Context, arg GetHostedRemoteLoginPlacementParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getHostedRemoteLoginPlacement,
+		arg.UserSessionIssuerID,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionClientID,
+		arg.DirectServer,
+		arg.RemoteSessionIssuerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getLocalFixtureOrganizationRemoteSessionClient = `-- name: GetLocalFixtureOrganizationRemoteSessionClient :one
@@ -6579,6 +6836,46 @@ WITH bound AS (
       AND (c.project_id = bp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = bp.organization_id)))
       AND (i.project_id = bp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = bp.organization_id)))
     UNION
+    -- Hosted OAuth is reached only through an exact, unambiguous placement.
+    SELECT sign_in.id, FALSE, hosted.project_id, hosted.id
+    FROM mcp_server_remote_session_clients AS assignment
+    JOIN mcp_servers AS hosted ON hosted.id = assignment.mcp_server_id
+      AND hosted.project_id = assignment.project_id AND hosted.toolset_id IS NOT NULL AND NOT hosted.deleted
+    JOIN projects AS hp ON hp.id = hosted.project_id AND hp.organization_id = assignment.organization_id AND NOT hp.deleted
+    JOIN organization_metadata AS ho ON ho.id = hp.organization_id AND ho.disabled_at IS NULL
+    JOIN user_session_issuers AS sign_in ON sign_in.id = $2::uuid AND NOT sign_in.deleted
+    LEFT JOIN projects AS sp ON sp.id = sign_in.project_id AND NOT sp.deleted
+    WHERE assignment.remote_session_client_id = c.id AND NOT assignment.deleted
+      AND COALESCE(sp.organization_id, sign_in.organization_id) = hp.organization_id
+      AND (c.project_id = hp.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = hp.organization_id)))
+      AND (i.project_id = hp.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = hp.organization_id)))
+      AND NOT i.deleted
+      AND NOT EXISTS (
+        SELECT 1 FROM mcp_server_remote_session_clients AS sibling
+        WHERE sibling.mcp_server_id = hosted.id AND sibling.project_id = hosted.project_id
+          AND sibling.organization_id = hp.organization_id AND NOT sibling.deleted
+          AND sibling.remote_session_client_id <> c.id
+      )
+      AND (
+        sign_in.id = hosted.user_session_issuer_id
+        OR (sign_in.project_id IS NULL AND NOT EXISTS (
+          SELECT 1 FROM organization_features AS disabled
+          WHERE disabled.organization_id = hp.organization_id AND NOT disabled.deleted
+            AND disabled.feature_name = 'organization_gateway_disabled'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM user_session_issuers AS other
+          WHERE other.organization_id = hp.organization_id AND other.project_id IS NULL
+            AND NOT other.deleted AND other.id <> sign_in.id
+        ))
+        OR EXISTS (
+          SELECT 1 FROM meta_mcp_server_members AS membership
+          JOIN meta_mcp_servers AS gateway ON gateway.id = membership.meta_mcp_server_id
+            AND gateway.project_id = membership.project_id AND NOT gateway.deleted
+          WHERE membership.mcp_server_id = hosted.id AND membership.project_id = hosted.project_id
+            AND NOT membership.deleted AND gateway.user_session_issuer_id = sign_in.id
+        )
+      )
+    UNION
     SELECT reached.id, FALSE, offer.project_id, offering.id
     FROM user_session_issuers AS minted_by
     LEFT JOIN projects AS minted_project ON minted_project.id = minted_by.project_id
@@ -6600,15 +6897,15 @@ WITH bound AS (
   ) AS reach
   JOIN user_session_issuers AS usi ON usi.id = reach.user_session_issuer_id AND usi.deleted IS FALSE
   LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
-  WHERE s.id = $1 AND s.updated_at = $2::timestamptz
-    AND s.grant_generation = $3::bigint AND s.deleted IS FALSE
+  WHERE s.id = $1 AND s.updated_at = $3::timestamptz
+    AND s.grant_generation = $4::bigint AND s.deleted IS FALSE
     AND (s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL)
     AND s.refresh_expires_at IS NULL
-    AND (s.access_expires_at IS NULL OR s.access_expires_at > $4::timestamptz)
-    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $4::timestamptz)
+    AND (s.access_expires_at IS NULL OR s.access_expires_at > $5::timestamptz)
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $5::timestamptz)
     AND c.deleted IS FALSE
     AND (usi.project_id IS NULL OR p.id IS NOT NULL)
-    AND COALESCE(p.organization_id, usi.organization_id) = ANY($5::text[])
+    AND COALESCE(p.organization_id, usi.organization_id) = ANY($6::text[])
     AND (
       (c.project_id IS NOT NULL AND (c.project_id = usi.project_id OR (usi.project_id IS NULL AND cp.organization_id = usi.organization_id)))
       OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
@@ -6618,7 +6915,7 @@ WITH bound AS (
       WHERE gs.user_session_issuer_id = usi.id
         AND gs.subject_urn = s.subject_urn
         AND gs.deleted IS FALSE
-        AND gs.refresh_expires_at > $4::timestamptz
+        AND gs.refresh_expires_at > $5::timestamptz
     ))
 ),
 target_servers AS (
@@ -6673,11 +6970,12 @@ ORDER BY (user_session_issuer_id = (SELECT source.user_session_issuer_id FROM re
 `
 
 type GetRemoteSessionRecheckEndpointsParams struct {
-	ID              uuid.UUID
-	UpdatedAt       pgtype.Timestamptz
-	GrantGeneration int64
-	NowTs           pgtype.Timestamptz
-	OrganizationIds []string
+	ID                  uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	UpdatedAt           pgtype.Timestamptz
+	GrantGeneration     int64
+	NowTs               pgtype.Timestamptz
+	OrganizationIds     []string
 }
 
 type GetRemoteSessionRecheckEndpointsRow struct {
@@ -6702,6 +7000,7 @@ type GetRemoteSessionRecheckEndpointsRow struct {
 func (q *Queries) GetRemoteSessionRecheckEndpoints(ctx context.Context, arg GetRemoteSessionRecheckEndpointsParams) ([]GetRemoteSessionRecheckEndpointsRow, error) {
 	rows, err := q.db.Query(ctx, getRemoteSessionRecheckEndpoints,
 		arg.ID,
+		arg.UserSessionIssuerID,
 		arg.UpdatedAt,
 		arg.GrantGeneration,
 		arg.NowTs,
@@ -13078,6 +13377,38 @@ func (q *Queries) LockEMAUserIssuer(ctx context.Context, arg LockEMAUserIssuerPa
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockHostedRemoteLoginPlacement = `-- name: LockHostedRemoteLoginPlacement :one
+SELECT id
+FROM mcp_server_remote_session_clients
+WHERE id = $1::uuid AND deleted IS FALSE
+FOR SHARE
+`
+
+// Lock the association confirmed under the server lock, refusing a tombstone
+// from a concurrent registration cleanup path that did not lock the server.
+func (q *Queries) LockHostedRemoteLoginPlacement(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockHostedRemoteLoginPlacement, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const lockHostedRemoteLoginUpstreamIssuer = `-- name: LockHostedRemoteLoginUpstreamIssuer :one
+SELECT id
+FROM remote_session_issuers
+WHERE id = $1::uuid AND deleted IS FALSE
+FOR SHARE
+`
+
+// Keep a live upstream issuer stable through the hosted grant write. Take
+// this before the registration row, in upstream issuer migration order.
+func (q *Queries) LockHostedRemoteLoginUpstreamIssuer(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockHostedRemoteLoginUpstreamIssuer, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
 }
 
 const lockJsonWebKeySetForClientAttach = `-- name: LockJsonWebKeySetForClientAttach :one

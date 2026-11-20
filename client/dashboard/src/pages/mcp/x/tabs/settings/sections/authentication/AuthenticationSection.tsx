@@ -1,3 +1,4 @@
+import type { ServerClientAssociation } from "@gram/client/models/components/serverclientassociation.js";
 import { useServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { Badge } from "@/components/ui/Badge";
 import { GatewayAuthorizationServersField } from "@/pages/mcp/gateway/GatewayMemberSignInField";
@@ -173,14 +174,6 @@ function StandardAuthenticationSectionBody({
     ],
     [associations.data],
   );
-  const registrationFor = (issuer: RemoteSessionIssuer | null) => {
-    const matches = associations.data?.associations.filter(
-      (item) => item.remoteSessionIssuerId === issuer?.id,
-    );
-    return matches?.length === 1
-      ? matches[0]?.remoteSessionClientId
-      : undefined;
-  };
   // Resolved by id, never by filtering the issuer listing: an attached issuer
   // can fall past any listing page, and filtering would then render a working
   // server as having no provider.
@@ -196,24 +189,30 @@ function StandardAuthenticationSectionBody({
 
   // Keep targets mounted for one render after close so exit animations retain
   // the row that triggered them.
-  const [deleteTarget, setDeleteTarget] = useState<RemoteSessionIssuer | null>(
-    null,
-  );
+  type ProviderTarget = {
+    issuer: RemoteSessionIssuer;
+    association: ServerClientAssociation;
+  };
+  const [deleteTarget, setDeleteTarget] = useState<ProviderTarget | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [modifyTarget, setModifyTarget] = useState<RemoteSessionIssuer | null>(
-    null,
-  );
+  const [modifyTarget, setModifyTarget] = useState<ProviderTarget | null>(null);
   const [modifyOpen, setModifyOpen] = useState(false);
-  const deleteRegistrationId = registrationFor(deleteTarget);
-  const modifyRegistrationId = registrationFor(modifyTarget);
 
-  const handleEdit = (issuer: RemoteSessionIssuer) => {
-    setModifyTarget(issuer);
+  const handleEdit = (
+    issuer: RemoteSessionIssuer,
+    association?: ServerClientAssociation,
+  ) => {
+    if (!association) return;
+    setModifyTarget({ issuer, association });
     setModifyOpen(true);
   };
 
-  const handleDelete = (issuer: RemoteSessionIssuer) => {
-    setDeleteTarget(issuer);
+  const handleDelete = (
+    issuer: RemoteSessionIssuer,
+    association?: ServerClientAssociation,
+  ) => {
+    if (!association) return;
+    setDeleteTarget({ issuer, association });
     setDeleteOpen(true);
   };
 
@@ -245,6 +244,7 @@ function StandardAuthenticationSectionBody({
         ) : (
           <RemoteIdentityProvidersField
             associatedIssuers={associatedIssuers}
+            associations={associations.data?.associations}
             allowAdditionalProviders={false}
             projectId={target.projectId}
             isLoading={associations.isLoading || isLoadingAssociatedIssuers}
@@ -287,23 +287,24 @@ function StandardAuthenticationSectionBody({
         />
       )}
 
-      {deleteTarget && serverId && deleteRegistrationId && (
+      {deleteTarget && serverId && (
         <DeleteRemoteIdentityProviderDialog
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
-          issuer={deleteTarget}
+          issuer={deleteTarget.issuer}
           mcpServerId={serverId}
-          registrationId={deleteRegistrationId}
+          registrationId={deleteTarget.association.remoteSessionClientId}
+          clientId={deleteTarget.association.clientId}
         />
       )}
 
-      {modifyTarget && userSessionIssuer && modifyRegistrationId && (
+      {modifyTarget && serverId && (
         <ModifyRemoteIdentityProviderSheet
           open={modifyOpen}
           onOpenChange={setModifyOpen}
-          userSessionIssuer={userSessionIssuer}
-          issuer={modifyTarget}
-          registrationId={modifyRegistrationId}
+          mcpServerId={serverId}
+          issuer={modifyTarget.issuer}
+          association={modifyTarget.association}
         />
       )}
     </>

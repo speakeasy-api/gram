@@ -12,7 +12,8 @@ INSERT INTO mcp_servers (
     unproxied_mcp_server_id,
     tool_variations_group_id,
     visibility,
-    network_access_mode
+    network_access_mode,
+    requires_upstream_auth
 )
 VALUES (
     @id,
@@ -27,7 +28,9 @@ VALUES (
     @unproxied_mcp_server_id,
     @tool_variations_group_id,
     @visibility,
-    sqlc.narg('network_access_mode')
+    sqlc.narg('network_access_mode'),
+    CASE WHEN sqlc.narg('toolset_id')::uuid IS NOT NULL
+              AND sqlc.narg('user_session_issuer_id')::uuid IS NULL THEN FALSE END
 )
 RETURNING *;
 

@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -105,6 +107,67 @@ func TestResolveAuthClientAccessTokens_ServesAConsentFromAnotherSignIn(t *testin
 	reconnect, err := f.mgr.AuthClientNeedsReconnect(ctx, f.request(subject, f.clientID))
 	require.NoError(t, err)
 	require.False(t, reconnect)
+}
+
+func TestResolveHostedRegistrationAccessTokens_UsesOnlyAssignedGrant(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "hosted-exact-grant")
+	subject := urn.NewUserSubject("hosted-exact-user")
+	sibling := seedRemoteClientAtTier(t, ctx, f.ti.conn, conv.ToNullUUID(f.projectID), conv.ToPGText(f.organizationID), f.issuerID, "hosted-exact-sibling", f.signInA)
+	f.consent(t, subject, f.signInB, sibling, "same-provider-sibling-token")
+	session := f.consent(t, subject, f.signInB, f.clientID, "assignment-token")
+	req := f.request(subject, f.clientID)
+	tokens, err := f.mgr.ResolveHostedRegistrationAccessTokens(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, session.ID, tokens[f.issuerID].RemoteSessionID)
+	require.Equal(t, f.clientID, tokens[f.issuerID].RemoteSessionClientID)
+	reconnect, err := f.mgr.HostedRegistrationNeedsReconnect(ctx, req)
+	require.NoError(t, err)
+	require.False(t, reconnect)
+
+	unknown := f.request(subject, uuid.New())
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, unknown)
+	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
+	reconnect, err = f.mgr.HostedRegistrationNeedsReconnect(ctx, unknown)
+	require.NoError(t, err)
+	require.True(t, reconnect)
+
+	siblingOnly := urn.NewUserSubject("hosted-sibling-only")
+	f.consent(t, siblingOnly, f.signInB, sibling, "sibling-only-token")
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, f.request(siblingOnly, f.clientID))
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	reconnect, err = f.mgr.HostedRegistrationNeedsReconnect(ctx, f.request(siblingOnly, f.clientID))
+	require.NoError(t, err)
+	require.True(t, reconnect)
+}
+
+func TestResolveHostedRegistrationAccessTokens_UsesExactAgentAttachment(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "hosted-agent")
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	configureBindingOwnerAuthorizer(f.ti)
+	agent, err := agentrepo.New(f.ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: f.organizationID, OwnerUserID: auth.UserID, Name: "Hosted agent",
+	})
+	require.NoError(t, err)
+	subject := urn.NewUserSubject(auth.UserID)
+	session := f.consent(t, subject, f.signInA, f.clientID, "attached-hosted-token")
+	_, err = f.ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{
+		PrincipalID: agent.ID.String(), UserSessionIssuerID: f.signInB.String(), RemoteSessionID: session.ID.String(),
+	})
+	require.NoError(t, err)
+
+	request := f.request(urn.NewAgentSubject(agent.ID), f.clientID)
+	tokens, err := f.mgr.ResolveHostedRegistrationAccessTokens(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, session.ID, tokens[f.issuerID].RemoteSessionID)
+	require.Equal(t, "attached-hosted-token", tokens[f.issuerID].Token)
+
+	request.UserSessionIssuerID = f.signInA
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(t.Context(), request)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a legacy issuer link is not an agent attachment")
 }
 
 func TestResolveClientAccessTokens_StillRequiresTheSignInLink(t *testing.T) {

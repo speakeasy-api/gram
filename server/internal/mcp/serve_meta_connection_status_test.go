@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -113,6 +114,31 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_GatedReportsPerMemberSignIn(t
 	require.Contains(t, got.text, "1 of 2 servers ready")
 	require.Contains(t, got.text, "Unconnected member: not signed in")
 	require.Contains(t, got.text, got.connectURL, "the text fallback must carry the same connect link")
+}
+
+func TestServePublic_MetaEndpoint_ConnectionStatus_HostedUsesAssignedGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := *auth.ProjectID, auth.ActiveOrganizationID
+	signIn := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	slug := "meta-hosted-status-" + uuid.NewString()[:8]
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, signIn)
+	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted status", 0, mcpservers.VisibilityPublic)
+	assigned := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "assigned-hosted", "", nil)
+	sibling := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "sibling-hosted", "", []uuid.UUID{signIn})
+	_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		OrganizationID: orgID, ProjectID: projectID, McpServerID: member.serverID, RemoteSessionClientID: assigned,
+	})
+	require.NoError(t, err)
+	subject := createTestUser(t, ctx, ti, "hosted-status-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, slug, signIn, subject)
+	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, sibling, subject, "sibling-token", "")
+	require.Equal(t, metamcp.SignInNotConnected, callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses[member.slug])
+
+	insertQualifiedRemoteSessionToken(t, ctx, ti, signIn, assigned, subject, "assigned-token", "")
+	require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), slug, bearer).statuses[member.slug])
 }
 
 // A remote member bound to no sign-in provider still receives a grant routed

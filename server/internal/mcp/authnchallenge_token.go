@@ -1727,6 +1727,28 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	if endpoint.MetaMcpServerID.Valid {
 		return upstreamRefreshServed
 	}
+	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
+		registrationID, err := s.hostedRegistration(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
+		if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+			return upstreamRefreshReconnect
+		}
+		if err != nil {
+			logger.WarnContext(ctx, "check hosted upstream assignment before refresh", attr.SlogError(err))
+			return upstreamRefreshCheckFailed
+		}
+		if registrationID == uuid.Nil || !s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject) {
+			return upstreamRefreshServed
+		}
+		reconnect, err := s.remoteChallengeMgr.HostedRegistrationNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject: subject, RegistrationID: registrationID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
+		})
+		if err != nil {
+			logger.WarnContext(ctx, "check hosted upstream grant before refresh", attr.SlogError(err))
+			return upstreamRefreshCheckFailed
+		}
+		return upstreamRefreshOf(reconnect)
+	}
 	// Where the auth client resolver serves the organization it decides the
 	// refresh: a choice it cannot use sends the session to reconnect rather
 	// than refreshing into the same rejection. Only a registration identity
@@ -1740,7 +1762,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		return upstreamRefreshOf(resolverReconnect)
 	}
 	reauthorizes := s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject)
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil, hostedClients: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
 		return upstreamRefreshCheckFailed

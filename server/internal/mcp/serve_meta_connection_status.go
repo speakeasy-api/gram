@@ -209,18 +209,37 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 	}
 	if member.backend == metaMemberBackendHosted {
-		if !member.remoteSessionIssuerID.Valid {
+		// The admitted snapshot already has the exact assignment. Token
+		// resolution still rechecks it live, so a changed assignment cannot
+		// report the newly selected sibling's credential as connected.
+		if member.associatedClients == nil || len(member.associatedClients) > 1 {
+			return signInRow(metamcp.SignInError, "could not check this server's sign-in", nil)
+		}
+		if len(member.associatedClients) == 0 {
+			id, err := s.hostedRegistration(ctx, gate.organizationID, member.projectID, member.serverID)
+			if err != nil {
+				logger.WarnContext(ctx, "check live hosted no-upstream state", attr.SlogError(err))
+				return signInRow(metamcp.SignInError, "could not check this server's sign-in", nil)
+			}
+			if id != uuid.Nil {
+				return notConnectedRow(gate, true)
+			}
 			return signInRow(metamcp.SignInNotRequired, "", nil)
 		}
-		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
+		var registrationID uuid.UUID
+		for id := range member.associatedClients {
+			registrationID = id
+		}
+		tokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
 			return memberFailureSignIn(ctx, *gate, member, err)
 		}
-		tokens, err := hostedMemberTokens(gateTokens, member)
-		if err != nil {
+		entry, ok := assignedHostedToken(tokens, registrationID)
+		if ok && entry.ClientCredentialErr != nil {
+			err := metaMemberClientCredentialError(member, entry.ClientCredentialErr)
 			return memberFailureSignIn(ctx, *gate, member, withMemberConnectLink(err, member, gate.memberCallerURL(member)))
 		}
-		if len(tokens) == 0 {
+		if !ok || entry.Token == "" {
 			return notConnectedRow(gate, true)
 		}
 		return signInRow(metamcp.SignInConnected, "", nil)
@@ -256,6 +275,27 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		return notConnectedRow(gate, dial.oauthSignIn)
 	}
 	return signInRow(metamcp.SignInNotRequired, "", nil)
+}
+
+// assignedHostedToken cannot select an issuer sibling or a resource-qualified
+// grant. The registration can appear at most once in an exact resolver result.
+func assignedHostedToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, registrationID uuid.UUID) (remotesessions.UpstreamToken, bool) {
+	var entry remotesessions.UpstreamToken
+	found := false
+	if registrationID == uuid.Nil {
+		return entry, false
+	}
+	for _, token := range tokens {
+		if token.RemoteSessionClientID != registrationID || token.Resource != "" {
+			continue
+		}
+		if found {
+			var none remotesessions.UpstreamToken
+			return none, false
+		}
+		entry, found = token, true
+	}
+	return entry, found
 }
 
 // memberAuthRequirements reports whether a proxied member offers an enabled

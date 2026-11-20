@@ -404,41 +404,44 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			AutoConnectDone:          false,
 			FocusServer:              "",
 		}
-		clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, placement.ReachProjectID, placement.OrganizationID, []uuid.UUID{sess.RemoteSessionClientID})
-		if err != nil || len(clients) != 1 || clients[0].CredentialOwner != remotesessions.CredentialOwnerSubject {
-			if err != nil {
-				logger.ErrorContext(ctx, "load registration for remote session re-check", attr.SlogError(err))
+		hosted, err := s.recheckHostedRemoteSession(ctx, logger, endpoint, state, sess, row.OrganizationIds)
+		if !hosted && err == nil {
+			clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, placement.ReachProjectID, placement.OrganizationID, []uuid.UUID{sess.RemoteSessionClientID})
+			if err != nil || len(clients) != 1 || clients[0].CredentialOwner != remotesessions.CredentialOwnerSubject {
+				if err != nil {
+					logger.ErrorContext(ctx, "load registration for remote session re-check", attr.SlogError(err))
+				}
+				continue
 			}
-			continue
+			client := clients[0]
+			entry, err := s.remoteChallengeMgr.OpenRecheckToken(ctx, sess)
+			if err != nil {
+				logger.InfoContext(ctx, "remote session re-check skipped: exact grant is unusable", attr.SlogError(err))
+				return recheckSkipped
+			}
+			tokens := map[uuid.UUID]remotesessions.UpstreamToken{client.RemoteSessionIssuerID: entry}
+			memberTokens := func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+				return tokens, nil
+			}
+			scope := recheckMemberScope{projectID: placement.ReachProjectID, typedOffer: placement.TypedOffer, serverID: placement.ServerID, registrationID: sess.RemoteSessionClientID}
+			probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, state, client, tokens, memberTokens, &scope)
+			if err != nil {
+				logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(err))
+				continue
+			}
+			// Recheck exact generation and the placement's live reach after target
+			// authorization and immediately before the grant can go to the wire.
+			placementParams.NowTs = conv.ToPGTimestamptz(time.Now())
+			current, err := q.GetRemoteSessionRecheckEndpoints(ctx, placementParams)
+			if err != nil {
+				logger.ErrorContext(ctx, "revalidate remote session re-check placement", attr.SlogError(err))
+				return recheckSkipped
+			}
+			if !slices.Contains(current, placement) {
+				continue
+			}
+			err = s.runRemoteSessionProbe(ctx, probeCtx, logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, client, entry, placement.ReachProjectID, target, remotesessionmetrics.ValidationTriggerKeepalive)
 		}
-		client := clients[0]
-		entry, err := s.remoteChallengeMgr.OpenRecheckToken(ctx, sess)
-		if err != nil {
-			logger.InfoContext(ctx, "remote session re-check skipped: exact grant is unusable", attr.SlogError(err))
-			return recheckSkipped
-		}
-		tokens := map[uuid.UUID]remotesessions.UpstreamToken{client.RemoteSessionIssuerID: entry}
-		memberTokens := func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			return tokens, nil
-		}
-		scope := recheckMemberScope{projectID: placement.ReachProjectID, typedOffer: placement.TypedOffer, serverID: placement.ServerID, registrationID: sess.RemoteSessionClientID}
-		probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, state, client, tokens, memberTokens, &scope)
-		if err != nil {
-			logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(err))
-			continue
-		}
-		// Recheck exact generation and the placement's live reach after target
-		// authorization and immediately before the grant can go to the wire.
-		placementParams.NowTs = conv.ToPGTimestamptz(time.Now())
-		current, err := q.GetRemoteSessionRecheckEndpoints(ctx, placementParams)
-		if err != nil {
-			logger.ErrorContext(ctx, "revalidate remote session re-check placement", attr.SlogError(err))
-			return recheckSkipped
-		}
-		if !slices.Contains(current, placement) {
-			continue
-		}
-		err = s.runRemoteSessionProbe(ctx, probeCtx, logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, client, entry, placement.ReachProjectID, target, remotesessionmetrics.ValidationTriggerKeepalive)
 		switch {
 		case errors.Is(err, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.
@@ -462,6 +465,60 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		return recheckProbed
 	}
 	return recheckSkipped
+}
+
+// recheckHostedRemoteSession uses the pinned, non-refreshable grant the
+// worker claimed, not the browser inventory or the token resolver (which
+// could refresh a newly replaced grant). Enrichment opens that exact row.
+func (s *Service) recheckHostedRemoteSession(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, sess remotesessions_repo.RemoteSession, organizationIDs []string) (bool, error) {
+	placement, err := s.hostedValidationPlacement(ctx, logger, endpoint, state, sess.RemoteSessionClientID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	if err != nil {
+		return false, err
+	}
+	if placement.serverID == uuid.Nil || sess.Resource.String != "" {
+		// A qualified grant may still reach a proxied member on this gateway,
+		// but must not be presented through a hosted assignment.
+		if isDirectHostedValidation(endpoint) {
+			return true, errRemoteSessionUnroutable
+		}
+		return false, nil
+	}
+	clients, err := s.hostedSignInClients(ctx, endpoint.OrganizationID, placement.projectID, placement.serverID)
+	if err != nil {
+		return true, err
+	}
+	if len(clients) != 1 || clients[0].ID != sess.RemoteSessionClientID || clients[0].CredentialOwner != remotesessions.CredentialOwnerSubject {
+		return true, errRemoteSessionUnroutable
+	}
+	client := clients[0]
+	now := time.Now()
+	q := remotesessions_repo.New(s.db)
+	current, err := q.GetDueRemoteSessionRecheckCandidate(ctx, remotesessions_repo.GetDueRemoteSessionRecheckCandidateParams{
+		ID: sess.ID, NowTs: conv.ToPGTimestamptz(now), RecheckCutoff: conv.ToPGTimestamptz(now.Add(-s.remoteSessionRecheck.interval)), OrganizationIds: organizationIDs,
+	})
+	if err != nil {
+		return true, fmt.Errorf("revalidate claimed hosted grant: %w", err)
+	}
+	if current.RemoteSession.GrantGeneration != sess.GrantGeneration || !current.RemoteSession.UpdatedAt.Time.Equal(sess.UpdatedAt.Time) {
+		return true, errRemoteSessionUnroutable
+	}
+	grant, err := q.GetTenantUserRemoteSessionForClient(ctx, remotesessions_repo.GetTenantUserRemoteSessionForClientParams{
+		ProjectID: placement.projectID, OrganizationID: endpoint.OrganizationID, SubjectUrn: sess.SubjectUrn, RemoteSessionClientID: sess.RemoteSessionClientID,
+	})
+	if err != nil {
+		return true, fmt.Errorf("revalidate hosted grant tenant: %w", err)
+	}
+	if grant.ID != sess.ID || grant.GrantGeneration != sess.GrantGeneration || !grant.UpdatedAt.Time.Equal(sess.UpdatedAt.Time) || grant.Resource.String != "" {
+		return true, errRemoteSessionUnroutable
+	}
+	ref := remotesessions.RemoteSessionRef{
+		ID: sess.ID, Subject: sess.SubjectUrn, ClientID: sess.RemoteSessionClientID, UpdatedAt: sess.UpdatedAt.Time,
+		ProjectID: placement.projectID, OrganizationID: endpoint.OrganizationID,
+	}
+	if err := s.admitRemoteSessionRecheck(ctx, logger, client.IssuerURL); err != nil {
+		return true, err
+	}
+	return true, s.verifyHostedRemoteSession(ctx, logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, client, placement, ref, remotesessionmetrics.ValidationTriggerKeepalive)
 }
 
 // placeRemoteSessionRecheck resolves one endpoint the runtime still serves, trying the private surface when the public one is policy-refused.

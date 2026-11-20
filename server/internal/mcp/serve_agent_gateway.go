@@ -210,14 +210,6 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 	if err != nil {
 		return nil, nil, fmt.Errorf("load agent member issuer: %w", err)
 	}
-	if !server.UserSessionIssuerID.Valid {
-		if member.backend == metaMemberBackendProxied {
-			_, credential, err := s.authorizeAgentMemberClient(ctx, gate, member, uuid.Nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
-			gate.recordServedCredential(uuid.Nil, credential)
-			return nil, nil, err
-		}
-		return nil, nil, nil
-	}
 	// Hosted members retain partial credentials: their tools declare their own
 	// inputs. Proxied members must never turn a missing attachment into an
 	// anonymous upstream request.
@@ -227,6 +219,14 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 			return nil, nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err)}
 		}
 		return tokens, nil, nil
+	}
+	if !server.UserSessionIssuerID.Valid {
+		if member.backend == metaMemberBackendProxied {
+			_, credential, err := s.authorizeAgentMemberClient(ctx, gate, member, uuid.Nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+			gate.recordServedCredential(uuid.Nil, credential)
+			return nil, nil, err
+		}
+		return nil, nil, nil
 	}
 	clients, err := s.agentServerClients(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug})
 	if err != nil {

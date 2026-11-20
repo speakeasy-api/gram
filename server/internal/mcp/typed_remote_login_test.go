@@ -81,7 +81,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			loaded, loadErr := ti.service.RemoteChallengeManager().ListAuthClientRegistrations(ctx, projectID, orgID, []uuid.UUID{registration})
 			require.NoError(t, loadErr)
 			require.Len(t, loaded, 1)
-			if scenario == "legacy" {
+			if scenario == "legacy" || scenario == "gateway_legacy" {
 				_, err = q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, RemoteSessionClientID: registration})
 				require.NoError(t, err)
 			}
@@ -202,9 +202,6 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 				// Simulate a provider callback issued by an old binary. This
 				// is separate from accepting a stale gateway approval preview.
 				state.TypedAuthorization = nil
-				if scenario == "gateway_legacy" {
-					state.ResourceMcpServerID = uuid.NullUUID{}
-				}
 			}
 			if scenario == "tenant_mismatch" || scenario == "legacy_unlinked" || scenario == "legacy" || scenario == "gateway_legacy" {
 				// Mutate trusted cached provenance to exercise compatibility and tamper checks.
@@ -216,7 +213,7 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			w := httptest.NewRecorder()
 			callbackErr := mgr.HandleRemoteLoginCallback(w, req)
 			session, sessionErr := remotesessionsrepo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: registration})
-			if scenario != "typed" && !strings.HasPrefix(scenario, "typed_alternatives") && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" && scenario != "gateway_legacy" {
+			if scenario != "typed" && !strings.HasPrefix(scenario, "typed_alternatives") && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" {
 				require.Error(t, callbackErr)
 				if scenario != "legacy_unlinked" && scenario != "deleted_sign_in" {
 					require.Nil(t, posted.Load(), "revocation must fail before exchanging the code")
