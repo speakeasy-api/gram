@@ -776,7 +776,8 @@ describe("an annotation choice is stored as a block", () => {
   });
 
   // Connect does not come with manage, so blocks alone would leave this row
-  // with no connect at all: the choice has to be the grant.
+  // with no connect at all. The choice is written as the grant, and the
+  // block still keeps out tools that also carry a left-out annotation.
   it("grants the chosen annotations when nothing else grants connect", () => {
     const { direct, rows } = state([
       entry({ principalUrn: "user:1", level: "manage" }),
@@ -789,13 +790,24 @@ describe("an annotation choice is stored as a block", () => {
       undefined,
     ).entries;
 
-    expect(written).toContainEqual({
-      principalUrn: "user:1",
-      level: "use",
-      tools: [],
-      dispositions: ["read_only"],
-    });
-    expect(written.some((rule) => rule.level === "blocked")).toBe(false);
+    expect(written).toHaveLength(3);
+    expect(written).toEqual(
+      expect.arrayContaining([
+        { principalUrn: "user:1", level: "manage" },
+        {
+          principalUrn: "user:1",
+          level: "use",
+          tools: [],
+          dispositions: ["read_only"],
+        },
+        {
+          principalUrn: "user:1",
+          level: "blocked",
+          tools: [],
+          dispositions: ["destructive", "idempotent", "open_world"],
+        },
+      ]),
+    );
   });
 });
 
