@@ -11,22 +11,29 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
 type stubDetectionReader struct {
-	lastInput access.AIDetectionsReadInput
-	result    *accessgen.ListAIDetectionsResult
+	lastCatalog *aivendors.Snapshot
+	lastInput   access.AIDetectionsReadInput
+	result      *accessgen.ListAIDetectionsResult
 }
 
-func (s *stubDetectionReader) ReadAIDetections(_ context.Context, input access.AIDetectionsReadInput) (*accessgen.ListAIDetectionsResult, error) {
+func (s *stubDetectionReader) ReadAIDetections(_ context.Context, catalog *aivendors.Snapshot, input access.AIDetectionsReadInput) (*accessgen.ListAIDetectionsResult, error) {
+	s.lastCatalog = catalog
 	s.lastInput = input
 	return s.result, nil
 }
 
-type stubLibraryReader struct{ list *aitargets.OrganizationList }
+type stubLibraryReader struct {
+	lastCatalog *aivendors.Snapshot
+	list        *aitargets.OrganizationList
+}
 
-func (s *stubLibraryReader) LoadLibrary(context.Context, string) (*aitargets.OrganizationList, error) {
+func (s *stubLibraryReader) LoadLibrary(_ context.Context, catalog *aivendors.Snapshot, _ string) (*aitargets.OrganizationList, error) {
+	s.lastCatalog = catalog
 	return s.list, nil
 }
 
@@ -68,8 +75,10 @@ func TestShadowAIListInventoryProjectsTheAccessVerdict(t *testing.T) {
 	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	out, err := service.ListInventory(t.Context(), shadowAIPrincipal(), ListShadowAIInventoryInput{Category: "harness"})
+	catalog := aivendors.CompiledSnapshot()
+	out, err := service.ListInventory(t.Context(), catalog, shadowAIPrincipal(), ListShadowAIInventoryInput{Category: "harness"})
 	require.NoError(t, err)
+	require.Same(t, catalog, detections.lastCatalog)
 	require.Len(t, out.Tools, 1)
 	require.Equal(t, "codex", out.Tools[0].TargetID)
 	require.Equal(t, "blocked", out.Tools[0].State)
@@ -89,10 +98,10 @@ func TestShadowAIRefusesWithoutLiveOrgAdmin(t *testing.T) {
 	service := NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{}, stubAuthorizer{err: denied}, allowingBudget())
 	require.NotNil(t, service)
 
-	_, err := service.ListInventory(t.Context(), shadowAIPrincipal(), ListShadowAIInventoryInput{})
+	_, err := service.ListInventory(t.Context(), aivendors.CompiledSnapshot(), shadowAIPrincipal(), ListShadowAIInventoryInput{})
 	require.ErrorIs(t, err, denied)
 
-	_, err = service.ListLibrary(t.Context(), shadowAIPrincipal(), ListAIScanLibraryInput{})
+	_, err = service.ListLibrary(t.Context(), aivendors.CompiledSnapshot(), shadowAIPrincipal(), ListAIScanLibraryInput{})
 	require.ErrorIs(t, err, denied)
 }
 
@@ -117,11 +126,14 @@ func TestShadowAIListLibraryReportsOriginAndBlockability(t *testing.T) {
 		},
 		Snapshot: aitargets.NewSnapshot(7, nil),
 	}
-	service := NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{list: list}, stubAuthorizer{}, allowingBudget())
+	library := &stubLibraryReader{list: list}
+	service := NewShadowAIService(&stubDetectionReader{}, library, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	out, err := service.ListLibrary(t.Context(), shadowAIPrincipal(), ListAIScanLibraryInput{})
+	catalog := aivendors.CompiledSnapshot()
+	out, err := service.ListLibrary(t.Context(), catalog, shadowAIPrincipal(), ListAIScanLibraryInput{})
 	require.NoError(t, err)
+	require.Same(t, catalog, library.lastCatalog)
 	require.EqualValues(t, 7, out.LibraryVersion)
 	require.Len(t, out.Targets, 2)
 
@@ -149,7 +161,7 @@ func TestShadowAIListLibraryRejectsUnknownCategory(t *testing.T) {
 	service := NewShadowAIService(&stubDetectionReader{}, &stubLibraryReader{list: &aitargets.OrganizationList{}}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	_, err := service.ListLibrary(t.Context(), shadowAIPrincipal(), ListAIScanLibraryInput{Category: "not-a-category"})
+	_, err := service.ListLibrary(t.Context(), aivendors.CompiledSnapshot(), shadowAIPrincipal(), ListAIScanLibraryInput{Category: "not-a-category"})
 	require.ErrorIs(t, err, ErrShadowAIInvalid)
 	require.NotErrorIs(t, err, ErrShadowAIUnavailable)
 }
@@ -202,7 +214,7 @@ func TestShadowAIListInventoryProjectsTheUnenforceableHalf(t *testing.T) {
 	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	out, err := service.ListInventory(t.Context(), shadowAIPrincipal(), ListShadowAIInventoryInput{})
+	out, err := service.ListInventory(t.Context(), aivendors.CompiledSnapshot(), shadowAIPrincipal(), ListShadowAIInventoryInput{})
 	require.NoError(t, err)
 	require.Len(t, out.Tools, 3)
 
@@ -232,7 +244,7 @@ func TestShadowAIListInventoryRejectsUnknownCategory(t *testing.T) {
 	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	_, err := service.ListInventory(t.Context(), shadowAIPrincipal(), ListShadowAIInventoryInput{Category: "not-a-category"})
+	_, err := service.ListInventory(t.Context(), aivendors.CompiledSnapshot(), shadowAIPrincipal(), ListShadowAIInventoryInput{Category: "not-a-category"})
 	require.ErrorIs(t, err, ErrShadowAIInvalid)
 	require.NotErrorIs(t, err, ErrShadowAIUnavailable, "the service is configured; only the argument is wrong")
 	require.Empty(t, detections.lastInput.OrganizationID, "the read must not run for an argument that cannot be valid")

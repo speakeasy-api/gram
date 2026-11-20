@@ -228,14 +228,14 @@ func attachOrganizationGateway(mux goahttp.Muxer, service *Service, metadataServ
 // gateway's authorization server routes on the authentication host, which an
 // organization issuer that opts in to it announces as the gateway's
 // authorization server.
-func attachOrganizationGatewayAuthenticationHost(host *AuthenticationHost, service *Service) {
+func attachOrganizationGatewayAuthenticationHost(mount func(method, pattern string, handler http.HandlerFunc), service *Service) {
 	gatewayPost := oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway)
 	for _, route := range service.shadowedEndpointPostRoutes() {
-		host.Handle(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayPost))
+		mount(http.MethodPost, "/"+mcproute.OrganizationGateway.String()+"/"+route.name, service.shadowedEndpointHandler(route.name, route.handler, gatewayPost))
 	}
 	for _, route := range service.organizationGatewayOAuthRoutes() {
 		if route.onAuthenticationHost {
-			host.Handle(route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, service.withOrganizationGateway(route.serve, isOAuthTokenRoute(route.method, route.path))).ServeHTTP)
+			mount(route.method, route.path, oauthRouteHandler(service.logger, route.method, route.path, service.withOrganizationGateway(route.serve, isOAuthTokenRoute(route.method, route.path))).ServeHTTP)
 		}
 	}
 }
@@ -439,7 +439,7 @@ func resolvesByAssociation(member metaMember) bool {
 // resolve only when one needs them.
 func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, skipped *remotesessions.SkippedClients) *projectTokenCache {
 	// One snapshot attributes every resolution in this request.
-	catalog := s.aiCatalog.Snapshot()
+	catalog := s.aiCatalog.SnapshotFor(r.Context())
 	return &projectTokenCache{
 		resolve: func(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx, catalog))).NotingSkips(skipped).FromRequest(r), projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)

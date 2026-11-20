@@ -2,6 +2,7 @@ package aivendors
 
 import (
 	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -42,6 +43,7 @@ type Snapshot struct {
 	patterns    []Preset
 	vendors     map[string]int
 	fingerprint string
+	derived     sync.Map // values other packages compute once per snapshot
 }
 
 // NewSnapshot builds indexes over validated catalog data and takes ownership of
@@ -55,6 +57,7 @@ func NewSnapshot(products []Product) *Snapshot {
 		patterns:    nil,
 		vendors:     make(map[string]int),
 		fingerprint: "",
+		derived:     sync.Map{},
 	}
 	for _, p := range products {
 		p = p.clone()
@@ -221,6 +224,18 @@ func (s *Snapshot) GatewayMatchersFor(p Product) GatewayMatchers {
 	return out
 }
 
+// Derived computes a value once per snapshot and caller-owned key; callers must not mutate it.
+func Derived[T any](s *Snapshot, key any, compute func(*Snapshot) T) T {
+	if v, ok := s.derived.Load(key); ok {
+		if out, ok := v.(T); ok {
+			return out
+		}
+	}
+	v, _ := s.derived.LoadOrStore(key, compute(s))
+	out, _ := v.(T)
+	return out
+}
+
 // Store publishes immutable snapshots. A compound operation calls Snapshot once
 // and uses that view throughout; refreshing never mutates a captured view.
 type Store struct {
@@ -243,4 +258,22 @@ func (s *Store) Snapshot() *Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.snapshot
+}
+
+type pinnedSnapshotKey struct{}
+
+// Pin captures one snapshot for the rest of a request, keeping one already pinned.
+func (s *Store) Pin(ctx context.Context) context.Context {
+	if _, ok := ctx.Value(pinnedSnapshotKey{}).(*Snapshot); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, pinnedSnapshotKey{}, s.Snapshot())
+}
+
+// SnapshotFor returns the snapshot pinned on ctx, or captures the current one.
+func (s *Store) SnapshotFor(ctx context.Context) *Snapshot {
+	if snapshot, ok := ctx.Value(pinnedSnapshotKey{}).(*Snapshot); ok {
+		return snapshot
+	}
+	return s.Snapshot()
 }

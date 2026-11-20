@@ -175,8 +175,18 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	if readiness != nil {
 		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
 	}
+	// Outermost, so every middleware and tool in a request reads one catalog snapshot.
+	middlewares = append([]mcp.Middleware{aiCatalogPinMiddleware(registrar)}, middlewares...)
 	runtime.server.AddReceivingMiddleware(middlewares...)
 	return runtime
+}
+
+func aiCatalogPinMiddleware(registrar *Registrar) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			return next(registrar.withAICatalogSnapshot(ctx), method, req)
+		}
+	}
 }
 
 func readinessMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {

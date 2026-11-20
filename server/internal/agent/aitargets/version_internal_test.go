@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func TestWireVersionStaysInDeviceRange(t *testing.T) {
@@ -28,4 +30,16 @@ func TestWireVersionStaysInDeviceRange(t *testing.T) {
 			require.Equal(t, tc.want, wireVersion(tc.prefix))
 		})
 	}
+}
+
+func TestDefaultsAreSharedPerSnapshotButReturnedAsCopies(t *testing.T) {
+	t.Parallel()
+	catalog := aivendors.NewSnapshot(aivendors.Products())
+	first := Defaults(catalog)
+	require.NotEmpty(t, first)
+	want := Defaults(catalog)
+	first[0].DisplayName = "Mutated"
+	first[0].Signatures.Binaries = append(first[0].Signatures.Binaries, "mutated")
+	require.Equal(t, want, Defaults(catalog))
+	require.Equal(t, ListVersion(want), NewOrganizationList(catalog, nil).Snapshot.ListVersion)
 }

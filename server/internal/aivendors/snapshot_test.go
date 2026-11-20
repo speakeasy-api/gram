@@ -217,3 +217,33 @@ func TestSnapshotOwnsAllMutableData(t *testing.T) {
 	require.Equal(t, fingerprint, NewSnapshot(snapshot.Products()).Fingerprint())
 	require.Equal(t, fingerprint, snapshot.Fingerprint())
 }
+
+func TestPinnedSnapshotSurvivesRefresh(t *testing.T) {
+	t.Parallel()
+	initial := NewSnapshot(Products())
+	store := NewStore(initial)
+	ctx := store.Pin(t.Context())
+	products := Products()
+	products[0].DisplayName = "Updated name"
+	next := NewSnapshot(products)
+	store.mu.Lock()
+	store.snapshot = next
+	store.mu.Unlock()
+	require.Same(t, initial, store.SnapshotFor(ctx))
+	require.Same(t, initial, store.SnapshotFor(store.Pin(ctx)), "an existing pin is kept")
+	require.Same(t, next, store.SnapshotFor(t.Context()))
+}
+
+func TestDerivedComputesOncePerSnapshot(t *testing.T) {
+	t.Parallel()
+	type key struct{}
+	calls := 0
+	compute := func(*Snapshot) int {
+		calls++
+		return calls
+	}
+	first := NewSnapshot(Products())
+	require.Equal(t, 1, Derived(first, key{}, compute))
+	require.Equal(t, 1, Derived(first, key{}, compute))
+	require.Equal(t, 2, Derived(NewSnapshot(Products()), key{}, compute))
+}

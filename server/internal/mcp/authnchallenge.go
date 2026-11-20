@@ -1231,7 +1231,7 @@ func (s *Service) authenticateIssuerGate(
 	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
-			s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(newCtx, s.aiCatalog.Snapshot())), mcpconnectionattempts.CodeNoServerAccess, r,
+			s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(newCtx, s.aiCatalog.SnapshotFor(ctx))), mcpconnectionattempts.CodeNoServerAccess, r,
 				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.Subject(subject), s.reportedClient(ctx, r, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
 		}
 		return ctx, nil, nil, err
@@ -1421,7 +1421,7 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 	if mcpconnectionattempts.AddressOf(code) != guardian.AddressFine {
 		opts = append(opts, remotesessions.OutageAddressOption(errors.Join(causes...)))
 	}
-	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx, s.aiCatalog.Snapshot())), code, authentication.request, opts...)
+	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx))), code, authentication.request, opts...)
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
