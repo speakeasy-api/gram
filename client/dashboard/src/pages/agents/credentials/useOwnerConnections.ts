@@ -29,15 +29,9 @@ export interface OwnerConnections {
  * person separately, read for a new agent they are about to own.
  *
  * The agent does not exist yet, so this reads the person's sessions in each
- * server's project rather than the agent's attachment candidates: one listing
- * of their sessions per project, and the upstream sign-ins each issuer asks
- * for. Provisioning checks the agent's real candidates again before attaching.
- *
- * A server with an issuer still needs nobody when its own auth clients offer
- * no personal sign-in: the issuer may be shared with servers that do. Under
- * upstream auth enforcement the sign-ins it asks for come from those auth
- * clients too, since a shared issuer binds another server's registration;
- * otherwise from the issuer, which is what routes the call.
+ * server's project. Proxied servers choose among their own offers, while hosted
+ * servers still use their issuer's registrations. Saving rechecks those same
+ * sources and keeps any existing, usable attachment.
  */
 export function useOwnerConnections(
   servers: InventoryServer[],

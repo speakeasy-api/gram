@@ -1889,11 +1889,7 @@ export function CredentialsWizard({
                         allServers
                           ? `${CONNECT_SCOPE} on all servers in the project`
                           : `${CONNECT_SCOPE} on the selected servers`,
-                        ...(true
-                          ? [
-                              `${AUTH_GRANT.scope} on all upstream credentials (narrow them on the agent's Permissions page)`,
-                            ]
-                          : []),
+                        `${AUTH_GRANT.scope} on all upstream credentials (narrow them on the agent's Permissions page)`,
                         ...(recordsSessions ? [HOOKS_INGEST_SCOPE] : []),
                         // What the platform's runtime needs beyond the
                         // servers, such as a device agent's plugin sync.

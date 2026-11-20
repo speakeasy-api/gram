@@ -1,4 +1,3 @@
-import { UpstreamCredentialsSection } from "@/pages/mcp/x/tabs/settings/sections/authentication/UpstreamCredentialsSection";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import {
@@ -40,6 +39,7 @@ import {
   useRemoteMcpInstallWorkflow,
 } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
+import { UpstreamCredentialsSection } from "@/pages/mcp/x/tabs/settings/sections/authentication/UpstreamCredentialsSection";
 import type { RemoteMcpCreationIdentity } from "@/pages/sources/remote-mcp/configureCreatedIdentity";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
