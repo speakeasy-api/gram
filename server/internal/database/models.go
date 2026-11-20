@@ -1807,6 +1807,50 @@ type ChatMessage struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	RiskAnalyzedAt pgtype.Timestamptz
+	// The entry before this one in the transcript tree. NULL on a tree root.
+	// @access: confidential
+	ParentMessageID uuid.NullUUID
+	// On a compaction root, the leaf of the old tree it continues. NULL otherwise.
+	// @access: confidential
+	ContinuesMessageID uuid.NullUUID
+	// Hash of role and normalized text, computed by Speakeasy.
+	// @access: confidential
+	ContentKey []byte
+	// Version of the normalization and hash behind content_key.
+	// @access: confidential
+	ContentKeyVersion pgtype.Int2
+	// Hash of the parent path_key and this content_key. Lookup only.
+	// @access: confidential
+	PathKey []byte
+	// Equals content_key while the row has no natural ID, NULL otherwise.
+	// @access: confidential
+	SiblingKey []byte
+}
+
+type ChatMessageNaturalID struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	ChatID uuid.UUID
+	// The message the ID names. NULL when the ID stands for the start of the chat, a first transcript line that was not stored.
+	// @access: confidential
+	ChatMessageID uuid.NullUUID
+	// tool_call, tool_result, prompt, claude_entry or compliance_message.
+	// @access: confidential
+	Kind string
+	// ID minted by a model or client, never by Speakeasy.
+	// @access: opaque-confidential
+	Value string
+	// Position of the content block that carries the ID. 0 when it names the whole message.
+	// @access: confidential
+	BlockIndex int16
+	// claude_transcript, anthropic_inference or compliance.
+	// @access: confidential
+	Source string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
 }
 
 type ChatMessageParticipant struct {
