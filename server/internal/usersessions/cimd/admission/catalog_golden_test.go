@@ -47,5 +47,5 @@ func TestCatalogMatchesTheCatalogAsShipped(t *testing.T) {
 		{ProductID: "pi", Pattern: true, VendorKey: "pi", URL: "https://pi.dev/oauth/*/client.json", DisplayName: "Pi (per-server document)", Enabled: true},
 	}
 
-	require.Equal(t, expected, aivendors.CompiledSnapshot().Catalog())
+	require.ElementsMatch(t, expected, aivendors.CompiledSnapshot().Catalog())
 }

@@ -347,15 +347,7 @@ func TestLoadedSnapshotMatchesCompiledSnapshot(t *testing.T) {
 		require.Equal(t, wantOK, gotOK, probe)
 		require.Equal(t, want, got, probe)
 	}
-	// Fingerprints differ only by order: the database lists products by id and
-	// documents by URL in byte order, the registry by declaration.
-	require.NotEqual(t, compiled.Fingerprint(), loaded.Fingerprint())
-	reordered := compiled.Products()
-	slices.SortFunc(reordered, func(a, b aivendors.Product) int { return strings.Compare(a.ID, b.ID) })
-	for i := range reordered {
-		slices.SortFunc(reordered[i].Documents, func(a, b aivendors.Document) int { return strings.Compare(a.URL, b.URL) })
-	}
-	require.Equal(t, loaded.Fingerprint(), aivendors.NewSnapshot(reordered).Fingerprint())
+	require.Equal(t, compiled.Fingerprint(), loaded.Fingerprint(), "a freshly seeded database loads the built-in catalog, order included")
 }
 
 func TestLoadRequiresValidator(t *testing.T) {

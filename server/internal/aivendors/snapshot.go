@@ -137,9 +137,7 @@ func (p Product) withEmptyAsNil() Product {
 	return p
 }
 
-// CompiledSnapshot returns the process's one immutable snapshot of the compiled
-// registry, shaped like a database snapshot: families and aliases stay with the
-// package-level registry.
+// CompiledSnapshot is the built-in registry in database order: products by id, then documents by URL.
 func CompiledSnapshot() *Snapshot { return compiledSnapshot() }
 
 var compiledSnapshot = sync.OnceValue(func() *Snapshot {
@@ -147,7 +145,9 @@ var compiledSnapshot = sync.OnceValue(func() *Snapshot {
 	for i := range products {
 		products[i].Family = ""
 		products[i].Aliases = nil
+		slices.SortFunc(products[i].Documents, func(a, b Document) int { return strings.Compare(a.URL, b.URL) })
 	}
+	slices.SortFunc(products, func(a, b Product) int { return strings.Compare(a.ID, b.ID) })
 	return NewSnapshot(products)
 })
 

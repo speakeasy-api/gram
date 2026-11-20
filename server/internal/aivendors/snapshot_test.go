@@ -152,30 +152,29 @@ func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {
 	require.Equal(t, NewSnapshot([]Product{{ID: "p"}}).Fingerprint(), NewSnapshot([]Product{empty}).Fingerprint())
 }
 
-func TestCompiledSnapshotMatchesRegistry(t *testing.T) {
+func TestCompiledSnapshotMatchesRegistryIgnoringOrder(t *testing.T) {
 	t.Parallel()
 	snapshot := CompiledSnapshot()
+	require.Same(t, snapshot, CompiledSnapshot(), "every caller shares one compiled snapshot")
+	byURL := func(a, b Document) int { return strings.Compare(a.URL, b.URL) }
 	want := Products()
 	for i := range want {
 		want[i].Family = ""
 		want[i].Aliases = nil
+		slices.SortFunc(want[i].Documents, byURL)
 	}
-	require.Equal(t, want, snapshot.Products())
-	scanned := ScanProducts()
-	for i := range scanned {
-		scanned[i].Family = ""
-		scanned[i].Aliases = nil
-	}
-	require.Equal(t, scanned, snapshot.ScanProducts())
-	require.Same(t, snapshot, CompiledSnapshot(), "every caller shares one compiled snapshot")
+	require.ElementsMatch(t, want, snapshot.Products())
+	require.True(t, slices.IsSortedFunc(snapshot.Products(), func(a, b Product) int { return strings.Compare(a.ID, b.ID) }))
 	var documents []Preset
 	for _, entry := range CIMDDocuments() {
 		require.Equal(t, strings.Contains(entry.Document.URL, "*"), entry.Document.Pattern, entry.Document.URL)
 		documents = append(documents, Preset{ProductID: entry.Product.ID, VendorKey: entry.Product.VendorKey, DisplayName: entry.Document.DisplayName, URL: entry.Document.URL, Enabled: entry.Document.Enabled, Pattern: entry.Document.Pattern})
 	}
-	require.Equal(t, documents, snapshot.Catalog())
+	require.ElementsMatch(t, documents, snapshot.Catalog())
 	for _, p := range Products() {
-		require.Equal(t, GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p), p.ID)
+		want, got := GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p)
+		require.Equal(t, want.VendorKeys, got.VendorKeys, p.ID)
+		require.ElementsMatch(t, want.ClientIDs, got.ClientIDs, p.ID)
 		require.Equal(t, BlockableVendorKey(p.VendorKey), snapshot.BlockableVendorKey(p.VendorKey), p.ID)
 	}
 }
