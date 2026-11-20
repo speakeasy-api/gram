@@ -1,9 +1,11 @@
 package aivendors_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -420,4 +422,26 @@ func TestLoadedSnapshotServesTheCompiledListVersionAndETag(t *testing.T) {
 	got := aitargets.NewOrganizationList(loaded, nil).Snapshot
 	require.Equal(t, want.ListVersion, got.ListVersion)
 	require.Equal(t, want.ETag, got.ETag)
+}
+
+func TestSkippedRowIsLoggedOnceAcrossBootAndRefreshes(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
+		ID: uuid.New(), AiProductID: "zed", Url: "https://*.example.com/client.json", DisplayName: "Malformed pattern", Enabled: true, IsPattern: true,
+	})
+	require.NoError(t, err)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.Error(t, store.Refresh(cancelled, db, logger, aitargets.ValidateCatalog))
+	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
+	require.Equal(t, 1, strings.Count(logs.String(), "skip AI catalog row"), "boot logs the row; refreshes and a failed read do not repeat it")
 }

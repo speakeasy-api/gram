@@ -45,6 +45,8 @@ type Snapshot struct {
 	vendors     map[string]int
 	fingerprint string
 	builtIn     bool
+	// skipped are the rows the load that built this snapshot left out.
+	skipped []string
 }
 
 // NewSnapshot builds indexes over validated catalog data and takes ownership of
@@ -59,6 +61,7 @@ func NewSnapshot(products []Product) *Snapshot {
 		vendors:     make(map[string]int),
 		fingerprint: "",
 		builtIn:     false,
+		skipped:     nil,
 	}
 	for _, p := range products {
 		p = p.clone()
@@ -245,7 +248,11 @@ func NewStore(snapshot *Snapshot) *Store {
 	if snapshot == nil {
 		panic("AI catalog requires an initial snapshot")
 	}
-	s := &Store{refreshMu: sync.Mutex{}, reported: nil, confirmed: atomic.Int64{}, mu: sync.RWMutex{}, snapshot: snapshot}
+	reported := make(map[string]struct{}, len(snapshot.skipped))
+	for _, row := range snapshot.skipped {
+		reported[row] = struct{}{}
+	}
+	s := &Store{refreshMu: sync.Mutex{}, reported: reported, confirmed: atomic.Int64{}, mu: sync.RWMutex{}, snapshot: snapshot}
 	s.confirmed.Store(time.Now().UnixNano())
 	return s
 }
