@@ -62,6 +62,12 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 	for i, u := range demoUsers {
 		userIDs[i] = s.userID(u.handle)
 	}
+	healthHeld := int64(0)
+	for _, session := range s.healthSessions() {
+		if session.deleted == nil {
+			healthHeld++
+		}
+	}
 
 	identity := []postflightIDCheck{
 		{byOrg(s.q.PostflightIDInferenceGrants), 2, "demo seed postflight: expected only 2 explicit inference grants, found %d"},
@@ -153,8 +159,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// Example OAuth's and Example Shared Credential's issuers, three
 		// independent gateway issuers, one Connections issuer, Linear's and
 		// Notion's.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 8, "demo seed postflight: expected 8 project user session issuers, found %d"},
-		{byProj(s.q.PostflightIDGatewayIssuers), 3, "demo seed postflight: expected 3 distinct gateway issuers, found %d"},
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 9, "demo seed postflight: expected 9 project user session issuers, found %d"},
+		{byProj(s.q.PostflightIDGatewayIssuers), 4, "demo seed postflight: expected 4 distinct gateway issuers, found %d"},
 		// The workforce issuer. The local fixtures add the Enterprise Sign-In
 		// (ID-JAG) Server's own federated sign-in after this check.
 		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 1, "demo seed postflight: expected 1 organization user session issuer, found %d"},
@@ -165,7 +171,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID:           org,
 			})
 		}, 1, "demo seed postflight: expected the workforce user session issuer in shared mode, found %d"},
-		{byProj(s.q.PostflightIDUserSessionClients), 9, "demo seed postflight: expected 9 registered agents, found %d"},
+		{byProj(s.q.PostflightIDUserSessionClients), 9 + int64(len(healthClients)), "demo seed postflight: expected 14 registered agents, found %d"},
 		// EMA: Acme Wiki's ready binding, no cached credentials, and its
 		// saved provider order. The workforce issuer accepts ID-JAGs from the
 		// fictional provider, but interactive sign-in does not go through it.
@@ -224,24 +230,30 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Example OAuth server
 		// and Example Shared Credential server sign-ins on their own server, the gateway
-		// sign-ins on both members.
+		// sign-ins on both members, and the organization sign-ins on the
+		// connection health servers with no upstream sign-in.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{},
+				OrgNoAuthServerIds: s.healthServerIDs(),
 				ProjectID:          proj,
+				HealthIssuerID:     s.healthIssuer(),
 				LinearSessionIds:   []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				SlackSessionIds:    []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				LinearServerID:     s.det("mcpserver-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
-		}, 23, "demo seed postflight: expected exactly 23 matching upstream client choices, found %d"},
+		}, 38, "demo seed postflight: expected exactly 38 matching upstream client choices, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDHealthUpstreamClientChoices(ctx, repo.PostflightIDHealthUpstreamClientChoicesParams{ProjectID: proj, HealthIssuerID: s.healthIssuer()})
+		}, healthHeld * int64(len(healthServers)), "demo seed postflight: expected no upstream sign-in on every connection health server for each held sign-in, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{},
+				OrgNoAuthServerIds: s.healthServerIDs(),
 				ProjectID:          proj,
+				HealthIssuerID:     s.healthIssuer(),
 				LinearServerID:     s.det("mcpserver-linear"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
@@ -267,10 +279,10 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// Managed-agent credentials are a separate surface from ordinary MCP
 		// connections, even though both fixtures belong to the same project.
 		{byProj(s.q.PostflightIDProjectAgentSessions), 1, "demo seed postflight: expected 1 project-scoped managed agent session, found %d"},
-		{byProj(s.q.PostflightIDConnections), 11, "demo seed postflight: expected 11 MCP connections, found %d"},
+		{byProj(s.q.PostflightIDConnections), 11 + healthHeld, "demo seed postflight: expected 11 MCP connections plus the connection health ones, found %d"},
 		// Spread across servers, not pooled on one: the connections tab groups
 		// by MCP server, and a single group makes that view look broken.
-		{byProj(s.q.PostflightIDConnectionServers), 4, "demo seed postflight: connections span %d MCP servers, expected 4"},
+		{byProj(s.q.PostflightIDConnectionServers), 5, "demo seed postflight: connections span %d MCP servers, expected 5"},
 		// Everyone holds one. A person whose usage panels show a week of
 		// traffic beside an empty connections tab reads as a broken join.
 		{func(ctx context.Context) (int64, error) {

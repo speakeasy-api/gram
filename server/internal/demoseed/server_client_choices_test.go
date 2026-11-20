@@ -4,6 +4,7 @@ package demoseed
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -29,6 +30,15 @@ func testServerClientChoices(t *testing.T, spec Spec) {
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
+	// The connection health sign-ins, and the two live organization gateway
+	// sign-ins, reach each connection health server.
+	held := &seeder{spec: spec, now: time.Now()}
+	live := 0
+	for _, session := range held.healthSessions() {
+		if session.deleted == nil && session.refreshExpires.After(held.now) {
+			live++
+		}
+	}
 	for range 2 {
 		seedLocalPostgres(ctx, t, db, spec)
 
@@ -37,7 +47,7 @@ func testServerClientChoices(t *testing.T, spec Spec) {
 		require.Positive(t, report.Credentials, "the seed must leave live credentials to check")
 		// Two live organization gateway sign-ins also reach the Auto-Configured
 		// OAuth Server and Linear.
-		require.Equal(t, 18, report.Pairs[selectionbackfill.OutcomeSelected], "every active seeded sign-in's reachable servers")
+		require.Equal(t, 18+(live+2)*len(healthServers), report.Pairs[selectionbackfill.OutcomeSelected], "every active seeded sign-in's reachable servers")
 		require.Empty(t, report.Gaps, "no seeded credential may be asked to reconnect")
 		require.Len(t, report.Pairs, 1, "the seed must record every choice: %v", report.Pairs)
 		require.Positive(t, report.Credentials, "the seed must leave live credentials to check")

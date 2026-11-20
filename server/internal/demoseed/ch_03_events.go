@@ -54,6 +54,7 @@ func (s *seeder) chCheckArgs() []any {
 		clickhouse.Named("gateway_suffix", "/mcp/"+s.spec.OrgSlug+"-gateway"),
 		clickhouse.Named("owner_agent", s.ownerAgentID().String()),
 		clickhouse.Named("owner_user", s.userID(demoAgentOwner.handle)),
+		clickhouse.Named("health_issuer", s.healthIssuer().String()),
 	}
 }
 
