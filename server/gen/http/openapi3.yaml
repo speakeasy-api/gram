@@ -19988,6 +19988,14 @@ paths:
                     minimum: 1
                     type: integer
                 - allowEmptyValue: true
+                  description: Keep only agents assigned to this project in the active organization.
+                  in: query
+                  name: project_id
+                  schema:
+                    description: Keep only agents assigned to this project in the active organization.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Case-insensitive substring match on the agent name.
                   in: query
                   name: search
