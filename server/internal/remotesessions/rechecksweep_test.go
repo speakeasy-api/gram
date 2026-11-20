@@ -326,7 +326,7 @@ func TestRecheckSweep_PlatformRegistrationDoesNotTransferGrantsAcrossOrganizatio
 
 	subject := urn.NewUserSubject("subject-" + slug)
 	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
-		SubjectUrn: subject, ID: session.ID, UpdatedAt: session.UpdatedAt, GrantGeneration: session.GrantGeneration, AccessTokenEncrypted: "access-ciphertext",
+		SubjectUrn: subject, UserSessionIssuerID: routable, RemoteSessionClientID: client.ID, AccessTokenEncrypted: "access-ciphertext",
 		AccessExpiresAt: pgtype.Timestamptz{}, RefreshTokenEncrypted: pgtype.Text{}, RefreshExpiresAt: pgtype.Timestamptz{}, Scopes: []string{}, Resource: pgtype.Text{}, AutoRefresh: false,
 	})
 	require.NoError(t, err)
