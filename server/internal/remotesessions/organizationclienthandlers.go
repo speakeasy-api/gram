@@ -170,7 +170,7 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 	mcpRows, err := r.ListOrganizationMcpServersUsingRegistration(ctx, repo.ListOrganizationMcpServersUsingRegistrationParams{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ClientID:            conv.ToNullUUID(clientID),
-		IssuerID:            uuid.NullUUID{},
+		IssuerID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IncludeDeleteImpact: true,
 	})
 	if err != nil {
@@ -262,7 +262,7 @@ func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsg
 	rows, err := r.ListOrganizationMcpServersUsingRegistration(ctx, repo.ListOrganizationMcpServersUsingRegistrationParams{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ClientID:            conv.ToNullUUID(clientID),
-		IssuerID:            uuid.NullUUID{},
+		IssuerID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IncludeDeleteImpact: false,
 	})
 	if err != nil {
@@ -477,19 +477,19 @@ func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx
 	if payloadProjectID != nil && strings.TrimSpace(*payloadProjectID) != "" {
 		pid, err := uuid.Parse(*payloadProjectID)
 		if err != nil {
-			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, logger)
 		}
 		if issuer.ProjectID.Valid && issuer.ProjectID.UUID != pid {
-			return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, nil, "project_id must match the issuer's project for a project-specific issuer").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, nil, "project_id must match the issuer's project for a project-specific issuer").LogError(ctx, logger)
 		}
 		if _, err := projectsrepo.New(dbtx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
 			ID:             pid,
 			OrganizationID: organizationID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "project not found in organization").LogError(ctx, logger)
+				return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "project not found in organization").LogError(ctx, logger)
 			}
-			return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "validate project").LogError(ctx, logger)
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeUnexpected, err, "validate project").LogError(ctx, logger)
 		}
 		clientProjectID = conv.ToNullUUID(pid)
 	}
