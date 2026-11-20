@@ -4783,6 +4783,51 @@ func (q *Queries) IsPlatformMCPNewModelEligible(ctx context.Context, organizatio
 	return exists, err
 }
 
+const listAgentLiveKeySharedCredentialChoices = `-- name: ListAgentLiveKeySharedCredentialChoices :many
+SELECT DISTINCT sel.auth_client_id::uuid AS auth_client_id
+FROM upstream_client_selections AS sel
+JOIN api_keys AS agent_key
+  ON agent_key.id = sel.credential_id
+ AND agent_key.organization_id = sel.organization_id
+WHERE sel.organization_id = $1
+  AND sel.credential_kind = 'api_key'
+  AND sel.mcp_server_id = $2
+  AND sel.auth_client_id IS NOT NULL
+  AND sel.deleted IS FALSE
+  AND agent_key.subject_urn = $3
+  AND agent_key.deleted IS FALSE
+  AND agent_key.expires_at > clock_timestamp()
+`
+
+type ListAgentLiveKeySharedCredentialChoicesParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	SubjectUrn     pgtype.Text
+}
+
+// The auth clients an agent's live keys were set up to use on one MCP server.
+// A key that is revoked or has expired signs nothing in, and a choice of no
+// upstream authentication names no client.
+func (q *Queries) ListAgentLiveKeySharedCredentialChoices(ctx context.Context, arg ListAgentLiveKeySharedCredentialChoicesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAgentLiveKeySharedCredentialChoices, arg.OrganizationID, arg.McpServerID, arg.SubjectUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var auth_client_id uuid.UUID
+		if err := rows.Scan(&auth_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, auth_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDirectRemoteAdmissionAudiencesForGateway = `-- name: ListDirectRemoteAdmissionAudiencesForGateway :many
 SELECT DISTINCT plugin.id AS plugin_id, assignment.principal_urn
 FROM meta_mcp_servers gateway

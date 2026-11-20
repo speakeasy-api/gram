@@ -26,6 +26,7 @@ import { KeyCredentialChoice } from "./KeyCredentialChoice";
 import { ACCOUNT_CHOICE } from "./keyCredentialChoices";
 import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
+import { useAgentKeysUseSharedCredential } from "@/pages/identities/useAgentKeysUseSharedCredential";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
@@ -37,6 +38,7 @@ export function StepAuthentication({
   onConnected,
   listAction,
   credentialChoice,
+  keysAgentId,
   showHeader = true,
 }: {
   servers: InventoryServer[];
@@ -60,6 +62,12 @@ export function StepAuthentication({
     value: (serverId: string) => string | undefined;
     onChange: (serverId: string, authClientId: string) => void;
   };
+  /**
+   * The agent whose issued keys this step describes, on its MCP sign-in tab.
+   * A row whose keys already sign in with a chosen shared credential says so,
+   * rather than naming a connection those keys do not use.
+   */
+  keysAgentId?: string;
   /** False where the page around it already titles the step. */
   showHeader?: boolean;
 }): JSX.Element {
@@ -127,215 +135,254 @@ export function StepAuthentication({
         onValueChange={setOpenRows}
         className="border-border border"
       >
-        {servers.map((server) => {
-          const connection = displayed.get(server.id);
-          const shared =
-            !server.issuerId || connection?.status === "not-required";
-          // The agent's keys use a shared credential chosen on this row, so
-          // nobody's own connection is needed for them.
-          const choice = credentialChoice?.show(server.id)
-            ? credentialChoice.value(server.id)
-            : undefined;
-          const sharedChosen = !shared && !!choice && choice !== ACCOUNT_CHOICE;
-          const expired = connection?.status === "ended";
-          const sessions =
-            connection?.status === "ready" || connection?.status === "ended"
-              ? connection.sessions
-              : [];
-          const session = sessions[0];
-          const mine = session?.subjectUrn === `user:${user.id}`;
-          const label =
-            shared || sharedChosen
-              ? "Shared credential"
-              : expired
-                ? "Expired"
-                : connection?.status === "ready"
-                  ? mine
-                    ? "Your connection"
-                    : `${session?.subjectDisplayName || session?.subjectEmail || "Another member"}'s connection`
-                  : connection?.status === "checking" || !connection
+        {servers.map((server) => (
+          <AgentKeysCredential
+            key={server.id}
+            agentId={keysAgentId}
+            server={server}
+          >
+            {(keysShared) => {
+              const connection = displayed.get(server.id);
+              const shared =
+                !server.issuerId || connection?.status === "not-required";
+              // The agent's keys use a shared credential chosen on this row, so
+              // nobody's own connection is needed for them.
+              const choice = credentialChoice?.show(server.id)
+                ? credentialChoice.value(server.id)
+                : undefined;
+              const sharedChosen =
+                !shared &&
+                ((!!choice && choice !== ACCOUNT_CHOICE) ||
+                  keysShared === true);
+              const keysChecking =
+                !shared && !sharedChosen && keysShared === "checking";
+              const expired = connection?.status === "ended";
+              const sessions =
+                connection?.status === "ready" || connection?.status === "ended"
+                  ? connection.sessions
+                  : [];
+              const session = sessions[0];
+              const mine = session?.subjectUrn === `user:${user.id}`;
+              const label =
+                shared || sharedChosen
+                  ? "Shared credential"
+                  : keysChecking
                     ? "Checking connection…"
-                    : connection.status === "error"
-                      ? "Could not check connection"
-                      : "Requires connection";
-          const missingSignIns = sharedChosen
-            ? null
-            : missingSignInsSentence(server, connection);
-          return (
-            <AccordionItem
-              key={server.id}
-              value={server.id}
-              className="px-4 data-[state=open]:bg-muted/30"
-            >
-              {/* Someone else's connection is marked by the lock on its
-                  badge, not by tinting the row. */}
-              <div className="flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <AccordionTrigger className="items-center hover:no-underline">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {server.name}
-                      </span>
-                    </span>
-                    {session && !sharedChosen && (
-                      <IdentityAvatar
-                        label={
-                          session.subjectDisplayName ||
-                          session.subjectEmail ||
-                          "Connection owner"
-                        }
-                        src={mine ? user.photoUrl : undefined}
-                        className="size-7"
-                        textClassName="text-xs"
-                      />
-                    )}
-                    <Badge
-                      // Blue, like the step's MCP sign-in arrow: each pill
-                      // says how Speakeasy signs in to that server.
-                      variant={
-                        sharedChosen
-                          ? "information"
-                          : expired || connection?.status === "missing"
-                            ? "warning"
-                            : shared || connection?.status === "ready"
-                              ? "information"
-                              : "neutral"
-                      }
-                      size="sm"
-                    >
-                      {session && !mine && !sharedChosen && (
-                        <LockKeyhole
-                          className="mr-1 size-3"
-                          aria-hidden="true"
-                        />
-                      )}
-                      {session && mine && !expired && !sharedChosen && (
-                        <Check className="mr-1 size-3" aria-hidden="true" />
-                      )}
-                      {expired && !sharedChosen && (
-                        <AlertTriangle
-                          className="mr-1 size-3"
-                          aria-hidden="true"
-                        />
-                      )}
-                      {label}
-                    </Badge>
-                  </AccordionTrigger>
-                </div>
-                <ServerInfoPopover server={server} />
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  aria-label={`Remove ${server.name}`}
-                  title="Remove MCP server"
-                  onClick={() => onRemove(server.id)}
+                    : expired
+                      ? "Expired"
+                      : connection?.status === "ready"
+                        ? mine
+                          ? "Your connection"
+                          : `${session?.subjectDisplayName || session?.subjectEmail || "Another member"}'s connection`
+                        : connection?.status === "checking" || !connection
+                          ? "Checking connection…"
+                          : connection.status === "error"
+                            ? "Could not check connection"
+                            : "Requires connection";
+              const missingSignIns = sharedChosen
+                ? null
+                : missingSignInsSentence(server, connection);
+              return (
+                <AccordionItem
+                  value={server.id}
+                  className="px-4 data-[state=open]:bg-muted/30"
                 >
-                  <X className="size-4" />
-                </Button>
-              </div>
-              <AccordionContent>
-                {credentialChoice?.show(server.id) &&
-                  (server.kind === "Remote" || server.kind === "Tunneled") &&
-                  // Whether it signs in accounts is only known once its
-                  // connection has been read.
-                  (!server.issuerId ||
-                    (connection !== undefined &&
-                      connection.status !== "checking")) && (
-                    <KeyCredentialChoice
-                      className="pb-3"
-                      serverId={server.id}
-                      serverName={server.name}
-                      // A server that signs each caller in also offers the
-                      // account connected for the agent, beside its shared
-                      // credentials.
-                      // Only once its own auth says it signs each person in:
-                      // an issuer alone does not, and offering the account
-                      // there would default a key past its only credential.
-                      accounts={
-                        !!server.issuerId &&
-                        !shared &&
-                        (connection?.status === "missing" ||
-                          connection?.status === "ready" ||
-                          connection?.status === "ended" ||
-                          // A read that failed and is being retried keeps a
-                          // personal connection already picked, rather than
-                          // clearing it as no longer offered.
-                          (connection?.status === "error" &&
-                            choice === ACCOUNT_CHOICE))
-                      }
-                      pickSole
-                      label={`Choose how the agent's keys sign in to ${server.name}`}
-                      value={credentialChoice.value(server.id)}
-                      onChange={(authClientId) =>
-                        credentialChoice.onChange(server.id, authClientId)
-                      }
-                    />
-                  )}
-                {shared || sharedChosen ? (
-                  <Text small muted>
-                    {sharedChosen
-                      ? "The agent's keys use the shared credential chosen above. No personal connection is needed."
-                      : "This server uses a shared credential. No personal connection is needed."}
-                  </Text>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-3 py-1">
+                  {/* Someone else's connection is marked by the lock on its
+                  badge, not by tinting the row. */}
+                  <div className="flex items-center gap-3">
                     <div className="min-w-0 flex-1">
-                      <Text small warning={expired} className="text-sm">
-                        {expired ? "Your connection has expired" : label}
-                      </Text>
-                      {session && (
-                        <Text small muted className="mt-1 text-xs">
-                          {connectionLifetimeLabel(connectionLifetime(session))}
-                        </Text>
-                      )}
-                      {missingSignIns && (
-                        <Text small muted className="mt-1 text-xs">
-                          {missingSignIns}
-                        </Text>
-                      )}
-                    </div>
-                    {server.connectUrl && (
-                      <Button
-                        size="xs"
-                        variant={expired || !session ? "primary" : "secondary"}
-                        onClick={() => {
-                          const url = new URL(server.connectUrl!);
-                          if (session?.remoteSessionClientId) {
-                            url.searchParams.set(
-                              "reauthenticate_client_id",
-                              session.remoteSessionClientId,
-                            );
+                      <AccordionTrigger className="items-center hover:no-underline">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">
+                            {server.name}
+                          </span>
+                        </span>
+                        {session && !sharedChosen && (
+                          <IdentityAvatar
+                            label={
+                              session.subjectDisplayName ||
+                              session.subjectEmail ||
+                              "Connection owner"
+                            }
+                            src={mine ? user.photoUrl : undefined}
+                            className="size-7"
+                            textClassName="text-xs"
+                          />
+                        )}
+                        <Badge
+                          // Blue, like the step's MCP sign-in arrow: each pill
+                          // says how Speakeasy signs in to that server.
+                          variant={
+                            sharedChosen
+                              ? "information"
+                              : expired || connection?.status === "missing"
+                                ? "warning"
+                                : shared || connection?.status === "ready"
+                                  ? "information"
+                                  : "neutral"
                           }
-                          if (oauth.open(url.toString()))
-                            connecting.current = server.id;
-                        }}
-                      >
-                        {session ? "Reauthenticate" : "Connect account"}
-                      </Button>
-                    )}
-                    {!server.connectUrl && !session && (
-                      <Text small muted>
-                        Connection setup is unavailable for this server.
-                      </Text>
-                    )}
+                          size="sm"
+                        >
+                          {session && !mine && !sharedChosen && (
+                            <LockKeyhole
+                              className="mr-1 size-3"
+                              aria-hidden="true"
+                            />
+                          )}
+                          {session && mine && !expired && !sharedChosen && (
+                            <Check className="mr-1 size-3" aria-hidden="true" />
+                          )}
+                          {expired && !sharedChosen && (
+                            <AlertTriangle
+                              className="mr-1 size-3"
+                              aria-hidden="true"
+                            />
+                          )}
+                          {label}
+                        </Badge>
+                      </AccordionTrigger>
+                    </div>
+                    <ServerInfoPopover server={server} />
                     <Button
                       variant="tertiary"
                       size="sm"
-                      aria-label={`Refresh ${server.name} connection status`}
-                      title="Refresh connection status"
-                      onClick={() => {
-                        void connections.refetch();
-                      }}
+                      aria-label={`Remove ${server.name}`}
+                      title="Remove MCP server"
+                      onClick={() => onRemove(server.id)}
                     >
-                      <RefreshCw className="size-4" />
+                      <X className="size-4" />
                     </Button>
                   </div>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
+                  <AccordionContent>
+                    {credentialChoice?.show(server.id) &&
+                      (server.kind === "Remote" ||
+                        server.kind === "Tunneled") &&
+                      // Whether it signs in accounts is only known once its
+                      // connection has been read.
+                      (!server.issuerId ||
+                        (connection !== undefined &&
+                          connection.status !== "checking")) && (
+                        <KeyCredentialChoice
+                          className="pb-3"
+                          serverId={server.id}
+                          serverName={server.name}
+                          // A server that signs each caller in also offers the
+                          // account connected for the agent, beside its shared
+                          // credentials.
+                          // Only once its own auth says it signs each person in:
+                          // an issuer alone does not, and offering the account
+                          // there would default a key past its only credential.
+                          accounts={
+                            !!server.issuerId &&
+                            !shared &&
+                            (connection?.status === "missing" ||
+                              connection?.status === "ready" ||
+                              connection?.status === "ended" ||
+                              // A read that failed and is being retried keeps a
+                              // personal connection already picked, rather than
+                              // clearing it as no longer offered.
+                              (connection?.status === "error" &&
+                                choice === ACCOUNT_CHOICE))
+                          }
+                          pickSole
+                          label={`Choose how the agent's keys sign in to ${server.name}`}
+                          value={credentialChoice.value(server.id)}
+                          onChange={(authClientId) =>
+                            credentialChoice.onChange(server.id, authClientId)
+                          }
+                        />
+                      )}
+                    {shared || sharedChosen ? (
+                      <Text small muted>
+                        {sharedChosen
+                          ? choice && choice !== ACCOUNT_CHOICE
+                            ? "The agent's keys use the shared credential chosen above. No personal connection is needed."
+                            : "The agent's keys sign in with a shared credential chosen when they were issued. No personal connection is needed."
+                          : "This server uses a shared credential. No personal connection is needed."}
+                      </Text>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-3 py-1">
+                        <div className="min-w-0 flex-1">
+                          <Text small warning={expired} className="text-sm">
+                            {expired ? "Your connection has expired" : label}
+                          </Text>
+                          {session && (
+                            <Text small muted className="mt-1 text-xs">
+                              {connectionLifetimeLabel(
+                                connectionLifetime(session),
+                              )}
+                            </Text>
+                          )}
+                          {missingSignIns && (
+                            <Text small muted className="mt-1 text-xs">
+                              {missingSignIns}
+                            </Text>
+                          )}
+                        </div>
+                        {server.connectUrl && (
+                          <Button
+                            size="xs"
+                            variant={
+                              expired || !session ? "primary" : "secondary"
+                            }
+                            onClick={() => {
+                              const url = new URL(server.connectUrl!);
+                              if (session?.remoteSessionClientId) {
+                                url.searchParams.set(
+                                  "reauthenticate_client_id",
+                                  session.remoteSessionClientId,
+                                );
+                              }
+                              if (oauth.open(url.toString()))
+                                connecting.current = server.id;
+                            }}
+                          >
+                            {session ? "Reauthenticate" : "Connect account"}
+                          </Button>
+                        )}
+                        {!server.connectUrl && !session && (
+                          <Text small muted>
+                            Connection setup is unavailable for this server.
+                          </Text>
+                        )}
+                        <Button
+                          variant="tertiary"
+                          size="sm"
+                          aria-label={`Refresh ${server.name} connection status`}
+                          title="Refresh connection status"
+                          onClick={() => {
+                            void connections.refetch();
+                          }}
+                        >
+                          <RefreshCw className="size-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            }}
+          </AgentKeysCredential>
+        ))}
       </Accordion>
     </div>
   );
+}
+
+/**
+ * Reads, for one server's row, whether the agent's issued keys sign in there
+ * with a chosen shared credential, and hands the answer to the row. A
+ * component so each row can call the hook.
+ */
+function AgentKeysCredential({
+  agentId,
+  server,
+  children,
+}: {
+  agentId: string | undefined;
+  server: InventoryServer;
+  children: (keysShared: boolean | "checking") => ReactNode;
+}): JSX.Element {
+  const keysShared = useAgentKeysUseSharedCredential(agentId, server);
+  return <>{children(keysShared)}</>;
 }

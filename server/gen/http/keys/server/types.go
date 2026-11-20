@@ -110,6 +110,10 @@ type CreateKeyResponseBody struct {
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoiceResponseBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -147,6 +151,10 @@ type RotateKeyResponseBody struct {
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoiceResponseBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -202,6 +210,10 @@ type UpdateKeyPolicyResponseBody struct {
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoiceResponseBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -1553,6 +1565,16 @@ type APIKeyPolicySelectorResponseBody struct {
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
+// AgentKeyAuthClientChoiceResponseBody is used to define fields on response
+// body types.
+type AgentKeyAuthClientChoiceResponseBody struct {
+	// The MCP server.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The auth client the key uses there. Omit for a server whose upstream needs
+	// no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
 // KeyResponseBody is used to define fields on response body types.
 type KeyResponseBody struct {
 	// The ID of the key
@@ -1579,6 +1601,10 @@ type KeyResponseBody struct {
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoiceResponseBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -1731,6 +1757,16 @@ func NewCreateKeyResponseBody(res *keys.Key) *CreateKeyResponseBody {
 			body.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
 		}
 	}
+	if res.AuthClientChoices != nil {
+		body.AuthClientChoices = make([]*AgentKeyAuthClientChoiceResponseBody, len(res.AuthClientChoices))
+		for i, val := range res.AuthClientChoices {
+			if val == nil {
+				body.AuthClientChoices[i] = nil
+				continue
+			}
+			body.AuthClientChoices[i] = marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceResponseBody(val)
+		}
+	}
 	return body
 }
 
@@ -1771,6 +1807,16 @@ func NewRotateKeyResponseBody(res *keys.Key) *RotateKeyResponseBody {
 				continue
 			}
 			body.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
+		}
+	}
+	if res.AuthClientChoices != nil {
+		body.AuthClientChoices = make([]*AgentKeyAuthClientChoiceResponseBody, len(res.AuthClientChoices))
+		for i, val := range res.AuthClientChoices {
+			if val == nil {
+				body.AuthClientChoices[i] = nil
+				continue
+			}
+			body.AuthClientChoices[i] = marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceResponseBody(val)
 		}
 	}
 	return body
@@ -1855,6 +1901,16 @@ func NewUpdateKeyPolicyResponseBody(res *keys.Key) *UpdateKeyPolicyResponseBody 
 				continue
 			}
 			body.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
+		}
+	}
+	if res.AuthClientChoices != nil {
+		body.AuthClientChoices = make([]*AgentKeyAuthClientChoiceResponseBody, len(res.AuthClientChoices))
+		for i, val := range res.AuthClientChoices {
+			if val == nil {
+				body.AuthClientChoices[i] = nil
+				continue
+			}
+			body.AuthClientChoices[i] = marshalKeysAgentKeyAuthClientChoiceToAgentKeyAuthClientChoiceResponseBody(val)
 		}
 	}
 	return body

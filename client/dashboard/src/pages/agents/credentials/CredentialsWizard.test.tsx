@@ -333,6 +333,19 @@ vi.mock("@gram/client/react-query/listAPIKeys.js", async (importOriginal) => ({
       : { data: { keys }, isSuccess: true };
   },
 }));
+// The MCP sign-in tab reads each server's auth clients to tell whether the
+// agent's keys chose a shared credential there; these tests choose none.
+vi.mock(
+  "@gram/client/react-query/mcpServerAuthentication.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    useMcpServerAuthentication: () => ({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    }),
+  }),
+);
 // Only read to keep a prefilled name from colliding with one in use.
 vi.mock("@gram/client/react-query/agents.js", () => ({
   useAgents: () => ({ data: { result: { items: mocks.agentList() } } }),

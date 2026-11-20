@@ -46,12 +46,27 @@ vi.mock("./KeyCredentialChoice", () => ({
   ),
 }));
 
+// Whether the agent's issued keys use a chosen shared credential, which the
+// hook reads from the agent's keys and the server's auth clients.
+const agentKeys = vi.hoisted(() => ({
+  shared: false as boolean | "checking",
+  agentIds: [] as (string | undefined)[],
+}));
+vi.mock("@/pages/identities/useAgentKeysUseSharedCredential", () => ({
+  useAgentKeysUseSharedCredential: (agentId: string | undefined) => {
+    agentKeys.agentIds.push(agentId);
+    return agentId ? agentKeys.shared : false;
+  },
+}));
+
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ user: { id: "editor", displayName: "Example Editor" } }),
 }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  agentKeys.shared = false;
+  agentKeys.agentIds = [];
 });
 
 const server: InventoryServer = {
@@ -345,5 +360,84 @@ describe("saving after a connection", () => {
       await popup.onComplete?.("popup-closed");
     });
     expect(onConnected).not.toHaveBeenCalled();
+  });
+});
+
+describe("the credential the agent's issued keys already use", () => {
+  // The agent's MCP sign-in tab: the agent's own connection is assigned, and
+  // the server's row asks nothing, since its keys already chose.
+  const tab = () =>
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers={false}
+        keysAgentId="agent_one"
+        onRemove={vi.fn<(id: string) => void>()}
+        credentialChoice={{
+          show: () => false,
+          value: () => undefined,
+          onChange: vi.fn<(serverId: string, authClientId: string) => void>(),
+        }}
+        connections={{
+          byServer: new Map([
+            [server.id, { status: "ready", sessions: [mine] }],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+  it("says shared credential, not the connection those keys do not use", () => {
+    agentKeys.shared = true;
+    tab();
+    expect(agentKeys.agentIds).toContain("agent_one");
+    expect(screen.queryByText("Your connection")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Example server.*Shared credential/ }),
+    );
+    expect(
+      screen.getByText(/shared credential chosen when they were issued/),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reauthenticate" })).toBeNull();
+  });
+
+  it("checks the connection while the keys' choice is still being read", () => {
+    agentKeys.shared = "checking";
+    tab();
+    expect(
+      screen.getByRole("button", {
+        name: /Example server.*Checking connection…/,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("keeps naming the connection when no key chose a shared credential", () => {
+    tab();
+    expect(
+      screen.getByRole("button", { name: /Example server.*Your connection/ }),
+    ).toBeTruthy();
+  });
+
+  it("reads no keys while the agent is being created", () => {
+    agentKeys.shared = true;
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [server.id, { status: "ready", sessions: [mine] }],
+          ]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(agentKeys.agentIds.every((id) => id === undefined)).toBe(true);
+    expect(
+      screen.getByRole("button", { name: /Example server.*Your connection/ }),
+    ).toBeTruthy();
   });
 });

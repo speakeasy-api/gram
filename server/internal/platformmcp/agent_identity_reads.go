@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -72,8 +73,10 @@ var (
 
 // Credential modes an agent signs in to an MCP server with.
 const (
-	// agentCredentialShared: the server asks no person to sign in, so the agent
-	// uses the server's shared credential, or none, and acts for no one.
+	// agentCredentialShared: the agent acts for no one. Either the server asks
+	// no person to sign in, so the agent uses its shared credential or none,
+	// or the organization enforces upstream auth and one of the agent's live
+	// keys was set up to use an enabled shared credential the server offers.
 	agentCredentialShared = "shared"
 
 	// agentCredentialOnBehalfOf: the agent signs in with the assigned people's
@@ -190,7 +193,8 @@ type AgentMCPServerAccess struct {
 	Rules []access.MCPAccessRuleSummary `json:"rules"`
 
 	// CredentialMode is shared, on_behalf_of, not_assigned, or
-	// caller_provided.
+	// caller_provided. A server that asks each person to sign in is still
+	// shared when the agent's keys use a shared credential chosen for it.
 	CredentialMode string `json:"credential_mode"`
 
 	// OnBehalfOf lists the people whose connections the agent uses; empty
@@ -538,7 +542,8 @@ func (s *AgentIdentityReadService) mcpNames(ctx context.Context, organizationID 
 }
 
 // agentCredentialReader reads an agent's connection assignments once per
-// project and user session issuer, which servers can share.
+// project and user session issuer, which servers can share, and the
+// organization's upstream auth enforcement once.
 type agentCredentialReader struct {
 	db             *pgxpool.Pool
 	tokens         *upstreamtokens.Tokens
@@ -546,6 +551,7 @@ type agentCredentialReader struct {
 	agentID        uuid.UUID
 	now            time.Time
 	assignments    map[string]agentAssignments
+	enforced       *bool
 }
 
 // agentAssignments is what is assigned to the agent for one issuer.
@@ -555,12 +561,13 @@ type agentAssignments struct {
 }
 
 func newAgentCredentialReader(db *pgxpool.Pool, tokens *upstreamtokens.Tokens, organizationID string, agentID uuid.UUID, now time.Time) *agentCredentialReader {
-	return &agentCredentialReader{db: db, tokens: tokens, organizationID: organizationID, agentID: agentID, now: now, assignments: make(map[string]agentAssignments)}
+	return &agentCredentialReader{db: db, tokens: tokens, organizationID: organizationID, agentID: agentID, now: now, assignments: make(map[string]agentAssignments), enforced: nil}
 }
 
 // describe sets entry's credential mode, as the dashboard's "Acting on behalf
 // of" reads it: a server that asks no person to sign in uses a shared
-// credential, and otherwise the agent acts for the people whose connections
+// credential, as does one the agent's keys were set up to use a shared
+// credential on, and otherwise the agent acts for the people whose connections
 // are assigned to it. connection_expired differs from that panel: it uses the
 // resolution rule, so a connection whose stored tokens can't be read or that
 // stores none is expired, while the panel reads only the expiry fields.
@@ -575,6 +582,13 @@ func (r *agentCredentialReader) describe(ctx context.Context, server platformrep
 		}
 		return nil
 	}
+	shared, err := r.keysUseSharedCredential(ctx, server.McpServerID, auth)
+	if err != nil {
+		return err
+	}
+	if shared {
+		return nil
+	}
 	assigned, err := r.read(ctx, server.ProjectID, server.UserSessionIssuerID.UUID)
 	if err != nil {
 		return err
@@ -587,6 +601,42 @@ func (r *agentCredentialReader) describe(ctx context.Context, server platformrep
 	entry.CredentialMode = agentCredentialOnBehalfOf
 	entry.OnBehalfOf = slices.Clone(assigned.people)
 	return nil
+}
+
+// keysUseSharedCredential reports whether calls to a server sign in with a
+// shared credential chosen for one of the agent's live keys, as the MCP
+// runtime serves an agent key with a choice for the server. The runtime
+// honors a key's choice only under upstream auth enforcement; elsewhere the
+// key keeps signing in with assigned connections. A choice whose auth client
+// is no longer an enabled shared credential the server offers is refused at
+// runtime, so it does not count.
+func (r *agentCredentialReader) keysUseSharedCredential(ctx context.Context, serverID uuid.UUID, auth *types.McpServerAuthentication) (bool, error) {
+	if r.enforced == nil {
+		enforced, err := authenforcement.ReadEnforced(ctx, r.db, r.organizationID)
+		if err != nil {
+			return false, fmt.Errorf("read upstream auth enforcement: %w", err)
+		}
+		r.enforced = &enforced
+	}
+	if !*r.enforced || auth == nil {
+		return false, nil
+	}
+	chosen, err := platformrepo.New(r.db).ListAgentLiveKeySharedCredentialChoices(ctx, platformrepo.ListAgentLiveKeySharedCredentialChoicesParams{
+		OrganizationID: r.organizationID,
+		McpServerID:    serverID,
+		SubjectUrn:     conv.ToPGText(urn.NewPrincipal(urn.PrincipalTypeAgent, r.agentID.String()).String()),
+	})
+	if err != nil {
+		return false, fmt.Errorf("list agent key credential choices: %w", err)
+	}
+	for _, clientID := range chosen {
+		if slices.ContainsFunc(auth.Clients, func(client *types.AuthClient) bool {
+			return client != nil && client.Enabled && client.ID == clientID.String() && authz.IsAgentKeyAuthClientType(client.ClientType)
+		}) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *agentCredentialReader) read(ctx context.Context, projectID, issuerID uuid.UUID) (agentAssignments, error) {
