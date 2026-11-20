@@ -7,8 +7,8 @@ import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
 afterEach(cleanup);
 
 const catalog = [
-  { name: "read_records", annotations: [] },
-  { name: "search_records", annotations: [] },
+  { name: "read_records", disposition: "unannotated" },
+  { name: "search_records", disposition: "unannotated" },
 ];
 
 describe("ToolNarrowingDialog", () => {

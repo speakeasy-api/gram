@@ -6,9 +6,8 @@ import { Heading } from "@/components/ui/Heading";
 import type { Column } from "@/components/ui/Table";
 import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
-import type { ToolAnnotation } from "@/components/tool-selection/ToolSelectionPanel";
 import type { Tool } from "@/lib/toolTypes";
-import type { ServerTool } from "@/pages/access/serverMerge";
+import { toolDisposition } from "@/pages/access/mcpAccessModel";
 import type { ToolSource } from "@/pages/access/useServerTools";
 import { Button } from "@/components/ui/Button";
 import { TriangleAlert } from "lucide-react";
@@ -23,17 +22,6 @@ import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
 import { toolSourceUnavailableMessage } from "./access/toolSourceMessage";
 
-/** The annotations a tool carries, in the vocabulary selectors store. */
-function toolAnnotations(tool: Tool | ServerTool): ToolAnnotation[] {
-  const annotations = "annotations" in tool ? tool.annotations : undefined;
-  if (!annotations) return [];
-  const carried: ToolAnnotation[] = [];
-  if (annotations.readOnlyHint) carried.push("read_only");
-  if (annotations.destructiveHint) carried.push("destructive");
-  if (annotations.idempotentHint) carried.push("idempotent");
-  if (annotations.openWorldHint) carried.push("open_world");
-  return carried;
-}
 
 function getInitials(name: string) {
   return name
@@ -115,7 +103,9 @@ export function MCPTeamAccessTab({
     () =>
       catalogTools?.map((tool) => ({
         name: "name" in tool ? tool.name : "",
-        annotations: toolAnnotations(tool),
+        disposition: toolDisposition(
+          "annotations" in tool ? tool : {},
+        ),
       })),
     [catalogTools],
   );
