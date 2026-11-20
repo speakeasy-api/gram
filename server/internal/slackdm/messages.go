@@ -134,3 +134,21 @@ func Retryable(err error) bool {
 	}
 	return true
 }
+
+// TimeZone returns the IANA time zone on a Slack user's profile, or "" when
+// the profile has none.
+func (m *Messenger) TimeZone(ctx context.Context, token, slackUserID string) (string, error) {
+	body, err := m.slack.CallWithToken(ctx, "users.info", map[string]any{"user": slackUserID}, token)
+	if err != nil {
+		return "", fmt.Errorf("get Slack user: %w", err)
+	}
+	var found struct {
+		User struct {
+			TZ string `json:"tz"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(body, &found); err != nil {
+		return "", fmt.Errorf("read Slack user: %w", err)
+	}
+	return found.User.TZ, nil
+}

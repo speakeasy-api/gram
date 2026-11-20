@@ -653,6 +653,58 @@ func (q *Queries) GetAccessRequestForUpdate(ctx context.Context, arg GetAccessRe
 	return i, err
 }
 
+const getAccessRequestMessageBySlackMessage = `-- name: GetAccessRequestMessageBySlackMessage :one
+SELECT m.id, m.organization_id, m.access_request_id, m.provider, m.kind, m.recipient_user_id, m.slack_team_id, m.slack_user_id, m.slack_channel_id, m.slack_message_ts, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM access_request_messages m
+JOIN slack_directory_connections c
+  ON c.organization_id = m.organization_id
+  AND c.slack_team_id = m.slack_team_id
+  AND c.disconnected_at IS NULL
+WHERE m.provider = 'slack'
+  AND m.slack_team_id = $1
+  AND m.slack_channel_id = $2
+  AND m.slack_message_ts = $3
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+LIMIT 1
+`
+
+type GetAccessRequestMessageBySlackMessageParams struct {
+	SlackTeamID    pgtype.Text
+	SlackChannelID pgtype.Text
+	SlackMessageTs pgtype.Text
+}
+
+type GetAccessRequestMessageBySlackMessageRow struct {
+	AccessRequestMessage AccessRequestMessage
+}
+
+// Resolves a Slack click to the DM it was made on. Slack signs the click, and
+// the click names its workspace, channel and message, so this lookup is not
+// tenant-scoped; the row it returns carries the tenant. A DM in a workspace
+// the organization has since disconnected finds no row.
+func (q *Queries) GetAccessRequestMessageBySlackMessage(ctx context.Context, arg GetAccessRequestMessageBySlackMessageParams) (GetAccessRequestMessageBySlackMessageRow, error) {
+	row := q.db.QueryRow(ctx, getAccessRequestMessageBySlackMessage, arg.SlackTeamID, arg.SlackChannelID, arg.SlackMessageTs)
+	var i GetAccessRequestMessageBySlackMessageRow
+	err := row.Scan(
+		&i.AccessRequestMessage.ID,
+		&i.AccessRequestMessage.OrganizationID,
+		&i.AccessRequestMessage.AccessRequestID,
+		&i.AccessRequestMessage.Provider,
+		&i.AccessRequestMessage.Kind,
+		&i.AccessRequestMessage.RecipientUserID,
+		&i.AccessRequestMessage.SlackTeamID,
+		&i.AccessRequestMessage.SlackUserID,
+		&i.AccessRequestMessage.SlackChannelID,
+		&i.AccessRequestMessage.SlackMessageTs,
+		&i.AccessRequestMessage.CreatedAt,
+		&i.AccessRequestMessage.UpdatedAt,
+		&i.AccessRequestMessage.DeletedAt,
+		&i.AccessRequestMessage.Deleted,
+	)
+	return i, err
+}
+
 const getActiveDirectoryGroupName = `-- name: GetActiveDirectoryGroupName :one
 SELECT name
 FROM directory_groups
@@ -1342,6 +1394,79 @@ func (q *Queries) InsertAccessRequest(ctx context.Context, arg InsertAccessReque
 	return i, err
 }
 
+const insertAccessRequestMessage = `-- name: InsertAccessRequestMessage :one
+INSERT INTO access_request_messages (
+  organization_id
+  , access_request_id
+  , provider
+  , kind
+  , recipient_user_id
+  , slack_team_id
+  , slack_user_id
+  , slack_channel_id
+  , slack_message_ts
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+)
+ON CONFLICT (access_request_id, provider, recipient_user_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, organization_id, access_request_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertAccessRequestMessageParams struct {
+	OrganizationID  string
+	AccessRequestID uuid.UUID
+	Provider        string
+	Kind            string
+	RecipientUserID string
+	SlackTeamID     pgtype.Text
+	SlackUserID     pgtype.Text
+	SlackChannelID  pgtype.Text
+	SlackMessageTs  pgtype.Text
+}
+
+// Records a notification sent for an access request. One per recipient and
+// provider, so a retried send that already recorded its message inserts
+// nothing.
+func (q *Queries) InsertAccessRequestMessage(ctx context.Context, arg InsertAccessRequestMessageParams) (AccessRequestMessage, error) {
+	row := q.db.QueryRow(ctx, insertAccessRequestMessage,
+		arg.OrganizationID,
+		arg.AccessRequestID,
+		arg.Provider,
+		arg.Kind,
+		arg.RecipientUserID,
+		arg.SlackTeamID,
+		arg.SlackUserID,
+		arg.SlackChannelID,
+		arg.SlackMessageTs,
+	)
+	var i AccessRequestMessage
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.AccessRequestID,
+		&i.Provider,
+		&i.Kind,
+		&i.RecipientUserID,
+		&i.SlackTeamID,
+		&i.SlackUserID,
+		&i.SlackChannelID,
+		&i.SlackMessageTs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
@@ -1946,6 +2071,55 @@ func (q *Queries) ListAccessNotificationUsers(ctx context.Context, organizationI
 	for rows.Next() {
 		var i ListAccessNotificationUsersRow
 		if err := rows.Scan(&i.ID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessRequestMessages = `-- name: ListAccessRequestMessages :many
+SELECT id, organization_id, access_request_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
+FROM access_request_messages
+WHERE organization_id = $1
+  AND access_request_id = $2
+  AND deleted IS FALSE
+ORDER BY created_at, id
+`
+
+type ListAccessRequestMessagesParams struct {
+	OrganizationID  string
+	AccessRequestID uuid.UUID
+}
+
+func (q *Queries) ListAccessRequestMessages(ctx context.Context, arg ListAccessRequestMessagesParams) ([]AccessRequestMessage, error) {
+	rows, err := q.db.Query(ctx, listAccessRequestMessages, arg.OrganizationID, arg.AccessRequestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccessRequestMessage
+	for rows.Next() {
+		var i AccessRequestMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.AccessRequestID,
+			&i.Provider,
+			&i.Kind,
+			&i.RecipientUserID,
+			&i.SlackTeamID,
+			&i.SlackUserID,
+			&i.SlackChannelID,
+			&i.SlackMessageTs,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

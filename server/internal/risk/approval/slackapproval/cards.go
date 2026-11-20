@@ -88,7 +88,7 @@ func pendingCard(in cardInput) slackdm.Message {
 	}
 	blocks = append(blocks, detailSections(in)...)
 	buttons := []slackdm.Element{
-		{Type: "button", Text: slackdm.PlainText("Approve once"), ActionID: ActionApprove, Value: in.Approval.ID.String(), Style: "primary", URL: "", TextValue: "", Confirm: nil},
+		{Type: "button", Text: slackdm.PlainText("Approve once"), ActionID: ActionApprove, Value: in.Approval.ID.String(), Style: "primary", URL: "", TextValue: "", Confirm: nil, Placeholder: nil, Options: nil, InitialOption: nil},
 		{Type: "button", Text: slackdm.PlainText("Deny"), ActionID: ActionDeny, Value: in.Approval.ID.String(), Style: "danger", URL: "", TextValue: "", Confirm: &slackdm.ConfirmDialog{
 			Title: slackdm.TextObject{Type: "plain_text", Text: "Deny this call?"},
 			// Slack shows a confirm dialog's text as plain text, so no mrkdwn here.
@@ -96,10 +96,10 @@ func pendingCard(in cardInput) slackdm.Message {
 			Confirm: slackdm.TextObject{Type: "plain_text", Text: "Deny"},
 			Deny:    slackdm.TextObject{Type: "plain_text", Text: "Cancel"},
 			Style:   "danger",
-		}},
+		}, Placeholder: nil, Options: nil, InitialOption: nil},
 	}
 	if in.DashboardURL != "" {
-		buttons = append(buttons, slackdm.Element{Type: "button", Text: slackdm.PlainText("Open in Speakeasy"), ActionID: actionOpen, Value: "", URL: in.DashboardURL, Style: "", TextValue: "", Confirm: nil})
+		buttons = append(buttons, slackdm.Element{Type: "button", Text: slackdm.PlainText("Open in Speakeasy"), ActionID: actionOpen, Value: "", URL: in.DashboardURL, Style: "", TextValue: "", Confirm: nil, Placeholder: nil, Options: nil, InitialOption: nil})
 	}
 	blocks = append(blocks,
 		slackdm.Block{Type: "actions", BlockID: "risk_approval", Text: nil, Fields: nil, Elements: buttons},

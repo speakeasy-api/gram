@@ -364,18 +364,18 @@ func (s *Service) DecideAccessRequestAs(ctx context.Context, input DecideAccessR
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get access request").LogError(ctx, logger)
 	}
-	if accessRequestStatus(current.AccessRequest, time.Now()) != AccessRequestStatusPending {
+	if EffectiveAccessRequestStatus(current.AccessRequest, time.Now()) != AccessRequestStatusPending {
 		return nil, ErrAccessRequestNotPending
 	}
 	if current.AccessRequest.RequesterUserID == input.DeciderUserID {
 		return nil, ErrAccessRequestSelfDecision
 	}
-	if err := s.authz.RequireUserOrganizationScope(ctx, input.OrganizationID, input.DeciderUserID, authz.ScopeOrgAdmin); err != nil {
-		var shareable *oops.ShareableError
-		if errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden {
-			return nil, ErrAccessRequestNotAdmin
-		}
-		return nil, fmt.Errorf("check decider is an administrator: %w", err)
+	admin, err := isOrganizationAdmin(ctx, s.db, input.OrganizationID, input.DeciderUserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check decider is an administrator").LogError(ctx, logger)
+	}
+	if !admin {
+		return nil, ErrAccessRequestNotAdmin
 	}
 
 	var prepared preparedTemporaryGrant
@@ -415,7 +415,7 @@ func (s *Service) DecideAccessRequestAs(ctx context.Context, input DecideAccessR
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock access request").LogError(ctx, logger)
 	}
-	if accessRequestStatus(locked, time.Now()) != AccessRequestStatusPending {
+	if EffectiveAccessRequestStatus(locked, time.Now()) != AccessRequestStatusPending {
 		return nil, ErrAccessRequestNotPending
 	}
 	before, err := s.accessRequestView(ctx, dbtx, locked, noGrantExpiry)
@@ -528,7 +528,7 @@ func (s *Service) WithdrawAccessRequest(ctx context.Context, payload *gen.Withdr
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock access request").LogError(ctx, logger)
 	}
-	if accessRequestStatus(locked, time.Now()) != AccessRequestStatusPending {
+	if EffectiveAccessRequestStatus(locked, time.Now()) != AccessRequestStatusPending {
 		return nil, oops.E(oops.CodeConflict, nil, "access request was already decided, withdrawn or has expired").LogError(ctx, logger)
 	}
 	before, err := s.accessRequestView(ctx, dbtx, locked, noGrantExpiry)
@@ -560,9 +560,9 @@ func (s *Service) WithdrawAccessRequest(ctx context.Context, payload *gen.Withdr
 	return after, nil
 }
 
-// accessRequestStatus reports a pending request whose window has passed as
-// expired, without waiting for anything to rewrite the row.
-func accessRequestStatus(row repo.AccessRequest, now time.Time) string {
+// EffectiveAccessRequestStatus reports a pending request whose window has
+// passed as expired, without waiting for anything to rewrite the row.
+func EffectiveAccessRequestStatus(row repo.AccessRequest, now time.Time) string {
 	if row.Status == AccessRequestStatusPending && !row.ExpiresAt.Time.After(now) {
 		return AccessRequestStatusExpired
 	}
@@ -614,7 +614,7 @@ func (s *Service) accessRequestViews(ctx context.Context, db database.DBTX, rows
 			Selector:         authzSelectorToGen(selector),
 			ResourceName:     conv.FromPGText[string](row.ResourceName),
 			Message:          conv.FromPGText[string](row.Message),
-			Status:           accessRequestStatus(row, now),
+			Status:           EffectiveAccessRequestStatus(row, now),
 			DecidedByUserID:  conv.FromPGText[string](row.DecidedByUserID),
 			DecidedByName:    nil,
 			DecidedVia:       conv.FromPGText[string](row.DecidedVia),
@@ -721,4 +721,24 @@ func (s *Service) openChallengesForRequest(ctx context.Context, request repo.Acc
 		}
 	}
 	return ids
+}
+
+// isOrganizationAdmin reports whether the member holds org:admin in the
+// organization, read from their live grants. It needs no session, so a
+// decision from Slack is held to the same rule as one from the dashboard, and
+// it is always enforced.
+func isOrganizationAdmin(ctx context.Context, db database.DBTX, organizationID, userID string) (bool, error) {
+	principals, err := authz.ResolveUserPrincipals(ctx, db, organizationID, userID)
+	if err != nil {
+		return false, fmt.Errorf("resolve principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, db, organizationID, principals)
+	if err != nil {
+		return false, fmt.Errorf("load grants: %w", err)
+	}
+	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
+	if err != nil {
+		return false, fmt.Errorf("evaluate org:admin: %w", err)
+	}
+	return allowed, nil
 }

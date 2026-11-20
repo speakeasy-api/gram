@@ -2255,3 +2255,58 @@ RETURNING *;
 SELECT id, display_name, email
 FROM users
 WHERE id = ANY(@ids::text[]);
+
+-- name: InsertAccessRequestMessage :one
+-- Records a notification sent for an access request. One per recipient and
+-- provider, so a retried send that already recorded its message inserts
+-- nothing.
+INSERT INTO access_request_messages (
+  organization_id
+  , access_request_id
+  , provider
+  , kind
+  , recipient_user_id
+  , slack_team_id
+  , slack_user_id
+  , slack_channel_id
+  , slack_message_ts
+) VALUES (
+  @organization_id
+  , @access_request_id
+  , @provider
+  , @kind
+  , @recipient_user_id
+  , @slack_team_id
+  , @slack_user_id
+  , @slack_channel_id
+  , @slack_message_ts
+)
+ON CONFLICT (access_request_id, provider, recipient_user_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING *;
+
+-- name: ListAccessRequestMessages :many
+SELECT *
+FROM access_request_messages
+WHERE organization_id = @organization_id
+  AND access_request_id = @access_request_id
+  AND deleted IS FALSE
+ORDER BY created_at, id;
+
+-- name: GetAccessRequestMessageBySlackMessage :one
+-- Resolves a Slack click to the DM it was made on. Slack signs the click, and
+-- the click names its workspace, channel and message, so this lookup is not
+-- tenant-scoped; the row it returns carries the tenant. A DM in a workspace
+-- the organization has since disconnected finds no row.
+SELECT sqlc.embed(m)
+FROM access_request_messages m
+JOIN slack_directory_connections c
+  ON c.organization_id = m.organization_id
+  AND c.slack_team_id = m.slack_team_id
+  AND c.disconnected_at IS NULL
+WHERE m.provider = 'slack'
+  AND m.slack_team_id = @slack_team_id
+  AND m.slack_channel_id = @slack_channel_id
+  AND m.slack_message_ts = @slack_message_ts
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+LIMIT 1;
