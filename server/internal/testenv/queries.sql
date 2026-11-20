@@ -1337,6 +1337,12 @@ UPDATE users SET deleted_at = now() WHERE id = $1;
 -- name: AddAttachmentReplacementOwnerMembershipFixture :execrows
 INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, 'replacement-owner');
 
+-- name: ProbeAttachmentParentLockFixture :one
+SELECT remote_session_client_id FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id::uuid
+  AND user_session_issuer_id = @user_session_issuer_id::uuid
+FOR UPDATE NOWAIT;
+
 -- name: UnlinkAttachmentClientFixture :execrows
 DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2;
 

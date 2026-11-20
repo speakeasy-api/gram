@@ -532,7 +532,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stamped)
 
-	subject := urn.NewUserSubject("remote-migrate-user")
+	subject := urn.NewUserSubject(authCtx.UserID)
 	remoteSession, err := remoteRepo.UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   sourceID,
@@ -556,7 +556,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		RemoteSessionClientID: remoteClient.ID,
 		RemoteSessionID:       remoteSession.ID,
 		GrantGeneration:       remoteSession.GrantGeneration,
-		AttachedBySubjectID:   "remote-migrate-user",
+		AttachedBySubjectID:   subject.String(),
 	})
 	require.NoError(t, err)
 	emaBindingID, err := fixtures.InsertRemoteSessionEMABindingFixture(ctx, testrepo.InsertRemoteSessionEMABindingFixtureParams{
@@ -600,7 +600,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		RemoteSessionClientID: remoteClient.ID,
 		RemoteSessionID:       staleSession.ID,
 		GrantGeneration:       staleSession.GrantGeneration,
-		AttachedBySubjectID:   "remote-migrate-stale-user",
+		AttachedBySubjectID:   staleSubject.String(),
 	})
 	require.NoError(t, err)
 	disconnected, err := remoteRepo.SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessionsrepo.SoftDeleteRemoteSessionBySubjectAndClientParams{
@@ -759,13 +759,25 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	gatewayID := seedIssuer(t, ctx, ti, "cross-issuer-migrate-gateway")
 	clientID := seedMigrationRemoteClient(t, ctx, ti, "cross-issuer-migrate-upstream", sourceID, gatewayID)
 	login, bindingIDs := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-user", gatewayID, clientID, sourceID)
+	// A second agent uses the same registration and same login. The fixture's
+	// reauthorization advances the grant on that login but preserves its ID.
+	secondLogin, secondBindings := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-second", gatewayID, clientID, sourceID)
+	require.Equal(t, login, secondLogin)
 
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	parent := remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: targetID}
+	parents, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.Zero(t, parents)
 	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 	require.Equal(t, 0, result.RemoteSessionsMigrated, "the login was made through the gateway, not the source")
 
 	requireMigrationAttachment(t, ctx, ti, bindingIDs[sourceID], targetID, login)
-	remoteRepo := remotesessionsrepo.New(ti.conn)
+	requireMigrationAttachment(t, ctx, ti, secondBindings[sourceID], targetID, secondLogin)
+	parents, err = remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, parents)
 	loginAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: login, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, gatewayID, loginAfter.UserSessionIssuerID, "the login stays on the issuer it was made through")
@@ -810,7 +822,7 @@ func seedMigrationAttachments(t *testing.T, ctx context.Context, ti *testInstanc
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	login, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
-		SubjectUrn:            urn.NewUserSubject(person),
+		SubjectUrn:            urn.NewUserSubject(authCtx.UserID),
 		UserSessionIssuerID:   loginIssuerID,
 		RemoteSessionClientID: clientID,
 		AccessTokenEncrypted:  "test-ciphertext",
@@ -833,7 +845,7 @@ func seedMigrationAttachments(t *testing.T, ctx context.Context, ti *testInstanc
 			RemoteSessionClientID: clientID,
 			RemoteSessionID:       login.ID,
 			GrantGeneration:       login.GrantGeneration,
-			AttachedBySubjectID:   person,
+			AttachedBySubjectID:   login.SubjectUrn.String(),
 		})
 		require.NoError(t, err)
 	}

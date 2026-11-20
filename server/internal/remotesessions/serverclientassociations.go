@@ -688,6 +688,13 @@ func (s *Service) releaseFrontingGatewayBindings(ctx context.Context, logger *sl
 		if inUse {
 			continue
 		}
+		attached, err := lockAttachmentParentForUnlink(ctx, sessions, organizationID, clientID, issuerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check agent attachments before unlink").LogError(ctx, logger)
+		}
+		if attached {
+			continue
+		}
 		removed, err := sessions.DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
 			ProjectID:             projectID,
 			OrganizationID:        organizationID,
