@@ -379,7 +379,7 @@ func TestHostedServerIssuerResyncsRemoteIssuer(t *testing.T) {
 	typed := authclientbackfill.New(ti.conn)
 	authClient, err := typed.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client.ID)})
 	require.NoError(t, err)
-	require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: toolset.ID, AuthClientID: authClient, Source: "admin"}))
+	require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, McpServerID: uuid.MustParse(toolset.ID), AuthClientID: authClient, Source: "admin"}))
 
 	server, err := ti.service.UpdateHostedServer(ctx, hostedUpdate(toolset, "public", func(u *mcpservers.HostedServerUpdate) {
 		u.UserSessionIssuerID = uuid.NullUUID{UUID: issuer.ID, Valid: true}
