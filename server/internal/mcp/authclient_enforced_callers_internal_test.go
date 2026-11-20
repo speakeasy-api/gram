@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -26,6 +27,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -544,6 +546,40 @@ func TestEnforcedCallerWithoutAChoiceIsDecidedByWhatTheServerOffers(t *testing.T
 
 // A gateway reached by a caller with no credential choice decides each member
 // by what the member offers.
+func TestTypedOrganizationGatewayServesWhenLegacyBindingsCannotBeRead(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_typed_gateway_binding_isolation")
+	require.NoError(t, err)
+	f := newEnforcedCallerFixture(t, pool)
+	require.NoError(t, testrepo.New(pool).SetMCPServerVisibilityFixture(t.Context(), testrepo.SetMCPServerVisibilityFixtureParams{Visibility: mcpservers.VisibilityPublic, ID: f.serverID, ProjectID: f.projectID}))
+	client := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+	f.copyHeader(client, "X-Upstream-Key", true, false, text("typed-fixture-key"), pgtype.Text{})
+	f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	unavailableDB, err := pgxpool.NewWithConfig(t.Context(), pool.Config())
+	require.NoError(t, err)
+	unavailableDB.Close()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), unavailableDB, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+	ctx := sessionContext(t, f.orgID)
+	_, _, _, err = f.service.resolveOrganizationMemberSnapshot(ctx, f.service.logger, mandatorySurfaceGatewayMember, f.orgID, true, f.signIn, f.projectID, false)
+	require.ErrorContains(t, err, "list gateway sign-in clients", "the legacy binding dependency is unavailable")
+
+	ctx, members, denied, err := f.service.resolveOrganizationMemberSnapshot(ctx, f.service.logger, mandatorySurfaceGatewayMember, f.orgID, true, f.signIn, f.projectID, true)
+	require.NoError(t, err)
+	require.Empty(t, denied)
+	require.Len(t, members, 1)
+	require.Equal(t, f.serverID, members[0].serverID)
+	require.Nil(t, members[0].associatedClients, "typed serving must not load legacy associations")
+	authentication := f.authentication(urn.NewUserSubject("user_1"))
+	choices := f.service.unchosenMemberChoices(authentication.endpoint, authentication.subject)
+	choices.apply(ctx, f.service.logger, members)
+	require.NoError(t, members[0].upstreamUnavailable)
+	require.NotNil(t, members[0].authClient)
+	require.Equal(t, client, members[0].authClient.clientID)
+	require.Len(t, members[0].authClient.headers, 1)
+}
+
 func TestEnforcedGatewayWithoutChoicesDecidesEachMemberByWhatItOffers(t *testing.T) {
 	t.Parallel()
 

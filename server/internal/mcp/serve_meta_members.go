@@ -418,9 +418,8 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	}
 
 	var clients []remotesessions.Client
-	if userSessionIssuerID != uuid.Nil {
-		// The agent gateway signs nobody in, so its callers never read
-		// associations and its members keep the derived match.
+	if !serving && userSessionIssuerID != uuid.Nil {
+		// Consent cards still use legacy links during their separate rollout.
 		if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 		}
@@ -430,6 +429,8 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		}
 	}
 	shadow := s.newMandatoryShadow(ctx, organizationID)
+	var servingClientsErr error
+	servingClientsLoaded := false
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
 		offer, known := offers[member.serverID]
@@ -470,10 +471,23 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		if !supported || (serving && known && len(offer.clients) == 0 && needsOAuth) {
 			continue
 		}
-		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
-			return clientServesAnyMember(client, []metaMember{member})
-		}) {
-			continue
+		if needsOAuth && userSessionIssuerID != uuid.Nil {
+			if serving && !servingClientsLoaded {
+				// Typed proxied members were handled above. Only hosted
+				// serving needs sign-in bindings; never attach legacy associations
+				// to a typed member. A binding lookup failure hides only the
+				// hosted OAuth members, not the rest of the gateway.
+				servingClientsLoaded = true
+				clients, servingClientsErr = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
+				if servingClientsErr != nil {
+					logger.WarnContext(ctx, "list hosted gateway sign-in clients", attr.SlogError(servingClientsErr))
+				}
+			}
+			if servingClientsErr != nil || !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+				return clientServesAnyMember(client, []metaMember{member})
+			}) {
+				continue
+			}
 		}
 		eligible = append(eligible, member)
 	}
