@@ -280,18 +280,21 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 		NamePattern:     pgtype.Text{String: "", Valid: false},
 		PageLimit:       pgtype.Int4{Int32: 0, Valid: false},
 	}
+	search := ""
+	if payload.Search != nil {
+		search = strings.TrimSpace(*payload.Search)
+	}
+	if search != "" {
+		params.NamePattern = pgtype.Text{String: keyNameContainsPattern(search), Valid: true}
+	}
+	cursorScope := keyListCursorScope(authCtx.ActiveOrganizationID, search)
 	if payload.Cursor != nil {
-		createdAt, id, err := decodeKeyListCursor(*payload.Cursor)
+		createdAt, id, err := decodeKeyListCursor(*payload.Cursor, cursorScope)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
 		}
 		params.CursorCreatedAt = pgtype.Timestamptz{Time: createdAt, InfinityModifier: pgtype.Finite, Valid: true}
 		params.CursorID = id
-	}
-	if payload.Search != nil {
-		if search := strings.TrimSpace(*payload.Search); search != "" {
-			params.NamePattern = pgtype.Text{String: keyNameContainsPattern(search), Valid: true}
-		}
 	}
 	// No limit keeps the original contract: every matching key, no cursor.
 	pageSize := 0
@@ -313,7 +316,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 	if pageSize > 0 && len(keys) > pageSize {
 		keys = keys[:pageSize]
 		last := keys[pageSize-1]
-		cursor := encodeKeyListCursor(last.CreatedAt.Time, last.ID)
+		cursor := encodeKeyListCursor(last.CreatedAt.Time, last.ID, cursorScope)
 		nextCursor = &cursor
 	}
 

@@ -47,43 +47,47 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ keys: { list: mocks.listKeys } }),
 }));
-// Mirrors the template's loading, empty and toolbar branches. The real search
-// box debounces; this one reports each change at once.
-vi.mock("@/components/page-templates", () => ({
-  ResourceListPage: ({
-    children,
-    primaryAction,
-    search,
-    isLoading,
-    isEmpty,
-    empty,
-  }: {
-    children: ReactNode;
-    primaryAction: ReactNode;
-    search: { value: string; onChange: (value: string) => void };
-    isLoading?: boolean;
-    isEmpty?: boolean;
-    empty: { heading: string };
-  }) => (
-    <>
-      {primaryAction}
-      {isLoading ? (
-        <div>Loading keys</div>
-      ) : isEmpty ? (
-        <div>{empty.heading}</div>
-      ) : (
-        <>
-          <input
-            aria-label="Search API keys"
-            value={search.value}
-            onChange={(e) => search.onChange(e.target.value)}
-          />
-          {children}
-        </>
-      )}
-    </>
-  ),
-}));
+// Mirrors the template's loading, empty and toolbar branches. The search box
+// is the real toolbar search, so its debounce applies as it does in the app.
+vi.mock("@/components/page-templates", async () => {
+  const { Toolbar } = await import("@/components/ui/Toolbar");
+  return {
+    ResourceListPage: ({
+      children,
+      primaryAction,
+      search,
+      isLoading,
+      isEmpty,
+      empty,
+    }: {
+      children: ReactNode;
+      primaryAction: ReactNode;
+      search: {
+        value: string;
+        onChange: (value: string) => void;
+        placeholder?: string;
+        debounceMs?: number;
+      };
+      isLoading?: boolean;
+      isEmpty?: boolean;
+      empty: { heading: string };
+    }) => (
+      <>
+        {primaryAction}
+        {isLoading ? (
+          <div>Loading keys</div>
+        ) : isEmpty ? (
+          <div>{empty.heading}</div>
+        ) : (
+          <>
+            <Toolbar.Search {...search} />
+            {children}
+          </>
+        )}
+      </>
+    ),
+  };
+});
 vi.mock("@gram/client/react-query/createAPIKey", () => ({
   useCreateAPIKeyMutation: (options: {
     onSuccess: (key: object) => Promise<void>;
@@ -565,7 +569,10 @@ describe("API key list paging and search", () => {
     renderPage();
     expect(await screen.findByText("Deploy key")).toBeTruthy();
 
-    await user.type(screen.getByLabelText("Search API keys"), " plugins ");
+    await user.type(
+      screen.getByPlaceholderText("Search by key name"),
+      " plugins ",
+    );
     // System keys come back from the server and are shown like any other.
     expect(await screen.findByText("plugins-hooks-key")).toBeTruthy();
     expect(screen.queryByText("Deploy key")).toBeNull();
@@ -574,6 +581,13 @@ describe("API key list paging and search", () => {
       cursor: undefined,
       search: "plugins",
     });
+    // The search box waits for typing to stop: one request for the settled
+    // term, not one per keystroke.
+    expect(
+      mocks.listKeys.mock.calls.flatMap(([request]) =>
+        request.search === undefined ? [] : [request.search],
+      ),
+    ).toEqual(["plugins"]);
   });
 
   it("keeps the search box when a search matches nothing", async () => {
@@ -584,16 +598,29 @@ describe("API key list paging and search", () => {
     renderPage();
     expect(await screen.findByText("Deploy key")).toBeTruthy();
 
-    await user.type(screen.getByLabelText("Search API keys"), "zzz");
+    await user.type(screen.getByPlaceholderText("Search by key name"), "zzz");
     expect(await screen.findByText("No matching API keys")).toBeTruthy();
-    expect(screen.getByLabelText("Search API keys")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Search by key name")).toBeTruthy();
     expect(screen.queryByText("No API keys yet")).toBeNull();
+  });
+
+  it("says the list failed to load instead of showing an empty organization", async () => {
+    mocks.listKeys.mockRejectedValueOnce(new Error("forbidden"));
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("Couldn't load API keys")).toBeTruthy();
+    expect(screen.queryByText("No API keys yet")).toBeNull();
+
+    mocks.keys = [apiKey("key_1", "Deploy key")];
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Deploy key")).toBeTruthy();
+    expect(screen.queryByText("Couldn't load API keys")).toBeNull();
   });
 
   it("shows the empty state only when the organization has no keys", async () => {
     renderPage();
     expect(await screen.findByText("No API keys yet")).toBeTruthy();
-    expect(screen.queryByLabelText("Search API keys")).toBeNull();
+    expect(screen.queryByPlaceholderText("Search by key name")).toBeNull();
   });
 
   it("reloads the list after a key is revoked", async () => {

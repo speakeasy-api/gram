@@ -391,6 +391,36 @@ func TestKeysService_ListKeys_Pagination(t *testing.T) {
 		require.Nil(t, result.NextCursor)
 	})
 
+	t.Run("a cursor only continues the search that produced it", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestKeysService(t)
+		createListedKeys(t, ctx, ti, "scope-a-1", "scope-a-2", "scope-b-1")
+
+		limit := 1
+		search := "scope"
+		first, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{Search: &search, Limit: &limit})
+		require.NoError(t, err)
+		require.NotNil(t, first.NextCursor)
+
+		// The same search, padded differently, is the same result set.
+		padded := "  scope "
+		_, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{Cursor: first.NextCursor, Search: &padded, Limit: &limit})
+		require.NoError(t, err)
+
+		// A different search, or none, would skip keys from the cursor's position.
+		narrower := "scope-a"
+		_, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{Cursor: first.NextCursor, Search: &narrower, Limit: &limit})
+		requireCode(t, err, oops.CodeBadRequest)
+		_, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{Cursor: first.NextCursor, Limit: &limit})
+		requireCode(t, err, oops.CodeBadRequest)
+
+		unfiltered, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{Limit: &limit})
+		require.NoError(t, err)
+		require.NotNil(t, unfiltered.NextCursor)
+		_, err = ti.service.ListKeys(ctx, &gen.ListKeysPayload{Cursor: unfiltered.NextCursor, Search: &search, Limit: &limit})
+		requireCode(t, err, oops.CodeBadRequest)
+	})
+
 	t.Run("pages stay inside the caller's organization", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
@@ -450,8 +480,10 @@ func TestKeysService_ListKeys_Pagination(t *testing.T) {
 		for _, cursor := range []string{
 			"not base64!",
 			base64.RawURLEncoding.EncodeToString([]byte("no-separator")),
-			base64.RawURLEncoding.EncodeToString([]byte("yesterday|" + uuid.NewString())),
-			base64.RawURLEncoding.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano) + "|not-a-uuid")),
+			base64.RawURLEncoding.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano) + "|" + uuid.NewString())),
+			base64.RawURLEncoding.EncodeToString([]byte("yesterday|" + uuid.NewString() + "|scope")),
+			base64.RawURLEncoding.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano) + "|not-a-uuid|scope")),
+			base64.RawURLEncoding.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano) + "|" + uuid.NewString() + "|not-this-scope")),
 		} {
 			_, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{Cursor: &cursor})
 			requireCode(t, err, oops.CodeBadRequest, "cursor %q", cursor)

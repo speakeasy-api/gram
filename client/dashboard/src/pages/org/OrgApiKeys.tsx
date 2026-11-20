@@ -219,8 +219,14 @@ function OrgApiKeysInner() {
   );
 
   // Only an unfiltered empty list means the organization has no keys. An
-  // empty search result keeps the toolbar so the search can be changed.
-  const hasNoKeys = !keysQuery.isPending && search === "" && keys.length === 0;
+  // empty search result keeps the toolbar so the search can be changed. A
+  // failed read is not an empty organization: the client suppresses 401 and
+  // 403 errors, so they land here and get their own message below.
+  const hasNoKeys =
+    !keysQuery.isPending &&
+    !keysQuery.isError &&
+    search === "" &&
+    keys.length === 0;
 
   return (
     <>
@@ -264,6 +270,22 @@ function OrgApiKeysInner() {
                 void keysQuery.fetchNextPage();
               }}
             />
+          </div>
+        ) : keysQuery.isError ? (
+          <div
+            role="alert"
+            className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 border p-6"
+          >
+            <Text variant="body">Couldn&apos;t load API keys</Text>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                void keysQuery.refetch();
+              }}
+            >
+              Try again
+            </Button>
           </div>
         ) : (
           <div
