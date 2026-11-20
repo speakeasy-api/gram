@@ -257,11 +257,9 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	return client.ID
 }
 
-// A remote_session is one shared upstream grant per (subject, client); its
-// user_session_issuer_id records only which surface minted it. A session under
-// a sibling issuer bound to the same client must therefore report the same
-// upstream, keyed by the sibling (requesting) issuer.
-func TestListUserSessionsReturnsUpstreamsMintedThroughSiblingIssuer(t *testing.T) {
+// Inventory attributes the shared upstream grant to its minting issuer,
+// never to a sibling issuer merely linked to the same client.
+func TestListUserSessionsDoesNotAttributeUpstreamsThroughStaleSiblingLinks(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -317,9 +315,7 @@ func TestListUserSessionsReturnsUpstreamsMintedThroughSiblingIssuer(t *testing.T
 	})
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
-	require.Len(t, res.Items[0].Upstreams, 1,
-		"a credential minted through a sibling issuer on the same client belongs to this session's upstreams")
-	require.Equal(t, "mcp.shared.example", res.Items[0].Upstreams[0].IssuerSlug)
+	require.Empty(t, res.Items[0].Upstreams, "a stale sibling link is not session provenance")
 }
 
 // A client detached from the issuer that minted the grant keeps live upstream
