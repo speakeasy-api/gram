@@ -1214,7 +1214,7 @@ RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM 
 -- Lock the superset of credential reach and recorded unmapped choices. Only
 -- moved consumers and registration/choice impact need typed synchronization.
 WITH transferred_registrations AS MATERIALIZED (
-    SELECT client.remote_session_client_id
+    SELECT client.remote_session_client_id AS id
     FROM mcp_servers AS server
     JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
     JOIN mcp_server_auth_clients AS offer ON offer.mcp_server_id = server.id
