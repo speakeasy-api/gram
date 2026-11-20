@@ -209,7 +209,7 @@ func TestReconcileCapturesAndKeepsGatewayAssociations(t *testing.T) {
 
 	require.NoError(t, f.q.DeleteClientBindingsFixture(t.Context(), client))
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, nil))
-	require.Empty(t, f.associations(member), "no issuer reaching the member binds the client any more")
+	require.Equal(t, []uuid.UUID{client}, f.associations(member), "removing a mirror pair does not change a server offer")
 }
 
 func TestReconcileDoesNotCaptureAGatewayMemberAGrantRoutesElsewhere(t *testing.T) {
@@ -373,7 +373,7 @@ func TestReconcileCapturesATunnelWhoseClaimedResourceAnotherClientHoldsGrantsFor
 	require.Equal(t, []uuid.UUID{client}, f.associations(member))
 }
 
-func TestReconcileRecapturesAMemberThatRejoinsItsGateway(t *testing.T) {
+func TestReconcilePreservesAnOfferWhenAMemberRejoinsItsGateway(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	gatewayIssuer := f.userIssuer()
@@ -386,11 +386,11 @@ func TestReconcileRecapturesAMemberThatRejoinsItsGateway(t *testing.T) {
 
 	require.NoError(t, f.q.RemoveGatewayMemberFixture(t.Context(), member))
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
-	require.Empty(t, f.associations(member), "leaving the gateway prunes the association")
+	require.Equal(t, []uuid.UUID{client}, f.associations(member), "leaving the gateway does not change the offer")
 
 	f.gateway(gatewayIssuer, member)
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{gatewayIssuer}))
-	require.Equal(t, []uuid.UUID{client}, f.associations(member), "a pruned association is not a detach")
+	require.Equal(t, []uuid.UUID{client}, f.associations(member), "rejoining neither removes nor duplicates the offer")
 }
 
 func TestReconcileKeepsAnExplicitGatewayDetach(t *testing.T) {

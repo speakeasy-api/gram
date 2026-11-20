@@ -373,7 +373,7 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, associated))
 	})
 
-	t.Run("an association reconcile prunes stops counting", func(t *testing.T) {
+	t.Run("an association to a deleted registration stops counting", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID, associated, _ := sharedIssuer(t, "assoc-pruned")
@@ -382,10 +382,8 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 		associateClient(t, ctx, ti.conn, orgID, projectID, associated, clientID)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
-		require.NoError(t, repo.New(ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
-			RemoteSessionClientID: clientID,
-			ProjectID:             conv.ToNullUUID(projectID),
-		}))
+		_, err := repo.New(ti.conn).DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{ID: clientID, ProjectID: conv.ToNullUUID(projectID)})
+		require.NoError(t, err)
 		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
 		require.Equal(t, conv.ToNullUUID(remaining), storedIssuer(t, ctx, ti.conn, projectID, associated), "the column is derived after the prune")

@@ -139,7 +139,7 @@ func TestCommitServerIdentityConfigurationFromTemplateCreatesIndependentClient(t
 	require.Equal(t, "registered", *result.Status)
 	require.Equal(t, "manual", *result.RegistrationMethod)
 	require.NotEqual(t, template.ID.String(), result.Client.ID)
-	require.Equal(t, []string{targetIssuerID.String()}, result.Client.UserSessionIssuerIds)
+	require.Empty(t, result.Client.UserSessionIssuerIds)
 
 	copyID, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
