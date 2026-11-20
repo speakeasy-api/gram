@@ -811,7 +811,7 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		return nil, workloadGrantStageUnavailable("upstream_choice_unavailable", err)
 	}
 	if grant.choosesUpstream && grant.endpoint != nil {
-		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject}
+		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject, connectsLater: false}
 		upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients, grant.session.TypedOnly)
 		if err != nil {
 			if _, ok := errors.AsType[*oops.OAuthError](err); ok {

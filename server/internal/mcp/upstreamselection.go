@@ -992,7 +992,14 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		member.upstreamUnavailable = s.authClientNoAccessError(ctx, member.serverID, res)
 		return
 	case authClientGap:
-		member.upstreamUnavailable = memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
+		credential := memberCredentialError{&metaMemberError{message: "This server's authentication needs setup or a new sign-in."}}
+		// Only a missing choice is fixed by connecting; any other gap is the
+		// administrator's to fix and links nothing.
+		if res.reason == authClientReasonMissingChoice {
+			member.upstreamUnavailable = memberChoiceGapError{credential}
+			return
+		}
+		member.upstreamUnavailable = credential
 		return
 	case authClientResolved, authClientNoAuth, authClientLegacy:
 	}

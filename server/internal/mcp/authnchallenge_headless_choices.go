@@ -6,7 +6,10 @@
 // credential the subject may use. Several ready credentials with no choice
 // named is an error, never the consent screen's preselection order, and so is
 // a named choice that does not validate. Nothing is recorded unless every
-// server's choice validates.
+// server's choice validates, except that a gateway session for a caller who
+// can connect later leaves out a member whose only problem is a missing or
+// unready connection: that member offers its connect page when called, as it
+// does for a browser sign-in that left it not connected.
 
 package mcp
 
@@ -63,6 +66,11 @@ type headlessCaller struct {
 	// workloadIssuerID and workloadSubject name a workload caller.
 	workloadIssuerID uuid.NullUUID
 	workloadSubject  string
+
+	// connectsLater reports a subject who can connect a gateway member
+	// through its connect page after the session is issued, so a member that
+	// is not connected yet does not refuse the session.
+	connectsLater bool
 }
 
 // headlessChoice is one server's requested or configured choice: a client, or
@@ -145,11 +153,17 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 	if err != nil {
 		return nil, nil, fmt.Errorf("decide server credentials: %w", err)
 	}
+	// On a gateway, one member that is not connected yet leaves only itself
+	// out; a single server's session would be useless without its credential.
+	defers := endpoint.MetaMcpServerID.Valid && caller.connectsLater
 	upstreamPicks := map[uuid.UUID]uuid.UUID{}
 	authClientPicks := map[uuid.UUID]uuid.UUID{}
 	for _, server := range servers {
 		auth := options[server.id]
 		if auth == nil {
+			if defers {
+				continue
+			}
 			return nil, nil, setupRequired("a server's upstream sign-in is not set up", errChoiceNotSetUp)
 		}
 		if err := s.headlessReadiness(ctx, endpoint, subject, server, auth); err != nil {
@@ -167,6 +181,9 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 			}
 		} else {
 			selected, err = decideHeadlessChoice(server, auth, choice, named)
+		}
+		if err != nil && defers && awaitsConnection(err) {
+			continue
 		}
 		if err != nil {
 			return nil, nil, err
@@ -321,6 +338,14 @@ func (s *Service) headlessReadiness(ctx context.Context, endpoint *ResolvedMcpEn
 		auth.Options[i].Selected = false
 	}
 	return nil
+}
+
+// awaitsConnection reports a refusal that only a sign-in the person or an
+// administrator has yet to complete would clear, never a wrong or ambiguous
+// choice.
+func awaitsConnection(err error) bool {
+	cause, ok := errors.AsType[headlessChoiceError](err)
+	return ok && (cause == errChoiceNotSetUp || cause == errChoiceNotReady || cause == errChoiceNoneReady)
 }
 
 func setupRequired(description string, cause headlessChoiceError) error {
