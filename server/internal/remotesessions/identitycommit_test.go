@@ -154,10 +154,7 @@ func seedLiveAgentBinding(t *testing.T, ctx context.Context, ti *testInstance, c
 	require.NoError(t, err)
 	subject := urn.NewUserSubject(authCtx.UserID)
 	session := insertRemoteSession(t, ctx, ti.conn, subject, userIssuerID.String(), clientID.String())
-	// The FK parent is keyed by client and issuer, not by the agent's project.
-	// Resolve it within the organization so another project's agent can exercise
-	// the replacement guard without granting that project a server offer.
-	ensureAttachmentParentInScope(t, ctx, ti.conn, uuid.NullUUID{}, clientID, userIssuerID)
+	ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
 	_, err = testrepo.New(ti.conn).InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
 		ProjectID:             *authCtx.ProjectID,
 		OrganizationID:        authCtx.ActiveOrganizationID,

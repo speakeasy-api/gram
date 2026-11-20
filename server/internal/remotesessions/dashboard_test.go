@@ -1088,8 +1088,8 @@ func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientWithAgentBind
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-current", "", false, []string{"none"})
 	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-agent-replace-client", currentProviderID, targetID, true)
 
-	// The agent is attached in another project, through the binding every
-	// project's servers on the issuer share.
+	// The client and issuer are organization-scoped, so the attachment can
+	// live in another project without offering the client on a server there.
 	otherProjectID := createProject(t, ctx, ti.conn, "org-agent-replace-other")
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

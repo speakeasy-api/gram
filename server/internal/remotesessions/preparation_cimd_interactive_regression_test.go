@@ -18,7 +18,7 @@ import (
 func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 	t.Parallel()
 	for _, legacy := range []bool{false, true} {
-		for _, mechanism := range []string{"cimd", "manual"} {
+		for _, mechanism := range []string{remotesessions.PreparationMechanismCIMD, remotesessions.PreparationMechanismManual} {
 			for _, tc := range []struct {
 				name      string
 				confirmed []string
@@ -66,7 +66,13 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					prepared, err := ti.service.PrepareIdentityChaining(ctx, in)
 					require.NoError(t, err)
 					require.ElementsMatch(t, combined, prepared.GrantTypes)
-					require.Equal(t, "published_acceptance_unverified", prepared.State)
+					if mechanism == remotesessions.PreparationMechanismCIMD {
+						require.Equal(t, remotesessions.PreparationStatePublishedAcceptanceUnverified, prepared.State)
+						require.Equal(t, remotesessions.PreparationGrantSourceCIMDPublished, prepared.GrantSource)
+					} else {
+						require.Equal(t, remotesessions.PreparationStateReady, prepared.State)
+						require.Equal(t, remotesessions.PreparationGrantSourceAdministratorDeclared, prepared.GrantSource)
+					}
 					in.ExpectedGeneration = prepared.Generation
 					before, err := ti.service.ReadIdentityChaining(ctx, in)
 					require.NoError(t, err)
@@ -87,7 +93,12 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
 					require.ElementsMatch(t, combined, doc.GrantTypes)
 					require.Equal(t, []string{oauthwire.ResponseTypeCode}, doc.ResponseTypes)
-					require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID), "unverified CIMD publication does not create a typed offer")
+					offers := offeredAuthClients(t, ctx, ti.conn, serverID)
+					if mechanism == remotesessions.PreparationMechanismCIMD {
+						require.Empty(t, offers, "unverified CIMD publication does not create a typed offer")
+					} else {
+						require.Len(t, offers, 1, "a ready manual binding creates a typed offer")
+					}
 					require.Equal(t, []uuid.UUID{in.ClientID}, associatedClients(t, ctx, ti.conn, *auth.ProjectID, serverID), "the interactive placement survives")
 				})
 			}

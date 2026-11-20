@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"log/slog"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -257,7 +256,15 @@ func (s *Service) refuseLegacyOrgWideAttachmentForTest(ctx context.Context, logg
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
 	}
-	if slices.Contains(client.UserSessionIssuerIds, userIssuerID) == attaching {
+	// The public view lists server placements, not the compatibility row this
+	// test-only writer is about to modify. Check the exact pair after locking.
+	count, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{
+		RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check legacy fixture binding").LogError(ctx, logger)
+	}
+	if (count > 0) == attaching {
 		return nil // Re-attaching or detaching a missing binding is a no-op.
 	}
 	issuer, err := q.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
