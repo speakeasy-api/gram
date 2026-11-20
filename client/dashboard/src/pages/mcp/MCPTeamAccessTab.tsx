@@ -22,7 +22,6 @@ import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
 import { toolSourceUnavailableMessage } from "./access/toolSourceMessage";
 
-
 function getInitials(name: string) {
   return name
     .split(" ")
@@ -103,9 +102,7 @@ export function MCPTeamAccessTab({
     () =>
       catalogTools?.map((tool) => ({
         name: "name" in tool ? tool.name : "",
-        disposition: toolDisposition(
-          "annotations" in tool ? tool : {},
-        ),
+        disposition: toolDisposition("annotations" in tool ? tool : {}),
       })),
     [catalogTools],
   );
