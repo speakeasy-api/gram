@@ -1297,16 +1297,10 @@ func (s *Store) decryptAPIKey(ctx context.Context, db repo.DBTX, orgID string, s
 // apiKeyError maps an aiproviderkeys error. Only a key that can never be read
 // again is unexpected: an unavailable organization key may clear on its own.
 func apiKeyError(err error, msg string) error {
-	switch {
-	case aiproviderkeys.IsUnreadable(err):
-		return oops.E(oops.CodeUnexpected, err, "%s", msg)
-	case aiproviderkeys.IsCustomerKeyProblem(err):
-		return oops.E(oops.CodeFailedPrecondition, err, "This organization's encryption key is unavailable. Check its key, then try again.")
-	case errors.Is(err, aiproviderkeys.ErrNotStored):
+	if errors.Is(err, aiproviderkeys.ErrNotStored) {
 		return oops.E(oops.CodeConflict, err, "The integration changed while saving. Reload and try again.")
-	default:
-		return oops.E(oops.CodeUnavailable, err, "This organization's encryption key is unavailable. Try again shortly.")
 	}
+	return aiproviderkeys.Error(err, msg)
 }
 
 func emptyConfig(orgID string, provider string) Config {

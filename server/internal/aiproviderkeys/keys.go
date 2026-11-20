@@ -24,6 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/orgencryption/repo"
 )
@@ -78,11 +79,24 @@ func IsUnreadable(err error) bool {
 	return errors.Is(err, orgencryption.ErrUnreadable) || errors.Is(err, orgencryption.ErrMissing)
 }
 
-// IsCustomerKeyProblem reports whether err is caused by the state of the
-// organization's own key, such as a suspended or revoked customer-managed
-// key, rather than by Speakeasy.
+// IsCustomerKeyProblem reports whether err is caused by the organization's
+// key being suspended or invalid, which needs someone to fix the key rather
+// than a retry.
 func IsCustomerKeyProblem(err error) bool {
 	return errors.Is(err, orgencryption.ErrSuspended) || errors.Is(err, orgencryption.ErrInvalidKey)
+}
+
+// Error converts an error from Open, Store or RequireUsable into an API
+// error. msg is the public message for errors that are not about the key.
+func Error(err error, msg string) *oops.ShareableError {
+	switch {
+	case IsCustomerKeyProblem(err):
+		return oops.E(oops.CodeFailedPrecondition, err, "This organization's encryption key is suspended or invalid, so the key can't be used until it is fixed.")
+	case orgencryption.IsKeyProblem(err):
+		return oops.E(oops.CodeUnavailable, err, "This organization's encryption key is unavailable. Try again shortly.")
+	default:
+		return oops.E(oops.CodeUnexpected, err, "%s", msg)
+	}
 }
 
 // Keys is the one seam for AI provider and model keys.

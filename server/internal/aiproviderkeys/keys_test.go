@@ -58,6 +58,29 @@ func TestStoreInDualWriteWritesBothCopies(t *testing.T) {
 	stored := ti.stored(t, "chat")
 	require.True(t, stored.Platform.Valid)
 	require.True(t, stored.Org.Valid)
+
+	ti.finalize(t)
+	opened, err := ti.keys.Open(t.Context(), nil, ti.orgID, aiproviderkeys.OpenRouterAPIKeys, orgencryption.Copies{Org: stored.Org})
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-key", string(opened))
+}
+
+func TestStoreAfterFinalizeWritesOnlyTheOrganizationCopy(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestInstance(t)
+	ti.enroll(t)
+	ti.finalize(t)
+
+	require.NoError(t, ti.keys.Store(t.Context(), ti.conn, ti.orgID, aiproviderkeys.OpenRouterAPIKeys, []byte("sk-or-key"), ti.createKey("chat")))
+
+	stored := ti.stored(t, "chat")
+	require.False(t, stored.Platform.Valid)
+	require.True(t, stored.Org.Valid)
+
+	opened, err := ti.keys.Open(t.Context(), ti.conn, ti.orgID, aiproviderkeys.OpenRouterAPIKeys, stored)
+	require.NoError(t, err)
+	require.Equal(t, "sk-or-key", string(opened))
 }
 
 func TestStoreSealsAgainWhenTheTransitionMoves(t *testing.T) {

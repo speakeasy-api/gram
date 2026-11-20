@@ -207,12 +207,8 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 		row = stored
 		return true, nil
 	})
-	switch {
-	case err == nil:
-	case aiproviderkeys.IsCustomerKeyProblem(err):
-		return nil, oops.E(oops.CodeFailedPrecondition, err, "This organization's encryption key is unavailable. Check its key, then try again.").LogError(ctx, logger)
-	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "encrypt model provider key").LogError(ctx, logger)
+	if err != nil {
+		return nil, aiproviderkeys.Error(err, "encrypt model provider key").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogModelProviderKeyUpsert(ctx, dbtx, audit.LogModelProviderKeyUpsertEvent{

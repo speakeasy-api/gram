@@ -512,7 +512,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	})
 	switch {
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
-		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		return "", aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 
 	// Only a missing row triggers provisioning. An existing row without a
 	// ciphertext hard-errors in keyMaterial below instead: minting a
@@ -532,7 +532,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		}
 		openrouterKey, err = o.keyMaterial(ctx, nil, key)
 		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+			return "", aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 		}
 	}
 
@@ -558,7 +558,7 @@ func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType Key
 	case errors.Is(err, pgx.ErrNoRows):
 		return "", false, nil
 	case err != nil:
-		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		return "", false, aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 	}
 
 	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
@@ -566,7 +566,7 @@ func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType Key
 	}
 	plaintext, err := o.keyMaterial(ctx, nil, key)
 	if err != nil {
-		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		return "", false, aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 	}
 	// A row that decrypts to nothing is unusable: ProvisionAPIKey refuses the
 	// same state, so a lookup must not report it as provisioned and hand
@@ -591,7 +591,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	// a minted upstream key that cannot be stored is orphaned, and this also
 	// loads the organization's key while no pooled connection is held.
 	if err := o.keys.RequireUsable(ctx, nil, orgID); err != nil {
-		return "", oops.E(oops.CodeUnavailable, err, "error provisioning openrouter key").LogError(ctx, o.logger)
+		return "", aiproviderkeys.Error(err, "error provisioning openrouter key").LogError(ctx, o.logger)
 	}
 
 	dbtx, err := o.db.Begin(ctx)
@@ -620,7 +620,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	})
 	switch {
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
-		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		return "", aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 	case errors.Is(err, pgx.ErrNoRows):
 	default:
 		// The lockdown binds here too: the key may have been disabled between
@@ -632,7 +632,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		}
 		plaintext, keyErr := o.keyMaterial(ctx, dbtx, key)
 		if keyErr != nil {
-			return "", oops.E(oops.CodeUnexpected, keyErr, "error reading open router key data").LogError(ctx, o.logger)
+			return "", aiproviderkeys.Error(keyErr, "error reading open router key data").LogError(ctx, o.logger)
 		}
 		return plaintext, nil
 	}
@@ -1541,7 +1541,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 
 	apiKey, err := o.keyMaterial(ctx, nil, key)
 	if err != nil {
-		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to resolve openrouter API key material").LogError(ctx, o.logger)
+		return nil, 0, aiproviderkeys.Error(err, "failed to resolve openrouter API key material").LogError(ctx, o.logger)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/generation", nil)

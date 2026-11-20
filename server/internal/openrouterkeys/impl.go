@@ -197,7 +197,7 @@ func (s *Service) GetKeyUsage(ctx context.Context, payload *gen.GetKeyUsagePaylo
 
 	apiKey, err := s.keyMaterial(ctx, row)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve openrouter key material").LogError(ctx, logger)
+		return nil, aiproviderkeys.Error(err, "resolve openrouter key material").LogError(ctx, logger)
 	}
 
 	used, upstreamLimit, err := s.provisioner.GetKeyUsage(ctx, apiKey)
