@@ -113,7 +113,7 @@ func Describe(ctx context.Context, db DBTX, target Target) (View, error) {
 	for _, row := range servers {
 		server := ServerView{
 			MCPServerID: row.McpServerID, Choice: nil, Gap: nil, Options: []Option{},
-			NoAuthAllowed: upstreamclients.CheckConfiguredChoice(row.offers, uuid.NullUUID{}, target.Context == ContextUserless) == nil,
+			NoAuthAllowed: upstreamclients.CheckConfiguredChoice(row.offers, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, target.Context == ContextUserless) == nil,
 		}
 		for i, offer := range row.offers {
 			if !offer.AuthClientID.Valid || upstreamclients.CheckConfiguredChoice(row.offers[i:i+1], offer.AuthClientID, target.Context == ContextUserless) != nil {

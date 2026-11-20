@@ -188,7 +188,7 @@ func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	}, binding.Gaps)
 }
 
-func TestBindTreatsEMAAsPersonal(t *testing.T) {
+func TestBindRequiresExplicitEMAChoiceForUserBackedTurns(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	server := f.server(unstored)
@@ -200,8 +200,13 @@ func TestBindTreatsEMAAsPersonal(t *testing.T) {
 	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapPersonalRequiresUser}}, userless.Gaps)
 
 	userBacked := f.bind(ContextUserBacked)
-	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(userBacked.VersionID))
+	require.Empty(t, f.choices(userBacked.VersionID))
+	require.Equal(t, []Gap{{MCPServerID: server, Reason: GapSelectionRequired}}, userBacked.Gaps)
 
+	_, err := f.setChoice(ContextUserBacked, server, client(emaClient))
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]uuid.UUID{server: emaClient}, f.choices(f.bind(ContextUserBacked).VersionID))
+	require.Empty(t, f.choices(userBacked.VersionID), "choosing EMA does not alter a running turn")
 }
 
 func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {

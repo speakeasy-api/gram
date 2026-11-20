@@ -7,8 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
 func TestAssistantProfileSelectionsStayPinnedAndFailClosedPerServer(t *testing.T) {
@@ -42,6 +45,11 @@ func TestAssistantProfileSelectionsStayPinnedAndFailClosedPerServer(t *testing.T
 	}
 	human := bind(executionprofiles.ContextUserBacked)
 	userlessGap := bind(executionprofiles.ContextUserless)
+	_, err = productfeaturesrepo.New(pool).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	f.service.authEnforcement = authenforcement.NewGate(pool)
 	require.Equal(t, personal, f.resolve(human).clientID)
 	require.Equal(t, authClientReasonMissingChoice, f.resolve(userlessGap).reason)
 
