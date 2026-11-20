@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	chatTranscriptShadowProjectIDsFlag  = "chat-transcript-shadow-project-ids"
 	orgEncryptionKMSKeyRingFlag         = "org-encryption-kms-key-ring"
 	orgEncryptionCredentialIDFlag       = "org-encryption-credential-id"
 	orgEncryptionServiceAccountFlag     = "org-encryption-service-account"
@@ -20,6 +21,11 @@ const (
 // provision keys as well as use them.
 func orgEncryptionFlags() []cli.Flag {
 	return append(orgEncryptionServiceFlags(),
+		&cli.StringSliceFlag{
+			Name:    chatTranscriptShadowProjectIDsFlag,
+			Usage:   "Explicit project UUIDs to write encrypted chat transcript shadow copies for; retains plaintext and does not backfill existing messages. Disabled by default.",
+			EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"},
+		},
 		&cli.DurationFlag{
 			Name:    orgEncryptionSwitchGracePeriodFlag,
 			Usage:   "How long a switch to another organization encryption key keeps the previous key readable before it completes.",

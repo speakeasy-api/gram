@@ -860,6 +860,9 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+				return err
+			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every

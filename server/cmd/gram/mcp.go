@@ -363,6 +363,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+		return err
+	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)

@@ -1194,6 +1194,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+				return err
+			}
 			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
 			upstreamTokens := orgEncryption.UpstreamTokens(logger, encryptionClient)
 			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, clientSecrets, callbackOrigins.Outbound)
