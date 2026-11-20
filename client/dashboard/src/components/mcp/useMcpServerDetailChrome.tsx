@@ -36,6 +36,7 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import {
   useCustomDomains,
+  platformEndpointSlug,
   useMcpEndpointAddresses,
   useResolvedMcpServerUrl,
 } from "@/hooks/useToolsetUrl";
@@ -197,6 +198,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     mcpServerId: mcpServer?.id,
     projectId: mcpServer?.projectId,
     userSessionIssuerId: mcpServer?.userSessionIssuerId,
+    platformSlug: platformEndpointSlug(endpoints),
+    publicTunnel:
+      !!mcpServer?.tunneledMcpServerId && mcpServer.visibility === "public",
     // Private-only servers aren't reached on the hosted URL, which may be
     // turned off on purpose, so probing it would report a working server down.
     enabled:
@@ -760,6 +764,12 @@ function serverUrlCheck({
         return {
           description: "Couldn't check that the server answers.",
           ready: null,
+        };
+      case "unverified":
+        return {
+          description:
+            "Endpoint is set. Connect your account in Inspect to check that the server answers.",
+          ready: true,
         };
       case "unreachable":
         return {
