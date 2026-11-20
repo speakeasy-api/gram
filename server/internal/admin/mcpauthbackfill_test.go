@@ -22,6 +22,6 @@ func TestBackfillMcpAuthGrantsRetired(t *testing.T) {
 	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 	_, err = svc.BackfillMcpAuthGrants(ctx, payload)
 	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeInvalid, shareable.Code)
+	require.Equal(t, oops.CodeNotImplemented, shareable.Code)
 	require.ErrorContains(t, err, "the upstream auth grant backfill has been retired")
 }

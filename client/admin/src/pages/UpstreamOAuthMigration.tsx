@@ -26,10 +26,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { errorMessage } from "@/lib/gramAdminApi";
-import { needsMigrationRun } from "@/lib/upstreamOAuthMigration";
 import {
   enableUpstreamAuthEnforcement,
-  runUpstreamOAuthMigration,
   upstreamOAuthMigrationOrganizationsQuery,
   upstreamOAuthMigrationStatusQuery,
 } from "@/lib/gramAdminClient";
@@ -44,9 +42,6 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   const [filter, setFilter] = useState("");
   // What each busy organization is doing, by id.
   const [running, setRunning] = useState<Map<string, string>>(new Map());
-  const [bulk, setBulk] = useState<{ done: number; total: number } | null>(
-    null,
-  );
 
   const all = organizations.data?.organizations ?? [];
   const term = filter.trim().toLowerCase();
@@ -79,49 +74,6 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   });
   const statusByID = new Map(all.map((org, i) => [org.id, statuses[i]]));
   const migrated = statuses.filter((s) => s.data?.migrated).length;
-  const pendingCount = statuses.filter((s) => needsMigrationRun(s.data)).length;
-
-  async function migrate(org: AdminUpstreamOAuthMigrationOrganization) {
-    setRunning((current) => new Map(current).set(org.id, "Migrating"));
-    try {
-      const run = await runUpstreamOAuthMigration(org.id);
-      client.setQueryData(
-        upstreamOAuthMigrationStatusQuery(org.id).queryKey,
-        run.status,
-      );
-      return run;
-    } finally {
-      setRunning((current) => {
-        const next = new Map(current);
-        next.delete(org.id);
-        return next;
-      });
-    }
-  }
-
-  async function migrateOne(org: AdminUpstreamOAuthMigrationOrganization) {
-    const ok = await confirm({
-      title: `Migrate ${org.name}?`,
-      description:
-        "Records the upstream OAuth client associations its configuration proves, then each live credential's client choice, then a typed auth client for each upstream identity its servers use, and grants the default auth permissions for them. Safe to run again; it only adds permissions, and never restores one an admin removed.",
-      confirmLabel: "Migrate",
-    });
-    if (!ok) return;
-    try {
-      const run = await migrate(org);
-      if (run.authClientsError) {
-        toast.warning(`${org.name}: ${run.authClientsError}`);
-      }
-      if (!run.status.migrated) {
-        toast.warning(`${org.name} still needs attention`);
-      } else if (!run.authClientsError) {
-        toast.success(`${org.name} is migrated`);
-      }
-    } catch (e) {
-      toast.error(`${org.name}: ${errorMessage(e)}`);
-    }
-  }
-
   async function enforce(org: AdminUpstreamOAuthMigrationOrganization) {
     const ok = await confirm({
       title: `Enforce upstream auth for ${org.name}?`,
@@ -151,80 +103,15 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     }
   }
 
-  async function migrateAllPending() {
-    const pending = all.filter((org) =>
-      needsMigrationRun(statusByID.get(org.id)?.data),
-    );
-    if (pending.length === 0) return;
-    const ok = await confirm({
-      title: `Migrate ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}?`,
-      description:
-        "Runs the migration for every organization not yet migrated or with auth clients left to record, one at a time, and grants the default auth permissions for each. It only adds permissions, and never restores one an admin removed. Keep this tab open until it finishes; an interrupted run is safe to start again.",
-      confirmLabel: "Migrate all",
-    });
-    if (!ok) return;
-    setBulk({ done: 0, total: pending.length });
-    let failed = 0;
-    let incomplete = 0;
-    let authClientsFailed = 0;
-    for (const org of pending) {
-      try {
-        const run = await migrate(org);
-        if (!run.status.migrated) incomplete++;
-        if (run.authClientsError) authClientsFailed++;
-      } catch (e) {
-        failed++;
-        toast.error(`${org.name}: ${errorMessage(e)}`);
-      }
-      setBulk((current) =>
-        current ? { ...current, done: current.done + 1 } : current,
-      );
-    }
-    setBulk(null);
-    if (authClientsFailed > 0) {
-      toast.warning(
-        `Auth clients weren't recorded for ${authClientsFailed} ${authClientsFailed === 1 ? "organization" : "organizations"}. Run again; the migration itself is unaffected.`,
-      );
-    }
-    if (incomplete > 0) {
-      toast.warning(
-        `${incomplete} ${incomplete === 1 ? "organization still needs" : "organizations still need"} attention`,
-      );
-    } else if (failed === 0 && authClientsFailed === 0) {
-      toast.success(
-        `Migrated ${pending.length} ${pending.length === 1 ? "organization" : "organizations"}`,
-      );
-    }
-  }
-
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Upstream OAuth migration</h1>
           <p className="text-muted-foreground max-w-3xl">
-            Records which upstream OAuth client each MCP server uses, which
-            client each signed-in credential chose, and a typed auth client for
-            each associated client, for organizations whose servers sign in
-            through a user session issuer. Auth clients never decide whether an
-            organization is migrated. Migrate one organization to try it, then
-            the rest.
+            Shows upstream OAuth coverage, typed credential choices, and
+            enforcement readiness. The one-time migration no longer runs.
           </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={() => void migrateAllPending()}
-            disabled={
-              bulk !== null ||
-              all.length === 0 ||
-              settled < all.length ||
-              pendingCount === 0
-            }
-          >
-            {bulk
-              ? `Migrating ${bulk.done} of ${bulk.total}`
-              : "Migrate all pending"}
-          </Button>
         </div>
       </div>
 
@@ -292,21 +179,13 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void migrateOne(org)}
-                          disabled={busy || bulk !== null}
-                        >
-                          {status?.data?.migrated ? "Run again" : "Migrate"}
-                        </Button>
                         {status?.data?.enforcement?.ready &&
                         !status.data.enforcement.enabled ? (
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => void enforce(org)}
-                            disabled={busy || bulk !== null}
+                            disabled={busy}
                           >
                             Enforce
                           </Button>

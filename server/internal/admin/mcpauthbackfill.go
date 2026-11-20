@@ -14,5 +14,5 @@ func (s *Service) BackfillMcpAuthGrants(ctx context.Context, _ *gen.BackfillMcpA
 	if !ok || auth == nil || auth.OIDCSubject == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	return nil, oops.E(oops.CodeInvalid, nil, "the upstream auth grant backfill has been retired")
+	return nil, oops.E(oops.CodeNotImplemented, nil, "the upstream auth grant backfill has been retired")
 }

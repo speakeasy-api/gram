@@ -48,9 +48,10 @@ func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRejectsRollback(t *testing
 	org.server(issuer)
 	org.session(issuer)
 
-	run, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
+	seedCoveredMigrationFixture(t, ctx, db, org.id)
+	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.True(t, run.Status.Enforcement.Ready, run.Status.Enforcement.Blockers)
+	require.True(t, status.Enforcement.Ready, status.Enforcement.Blockers)
 
 	_, err = svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: false, CrossOrganizationDenialCommunicated: true})
 	var shareable *oops.ShareableError
@@ -141,10 +142,9 @@ func TestUpstreamAuthEnforcement_RequiresCrossOrganizationNotice(t *testing.T) {
 	org.client(issuer)
 	org.server(issuer)
 	org.session(issuer)
-	_, err := svc.RunUpstreamOAuthMigration(ctx, &gen.RunUpstreamOAuthMigrationPayload{OrganizationID: org.id})
-	require.NoError(t, err)
+	seedCoveredMigrationFixture(t, ctx, db, org.id)
 
-	_, err = svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: true, CrossOrganizationDenialCommunicated: false})
+	_, err := svc.EnableUpstreamAuthEnforcement(ctx, &gen.EnableUpstreamAuthEnforcementPayload{OrganizationID: org.id, ShadowParityConfirmed: true, CrossOrganizationDenialCommunicated: false})
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeInvalid, shareable.Code)
