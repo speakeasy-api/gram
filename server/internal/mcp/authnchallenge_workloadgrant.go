@@ -923,7 +923,7 @@ func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog
 	ctx = authz.WithoutCredentialCeiling(ctx)
 	var members []metaMember
 	if endpoint.IsProjectGateway() {
-		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint.OrganizationID, false, uuid.Nil, endpoint.ProjectID)
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint.OrganizationID, false, uuid.Nil, endpoint.ProjectID, false)
 	} else {
 		ctx, members, err = s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint)
 	}

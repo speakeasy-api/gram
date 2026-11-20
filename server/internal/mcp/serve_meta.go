@@ -832,10 +832,8 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 	refreshScope := gatewayScope(metaServer.OrganizationID, mcpEndpoint.ProjectID, metaServer.ID, requestApp(ctx))
 	skipped := new(remotesessions.SkippedClients)
 
-	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
 	var gateMemberChoices *memberChoices
-	agentKeyChoicesRead := false
 	var gatePolicy *toolfilter.SessionPolicy
 	var gateAuthentication *issuerGateAuthentication
 	var gateCaller gatewayCaller
@@ -892,31 +890,13 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
 		}
-		if gateMemberChoices == nil && gateAgentID != uuid.Nil {
-			// Decided before the token path, so members the key has a choice
-			// for resolve lazily like any other chosen member.
-			agentKeyChoicesRead = true
-			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, gateAgentID, metaServer.UserSessionIssuerID.UUID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
-			if err != nil {
-				return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
-			}
-		}
-		if gateMemberChoices != nil || (toolSelection != nil && toolSelection.Catalog != nil) {
-			// Proxied members resolve only their chosen clients, so the
-			// issuer's other clients resolve lazily, for hosted members that
-			// need them, and an unrelated broken one blocks nothing else.
-			gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
-		} else {
-			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
-			if err != nil {
-				return ctx, nil, fmt.Errorf("apply issuer gate: %w", err)
-			}
-			gateTokens = tokens
-		}
+		// Proxied members resolve only their chosen clients. Hosted members
+		// still resolve issuer clients lazily in their own project.
+		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		gatePolicy = toolSelection
 		gateAuthentication = authentication
 	}
-	if gateMemberChoices == nil && gateAgentID != uuid.Nil && !agentKeyChoicesRead {
+	if gateMemberChoices == nil && gateAgentID != uuid.Nil {
 		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, gateAgentID, metaServer.UserSessionIssuerID.UUID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
@@ -947,7 +927,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		agentMembership:     membership.agentID != uuid.Nil,
 		organizationGateway: membership.organization,
 		organizationID:      metaServer.OrganizationID,
-		tokens:              gateTokens,
+		tokens:              nil,
 		projectTokens:       gateProjectTokens,
 		memberChoices:       gateMemberChoices,
 		// Uninitialized when ungated, which disables identity chaining.

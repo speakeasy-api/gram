@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -169,11 +168,11 @@ type consentAuthServer struct {
 // upstream authentication through typed auth clients. Elsewhere the consent
 // screen keeps choosing through its service cards.
 func (s *Service) consentAuthChoicesEnforced(ctx context.Context, organizationID string) (bool, error) {
-	mode, err := s.authClientMode(ctx, organizationID)
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
-	return mode == feature.AuthClientResolverEnforced, nil
+	return enforced, nil
 }
 
 // consentAuthChoices decides, for each server, the clients this person may

@@ -93,12 +93,16 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_GatedReportsPerMemberSignIn(t
 	_, unconnectedIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Unconnected member", "member-unconnected", 1, "")
 
 	connectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-connected", "", []uuid.UUID{sharedIssuerID, connectedIssuerID})
-	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-unconnected", "", []uuid.UUID{sharedIssuerID, unconnectedIssuerID})
+	unconnectedClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-unconnected", "", []uuid.UUID{sharedIssuerID, unconnectedIssuerID})
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{connectedIssuerID, unconnectedIssuerID}))
 
 	subject := createTestUser(t, ctx, ti, "status-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, connectedClient, subject, "token-connected", "")
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+	connectedID := tunneledFixtureMember(t, ctx, ti, projectID, meta.ID, "member-connected")
+	unconnectedID := tunneledFixtureMember(t, ctx, ti, projectID, meta.ID, "member-unconnected")
+	typedConnected := seedTypedSessionClient(t, ctx, ti, orgID, projectID, connectedID, connectedClient, "remote_session", subject)
+	typedUnconnected := seedTypedSessionClient(t, ctx, ti, orgID, projectID, unconnectedID, unconnectedClient, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: connectedID, clientID: typedConnected}, metaServingChoice{organizationID: orgID, serverID: unconnectedID, clientID: typedUnconnected})
 
 	got := callConnectionStatus(t, ti, context.Background(), metaSlug, bearer)
 	require.Equal(t, metamcp.SignInConnected, got.statuses["member-connected"])
@@ -127,13 +131,14 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_RemoteMemberRoutedWithoutIssu
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
 
 	routedURL := "https://routed.example.com/mcp/" + uuid.NewString()
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-routed", routedURL, uuid.NullUUID{}, 0)
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-open", "https://open.example.com/mcp/"+uuid.NewString(), uuid.NullUUID{}, 1)
+	routed := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-routed", routedURL, uuid.NullUUID{}, 0)
+	open := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-open", "https://open.example.com/mcp/"+uuid.NewString(), uuid.NullUUID{}, 1)
 
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-routed", "", []uuid.UUID{sharedIssuerID})
 	subject := createTestUser(t, ctx, ti, "status-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-routed", routedURL)
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, routed.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: routed.mcpServerID, clientID: typed}, metaServingChoice{organizationID: orgID, serverID: open.mcpServerID})
 
 	got := callConnectionStatus(t, ti, context.Background(), metaSlug, bearer)
 	require.Equal(t, metamcp.SignInConnected, got.statuses["member-routed"])

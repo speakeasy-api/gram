@@ -49,9 +49,10 @@ func callMemberAt(t *testing.T, memberURL string, guardianOpts ...func(*guardian
 	metaSlug := "meta-address-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-address", "", []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", memberURL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", memberURL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-address-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-address", memberURL)
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))

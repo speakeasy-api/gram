@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -76,7 +75,6 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			connectGrantID := seedPrincipalMCPConnectGrant(t, ctx, ti, orgID, principal, serverID)
 			require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
 			if scenario != "legacy" {
-				ti.features.SetFlag(feature.FlagAuthClientResolver, orgID, true)
 				_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 				require.NoError(t, err)
 			}

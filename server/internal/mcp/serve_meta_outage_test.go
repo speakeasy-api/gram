@@ -115,7 +115,7 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "outage-"+uuid.NewString()[:8], provider.URL, []uuid.UUID{issuerID})
 	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", member.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	seededMember := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", member.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	subject := createTestUser(t, ctx, ti, "meta-outage-user-"+uuid.NewString())
 
 	access, err := ti.enc.Encrypt([]byte("expired-token"))
@@ -136,10 +136,11 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 	})
 	require.NoError(t, err)
 
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, seededMember.mcpServerID, clientID, "remote_session", subject)
 	return memberRefreshOutageFixture{
 		ti:         ti,
 		metaSlug:   metaSlug,
-		bearer:     mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject),
+		bearer:     mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: seededMember.mcpServerID, clientID: typed}),
 		subject:    subject,
 		clientID:   clientID,
 		down:       down,

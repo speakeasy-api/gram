@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -206,12 +208,15 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, choices, 1)
 	require.Equal(t, uuid.NullUUID{UUID: typedClientID, Valid: true}, choices[0].AuthClientID)
+	seedPrincipalGrant(t, ctx, ti, auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, typedClientID.String())
 	before := chainer.acquireCount()
 	response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
 	require.NoError(t, err)
 	require.Contains(t, response.Body.String(), memberSlug+"--note")
 	require.Equal(t, before, chainer.acquireCount(), "cached discovery never exchanges")
-	require.NotContains(t, callGatewayTool(t, ti, slug, connection.token, memberSlug+"--note", map[string]any{}), `"isError":true`)
+	reply := callGatewayTool(t, ti, slug, connection.token, memberSlug+"--note", map[string]any{})
+	require.NotContains(t, reply, `"error":`, reply)
+	require.NotContains(t, reply, `"isError":true`, reply)
 	require.Equal(t, 1, upstream.toolCalls())
 	require.Greater(t, chainer.acquireCount(), before, "execution resolves current identity")
 }

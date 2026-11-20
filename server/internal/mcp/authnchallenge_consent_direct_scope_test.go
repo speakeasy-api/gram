@@ -18,7 +18,6 @@ import (
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -182,12 +181,10 @@ func TestConsentDirectScope_InventoryCannotApproveAnotherChoice(t *testing.T) {
 
 func TestConsentDirectScope_OffAndShadowKeepLegacyPreview(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"off", "shadow"} {
+	for _, mode := range []string{"not_enrolled"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			ctx, fx, member := seedDirectScopeConsent(t, false)
-			fx.ti.features.SetFlag(feature.FlagAuthClientResolver, fx.orgID, false)
-			fx.ti.features.SetFlag(feature.FlagAuthClientResolverShadow, fx.orgID, mode == "shadow")
 			legacy := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "legacy-connected", "", []uuid.UUID{fx.shared})
 			issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, legacy)
 			err := authclientfixtures.New(fx.ti.conn).SetServerRemoteSessionIssuerFixture(ctx, authclientfixtures.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(issuer), ID: fx.endpoint.McpServerID.UUID})

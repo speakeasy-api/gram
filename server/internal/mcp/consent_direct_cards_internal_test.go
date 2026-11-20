@@ -26,7 +26,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 		clientType   string
 		state        string
 		enforced     bool
-		shadow       bool
 		hosted       bool
 		issuerLinked bool
 		wantCard     bool
@@ -45,7 +44,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 		{name: "deleted excluded", clientType: authClientTypeRemoteSession, state: "deleted", enforced: true, issuerLinked: true},
 		{name: "unlinked excluded", clientType: authClientTypeRemoteSession, state: "unlinked", enforced: true, issuerLinked: true},
 		{name: "off preserves legacy", issuerLinked: true, wantCard: true},
-		{name: "shadow preserves legacy", shadow: true, issuerLinked: true, wantCard: true},
 		{name: "hosted preserves legacy", hosted: true, enforced: true, issuerLinked: true, wantCard: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,7 +51,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 			f := newAuthClientFixture(t, pool)
 			ctx := t.Context()
 			flags := new(feature.InMemory)
-			flags.SetFlag(feature.FlagAuthClientResolverShadow, f.orgID, tc.shadow)
 			f.service.features = flags
 			f.service.authEnforcement = authenforcement.NewGate(pool)
 			if tc.enforced {

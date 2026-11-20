@@ -1229,7 +1229,11 @@ func (s *Service) authenticateIssuerGate(
 		}
 		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, message)
 	}
-	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
+	refuseForeignCaller := s.refuseForeignCaller
+	if endpoint.ToolsetID.Valid {
+		refuseForeignCaller = s.refuseForeignCallerOutsideTypedServing
+	}
+	if err := refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
 			s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.CodeNoServerAccess, r,
@@ -1441,7 +1445,13 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 // Its connection owner must repair the grant; a new session cannot bypass it.
 func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
 	errorCode := ""
-	if authentication.refreshableUserSession && s.subjectReauthorizesToReconnect(ctx, authentication.endpoint.OrganizationID, authentication.subject) {
+	// Typed serving cannot offer an anonymous caller a personal connection to
+	// repair. Hosted endpoints retain their existing reconnect policy.
+	reauthorizes := authentication.subject.Kind == urn.SessionSubjectKindUser
+	if authentication.refreshableUserSession && authentication.endpoint.ToolsetID.Valid {
+		reauthorizes = s.subjectReauthorizesToReconnect(ctx, authentication.endpoint.OrganizationID, authentication.subject)
+	}
+	if authentication.refreshableUserSession && reauthorizes {
 		errorCode = oautherr.CodeInvalidToken
 	}
 	header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
