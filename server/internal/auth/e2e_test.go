@@ -1794,7 +1794,7 @@ func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
 	// Login → Callback (zero orgs)
 	callbackResult, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
-	require.NotEmpty(t, callbackResult.SessionToken)
+	require.NotEmpty(t, callbackResult.SessionToken, "callback redirected to %s", callbackResult.Location)
 
 	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
 	require.NoError(t, err)

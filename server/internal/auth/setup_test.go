@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
@@ -439,7 +440,9 @@ func (ti *testInstance) seedNonce(ctx context.Context, t *testing.T, nonce strin
 // The returned context includes the nonce binding so validateAuthNonce passes.
 func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redirectURL string) (context.Context, string) {
 	t.Helper()
-	nonce := fmt.Sprintf("test-nonce-%d", time.Now().UnixNano())
+	// Parallel tests share one Redis, so the nonce must be unique across them:
+	// two tests that read the same clock value would consume each other's.
+	nonce := "test-nonce-" + uuid.NewString()
 	ti.seedNonce(ctx, t, nonce)
 	state := map[string]string{
 		"final_destination_url": redirectURL,
