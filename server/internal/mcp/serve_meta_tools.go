@@ -327,6 +327,12 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 				break
 			}
 		}
+		// A member's local tools are not part of what was approved at connect
+		// time: access to them follows access to the member, not to any one of
+		// its tools.
+		if !found && ok {
+			_, found = localToolNamed(s.memberLocalTools(ctx, logger, gate.organizationID, member), toolName)
+		}
 		if !found {
 			// Absence from this cached view does not prove consent excluded a real
 			// tool: misspelled, removed, or unknown member tools are absent too.
@@ -420,9 +426,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
-		// A gateway does not list its members' feedback tools, so it does not
-		// answer calls to them either.
-		s.platformExtras, s.sessionClientInfo, s.scanEvaluator, nil)
+		// The member's local tools are answered here, after the checks this
+		// dispatch makes, exactly where its own tools would be dispatched.
+		s.platformExtras, s.sessionClientInfo, s.scanEvaluator, s.hostedLocalTools)
 	// A refusal keeps its own code, as on a hosted server; otherwise the provider's rejection is recorded.
 	code, refused := toolsCallRefusal(err)
 	if !refused {
@@ -547,7 +553,7 @@ func (s *Service) describeMemberToolset(
 			catalog.entries = append(catalog.entries, kept)
 		}
 	}
-	return catalog, nil
+	return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 }
 
 // withMemberProjectAuthContext scopes the caller's auth context to a hosted

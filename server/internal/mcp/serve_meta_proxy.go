@@ -800,7 +800,13 @@ func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, g
 		return nil, err
 	}
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
-		return s.describeCachedMember(ctx, gate, member)
+		catalog, err := s.describeCachedMember(ctx, gate, member)
+		if err != nil {
+			return nil, err
+		}
+		// A cached catalog holds what was approved at connect time, which
+		// never includes local tools; they are offered as on a live listing.
+		return withLocalToolsInCatalog(catalog, s.memberLocalTools(ctx, logger, gate.organizationID, member)), nil
 	}
 	if member.backend == metaMemberBackendHosted {
 		return s.describeMemberToolset(ctx, logger, gate, member)
