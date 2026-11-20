@@ -241,7 +241,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledIdentifierNeverHarvestsSib
 	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member, clientID: typed})
 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
-	require.NotEmpty(t, rpc["error"], "a chosen member with no usable connection must fail closed")
+	text, isError := metaToolResultText(t, rpc)
+	require.True(t, isError, "a chosen member with no usable connection must fail closed: %s", text)
+	require.Contains(t, text, "is not connected for this user")
 	require.Zero(t, gateway.forwardCount(), "no tool call dials the tunnel with a different credential")
 }
 

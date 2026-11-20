@@ -1044,7 +1044,7 @@ Issuer-gated direct remote and tunneled servers, gateway members, and applicable
 
 An authenticated caller from another organization is refused on typed routes before upstream credentials are used and is not retried anonymously. An organization-less caller is evaluated as anonymous, without tenant grants; normal server visibility still applies. Hosted and ordinary ungated admission retain their existing policy. The mandatory server authorization shadow and the upstream issuer-routing rollout are separate.
 
-Consent, refresh, and issuance retain their existing organization enrollment. Staff can still record readiness and inspect coverage but cannot disable enforcement to roll serving back. See the [upstream auth rollback closure runbook](runbooks/upstream-auth-rollback-closure.md) for the evidence and rollback floor required before deploying this contraction. No legacy schema is removed here.
+Consent, refresh, and issuance retain their existing organization enrollment. Staff can still record readiness and inspect coverage but cannot disable enforcement to roll serving back. No legacy schema is removed here.
 
 ### `Require`
 

@@ -241,9 +241,17 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 		OrganizationID:        f.orgID,
 	})
 	require.NoError(t, err)
+	beforeLinear := linearUpstream.requestCount()
 	resp, err = callTool(t, f.ti, linearSlug, linearBearer, "ping")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.Code)
+	var callAuth []string
+	for _, req := range linearUpstream.journal()[beforeLinear:] {
+		if req.rpcMethod == "tools/call" {
+			callAuth = append(callAuth, req.authorization)
+		}
+	}
+	require.Equal(t, []string{"Bearer token-linear"}, callAuth)
 }
 
 // An anonymous session is served through its recorded choices like any other

@@ -456,8 +456,11 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		}
 		var supported, needsOAuth bool
 		if known && !offer.pending && member.backend == metaMemberBackendProxied {
-			// Check detached offers against legacy source headers without decrypting credentials.
-			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], memberNeedsSignIn(member))
+			// A detached typed offer cannot use a legacy association to
+			// serve. The listed association count is only an indication
+			// that the member needs sign-in, not a credential choice.
+			needsSignIn := memberNeedsSignIn(member) || serving && member.upstreamIssuer.association.Providers > 0
+			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], needsSignIn)
 		} else {
 			supported, needsOAuth, err = s.derivedMemberAuth(ctx, shadow, authzSurface, member)
 			if errors.Is(err, errMemberToolsetDenied) {

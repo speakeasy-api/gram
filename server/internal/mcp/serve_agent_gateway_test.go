@@ -682,33 +682,57 @@ func seedOwnerAttachedMember(t *testing.T) (context.Context, ownerAttachedMember
 func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	t.Parallel()
 	ctx, seeded := seedOwnerAttachedMember(t)
-	ti, fx, upstream, binding := seeded.ti, seeded.fx, seeded.upstream, seeded.binding
+	ti, fx, upstream := seeded.ti, seeded.fx, seeded.upstream
 	body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.False(t, isError, text)
-	upstream.requireToolCallAuth(t, "Bearer owner-assigned-token")
-	_, err = testrepo.New(ti.conn).RevokeAttachmentByIDFixture(ctx, binding.ID)
-	require.NoError(t, err)
+	toolCalls := 0
+	for _, req := range upstream.journal() {
+		if req.rpcMethod == "tools/call" {
+			toolCalls++
+			require.True(t, req.authorization == "Bearer owner-assigned-token", "active attachment: tool call lacks the owner bearer (has authorization: %t)", req.authorization != "")
+		}
+	}
+	require.Equal(t, 1, toolCalls)
+	upstream.awaitMetadataProbe(t)
+	disconnectOwnerAttachedMember(t, ctx, seeded)
 	upstream.mu.Lock()
 	upstream.requests = nil
 	upstream.mu.Unlock()
-	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
+	response, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
-	upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+	text, isError = metaToolResultText(t, decodeRPCResponse(t, response))
+	require.True(t, isError, text)
+	require.Zero(t, upstream.requestCount(), "a disconnected member must not dial")
 }
 
 // An agent whose delegated connection stops working cannot sign in itself.
 // The tool error and connection_status send it to someone who can edit it,
 // with the agent's MCP sign-in page, and never to a gateway administrator.
 // They name no one and hand the agent no credential.
+// The attached session also belongs to the key's authorizer. Disconnect the
+// source as well as the attachment so there is no independently authorized
+// connection left for the agent to use.
+func disconnectOwnerAttachedMember(t *testing.T, ctx context.Context, seeded ownerAttachedMember) {
+	t.Helper()
+	_, err := testrepo.New(seeded.ti.conn).RevokeAttachmentByIDFixture(ctx, seeded.binding.ID)
+	require.NoError(t, err)
+	auth := requireProjectAuthContext(t, ctx)
+	deleted, err := remotesessionsrepo.New(seeded.ti.conn).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessionsrepo.SoftDeleteRemoteSessionBySubjectAndClientParams{
+		SubjectUrn: urn.NewUserSubject(auth.UserID), RemoteSessionClientID: seeded.binding.RemoteSessionClientID,
+		UserSessionIssuerID: seeded.binding.UserSessionIssuerID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Len(t, deleted, 1)
+}
+
 func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 	t.Parallel()
 	ctx, seeded := seedOwnerAttachedMember(t)
 	ti, fx := seeded.ti, seeded.fx
-	_, err := testrepo.New(ti.conn).RevokeAttachmentByIDFixture(ctx, seeded.binding.ID)
-	require.NoError(t, err)
+	disconnectOwnerAttachedMember(t, ctx, seeded)
 
 	agent, err := agentsrepo.New(ti.conn).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: fx.agent.OrganizationID, ID: fx.agent.ID})
 	require.NoError(t, err)
@@ -727,6 +751,7 @@ func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
 	require.NoError(t, err)
+	require.Zero(t, seeded.upstream.requestCount(), "a disconnected member must not dial")
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.True(t, isError, text)
 	require.Contains(t, text, fmt.Sprintf("server %q needs re-authentication", fx.granted))
@@ -754,6 +779,7 @@ func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 	row := slices.IndexFunc(result.StructuredContent.Servers, func(s metamcp.ConnectionStatusServer) bool { return s.Slug == fx.granted })
 	require.GreaterOrEqual(t, row, 0)
 	require.True(t, result.StructuredContent.Servers[row].Reconnect, "the agent's sign-in step fixes the broken connection")
+	require.Zero(t, seeded.upstream.requestCount(), "status must not dial a disconnected member either")
 	require.Equal(t, "needs re-authentication", result.StructuredContent.Servers[row].Detail)
 	seeded.upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
 }

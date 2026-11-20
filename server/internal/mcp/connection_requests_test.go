@@ -367,9 +367,10 @@ func TestGatewayMemberRows(t *testing.T) {
 	t.Cleanup(deny.Close)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-rows", "", []uuid.UUID{issuerID})
 	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	subject := createTestUser(t, ctx, ti, "meta-rows-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 
 	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
@@ -409,9 +410,10 @@ func TestGatewayMemberRefreshOutageNamesTheProviderOnce(t *testing.T) {
 		ID: remoteIssuerID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, IncludeOrganizational: true, OrganizationID: conv.ToPGText(orgID), IncludeGlobal: true,
 	})
 	require.NoError(t, err)
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	subject := createTestUser(t, ctx, ti, "meta-refresh-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 	upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuerID, clientID, subject)
 	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, clientID, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) })
 
@@ -456,9 +458,10 @@ func TestGatewayMemberOutageRows(t *testing.T) {
 			}))
 			t.Cleanup(upstream.Close)
 			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-outage", "", []uuid.UUID{issuerID})
-			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+			member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 			subject := createTestUser(t, ctx, ti, "meta-outage-user-"+uuid.NewString())
-			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+			typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 			insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-outage", upstream.URL)
 
 			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
@@ -490,9 +493,10 @@ func TestGatewayRowsReadTheReportedClient(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-client", "", []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-client-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-client", upstream.URL)
 
 	const userAgent = "python-httpx/0.28.1"
@@ -1379,9 +1383,10 @@ func TestUnreadableUpstreamTokenGatewayMemberAsksToReconnect(t *testing.T) {
 			metaSlug := "meta-unreadable-" + uuid.NewString()[:8]
 			meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
 			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable", "", []uuid.UUID{issuerID})
-			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+			member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 			subject := createTestUser(t, ctx, ti, "meta-unreadable-user-"+uuid.NewString())
-			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+			typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 			resource := ""
 			if tc.resource {
 				resource = upstream.URL
@@ -1509,9 +1514,10 @@ func TestUnreadableUpstreamTokenGatewayMemberMisconfiguredNamesAdministrator(t *
 	metaSlug := "meta-unreadable-admin-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable-admin", provider.URL, []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
 	subject := createTestUser(t, ctx, ti, "meta-unreadable-admin-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
 	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
@@ -1589,10 +1595,12 @@ func TestUnreadableSharedIssuerGrantNeverDialsEitherMember(t *testing.T) {
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-shared", "", []uuid.UUID{issuerID})
 	remoteIssuer := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID))
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "alpha", upstreamA.URL, remoteIssuer, 0)
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "beta", upstreamB.URL, remoteIssuer, 1)
+	alpha := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "alpha", upstreamA.URL, remoteIssuer, 0)
+	beta := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "beta", upstreamB.URL, remoteIssuer, 1)
 	subject := createTestUser(t, ctx, ti, "meta-shared-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	typedAlpha := seedTypedSessionClient(t, ctx, ti, orgID, projectID, alpha.mcpServerID, clientID, "remote_session", subject)
+	typedBeta := seedTypedSessionClient(t, ctx, ti, orgID, projectID, beta.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject, metaServingChoice{organizationID: orgID, serverID: alpha.mcpServerID, clientID: typedAlpha}, metaServingChoice{organizationID: orgID, serverID: beta.mcpServerID, clientID: typedBeta})
 	upsertUnreadableRemoteSession(t, ctx, ti, issuerID, clientID, subject, upstreamA.URL)
 
 	for _, member := range []string{"alpha", "beta"} {

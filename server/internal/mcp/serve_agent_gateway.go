@@ -324,6 +324,9 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
+	if err == nil && len(resolved) == 0 {
+		err = remotesessions.ErrNoValidToken
+	}
 	if err != nil {
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}

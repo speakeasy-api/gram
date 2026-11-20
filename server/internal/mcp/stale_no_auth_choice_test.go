@@ -94,10 +94,7 @@ func (g *staleChoiceGateway) attachSignIn(t *testing.T, ctx context.Context, typ
 	_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
 	require.NoError(t, err)
 	if typed {
-		fixtures := authclientfixtures.New(g.ti.conn)
-		id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: g.org, ProjectID: uuid.NullUUID{UUID: g.project, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
-		require.NoError(t, err)
-		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: g.project, OrganizationID: g.org, McpServerID: g.serverID, AuthClientID: id, Source: "admin"}))
+		seedTypedSessionClient(t, ctx, g.ti, g.org, g.project, g.serverID, registration, "remote_session", urn.NewUserSubject(mockidp.MockUserID))
 	}
 	return registration
 }
@@ -216,6 +213,12 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 
 					insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
 					renewed := g.approve(t, ctx)
+					if !typed {
+						before = g.source.requests.Load()
+						requireStaleError(t, g.call(t, renewed.token, "source--tool_000"), "authentication needs setup or a new sign-in")
+						require.Equal(t, before, g.source.requests.Load(), "legacy-only setup cannot route a credential")
+						return
+					}
 					requireExecuted(t, g.call(t, renewed.token, "source--tool_000"))
 					require.Equal(t, "Bearer fixture-token", g.source.callAuthorization.Load())
 				})

@@ -582,11 +582,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_NoCredentialCallsAnonymously(t *te
 	upstreamA.requireNeverCarried(t, "Bearer token-member-b", "member A's upstream must never see member B's bearer")
 }
 
-// A subject who connected only one of the gateway's two providers still gets
-// a served session: the covered member forwards its own bearer, the
-// uncovered member is called anonymously, and no request-level 401 fires.
-// Before partial resolution, the missing grant rejected the whole session.
-func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) {
+// An unconnected member fails closed without dialing, while the connected
+// member keeps serving with its own credential.
+func TestServePublic_MetaEndpoint_UnconnectedMemberDoesNotBlockConnectedMember(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -627,7 +625,8 @@ func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) 
 		"the covered member must receive its own bearer")
 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
-	require.NotEmpty(t, rpc["error"], "the unconnected member fails closed")
+	text, isError = metaToolResultText(t, rpc)
+	require.True(t, isError, "the unconnected member fails closed: %s", text)
 	require.Zero(t, upstreamA.requestCount(), "the unconnected member must not dial")
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
 	text, isError = metaToolResultText(t, rpc)
@@ -700,20 +699,20 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(deny.Close)
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member", 0, deny.URL)
+	member := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member", 0, deny.URL)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-401", "", []uuid.UUID{sharedIssuerID})
 	subject := createTestUser(t, ctx, ti, "meta-401-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member})
 
-	// A legacy grant with no resource routes nowhere: the dial is anonymous.
+	// An explicit no-auth choice never forwards an unrelated legacy grant.
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-legacy", "")
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
 	require.Contains(t, text, "has no credential for this caller")
 
-	// A grant qualified to the member ties the client to it, and migrating
-	// again replaces the credential's no-auth choice with that client. The
-	// gateway forwards the grant, and the member refuses it.
+	// A named typed choice forwards only its own resource-qualified grant.
+	client := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member, clientID, "remote_session", subject)
+	bearer = mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member, clientID: client})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
 	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
@@ -736,20 +735,25 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnconnectedMemberLinksItsConnectPa
 	metaSlug := "meta-connect-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
 
+	var requests atomic.Int32
 	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(deny.Close)
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-connect", "", []uuid.UUID{sharedIssuerID})
 	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	member := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
 	subject := createTestUser(t, ctx, ti, "meta-connect-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+	typed := seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, "remote_session", subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: member.mcpServerID, clientID: typed})
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
 	require.Contains(t, text, `server "member" is not connected for this user`)
 	require.Contains(t, text, "/mcp/"+metaSlug+"/connect/first-party?server=member")
+
+	require.Zero(t, requests.Load(), "a missing connection cannot reach upstream")
 
 	// A refused credential links the same page, to reconnect it.
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)

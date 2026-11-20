@@ -111,13 +111,19 @@ func seedRemoteHeader(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 func mintTypedHeaderBearer(t *testing.T, ctx context.Context, ti *testInstance, auth *contextvalues.AuthContext, slug string, server mcpserversrepo.McpServer) string {
 	t.Helper()
 	subject := urn.NewAnonymousSubject(uuid.NewString())
-	clientID := seedTypedSessionClient(t, ctx, ti, auth.ActiveOrganizationID, server.ProjectID, server.ID, uuid.Nil, authz.AuthClientTypeStaticCredential, subject)
-	headers, err := remotemcprepo.New(ti.conn).ListHeadersByServerID(ctx, server.RemoteMcpServerID.UUID)
+	clientID := seedTypedStaticHeaders(t, ctx, ti, auth.ActiveOrganizationID, server.ProjectID, server.ID, server.RemoteMcpServerID.UUID, subject)
+	return mintMetaIssuerBearer(t, ti, slug, server.UserSessionIssuerID.UUID, subject, metaServingChoice{organizationID: auth.ActiveOrganizationID, serverID: server.ID, clientID: clientID})
+}
+
+func seedTypedStaticHeaders(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID, serverID, remoteID uuid.UUID, subject urn.SessionSubject) uuid.UUID {
+	t.Helper()
+	clientID := seedTypedSessionClient(t, ctx, ti, orgID, projectID, serverID, uuid.Nil, authz.AuthClientTypeStaticCredential, subject)
+	headers, err := remotemcprepo.New(ti.conn).ListHeadersByServerID(ctx, remoteID)
 	require.NoError(t, err)
 	for _, header := range headers {
-		require.NoError(t, authclientbackfill.New(ti.conn).SeedAuthClientHeaderFixture(ctx, authclientbackfill.SeedAuthClientHeaderFixtureParams{AuthClientID: clientID, OrganizationID: auth.ActiveOrganizationID, Name: header.Name, IsRequired: header.IsRequired, IsSecret: header.IsSecret, Value: header.Value, ValueFromRequestHeader: header.ValueFromRequestHeader}))
+		require.NoError(t, authclientbackfill.New(ti.conn).SeedAuthClientHeaderFixture(ctx, authclientbackfill.SeedAuthClientHeaderFixtureParams{AuthClientID: clientID, OrganizationID: orgID, Name: header.Name, IsRequired: header.IsRequired, IsSecret: header.IsSecret, Value: header.Value, ValueFromRequestHeader: header.ValueFromRequestHeader}))
 	}
-	return mintMetaIssuerBearer(t, ti, slug, server.UserSessionIssuerID.UUID, subject, metaServingChoice{organizationID: auth.ActiveOrganizationID, serverID: server.ID, clientID: clientID})
+	return clientID
 }
 
 func TestServePublic_RemoteEndpoint_DoesNotForwardSpeakeasyHeaders(t *testing.T) {
@@ -272,12 +278,10 @@ func TestServePublic_MetaEndpoint_RemoteMembersApplyRemoteHeaderPolicy(t *testin
 	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteA, "Set-Cookie", "synthetic=1", "", false)
 	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteB, "X-Upstream-Token", "", "Gram-Key", true)
 
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-header-a", "", []uuid.UUID{sharedIssuerID})
-	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-header-b", "", []uuid.UUID{sharedIssuerID})
 	subject := createTestUser(t, ctx, ti, "meta-header-user-"+uuid.NewString())
-	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-member-a", upstreamA.url)
-	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+	clientA := seedTypedStaticHeaders(t, ctx, ti, orgID, projectID, memberA, remoteA, subject)
+	clientB := seedTypedStaticHeaders(t, ctx, ti, orgID, projectID, memberB, remoteB, subject)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject, metaServingChoice{organizationID: orgID, serverID: memberA, clientID: clientA}, metaServingChoice{organizationID: orgID, serverID: memberB, clientID: clientB})
 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
 	text, isError := metaToolResultText(t, rpc)
