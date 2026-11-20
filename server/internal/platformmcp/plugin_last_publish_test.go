@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -38,10 +38,11 @@ func seedRecordedPublish(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	t.Helper()
 	recorded, err := pluginsrepo.New(conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: projectID, InstallationID: 1, RepoOwner: "private-owner", RepoName: "private-repository",
-		MarketplaceToken: conv.ToPGText("secret-marketplace-token"), PublishedMcpFingerprints: []byte(`{}`),
-		PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
+		PublishedMcpFingerprints: []byte(`{}`),
+		PublishedHooksVersion:    pgtype.Text{}, PublishedHooksConfig: nil,
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, conn, projectID, "secret-marketplace-token")
 	return recorded.UpdatedAt.Time.UTC().Format(time.RFC3339)
 }
 

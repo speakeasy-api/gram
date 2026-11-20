@@ -42,7 +42,7 @@ Or with collaborators:
 
 4. **Push to GitHub.** The server calls `CreateRepo()` (no-op if repo exists) then `PushFiles()` with a single commit. The repo name is `<project-slug>-plugins` under the configured org.
 
-5. **Mint marketplace token.** On first publish, a 256-bit base64url token is generated and stored in `plugin_github_connections.marketplace_token`. This token becomes part of the marketplace proxy URL served by Speakeasy:
+5. **Mint marketplace token.** On first publish, a 256-bit base64url token is generated. The token is never stored in plaintext. `plugin_github_connections` stores its SHA-256 hash (`marketplace_token_hash`), which the marketplace proxy looks it up by, and a sealed copy, which the server opens to show the install URL again (see `server/internal/plugins/marketplacetokens`). This token becomes part of the marketplace proxy URL served by Speakeasy:
 
    ```
    https://app.getgram.ai/m/<token>/marketplace.json
@@ -66,7 +66,7 @@ Dev and test share one GitHub App and one org. This means plugin repos published
 
 ## Marketplace proxy
 
-The URL `https://app.getgram.ai/m/<token>/marketplace.json` is served by a dedicated marketplace proxy endpoint. The token resolves to a `plugin_github_connections` row, which identifies the project whose latest-published `marketplace.json` to serve.
+The URL `https://app.getgram.ai/m/<token>/marketplace.json` is served by a dedicated marketplace proxy endpoint. The proxy hashes the token and resolves the hash to a `plugin_github_connections` row, which identifies the project whose latest-published `marketplace.json` to serve. A database read therefore never yields a working install URL.
 
 Speakeasy does **not** proxy raw GitHub traffic — it serves the cached published content (or generates it on demand from DB state). The marketplace URL token is opaque: no org or project identity is embedded.
 

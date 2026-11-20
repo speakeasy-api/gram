@@ -949,19 +949,29 @@ SELECT COALESCE(
   ''
 )::text AS user_id;
 
--- name: GetGitHubConnectionByMarketplaceToken :one
--- Resolves a marketplace proxy URL token to the upstream connection. The token
--- is the auth credential — there's no project scope to apply ahead of it.
+-- name: GetGitHubConnectionByMarketplaceTokenHash :one
+-- Resolves a marketplace proxy URL token, by its hash, to the upstream
+-- connection. The token is the auth credential, so there's no project scope to
+-- apply ahead of it.
 SELECT *
 FROM plugin_github_connections
-WHERE marketplace_token = @marketplace_token;
+WHERE marketplace_token_hash = @marketplace_token_hash;
+
+-- name: GetGitHubConnectionByMarketplaceToken :one
+-- DEPRECATED: resolves a marketplace proxy URL token through the plaintext
+-- marketplace_token column, for connections the marketplace token backfill has
+-- not moved yet. Removed with that column.
+SELECT *
+FROM plugin_github_connections
+WHERE marketplace_token = @marketplace_token
+  AND marketplace_token_hash IS NULL;
 
 -- name: UpsertGitHubConnection :one
--- Inserts or refreshes a project's GitHub connection. The marketplace_token
--- argument is the candidate token to use if no token is currently set; on
--- conflict the existing token is preserved via COALESCE so callers can pass a
--- freshly-generated token on every publish without overwriting prior state.
--- Token rotation goes through a separate query. published_mcp_fingerprints,
+-- Inserts or refreshes a project's GitHub connection. It never writes the
+-- marketplace token: the publish path gives a connection without one its token
+-- through package marketplacetokens, in the same transaction.
+-- organization_id is the project's organization; an existing value is kept, so
+-- a connection never moves to another organization's key. published_mcp_fingerprints,
 -- published_hooks_version, and published_hooks_config record the per-plugin MCP
 -- content hashes, the hooks generator version, and the hook-output-affecting
 -- config just published; all are always overwritten so subsequent rollout runs
@@ -970,13 +980,13 @@ WHERE marketplace_token = @marketplace_token;
 -- browser-login toggle). published_hooks_config also records, under
 -- published_marketplace_name, the marketplace name the repo was published under,
 -- which freezes the project's marketplace name.
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
-VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
+INSERT INTO plugin_github_connections (project_id, organization_id, installation_id, repo_owner, repo_name, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
+VALUES (@project_id, sqlc.narg('organization_id'), @installation_id, @repo_owner, @repo_name, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
+      organization_id = COALESCE(plugin_github_connections.organization_id, EXCLUDED.organization_id),
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
-      marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
       published_hooks_version = EXCLUDED.published_hooks_version,
       published_hooks_config = EXCLUDED.published_hooks_config,
