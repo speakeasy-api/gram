@@ -86,6 +86,7 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		authorized:       sharing,
 		scopes:           scopes,
 		fromAssociations: feature.UpstreamIssuerFromAssociations(ctx, s.features, authCtx.ActiveOrganizationID),
+		staffOffers:      false,
 	})
 }
 
@@ -104,6 +105,7 @@ type scopePinWrite struct {
 	// fromAssociations decides ownership of the resource in the returned view
 	// from each client's associated servers.
 	fromAssociations bool
+	staffOffers      bool
 }
 
 // commitScopePin writes the pin in its own transaction and returns the view as
@@ -127,7 +129,12 @@ func commitScopePin(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Lo
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return serverScopes(ctx, db, logger, w.organizationID, w.projectID, w.target, sharedServerCount(w.authorized, w.target), true, remotesessions.ResourceScopesFromRow(row, true), w.fromAssociations)
+	cached := remotesessions.ResourceScopesFromRow(row, true)
+	shared := sharedServerCount(w.authorized, w.target)
+	if w.staffOffers {
+		return staffServerScopes(ctx, db, logger, w.organizationID, w.projectID, w.target, cached, shared)
+	}
+	return serverScopes(ctx, db, logger, w.organizationID, w.projectID, w.target, shared, true, cached, w.fromAssociations)
 }
 
 // writeScopePin runs only on dbtx: a second pool connection taken while holding
@@ -324,8 +331,12 @@ func serverScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, or
 		}
 	}
 
+	return serverScopeView(target.resourceURL, cached, clients, sharedServers, canPin), nil
+}
+
+func serverScopeView(resourceURL string, cached remotesessions.ResourceScopes, clients []*gen.RemoteMcpServerClientScopes, sharedServers int, canPin bool) *gen.RemoteMcpServerScopes {
 	return &gen.RemoteMcpServerScopes{
-		ResourceURL:           target.resourceURL,
+		ResourceURL:           resourceURL,
 		PinnedScopes:          conv.DefaultSlice(cached.Pin, []string{}),
 		AdvertisedScopesKnown: cached.ScopesSupported != nil,
 		AdvertisedScopes:      cached.ScopesSupported,
@@ -334,7 +345,7 @@ func serverScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, or
 		Clients:               clients,
 		SharedServerCount:     sharedServers,
 		CanPin:                canPin,
-	}, nil
+	}
 }
 
 func clientScopes(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, orgID string, target pinnableServer, cached remotesessions.ResourceScopes, fromAssociations bool) ([]*gen.RemoteMcpServerClientScopes, error) {

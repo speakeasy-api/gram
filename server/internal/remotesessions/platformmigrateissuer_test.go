@@ -185,7 +185,7 @@ func TestMigrateToGlobalIssuer_ClientStaysReachableToItsOrganization(t *testing.
 	// The org-admin listing is the surface that would go blind.
 	listed, err := q.ListOrganizationRemoteSessionClientsByIssuerID(ctx, repo.ListOrganizationRemoteSessionClientsByIssuerIDParams{
 		RemoteSessionIssuerID: targetID,
-		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		Cursor:                uuid.NullUUID{},
 		LimitValue:            50,
 	})
@@ -430,7 +430,7 @@ func TestMigrateToGlobalIssuer_CrossOrgSourceSucceeds(t *testing.T) {
 
 	listed, err := repo.New(ti.conn).ListOrganizationRemoteSessionClientsByIssuerID(ctx, repo.ListOrganizationRemoteSessionClientsByIssuerIDParams{
 		RemoteSessionIssuerID: targetID,
-		OrganizationID:        conv.ToPGText(otherOrgID),
+		OrganizationID:        otherOrgID,
 		Cursor:                uuid.NullUUID{},
 		LimitValue:            50,
 	})

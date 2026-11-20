@@ -3,6 +3,7 @@ package remotemcp
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,8 +11,10 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -59,7 +62,34 @@ func (s *StaffScopes) Describe(ctx context.Context, target StaffScopeTarget) (*g
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers sharing the protected resource").LogError(ctx, logger)
 	}
-	return readServerScopes(ctx, s.db, logger, target.OrganizationID, target.ProjectID, server, sharing, true, false)
+	cached, _, err := remotesessions.CachedResourceScopes(ctx, s.db, target.ProjectID, server.resourceURL, true)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
+	}
+	return staffServerScopes(ctx, s.db, logger, target.OrganizationID, target.ProjectID, server, cached, sharedServerCount(sharing, server))
+}
+
+func staffServerScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, organizationID string, projectID uuid.UUID, server pinnableServer, cached remotesessions.ResourceScopes, sharedServers int) (*gen.RemoteMcpServerScopes, error) {
+	rows, err := repo.New(db).ListOfferedOAuthRegistrationsForStaffScopes(ctx, repo.ListOfferedOAuthRegistrationsForStaffScopesParams{
+		OrganizationID: organizationID, ProjectID: projectID, McpServerID: server.server.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list offered OAuth registrations").LogError(ctx, logger)
+	}
+	clients := make([]*gen.RemoteMcpServerClientScopes, 0, len(rows))
+	for _, row := range rows {
+		resolved := remotesessions.ClientConnectionScopes(remotesessions.ConnectionScopeInput{
+			ClientID: row.ID, ClientScope: row.Scope, IssuerScopesSupported: row.ScopesSupported,
+			IssuerScopeOverride: row.ScopeOverride, IssuerOmitScopeFallback: row.OmitScopeFallback.Valid && row.OmitScopeFallback.Bool,
+		}, cached, true)
+		clients = append(clients, &gen.RemoteMcpServerClientScopes{
+			ClientID: row.ID.String(), IssuerName: conv.PtrEmpty(strings.TrimSpace(row.IssuerName.String)), IssuerURL: &row.IssuerUrl,
+			ScopeSource: string(resolved.Source), RequestedScopes: conv.DefaultSlice(resolved.Scopes, []string{}),
+			UnadvertisedPinnedScopes: conv.DefaultSlice(resolved.Unadvertised, []string{}),
+			PinWouldDecide:           cached.UseDiscovered && len(row.Scope) == 0 && len(cached.ChallengeScopes) == 0,
+		})
+	}
+	return serverScopeView(server.resourceURL, cached, clients, sharedServers, true), nil
 }
 
 // SetPin writes the pin for every server sharing the target's upstream URL,
@@ -87,5 +117,6 @@ func (s *StaffScopes) SetPin(ctx context.Context, pin StaffScopePin) (*gen.Remot
 		authorized:       sharing,
 		scopes:           scopes,
 		fromAssociations: false,
+		staffOffers:      true,
 	})
 }
