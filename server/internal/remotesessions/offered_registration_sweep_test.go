@@ -119,8 +119,6 @@ func (o offeredRegistration) requireNoLink(t *testing.T, ctx context.Context) {
 // registration that takes its grant out of the background sweeps.
 type offeredReachCase struct {
 	name string
-	// skipEnforcement leaves the organization without typed enforcement.
-	skipEnforcement bool
 	// skipSession leaves the subject without a Speakeasy session.
 	skipSession bool
 	// sessionLapsed gives the subject a Speakeasy session that has lapsed.
@@ -137,7 +135,6 @@ func (c offeredReachCase) sessionLifetime() time.Duration {
 
 func offeredReachCases() []offeredReachCase {
 	return []offeredReachCase{
-		{name: "typed auth clients are not enforced", skipEnforcement: true},
 		{name: "the subject holds no session", skipSession: true},
 		{name: "the subject's session has lapsed", sessionLapsed: true},
 		{name: "the auth client is disabled", breakIt: func(t *testing.T, ctx context.Context, o offeredRegistration) {
@@ -178,7 +175,6 @@ func offeredReachCases() []offeredReachCase {
 func TestRefreshSweep_OfferedRegistrationWithoutASignInLink(t *testing.T) {
 	t.Parallel()
 	ctx, o := seedOfferedRegistration(t, "sweep-offered", "https://issuer.example.com/sweep-offered")
-	enforceUpstreamAuth(t, ctx, o.ti.conn, o.organization)
 	enableOrgAutoRefreshFeature(t, ctx, o.ti, o.organization, productfeatures.FeatureRemoteSessionAutoRefresh)
 	sessionID := o.grant(t, ctx, o.signIn, true, true)
 	seedGramSession(t, ctx, o.ti, o.subject, o.signIn, "sweep-offered", 24*time.Hour)
@@ -210,9 +206,6 @@ func TestRefreshSweep_OfferedRegistrationOutOfReach(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, o := seedOfferedRegistration(t, "sweep-out", "https://issuer.example.com/sweep-out")
-			if !tc.skipEnforcement {
-				enforceUpstreamAuth(t, ctx, o.ti.conn, o.organization)
-			}
 			enableOrgAutoRefreshFeature(t, ctx, o.ti, o.organization, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
 			sessionID := o.grant(t, ctx, o.signIn, true, true)
 			if !tc.skipSession {
@@ -425,7 +418,6 @@ func seedForeignOrganizationSignIn(t *testing.T, ctx context.Context, ti *testIn
 func TestRecheckSweep_OfferedRegistrationWithoutASignInLink(t *testing.T) {
 	t.Parallel()
 	ctx, o := seedOfferedRegistration(t, "recheck-offered", "https://issuer.example.com/recheck-offered")
-	enforceUpstreamAuth(t, ctx, o.ti.conn, o.organization)
 	_, err := mcpendpointsrepo.New(o.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: o.projectID, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID: conv.ToNullUUID(o.serverID), MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: "recheck-offered-endpoint",
@@ -447,20 +439,32 @@ func TestRecheckSweep_OfferedRegistrationWithoutASignInLink(t *testing.T) {
 	require.Equal(t, sessionID, candidate.RemoteSession.ID)
 
 	placements, err := q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
-		UserSessionIssuerID:   o.signIn,
-		RemoteSessionClientID: o.registration,
-		OrganizationIds:       []string{o.organization},
-		SubjectUrn:            o.subject,
-		NowTs:                 conv.ToPGTimestamptz(window.now),
+		ID: sessionID, UpdatedAt: candidate.RemoteSession.UpdatedAt, GrantGeneration: candidate.RemoteSession.GrantGeneration,
+		OrganizationIds: []string{o.organization},
+		NowTs:           conv.ToPGTimestamptz(window.now),
 	})
 	require.NoError(t, err)
 	require.Len(t, placements, 1)
 	require.Equal(t, conv.ToNullUUID(o.serverID), placements[0].McpServerID)
 
-	n, err := q.ClearRemoteSessionRecheckLease(ctx, repo.ClearRemoteSessionRecheckLeaseParams{ID: sessionID, OrganizationIds: []string{"another-organization"}})
+	staleGrant := candidate.RemoteSession.GrantGeneration - 1
+	outdated, err := q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
+		ID: sessionID, UpdatedAt: candidate.RemoteSession.UpdatedAt, GrantGeneration: staleGrant,
+		OrganizationIds: []string{o.organization}, NowTs: conv.ToPGTimestamptz(window.now),
+	})
+	require.NoError(t, err)
+	require.Empty(t, outdated, "an old grant snapshot cannot publish material from the current generation")
+
+	stale := rows[0].ClaimedAt
+	stale.Time = stale.Time.Add(-time.Second)
+	n, err := q.ClearRemoteSessionRecheckLease(ctx, repo.ClearRemoteSessionRecheckLeaseParams{ID: sessionID, ClaimedAt: stale, NowTs: conv.ToPGTimestamptz(window.now), OrganizationIds: rows[0].OrganizationIds})
+	require.NoError(t, err)
+	require.Zero(t, n, "old cleanup must not clear a newer lease")
+	n, err = q.ClearRemoteSessionRecheckLease(ctx, repo.ClearRemoteSessionRecheckLeaseParams{ID: sessionID, ClaimedAt: rows[0].ClaimedAt, NowTs: conv.ToPGTimestamptz(window.now), OrganizationIds: []string{"another-organization"}})
+
 	require.NoError(t, err)
 	require.Zero(t, n, "a lease is given back only under the organizations it was claimed in")
-	n, err = q.ClearRemoteSessionRecheckLease(ctx, repo.ClearRemoteSessionRecheckLeaseParams{ID: sessionID, OrganizationIds: rows[0].OrganizationIds})
+	n, err = q.ClearRemoteSessionRecheckLease(ctx, repo.ClearRemoteSessionRecheckLeaseParams{ID: sessionID, ClaimedAt: rows[0].ClaimedAt, NowTs: conv.ToPGTimestamptz(window.now), OrganizationIds: rows[0].OrganizationIds})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 	rows, err = q.ClaimDueRemoteSessionRecheckCandidates(ctx, window.claimParams())
@@ -475,9 +479,6 @@ func TestRecheckSweep_OfferedRegistrationOutOfReach(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, o := seedOfferedRegistration(t, "recheck-out", "https://issuer.example.com/recheck-out")
-			if !tc.skipEnforcement {
-				enforceUpstreamAuth(t, ctx, o.ti.conn, o.organization)
-			}
 			_, err := mcpendpointsrepo.New(o.ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 				ProjectID: o.projectID, CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				McpServerID: conv.ToNullUUID(o.serverID), MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Slug: "recheck-out-endpoint",
@@ -500,12 +501,12 @@ func TestRecheckSweep_OfferedRegistrationOutOfReach(t *testing.T) {
 			_, err = q.GetDueRemoteSessionRecheckCandidate(ctx, window.candidateParams(sessionID, o.organization))
 			require.ErrorIs(t, err, pgx.ErrNoRows, "the claim and its re-read agree")
 
+			sess, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: o.subject, RemoteSessionClientID: o.registration})
+			require.NoError(t, err)
 			placements, err := q.GetRemoteSessionRecheckEndpoints(ctx, repo.GetRemoteSessionRecheckEndpointsParams{
-				UserSessionIssuerID:   o.signIn,
-				RemoteSessionClientID: o.registration,
-				OrganizationIds:       []string{o.organization},
-				SubjectUrn:            o.subject,
-				NowTs:                 conv.ToPGTimestamptz(window.now),
+				ID: sessionID, UpdatedAt: sess.UpdatedAt, GrantGeneration: sess.GrantGeneration,
+				OrganizationIds: []string{o.organization},
+				NowTs:           conv.ToPGTimestamptz(window.now),
 			})
 			require.NoError(t, err)
 			require.Empty(t, placements)
@@ -520,7 +521,6 @@ func TestRemoteSessionRefreshActivity_RefreshesAnOfferedRegistration(t *testing.
 	var posted atomic.Pointer[url.Values]
 	upstream := newFormCapturingTokenUpstream(t, &posted)
 	ctx, o := seedOfferedRegistration(t, "activity-offered", upstream.URL)
-	enforceUpstreamAuth(t, ctx, o.ti.conn, o.organization)
 	enableOrgAutoRefreshFeature(t, ctx, o.ti, o.organization, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
 	subject := seedRefreshableSharedSession(t, ctx, o.ti, o.signIn, o.registration, "activity-offered")
 	q := repo.New(o.ti.conn)

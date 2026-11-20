@@ -109,6 +109,10 @@ func (s *Service) claimingMetaMembers(
 		return nil, false, err
 	}
 
+	return s.claimingMetaMembersForValidation(ctx, endpoint, client, typedOffers)
+}
+
+func (s *Service) claimingMetaMembersForValidation(ctx context.Context, endpoint *ResolvedMcpEndpoint, client remotesessions.Client, typedOffers bool) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, bool, error) {
 	// A member claims the clients associated with it rather than every
 	// client of its authorization server.
 	var rows []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow

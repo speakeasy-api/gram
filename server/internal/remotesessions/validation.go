@@ -72,3 +72,25 @@ func (m *ChallengeManager) RecordRemoteSessionValidation(ctx context.Context, re
 	}
 	return rows > 0, nil
 }
+
+// OpenRecheckToken reads an already scoped, exact unrenewable grant snapshot.
+// A scheduled probe must never switch to another row or refresh a credential.
+func (m *ChallengeManager) OpenRecheckToken(ctx context.Context, sess remotesessions_repo.RemoteSession) (UpstreamToken, error) {
+	now := time.Now()
+	if !authorizationUsable(sess, now) || (sess.AccessExpiresAt.Valid && !sess.AccessExpiresAt.Time.After(now)) ||
+		sess.RefreshTokenEncrypted.Valid || sess.RefreshTokenOrgEncrypted.Valid || sess.RefreshExpiresAt.Valid {
+		return UpstreamToken{}, ErrNoValidToken
+	}
+	token, err := openAccessToken(ctx, m.tokens, sess)
+	if err != nil {
+		return UpstreamToken{}, fmt.Errorf("open exact grant for re-check: %w", err)
+	}
+	if token == "" {
+		return UpstreamToken{}, ErrNoValidToken
+	}
+	return UpstreamToken{ //nolint:exhaustruct_v5 // an exact subject token is not renewable here
+		Token: token, Resource: conv.FromPGTextOrEmpty[string](sess.Resource), CredentialOwner: CredentialOwnerSubject,
+		RemoteSessionClientID: sess.RemoteSessionClientID, RemoteSessionID: sess.ID,
+		RemoteSessionUpdatedAt: sess.UpdatedAt.Time, RemoteSessionResolvedFromUpdatedAt: sess.UpdatedAt.Time,
+	}, nil
+}

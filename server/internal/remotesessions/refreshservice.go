@@ -876,7 +876,7 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 
 	// The grant the POST actually presented, which a concurrent reconnect can move past sess.
 	attempted := sess
-	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, &attempted)
+	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, &attempted, attribution)
 	if postLockClient != nil {
 		client = *postLockClient
 	}
@@ -1004,6 +1004,7 @@ func (s *RefreshService) refresh(
 	sess remotesessions_repo.RemoteSession,
 	callerResource string,
 	attempted *remotesessions_repo.RemoteSession,
+	attribution RefreshAttribution,
 ) (RefreshResult, *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, *identityRestatement, error) {
 	var zero RefreshResult
 
@@ -1120,6 +1121,17 @@ func (s *RefreshService) refresh(
 		return zero, nil, nil, ErrNoValidToken
 	}
 
+	if attribution.scheduledEligibility != nil {
+		resources, err := attribution.scheduledEligibility(ctx, sess)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return RefreshResult{Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive}, nil, nil, nil //nolint:exhaustruct_v5 // no grant was presented
+		}
+		if err != nil {
+			return zero, nil, nil, fmt.Errorf("recheck scheduled remote session refresh eligibility: %w", err)
+		}
+		callerResource = clientUpstreamResource(resources)
+	}
+
 	// The persisted binding wins over the caller-derived fallback: the token
 	// family was granted for the resource recorded at code exchange, and a
 	// request-derived value can drift from it (e.g. after MCP server moves).
@@ -1127,7 +1139,7 @@ func (s *RefreshService) refresh(
 	if resource == "" {
 		resource = callerResource
 	}
-	if resource == "" {
+	if resource == "" && attribution.scheduledEligibility == nil {
 		// Legacy row minted before the resource column, with no caller value:
 		// derive the client's own so it is never replayed against another
 		// upstream's audience.
