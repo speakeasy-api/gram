@@ -18,7 +18,10 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { ServerClientAssociation } from "@gram/client/models/components/serverclientassociation.js";
 import { buildServerClientAssociationsQuery } from "@gram/client/react-query/serverClientAssociations.js";
-import { useRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient.js";
+import {
+  invalidateAllRemoteSessionClient,
+  useRemoteSessionClient,
+} from "@gram/client/react-query/remoteSessionClient.js";
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
@@ -176,8 +179,9 @@ function ModifyRemoteIdentityProviderSheetBody({
     },
     onSuccess: async () => {
       // The client detail page reads the organization-scoped queries, so
-      // refresh those as well as this project's list.
+      // refresh those as well as this project's registration and list.
       await Promise.all([
+        invalidateAllRemoteSessionClient(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         invalidateAllOrganizationRemoteSessionClient(queryClient, {
           refetchType: "all",
@@ -404,6 +408,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       await Promise.all([
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuer(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteSessionClient(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         // Also invalidate MCP server queries so the sidebar readiness bar
         // refreshes (AGE-3279).

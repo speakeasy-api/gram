@@ -107,6 +107,34 @@ func TestResolveAuthClientAccessTokens_ServesAConsentFromAnotherSignIn(t *testin
 	require.False(t, reconnect)
 }
 
+func TestResolveHostedRegistrationAccessTokens_UsesOnlyAssignedGrant(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "hosted-exact-grant")
+	subject := urn.NewUserSubject("hosted-exact-user")
+	session := f.consent(t, subject, f.signInB, f.clientID, "assignment-token")
+	req := f.request(subject, f.clientID)
+	tokens, err := f.mgr.ResolveHostedRegistrationAccessTokens(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, session.ID, tokens[f.issuerID].RemoteSessionID)
+	require.Equal(t, f.clientID, tokens[f.issuerID].RemoteSessionClientID)
+	reconnect, err := f.mgr.HostedRegistrationNeedsReconnect(ctx, req)
+	require.NoError(t, err)
+	require.False(t, reconnect)
+
+	unknown := f.request(subject, uuid.New())
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, unknown)
+	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
+	reconnect, err = f.mgr.HostedRegistrationNeedsReconnect(ctx, unknown)
+	require.NoError(t, err)
+	require.True(t, reconnect)
+
+	// An agent without an exact attachment cannot borrow this user's grant.
+	agent := f.request(urn.NewAgentSubject(uuid.New()), f.clientID)
+	reconnect, err = f.mgr.HostedRegistrationNeedsReconnect(t.Context(), agent)
+	require.NoError(t, err)
+	require.True(t, reconnect)
+}
+
 func TestResolveClientAccessTokens_StillRequiresTheSignInLink(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAuthClientTokenFixture(t, "ac-legacy-link")

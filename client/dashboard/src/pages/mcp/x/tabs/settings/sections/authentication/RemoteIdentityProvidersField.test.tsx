@@ -41,7 +41,10 @@ function renderField(
   issuers: RemoteSessionIssuer[],
   handlers: {
     onEdit?: () => void;
-    onDelete?: () => void;
+    onDelete?: (
+      issuer: RemoteSessionIssuer,
+      association?: ServerClientAssociation,
+    ) => void;
     allowAdditionalProviders?: boolean;
     isError?: boolean;
     associations?: ServerClientAssociation[];
@@ -81,7 +84,13 @@ describe("RemoteIdentityProvidersField", () => {
       clientId: "same-oauth-client",
     } as ServerClientAssociation;
     const second = { ...first, remoteSessionClientId: "registration-2" };
-    const onDelete = vi.fn();
+    const onDelete =
+      vi.fn<
+        (
+          issuer: RemoteSessionIssuer,
+          association?: ServerClientAssociation,
+        ) => void
+      >();
     renderField([issuer()], { associations: [first, second], onDelete });
 
     expect(screen.getByText(/multiple registrations/)).toBeTruthy();

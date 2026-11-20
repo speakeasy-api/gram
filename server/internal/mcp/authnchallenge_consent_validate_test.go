@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -1354,9 +1355,12 @@ func TestServeConsentAction_ValidateHostedAssignmentWithoutIssuerLink(t *testing
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, assigned, fx.subject, "assigned-token", "")
 	fx.clientID = assigned
 	fx.server = hosted.slug
+	rec := recordValidationAttempts(t, ctx, fx)
 	requireValidated(t, fx)
 	require.Empty(t, fx.member.drain(), "hosted Verify must not send its grant to the proxied member")
 	require.Equal(t, string(remotesessions.ValidationOutcomeInactive), storedSession(t, ctx, fx).ValidationStatus.String)
+	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderRejected)
+	require.Equal(t, assigned.String(), row.RemoteSessionClientID)
 }
 
 // Only introspection can tell a member's rejection from a token the provider no longer honours.

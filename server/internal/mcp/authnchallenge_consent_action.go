@@ -473,6 +473,8 @@ func (s *Service) buildRemoteConnectURL(
 	if loginProjectID == uuid.Nil && resourceMember.serverID.Valid {
 		loginProjectID = resourceMember.projectID
 	}
+	// A hosted toolset uses its server's placed registration, just like the
+	// hosted runtime. Only a proxied login is authorized by a typed offer.
 	var typedAuthorization *remotesessions.TypedAuthorization
 	if hostedPlacement == nil {
 		typedAuthorization, err = s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, resourceMember)

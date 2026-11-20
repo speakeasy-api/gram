@@ -32,7 +32,7 @@ func TestTypedAuthorizationValidatorFailsClosed(t *testing.T) {
 func TestHostedPlacementStateRoundTrip(t *testing.T) {
 	t.Parallel()
 	subject := urn.NewUserSubject("synthetic-user")
-	placement := &HostedPlacement{OrganizationID: "synthetic-org", ProjectID: uuid.New(), ServerID: uuid.New(), RemoteSessionClientID: uuid.New()}
+	placement := &HostedPlacement{AssociationID: uuid.New(), OrganizationID: "synthetic-org", ProjectID: uuid.New(), ServerID: uuid.New(), RemoteSessionClientID: uuid.New()}
 	server := uuid.NullUUID{UUID: placement.ServerID, Valid: true}
 	state := RemoteLoginState{HostedPlacement: placement, OrganizationID: placement.OrganizationID, ProjectID: placement.ProjectID,
 		McpServerID: server, ResourceMcpServerID: server, RemoteSessionClientID: placement.RemoteSessionClientID, Subject: &subject,

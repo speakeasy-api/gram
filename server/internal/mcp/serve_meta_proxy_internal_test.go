@@ -471,9 +471,11 @@ func TestMemberTokens_MissingMemberResolverDoesNotUseProjectCredentials(t *testi
 		{serverID: uuid.New(), projectID: projectID, slug: "hosted", backend: metaMemberBackendHosted},
 		{serverID: uuid.New(), projectID: projectID, slug: "associated", backend: metaMemberBackendProxied, associatedClients: map[uuid.UUID]bool{uuid.New(): true}},
 	} {
-		got, err := gate.memberTokens(t.Context(), member)
-		require.ErrorContains(t, err, "could not load its connection credentials")
-		require.Nil(t, got)
+		t.Run(member.slug, func(t *testing.T) {
+			got, err := gate.memberTokens(t.Context(), member)
+			require.ErrorContains(t, err, "could not load its connection credentials")
+			require.Nil(t, got)
+		})
 	}
 }
 

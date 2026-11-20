@@ -139,7 +139,7 @@ func TestHandleToken_RefreshRefusedWhileUpstreamNeedsReconnect(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
-	remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+	remoteClient := attachHostedRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID, toolset.ID)
 
 	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, refused.err)
@@ -166,7 +166,7 @@ func TestHandleToken_RefreshProceedsWhileUpstreamUnavailable(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
-	remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+	remoteClient := attachHostedRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID, toolset.ID)
 	upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuer.ID, remoteClient.ID, urn.NewUserSubject("refresh-replay-user"))
 	var upstreamRefreshes atomic.Int32
 	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, remoteClient.ID, func(w http.ResponseWriter, _ *http.Request) {
@@ -301,7 +301,7 @@ func TestIssuerGate_UpstreamInvalidGrantRefusesTheFollowingRefresh(t *testing.T)
 	ctx, ti := newTestMCPService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
-	remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+	remoteClient := attachHostedRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID, toolset.ID)
 	subject := urn.NewUserSubject("refresh-replay-user")
 	upsertExpiredRefreshableRemoteSession(t, ctx, ti, issuer.ID, remoteClient.ID, subject)
 	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, remoteClient.ID, func(w http.ResponseWriter, _ *http.Request) {
@@ -353,7 +353,7 @@ func TestHandleToken_RefreshChecksStoredUpstreamCredentials(t *testing.T) {
 			ctx, ti := newTestMCPService(t)
 			authCtx := requireProjectAuthContext(t, ctx)
 			toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
-			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+			remoteClient := attachHostedRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID, toolset.ID)
 			subject := urn.NewUserSubject("refresh-replay-user")
 			accessCiphertext, err := ti.enc.Encrypt([]byte("upstream-access"))
 			require.NoError(t, err)
@@ -552,6 +552,14 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) string {
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, code, shareable.Code)
 	return shareable.Error()
+}
+
+// attachHostedRemoteSessionClient sets the exact upstream used by a hosted server.
+func attachHostedRemoteSessionClient(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, userSessionIssuerID, serverID uuid.UUID) remotesessions_repo.RemoteSessionClient {
+	t.Helper()
+	client := attachTestRemoteSessionClient(t, ctx, ti, authCtx, userSessionIssuerID)
+	assignHostedOAuth(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, client.ID)
+	return client
 }
 
 // attachTestRemoteSessionClient binds a new remote_session_client to the user

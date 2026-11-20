@@ -209,13 +209,18 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 	}
 	if member.backend == metaMemberBackendHosted {
-		registrationID, err := s.hostedRegistration(ctx, gate.organizationID, member.projectID, member.serverID)
-		if err != nil {
-			logger.WarnContext(ctx, "check hosted member upstream assignment", attr.SlogError(err))
+		// The admitted snapshot already has the exact assignment. Token
+		// resolution still rechecks it live, so a changed assignment cannot
+		// report the newly selected sibling's credential as connected.
+		if member.associatedClients == nil || len(member.associatedClients) > 1 {
 			return signInRow(metamcp.SignInError, "could not check this server's sign-in", nil)
 		}
-		if registrationID == uuid.Nil {
+		if len(member.associatedClients) == 0 {
 			return signInRow(metamcp.SignInNotRequired, "", nil)
+		}
+		var registrationID uuid.UUID
+		for id := range member.associatedClients {
+			registrationID = id
 		}
 		tokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
@@ -277,7 +282,8 @@ func assignedHostedToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, regi
 			continue
 		}
 		if found {
-			return remotesessions.UpstreamToken{}, false
+			var none remotesessions.UpstreamToken
+			return none, false
 		}
 		entry, found = token, true
 	}

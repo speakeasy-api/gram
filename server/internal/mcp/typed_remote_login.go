@@ -48,6 +48,12 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		}
 		return fmt.Errorf("load typed login server: %w", err)
 	}
+	// Typed OAuth offers are for proxied servers. A hosted server must prove
+	// its own registration placement; an offer (including one captured in
+	// an older recovery link) is not a substitute.
+	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
+		return fmt.Errorf("%w: typed login requires a proxied server", remotesessions.ErrTypedAuthorizationChanged)
+	}
 	if server.ProjectID != a.ProjectID {
 		return fmt.Errorf("%w: typed login project changed", remotesessions.ErrTypedAuthorizationChanged)
 	}

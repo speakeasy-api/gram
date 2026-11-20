@@ -27,15 +27,31 @@ func TestHostedAssignmentsDoNotBorrowSiblingRegistration(t *testing.T) {
 		row(first, a, unknown), row(sibling, b, unknown), row(missing, uuid.Nil, unknown), row(noAuth, uuid.Nil, notRequired),
 		row(ambiguous, a, unknown), row(ambiguous, b, unknown),
 	})
-	for server, expected := range map[uuid.UUID]uuid.UUID{first: a, sibling: b, noAuth: uuid.Nil} {
-		got, err := assignments[server].registration(project)
-		require.NoError(t, err)
-		require.Equal(t, expected, got)
+	for _, tc := range []struct {
+		name          string
+		server        uuid.UUID
+		want          uuid.UUID
+		misconfigured bool
+	}{
+		{name: "first uses its own registration", server: first, want: a},
+		{name: "sibling uses its own registration", server: sibling, want: b},
+		{name: "explicit no upstream", server: noAuth},
+		{name: "missing assignment", server: missing, misconfigured: true},
+		{name: "ambiguous assignment", server: ambiguous, misconfigured: true},
+		{name: "missing server", server: uuid.New(), misconfigured: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := assignments[tc.server].registration(project)
+			if tc.misconfigured {
+				require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
 	}
-	for _, server := range []uuid.UUID{missing, ambiguous, uuid.New()} {
-		_, err := assignments[server].registration(project)
+	t.Run("wrong project", func(t *testing.T) {
+		_, err := assignments[first].registration(uuid.New())
 		require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
-	}
-	_, err := assignments[first].registration(uuid.New())
-	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
+	})
 }

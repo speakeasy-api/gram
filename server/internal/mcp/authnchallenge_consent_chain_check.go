@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"slices"
 	"time"
@@ -72,16 +73,15 @@ func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedM
 			return nil, routing, fmt.Errorf("remote session statuses: %w", err)
 		}
 	}
-	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, hosted)
-	if err != nil {
-		return nil, routing, err
-	}
-	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
+	exact := make(map[uuid.UUID]uuid.UUID, len(hosted)+len(typed))
+	maps.Copy(exact, hosted)
+	maps.Copy(exact, typed)
+	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, exact)
 	if err != nil {
 		return nil, routing, err
 	}
 	if len(statuses) > 0 {
-		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
+		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses, hosted)
 		if err != nil {
 			return nil, routing, err
 		}

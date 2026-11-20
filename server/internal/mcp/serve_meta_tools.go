@@ -548,15 +548,9 @@ func (s *Service) buildMemberDispatch(
 	if err != nil {
 		return nil, hostingstate.NotHosted(), nil, err
 	}
-	qualified := make(map[uuid.UUID]remotesessions.UpstreamToken, 1)
-	for issuer, token := range tokens {
-		if !member.associatedClients[token.RemoteSessionClientID] || token.Resource != "" {
-			continue
-		}
-		if token.ClientCredentialErr != nil {
-			return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(metaMemberClientCredentialError(member, token.ClientCredentialErr), member, gate.memberCallerURL(member))
-		}
-		qualified[issuer] = token
+	qualified, err := hostedMemberTokens(tokens, member)
+	if err != nil {
+		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberCallerURL(member))
 	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, qualified)
 	if err != nil {
@@ -628,6 +622,25 @@ func (s *Service) buildMemberDispatch(
 		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 	return toolset, hosting, inputs, nil
+}
+
+// hostedMemberTokens accepts only an unqualified credential for the unique
+// registration already admitted on this server. An issuer match is not a
+// placement; even a single token must match the actual registration.
+func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	if len(member.associatedClients) != 1 || len(tokens) == 0 {
+		return nil, nil
+	}
+	for issuer, token := range tokens {
+		if !member.associatedClients[token.RemoteSessionClientID] || token.Resource != "" {
+			continue
+		}
+		if token.ClientCredentialErr != nil {
+			return nil, metaMemberClientCredentialError(member, token.ClientCredentialErr)
+		}
+		return map[uuid.UUID]remotesessions.UpstreamToken{issuer: token}, nil
+	}
+	return nil, nil
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

@@ -107,6 +107,13 @@ func (m *ChallengeManager) HostedRegistrationNeedsReconnect(ctx context.Context,
 	if err != nil {
 		return false, err
 	}
+	if CredentialOwner(client.CredentialOwner) == CredentialOwnerSelf {
+		resources, err := m.selfClientResources(ctx, req.OrganizationID, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, false)
+		if err != nil {
+			return false, err
+		}
+		return clientCredentialRequestResource(client, resources[client.ClientID]) != "", nil
+	}
 	resource := ""
 	return m.storedGrantsNeedReconnectForResource(ctx, lookupAuthClient, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow{client}, req.Subject, &resource)
 }

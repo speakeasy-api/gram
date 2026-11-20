@@ -10,12 +10,13 @@
 // replaced by another client.
 //
 // Credentials without a session row (principal credentials, agent keys,
-// assistant tokens) and hosted toolsets keep the issuer-derived path until
-// the organization enforces upstream auth. Then every credential reaching a
+// assistant tokens) keep the compatibility path until the organization
+// enforces upstream auth. Then every credential reaching a
 // proxied server is decided by the typed auth client resolver: a principal
 // credential through the execution-selection profile version it binds, an
 // agent key through its choice or the server's own auth clients, and any
-// other credential by what the server offers.
+// other credential by what the server offers. Hosted toolsets always use
+// the exact registration assigned to the server.
 
 package mcp
 
@@ -468,9 +469,8 @@ func (s *Service) directAgentKeyError(ctx context.Context, authentication *issue
 }
 
 // resolveAccessTokens resolves the authenticated caller's upstream
-// credentials: every client the issuer binds, or only the chosen client once
-// directUpstreamChoice has narrowed authentication to one, or none for a
-// no-auth choice.
+// credentials: the exact hosted assignment, or the proxied selection
+// (including an explicit no-auth choice).
 func (s *Service) resolveAccessTokens(ctx context.Context, authentication *issuerGateAuthentication, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	tokens, err := s.resolveSelectedAccessTokens(ctx, authentication, skipUnusable)
 	if err != nil {
@@ -1216,10 +1216,8 @@ func (s *Service) attachAssociatedClients(ctx context.Context, organizationID st
 	return nil
 }
 
-// memberUsesClient reports whether a client authenticates for a member: one
-// of a proxied member's associated clients, otherwise, for a hosted member, a
-// client of the member's authorization server in the member's own project
-// when a project owns it.
+// memberUsesClient checks exact hosted assignments and explicit proxied
+// associations before considering compatibility matching for a proxied member.
 func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, clientProjectID uuid.NullUUID) bool {
 	if member.backend == metaMemberBackendHosted {
 		return member.associatedClients[clientID]

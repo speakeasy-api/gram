@@ -469,6 +469,11 @@ SELECT EXISTS (
     )
 ) AS sole_consumer;
 
+-- name: RequireHostedUpstreamAssignment :exec
+UPDATE mcp_servers
+SET requires_upstream_auth = TRUE
+WHERE id = @server_id AND project_id = @project_id AND toolset_id IS NOT NULL AND NOT deleted;
+
 -- name: ListHostedUpstreamAssignments :many
 -- Preserve the server row even without a live placement so readers can
 -- distinguish an explicit no-auth setting from missing configuration.

@@ -44,8 +44,13 @@ type consentRouting struct {
 // unroutable reports whether the runtime would refuse to forward a card's
 // live grant.
 func (r consentRouting) unroutable(client remotesessions.Client, resource string) bool {
-	if r.hostedClients[client.ID] && (r.backend == consentBackendNone || len(r.members[client.ID]) == 0) {
-		return resource != ""
+	if r.hostedClients[client.ID] {
+		if resource == "" {
+			return false
+		}
+		if len(r.members[client.ID]) == 0 {
+			return true
+		}
 	}
 	switch r.backend {
 	case consentBackendRemote:
@@ -96,16 +101,13 @@ func (s *Service) resolveConsentRouting(
 	challengeState AuthnChallengeState,
 	clients []remotesessions.Client,
 	statuses map[uuid.UUID]remotesessions.RemoteSessionState,
+	hosted map[uuid.UUID]uuid.UUID,
 ) (consentRouting, error) {
-	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil, hostedClients: nil}
+	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil, hostedClients: make(map[uuid.UUID]bool, len(hosted))}
+	for id := range hosted {
+		r.hostedClients[id] = true
+	}
 	if isDirectHostedValidation(endpoint) {
-		registration, err := s.hostedRegistration(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
-		if err != nil {
-			return r, err
-		}
-		if registration != uuid.Nil {
-			r.hostedClients = map[uuid.UUID]bool{registration: true}
-		}
 		return r, nil
 	}
 	switch {
@@ -113,19 +115,6 @@ func (s *Service) resolveConsentRouting(
 		memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
 		if err != nil {
 			return r, fmt.Errorf("stamp consent subject context: %w", err)
-		}
-		_, admitted, err := s.resolveEndpointMemberSnapshot(memberCtx, s.logger, mandatorySurfaceConsent, endpoint)
-		if err != nil {
-			return r, fmt.Errorf("resolve hosted consent routing: %w", err)
-		}
-		r.hostedClients = make(map[uuid.UUID]bool)
-		for _, member := range admitted {
-			if member.backend != metaMemberBackendHosted {
-				continue
-			}
-			for id := range member.associatedClients {
-				r.hostedClients[id] = true
-			}
 		}
 
 		r.backend = consentBackendMeta

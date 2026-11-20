@@ -895,13 +895,17 @@ func (m *ChallengeManager) resolveClientTokens(
 		if self {
 			selfResource = clientCredentialRequestResource(c, selfResources[c.ClientID])
 			if ctx.Value(hostedTokenResourceKey{}) == true && selfResource != "" {
-				return nil, ErrNoValidToken
+				err = ErrNoValidToken
+				// Preserve the unavailable entry without making it routeable as
+				// a resource-qualified token or contacting the provider.
+				selfResource = ""
+			} else {
+				resolved, err = m.resolveClientCredential(ctx, ClientCredentialRequest{
+					OrganizationID: organizationID,
+					ClientID:       c.ClientID,
+					Resource:       selfResource,
+				})
 			}
-			resolved, err = m.resolveClientCredential(ctx, ClientCredentialRequest{
-				OrganizationID: organizationID,
-				ClientID:       c.ClientID,
-				Resource:       selfResource,
-			})
 		} else {
 			// The grant-time metadata (the recorded RFC 8707 resource) comes
 			// from the same row load that produced the token, so a

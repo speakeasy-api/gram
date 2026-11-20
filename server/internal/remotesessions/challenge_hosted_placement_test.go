@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -18,19 +19,20 @@ import (
 func TestHostedCallbackAuthorizesExactPlacement(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
-		name          string
-		stamp         bool
-		detachIssuer  bool
-		reattach      bool
-		detachPhase   int
-		wantExchanges int64
-		wantGrant     bool
+		name                 string
+		stamp                bool
+		detachIssuer         bool
+		reattach             bool
+		detachBeforeExchange bool
+		detachBeforeGrant    bool
+		wantExchanges        int64
+		wantGrant            bool
 	}{
 		{name: "exact-placement-no-issuer-binding", stamp: true, detachIssuer: true, wantExchanges: 1, wantGrant: true},
 		{name: "old-issuer-only-state", stamp: false},
-		{name: "placement-removed-before-exchange", stamp: true, detachPhase: 1},
-		{name: "placement-replaced-before-exchange", stamp: true, detachPhase: 1, reattach: true},
-		{name: "placement-removed-before-grant-write", stamp: true, detachPhase: 2, wantExchanges: 1},
+		{name: "placement-removed-before-exchange", stamp: true, detachBeforeExchange: true},
+		{name: "placement-replaced-before-exchange", stamp: true, detachBeforeExchange: true, reattach: true},
+		{name: "placement-removed-before-grant-write", stamp: true, detachBeforeGrant: true, wantExchanges: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -67,7 +69,10 @@ func TestHostedCallbackAuthorizesExactPlacement(t *testing.T) {
 				_, err := associations.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
 					McpServerID: serverID, ProjectID: fx.projectID, RemoteSessionClientID: fx.clientID,
 				})
-				return err
+				if err != nil {
+					return fmt.Errorf("detach hosted assignment: %w", err)
+				}
+				return nil
 			}
 			if tt.detachIssuer {
 				removed, err := repo.New(fx.ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
@@ -76,7 +81,7 @@ func TestHostedCallbackAuthorizesExactPlacement(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, 1, removed)
 			}
-			if tt.detachPhase == 1 {
+			if tt.detachBeforeExchange {
 				require.NoError(t, detach(ctx))
 				if tt.reattach {
 					_, err := associations.AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
@@ -85,12 +90,12 @@ func TestHostedCallbackAuthorizesExactPlacement(t *testing.T) {
 					require.NoError(t, err)
 				}
 			}
-			checks := 0
+			removedBeforeGrant := false
 			fx.mgr.SetTypedAuthorizationValidator(func(ctx context.Context, _ remotesessions.RemoteLoginState) error {
-				checks++
-				if tt.detachPhase == 2 && checks == 2 {
-					// Placement already passed the post-exchange read. The
-					// transactional recheck must still refuse the grant write.
+				if tt.detachBeforeGrant && fx.exchanges.Load() > 0 && !removedBeforeGrant {
+					// This is the subject check after the post-exchange placement
+					// read. Only the transactional recheck can catch this detach.
+					removedBeforeGrant = true
 					return detach(ctx)
 				}
 				return nil
@@ -98,6 +103,7 @@ func TestHostedCallbackAuthorizesExactPlacement(t *testing.T) {
 
 			callbackErr := fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "hosted-code"))
 			require.Equal(t, tt.wantExchanges, fx.exchanges.Load())
+			require.Equal(t, tt.detachBeforeGrant, removedBeforeGrant)
 			grant, err := repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
 			if tt.wantGrant {
 				require.NoError(t, callbackErr)

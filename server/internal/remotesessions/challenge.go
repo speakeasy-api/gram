@@ -677,7 +677,10 @@ func (s RemoteLoginState) lockHostedGatewayMember(ctx context.Context, db remote
 			if errors.Is(err, pgx.ErrNoRows) || (err == nil && (got.McpServerID != member.McpServerID || got.MetaMcpServerID != s.MetaMcpServerID.UUID)) {
 				return ErrTypedAuthorizationChanged
 			}
-			return err
+			if err != nil {
+				return fmt.Errorf("lock hosted login gateway member: %w", err)
+			}
+			return nil
 		}
 	}
 	return ErrTypedAuthorizationChanged
@@ -2343,7 +2346,8 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	// Recheck subject permission after the exchange, before taking database
-	// locks. The exact typed binding is then locked through grant commit below.
+	// locks. The exact typed binding or hosted placement is then locked through
+	// grant commit below.
 	if err := m.validateRemoteLoginAuthorization(ctx, state); err != nil {
 		t.Refuse(ctx, TypedAuthorizationHappened(err))
 		return none, oops.E(oops.CodeUnauthorized, err, "connection authorization is no longer valid").LogWarn(ctx, logger)
@@ -2356,10 +2360,14 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
 
-	if state.HostedPlacement != nil && state.MetaMcpServerID.Valid {
+	if state.HostedPlacement != nil && state.MetaMcpServerID.Valid && state.RouteBase != mcproute.OrganizationGateway {
 		if err := state.validateHostedGateway(ctx, dbtx, true); err != nil {
-			t.Refuse(ctx, TypedAuthorizationHappened(err))
-			return none, oops.E(oops.CodeUnauthorized, err, "hosted gateway is no longer valid").LogWarn(ctx, logger)
+			if errors.Is(err, ErrTypedAuthorizationDenied) {
+				t.Refuse(ctx, TypedAuthorizationHappened(err))
+				return none, oops.E(oops.CodeUnauthorized, err, "hosted gateway is no longer valid").LogWarn(ctx, logger)
+			}
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnexpected, err, "lock hosted gateway").LogError(ctx, logger)
 		}
 	}
 
@@ -2382,8 +2390,12 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	if state.HostedPlacement != nil && state.MetaMcpServerID.Valid && state.RouteBase != mcproute.OrganizationGateway {
 		if err := state.lockHostedGatewayMember(ctx, dbtx); err != nil {
-			t.Refuse(ctx, TypedAuthorizationHappened(err))
-			return none, oops.E(oops.CodeUnauthorized, err, "hosted gateway membership is no longer valid").LogWarn(ctx, logger)
+			if errors.Is(err, ErrTypedAuthorizationChanged) {
+				t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+				return none, oops.E(oops.CodeUnauthorized, err, "hosted gateway membership is no longer valid").LogWarn(ctx, logger)
+			}
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnexpected, err, "lock hosted gateway membership").LogError(ctx, logger)
 		}
 	}
 
@@ -2468,6 +2480,20 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if !bound {
 			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 			return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+		}
+	}
+
+	if state.HostedPlacement != nil && state.RouteBase == mcproute.OrganizationGateway {
+		// A derived gateway has no persisted parent to lock. Recheck its issuer
+		// inventory and availability immediately before writing, after waiting
+		// for the issuer, registration and placement locks.
+		if err := state.validateHostedGateway(ctx, dbtx, false); err != nil {
+			if errors.Is(err, ErrTypedAuthorizationChanged) {
+				t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+				return none, oops.E(oops.CodeUnauthorized, err, "hosted gateway is no longer valid").LogWarn(ctx, logger)
+			}
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return none, oops.E(oops.CodeUnexpected, err, "recheck hosted gateway issuer").LogError(ctx, logger)
 		}
 	}
 

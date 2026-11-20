@@ -240,6 +240,12 @@ func (s *Service) attachServerClient(ctx context.Context, logger *slog.Logger, a
 		}
 	}
 
+	if server.ToolsetID.Valid {
+		if err := associations.RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{ServerID: serverID, ProjectID: projectID}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "record hosted upstream requirement").LogError(ctx, logger)
+		}
+	}
+
 	// Where typed auth clients choose upstream authentication, an explicit
 	// attach is the undo for a detach that retired the server's link to the
 	// client's backfilled auth client, which the synchronization otherwise

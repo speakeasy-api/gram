@@ -1175,20 +1175,15 @@ func TestExternalOAuthTokenWithUnmetSchemeRecords(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
 }
 
-// A later client needing a re-link decides the response, so it keeps its own row beside the refresh row.
-func TestFreshRefreshOutrankedByReconnectKeepsTheReconnectRow(t *testing.T) {
+// A sibling registration on the issuer must not refresh or report an outcome for this hosted server.
+func TestHostedReconnectIgnoresRefreshableSibling(t *testing.T) {
 	t.Parallel()
 	rec := mcpconnectionattemptstest.New(t)
 	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	authCtx := requireProjectAuthContext(t, ctx)
 	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-outranked")
-	// Clients resolve in id order, so the lower id must be the one that refreshes.
-	refreshing := fixture.RemoteSessionClient.ID
-	other := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "fresh-outranked-unlinked-"+uuid.NewString()[:8], "", []uuid.UUID{fixture.UserSessionIssuer.ID})
-	if other.String() < refreshing.String() {
-		refreshing = other
-	}
+	sibling := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "hosted-refresh-sibling-"+uuid.NewString()[:8], "", []uuid.UUID{fixture.UserSessionIssuer.ID})
 
 	neverLinked := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, urn.NewUserSubject("gate-user-"+uuid.NewString()))
 	want, wantErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), neverLinked, nil)
@@ -1196,24 +1191,23 @@ func TestFreshRefreshOutrankedByReconnectKeepsTheReconnectRow(t *testing.T) {
 	require.Len(t, rec.Rows(), 1, "a never-linked subject gets the gate row")
 
 	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
-	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, refreshing, subject)
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, sibling, subject)
 	var calls atomic.Int32
-	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, refreshing, func(w http.ResponseWriter, _ *http.Request) {
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, sibling, func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 	got, gotErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject), nil)
-	require.EqualValues(t, 1, calls.Load(), "the refreshing client must resolve first")
+	require.Zero(t, calls.Load(), "only the assigned registration can refresh")
 	require.EqualError(t, gotErr, wantErr.Error())
 	require.Equal(t, want.Code, got.Code)
 	require.Equal(t, want.Body.String(), got.Body.String())
 	require.Equal(t, want.Header().Get("WWW-Authenticate"), got.Header().Get("WWW-Authenticate"))
 
 	rows := rec.Rows()[1:]
-	require.Len(t, rows, 2)
-	require.Equal(t, mcpconnectionattempts.StepProviderRefresh.String(), rows[0].Step)
-	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[1].Step)
-	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession.String(), rows[1].Reason)
+	require.Len(t, rows, 1)
+	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[0].Step)
+	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession.String(), rows[0].Reason)
 }
 
 // A gateway call is past sign-in and takes no caller headers, so its rows stay as they were.

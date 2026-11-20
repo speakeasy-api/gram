@@ -475,9 +475,6 @@ func (s *Service) recheckHostedRemoteSession(ctx context.Context, logger *slog.L
 		return true, errRemoteSessionUnroutable
 	}
 	client := clients[0]
-	if err := s.admitRemoteSessionRecheck(ctx, logger, client.IssuerURL); err != nil {
-		return true, err
-	}
 	now := time.Now()
 	q := remotesessions_repo.New(s.db)
 	current, err := q.GetDueRemoteSessionRecheckCandidate(ctx, remotesessions_repo.GetDueRemoteSessionRecheckCandidateParams{
@@ -502,7 +499,10 @@ func (s *Service) recheckHostedRemoteSession(ctx context.Context, logger *slog.L
 		ID: sess.ID, Subject: sess.SubjectUrn, ClientID: sess.RemoteSessionClientID, UpdatedAt: sess.UpdatedAt.Time,
 		ProjectID: placement.projectID, OrganizationID: endpoint.OrganizationID,
 	}
-	return true, s.verifyHostedRemoteSession(ctx, client, placement, ref, remotesessionmetrics.ValidationTriggerKeepalive)
+	if err := s.admitRemoteSessionRecheck(ctx, logger, client.IssuerURL); err != nil {
+		return true, err
+	}
+	return true, s.verifyHostedRemoteSession(ctx, logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, client, placement, ref, remotesessionmetrics.ValidationTriggerKeepalive)
 }
 
 // placeRemoteSessionRecheck resolves one endpoint the runtime still serves, trying the private surface when the public one is policy-refused.

@@ -17,6 +17,7 @@ import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProvide
 const sdk = vi.hoisted(() => ({
   updateIssuer: vi.fn(async () => ({})),
   updateClient: vi.fn(async () => ({})),
+  invalidateClient: vi.fn(async () => undefined),
   servers: vi.fn(() => ({
     data: { mcpServers: [] as { id: string; name: string }[] },
   })),
@@ -96,6 +97,7 @@ vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/remoteSessionClient.js", () => ({
+  invalidateAllRemoteSessionClient: sdk.invalidateClient,
   useRemoteSessionClient: () => ({
     data: {
       id: "client-1",
@@ -207,7 +209,7 @@ const currentAssociation = {
   serverCount: 1,
 } as ServerClientAssociation;
 
-it("warns for servers associated with the issuer through a different registration", async () => {
+it("warns when another server is associated with the same issuer", async () => {
   sdk.servers.mockReturnValue({
     data: {
       mcpServers: [
@@ -301,6 +303,7 @@ describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
         },
       }),
     );
+    expect(sdk.invalidateClient).toHaveBeenCalledOnce();
     expect(rbac.requested).toContainEqual(["project:write"]);
   });
 
@@ -345,6 +348,7 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
         }),
       }),
     );
+    expect(sdk.invalidateClient).toHaveBeenCalledOnce();
   });
 
   it.each(["method", "audience"])(
