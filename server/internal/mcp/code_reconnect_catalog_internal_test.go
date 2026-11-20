@@ -5,11 +5,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestReconnectCatalogChanges(t *testing.T) {
@@ -54,4 +58,45 @@ func TestFreezeConnectionCatalogRejectsInvalidDefinitions(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
+}
+
+func TestReconnectRecordsOnlyReviewedTypedChoices(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	pool, err := TestInfra.CloneTestDatabase(t, "reconnect_typed_choices")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	issuerID := uuid.New()
+	require.NoError(t, selectionbackfill.New(pool).SeedUserSessionIssuerFixture(ctx, selectionbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: uuid.NullUUID{}, OrganizationID: text(f.orgID), Slug: "typed-reconnect"}))
+	credentialID := uuid.New()
+	unrelated, _ := f.server()
+	require.NoError(t, f.q.SeedUpstreamSelectionFixture(ctx, authclientbackfill.SeedUpstreamSelectionFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, CredentialID: credentialID, McpServerID: unrelated, NoAuth: true}))
+	client := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+	previous := &connectionCatalog{IssuerID: issuerID, OrganizationID: f.orgID}
+	next := &connectionCatalog{IssuerID: issuerID, OrganizationID: f.orgID, Members: map[string]connectionCatalogMember{
+		"source": {ServerID: f.serverID, ProjectID: f.projectID, Auth: &connectionCatalogAuth{ClientID: client, RegistrationID: validUUID(f.registration)}},
+	}}
+	replace := func(previous, next *connectionCatalog) {
+		t.Helper()
+		tx, err := pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		require.NoError(t, replaceReconnectUpstreamChoices(ctx, usersessionsrepo.New(tx), credentialID, previous, next))
+		require.NoError(t, tx.Commit(ctx))
+	}
+	params := authclientbackfill.GetSelectionFixtureParams{CredentialID: credentialID, McpServerID: f.serverID}
+	replace(previous, next)
+	choice, err := f.q.GetSelectionFixture(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, validUUID(client), choice.AuthClientID)
+
+	// A retired pick never authorizes a substitute, even when only one remains.
+	require.NoError(t, f.q.SoftDeleteAuthClientFixture(ctx, client))
+	f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+	replace(next, next)
+	_, err = f.q.GetSelectionFixture(ctx, params)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	untouched, err := f.q.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: credentialID, McpServerID: unrelated})
+	require.NoError(t, err)
+	require.True(t, untouched.NoAuth)
 }

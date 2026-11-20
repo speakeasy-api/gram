@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -228,18 +227,16 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, catalog *connect
 
 // upstreamChoices records only reviewed members, even when their issuer also
 // serves other gateways. An empty scope must stay non-nil: nil means issuer-wide.
-func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bool) usersessionsrepo.RecordUpstreamClientSelectionsParams {
-	picks := usersessionsrepo.RecordUpstreamClientSelectionsParams{
+func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID) usersessionsrepo.RecordIssuedAuthClientChoicesParams {
+	picks := usersessionsrepo.RecordIssuedAuthClientChoicesParams{
 		UserSessionIssuerID: c.IssuerID,
-		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        credentialID,
-		Source:              upstreamclients.SelectionSourceIssuance,
 		ScopeMcpServerIds:   make([]uuid.UUID, 0, len(c.Members)),
 		ExcludeMcpServerIds: nil,
 		PickedMcpServerIds:  nil,
 		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
-		TypedOnly:           typedOnly,
+		AllowSoleOffer:      false,
 	}
 	for _, member := range c.Members {
 		picks.ScopeMcpServerIds = append(picks.ScopeMcpServerIds, member.ServerID)

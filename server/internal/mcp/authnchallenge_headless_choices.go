@@ -1,8 +1,8 @@
 // Upstream credential choices for sessions issued without a browser: an
-// ID-JAG exchange or a workload grant. Where typed auth client resolution is
-// enforced, each MCP server the session targets gets a choice before the
-// session is written: the one the token request names, otherwise the one the
-// caller's issuance profile names, otherwise the server's only ready
+// ID-JAG exchange or a workload grant. Each MCP server the session targets
+// gets a choice before the session is written: the one the token request
+// names, otherwise the one the caller's issuance profile names, otherwise
+// the server's only ready
 // credential the subject may use. Several ready credentials with no choice
 // named is an error, never the consent screen's preselection order, and so is
 // a named choice that does not validate. Nothing is recorded unless every
@@ -114,19 +114,8 @@ func parseRequestedAuthClients(values []string) (map[uuid.UUID]headlessChoice, e
 // targets and returns them as the issuance's picks: the registration a
 // choice authenticates through, keyed by server, and the typed client, along
 // with the servers it deferred, which the session must record no choice for. It
-// returns nil maps where typed auth client resolution is not enforced, where
-// the server's choice keeps being decided at recording, and for a session
-// that targets no one server. enforced is the organization's enforcement
-// state as the caller read it, which it records the session's choices under
-// too, so the picks and the recording never disagree.
-func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller, requested map[uuid.UUID]headlessChoice, enforced bool) (map[uuid.UUID]uuid.UUID, map[uuid.UUID]uuid.UUID, []uuid.UUID, error) {
-	if !enforced {
-		if len(requested) > 0 {
-			return nil, nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" is not accepted for this organization yet", errChoiceNotAccepted)
-		}
-		return nil, nil, nil, nil
-	}
-
+// returns nil maps for a session that targets no one server.
+func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller, requested map[uuid.UUID]headlessChoice) (map[uuid.UUID]uuid.UUID, map[uuid.UUID]uuid.UUID, []uuid.UUID, error) {
 	servers, err := s.headlessTargetServers(ctx, endpoint, subject)
 	if err != nil {
 		return nil, nil, nil, err
@@ -362,7 +351,7 @@ func awaitsConnection(err error, named bool) bool {
 		return true
 	case errChoiceNotSetUp:
 		return !named
-	case errChoiceNotAccepted, errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential, errChoiceDenied, errChoiceNoneAllowed, errChoiceNotNamed:
+	case errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential, errChoiceDenied, errChoiceNoneAllowed, errChoiceNotNamed:
 	}
 	return false
 }
@@ -382,9 +371,6 @@ type headlessChoiceError string
 func (p headlessChoiceError) Error() string { return string(p) }
 
 const (
-	// errChoiceNotAccepted names a choice in an organization that does not take them yet.
-	errChoiceNotAccepted headlessChoiceError = "choice_not_accepted"
-
 	// errChoiceServerNotReached names a choice for a server the token does not reach.
 	errChoiceServerNotReached headlessChoiceError = "choice_server_not_reached"
 

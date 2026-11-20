@@ -15,7 +15,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -25,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -186,12 +184,6 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-	// Read on the mint's transaction, so the choices it records follow the
-	// enforcement state they commit beside.
-	enforced, err := authenforcement.ReadEnforced(ctx, dbtx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, s.logger)
-	}
 	txRepo := repo.New(dbtx)
 	session, err := txRepo.CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
@@ -230,18 +222,15 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
 	}
-	if _, err := txRepo.RecordUpstreamClientSelections(ctx, repo.RecordUpstreamClientSelectionsParams{
+	if _, err := txRepo.RecordIssuedAuthClientChoices(ctx, repo.RecordIssuedAuthClientChoicesParams{
 		UserSessionIssuerID: target.issuerID,
-		CredentialKind:      upstreamclients.CredentialKindUserSession,
 		CredentialID:        session.ID,
-		Source:              upstreamclients.SelectionSourceIssuance,
-		// A dashboard mint has no consent page, so it picks nothing.
-		PickedMcpServerIds:  []uuid.UUID{},
-		PickedClientIds:     []uuid.UUID{},
+		PickedMcpServerIds:  nil,
+		PickedClientIds:     nil,
 		PickedAuthClientIds: nil,
 		ScopeMcpServerIds:   nil,
 		ExcludeMcpServerIds: nil,
-		TypedOnly:           enforced,
+		AllowSoleOffer:      true,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}
