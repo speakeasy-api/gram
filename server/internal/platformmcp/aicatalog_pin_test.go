@@ -26,7 +26,7 @@ func (a swappingAuthorizer) AuthorizeExternalCall(ctx context.Context, principal
 func TestRuntimeToolCallReadsOneAICatalogSnapshot(t *testing.T) {
 	t.Parallel()
 
-	initial := aivendors.CompiledSnapshot()
+	initial := aivendors.NewSnapshot(aivendors.Products())
 	store := aivendors.NewStore(initial)
 	products := aivendors.Products()
 	products[0].DisplayName = "Swapped"

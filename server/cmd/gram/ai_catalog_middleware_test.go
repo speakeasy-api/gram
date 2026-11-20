@@ -2,6 +2,7 @@ package gram
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -31,27 +32,31 @@ func TestMCPMuxPinsOneAICatalogSnapshotPerRequest(t *testing.T) {
 	mux, err := newMCPServerMux(cli.NewContext(nil, flags, nil), testenv.NewLogger(t), nil, origin, store, host, nil, nil, &background.Publishers{})
 	require.NoError(t, err)
 
-	products := aivendors.Products()
-	products[0].DisplayName = "Swapped"
+	snapshotNamed := func(name string) *aivendors.Snapshot {
+		products := aivendors.Products()
+		products[0].DisplayName = name
+		return aivendors.NewSnapshot(products)
+	}
+	var next *aivendors.Snapshot
 	var first, second *aivendors.Snapshot
 	swapMidRequest := func(w http.ResponseWriter, r *http.Request) {
 		first = store.SnapshotFor(r.Context())
-		store.Publish(aivendors.NewSnapshot(products))
+		store.Publish(next)
 		second = store.SnapshotFor(r.Context())
 		w.WriteHeader(http.StatusNoContent)
 	}
 	mux.Handle(http.MethodGet, "/test-ai-catalog", swapMidRequest)
 	host.Handle(http.MethodGet, "/test-ai-catalog", swapMidRequest)
 
-	for _, target := range []string{origin.String(), "https://auth.example.com"} {
-		first, second = nil, nil
+	for i, target := range []string{origin.String(), "https://auth.example.com"} {
 		before := store.Snapshot()
+		next = snapshotNamed(fmt.Sprintf("Swapped %d", i))
+		first, second = nil, nil
 		response := httptest.NewRecorder()
 		mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, target+"/test-ai-catalog", nil))
 		require.Equal(t, http.StatusNoContent, response.Code, target)
-		require.Same(t, before, first, target)
-		require.NotSame(t, first, store.Snapshot(), target)
+		require.Same(t, before, first, "a request starts on the snapshot published before it: %s", target)
 		require.Same(t, first, second, target)
-		store.Publish(aivendors.CompiledSnapshot())
+		require.Same(t, next, store.Snapshot(), target)
 	}
 }

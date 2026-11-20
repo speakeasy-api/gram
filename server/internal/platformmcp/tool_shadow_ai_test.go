@@ -75,7 +75,7 @@ func TestShadowAIListInventoryProjectsTheAccessVerdict(t *testing.T) {
 	service := NewShadowAIService(detections, &stubLibraryReader{}, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	catalog := aivendors.CompiledSnapshot()
+	catalog := aivendors.NewSnapshot(aivendors.Products())
 	out, err := service.ListInventory(t.Context(), catalog, shadowAIPrincipal(), ListShadowAIInventoryInput{Category: "harness"})
 	require.NoError(t, err)
 	require.Same(t, catalog, detections.lastCatalog)
@@ -130,7 +130,7 @@ func TestShadowAIListLibraryReportsOriginAndBlockability(t *testing.T) {
 	service := NewShadowAIService(&stubDetectionReader{}, library, stubAuthorizer{}, allowingBudget())
 	require.NotNil(t, service)
 
-	catalog := aivendors.CompiledSnapshot()
+	catalog := aivendors.NewSnapshot(aivendors.Products())
 	out, err := service.ListLibrary(t.Context(), catalog, shadowAIPrincipal(), ListAIScanLibraryInput{})
 	require.NoError(t, err)
 	require.Same(t, catalog, library.lastCatalog)

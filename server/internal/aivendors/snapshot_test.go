@@ -5,7 +5,10 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -273,6 +276,35 @@ func TestDerivedComputesOncePerSnapshot(t *testing.T) {
 	require.Equal(t, 1, Derived(first, key{}, compute))
 	require.Equal(t, 1, Derived(first, key{}, compute))
 	require.Equal(t, 2, Derived(NewSnapshot(Products()), key{}, compute))
+}
+
+func TestDerivedComputesOnceUnderConcurrentFirstReads(t *testing.T) {
+	t.Parallel()
+	type key struct{}
+	snapshot := NewSnapshot(Products())
+	var calls atomic.Int32
+	release := make(chan struct{})
+	compute := func(*Snapshot) int {
+		calls.Add(1)
+		<-release
+		return 7
+	}
+	var wg sync.WaitGroup
+	var started atomic.Int32
+	results := make([]int, 16)
+	for i := range results {
+		wg.Go(func() {
+			started.Add(1)
+			results[i] = Derived(snapshot, key{}, compute)
+		})
+	}
+	require.Eventually(t, func() bool { return started.Load() == int32(len(results)) && calls.Load() > 0 }, 5*time.Second, time.Millisecond)
+	close(release)
+	wg.Wait()
+	require.Equal(t, int32(1), calls.Load())
+	for _, got := range results {
+		require.Equal(t, 7, got)
+	}
 }
 
 func TestDerivedRefusesAKeyReusedForAnotherType(t *testing.T) {

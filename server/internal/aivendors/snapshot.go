@@ -228,18 +228,15 @@ func (s *Snapshot) GatewayMatchersFor(p Product) GatewayMatchers {
 
 // Derived computes a value once per snapshot and caller-owned key; callers must not mutate it.
 func Derived[T any](s *Snapshot, key any, compute func(*Snapshot) T) T {
-	if v, ok := s.derived.Load(key); ok {
-		if out, ok := v.(T); ok {
-			return out
-		}
-		panic(fmt.Sprintf("aivendors: derived value for key %T is %T, not the requested type", key, v))
+	v, ok := s.derived.Load(key)
+	if !ok {
+		v, _ = s.derived.LoadOrStore(key, sync.OnceValue(func() T { return compute(s) }))
 	}
-	v, _ := s.derived.LoadOrStore(key, compute(s))
-	out, ok := v.(T)
+	get, ok := v.(func() T)
 	if !ok {
 		panic(fmt.Sprintf("aivendors: derived value for key %T is %T, not the requested type", key, v))
 	}
-	return out
+	return get()
 }
 
 // Store publishes immutable snapshots. A compound operation calls Snapshot once
