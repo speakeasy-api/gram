@@ -5,44 +5,33 @@ import (
 	"fmt"
 )
 
-// These caps bound one loaded catalog so a bad edit cannot grow every
-// reader's in-memory snapshot without limit.
 const (
-	// MaxProducts caps the live products in one catalog.
-	MaxProducts = 500
+	// aitargets bounds only scanned products; this bounds the rest at about ten times today's 53.
+	maxProducts = 500
 
-	// MaxDocumentsPerProduct caps the live documents one product publishes.
-	MaxDocumentsPerProduct = 32
+	// Nothing else bounds a product's documents; today's most is 2.
+	maxDocumentsPerProduct = 32
 
-	// MaxListEntries caps each signature list and the client info names.
-	MaxListEntries = 32
+	// aitargets bounds scanned products' client info names at 16; this holds every product to the same.
+	maxClientInfoNames = 16
 )
 
-// ErrInvalidCatalog is wrapped by every catalog-wide validation failure.
-var ErrInvalidCatalog = errors.New("invalid AI client catalog")
+var errInvalidCatalog = errors.New("invalid AI client catalog")
 
-// Validate checks the rules every loaded snapshot holds before it is
-// published, whatever the consumer: it is not empty, it fits the caps, every
-// scanned product has a category, and no two products share a client ID
-// space unless one pattern is strictly narrower than the other.
-func Validate(s *Snapshot) error {
+// validateCatalog holds every loaded snapshot to the rules no consumer validator checks.
+func validateCatalog(s *Snapshot) error {
 	if len(s.products) == 0 {
-		return fmt.Errorf("%w: no live products", ErrInvalidCatalog)
+		return fmt.Errorf("%w: no live products", errInvalidCatalog)
 	}
-	if len(s.products) > MaxProducts {
-		return fmt.Errorf("%w: %d products exceeds the maximum of %d", ErrInvalidCatalog, len(s.products), MaxProducts)
+	if len(s.products) > maxProducts {
+		return fmt.Errorf("%w: %d products exceeds the maximum of %d", errInvalidCatalog, len(s.products), maxProducts)
 	}
 	for _, p := range s.products {
-		if p.IsScanned() && p.Category == "" {
-			return fmt.Errorf("%w: product %q has install signatures but no category", ErrInvalidCatalog, p.ID)
+		if len(p.Documents) > maxDocumentsPerProduct {
+			return fmt.Errorf("%w: product %q has %d documents, over the maximum of %d", errInvalidCatalog, p.ID, len(p.Documents), maxDocumentsPerProduct)
 		}
-		if len(p.Documents) > MaxDocumentsPerProduct {
-			return fmt.Errorf("%w: product %q has %d documents, over the maximum of %d", ErrInvalidCatalog, p.ID, len(p.Documents), MaxDocumentsPerProduct)
-		}
-		for _, list := range [][]string{p.Signatures.BundleIDs, p.Signatures.Binaries, p.Signatures.ConfigDirs, p.Signatures.ProcessNames, p.ClientInfoNames} {
-			if len(list) > MaxListEntries {
-				return fmt.Errorf("%w: product %q has a list of %d entries, over the maximum of %d", ErrInvalidCatalog, p.ID, len(list), MaxListEntries)
-			}
+		if len(p.ClientInfoNames) > maxClientInfoNames {
+			return fmt.Errorf("%w: product %q has %d client info names, over the maximum of %d", errInvalidCatalog, p.ID, len(p.ClientInfoNames), maxClientInfoNames)
 		}
 	}
 	for i, a := range s.patterns {
@@ -53,7 +42,7 @@ func Validate(s *Snapshot) error {
 			if a.URL != b.URL && (patternWithin(a.URL, b.URL) || patternWithin(b.URL, a.URL)) {
 				continue
 			}
-			return fmt.Errorf("%w: patterns %q (%s) and %q (%s) overlap and neither is narrower", ErrInvalidCatalog, a.URL, a.ProductID, b.URL, b.ProductID)
+			return fmt.Errorf("%w: patterns %q (%s) and %q (%s) overlap and neither is narrower", errInvalidCatalog, a.URL, a.ProductID, b.URL, b.ProductID)
 		}
 	}
 	return nil

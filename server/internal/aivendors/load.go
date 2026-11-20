@@ -106,7 +106,7 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		return nil, skipped, fmt.Errorf("finish AI catalog read: %w", err)
 	}
 	snapshot := NewSnapshot(products)
-	if err := Validate(snapshot); err != nil {
+	if err := validateCatalog(snapshot); err != nil {
 		return nil, skipped, fmt.Errorf("%w: %w", errRejected, err)
 	}
 	if err := validate(snapshot); err != nil {

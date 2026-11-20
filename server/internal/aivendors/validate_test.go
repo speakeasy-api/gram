@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCompiledRegistryPassesValidate(t *testing.T) {
+func TestCompiledRegistryPassesValidation(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, Validate(NewSnapshot(Products())))
+	require.NoError(t, validateCatalog(NewSnapshot(Products())))
 }
 
 func TestValidateRejectsCatalogShapes(t *testing.T) {
@@ -18,15 +18,15 @@ func TestValidateRejectsCatalogShapes(t *testing.T) {
 	pattern := func(id, vendor, url string, enabled bool) Product {
 		return Product{ID: id, VendorKey: vendor, Documents: []Document{{URL: url, Enabled: enabled, Pattern: true}}}
 	}
-	many := make([]Product, 0, MaxProducts+1)
-	for i := range MaxProducts + 1 {
+	many := make([]Product, 0, maxProducts+1)
+	for i := range maxProducts + 1 {
 		many = append(many, Product{ID: fmt.Sprintf("p-%d", i), VendorKey: "v"})
 	}
-	docs := make([]Document, 0, MaxDocumentsPerProduct+1)
-	for i := range MaxDocumentsPerProduct + 1 {
+	docs := make([]Document, 0, maxDocumentsPerProduct+1)
+	for i := range maxDocumentsPerProduct + 1 {
 		docs = append(docs, Document{URL: fmt.Sprintf("https://example.com/%d/client.json", i), Enabled: true})
 	}
-	names := make([]string, MaxListEntries+1)
+	names := make([]string, maxClientInfoNames+1)
 	for i := range names {
 		names[i] = strings.Repeat("n", i+1)
 	}
@@ -37,9 +37,8 @@ func TestValidateRejectsCatalogShapes(t *testing.T) {
 	}{
 		{name: "empty", products: nil, want: "no live products"},
 		{name: "too many products", products: many, want: "products exceeds"},
-		{name: "scanned without category", products: []Product{{ID: "x", VendorKey: "x", Signatures: Signatures{Binaries: []string{"x"}}}}, want: "no category"},
 		{name: "too many documents", products: []Product{{ID: "x", VendorKey: "x", Documents: docs}}, want: "documents"},
-		{name: "long list", products: []Product{{ID: "x", VendorKey: "x", ClientInfoNames: names}}, want: "list of"},
+		{name: "too many client info names", products: []Product{{ID: "x", VendorKey: "x", ClientInfoNames: names}}, want: "client info names"},
 		{name: "incomparable overlap", products: []Product{
 			pattern("a", "a", "https://example.com/oauth/*/client.json", true),
 			pattern("b", "b", "https://example.com/*/fixed/client.json", true),
@@ -51,8 +50,8 @@ func TestValidateRejectsCatalogShapes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := Validate(NewSnapshot(tc.products))
-			require.ErrorIs(t, err, ErrInvalidCatalog)
+			err := validateCatalog(NewSnapshot(tc.products))
+			require.ErrorIs(t, err, errInvalidCatalog)
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -86,7 +85,7 @@ func TestValidateAllowsNarrowerAndUnrelatedPatterns(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.NoError(t, Validate(NewSnapshot(tc.products)))
+			require.NoError(t, validateCatalog(NewSnapshot(tc.products)))
 		})
 	}
 }

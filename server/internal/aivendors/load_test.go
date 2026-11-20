@@ -171,7 +171,7 @@ func TestRefreshRejectsEmptyCatalog(t *testing.T) {
 		require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: p.ID, DisplayName: p.DisplayName, DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
 	}
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db), "startup does not restore soft-deleted products")
-	require.ErrorIs(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), aivendors.ErrInvalidCatalog)
+	require.ErrorContains(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), "invalid AI client catalog")
 	require.Same(t, initial, store.Snapshot(), "an empty load never replaces a good snapshot")
 	loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestRefreshReplacesTheBuiltInCatalogOnceALoadValidates(t *testing.T) {
 	require.NoError(t, err)
 	logger := testenv.NewLogger(t)
 	store := aivendors.NewStore(aivendors.CompiledSnapshot())
-	require.ErrorIs(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), aivendors.ErrInvalidCatalog)
+	require.ErrorContains(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), "invalid AI client catalog")
 	require.Same(t, aivendors.CompiledSnapshot(), store.Snapshot())
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
@@ -216,7 +216,7 @@ func TestRefreshRejectsOverlappingPatternsOfTwoProducts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	err = store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog)
-	require.ErrorIs(t, err, aivendors.ErrInvalidCatalog)
+	require.ErrorContains(t, err, "invalid AI client catalog")
 	require.ErrorContains(t, err, "overlap")
 	require.Same(t, initial, store.Snapshot())
 }
@@ -252,10 +252,9 @@ func TestInvalidDeviceDefinitionsDoNotReplaceCatalog(t *testing.T) {
 		category  pgtype.Text
 		binaries  []string
 		processes []string
-		wantErr   error
 		want      string
 	}{
-		{name: "missing category", binaries: []string{"fixture"}, wantErr: aivendors.ErrInvalidCatalog, want: "no category"},
+		{name: "missing category", binaries: []string{"fixture"}, want: "unknown category"},
 		{name: "unknown category", category: pgtype.Text{String: "unknown", Valid: true}, binaries: []string{"fixture"}, want: "unknown category"},
 		{name: "invalid binary", category: pgtype.Text{String: "harness", Valid: true}, binaries: []string{"../fixture"}, want: "bare command name"},
 		{name: "process only", category: pgtype.Text{String: "harness", Valid: true}, processes: []string{"Fixture"}, want: "at least one install signature"},
@@ -275,12 +274,8 @@ func TestInvalidDeviceDefinitionsDoNotReplaceCatalog(t *testing.T) {
 				ProcessNames: append([]string{}, tc.processes...), ClientInfoNames: []string{},
 			})
 			require.NoError(t, err)
-			wantErr := tc.wantErr
-			if wantErr == nil {
-				wantErr = aitargets.ErrInvalidTarget
-			}
 			err = store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog)
-			require.ErrorIs(t, err, wantErr)
+			require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
 			require.ErrorContains(t, err, tc.want)
 			require.Same(t, initial, store.Snapshot(), "a bad definition must not replace the usable catalog")
 			loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
