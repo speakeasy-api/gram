@@ -597,37 +597,6 @@ func (q *Queries) HardDeleteAssociationFixture(ctx context.Context, id uuid.UUID
 	return err
 }
 
-const hasLegacySelectionIssuerBinding = `-- name: HasLegacySelectionIssuerBinding :one
-SELECT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN projects AS project ON project.id = $1::uuid
-      AND project.organization_id = $2::text AND NOT project.deleted
-    WHERE link.remote_session_client_id = $3::uuid
-      AND link.user_session_issuer_id = $4::uuid
-)::boolean
-`
-
-type HasLegacySelectionIssuerBindingParams struct {
-	ProjectID             uuid.UUID
-	OrganizationID        string
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-// Only the retired mapping workflow still uses issuer-client links as evidence.
-func (q *Queries) HasLegacySelectionIssuerBinding(ctx context.Context, arg HasLegacySelectionIssuerBindingParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasLegacySelectionIssuerBinding,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
-	)
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const insertHeaderCopy = `-- name: InsertHeaderCopy :execrows
 INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, description, is_required, is_secret, value, value_from_request_header)
 SELECT ac.id, ac.organization_id, src.name, src.description, src.is_required, src.is_secret, src.value, src.value_from_request_header
@@ -2359,6 +2328,59 @@ func (q *Queries) ListEMASameOriginServers(ctx context.Context, arg ListEMASameO
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLegacySelectionIssuerEvidence = `-- name: ListLegacySelectionIssuerEvidence :many
+SELECT sel.id
+FROM (
+    SELECT unnest($1::uuid[]) AS selection_id,
+           unnest($2::uuid[]) AS client_id,
+           unnest($3::uuid[]) AS issuer_id
+) AS input
+JOIN upstream_client_selections AS sel ON sel.id = input.selection_id
+  AND sel.remote_session_client_id = input.client_id
+  AND sel.organization_id = $4::text AND NOT sel.deleted
+JOIN projects AS project ON project.id = sel.project_id
+  AND project.organization_id = sel.organization_id AND NOT project.deleted
+JOIN remote_session_clients AS client ON client.id = sel.remote_session_client_id AND NOT client.deleted
+  AND (client.project_id = project.id OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = project.organization_id)))
+JOIN user_session_issuers AS issuer ON issuer.id = input.issuer_id AND NOT issuer.deleted
+  AND (issuer.project_id = project.id OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = client.id
+  AND link.user_session_issuer_id = issuer.id
+`
+
+type ListLegacySelectionIssuerEvidenceParams struct {
+	SelectionIds   []uuid.UUID
+	ClientIds      []uuid.UUID
+	IssuerIds      []uuid.UUID
+	OrganizationID string
+}
+
+// Only the retired workflow reads this evidence, once per mapping page.
+func (q *Queries) ListLegacySelectionIssuerEvidence(ctx context.Context, arg ListLegacySelectionIssuerEvidenceParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLegacySelectionIssuerEvidence,
+		arg.SelectionIds,
+		arg.ClientIds,
+		arg.IssuerIds,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

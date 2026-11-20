@@ -2137,16 +2137,25 @@ WHERE ac.organization_id = @organization_id::text
 ORDER BY ac.id
 FOR SHARE OF ac;
 
--- name: HasLegacySelectionIssuerBinding :one
--- Only the retired mapping workflow still uses issuer-client links as evidence.
-SELECT EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS link
-    JOIN projects AS project ON project.id = @project_id::uuid
-      AND project.organization_id = @organization_id::text AND NOT project.deleted
-    WHERE link.remote_session_client_id = @remote_session_client_id::uuid
-      AND link.user_session_issuer_id = @user_session_issuer_id::uuid
-)::boolean;
+-- name: ListLegacySelectionIssuerEvidence :many
+-- Only the retired workflow reads this evidence, once per mapping page.
+SELECT sel.id
+FROM (
+    SELECT unnest(@selection_ids::uuid[]) AS selection_id,
+           unnest(@client_ids::uuid[]) AS client_id,
+           unnest(@issuer_ids::uuid[]) AS issuer_id
+) AS input
+JOIN upstream_client_selections AS sel ON sel.id = input.selection_id
+  AND sel.remote_session_client_id = input.client_id
+  AND sel.organization_id = @organization_id::text AND NOT sel.deleted
+JOIN projects AS project ON project.id = sel.project_id
+  AND project.organization_id = sel.organization_id AND NOT project.deleted
+JOIN remote_session_clients AS client ON client.id = sel.remote_session_client_id AND NOT client.deleted
+  AND (client.project_id = project.id OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = project.organization_id)))
+JOIN user_session_issuers AS issuer ON issuer.id = input.issuer_id AND NOT issuer.deleted
+  AND (issuer.project_id = project.id OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = client.id
+  AND link.user_session_issuer_id = issuer.id;
 
 -- name: LockSelectionIssuerBinding :exec
 -- Holds the binding of an unmapped OAuth choice's registration to its

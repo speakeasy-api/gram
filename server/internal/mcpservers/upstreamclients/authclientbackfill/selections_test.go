@@ -526,12 +526,6 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 			typedOnly: true,
 			want:      SelectionUnusable,
 		},
-		"typed offer maps a live registration without an FK parent": {
-			row:                       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
-			typedOnly:                 true,
-			registrationIssuerMatches: true,
-			want:                      SelectionMap,
-		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -545,6 +539,15 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 		})
 	}
 }
+func TestTypedSelectionRepairSkipsLegacyIssuerEvidence(t *testing.T) {
+	t.Parallel()
+	row := ListSelectionMappingsRow{RemoteSessionClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	// With no SQL client this would fail if typed repair tried the legacy read.
+	matches, err := legacySelectionIssuerEvidence(t.Context(), nil, "fixture-org", []ListSelectionMappingsRow{row}, true, func(ListSelectionMappingsRow) uuid.UUID { return uuid.New() })
+	require.NoError(t, err)
+	require.Empty(t, matches)
+}
+
 func TestListSelectionMappingsScopedLiveCredentialsRespectTenant(t *testing.T) {
 	t.Parallel()
 	for _, organizationIssuer := range []bool{false, true} {
