@@ -9,7 +9,7 @@ import (
 // The decision snapshot's cases. This file uses only API that main also has,
 // so the same cases can be answered by main and by this branch and the two
 // snapshots compared. Everything that differs between the two lives in
-// decision_snapshot_refs_test.go.
+// the two helpers at the end of decision_snapshot_test.go.
 
 // snapshotFile is the evaluator's answers to every case, grouped so each
 // grant and check is written once.

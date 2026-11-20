@@ -23,10 +23,6 @@ import (
 //
 // and the diff of the file is the list of answers it changes.
 
-const decisionSnapshotPath = "testdata/decision_snapshot.json"
-
-var writeDecisionSnapshot = flag.Bool("write-decision-snapshot", false, "regenerate "+decisionSnapshotPath)
-
 func TestDecisionSnapshot(t *testing.T) {
 	t.Parallel()
 	fresh := buildDecisionSnapshot()
@@ -81,6 +77,10 @@ func TestDecisionSnapshot(t *testing.T) {
 		t.Errorf("... %d answers changed in all", changed)
 	}
 }
+
+const decisionSnapshotPath = "testdata/decision_snapshot.json"
+
+var writeDecisionSnapshot = flag.Bool("write-decision-snapshot", false, "regenerate "+decisionSnapshotPath)
 
 // sameSnapshotCases reports whether two snapshots ask the same questions of
 // the same grants, whatever their answers.
@@ -178,4 +178,16 @@ func encodeDecisionSnapshot(snapshot snapshotFile) ([]byte, error) {
 	}
 	out.WriteString("]\n}\n")
 	return out.Bytes(), nil
+}
+
+// The two helpers below are the parts of the decision snapshot that depend on
+// this branch's API. To compare with another version of the evaluator, copy
+// decision_snapshot_cases_test.go there and rewrite these two for its API.
+
+func snapshotMCPServer(id, project string) MCPServerRef {
+	return MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project))
+}
+
+func snapshotRawCheck(scope Scope, kind, id string, dimensions map[string]string) Check {
+	return Check{Scope: scope, ResourceKind: kind, ResourceID: id, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
