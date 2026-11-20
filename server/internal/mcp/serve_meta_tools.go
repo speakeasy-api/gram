@@ -550,12 +550,14 @@ func (s *Service) buildMemberDispatch(
 	if err != nil {
 		return nil, hostingstate.NotHosted(), nil, err
 	}
-	hostedTokens, err := hostedMemberTokens(tokens, member)
-	s.compareHostedMemberTokens(ctx, logger, gate.organizationID, tokens, member, hostedTokens, err)
-	if err != nil {
-		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberCallerURL(member))
+	// Hosted dispatch receives the exact registration's tokens from its
+	// member resolver. Do not reselect them using a derived issuer column.
+	for _, token := range tokens {
+		if token.ClientCredentialErr != nil {
+			return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(metaMemberClientCredentialError(member, token.ClientCredentialErr), member, gate.memberCallerURL(member))
+		}
 	}
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, tokens)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}

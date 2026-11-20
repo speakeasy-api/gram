@@ -222,7 +222,7 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 	// inputs. Proxied members must never turn a missing attachment into an
 	// anonymous upstream request.
 	if member.backend != metaMemberBackendProxied {
-		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+		tokens, err := s.hostedUpstreamTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), gate.organizationID, member.projectID, member.serverID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID), true)
 		if err != nil {
 			return nil, nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err)}
 		}

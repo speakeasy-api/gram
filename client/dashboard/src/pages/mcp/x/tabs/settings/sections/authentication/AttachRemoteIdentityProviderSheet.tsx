@@ -1,3 +1,4 @@
+import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -400,8 +401,7 @@ export function AttachRemoteIdentityProviderSheet({
         resolvedIssuer = created;
       }
 
-      // Step 3: create a remote_session_client bound to the
-      // user_session_issuer: from scratch in the chosen mode (DCR / CIMD /
+      // Step 3: create a registration for this server: from scratch in the chosen mode (DCR / CIMD /
       // Manual), or from a stored client's reviewed settings. A stored client
       // is never bound here.
       // Tracks when DCR returns an auth method the SDK enum doesn't model
@@ -409,6 +409,11 @@ export function AttachRemoteIdentityProviderSheet({
       // but warn the operator after success so they understand why their
       // client may not behave as the upstream advertised.
       let unsupportedDcrAuthMethod: string | null = null;
+      const serverId =
+        target.mcpServerId ?? target.attachImpactTarget.toolsetId;
+      if (!serverId)
+        throw new Error("Choose an MCP server to configure upstream sign-in.");
+      let registrationId: string;
 
       if (effectiveClientMode === "select" && !selectedClient) {
         throw new Error("Choose the client to start from.");
@@ -425,32 +430,34 @@ export function AttachRemoteIdentityProviderSheet({
         // server copy the secret and callback; the secret never reaches the
         // browser. A different client ID is a different registration, so
         // nothing is copied for it.
-        await client.remoteSessionClients.create({
-          createRemoteSessionClientForm: {
-            remoteSessionIssuerId: remoteIssuerId,
-            userSessionIssuerIds: [issuerId],
-            clientId: clientId.trim(),
-            clientSecret: clientSecret.trim() || undefined,
-            templateClientId:
-              clientId.trim() === selectedClient.clientId
-                ? selectedClient.id
-                : undefined,
-            tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-          },
-        });
+        registrationId = (
+          await client.remoteSessionClients.create({
+            createRemoteSessionClientForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              clientId: clientId.trim(),
+              clientSecret: clientSecret.trim() || undefined,
+              templateClientId:
+                clientId.trim() === selectedClient.clientId
+                  ? selectedClient.id
+                  : undefined,
+              tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+            },
+          })
+        ).id;
       } else if (startsFromDocument || clientType === "cimd") {
         // CIMD: the platform generates the client_id and hosts the metadata
         // document, so there are no credentials to collect.
-        await client.remoteSessionClients.createCimd({
-          createCimdForm: {
-            remoteSessionIssuerId: remoteIssuerId,
-            userSessionIssuerIds: [issuerId],
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-          },
-        });
+        registrationId = (
+          await client.remoteSessionClients.createCimd({
+            createCimdForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+            },
+          })
+        ).id;
       } else {
         // DCR proxies a registration to the upstream issuer for a fresh
         // client_id / client_secret; Manual uses what the operator typed.
@@ -501,21 +508,21 @@ export function AttachRemoteIdentityProviderSheet({
           };
         }
 
-        // Create the remote_session_client binding the resolved issuer to the
-        // user_session_issuer. Scope/audience overrides are stored on the
-        // client and consumed at OAuth dance time.
-        await client.remoteSessionClients.create({
-          createRemoteSessionClientForm: {
-            remoteSessionIssuerId: remoteIssuerId,
-            userSessionIssuerIds: [issuerId],
-            clientId: clientCredentials.clientId,
-            clientSecret: clientCredentials.clientSecret,
-            tokenEndpointAuthMethod: clientCredentials.tokenEndpointAuthMethod,
-            scope: parsedScopes.length > 0 ? parsedScopes : undefined,
-            audience: trimmedAudience || undefined,
-            ...clientCredentials.provenance,
-          },
-        });
+        // Store scope and audience overrides on the registration.
+        registrationId = (
+          await client.remoteSessionClients.create({
+            createRemoteSessionClientForm: {
+              remoteSessionIssuerId: remoteIssuerId,
+              clientId: clientCredentials.clientId,
+              clientSecret: clientCredentials.clientSecret,
+              tokenEndpointAuthMethod:
+                clientCredentials.tokenEndpointAuthMethod,
+              scope: parsedScopes.length > 0 ? parsedScopes : undefined,
+              audience: trimmedAudience || undefined,
+              ...clientCredentials.provenance,
+            },
+          })
+        ).id;
       }
 
       // Step 4: on first-add, link the target to the new issuer. How the link
@@ -525,6 +532,13 @@ export function AttachRemoteIdentityProviderSheet({
         await target.linkUserSessionIssuer?.(issuerId);
       }
 
+      await client.remoteSessions.attachServerClientAssociation({
+        serverClientAssociationForm: {
+          mcpServerId: serverId,
+          remoteSessionClientId: registrationId,
+        },
+      });
+
       return { unsupportedDcrAuthMethod };
     },
     onSuccess: async ({ unsupportedDcrAuthMethod }) => {
@@ -532,6 +546,7 @@ export function AttachRemoteIdentityProviderSheet({
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
+        invalidateAllServerClientAssociations(queryClient),
         invalidateSharedIssuerImpact(queryClient),
         target.invalidate(queryClient),
       ]);

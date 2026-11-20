@@ -455,6 +455,9 @@ func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *Resolv
 			return tokens, nil
 		},
 		resolveMember: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			if member.backend == metaMemberBackendHosted {
+				return s.hostedUpstreamTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), endpoint.OrganizationID, member.projectID, member.serverID, endpoint.UserSessionIssuerID, subject, true)
+			}
 			tokens, err := s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve member remote session").LogError(ctx, s.logger)
@@ -478,7 +481,7 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 	if g.projectTokens == nil {
 		return g.tokens, nil
 	}
-	if resolvesByAssociation(member) {
+	if member.backend == metaMemberBackendHosted || resolvesByAssociation(member) {
 		tokens, err := g.projectTokens.getMember(ctx, member)
 		if err != nil {
 			return nil, memberCredentialLoadError(member, err)
@@ -562,11 +565,35 @@ func (s *Service) listEndpointClientsAndRegistrations(ctx context.Context, endpo
 // listSignInClients is the clients the endpoint's sign-in links that
 // listEndpointClients offers.
 func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, loadMembers func() ([]metaMember, error)) ([]remotesessions.Client, error) {
+	if endpoint.ToolsetID.Valid && endpoint.McpServerID.Valid {
+		return s.hostedSignInClients(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
+	}
 	if usesTypedConsentInventory(ctx) && (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) {
 		members, err := loadMembers()
-		if err != nil || !hasHostedConsentMember(members) {
+		if err != nil {
 			return nil, err
 		}
+		var clients []remotesessions.Client
+		seen := make(map[uuid.UUID]bool)
+		for _, member := range members {
+			if member.backend != metaMemberBackendHosted {
+				continue
+			}
+			assigned, err := s.hostedSignInClients(ctx, endpoint.OrganizationID, member.projectID, member.serverID)
+			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			for _, client := range assigned {
+				if !seen[client.ID] {
+					seen[client.ID] = true
+					clients = append(clients, client)
+				}
+			}
+		}
+		return clients, nil
 	}
 	if endpoint.IsOrganizationGateway() {
 		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)

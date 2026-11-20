@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -379,12 +380,9 @@ func TestAttachUserSessionIssuer_RejectsCrossProjectUserIssuer(t *testing.T) {
 	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
 	foreignUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-attach-foreign").String()
 
-	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	_, err = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  created.ID,
 		UserSessionIssuerID: foreignUserIssuer,
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
@@ -1058,12 +1056,9 @@ func TestAttachUserSessionIssuer(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachUserSessionIssuer)
 	require.NoError(t, err)
 
-	attached, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	attached, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  created.ID,
 		UserSessionIssuerID: userIssuerIDString,
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{userIssuerIDString}, attached.UserSessionIssuerIds)
@@ -1074,12 +1069,9 @@ func TestAttachUserSessionIssuer(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 
 	// Re-attaching the same issuer is a no-op success: still exactly one binding.
-	reattached, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	reattached, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  created.ID,
 		UserSessionIssuerID: userIssuerIDString,
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{userIssuerIDString}, reattached.UserSessionIssuerIds)
@@ -1108,21 +1100,15 @@ func TestAttachUserSessionIssuer_SerializedAgainstOrganizationIssuerDeletion(t *
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, userIssuerID))
 
-	_, probeErr := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	_, probeErr := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  created.ID,
 		UserSessionIssuerID: userIssuerID.String(),
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
 	})
 	testenv.RequireLockNotAvailable(t, probeErr)
 	require.NoError(t, tx.Rollback(ctx))
-	_, probeErr = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	_, probeErr = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  created.ID,
 		UserSessionIssuerID: userIssuerID.String(),
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
 	})
 	require.NoError(t, probeErr)
 }
@@ -1155,12 +1141,9 @@ func TestDetachUserSessionIssuer(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
 	require.NoError(t, err)
 
-	detached, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+	detached, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  created.ID,
 		UserSessionIssuerID: userIssuerIDString,
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, detached.UserSessionIssuerIds)
@@ -1171,19 +1154,16 @@ func TestDetachUserSessionIssuer(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 
 	// Detaching an absent binding is a no-op success.
-	redetached, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+	redetached, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  created.ID,
 		UserSessionIssuerID: userIssuerIDString,
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
 	})
 	require.NoError(t, err)
 	require.Empty(t, redetached.UserSessionIssuerIds)
 	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
 
 	// A missing issuer is not an absent binding: it must still return 404.
-	_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+	_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  created.ID,
 		UserSessionIssuerID: uuid.NewString(),
 	})
@@ -1215,12 +1195,9 @@ func TestAttachUserSessionIssuer_RejectsDuplicateRemoteIssuerBinding(t *testing.
 	require.NoError(t, err)
 
 	// Attaching U to B violates the single-client-per-(U, R) guard.
-	_, err = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	_, err = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  clientB.ID,
 		UserSessionIssuerID: userIssuerID,
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeConflict)

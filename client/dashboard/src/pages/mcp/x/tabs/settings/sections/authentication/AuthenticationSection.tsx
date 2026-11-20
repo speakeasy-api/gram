@@ -1,3 +1,4 @@
+import { useServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { Badge } from "@/components/ui/Badge";
 import { GatewayAuthorizationServersField } from "@/pages/mcp/gateway/GatewayMemberSignInField";
 import {
@@ -24,10 +25,7 @@ import { SharedAuthorizationServerField } from "./SharedAuthorizationServerField
 import { UserSessionIssuerField } from "./UserSessionIssuerField";
 import { useSelectableUserSessionIssuers } from "./useSelectableUserSessionIssuers";
 import { UserIdentitySessionControls } from "./UserIdentitySessionControls";
-import {
-  useAllRemoteSessionClients,
-  useRemoteSessionIssuersByIds,
-} from "@/lib/remote-identity";
+import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
 import { SetupStepBanner } from "./SetupStepBanner";
 import { UpstreamCredentialsSection } from "./UpstreamCredentialsSection";
 
@@ -158,24 +156,31 @@ function StandardAuthenticationSectionBody({
     enabled: issuerConfigured,
   });
 
-  const {
-    items: allClients,
-    isLoading: isLoadingClients,
-    isError: isClientsError,
-  } = useAllRemoteSessionClients(
-    { userSessionIssuerId },
-    { enabled: issuerConfigured },
-  );
-
   const gatewayId = target.attachImpactTarget.metaMcpServerId;
-
+  const serverId = target.mcpServerId ?? target.attachImpactTarget.toolsetId;
+  const associations = useServerClientAssociations(
+    { mcpServerId: serverId ?? "" },
+    undefined,
+    { enabled: !!serverId && issuerConfigured, throwOnError: false },
+  );
   const attachedIssuerIds = useMemo(
     () => [
-      ...new Set(allClients.map((client) => client.remoteSessionIssuerId)),
+      ...new Set(
+        associations.data?.associations.map(
+          (item) => item.remoteSessionIssuerId,
+        ) ?? [],
+      ),
     ],
-    [allClients],
+    [associations.data],
   );
-
+  const registrationFor = (issuer: RemoteSessionIssuer | null) => {
+    const matches = associations.data?.associations.filter(
+      (item) => item.remoteSessionIssuerId === issuer?.id,
+    );
+    return matches?.length === 1
+      ? matches[0]?.remoteSessionClientId
+      : undefined;
+  };
   // Resolved by id, never by filtering the issuer listing: an attached issuer
   // can fall past any listing page, and filtering would then render a working
   // server as having no provider.
@@ -199,6 +204,8 @@ function StandardAuthenticationSectionBody({
     null,
   );
   const [modifyOpen, setModifyOpen] = useState(false);
+  const deleteRegistrationId = registrationFor(deleteTarget);
+  const modifyRegistrationId = registrationFor(modifyTarget);
 
   const handleEdit = (issuer: RemoteSessionIssuer) => {
     setModifyTarget(issuer);
@@ -211,7 +218,11 @@ function StandardAuthenticationSectionBody({
   };
 
   let authenticationFields: ReactNode;
-  if (!issuerConfigured) {
+  if (!issuerConfigured && gatewayId) {
+    authenticationFields = (
+      <GatewayAuthorizationServersField metaMcpServerId={gatewayId} />
+    );
+  } else if (!issuerConfigured) {
     authenticationFields = (
       <IdentityProviderSetupField
         onStartManual={() => setSheetOpen(true)}
@@ -230,25 +241,14 @@ function StandardAuthenticationSectionBody({
           mcpUrl={target.mcpUrl}
         />
         {gatewayId ? (
-          <GatewayAuthorizationServersField
-            metaMcpServerId={gatewayId}
-            associatedIssuers={associatedIssuers}
-            allowAdditionalProviders={!!target.multipleProviders}
-            projectId={target.projectId}
-            isLoading={isLoadingClients || isLoadingAssociatedIssuers}
-            isError={isClientsError || isAssociatedIssuersError}
-            onAdd={() => setSheetOpen(true)}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            readOnly={userSessionIssuer.projectId === ""}
-          />
+          <GatewayAuthorizationServersField metaMcpServerId={gatewayId} />
         ) : (
           <RemoteIdentityProvidersField
             associatedIssuers={associatedIssuers}
-            allowAdditionalProviders={!!target.multipleProviders}
+            allowAdditionalProviders={false}
             projectId={target.projectId}
-            isLoading={isLoadingClients || isLoadingAssociatedIssuers}
-            isError={isClientsError || isAssociatedIssuersError}
+            isLoading={associations.isLoading || isLoadingAssociatedIssuers}
+            isError={associations.isError || isAssociatedIssuersError}
             onAdd={() => setSheetOpen(true)}
             onEdit={handleEdit}
             onDelete={handleDelete}
@@ -277,30 +277,33 @@ function StandardAuthenticationSectionBody({
         </div>
       </SettingsSection.Panel>
 
-      <AttachRemoteIdentityProviderSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        target={target}
-        userSessionIssuer={userSessionIssuer ?? null}
-        excludedIssuerIds={attachedIssuerIds}
-      />
-
-      {deleteTarget && userSessionIssuerId && (
-        <DeleteRemoteIdentityProviderDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          userSessionIssuerId={userSessionIssuerId}
-          issuer={deleteTarget}
-          mcpServerId={target.mcpServerId}
+      {serverId && (
+        <AttachRemoteIdentityProviderSheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          target={target}
+          userSessionIssuer={userSessionIssuer ?? null}
+          excludedIssuerIds={attachedIssuerIds}
         />
       )}
 
-      {modifyTarget && userSessionIssuer && (
+      {deleteTarget && serverId && deleteRegistrationId && (
+        <DeleteRemoteIdentityProviderDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          issuer={deleteTarget}
+          mcpServerId={serverId}
+          registrationId={deleteRegistrationId}
+        />
+      )}
+
+      {modifyTarget && userSessionIssuer && modifyRegistrationId && (
         <ModifyRemoteIdentityProviderSheet
           open={modifyOpen}
           onOpenChange={setModifyOpen}
           userSessionIssuer={userSessionIssuer}
           issuer={modifyTarget}
+          registrationId={modifyRegistrationId}
         />
       )}
     </>

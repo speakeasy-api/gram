@@ -1,8 +1,3 @@
-import { RemoteIdentityProvidersField } from "@/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField";
-import { useGramContext } from "@gram/client/react-query/_context.js";
-import { buildServerClientAssociationsQuery } from "@gram/client/react-query/serverClientAssociations.core.js";
-import { useQueries } from "@tanstack/react-query";
-import { type ComponentProps, useMemo } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -16,56 +11,22 @@ import { useGatewayMemberRows } from "./useGatewayMemberRows";
 
 export function GatewayAuthorizationServersField({
   metaMcpServerId,
-  ...field
-}: Omit<
-  ComponentProps<typeof RemoteIdentityProvidersField>,
-  "members" | "hiddenIssuerIds"
-> & { metaMcpServerId: string }): JSX.Element {
+}: {
+  metaMcpServerId: string;
+}): JSX.Element {
   const { rows, isLoading, isError, refetch } =
     useGatewayMemberRows(metaMcpServerId);
   const servers = rows.flatMap((row) =>
     row.classification === "proxied" && row.server ? [row.server] : [],
   );
-  const legacy = useLegacyProviderVisibility(servers);
   return (
-    <RemoteIdentityProvidersField
-      {...field}
-      isLoading={field.isLoading || isLoading || legacy.isLoading}
-      hiddenIssuerIds={legacy.issuerIds}
-      members={
-        <GatewayMemberSignInField
-          servers={servers}
-          isLoading={isLoading}
-          isError={isError}
-          refetch={refetch}
-        />
-      }
+    <GatewayMemberSignInField
+      servers={servers}
+      isLoading={isLoading}
+      isError={isError}
+      refetch={refetch}
     />
   );
-}
-
-/** Preserve the legacy provider controls' visibility until hosted migration. */
-function useLegacyProviderVisibility(servers: McpServer[]) {
-  const client = useGramContext();
-  const results = useQueries({
-    queries: servers.map((server) => ({
-      ...buildServerClientAssociationsQuery(client, {
-        mcpServerId: server.id,
-      }),
-      throwOnError: false,
-    })),
-  });
-  const ids = results.flatMap(
-    (result) =>
-      result.data?.associations.map((a) => a.remoteSessionIssuerId) ?? [],
-  );
-  const key = ids.join(",");
-  // oxlint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, not by the per-render array
-  const issuerIds = useMemo(() => new Set(ids), [key]);
-  return {
-    issuerIds,
-    isLoading: results.some((result) => result.isLoading),
-  };
 }
 
 /** A proxied member brings its own upstream offers to the gateway. */

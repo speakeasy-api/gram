@@ -196,6 +196,7 @@ function renderSheet() {
       <ModifyRemoteIdentityProviderSheet
         open
         onOpenChange={vi.fn<(open: boolean) => void>()}
+        registrationId="client-1"
         userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
         issuer={
           {
@@ -224,6 +225,7 @@ function renderGrantProfileSheet() {
       <ModifyRemoteIdentityProviderSheet
         open
         onOpenChange={vi.fn<(open: boolean) => void>()}
+        registrationId="client-1"
         userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
         issuer={
           {
@@ -337,6 +339,7 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
         <ModifyRemoteIdentityProviderSheet
           open
           onOpenChange={vi.fn<(open: boolean) => void>()}
+          registrationId="client-1"
           userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
           issuer={
             {
@@ -437,6 +440,7 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
         <ModifyRemoteIdentityProviderSheet
           open
           onOpenChange={vi.fn<(open: boolean) => void>()}
+          registrationId="client-1"
           userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
           issuer={
             {

@@ -1,3 +1,4 @@
+import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { Spinner } from "@/components/ui/Spinner";
 import { Input } from "@/components/ui/Input";
 import { ServerUsageImpactById } from "@/components/mcp-server-usage/ServerUsageConfirmation";
@@ -18,27 +19,24 @@ import { toast } from "sonner";
 export function DeleteRemoteIdentityProviderDialog({
   open,
   onOpenChange,
-  userSessionIssuerId,
+  registrationId,
   issuer,
   mcpServerId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // The user_session_issuer this provider is associated with on the current
-  // MCP server. We scope the delete to the clients linking this pair —
-  // delete-semantics #1: remove the association, leave the
-  // remote_session_issuer record alone so other servers can still use it.
-  userSessionIssuerId: string;
+  /** The exact registration to unlink; the provider and registration remain. */
+  registrationId: string;
   issuer: RemoteSessionIssuer;
   /** The MCP server the provider is removed from, for the usage preview. */
-  mcpServerId?: string;
+  mcpServerId: string;
 }): JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="max-w-2xl!">
         {open && (
           <DeleteRemoteIdentityProviderDialogBody
-            userSessionIssuerId={userSessionIssuerId}
+            registrationId={registrationId}
             issuer={issuer}
             mcpServerId={mcpServerId}
             onClose={() => onOpenChange(false)}
@@ -50,14 +48,14 @@ export function DeleteRemoteIdentityProviderDialog({
 }
 
 function DeleteRemoteIdentityProviderDialogBody({
-  userSessionIssuerId,
+  registrationId,
   issuer,
   mcpServerId,
   onClose,
 }: {
-  userSessionIssuerId: string;
+  registrationId: string;
   issuer: RemoteSessionIssuer;
-  mcpServerId?: string;
+  mcpServerId: string;
   onClose: () => void;
 }) {
   const client = useSdkClient();
@@ -80,33 +78,14 @@ function DeleteRemoteIdentityProviderDialogBody({
     setSubmitting(true);
     setError(null);
     try {
-      // Collect every remote_session_client that joins this
-      // user_session_issuer to this remote_session_issuer, walking cursor
-      // pagination so a pairing with more than a page's worth of clients is
-      // fully drained. The uniqueness is per
-      // (project, issuer, user_session_issuer, client_id), so a single
-      // pair can have multiple rows.
-      const clientIds: string[] = [];
-      let cursor: string | undefined;
-      do {
-        const page = await client.remoteSessionClients.list({
-          userSessionIssuerId,
-          remoteSessionIssuerId: issuer.id,
-          limit: 100,
-          cursor,
-        });
-        for (const remoteClient of page.result.items) {
-          clientIds.push(remoteClient.id);
-        }
-        cursor = page.result.nextCursor || undefined;
-      } while (cursor);
-      // Detach, not delete: the client may back other servers' issuers.
-      for (const id of clientIds) {
-        await client.remoteSessionClients.detachUserSessionIssuer({
-          attachUserSessionIssuerForm: { id, userSessionIssuerId },
-        });
-      }
+      await client.remoteSessions.detachServerClientAssociation({
+        serverClientAssociationForm: {
+          mcpServerId,
+          remoteSessionClientId: registrationId,
+        },
+      });
       await Promise.all([
+        invalidateAllServerClientAssociations(queryClient),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         // Also invalidate MCP server queries so the sidebar readiness bar

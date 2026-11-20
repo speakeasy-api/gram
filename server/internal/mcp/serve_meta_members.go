@@ -439,7 +439,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 			}
 		}
-		if !typedConsent || hasHostedConsentMember(members) {
+		if !typedConsent {
 			clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
 			if err != nil {
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
@@ -447,8 +447,6 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		}
 	}
 	shadow := s.newMandatoryShadow(ctx, organizationID)
-	var servingClientsErr error
-	servingClientsLoaded := false
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
 		offer, known := offers[member.serverID]
@@ -492,24 +490,17 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		if !supported || (serving && known && len(offer.clients) == 0 && needsOAuth) {
 			continue
 		}
-		if needsOAuth && userSessionIssuerID != uuid.Nil {
-			if serving && !servingClientsLoaded {
-				// Typed proxied members were handled above. Only hosted
-				// serving needs sign-in bindings; never attach legacy associations
-				// to a typed member. A binding lookup failure hides only the
-				// hosted OAuth members, not the rest of the gateway.
-				servingClientsLoaded = true
-				clients, servingClientsErr = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
-				if servingClientsErr != nil {
-					logger.WarnContext(ctx, "list hosted gateway sign-in clients", attr.SlogError(servingClientsErr))
-				}
-			}
-			if servingClientsErr != nil || !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
-				return (!typedConsent || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
-			}) {
+		if member.backend == metaMemberBackendHosted && userSessionIssuerID != uuid.Nil {
+			if _, err := s.hostedRegistration(ctx, organizationID, member.projectID, member.serverID); err != nil {
+				logger.WarnContext(ctx, "hosted member upstream assignment unavailable", attr.SlogError(err))
 				continue
 			}
+		} else if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+			return !typedConsent && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
+		}) {
+			continue
 		}
+
 		eligible = append(eligible, member)
 	}
 	return ctx, qualifyMemberSlugsByProject(eligible), denied, nil
@@ -565,6 +556,7 @@ func (s *Service) admitMetaMembers(
 	organizationID string,
 	candidates []metaMemberCandidate,
 ) (context.Context, []metaMember, []metaMember, error) {
+	shadow := s.newMandatoryShadow(ctx, organizationID)
 	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember

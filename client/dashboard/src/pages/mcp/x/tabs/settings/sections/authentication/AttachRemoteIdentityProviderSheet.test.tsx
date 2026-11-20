@@ -101,10 +101,10 @@ vi.mock("@/contexts/Fetcher", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessionClients: {
-      attachUserSessionIssuer: mocks.attachClient,
       create: mocks.createClient,
       createCimd: mocks.createCimdClient,
     },
+    remoteSessions: { attachServerClientAssociation: mocks.attachClient },
     remoteSessionIssuers: { create: mocks.createProvider },
     userSessionIssuers: { create: mocks.createUserSessionIssuer },
   }),
@@ -155,6 +155,7 @@ function target(overrides: Partial<AuthTarget> = {}): AuthTarget {
     slug: "example-server",
     projectId: "project-1",
     permissionResourceId: "mcp-server-1",
+    mcpServerId: "mcp-server-1",
     attachImpactTarget: { mcpServerId: "mcp-server-1" },
     supportsOrganizationIssuers: true,
     userSessionIssuerId: null,
@@ -474,7 +475,6 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       expect(mocks.createClient).toHaveBeenCalledWith({
         createRemoteSessionClientForm: {
           remoteSessionIssuerId: provider.id,
-          userSessionIssuerIds: ["user-session-issuer-1"],
           clientId: "stored-app",
           clientSecret: undefined,
           templateClientId: "stored-client",
@@ -483,7 +483,12 @@ describe("AttachRemoteIdentityProviderSheet", () => {
           audience: "https://api.example.test",
         },
       });
-      expect(mocks.attachClient).not.toHaveBeenCalled();
+      expect(mocks.attachClient).toHaveBeenCalledWith({
+        serverClientAssociationForm: {
+          mcpServerId: "mcp-server-1",
+          remoteSessionClientId: "client-1",
+        },
+      });
     });
 
     it("copies no secret once the client ID is changed", async () => {
@@ -511,7 +516,12 @@ describe("AttachRemoteIdentityProviderSheet", () => {
           templateClientId: undefined,
         }),
       });
-      expect(mocks.attachClient).not.toHaveBeenCalled();
+      expect(mocks.attachClient).toHaveBeenCalledWith({
+        serverClientAssociationForm: {
+          mcpServerId: "mcp-server-1",
+          remoteSessionClientId: "client-1",
+        },
+      });
     });
 
     it("clears a starting client's settings when the authorization server changes", async () => {

@@ -62,11 +62,13 @@ export function ModifyRemoteIdentityProviderSheet({
   onOpenChange,
   userSessionIssuer,
   issuer,
+  registrationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   userSessionIssuer: UserSessionIssuer;
   issuer: RemoteSessionIssuer;
+  registrationId: string;
 }): JSX.Element {
   // Fetch every remote_session_client tied to this issuer (across all
   // user_session_issuers in the project), walking every page. We need the
@@ -80,8 +82,7 @@ export function ModifyRemoteIdentityProviderSheet({
       { enabled: open },
     );
   const primaryClient: RemoteSessionClient | undefined = allClients.find(
-    (clientRow) =>
-      clientRow.userSessionIssuerIds.includes(userSessionIssuer.id),
+    (clientRow) => clientRow.id === registrationId,
   );
   const otherUserSessionIssuerIds = useMemo(
     () =>
