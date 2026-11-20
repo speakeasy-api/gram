@@ -6218,6 +6218,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	groupedSB = withTraceWindowScanBounds(groupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	groupedSB = withToolUsageIdentityChips(groupedSB, arg.Filters)
 	groupedSB, err := withToolUsageAgentTraces(groupedSB, arg.GramProjectID, arg.TimeStart, arg.TimeEnd, toolUsageAgentScope(arg.UserFilters, arg.AuthorizerUserIDs, arg.AgentIDs))
 	if err != nil {
 		return "", nil, err
@@ -7003,14 +7004,38 @@ func toolUsageSummaryNeedsRawScan(arg GetToolUsageSummaryParams) bool {
 	return false
 }
 
+// toolUsageIdentityChipColumns maps the identity chips the trace_summaries
+// path can answer to the per-trace columns its grouped queries project.
+var toolUsageIdentityChipColumns = map[string]string{
+	"user.email":            "g_user_email",
+	"user.id":               "g_user_id",
+	"gram.external_user.id": "g_external_user_id",
+}
+
 // toolUsageSummaryAnswersFilter reports whether the trace_summaries path can
-// apply the chip to its per-trace event_source column. Every other chip,
-// http.response.status_code included, still takes the raw scan.
+// apply the chip itself: an event source or identity chip with eq, not_eq or
+// in. Every other chip, http.response.status_code included, still takes the
+// raw scan.
 func toolUsageSummaryAnswersFilter(filter AttributeFilter) bool {
-	if filter.Path != toolUsageEventSourcePath {
+	if filter.Path != toolUsageEventSourcePath && toolUsageIdentityChipColumns[filter.Path] == "" {
 		return false
 	}
 	return filter.Op == "eq" || filter.Op == "not_eq" || filter.Op == "in"
+}
+
+// withToolUsageIdentityChips applies identity chips to a grouped
+// trace_summaries query, against the trace's own identity columns.
+func withToolUsageIdentityChips(sb squirrel.SelectBuilder, filters []AttributeFilter) squirrel.SelectBuilder {
+	for _, filter := range filters {
+		col := toolUsageIdentityChipColumns[filter.Path]
+		if col == "" {
+			continue
+		}
+		if pred := filter.Predicate(col); pred != nil {
+			sb = sb.Having(pred)
+		}
+	}
+	return sb
 }
 
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
@@ -7082,6 +7107,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) != 'hook'").
 		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	directGroupedSB = withTraceWindowScanBounds(directGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	directGroupedSB = withToolUsageIdentityChips(directGroupedSB, arg.Filters)
 	if identityFilter != nil {
 		directGroupedSB = directGroupedSB.Where(identityFilter)
 	}
@@ -7116,6 +7142,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) = 'hook'").
 		Having("(" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')")
 	hookGroupedSB = withTraceWindowScanBounds(hookGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	hookGroupedSB = withToolUsageIdentityChips(hookGroupedSB, arg.Filters)
 	if identityFilter != nil {
 		hookGroupedSB = hookGroupedSB.Where(identityFilter)
 	}
