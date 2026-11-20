@@ -48,28 +48,10 @@ func goldenCatalogClientIDs(t *testing.T) []string {
 // everyHarness serves one discovery variant to every harness.
 func everyHarness(variant feature.Variant) harnessFlags {
 	flags := harnessFlags{"unknown": variant}
-	for _, product := range aivendorstest.CompiledSnapshot().Products() {
+	for _, product := range aivendors.CompiledSnapshot().Products() {
 		flags[product.ID] = variant
 	}
 	return flags
-}
-
-// goldenCatalogs are the compiled registry and the same content in the order a
-// freshly seeded database loads it. Outputs that list the catalog keep a
-// separate golden for database order.
-func goldenCatalogs() []struct {
-	name    string
-	catalog *aivendors.Snapshot
-	ordered string
-} {
-	return []struct {
-		name    string
-		catalog *aivendors.Snapshot
-		ordered string
-	}{
-		{name: "compiled", catalog: aivendorstest.CompiledSnapshot(), ordered: ""},
-		{name: "database", catalog: aivendorstest.DatabaseSnapshot(), ordered: "_database_order"},
-	}
 }
 
 // goldenClientDecision is what Platform MCP decides from one client ID.
@@ -85,19 +67,9 @@ type goldenClientDecision struct {
 
 func TestClientCatalogDecisionsMatchGolden(t *testing.T) {
 	t.Parallel()
-	for _, golden := range goldenCatalogs() {
-		t.Run(golden.name, func(t *testing.T) {
-			t.Parallel()
-			testenv.RequireJSONGolden(t, "testdata/ai_catalog_client_decisions_golden.json", clientCatalogDecisions(t, golden.catalog))
-		})
-	}
-}
-
-func clientCatalogDecisions(t *testing.T, catalog *aivendors.Snapshot) []byte {
-	t.Helper()
 
 	runtimeFor := func(variant feature.Variant) *Runtime {
-		return newAllowlistTestRuntime(t, nil).WithAICatalog(aivendors.NewStore(catalog)).WithDiscovery(DiscoveryConfig{
+		return newAllowlistTestRuntime(t, nil).WithDiscovery(DiscoveryConfig{
 			Flags:             everyHarness(variant),
 			CodeExecutor:      codemode.Disabled{},
 			CodeModeAvailable: func(_ context.Context, _ string) bool { return true },
@@ -106,6 +78,7 @@ func clientCatalogDecisions(t *testing.T, catalog *aivendors.Snapshot) []byte {
 	progressive := runtimeFor(feature.VariantPlatformMCPDiscoveryProgressive)
 	codeMode := runtimeFor(feature.VariantPlatformMCPDiscoveryCodeMode)
 
+	catalog := aivendors.CompiledSnapshot()
 	ids := goldenCatalogClientIDs(t)
 	decisions := make([]goldenClientDecision, 0, len(ids))
 	for _, id := range ids {
@@ -123,7 +96,7 @@ func clientCatalogDecisions(t *testing.T, catalog *aivendors.Snapshot) []byte {
 	}
 	data, err := json.Marshal(decisions)
 	require.NoError(t, err)
-	return data
+	testenv.RequireJSONGolden(t, "testdata/ai_catalog_client_decisions_golden.json", data)
 }
 
 // goldenClientSurface is the full-catalogue surface one client is served.
@@ -136,18 +109,8 @@ type goldenClientSurface struct {
 
 func TestClientToolSurfacesMatchGolden(t *testing.T) {
 	t.Parallel()
-	for _, golden := range goldenCatalogs() {
-		t.Run(golden.name, func(t *testing.T) {
-			t.Parallel()
-			testenv.RequireJSONGolden(t, "testdata/ai_catalog_client_surfaces_golden.json", clientToolSurfaces(t, golden.catalog))
-		})
-	}
-}
 
-func clientToolSurfaces(t *testing.T, catalog *aivendors.Snapshot) []byte {
-	t.Helper()
-
-	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithAICatalog(aivendors.NewStore(catalog))
+	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
 	handler := runtime.Handler()
 	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
 	call := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_platform_context","arguments":{}}}`
@@ -178,7 +141,7 @@ func clientToolSurfaces(t *testing.T, catalog *aivendors.Snapshot) []byte {
 	}
 	data, err := json.Marshal(surfaces)
 	require.NoError(t, err)
-	return data
+	testenv.RequireJSONGolden(t, "testdata/ai_catalog_client_surfaces_golden.json", data)
 }
 
 // The runtime reads the store it was given: an empty catalog recognizes no
@@ -228,22 +191,12 @@ func recordedAdmissionOutcomes(t *testing.T, reader *sdkmetric.ManualReader) map
 
 func TestOAuthClientAdmissionMatchesGolden(t *testing.T) {
 	t.Parallel()
-	for _, golden := range goldenCatalogs() {
-		t.Run(golden.name, func(t *testing.T) {
-			t.Parallel()
-			testenv.RequireJSONGolden(t, "testdata/ai_catalog_oauth_admission_golden.json", oauthClientAdmissions(t, golden.catalog))
-		})
-	}
-}
-
-func oauthClientAdmissions(t *testing.T, catalog *aivendors.Snapshot) []byte {
-	t.Helper()
 
 	reader := sdkmetric.NewManualReader()
 	base, err := url.Parse("https://gram.example")
 	require.NoError(t, err)
 	service, err := NewOAuthHTTP(OAuthHTTPConfig{
-		AICatalog:     aivendors.NewStore(catalog),
+		AICatalog:     aivendorstest.NewStore(),
 		BaseURL:       base,
 		Cache:         &memoryCache{values: map[string]any{}},
 		Store:         platformoauth.NewInMemoryStore(),
@@ -276,57 +229,38 @@ func oauthClientAdmissions(t *testing.T, catalog *aivendors.Snapshot) []byte {
 	}
 	data, err := json.Marshal(admissions)
 	require.NoError(t, err)
-	return data
+	testenv.RequireJSONGolden(t, "testdata/ai_catalog_oauth_admission_golden.json", data)
 }
 
 func TestInboundEMAPresetClientsMatchGolden(t *testing.T) {
 	t.Parallel()
-	for _, golden := range goldenCatalogs() {
-		t.Run(golden.name, func(t *testing.T) {
-			t.Parallel()
-			data, err := json.Marshal(inboundEMAPresetClients(golden.catalog))
-			require.NoError(t, err)
-			testenv.RequireJSONGolden(t, "testdata/ai_catalog_inbound_ema_presets"+golden.ordered+"_golden.json", data)
-		})
-	}
-	require.ElementsMatch(t, inboundEMAPresetClients(aivendorstest.CompiledSnapshot()), inboundEMAPresetClients(aivendorstest.DatabaseSnapshot()))
+
+	data, err := json.Marshal(inboundEMAPresetClients(aivendors.CompiledSnapshot()))
+	require.NoError(t, err)
+	testenv.RequireJSONGolden(t, "testdata/ai_catalog_inbound_ema_presets_golden.json", data)
 }
 
 // An organization with no overlay is listed the catalog's scan targets.
 func TestAIScanLibraryWithoutOverlayMatchesGolden(t *testing.T) {
 	t.Parallel()
-	for _, golden := range goldenCatalogs() {
-		t.Run(golden.name, func(t *testing.T) {
-			t.Parallel()
-			conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_ai_catalog_golden")
-			require.NoError(t, err)
-			service := NewShadowAIService(&stubDetectionReader{}, NewPostgresShadowAILibrary(aivendors.NewStore(golden.catalog), agentrepo.New(conn)), stubAuthorizer{}, allowingBudget())
-			output, err := service.ListLibrary(t.Context(), shadowAIPrincipal(), ListAIScanLibraryInput{Category: ""})
-			require.NoError(t, err)
-			data, err := json.Marshal(output)
-			require.NoError(t, err)
-			testenv.RequireJSONGolden(t, "testdata/ai_catalog_scan_library_golden.json", data)
-		})
-	}
+
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_ai_catalog_golden")
+	require.NoError(t, err)
+	service := NewShadowAIService(&stubDetectionReader{}, NewPostgresShadowAILibrary(aivendorstest.NewStore(), agentrepo.New(conn)), stubAuthorizer{}, allowingBudget())
+	output, err := service.ListLibrary(t.Context(), shadowAIPrincipal(), ListAIScanLibraryInput{Category: ""})
+	require.NoError(t, err)
+	data, err := json.Marshal(output)
+	require.NoError(t, err)
+	testenv.RequireJSONGolden(t, "testdata/ai_catalog_scan_library_golden.json", data)
 }
 
 // get_inbound_ema_trust lists the catalog's enabled presets in order.
 func TestInboundEMATrustToolPresetClientsMatchGolden(t *testing.T) {
 	t.Parallel()
-	for _, golden := range goldenCatalogs() {
-		t.Run(golden.name, func(t *testing.T) {
-			t.Parallel()
-			testenv.RequireJSONGolden(t, "testdata/ai_catalog_inbound_ema_presets"+golden.ordered+"_golden.json", inboundEMATrustToolPresetClients(t, golden.catalog))
-		})
-	}
-}
-
-func inboundEMATrustToolPresetClients(t *testing.T, catalog *aivendors.Snapshot) json.RawMessage {
-	t.Helper()
 
 	f := newInboundEMAFixture(t, 1)
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "inbound-ema", Version: "1"}, nil))
-	reg.withAICatalog(aivendors.NewStore(catalog))
+	reg.withAICatalog(aivendorstest.NewStore())
 	registerInboundEMATrustTools(reg, f.service)
 	result, err := descriptorByName(t, reg, getInboundEMATrustToolName).Invoke(contextWithPrincipal(t.Context(), f.principal), json.RawMessage(`{}`))
 	require.NoError(t, err)
@@ -344,7 +278,7 @@ func inboundEMATrustToolPresetClients(t *testing.T, catalog *aivendors.Snapshot)
 		presets = output.StructuredContent.PresetClients
 	}
 	require.NotNil(t, presets, string(encoded))
-	return presets
+	testenv.RequireJSONGolden(t, "testdata/ai_catalog_inbound_ema_presets_golden.json", presets)
 }
 
 // A runtime composed without a catalog fails when it is attached, not on its

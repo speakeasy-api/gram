@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -34,7 +35,7 @@ func TestIsChatGPTClient(t *testing.T) {
 		"00000000-0000-0000-0000-000000000000":                  false,
 		"":                                                      false,
 	} {
-		require.Equal(t, want, isChatGPTClient(aivendorstest.CompiledSnapshot(), clientID), clientID)
+		require.Equal(t, want, isChatGPTClient(aivendors.CompiledSnapshot(), clientID), clientID)
 	}
 }
 

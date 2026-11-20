@@ -137,6 +137,20 @@ func (p Product) withEmptyAsNil() Product {
 	return p
 }
 
+// CompiledSnapshot returns the process's one immutable snapshot of the compiled
+// registry, shaped like a database snapshot: families and aliases stay with the
+// package-level registry.
+func CompiledSnapshot() *Snapshot { return compiledSnapshot() }
+
+var compiledSnapshot = sync.OnceValue(func() *Snapshot {
+	products := Products()
+	for i := range products {
+		products[i].Family = ""
+		products[i].Aliases = nil
+	}
+	return NewSnapshot(products)
+})
+
 // Fingerprint hashes the complete snapshot, including product and document
 // order, which is listing order.
 func (s *Snapshot) Fingerprint() string { return s.fingerprint }

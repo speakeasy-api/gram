@@ -19,6 +19,7 @@ import (
 	orgremotegen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	orgusergen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -236,7 +237,7 @@ func TestInboundEMATrustGetReportsAudienceDirectoryAndProvider(t *testing.T) {
 	endpointID := uuid.NewString()
 	f.users.issuers[endpointID] = &types.UserSessionIssuer{ID: endpointID, Slug: "endpoint", AuthorizationServerMode: "endpoint"}
 
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.Equal(t, InboundEMADirectory{ResolvableDirectoryUsers: 2, Synced: true}, output.Directory)
 	require.Contains(t, output.PresetClients, InboundEMAClient{Name: "Anthropic (Claude Code)", ClientID: "https://claude.ai/oauth/claude-code-client-metadata"})
@@ -258,7 +259,7 @@ func TestInboundEMATrustGetReportsAudienceDirectoryAndProvider(t *testing.T) {
 func TestInboundEMATrustGetWithoutDirectorySyncSaysEveryExchangeIsRefused(t *testing.T) {
 	t.Parallel()
 	f := newInboundEMAFixture(t, 0)
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.False(t, output.Directory.Synced)
 	require.Contains(t, output.NextStep, "every ID-JAG exchange is refused")
@@ -580,7 +581,7 @@ func TestInboundEMATrustGetNextStepExplainsEndpointModeHasNoAudience(t *testing.
 	f.users.issuers[f.issuerID].IssuerURL = nil
 	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
 
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.NotContains(t, output.NextStep, "reported audience")
 	require.Contains(t, output.NextStep, "no single audience")
@@ -595,14 +596,14 @@ func TestInboundEMATrustGetNextStepExplainsDisabledAdmissionBlocksIDJAG(t *testi
 	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
 	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "disabled"
 
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.Len(t, output.Issuers, 1)
 	require.Equal(t, "disabled", output.Issuers[0].ClientIDMetadataAdmissionMode)
 	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until its admission mode is presets or open")
 
 	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "presets"
-	output, err = f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err = f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.NotContains(t, output.NextStep, "cannot work until")
 	require.Contains(t, output.NextStep, "must be in preset_clients or custom_client_urls")
@@ -618,7 +619,7 @@ func TestInboundEMATrustGetNextStepKeepsAudienceGuidanceWithDisabledAdmission(t 
 	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(providerID)
 	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "disabled"
 
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.Contains(t, output.NextStep, "no single audience")
 	require.Contains(t, output.NextStep, "ID-JAG sign-in cannot work until its admission mode is presets or open")
@@ -647,7 +648,7 @@ func TestInboundEMATrustGetListsCustomClientURLsInPresetsMode(t *testing.T) {
 	f.users.issuers[issuer.ID.String()] = &types.UserSessionIssuer{ID: issuer.ID.String(), Slug: issuer.Slug, AuthorizationServerMode: "shared", ClientIDMetadataAdmissionMode: "presets"}
 	f.users.issuers[f.issuerID].ClientIDMetadataAdmissionMode = "open"
 
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	for _, view := range output.Issuers {
 		if view.UserSessionIssuerID == issuer.ID.String() {
@@ -681,7 +682,7 @@ func TestInboundEMATrustGetTruncatesCustomClientURLs(t *testing.T) {
 	}
 	f.users.issuers = map[string]*types.UserSessionIssuer{issuer.ID.String(): {ID: issuer.ID.String(), Slug: issuer.Slug, AuthorizationServerMode: "shared", ClientIDMetadataAdmissionMode: "presets"}}
 
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.Len(t, output.Issuers, 1)
 	require.Len(t, output.Issuers[0].CustomClientURLs, clientAdmissionCustomURLLimit)
@@ -817,7 +818,7 @@ func TestInboundEMATrustGetMarksUnreadableProviderUnavailable(t *testing.T) {
 	f.users.issuers[f.issuerID].TrustedRemoteSessionIssuerID = new(uuid.NewString())
 	f.remote.getErr = errors.New("read failed")
 
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.Len(t, output.Issuers, 1)
 	require.True(t, output.Issuers[0].TrustedIdentityProviderUnavailable)
@@ -832,7 +833,7 @@ func TestInboundEMATrustGetUnreadableFederatedProviderPointsToDashboard(t *testi
 	f.users.issuers[f.issuerID].TrustedRemoteSessionClientID = new(uuid.NewString())
 	f.remote.getErr = errors.New("read failed")
 
-	output, err := f.service.Get(t.Context(), aivendorstest.CompiledSnapshot(), f.principal)
+	output, err := f.service.Get(t.Context(), aivendors.CompiledSnapshot(), f.principal)
 	require.NoError(t, err)
 	require.Len(t, output.Issuers, 1)
 	require.True(t, output.Issuers[0].TrustedIdentityProviderUnavailable)

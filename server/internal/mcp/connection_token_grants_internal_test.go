@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -117,7 +117,7 @@ func TestAssistantClientCredentialsRecordsSuccess(t *testing.T) {
 	require.Equal(t, oauthwire.GrantTypeClientCredentials, row.GrantType)
 	require.Equal(t, urn.NewAgentSubject(agentID).String(), row.SubjectURN)
 	require.Equal(t, c.client.ID.String(), row.UserSessionClientID)
-	require.Equal(t, mcpconnectionattempts.AppOf(aivendorstest.CompiledSnapshot(), c.client.ClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
+	require.Equal(t, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), c.client.ClientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 	require.Len(t, rec.Rows(), 1)
 }
 

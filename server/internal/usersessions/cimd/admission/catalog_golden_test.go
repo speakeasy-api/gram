@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 // TestCatalogMatchesTheCatalogAsShipped pins the admission catalog against the
@@ -47,5 +47,5 @@ func TestCatalogMatchesTheCatalogAsShipped(t *testing.T) {
 		{ProductID: "pi", Pattern: true, VendorKey: "pi", URL: "https://pi.dev/oauth/*/client.json", DisplayName: "Pi (per-server document)", Enabled: true},
 	}
 
-	require.Equal(t, expected, aivendorstest.CompiledSnapshot().Catalog())
+	require.Equal(t, expected, aivendors.CompiledSnapshot().Catalog())
 }

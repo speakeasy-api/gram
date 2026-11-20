@@ -20,6 +20,8 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
+
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -90,13 +92,13 @@ func TestGateConnectionScope(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	gateway := uuid.New()
 	organizationGate := &metaGateContext{organizationID: "org", metaServerID: gateway, organizationGateway: true}
-	rec.Recorder.Once(t.Context(), organizationGate.connectionScope(t.Context(), aivendorstest.CompiledSnapshot()), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	rec.Recorder.Once(t.Context(), organizationGate.connectionScope(t.Context(), aivendors.CompiledSnapshot()), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
 	require.Equal(t, uuid.Nil, rec.Rows()[0].ProjectID)
 	require.Equal(t, gateway.String(), rec.Rows()[0].ServerID)
 
 	project := uuid.New()
 	projectGate := &metaGateContext{organizationID: "org", projectID: project, metaServerID: gateway}
-	rec.Recorder.Once(t.Context(), projectGate.connectionScope(t.Context(), aivendorstest.CompiledSnapshot()), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	rec.Recorder.Once(t.Context(), projectGate.connectionScope(t.Context(), aivendors.CompiledSnapshot()), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
 	require.Equal(t, project, rec.Rows()[1].ProjectID)
 }
 

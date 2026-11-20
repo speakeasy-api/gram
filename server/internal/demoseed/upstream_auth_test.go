@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -50,7 +50,7 @@ func TestSeedUpstreamAuthReadyAfterReseed(t *testing.T) {
 
 			grants, err := testrepo.New(db).ListDemoSeedAuthGrantsFixture(ctx, spec.OrgID)
 			require.NoError(t, err)
-			s := &seeder{spec: spec, catalog: aivendorstest.CompiledSnapshot()}
+			s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
 			got := make([]string, 0, len(grants))
 			for _, g := range grants {
 				got = append(got, authGrantLabel(s, g))

@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 func TestDefaultsAreValid(t *testing.T) {
 	t.Parallel()
 
-	defaults := aitargets.Defaults(aivendorstest.CompiledSnapshot())
+	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
 	require.Len(t, defaults, 41)
-	require.NoError(t, aitargets.Validate(aivendorstest.CompiledSnapshot(), defaults))
+	require.NoError(t, aitargets.Validate(aivendors.CompiledSnapshot(), defaults))
 }
 
 func TestDefaultsReturnsACopy(t *testing.T) {
@@ -35,7 +35,7 @@ func TestDefaultsReturnsACopy(t *testing.T) {
 		return nil
 	}
 
-	catalog := aivendorstest.CompiledSnapshot()
+	catalog := aivendors.CompiledSnapshot()
 	first := aitargets.Defaults(catalog)
 	first[0].DisplayName = "mutated"
 	mutable := withBinaries(first)
@@ -55,7 +55,7 @@ func TestDefaultsReturnsACopy(t *testing.T) {
 func TestSnapshotSortsResolvesAndCopies(t *testing.T) {
 	t.Parallel()
 
-	defaults := aitargets.Defaults(aivendorstest.CompiledSnapshot())
+	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
 	reversed := slices.Clone(defaults)
 	slices.Reverse(reversed)
 	snapshot := aitargets.NewSnapshot(7, reversed)
@@ -83,13 +83,13 @@ func TestSnapshotSortsResolvesAndCopies(t *testing.T) {
 func TestSnapshotETagTracksVersionAndContent(t *testing.T) {
 	t.Parallel()
 
-	defaults := aitargets.Defaults(aivendorstest.CompiledSnapshot())
+	defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
 	base := aitargets.NewSnapshot(1, defaults)
 	require.Equal(t, base.ETag, aitargets.NewSnapshot(1, defaults).ETag, "same input must fingerprint identically")
 	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(2, defaults).ETag, "a version bump must move the etag")
 	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, defaults[1:]).ETag, "two served lists sharing a list_version still differ in etag")
 
-	renamed := aitargets.Defaults(aivendorstest.CompiledSnapshot())
+	renamed := aitargets.Defaults(aivendors.CompiledSnapshot())
 	renamed[0].DisplayName = "Renamed"
 	require.NotEqual(t, base.ETag, aitargets.NewSnapshot(1, renamed).ETag, "a content change must move the etag")
 }
@@ -138,7 +138,7 @@ func TestEnvelopeWireShape(t *testing.T) {
 func TestEnvelopeOmitsAbsentVersionHint(t *testing.T) {
 	t.Parallel()
 
-	snapshot := aitargets.NewSnapshot(1, aitargets.Defaults(aivendorstest.CompiledSnapshot())[:1])
+	snapshot := aitargets.NewSnapshot(1, aitargets.Defaults(aivendors.CompiledSnapshot())[:1])
 	data, err := json.Marshal(snapshot.Envelope())
 	require.NoError(t, err)
 	require.NotContains(t, string(data), "version_hint")

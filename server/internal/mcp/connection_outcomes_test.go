@@ -18,7 +18,7 @@ import (
 	otellog "go.opentelemetry.io/otel/log"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -1040,7 +1040,7 @@ func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
 
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, tc.what)
 			require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
-			require.Equal(t, mcpconnectionattempts.AppOf(aivendorstest.CompiledSnapshot(), ds.clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
+			require.Equal(t, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), ds.clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 			require.NotContains(t, row.AppKey, "/", "host only")
 			require.Len(t, rec.Rows(), 1)
 		})

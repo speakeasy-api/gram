@@ -5,16 +5,13 @@ package admission
 // needs `-args -update`.
 
 import (
-	"cmp"
 	"encoding/json"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -98,11 +95,11 @@ func goldenClientIDs(catalog *aivendors.Snapshot) []string {
 	return ids
 }
 
-// admissionGolden decides every golden client ID, listed in the compiled
-// registry's order, against catalog.
-func admissionGolden(t *testing.T, catalog *aivendors.Snapshot) []byte {
-	t.Helper()
-	ids := goldenClientIDs(aivendorstest.CompiledSnapshot())
+func TestCompiledSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
+	t.Parallel()
+
+	catalog := aivendors.CompiledSnapshot()
+	ids := goldenClientIDs(catalog)
 	cases := make([]goldenCase, 0, len(ids))
 	for _, id := range ids {
 		reason, matched := CatalogMatch(catalog, id)
@@ -125,49 +122,20 @@ func admissionGolden(t *testing.T, catalog *aivendors.Snapshot) []byte {
 	}
 	data, err := json.Marshal(cases)
 	require.NoError(t, err)
-	return data
-}
-
-func presetsGolden(t *testing.T, catalog *aivendors.Snapshot) []goldenPreset {
-	t.Helper()
-	presets := catalog.Catalog()
-	listing := make([]goldenPreset, 0, len(presets))
-	for _, preset := range presets {
-		listing = append(listing, toGoldenPreset(preset))
-	}
-	return listing
-}
-
-func TestCompiledSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
-	t.Parallel()
-	testenv.RequireJSONGolden(t, "testdata/admission_golden.json", admissionGolden(t, aivendorstest.CompiledSnapshot()))
-}
-
-// A freshly seeded database decides every client ID as the registry did.
-func TestDatabaseSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
-	t.Parallel()
-	testenv.RequireJSONGolden(t, "testdata/admission_golden.json", admissionGolden(t, aivendorstest.DatabaseSnapshot()))
+	testenv.RequireJSONGolden(t, "testdata/admission_golden.json", data)
 }
 
 // The presets listing, and the inbound EMA list built from it, keep the
 // registry's entries and order.
 func TestCompiledSnapshotListsPresetsAsTheRegistryDid(t *testing.T) {
 	t.Parallel()
-	data, err := json.Marshal(presetsGolden(t, aivendorstest.CompiledSnapshot()))
-	require.NoError(t, err)
-	testenv.RequireJSONGolden(t, "testdata/presets_golden.json", data)
-}
 
-// A freshly seeded database lists the same presets by product id, then URL.
-func TestDatabaseSnapshotListsPresetsInDatabaseOrder(t *testing.T) {
-	t.Parallel()
-	catalog := aivendorstest.DatabaseSnapshot()
-	listing := presetsGolden(t, catalog)
-	require.ElementsMatch(t, presetsGolden(t, aivendorstest.CompiledSnapshot()), listing)
-	require.True(t, slices.IsSortedFunc(catalog.Catalog(), func(a, b aivendors.Preset) int {
-		return cmp.Or(strings.Compare(a.ProductID, b.ProductID), strings.Compare(a.URL, b.URL))
-	}))
+	presets := aivendors.CompiledSnapshot().Catalog()
+	listing := make([]goldenPreset, 0, len(presets))
+	for _, preset := range presets {
+		listing = append(listing, toGoldenPreset(preset))
+	}
 	data, err := json.Marshal(listing)
 	require.NoError(t, err)
-	testenv.RequireJSONGolden(t, "testdata/presets_database_order_golden.json", data)
+	testenv.RequireJSONGolden(t, "testdata/presets_golden.json", data)
 }

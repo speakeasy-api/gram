@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -78,7 +77,7 @@ func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder
 
 // ConnectionAttempt exposes the state's connection attempt.
 func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
-	return a.connectionAttempt(aivendorstest.CompiledSnapshot(), endpoint)
+	return a.connectionAttempt(aivendors.CompiledSnapshot(), endpoint)
 }
 
 // SetEnvironmentLoader replaces the environment loader.

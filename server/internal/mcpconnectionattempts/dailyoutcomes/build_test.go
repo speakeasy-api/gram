@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -149,7 +149,7 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 	f := newFixture(t)
 	day := f.day(daysAgoOutcomes)
 	server := uuid.New()
-	app := mcpconnectionattempts.AppOf(aivendorstest.CompiledSnapshot(), catalogApp, mcpconnectionattempts.ClientIDAdmitted)
+	app := mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), catalogApp, mcpconnectionattempts.ClientIDAdmitted)
 
 	connected := f.attempt(server, app, day.Add(time.Hour))
 	connectedRow := f.row(connected, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute)
@@ -410,7 +410,7 @@ func TestBuildDayKeepsVendorNamesOnlyWhenSeveralOrganizationsUseThem(t *testing.
 	f := newFixture(t)
 	day := f.day(daysAgoPrivacy)
 	write := func(org, provider, appURL string) {
-		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), uuid.New(), mcpconnectionattempts.AppOf(aivendorstest.CompiledSnapshot(), appURL, mcpconnectionattempts.ClientIDAdmitted)))
+		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), uuid.New(), mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), appURL, mcpconnectionattempts.ClientIDAdmitted)))
 		f.write(f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, mcpconnectionattempts.Provider(provider)))
 	}
 	newOrg := func() string { return "org-" + uuid.NewString() }
