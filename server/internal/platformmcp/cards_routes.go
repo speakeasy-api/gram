@@ -240,6 +240,7 @@ var textOnlyTools = map[string]string{
 	"list_ai_scan_library":                 textOnlyForModel,
 	"get_xaa_readiness":                    textOnlyForModel,
 	"get_internal_session_issuer":          textOnlyForModel,
+	"list_workload_identities":             textOnlyForModel,
 	"get_workload_assertion_reuse":         textOnlyForModel,
 	"get_inbound_ema_trust":                textOnlyForModel,
 	"get_network_ingress":                  textOnlyForModel,
