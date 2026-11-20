@@ -145,7 +145,9 @@ func requireRejectedEndless(t *testing.T, ctx context.Context, err error, writte
 	t.Helper()
 	require.ErrorIs(t, err, ErrResponseTooLarge)
 	require.NoError(t, ctx.Err(), "the limit must reject the body, not the test deadline")
-	require.Positive(t, written.Load(), "the oversized body must have reached the client")
+	// The client can read the bytes and reject them before the server's Write
+	// returns and the handler adds them to written, so wait for the count.
+	require.Eventually(t, func() bool { return written.Load() > 0 }, 5*time.Second, 10*time.Millisecond, "the oversized body must have reached the client")
 }
 
 func TestBodyLimitStopsReadingAfterRejection(t *testing.T) {
