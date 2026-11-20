@@ -145,6 +145,25 @@ func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg Servers
 	return err
 }
 
+const serversInsertAttachmentParent = `-- name: ServersInsertAttachmentParent :exec
+INSERT INTO remote_session_client_user_session_issuers
+  (remote_session_client_id, user_session_issuer_id)
+VALUES
+  ($1::uuid,
+   $2::uuid)
+`
+
+type ServersInsertAttachmentParentParams struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+// The principal attachment FK requires this compatibility row.
+func (q *Queries) ServersInsertAttachmentParent(ctx context.Context, arg ServersInsertAttachmentParentParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAttachmentParent, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
 const serversInsertAttachmentSession = `-- name: ServersInsertAttachmentSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id,
@@ -1595,24 +1614,6 @@ type ServersInsertRemoteMCPServersParams struct {
 // fixture servers phase (fixture_servers.go).
 func (q *Queries) ServersInsertRemoteMCPServers(ctx context.Context, arg ServersInsertRemoteMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertRemoteMCPServers, arg.LinearID, arg.ProjectID, arg.SlackID)
-	return err
-}
-
-const serversInsertRemoteSessionClientIssuerBinding = `-- name: ServersInsertRemoteSessionClientIssuerBinding :exec
-INSERT INTO remote_session_client_user_session_issuers
-  (remote_session_client_id, user_session_issuer_id)
-VALUES
-  ($1::uuid,
-   $2::uuid)
-`
-
-type ServersInsertRemoteSessionClientIssuerBindingParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) ServersInsertRemoteSessionClientIssuerBinding(ctx context.Context, arg ServersInsertRemoteSessionClientIssuerBindingParams) error {
-	_, err := q.db.Exec(ctx, serversInsertRemoteSessionClientIssuerBinding, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	return err
 }
 

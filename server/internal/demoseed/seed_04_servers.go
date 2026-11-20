@@ -177,20 +177,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo linear remote session client: %w", err)
 	}
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"),
-		UserSessionIssuerID:   s.det("issuer-linear"),
-	}); err != nil {
-		return fmt.Errorf("bind demo linear remote session client: %w", err)
-	}
-	// The gateway serves the Example OAuth server as a member, so its issuer binds the Example OAuth server's
-	// client too, or no gateway sign-in could choose a client for the Example OAuth server.
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"),
-		UserSessionIssuerID:   s.det("issuer-gateway"),
-	}); err != nil {
-		return fmt.Errorf("bind demo linear remote session client to the gateway: %w", err)
-	}
 	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("remote-identity-provider-linear"),
 		McpServerID:           s.det("mcpserver-linear"),
@@ -348,12 +334,6 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}); err != nil {
 			return fmt.Errorf("insert organization gateway session: %w", err)
 		}
-	}
-
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"), UserSessionIssuerID: s.det("issuer-workforce"),
-	}); err != nil {
-		return fmt.Errorf("bind organization gateway provider: %w", err)
 	}
 
 	userSessions := []serversUserSession{
@@ -527,6 +507,13 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	// Keep the compatibility parent only for the exact attachment FK.
+	if err := s.q.ServersInsertAttachmentParent(ctx, repo.ServersInsertAttachmentParentParams{
+		RemoteSessionClientID: s.det("remote-identity-client-linear"),
+		UserSessionIssuerID:   s.det("issuer-linear"),
+	}); err != nil {
+		return fmt.Errorf("insert demo attachment compatibility parent: %w", err)
+	}
 	// Show both a working connection and an expired delegated connection.
 	for _, agent := range []int{1, 4} {
 		num := strconv.Itoa(agent)
@@ -827,15 +814,6 @@ func (s *seeder) seedServersEMAWiki(ctx context.Context) error {
 		IssuerID:  s.det("ema-vendor-wiki"),
 	}); err != nil {
 		return fmt.Errorf("insert demo acme wiki vendor client: %w", err)
-	}
-	// The client is bound to the workforce sign-in, so organization
-	// sign-ins, which reach every server in the organization, reach the
-	// server through it.
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("ema-client-wiki"),
-		UserSessionIssuerID:   issuer,
-	}); err != nil {
-		return fmt.Errorf("bind demo acme wiki client to the workforce issuer: %w", err)
 	}
 	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
 		ID:                    s.det("server-client-association-ema-wiki"),

@@ -273,7 +273,8 @@ VALUES
    -- No scope of its own: the resource pin decides once discovery is on.
    NULL);
 
--- name: ServersInsertRemoteSessionClientIssuerBinding :exec
+-- name: ServersInsertAttachmentParent :exec
+-- The principal attachment FK requires this compatibility row.
 INSERT INTO remote_session_client_user_session_issuers
   (remote_session_client_id, user_session_issuer_id)
 VALUES

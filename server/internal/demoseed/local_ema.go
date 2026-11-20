@@ -162,16 +162,6 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 		{"insert the authorization server client", func() error {
 			return q.LocalEMAInsertVendorClient(ctx, repo.LocalEMAInsertVendorClientParams{ID: client, ProjectID: proj, OrgID: org, IssuerID: vendor, ClientID: clientID, ClientSecretEncrypted: secret, Scopes: scopes})
 		}},
-		// The client is bound to both organization sign-ins that reach the
-		// server: its own federated sign-in, and the workforce sign-in. The
-		// server is associated with it: the one client of the authorization
-		// server its protected resource names.
-		{"bind the client to the sign-in", func() error {
-			return q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer})
-		}},
-		{"bind the client to the workforce sign-in", func() error {
-			return q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{RemoteSessionClientID: client, UserSessionIssuerID: s.det("issuer-workforce")})
-		}},
 		{"associate the server with its client", func() error {
 			return q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{ID: s.det("server-client-association-ema-tracker"), ProjectID: proj, OrgID: org, McpServerID: server, RemoteSessionClientID: client})
 		}},
