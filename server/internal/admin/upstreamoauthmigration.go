@@ -80,9 +80,8 @@ func (s *Service) upstreamOAuthMigrationStatus(ctx context.Context, organization
 	return status, nil
 }
 
-// authClientMigrationStatus dry-runs the typed auth client backfill. It is
-// reported apart from migrated and never gates the cutover, so a failure only
-// leaves it out, and a failed phase is named beside the others' counts.
+// authClientMigrationStatus reports typed readiness without applying changes.
+// Failed phases are named alongside the counts from successful phases.
 func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID string) *gen.AdminUpstreamOAuthMigrationAuthClients {
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 	report, err := authclientbackfill.Run(ctx, s.db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: true})
@@ -152,6 +151,9 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 	kinds := make([]*gen.AdminUpstreamOAuthMigrationAuthClientKind, 0, len(authclientbackfill.Kinds))
 	for _, kind := range authclientbackfill.Kinds {
 		counts := report.ByKind[kind]
+		if counts == nil {
+			continue
+		}
 		kinds = append(kinds, &gen.AdminUpstreamOAuthMigrationAuthClientKind{
 			Kind:               string(kind),
 			Decided:            int64(counts.Decided),
