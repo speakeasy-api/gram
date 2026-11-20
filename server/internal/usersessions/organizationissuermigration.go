@@ -845,9 +845,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			})
 		}
 	}
-	if _, err := q.InsertTargetRemoteSessionClientIssuerLinks(ctx, repo.InsertTargetRemoteSessionClientIssuerLinksParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, RemoteSessionClientIds: carried, OrganizationID: organizationID}); err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "create target remote-session client links").LogError(ctx, logger)
-	}
 	run.remoteSessionsMigrated, err = q.UpdateRemoteSessionsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate remote-session provenance").LogError(ctx, logger)
@@ -862,12 +859,15 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			bindingIDs = append(bindingIDs, rekey.ID)
 			clientIDs = append(clientIDs, rekey.RemoteSessionClientID)
 		}
-		if err := remotesessionsrepo.New(dbtx).EnsurePrincipalAttachmentParents(ctx, remotesessionsrepo.EnsurePrincipalAttachmentParentsParams{ClientIds: clientIDs, UserSessionIssuerID: target.ID}); err != nil {
+		if err := remotesessionsrepo.New(dbtx).EnsurePrincipalAttachmentParents(ctx, remotesessionsrepo.EnsurePrincipalAttachmentParentsParams{ClientIds: clientIDs, UserSessionIssuerID: target.ID, OrganizationID: organizationID, ProjectID: target.ProjectID}); err != nil {
 			return run, oops.E(oops.CodeUnexpected, err, "ensure attachment parents for migration").LogError(ctx, logger)
 		}
 		if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID, BindingIds: bindingIDs}); err != nil {
 			return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
 		}
+	}
+	if _, err := q.InsertTargetRemoteSessionClientIssuerLinks(ctx, repo.InsertTargetRemoteSessionClientIssuerLinksParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, RemoteSessionClientIds: carried, OrganizationID: organizationID}); err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "create target remote-session client links").LogError(ctx, logger)
 	}
 	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "remove source remote-session client links").LogError(ctx, logger)
