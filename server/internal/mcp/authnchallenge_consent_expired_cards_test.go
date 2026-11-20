@@ -145,10 +145,11 @@ func TestConsentPost_TypedChoiceRefusesAnExpiredPersonalClient(t *testing.T) {
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
 	expireConsentGrant(t, ctx, fx.ti, fx.shared, registration, fx.subject, consentChainedUpstream)
 
-	_, err = postApproveResult(t, ctx, fx)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeFailedPrecondition, shareable.Code)
+	w := postApprove(t, ctx, fx)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	location, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Empty(t, location.Query().Get("code"))
 }
 
 // A shared credential needs no connection, so an expired service card does not block it.

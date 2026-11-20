@@ -85,9 +85,22 @@ func TestConsentPost_DoesNotInferChoiceFromSignInLink(t *testing.T) {
 	ctx, fx := seedTwoClientConsentEndpoint(t, "pick-linked")
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientB, fx.subject, "token-b", consentChainedUpstream)
 
-	grant := approveConsent(t, ctx, fx)
-	require.Empty(t, grant.AuthClientPicks)
-	require.Empty(t, grant.UpstreamClientPicks)
+	w, err := postApproveResult(t, ctx, fx)
+	// Legacy setup may need migration. It must never pick the linked client.
+	if err != nil {
+		require.ErrorContains(t, err, "The credential you chose can no longer be used")
+		require.Empty(t, w.Header().Get("Location"))
+		return
+	}
+	location, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	if code := location.Query().Get("code"); code != "" {
+		grant := cache.NewTypedObjectCache[mcp.UserSessionGrant](fx.ti.logger, fx.ti.cacheAdapter, cache.SuffixNone)
+		stored, err := grant.Get(ctx, "userSessionGrant:"+fx.shared.String()+":"+code)
+		require.NoError(t, err)
+		require.Empty(t, stored.AuthClientPicks)
+		require.Empty(t, stored.UpstreamClientPicks)
+	}
 }
 
 // Redeeming the authorization code records the grant's pick as the new

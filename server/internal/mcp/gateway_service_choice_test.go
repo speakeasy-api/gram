@@ -18,10 +18,10 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -54,8 +54,7 @@ func seedServiceChoiceGateway(t *testing.T, connected int) (context.Context, ser
 	fx := serviceChoiceGateway{ti: ti, issuerID: issuer.ID, client: client, gateway: gateway.ID, slug: slug, serverID: serverID, orgID: auth.ActiveOrganizationID, services: nil, upstream: upstream.url}
 	for i := range connected {
 		registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "service-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
-		_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration})
-		require.NoError(t, err)
+		seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, serverID, registration, authz.AuthClientTypeRemoteSession)
 		insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "service-token-"+string(rune('a'+i)), upstream.url)
 		fx.services = append(fx.services, registration)
 	}

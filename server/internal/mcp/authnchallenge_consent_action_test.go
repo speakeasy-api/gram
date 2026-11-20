@@ -25,6 +25,7 @@ import (
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -166,6 +167,8 @@ func mintConsentEndpointState(t *testing.T, ctx context.Context, ti *testInstanc
 	}
 
 	subject := createTestUser(t, ctx, ti, uuid.NewString())
+	_, err := organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: conv.ToPGText(subject.ID)})
+	require.NoError(t, err)
 	stateID := uuid.NewString()
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,
@@ -575,7 +578,7 @@ func newConsentCallbackManager(t *testing.T, ti *testInstance) *remotesessions.C
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	return remotesessions.NewChallengeManager(ti.logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, nil, ti.cacheAdapter, ti.serverURL)
+	return remotesessions.NewChallengeManager(ti.logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, nil, ti.cacheAdapter, ti.serverURL, remotesessions.WithTypedAuthorizationValidator(ti.service.ValidateRemoteLoginTypedAuthorization))
 }
 
 // completeRemoteLogin drives the code-exchange callback for one authorize
