@@ -390,16 +390,14 @@ describe("attachOwnerConnections", () => {
       personal: true,
       remoteSessionClientId: "client_one",
     } as AuthClient;
-    const shared = () =>
-      api({
+
+    it("attaches a gateway-made session for an offered registration without a target issuer link", async () => {
+      const { fake, attachBinding } = api({
         auth: () => Promise.resolve(authentication([own])),
-        clients: [client("client_other_server")],
-        candidates: [session({})],
+        clients: [],
+        candidates: [session({ userSessionIssuerId: "gateway_issuer" })],
         bindings: [],
       });
-
-    it("attaches the server's own sign-in without an issuer link", async () => {
-      const { fake, attachBinding } = shared();
       const missing = await attachOwnerConnections(
         fake,
         "agent_new",
@@ -413,6 +411,11 @@ describe("attachOwnerConnections", () => {
         attachBindingRequestBody: { remoteSessionId: "session_mine" },
       });
       expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
+      expect(fake.remoteSessions.list).toHaveBeenCalledWith(
+        { gramProject: "project-one", subjectUrn: "user:user_owner" },
+        undefined,
+        expect.anything(),
+      );
     });
 
     it("requires repair when a personal offer names no registration", async () => {
