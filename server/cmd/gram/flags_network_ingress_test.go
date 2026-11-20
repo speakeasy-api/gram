@@ -288,3 +288,13 @@ func TestGatewayNameQualifierReachesReconcilerAndGateway(t *testing.T) {
 		require.Equal(t, []string{"GRAM_NETWORK_INGRESS_GATEWAY_NAME_QUALIFIER"}, envVars, "%s reads the qualifier", name)
 	}
 }
+
+func TestStreamsRegistersOnlyTheEncryptionSettingsItReads(t *testing.T) {
+	t.Parallel()
+	names := map[string]bool{}
+	for _, flag := range newStreamsCommand().Flags {
+		names[flag.Names()[0]] = true
+	}
+	require.True(t, names[orgEncryptionCredentialIDFlag], "streams opens AI provider keys with the organization's key")
+	require.False(t, names[orgEncryptionSwitchGracePeriodFlag], "key switching is the provisioner's, not streams'")
+}

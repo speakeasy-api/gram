@@ -953,6 +953,7 @@ func newAdminOpenRouter(
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
+	orgEncryption orgEncryptionDeps,
 	c *cli.Context,
 ) admin.AdminOpenRouter {
 	env := c.String("environment")
@@ -972,6 +973,11 @@ func newAdminOpenRouter(
 		return admin.TrialKeysUnavailable{}
 	}
 
+	aiProviderKeys := aiproviderkeys.WithoutOrganizationEncryption(logger, db, encryptionClient)
+	if orgEncryption.Transitions != nil {
+		aiProviderKeys = orgEncryption.AIProviderKeys(logger, encryptionClient)
+	}
+
 	return openrouter.New(
 		logger,
 		tracerProvider,
@@ -982,6 +988,7 @@ func newAdminOpenRouter(
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
 		encryptionClient,
+		openrouter.WithAIProviderKeys(aiProviderKeys),
 	)
 }
 
