@@ -245,7 +245,7 @@ func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 			c := dashboardCase{Name: strings.Join(names, ", "), Grants: toEffectiveGrants(grants), Checks: nil}
 			for _, scope := range set.checks {
 				for _, tg := range targets {
-					check := authz.Check{Scope: authz.Scope(scope), ResourceKind: "", ResourceID: tg.resource, Dimensions: nil}
+					check := authz.Check{Scope: authz.Scope(scope), ResourceKind: "", ResourceID: tg.resource, Dimensions: nil} //nolint:glint // norawauthzchecks: generated cases pair every scope with every target to test the dashboard matcher
 					if tg.project != "" {
 						check.Dimensions = map[string]string{authz.SelectorKeyProjectID: tg.project}
 					}

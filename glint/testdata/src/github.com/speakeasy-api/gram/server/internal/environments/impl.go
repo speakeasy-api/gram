@@ -1,5 +1,5 @@
-// Package environments carries the production import path of a migrated
-// package, so the rule's default package list is exercised.
+// Package environments carries a production import path outside authz,
+// package, so the rule's default reach is exercised.
 package environments
 
 import "github.com/speakeasy-api/gram/server/internal/authz"
