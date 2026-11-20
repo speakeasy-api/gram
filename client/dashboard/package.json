@@ -56,7 +56,7 @@
     "@rive-app/canvas": "2.45.1",
     "@rive-app/react-canvas": "4.37.1",
     "@stripe/react-stripe-js": "7.0.1",
-    "@stripe/stripe-js": "10.2.1",
+    "@stripe/stripe-js": "10.3.0",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "catalog:",
