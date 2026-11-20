@@ -394,7 +394,7 @@ func TestCreate_AbandonsOINOrphanWithoutKeySet(t *testing.T) {
 
 // Tombstoning an abandoned connection's client also removes its user session
 // issuer bindings, so nothing keeps pointing at a deleted client.
-func TestCreate_AbandonedClientLeavesNoBinding(t *testing.T) {
+func TestCreate_AbandonedClientRetiresRegistrationWithoutUnlinkingParent(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 
@@ -427,5 +427,5 @@ func TestCreate_AbandonedClientLeavesNoBinding(t *testing.T) {
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned, "the orphan's client was tombstoned")
 	bindings, err := fixtures.CountRemoteSessionClientBindingsFixture(ctx, managed.ClientRowID)
 	require.NoError(t, err)
-	require.Zero(t, bindings)
+	require.EqualValues(t, 1, bindings, "cleanup does not physically unlink compatibility parents")
 }
