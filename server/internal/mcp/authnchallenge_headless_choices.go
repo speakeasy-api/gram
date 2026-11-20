@@ -1,10 +1,9 @@
 // Upstream credential choices for sessions issued without a browser: an
-// ID-JAG exchange or a workload grant. Where typed auth client resolution is
-// enforced, each MCP server the session targets gets a choice before the
-// session is written: the one the token request names, otherwise the one the
-// caller's issuance profile names, otherwise the server's only ready
-// credential the subject may use. Several ready credentials with no choice
-// named is an error, never the consent screen's preselection order, and so is
+// ID-JAG exchange or a workload grant. Each MCP server the session targets
+// gets a choice before the session is written: the one the token request
+// names, otherwise the one the caller's issuance profile names, otherwise
+// the server's only ready non-EMA credential the subject may use. Several
+// ready credentials or an EMA credential need an explicit selection. So does
 // a named choice that does not validate. Nothing is recorded unless every
 // server's choice validates, except that a gateway session for a caller who
 // can connect later defers a member whose only problem is a missing or unready
@@ -73,6 +72,8 @@ type headlessCaller struct {
 	// through its connect page after the session is issued, so a member that
 	// is not connected yet does not refuse the session.
 	connectsLater bool
+	// workloadServers are the proxied members from workload admission.
+	workloadServers []consentAuthServer
 }
 
 // headlessChoice is one server's requested or configured choice: a client, or
@@ -114,20 +115,9 @@ func parseRequestedAuthClients(values []string) (map[uuid.UUID]headlessChoice, e
 // targets and returns them as the issuance's picks: the registration a
 // choice authenticates through, keyed by server, and the typed client, along
 // with the servers it deferred, which the session must record no choice for. It
-// returns nil maps where typed auth client resolution is not enforced, where
-// the server's choice keeps being decided at recording, and for a session
-// that targets no one server. enforced is the organization's enforcement
-// state as the caller read it, which it records the session's choices under
-// too, so the picks and the recording never disagree.
-func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller, requested map[uuid.UUID]headlessChoice, enforced bool) (map[uuid.UUID]uuid.UUID, map[uuid.UUID]uuid.UUID, []uuid.UUID, error) {
-	if !enforced {
-		if len(requested) > 0 {
-			return nil, nil, nil, oops.NewOAuthError(http.StatusBadRequest, "invalid_request", tokenParamUpstreamAuthClient+" is not accepted for this organization yet", errChoiceNotAccepted)
-		}
-		return nil, nil, nil, nil
-	}
-
-	servers, err := s.headlessTargetServers(ctx, endpoint, subject)
+// returns nil maps for a session that targets no one server.
+func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller, requested map[uuid.UUID]headlessChoice) (map[uuid.UUID]uuid.UUID, map[uuid.UUID]uuid.UUID, []uuid.UUID, error) {
+	servers, err := s.headlessTargetServers(ctx, endpoint, subject, caller)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -208,10 +198,12 @@ func (s *Service) headlessAuthClientPicks(ctx context.Context, endpoint *Resolve
 
 // headlessTargetServers is the servers a session for endpoint reaches: its
 // own server, or the gateway members the subject reaches.
-func (s *Service) headlessTargetServers(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) ([]consentAuthServer, error) {
+func (s *Service) headlessTargetServers(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, caller headlessCaller) ([]consentAuthServer, error) {
 	switch {
 	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
 		return []consentAuthServer{{id: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID}}, nil
+	case caller.workloadIssuerID.Valid:
+		return caller.workloadServers, nil
 	case endpoint.MetaMcpServerID.Valid:
 		members, err := s.consentSubjectMembers(ctx, endpoint, AuthnChallengeState{Subject: &subject, ID: "headless:" + uuid.NewString()}) //nolint:exhaustruct_v5 // only the subject and a session-like id are read
 		if err != nil {
@@ -307,9 +299,11 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 	case 0:
 		return nil, setupRequired("no upstream credential for a server is ready: set one up or connect it first", errChoiceNoneReady)
 	case 1:
-		return ready[0], nil
+		if ready[0].Type != authz.AuthClientTypeEMA {
+			return ready[0], nil
+		}
 	}
-	return nil, oops.NewOAuthError(http.StatusBadRequest, tokenErrorSelectionRequired, fmt.Sprintf("server %s offers several upstream credentials; name one with %s=%s:<auth_client_id> or configure an issuance profile", server.id, tokenParamUpstreamAuthClient, server.id), errChoiceNotNamed)
+	return nil, oops.NewOAuthError(http.StatusBadRequest, tokenErrorSelectionRequired, fmt.Sprintf("server %s requires an explicit upstream credential; name one with %s=%s:<auth_client_id> or configure an issuance profile", server.id, tokenParamUpstreamAuthClient, server.id), errChoiceNotNamed)
 }
 
 // headlessReadiness marks the personal options of a server ready or not from
@@ -362,7 +356,7 @@ func awaitsConnection(err error, named bool) bool {
 		return true
 	case errChoiceNotSetUp:
 		return !named
-	case errChoiceNotAccepted, errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential, errChoiceDenied, errChoiceNoneAllowed, errChoiceNotNamed:
+	case errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential, errChoiceDenied, errChoiceNoneAllowed, errChoiceNotNamed:
 	}
 	return false
 }
@@ -382,9 +376,6 @@ type headlessChoiceError string
 func (p headlessChoiceError) Error() string { return string(p) }
 
 const (
-	// errChoiceNotAccepted names a choice in an organization that does not take them yet.
-	errChoiceNotAccepted headlessChoiceError = "choice_not_accepted"
-
 	// errChoiceServerNotReached names a choice for a server the token does not reach.
 	errChoiceServerNotReached headlessChoiceError = "choice_server_not_reached"
 

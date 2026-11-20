@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -58,14 +59,10 @@ func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedM
 	}
 	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
 	var err error
-	enforcedDirect := false
-	if endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
-		enforcedDirect, err = s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-		if err != nil {
-			return nil, routing, err
-		}
-	}
-	if !enforcedDirect {
+	if !directProxiedConsent(endpoint) && slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+		_, offered := typed[client.ID]
+		return !offered
+	}) {
 		statuses, err = s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
 		if err != nil {
 			return nil, routing, fmt.Errorf("remote session statuses: %w", err)

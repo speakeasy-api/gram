@@ -1050,6 +1050,7 @@
                       data-auto-submit
                       class="bg-card mt-1 max-w-full border px-2 py-1 text-xs"
                     >
+                      {{if not .Selected}}<option value="" selected disabled>Choose a credential</option>{{end}}
                       {{range .Options}}
                       <option value="{{.ID}}" {{if .Selected}}selected{{end}} {{if not .Usable}}disabled{{end}}>
                         {{.Name}} · {{.TypeLabel}}{{if eq .State "connect"}} (connect first){{else if eq .State "reconnect"}} (reconnect first){{else if eq .State "setup"}} (not set up){{end}}

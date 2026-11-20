@@ -327,7 +327,7 @@ func TestGatewayConsentMemberAtUnusableAddress(t *testing.T) {
 	}
 }
 
-// A connection stopped by its sign-in provider's address is down, like an outage: approval waits, as it does for an outage.
+// A broken provider address cannot be approved. A temporary outage does not invalidate the typed choice.
 func TestConsentPost_SignInProviderAddressIsNotApprovable(t *testing.T) {
 	t.Parallel()
 
@@ -338,12 +338,17 @@ func TestConsentPost_SignInProviderAddressIsNotApprovable(t *testing.T) {
 		approvable bool
 	}{
 		{name: "address", key: remotesessions.RefreshAddressKey, value: guardian.AddressNotFound, approvable: false},
-		{name: "outage", key: remotesessions.RefreshOutageKey, value: remotesessions.RefreshOutageProvider, approvable: false},
+		{name: "outage", key: remotesessions.RefreshOutageKey, value: remotesessions.RefreshOutageProvider, approvable: true},
 		{name: "nothing recorded", key: nil, value: nil, approvable: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, fx := seedTwoClientConsentEndpoint(t, "address-approve-"+uuid.NewString()[:8])
+			serverID := fx.endpoint.McpServerID.UUID
+			for _, clientID := range []uuid.UUID{fx.clientA, fx.clientB} {
+				seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, clientID, "remote_session")
+			}
+			seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, serverID.String())
 			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientA, fx.subject, "token-a", consentChainedUpstream)
 			refreshableConnection(t, ctx, fx, fx.clientA, time.Now().Add(-time.Minute), serviceUnavailable)
 			if tc.key != nil {

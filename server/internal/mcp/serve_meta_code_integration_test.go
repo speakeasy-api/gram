@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -398,6 +400,22 @@ func TestCodeModeAvailableFollowsRuntime(t *testing.T) {
 
 // Real Python, gateway dispatch and OAuth token exchange against owned fixtures.
 // The browser-facing handlers run as HTTP requests; no real account is used.
+// seedCodeReconnectOffer enables browser reconnect through one exact server
+// and auth client, without granting access to other gateway members.
+func seedCodeReconnectOffer(t *testing.T, ctx context.Context, ti *testInstance, orgID, userID string, projectID, serverID, registrationID uuid.UUID) uuid.UUID {
+	t.Helper()
+	fixtures := authclientfixtures.New(ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registrationID)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+	seedUserMCPConnectGrant(t, ctx, ti.conn, orgID, userID, serverID.String())
+	selector, err := authz.AuthClientSelector(authClientID.String(), projectID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: orgID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, userID), Scope: string(authz.ScopeMCPAuth), Selectors: selector})
+	require.NoError(t, err)
+	return authClientID
+}
+
 func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	t.Parallel()
 	mock := memberMock()
@@ -418,6 +436,7 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 	selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
 	selection.associate(t, ctx, member.mcpServerID, client)
+	authClientID := seedCodeReconnectOffer(t, ctx, ti, auth.ActiveOrganizationID, auth.UserID, *auth.ProjectID, member.mcpServerID, client)
 	bearer := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(bearer, urn.NewUserSessionIssuer(issuer).String())
 	require.NoError(t, err)
@@ -483,6 +502,11 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	authorization, err := url.Parse(sent.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
+	login, err := ti.service.RemoteLoginState(ctx, authorization.Query().Get("state"))
+	require.NoError(t, err)
+	require.NotNil(t, login.TypedAuthorization)
+	require.Equal(t, authClientID, login.TypedAuthorization.AuthClientID)
+	require.Equal(t, member.mcpServerID, login.TypedAuthorization.ServerID)
 	remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
 	remoteCallback.AddCookie(callbackBrowser)
 	completed := httptest.NewRecorder()
@@ -572,14 +596,11 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
 			selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
 			selection.associate(t, ctx, member.mcpServerID, client)
+			authClientID := seedCodeReconnectOffer(t, ctx, ti, auth.ActiveOrganizationID, auth.UserID, *auth.ProjectID, member.mcpServerID, client)
 			var permitCallers func() []string
 			if tc.typedAuth {
 				permitCallers = ti.service.RecordAuthClientPermitCallers()
-				fixtures := authclientfixtures.New(ti.conn)
-				authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client)})
-				require.NoError(t, err)
-				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
-				_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 				require.NoError(t, err)
 			}
 			other := newCatalogUpstream(t, 2)
@@ -682,6 +703,11 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			authorization, err := url.Parse(sent.Header().Get("Location"))
 			require.NoError(t, err)
 			require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
+			login, err := ti.service.RemoteLoginState(ctx, authorization.Query().Get("state"))
+			require.NoError(t, err)
+			require.NotNil(t, login.TypedAuthorization)
+			require.Equal(t, authClientID, login.TypedAuthorization.AuthClientID)
+			require.Equal(t, member.mcpServerID, login.TypedAuthorization.ServerID)
 			remoteCallbackURL := "/mcp/remote_login_callback?state=" + url.QueryEscape(authorization.Query().Get("state")) + "&code=synthetic-approved-code"
 			if tc.otherBrowser {
 				// Another browser completing the upstream sign-in stores nothing.

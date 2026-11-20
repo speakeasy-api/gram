@@ -12,19 +12,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// typedOfferedRegistrations is, where typed auth client resolution is
-// enforced, the OAuth registrations each of serverIDs offers through a
-// personal or identity-provider auth client. Such a registration need not be
-// linked to the sign-in or associated with the server the older way, so
-// consent adds it to the services a person can connect. It is nil elsewhere,
-// where consent keeps the sign-in's clients alone.
+// typedOfferedRegistrations returns the OAuth registrations each server offers
+// through personal or identity-provider auth clients, independently of sign-in links.
 func (s *Service) typedOfferedRegistrations(ctx context.Context, organizationID string, serverIDs []uuid.UUID) (map[uuid.UUID][]uuid.UUID, error) {
 	if len(serverIDs) == 0 {
 		return nil, nil
-	}
-	enforced, err := s.consentAuthChoicesEnforced(ctx, organizationID)
-	if err != nil || !enforced {
-		return nil, err
 	}
 	offers, err := s.configuredAuthOffers(ctx, organizationID, serverIDs)
 	if err != nil {
@@ -40,10 +32,8 @@ func (s *Service) typedOfferedRegistrations(ctx context.Context, organizationID 
 }
 
 // withTypedMemberRegistrations makes the registrations each proxied member
-// offers through typed auth clients its associated clients, where typed auth
-// client resolution is enforced, so consent matches a service to the members
-// the resolver serves through it. A member offering none is matched to none.
-// Elsewhere members keep the clients associated with them.
+// offers through typed auth clients its associated clients. A proxied member
+// offering none is matched to none; hosted members keep their own sign-in.
 func (s *Service) withTypedMemberRegistrations(ctx context.Context, organizationID string, members []metaMember) error {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
@@ -51,15 +41,20 @@ func (s *Service) withTypedMemberRegistrations(ctx context.Context, organization
 			ids = append(ids, member.serverID)
 		}
 	}
-	offered, err := s.typedOfferedRegistrations(ctx, organizationID, ids)
-	if err != nil || offered == nil {
+	offers, err := s.configuredAuthOffers(ctx, organizationID, ids)
+	if err != nil {
 		return err
 	}
+	applyTypedMemberRegistrations(members, offers)
+	return nil
+}
+
+func applyTypedMemberRegistrations(members []metaMember, offers map[uuid.UUID]configuredAuthOffer) {
 	for i := range members {
 		if members[i].backend != metaMemberBackendProxied {
 			continue
 		}
-		registrations := offered[members[i].serverID]
+		registrations := offers[members[i].serverID].personalRegistrations()
 		clients := make(map[uuid.UUID]bool, len(registrations))
 		for _, id := range registrations {
 			clients[id] = true
@@ -67,20 +62,29 @@ func (s *Service) withTypedMemberRegistrations(ctx context.Context, organization
 		members[i].associatedClients = clients
 		members[i].typedRegistrations = true
 	}
-	return nil
 }
 
-// typedConsentRegistrations maps each registration the endpoint's servers
-// offer through typed auth clients to the project it is served in: the
-// endpoint's own for a direct server, each member's for a gateway. It is
-// empty where typed auth client resolution is not enforced.
+// recheckLegacyInventoryKey keeps AIM-1149's existing unenforced keepalive
+// behavior separate from browser consent. No browser path sets this key.
+type recheckLegacyInventoryKey struct{}
+
+func usesTypedConsentInventory(ctx context.Context) bool {
+	legacy, _ := ctx.Value(recheckLegacyInventoryKey{}).(bool)
+	return !legacy
+}
+
+func directProxiedConsent(endpoint *ResolvedMcpEndpoint) bool {
+	return endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway()
+}
+
+// typedConsentRegistrations maps each registration the endpoint offers to
+// the project that serves it. Hosted endpoints have no typed registrations.
 func (s *Service) typedConsentRegistrations(ctx context.Context, endpoint *ResolvedMcpEndpoint, loadMembers func() ([]metaMember, error)) (map[uuid.UUID]uuid.UUID, error) {
-	if (!endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid) && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
+	if !usesTypedConsentInventory(ctx) {
 		return nil, nil
 	}
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil || !enforced {
-		return nil, err
+	if (!endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid) && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
+		return nil, nil
 	}
 	projects := map[uuid.UUID]uuid.UUID{}
 	switch {

@@ -102,6 +102,25 @@ func TestConsentAuthChoices(t *testing.T) {
 		require.Equal(t, validUUID(f.registration), auth.Selected().registrationID)
 	})
 
+	t.Run("offers sharing a registration require an exact pick", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		first := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		second := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		cards := []remoteSessionCard{{ClientID: f.registration.String(), Connected: true}}
+
+		auth := choices(t, f, user, cards, uuid.Nil)
+		require.Len(t, auth.Options, 2)
+		require.True(t, auth.ShowPicker())
+		require.Nil(t, auth.Selected())
+		require.False(t, auth.Approvable())
+		for _, pick := range []uuid.UUID{first, second} {
+			auth := choices(t, f, user, cards, pick)
+			require.NotNil(t, auth.Selected())
+			require.Equal(t, pick, auth.Selected().ID)
+		}
+	})
+
 	t.Run("a personal client asks for a connection before it can be chosen", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
