@@ -130,7 +130,7 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 		params.NowTs = conv.ToPGTimestamptz(time.Now())
 		current, err := q.GetDueRemoteSessionRefreshCandidate(ctx, params)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reload scheduled grant in claimed organization: %w", err)
 		}
 		if locked.ID != current.RemoteSession.ID || locked.GrantGeneration != current.RemoteSession.GrantGeneration || !locked.UpdatedAt.Time.Equal(current.RemoteSession.UpdatedAt.Time) {
 			return nil, pgx.ErrNoRows
