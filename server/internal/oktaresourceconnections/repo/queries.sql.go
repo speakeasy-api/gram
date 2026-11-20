@@ -304,27 +304,7 @@ SELECT
   , ms.slug
   , i.id AS issuer_id
   , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS typed_auth_enforced
-  , ARRAY(
-      SELECT oc.id
-      FROM mcp_server_auth_clients AS ol
-      JOIN mcp_auth_clients AS oa
-        ON oa.id = ol.auth_client_id
-       AND oa.organization_id = ol.organization_id
-       AND oa.deleted IS FALSE
-       AND oa.enabled
-       AND (oa.project_id IS NULL OR oa.project_id = ms.project_id)
-       AND oa.client_type IN ('ema', 'remote_session')
-      JOIN remote_session_clients AS oc
-        ON oc.id = oa.remote_session_client_id
-       AND oc.deleted IS FALSE
-       AND (oc.project_id IS NULL OR oc.project_id = ms.project_id)
-       AND (oc.organization_id IS NULL OR oc.organization_id = p.organization_id)
-      WHERE ol.mcp_server_id = ms.id
-        AND ol.project_id = ms.project_id
-        AND ol.organization_id = p.organization_id
-        AND ol.deleted IS FALSE
-      ORDER BY oc.id
-    )::uuid[] AS offered_client_ids
+  , COALESCE(offers.client_ids, '{}'::uuid[])::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
@@ -337,34 +317,37 @@ JOIN projects AS p
   ON p.id = ms.project_id
  AND p.organization_id = $1
  AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT
+        array_agg(DISTINCT c.id ORDER BY c.id) AS client_ids
+      , (array_agg(c.remote_session_issuer_id ORDER BY (ac.client_type = 'ema') DESC, c.id))[1] AS issuer_id
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = offer.auth_client_id
+     AND ac.organization_id = offer.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+     AND ac.client_type IN ('ema', 'remote_session')
+    JOIN remote_session_clients AS c
+      ON c.id = ac.remote_session_client_id
+     AND c.deleted IS FALSE
+     AND (c.project_id IS NULL OR c.project_id = ms.project_id)
+     AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)
+    JOIN remote_session_issuers AS provider
+      ON provider.id = c.remote_session_issuer_id
+     AND provider.deleted IS FALSE
+     AND (provider.project_id IS NULL OR provider.project_id = ms.project_id)
+     AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)
+    WHERE offer.mcp_server_id = ms.id
+      AND offer.project_id = ms.project_id
+      AND offer.organization_id = p.organization_id
+      AND offer.deleted IS FALSE
+      AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)
+) AS offers ON true
 JOIN remote_session_issuers AS i
-  ON i.id = CASE WHEN ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL THEN (
-       SELECT oc.remote_session_issuer_id
-       FROM mcp_server_auth_clients AS ol
-       JOIN mcp_auth_clients AS oa
-         ON oa.id = ol.auth_client_id
-        AND oa.organization_id = ol.organization_id
-        AND oa.deleted IS FALSE
-        AND oa.enabled
-       AND (oa.project_id IS NULL OR oa.project_id = ms.project_id)
-        AND oa.client_type IN ('ema', 'remote_session')
-       JOIN remote_session_clients AS oc
-         ON oc.id = oa.remote_session_client_id
-        AND oc.deleted IS FALSE
-       AND (oc.project_id IS NULL OR oc.project_id = ms.project_id)
-       AND (oc.organization_id IS NULL OR oc.organization_id = p.organization_id)
-       JOIN remote_session_issuers AS provider
-         ON provider.id = oc.remote_session_issuer_id
-        AND provider.deleted IS FALSE
-        AND (provider.project_id IS NULL OR provider.project_id = ms.project_id)
-        AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)
-       WHERE ol.mcp_server_id = ms.id
-         AND ol.project_id = ms.project_id
-        AND ol.organization_id = p.organization_id
-         AND ol.deleted IS FALSE
-       ORDER BY (oa.client_type = 'ema') DESC, oc.id
-       LIMIT 1
-     ) ELSE (
+  ON i.id = CASE WHEN ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL
+    THEN offers.issuer_id ELSE (
        SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
                    THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
        FROM mcp_server_remote_session_clients AS a
@@ -750,27 +733,7 @@ SELECT
   , ms.slug
   , i.id AS issuer_id
   , (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)::boolean AS typed_auth_enforced
-  , ARRAY(
-      SELECT oc.id
-      FROM mcp_server_auth_clients AS ol
-      JOIN mcp_auth_clients AS oa
-        ON oa.id = ol.auth_client_id
-       AND oa.organization_id = ol.organization_id
-       AND oa.deleted IS FALSE
-       AND oa.enabled
-       AND (oa.project_id IS NULL OR oa.project_id = ms.project_id)
-       AND oa.client_type IN ('ema', 'remote_session')
-      JOIN remote_session_clients AS oc
-        ON oc.id = oa.remote_session_client_id
-       AND oc.deleted IS FALSE
-       AND (oc.project_id IS NULL OR oc.project_id = ms.project_id)
-       AND (oc.organization_id IS NULL OR oc.organization_id = p.organization_id)
-      WHERE ol.mcp_server_id = ms.id
-        AND ol.project_id = ms.project_id
-        AND ol.organization_id = p.organization_id
-        AND ol.deleted IS FALSE
-      ORDER BY oc.id
-    )::uuid[] AS offered_client_ids
+  , COALESCE(offers.client_ids, '{}'::uuid[])::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
@@ -783,34 +746,37 @@ JOIN projects AS p
   ON p.id = ms.project_id
  AND p.organization_id = $1
  AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT
+        array_agg(DISTINCT c.id ORDER BY c.id) AS client_ids
+      , (array_agg(c.remote_session_issuer_id ORDER BY (ac.client_type = 'ema') DESC, c.id))[1] AS issuer_id
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS ac
+      ON ac.id = offer.auth_client_id
+     AND ac.organization_id = offer.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = ms.project_id)
+     AND ac.deleted IS FALSE
+     AND ac.enabled
+     AND ac.client_type IN ('ema', 'remote_session')
+    JOIN remote_session_clients AS c
+      ON c.id = ac.remote_session_client_id
+     AND c.deleted IS FALSE
+     AND (c.project_id IS NULL OR c.project_id = ms.project_id)
+     AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)
+    JOIN remote_session_issuers AS provider
+      ON provider.id = c.remote_session_issuer_id
+     AND provider.deleted IS FALSE
+     AND (provider.project_id IS NULL OR provider.project_id = ms.project_id)
+     AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)
+    WHERE offer.mcp_server_id = ms.id
+      AND offer.project_id = ms.project_id
+      AND offer.organization_id = p.organization_id
+      AND offer.deleted IS FALSE
+      AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL)
+) AS offers ON true
 JOIN remote_session_issuers AS i
-  ON i.id = CASE WHEN ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL THEN (
-       SELECT oc.remote_session_issuer_id
-       FROM mcp_server_auth_clients AS ol
-       JOIN mcp_auth_clients AS oa
-         ON oa.id = ol.auth_client_id
-        AND oa.organization_id = ol.organization_id
-        AND oa.deleted IS FALSE
-        AND oa.enabled
-       AND (oa.project_id IS NULL OR oa.project_id = ms.project_id)
-        AND oa.client_type IN ('ema', 'remote_session')
-       JOIN remote_session_clients AS oc
-         ON oc.id = oa.remote_session_client_id
-        AND oc.deleted IS FALSE
-       AND (oc.project_id IS NULL OR oc.project_id = ms.project_id)
-       AND (oc.organization_id IS NULL OR oc.organization_id = p.organization_id)
-       JOIN remote_session_issuers AS provider
-         ON provider.id = oc.remote_session_issuer_id
-        AND provider.deleted IS FALSE
-        AND (provider.project_id IS NULL OR provider.project_id = ms.project_id)
-        AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)
-       WHERE ol.mcp_server_id = ms.id
-         AND ol.project_id = ms.project_id
-        AND ol.organization_id = p.organization_id
-         AND ol.deleted IS FALSE
-       ORDER BY (oa.client_type = 'ema') DESC, oc.id
-       LIMIT 1
-     ) ELSE (
+  ON i.id = CASE WHEN ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL
+    THEN offers.issuer_id ELSE (
        SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
                    THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
        FROM mcp_server_remote_session_clients AS a

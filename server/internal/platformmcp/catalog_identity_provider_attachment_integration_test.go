@@ -515,9 +515,7 @@ func TestAttachmentRegistersDiscoveredScopesWithoutStoringThem(t *testing.T) {
 	require.Empty(t, clients[0].ClientScope)
 }
 
-// A retry that finds the registered issuer's client already bound records the
-// server's association only while the server still signs in through that
-// issuer; once it moved to another issuer the retry is a conflict.
+// Typed attachment recognizes only live personal offers on the exact target.
 func TestMatchingAttachmentFollowsTypedOffers(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -614,4 +612,10 @@ func TestMatchingAttachmentFollowsTypedOffers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, offers, 1)
 	require.Equal(t, conv.ToNullUUID(authClientID), offers[0].AuthClientID)
+
+	_, err = remotesessionsrepo.New(conn).MarkRemoteSessionClientUpstreamRejected(ctx, remotesessionsrepo.MarkRemoteSessionClientUpstreamRejectedParams{ID: registration.ID, ClientID: registration.ClientID})
+	require.NoError(t, err)
+	attached, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, provider)
+	require.NoError(t, err)
+	require.False(t, attached, "a rejected registration cannot satisfy attachment readiness")
 }

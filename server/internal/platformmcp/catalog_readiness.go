@@ -175,11 +175,14 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		}
 	}
 
-	clients, err := p.offeredRegistrations(ctx, principal.OrganizationID, projectID, []uuid.UUID{mcpServerID}, []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeEMA})
+	clients, incomplete, err := p.offeredRegistrations(ctx, principal.OrganizationID, projectID, mcpServerID, []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeEMA})
 	if err != nil {
 		return ProviderReadinessProbeResult{}, err
 	}
 	if len(clients) == 0 {
+		if incomplete {
+			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{}, "no_client"), nil
+		}
 		state, evidence := p.probe(ctx, remote.Url, headers, "")
 		if state == ReadinessUnauthorized {
 			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{}, "no_client"), nil
@@ -219,20 +222,22 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
 		var firstConfigured *IdentityChainingReadiness
+		var firstClientID uuid.UUID
 		for _, client := range clients {
 			chained, ok := resolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url, conv.ToNullUUID(client.ID))
 			if !ok {
 				continue
 			}
 			if chained.State == ReadinessReady {
-				return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
+				return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionClientID: client.ID, RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
 			}
 			if firstConfigured == nil {
 				firstConfigured = &chained
+				firstClientID = client.ID
 			}
 		}
 		if firstConfigured != nil {
-			return p.result(principal, registrationID, firstConfigured.State, firstConfigured.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: firstConfigured.RemoteSessionIssuerID}, firstConfigured.Absence), nil
+			return p.result(principal, registrationID, firstConfigured.State, firstConfigured.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionClientID: firstClientID, RemoteSessionIssuerID: firstConfigured.RemoteSessionIssuerID}, firstConfigured.Absence), nil
 		}
 		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_session"), nil
 	}
