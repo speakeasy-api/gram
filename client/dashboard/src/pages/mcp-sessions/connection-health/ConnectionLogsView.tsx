@@ -590,7 +590,11 @@ export function ConnectionLogsView({
             value={search}
             onChange={(value) => setParam(SEARCH_PARAM, value || null)}
             debounceMs={250}
-            placeholder="Search reference, person or server"
+            placeholder={
+              serverId
+                ? "Search reference or person"
+                : "Search reference, person or server"
+            }
             className="w-full max-w-md"
           />
           {filtersActive && loggingEnabled ? (
