@@ -137,8 +137,8 @@ export function MCPOverviewTab({
   // With keepPreviousData a failed refetch still has stale data to show, so
   // only fall back to the error state when there is nothing to render at all.
   const showQueryError = isError && !data;
-  // Placeholder data is the previous range's result, so an empty list there
-  // says nothing about the range being loaded.
+  // Placeholder data is the previous range's result, and its bars would link
+  // to the new range, so the lists wait for the selected range to arrive.
   const toolsLoading = isLoading || isPlaceholderData;
 
   const summary = data?.summary;
@@ -256,20 +256,20 @@ export function MCPOverviewTab({
           <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by call count</h3>
-              {topByCount.length > 0 ? (
-                <RankedBarList items={topByCount} />
-              ) : toolsLoading ? (
+              {toolsLoading ? (
                 <RankedBarListSkeleton />
+              ) : topByCount.length > 0 ? (
+                <RankedBarList items={topByCount} />
               ) : (
                 <WidgetEmptyState message="No tool calls in the selected range." />
               )}
             </div>
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
-              {topByFailureRate.length > 0 ? (
-                <RankedBarList items={topByFailureRate} />
-              ) : toolsLoading ? (
+              {toolsLoading ? (
                 <RankedBarListSkeleton />
+              ) : topByFailureRate.length > 0 ? (
+                <RankedBarList items={topByFailureRate} />
               ) : (
                 <WidgetEmptyState message="No failed tool calls in the selected range." />
               )}
