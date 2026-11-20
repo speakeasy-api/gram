@@ -171,11 +171,9 @@ var switches sync.Map
 // pass a startup context, and a poller that stopped with it would leave the
 // process unable to see a hold.
 func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, role string, next Target) (*redis.Client, error) {
-	if next.Addr == "" {
+	// A next instance equal to the current one means the move is over.
+	if next.Addr == "" || next.Addr == opts.Addr {
 		return redis.NewClient(opts), nil
-	}
-	if next.Addr == opts.Addr {
-		return nil, errors.New("next redis instance is the current one")
 	}
 
 	// Reserved before starting, so two callers cannot both build a switch for
