@@ -272,7 +272,11 @@ func (s *seeder) healthSessions() []healthSession {
 		if created.After(now.Add(-8 * time.Hour)) {
 			created = now.Add(-8 * time.Hour)
 		}
-		lastUsed := now.Add(-time.Duration(r.between(2, 240)) * time.Minute)
+		lastUsed := now.Add(-time.Duration(r.between(30, 240)) * time.Minute)
+		// The people renewing right now, and Marcus Lee's retry loop, used their sign-in minutes ago.
+		if minutes, ok := map[string]int{"sam": 3, "priya": 7, "ana": 11, "mei": 15, "sofia": 19, "jonas": 23, "omar": 27, "marcus": 5}[p.key]; ok {
+			lastUsed = now.Add(-time.Duration(minutes) * time.Minute)
+		}
 		refresh := lastUsed.Add(14 * day)
 		switch p.key {
 		case "lena":
