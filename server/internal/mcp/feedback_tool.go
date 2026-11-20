@@ -153,7 +153,7 @@ func handleHostedFeedbackToolCall(
 // organization's feedback may name. The session is the one the client sent,
 // never one the gateway made up for a request without one.
 func feedbackCaller(ctx context.Context, organizationID string, r *http.Request, authenticated bool) mcpfeedback.Caller {
-	caller := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
+	caller := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: "", LimitSubject: ""}
 	if r != nil {
 		caller.SessionID = r.Header.Get(proxy.McpSessionIDHeader)
 	}
@@ -164,6 +164,12 @@ func feedbackCaller(ctx context.Context, organizationID string, r *http.Request,
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return caller
+	}
+	// A caller from another organization is not named, but is still held to
+	// its own rate limit rather than only the server's.
+	caller.LimitSubject = authCtx.UserID
+	if caller.LimitSubject == "" {
+		caller.LimitSubject = authCtx.ExternalUserID
 	}
 	if authCtx.ActiveOrganizationID == organizationID {
 		caller.ExternalUserID = authCtx.ExternalUserID
