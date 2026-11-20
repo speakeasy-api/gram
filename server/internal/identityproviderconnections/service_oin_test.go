@@ -392,8 +392,8 @@ func TestCreate_AbandonsOINOrphanWithoutKeySet(t *testing.T) {
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned, "the orphan's client was tombstoned")
 }
 
-// Tombstoning an abandoned connection's client also removes its user session
-// issuer bindings, so nothing keeps pointing at a deleted client.
+// Abandoned connection cleanup retires the registration without deleting
+// the junction row kept temporarily for attachment foreign keys.
 func TestCreate_AbandonedClientRetiresRegistrationWithoutUnlinkingParent(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
