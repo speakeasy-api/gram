@@ -329,3 +329,11 @@ func TestPublishReplacesTheBuiltInCatalogWithoutCarryingDerivedValues(t *testing
 	store.Publish(NewSnapshot(store.Snapshot().Products()))
 	require.Same(t, equal, store.Snapshot(), "an equal database snapshot is not republished")
 }
+
+func TestPublishRejectsNil(t *testing.T) {
+	t.Parallel()
+	initial := NewSnapshot(Products())
+	store := NewStore(initial)
+	require.Panics(t, func() { store.Publish(nil) })
+	require.Same(t, initial, store.Snapshot())
+}

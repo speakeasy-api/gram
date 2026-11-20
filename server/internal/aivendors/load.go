@@ -100,23 +100,32 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 			Documents:       nil,
 		})
 	}
-	var skipped []error
+	var skipped, malformed []error
 	for _, d := range docs {
-		if d.IsPattern {
-			if err := validatePattern(d.Url); err != nil {
-				skipped = append(skipped, fmt.Errorf("document %s: %w", d.ID, err))
-				continue
-			}
-		}
 		i, ok := byID[d.AiProductID]
 		if !ok {
 			skipped = append(skipped, fmt.Errorf("document %s: product %s is not live", d.ID, d.AiProductID))
 			continue
 		}
+		if d.IsPattern {
+			if err := validatePattern(d.Url); err != nil {
+				err = fmt.Errorf("document %s: %w", d.ID, err)
+				// A broken enabled pattern would silently drop a working client, so it rejects the catalog.
+				if d.Enabled {
+					malformed = append(malformed, err)
+				} else {
+					skipped = append(skipped, err)
+				}
+				continue
+			}
+		}
 		products[i].Documents = append(products[i].Documents, Document{URL: d.Url, DisplayName: d.DisplayName, Enabled: d.Enabled, Pattern: d.IsPattern})
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, nil, fmt.Errorf("finish AI catalog read: %w", err)
+	}
+	if len(malformed) > 0 {
+		return nil, skipped, fmt.Errorf("%w: %w: %w", errRejected, errInvalidCatalog, errors.Join(malformed...))
 	}
 	snapshot := NewSnapshot(products)
 	if err := validateCatalog(snapshot); err != nil {

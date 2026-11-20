@@ -165,6 +165,9 @@ func newCompiledSnapshot() *Snapshot {
 	return s
 }
 
+// BuiltIn reports whether this is the built-in catalog rather than a database load.
+func (s *Snapshot) BuiltIn() bool { return s.builtIn }
+
 // Fingerprint hashes the complete snapshot, including product and document
 // order, which is listing order.
 func (s *Snapshot) Fingerprint() string { return s.fingerprint }
@@ -314,6 +317,9 @@ func (s *Store) Middleware(next http.Handler) http.Handler {
 
 // Publish replaces the current snapshot unless next has the same content; it always replaces the built-in one.
 func (s *Store) Publish(next *Snapshot) {
+	if next == nil {
+		panic("aivendors: publish requires a snapshot")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.snapshot.builtIn || s.snapshot.Fingerprint() != next.Fingerprint() {

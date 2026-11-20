@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	seedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -40,4 +41,20 @@ func TestAICatalogStartupServesTheBuiltInCatalogForAnInvalidDefinition(t *testin
 	require.NoError(t, err)
 	t.Cleanup(stop)
 	require.Same(t, aivendors.CompiledSnapshot(), catalog.Snapshot())
+}
+
+func TestAICatalogStartupSurvivesANullArrayElement(t *testing.T) {
+	t.Parallel()
+	infra, cleanup, err := testenv.Launch(t.Context(), testenv.LaunchOptions{Postgres: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, cleanup()) })
+	db, err := infra.CloneTestDatabase(t, "null_ai_catalog_element")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	_, err = db.Exec(t.Context(), "UPDATE ai_products SET client_info_names = ARRAY[NULL]::text[], bundle_ids = array_append(bundle_ids, NULL) WHERE id = 'zed'")
+	require.NoError(t, err)
+	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+	t.Cleanup(stop)
+	require.False(t, catalog.Snapshot().BuiltIn())
 }

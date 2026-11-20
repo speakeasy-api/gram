@@ -31,6 +31,7 @@ func TestDatabaseCatalogPreservesShippedAdmissionAndProducts(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
+	require.False(t, snapshot.BuiltIn(), "the seeded catalog loads from the database")
 	require.Len(t, snapshot.Products(), len(aivendors.Products()))
 	require.Len(t, snapshot.Catalog(), 26)
 	// Frozen expected documents and publishers are independent of the DB reader.
@@ -106,7 +107,7 @@ func TestLoadOmitsInvalidPatternsAndDeletedProducts(t *testing.T) {
 	require.NoError(t, err)
 	for _, d := range docs {
 		if d.Url == "https://chatgpt.com/oauth/*/client.json" {
-			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://*.example.com/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
+			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://*.example.com/client.json", DisplayName: d.DisplayName, Enabled: false, DeletedAt: pgtype.Timestamptz{}}))
 		}
 	}
 	require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
@@ -126,7 +127,7 @@ func TestLoadOmitsInvalidPatternsAndDeletedProducts(t *testing.T) {
 	}
 }
 
-func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
+func TestLoadOmitsDisabledPatternsWithoutRealPath(t *testing.T) {
 	t.Parallel()
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -139,7 +140,7 @@ func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
 	}
 	for _, pattern := range patterns {
 		_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
-			ID: uuid.New(), AiProductID: "zed", Url: pattern, DisplayName: "Malformed pattern", Enabled: true, IsPattern: true,
+			ID: uuid.New(), AiProductID: "zed", Url: pattern, DisplayName: "Malformed pattern", Enabled: false, IsPattern: true,
 		})
 		require.NoError(t, err)
 	}
@@ -343,6 +344,7 @@ func TestLoadedSnapshotMatchesCompiledSnapshot(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
+	require.False(t, loaded.BuiltIn(), "the seeded catalog loads from the database")
 	compiled := aivendors.CompiledSnapshot()
 	ids := func(s *aivendors.Snapshot) []string {
 		var out []string
@@ -416,6 +418,7 @@ func TestLoadedSnapshotServesTheCompiledListVersionAndETag(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
+	require.False(t, loaded.BuiltIn(), "the seeded catalog loads from the database")
 	t.Logf("compiled fingerprint %s, loaded fingerprint %s", aivendors.CompiledSnapshot().Fingerprint(), loaded.Fingerprint())
 
 	want := aitargets.NewOrganizationList(aivendors.CompiledSnapshot(), nil).Snapshot
@@ -430,7 +433,7 @@ func TestSkippedRowIsLoggedOnceAcrossBootAndRefreshes(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
-		ID: uuid.New(), AiProductID: "zed", Url: "https://*.example.com/client.json", DisplayName: "Malformed pattern", Enabled: true, IsPattern: true,
+		ID: uuid.New(), AiProductID: "zed", Url: "https://*.example.com/client.json", DisplayName: "Malformed pattern", Enabled: false, IsPattern: true,
 	})
 	require.NoError(t, err)
 	var logs bytes.Buffer
@@ -444,4 +447,45 @@ func TestSkippedRowIsLoggedOnceAcrossBootAndRefreshes(t *testing.T) {
 	require.Error(t, store.Refresh(cancelled, db, logger, aitargets.ValidateCatalog))
 	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
 	require.Equal(t, 1, strings.Count(logs.String(), "skip AI catalog row"), "boot logs the row; refreshes and a failed read do not repeat it")
+}
+
+func TestMalformedEnabledPatternRejectsTheCatalog(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	logger := testenv.NewLogger(t)
+	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	docs, err := seedrepo.New(db).ListDocuments(t.Context())
+	require.NoError(t, err)
+	for _, d := range docs {
+		if d.Url == "https://chatgpt.com/oauth/*/client.json" {
+			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://chatgpt.com/oauth/x*/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
+		}
+	}
+	err = store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.ErrorContains(t, err, "invalid AI client catalog")
+	require.ErrorContains(t, err, "complete path segment")
+	require.Same(t, initial, store.Snapshot(), "a broken enabled pattern keeps the working client")
+	loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.True(t, loaded.BuiltIn(), "boot falls back to the built-in catalog")
+}
+
+func TestLoadDropsNullArrayElements(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	_, err = db.Exec(t.Context(), "UPDATE ai_products SET client_info_names = ARRAY[NULL, 'Zed']::text[], binaries = array_append(binaries, NULL) WHERE id = 'zed'")
+	require.NoError(t, err)
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.False(t, loaded.BuiltIn())
+	target, ok := aitargets.DefaultByID(loaded, "zed")
+	require.True(t, ok)
+	require.Equal(t, []string{"Zed"}, target.GatewayClient.ClientInfoNames)
+	require.NotContains(t, target.Signatures.Binaries, "")
 }
