@@ -36,7 +36,7 @@ export function FeedbackToolPanel({
           {settings.enabled ? (
             <>
               Agents see a tool named{" "}
-              <span className="text-foreground font-mono">
+              <span className="text-foreground font-mono break-all">
                 {settings.tool.name}
               </span>{" "}
               on this server and call it to report what blocked or confused

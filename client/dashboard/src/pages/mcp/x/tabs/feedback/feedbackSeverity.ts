@@ -32,8 +32,8 @@ export const FEEDBACK_SEVERITIES: readonly {
 
 /**
  * The severity a report carries, when it is one this page knows. A report with
- * none is a general comment, and one from a newer server is shown without a
- * label rather than under a made-up one.
+ * none is a general comment; one this page does not know yet is shown by its
+ * raw value where it is displayed.
  */
 export function feedbackSeverity(
   value: string | undefined,

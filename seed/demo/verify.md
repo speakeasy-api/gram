@@ -39,11 +39,12 @@ that **Technical details** stays closed until opened. Choose a tool in the
 ranking and confirm the list narrows to it and scrolls into view, then clear
 the filter. Open Example OAuth's tab and confirm it names the tool
 `report_a_problem` and says there are no reports yet. Open Example Shared
-Credential's tab and confirm **Feedback is off** with nothing below it. In the
-demo org the tab shows no **Customize** or switch control and says who can
-change it; in the local writable org, turn feedback on and off on Example
-Shared Credential and confirm the state and its **Changed by** line follow.
-Check the console for errors.
+Credential's tab and confirm **Feedback is off** with nothing below it. Turn
+feedback on and off on Example Shared Credential and confirm the state and its
+**Changed by** line follow; in the demo org the next daily reseed puts it back.
+To check the read-only state, sign in as a member without `mcp:write` on the
+server in the local org and confirm the tab shows no **Customize** or switch
+control and says who can change it. Check the console for errors.
 
 ### Signals Intelligence
 

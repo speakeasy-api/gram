@@ -207,7 +207,7 @@ export function StatTileSkeleton({
     <div className="bg-card flex min-w-0 flex-1 flex-col gap-4 p-6">
       <Skeleton className="h-[14.3px] w-24" />
       <Skeleton className="h-[34px] w-20" />
-      {caption && <Skeleton className="h-[17.9px] w-36" />}
+      {caption && <Skeleton className="h-[17.9px] w-36 max-w-full" />}
     </div>
   );
 }

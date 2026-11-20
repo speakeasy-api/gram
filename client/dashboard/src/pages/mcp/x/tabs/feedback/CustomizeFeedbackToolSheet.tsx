@@ -159,7 +159,8 @@ export function CustomizeFeedbackToolSheet({
               ) : (
                 <FieldDescription>
                   Agents read this to decide when to send feedback and what to
-                  put in it. {trimmedInstructions.length.toLocaleString()} of{" "}
+                  put in it.{" "}
+                  {characterCount(trimmedInstructions).toLocaleString()} of{" "}
                   {MAX_INSTRUCTIONS_LENGTH.toLocaleString()} characters.
                 </FieldDescription>
               )}
@@ -238,9 +239,14 @@ function UseDefaultButton({
   );
 }
 
+/** Characters as the API counts them: code points, not UTF-16 units. */
+function characterCount(value: string): number {
+  return Array.from(value).length;
+}
+
 function toolNameError(name: string): string | undefined {
   if (name === "") return "Give the tool a name.";
-  if (name.length > MAX_TOOL_NAME_LENGTH) {
+  if (characterCount(name) > MAX_TOOL_NAME_LENGTH) {
     return `Use ${MAX_TOOL_NAME_LENGTH} characters or fewer.`;
   }
   if (!TOOL_NAME_PATTERN.test(name)) {
@@ -251,8 +257,8 @@ function toolNameError(name: string): string | undefined {
 
 function instructionsProblem(instructions: string): string | undefined {
   if (instructions === "") return "Tell agents when to send feedback.";
-  if (instructions.length > MAX_INSTRUCTIONS_LENGTH) {
-    return `Use ${MAX_INSTRUCTIONS_LENGTH.toLocaleString()} characters or fewer. This is ${instructions.length.toLocaleString()}.`;
+  if (characterCount(instructions) > MAX_INSTRUCTIONS_LENGTH) {
+    return `Use ${MAX_INSTRUCTIONS_LENGTH.toLocaleString()} characters or fewer. This is ${characterCount(instructions).toLocaleString()}.`;
   }
   return undefined;
 }
