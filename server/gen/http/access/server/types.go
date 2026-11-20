@@ -556,6 +556,11 @@ type GetShadowMCPInventoryServerResponseBody struct {
 	LastSeen         string  `form:"last_seen" json:"last_seen" xml:"last_seen"`
 	LastCalled       *string `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
 	ObservedUseCount int     `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	// Calls to this server that a Speakeasy hook blocked, within the telemetry
+	// retention window. Included in observed_use_count. Optional for one release
+	// so a dashboard deployed ahead of the server still loads the inventory; the
+	// server always sends it.
+	BlockedCallCount int `form:"blocked_call_count" json:"blocked_call_count" xml:"blocked_call_count"`
 	// Distinct users who reached this server.
 	UserCount int `form:"user_count" json:"user_count" xml:"user_count"`
 	// The users who reached this server most.
@@ -10019,6 +10024,11 @@ type ShadowMCPInventoryServerResponseBody struct {
 	LastSeen         string  `form:"last_seen" json:"last_seen" xml:"last_seen"`
 	LastCalled       *string `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
 	ObservedUseCount int     `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	// Calls to this server that a Speakeasy hook blocked, within the telemetry
+	// retention window. Included in observed_use_count. Optional for one release
+	// so a dashboard deployed ahead of the server still loads the inventory; the
+	// server always sends it.
+	BlockedCallCount int `form:"blocked_call_count" json:"blocked_call_count" xml:"blocked_call_count"`
 	// Distinct users who reached this server.
 	UserCount int `form:"user_count" json:"user_count" xml:"user_count"`
 	// The users who reached this server most.
@@ -11270,9 +11280,16 @@ func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventorySe
 		LastSeen:           res.LastSeen,
 		LastCalled:         res.LastCalled,
 		ObservedUseCount:   res.ObservedUseCount,
+		BlockedCallCount:   res.BlockedCallCount,
 		UserCount:          res.UserCount,
 		Access:             res.Access,
 		RequestCount:       res.RequestCount,
+	}
+	{
+		var zero int
+		if body.BlockedCallCount == zero {
+			body.BlockedCallCount = 0
+		}
 	}
 	if res.TopUsers != nil {
 		body.TopUsers = make([]string, len(res.TopUsers))

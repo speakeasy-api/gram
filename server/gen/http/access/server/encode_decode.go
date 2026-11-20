@@ -10890,9 +10890,16 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		LastSeen:           v.LastSeen,
 		LastCalled:         v.LastCalled,
 		ObservedUseCount:   v.ObservedUseCount,
+		BlockedCallCount:   v.BlockedCallCount,
 		UserCount:          v.UserCount,
 		Access:             v.Access,
 		RequestCount:       v.RequestCount,
+	}
+	{
+		var zero int
+		if res.BlockedCallCount == zero {
+			res.BlockedCallCount = 0
+		}
 	}
 	if v.TopUsers != nil {
 		res.TopUsers = make([]string, len(v.TopUsers))
