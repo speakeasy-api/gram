@@ -49,8 +49,9 @@ SELECT EXISTS (
  WHERE offer.organization_id = sqlc.arg(org_id)::text
    AND offer.mcp_server_id = sqlc.arg(server_id)::text::uuid
    AND offer.deleted IS FALSE
-   AND client.deleted IS FALSE
-   AND ((client.client_type = 'remote_session' AND registration.credential_owner = 'subject')
+   AND client.deleted IS FALSE AND client.enabled
+   AND registration.credential_owner = 'subject'
+   AND (client.client_type = 'remote_session'
         OR (client.client_type = 'ema' AND EXISTS (
             SELECT 1 FROM mcp_auth_client_emas details
             WHERE details.auth_client_id = client.id

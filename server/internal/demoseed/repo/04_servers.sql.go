@@ -1940,10 +1940,10 @@ INSERT INTO upstream_client_selections
 SELECT $1::uuid, $2::uuid, $3::text, $4::text,
        $5::uuid, $6::uuid, c.id, c.attachment_scope,
        auth_client.id, auth_client.attachment_scope,
-       $7::uuid IS NULL, $8::text
+       ($7::uuid IS NULL AND $8::uuid IS NULL), $9::text
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
-  ON c.id = $9::uuid
+  ON c.id = $8::uuid
 LEFT JOIN mcp_auth_clients AS auth_client
   ON auth_client.id = $7::uuid
  AND auth_client.organization_id = $3::text
@@ -1957,8 +1957,8 @@ type ServersInsertUpstreamClientChoiceParams struct {
 	CredentialID          uuid.UUID
 	McpServerID           uuid.UUID
 	AuthClientID          uuid.NullUUID
-	Source                string
 	RemoteSessionClientID uuid.NullUUID
+	Source                string
 }
 
 // One seeded credential's choice for one server, as issuance records it: the
@@ -1975,8 +1975,8 @@ func (q *Queries) ServersInsertUpstreamClientChoice(ctx context.Context, arg Ser
 		arg.CredentialID,
 		arg.McpServerID,
 		arg.AuthClientID,
-		arg.Source,
 		arg.RemoteSessionClientID,
+		arg.Source,
 	)
 	return err
 }

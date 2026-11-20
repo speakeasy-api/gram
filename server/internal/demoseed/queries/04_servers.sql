@@ -317,7 +317,7 @@ INSERT INTO upstream_client_selections
 SELECT @id::uuid, @project_id::uuid, @org_id::text, @credential_kind::text,
        @credential_id::uuid, @mcp_server_id::uuid, c.id, c.attachment_scope,
        auth_client.id, auth_client.attachment_scope,
-       sqlc.narg(auth_client_id)::uuid IS NULL, @source::text
+       (sqlc.narg(auth_client_id)::uuid IS NULL AND sqlc.narg(remote_session_client_id)::uuid IS NULL), @source::text
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
   ON c.id = sqlc.narg(remote_session_client_id)::uuid

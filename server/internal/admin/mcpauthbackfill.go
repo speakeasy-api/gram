@@ -8,7 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// BackfillMcpAuthGrants rejects requests from older staff clients rather than granting broad access.
+// BackfillMcpAuthGrants rejects all requests rather than granting broad access.
 func (s *Service) BackfillMcpAuthGrants(ctx context.Context, _ *gen.BackfillMcpAuthGrantsPayload) (*gen.AdminBackfillMCPAuthGrantsResult, error) {
 	auth, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || auth == nil || auth.OIDCSubject == "" {
