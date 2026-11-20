@@ -146,7 +146,12 @@ describe("removedToolKindRules", () => {
         scope: "mcp:connect",
         selectors: [
           { resourceKind: "mcp", resourceId: "gh", disposition: "read_only" },
-          { resourceKind: "mcp", resourceId: "gh", disposition: "unannotated" },
+          {
+            resourceKind: "mcp",
+            resourceId: "gh",
+            disposition: "unannotated",
+            tool: "*",
+          },
           { resourceKind: "mcp", resourceId: "gh", tool: "update_task" },
           // One tool, named with its kind: removing it removes no kind rule.
           {

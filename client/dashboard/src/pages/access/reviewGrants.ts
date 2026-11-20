@@ -114,13 +114,21 @@ export function removedToolKindRules(
   for (const grant of removeGrants) {
     if (grant.scope !== "mcp:connect") continue;
     for (const selector of grant.selectors ?? []) {
-      if (!selector.disposition || selector.tool) continue;
+      if (!selector.disposition || namesOneTool(selector)) continue;
       if (!connectStillCoversKind(after, selector)) {
         kinds.add(selector.disposition);
       }
     }
   }
   return [...kinds];
+}
+
+/**
+ * Whether a selector is limited to one named tool. A tool of "*" matches
+ * every tool, so { disposition: "read_only", tool: "*" } is a kind rule.
+ */
+function namesOneTool(selector: Selector): boolean {
+  return !!selector.tool && selector.tool !== "*";
 }
 
 /**
@@ -139,7 +147,7 @@ function connectStillCoversKind(
     if (selectors.length === 0) return true;
     return selectors.some(
       (selector) =>
-        !selector.tool &&
+        !namesOneTool(selector) &&
         (!selector.disposition ||
           selector.disposition === removed.disposition) &&
         (selector.resourceId === removed.resourceId ||
