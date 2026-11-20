@@ -88,6 +88,10 @@ func (p *Proxy) listLocalTools(ctx context.Context, list *ToolsListResponse) err
 		if tool.Definition == nil || tool.Call == nil {
 			continue
 		}
+		// Calls go to the first tool with a name, so only that one is listed.
+		if _, listed := taken[tool.Definition.Name]; listed {
+			continue
+		}
 		taken[tool.Definition.Name] = struct{}{}
 		definitions = append(definitions, tool.Definition)
 	}
