@@ -13,11 +13,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -153,18 +151,14 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 // targets. It only considers writable, personal registrations offered there.
 func catalogResourceOffers(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, sourceID uuid.UUID) (map[uuid.UUID][]remotesessionsrepo.ListReachableRemoteSessionClientsRow, error) {
 	projectID, org := *authCtx.ProjectID, authCtx.ActiveOrganizationID
-	targets, err := platformrepo.New(tx).ListPlatformMCPCatalogOfferTargets(ctx, platformrepo.ListPlatformMCPCatalogOfferTargetsParams{RemoteMcpServerID: conv.ToNullUUID(sourceID), OrganizationID: org, ProjectID: projectID})
+	offers, err := platformrepo.New(tx).LockPlatformMCPCatalogResourceOffers(ctx, platformrepo.LockPlatformMCPCatalogResourceOffersParams{RemoteMcpServerID: conv.ToNullUUID(sourceID), OrganizationID: org, ProjectID: projectID})
 	if err != nil {
-		return nil, fmt.Errorf("list platform mcp offer targets: %w", err)
-	}
-	offers, err := upstreamclientsrepo.New(tx).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: org, McpServerIds: targets})
-	if err != nil {
-		return nil, fmt.Errorf("list catalogue auth offers: %w", err)
+		return nil, fmt.Errorf("lock catalogue resource offers: %w", err)
 	}
 	idsByTarget := make(map[uuid.UUID][]uuid.UUID)
 	var ids []uuid.UUID
 	for _, offer := range offers {
-		if offer.ClientType.String != authz.AuthClientTypeRemoteSession || !offer.RemoteSessionClientID.Valid {
+		if !offer.RemoteSessionClientID.Valid {
 			continue
 		}
 		id := offer.RemoteSessionClientID.UUID
@@ -185,8 +179,8 @@ func catalogResourceOffers(ctx context.Context, tx pgx.Tx, authCtx *contextvalue
 		if row.UpstreamRejectedAt.Valid || row.CredentialOwner != string(remotesessions.CredentialOwnerSubject) {
 			continue
 		}
-		for _, target := range targets {
-			if slices.Contains(idsByTarget[target], row.ClientID) {
+		for target, ids := range idsByTarget {
+			if slices.Contains(ids, row.ClientID) {
 				byTarget[target] = append(byTarget[target], row)
 			}
 		}
