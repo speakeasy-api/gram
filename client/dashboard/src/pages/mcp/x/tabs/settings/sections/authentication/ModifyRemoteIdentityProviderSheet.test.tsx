@@ -1,5 +1,5 @@
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import type { ServerClientAssociation } from "@gram/client/models/components/serverclientassociation.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -17,6 +17,16 @@ import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProvide
 const sdk = vi.hoisted(() => ({
   updateIssuer: vi.fn(async () => ({})),
   updateClient: vi.fn(async () => ({})),
+  invalidateClient: vi.fn(async () => undefined),
+  servers: vi.fn(() => ({
+    data: { mcpServers: [] as { id: string; name: string }[] },
+  })),
+  associations:
+    vi.fn<
+      (
+        id: string,
+      ) => Promise<{ associations: { remoteSessionIssuerId: string }[] }>
+    >(),
 }));
 
 const rbac = vi.hoisted(() => ({
@@ -74,22 +84,30 @@ vi.mock("@/components/ui/Sheet", () => ({
   SheetTitle: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
-  useMcpServers: () => ({ data: { mcpServers: [] } }),
+  useMcpServers: () => sdk.servers(),
   invalidateAllMcpServers: vi.fn(async () => undefined),
 }));
-vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: () => ({
-    items: [
-      {
-        id: "client-1",
-        clientId: "oauth-client",
-        userSessionIssuerIds: ["user-issuer-1"],
-        tokenEndpointAuthMethod: fixture.authMethod,
-        tokenEndpointAuthAudienceFormat: fixture.audienceFormat,
-        jsonWebKeySetId: "set-1",
-        legacyCallbackUrl: fixture.legacyCallbackUrl,
-      },
-    ],
+vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
+  buildServerClientAssociationsQuery: (
+    _client: unknown,
+    { mcpServerId }: { mcpServerId: string },
+  ) => ({
+    queryKey: ["test-associations", mcpServerId],
+    queryFn: () => sdk.associations(mcpServerId),
+  }),
+}));
+vi.mock("@gram/client/react-query/remoteSessionClient.js", () => ({
+  invalidateAllRemoteSessionClient: sdk.invalidateClient,
+  useRemoteSessionClient: () => ({
+    data: {
+      id: "client-1",
+      clientId: "oauth-client",
+      userSessionIssuerIds: ["user-issuer-1"],
+      tokenEndpointAuthMethod: fixture.authMethod,
+      tokenEndpointAuthAudienceFormat: fixture.audienceFormat,
+      jsonWebKeySetId: "set-1",
+      legacyCallbackUrl: fixture.legacyCallbackUrl,
+    },
     isLoading: false,
   }),
 }));
@@ -179,9 +197,36 @@ afterEach(() => {
   vi.clearAllMocks();
   rbac.canWrite = true;
   rbac.requested = [];
+  sdk.servers.mockReset();
+  sdk.associations.mockReset();
   fixture.legacyCallbackUrl = false;
   fixture.authMethod = "private_key_jwt";
   fixture.audienceFormat = undefined;
+});
+
+const currentAssociation = {
+  remoteSessionClientId: "client-1",
+  serverCount: 1,
+} as ServerClientAssociation;
+
+it("warns when another server is associated with the same issuer", async () => {
+  sdk.servers.mockReturnValue({
+    data: {
+      mcpServers: [
+        { id: "server-1", name: "Current server" },
+        { id: "server-2", name: "Other associated server" },
+      ],
+    },
+  });
+  sdk.associations.mockResolvedValueOnce({
+    associations: [{ remoteSessionIssuerId: "issuer-1" }],
+  });
+  renderSheet();
+  expect(await screen.findByText("Other associated server")).toBeTruthy();
+  expect(
+    screen.getByText(/shared with at least 1 other MCP server/),
+  ).toBeTruthy();
+  expect(sdk.associations).toHaveBeenCalledExactlyOnceWith("server-2");
 });
 
 function renderSheet() {
@@ -196,8 +241,8 @@ function renderSheet() {
       <ModifyRemoteIdentityProviderSheet
         open
         onOpenChange={vi.fn<(open: boolean) => void>()}
-        registrationId="client-1"
-        userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+        association={currentAssociation}
+        mcpServerId="server-1"
         issuer={
           {
             id: "issuer-1",
@@ -225,8 +270,8 @@ function renderGrantProfileSheet() {
       <ModifyRemoteIdentityProviderSheet
         open
         onOpenChange={vi.fn<(open: boolean) => void>()}
-        registrationId="client-1"
-        userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+        association={currentAssociation}
+        mcpServerId="server-1"
         issuer={
           {
             id: "issuer-1",
@@ -258,6 +303,7 @@ describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
         },
       }),
     );
+    expect(sdk.invalidateClient).toHaveBeenCalledOnce();
     expect(rbac.requested).toContainEqual(["project:write"]);
   });
 
@@ -302,6 +348,7 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
         }),
       }),
     );
+    expect(sdk.invalidateClient).toHaveBeenCalledOnce();
   });
 
   it.each(["method", "audience"])(
@@ -339,8 +386,8 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
         <ModifyRemoteIdentityProviderSheet
           open
           onOpenChange={vi.fn<(open: boolean) => void>()}
-          registrationId="client-1"
-          userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+          association={currentAssociation}
+          mcpServerId="server-1"
           issuer={
             {
               id: "issuer-1",
@@ -440,8 +487,8 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
         <ModifyRemoteIdentityProviderSheet
           open
           onOpenChange={vi.fn<(open: boolean) => void>()}
-          registrationId="client-1"
-          userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+          association={currentAssociation}
+          mcpServerId="server-1"
           issuer={
             {
               id: "issuer-1",

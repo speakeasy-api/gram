@@ -1,3 +1,4 @@
+import type { ServerClientAssociation } from "@gram/client/models/components/serverclientassociation.js";
 import { FieldError } from "@/components/ui/Field";
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
@@ -16,6 +17,7 @@ export const AUTHORIZATION_SERVERS_FIELD_ID = "authorization-servers";
 
 export function RemoteIdentityProvidersField({
   associatedIssuers,
+  associations,
   isLoading,
   isError = false,
   allowAdditionalProviders,
@@ -28,6 +30,7 @@ export function RemoteIdentityProvidersField({
   hiddenIssuerIds,
 }: {
   associatedIssuers: RemoteSessionIssuer[];
+  associations?: readonly ServerClientAssociation[] | undefined;
   isLoading: boolean;
   /** An attached provider failed to load. Never rendered as the empty state,
    * which would tell the user nothing is connected; providers that did load
@@ -39,8 +42,14 @@ export function RemoteIdentityProvidersField({
   /** Scopes the mcp:write gates to the target's own project. */
   projectId: string;
   onAdd: () => void;
-  onEdit: (issuer: RemoteSessionIssuer) => void;
-  onDelete: (issuer: RemoteSessionIssuer) => void;
+  onEdit: (
+    issuer: RemoteSessionIssuer,
+    association?: ServerClientAssociation,
+  ) => void;
+  onDelete: (
+    issuer: RemoteSessionIssuer,
+    association?: ServerClientAssociation,
+  ) => void;
   readOnly?: boolean;
   /**
    * A gateway’s proxied members, whose upstream state is separate from its
@@ -119,16 +128,25 @@ export function RemoteIdentityProvidersField({
   } else {
     providerControls = (
       <div className="space-y-3">
-        {associatedIssuers.map((issuer) => (
-          <RemoteIdentityProviderRow
-            key={issuer.id}
-            issuer={issuer}
-            projectId={projectId}
-            onEdit={() => onEdit(issuer)}
-            onDelete={() => onDelete(issuer)}
-            readOnly={readOnly}
-          />
-        ))}
+        {associatedIssuers.map((issuer) => {
+          const matches =
+            associations?.filter(
+              (association) => association.remoteSessionIssuerId === issuer.id,
+            ) ?? [];
+          const only = matches.length === 1 ? matches[0] : undefined;
+          return (
+            <RemoteIdentityProviderRow
+              key={issuer.id}
+              issuer={issuer}
+              projectId={projectId}
+              onEdit={() => onEdit(issuer, only)}
+              onDelete={() => onDelete(issuer, only)}
+              readOnly={readOnly}
+              repair={matches.length > 1 ? matches : undefined}
+              onUnlink={(association) => onDelete(issuer, association)}
+            />
+          );
+        })}
         {isError && loadError}
         {allowAdditionalProviders && !readOnly && addButton}
       </div>
@@ -170,12 +188,16 @@ function RemoteIdentityProviderRow({
   onDelete,
   projectId,
   readOnly,
+  repair,
+  onUnlink,
 }: {
   issuer: RemoteSessionIssuer;
   projectId: string;
   readOnly: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  repair?: ServerClientAssociation[] | undefined;
+  onUnlink?: (association: ServerClientAssociation) => void;
 }) {
   // Editing rewrites the issuer's own metadata, which only the owning tenant can
   // do. Organization-level and platform issuers are managed on their own admin
@@ -207,7 +229,7 @@ function RemoteIdentityProviderRow({
             {issuer.issuer}
           </Text>
         </div>
-        {!readOnly ? (
+        {!readOnly && !repair ? (
           <RequireScope
             scope="mcp:write"
             resourceId={projectId}
@@ -233,6 +255,40 @@ function RemoteIdentityProviderRow({
           </RequireScope>
         ) : null}
       </div>
+      {repair && (
+        <div className="mt-3 space-y-2">
+          <FieldError>
+            This authorization server has multiple registrations on this MCP
+            server. Unlink the extra registrations before editing it.
+          </FieldError>
+          {repair.map((association) => (
+            <div
+              key={association.remoteSessionClientId}
+              className="flex flex-wrap items-center justify-between gap-2"
+            >
+              <Text small mono className="break-all">
+                {association.clientId} · {association.remoteSessionClientId}
+              </Text>
+              {!readOnly && (
+                <RequireScope
+                  scope="mcp:write"
+                  resourceId={projectId}
+                  level="component"
+                >
+                  <Button
+                    size="md"
+                    variant="destructive-secondary"
+                    aria-label={`Unlink registration ${association.clientId} (${association.remoteSessionClientId})`}
+                    onClick={() => onUnlink?.(association)}
+                  >
+                    <Button.Text>Unlink</Button.Text>
+                  </Button>
+                </RequireScope>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

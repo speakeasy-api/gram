@@ -55,7 +55,7 @@ func (s *Service) AttachLegacyIssuerForTest(ctx context.Context, payload *Legacy
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	dbtx, err := s.db.Begin(ctx) //nolint:glint // notestingrawsql: the fixture uses generated queries and needs one transaction for the legacy write and typed sync.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
@@ -143,7 +143,7 @@ func (s *Service) DetachLegacyIssuerForTest(ctx context.Context, payload *Legacy
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	dbtx, err := s.db.Begin(ctx) //nolint:glint // notestingrawsql: the fixture uses generated queries and needs one transaction for the legacy write and typed sync.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}

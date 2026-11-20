@@ -213,7 +213,8 @@ INSERT INTO mcp_servers (
     unproxied_mcp_server_id,
     tool_variations_group_id,
     visibility,
-    network_access_mode
+    network_access_mode,
+    requires_upstream_auth
 )
 VALUES (
     $1,
@@ -228,7 +229,9 @@ VALUES (
     $10,
     $11,
     $12,
-    $13
+    $13,
+    CASE WHEN $9::uuid IS NOT NULL
+              AND $6::uuid IS NULL THEN FALSE END
 )
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, setup_guide_completed_at, created_at, updated_at, deleted_at, deleted
 `

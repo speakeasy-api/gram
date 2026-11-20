@@ -516,12 +516,7 @@ func (s *Service) resolveOrganizationMemberSnapshotWithRecheck(
 		if !supported || (serving && known && len(offer.clients) == 0 && needsOAuth) {
 			continue
 		}
-		if member.backend == metaMemberBackendHosted && userSessionIssuerID != uuid.Nil {
-			if _, err := s.hostedRegistration(ctx, organizationID, member.projectID, member.serverID); err != nil {
-				logger.WarnContext(ctx, "hosted member upstream assignment unavailable", attr.SlogError(err))
-				continue
-			}
-		} else if recheck == nil && needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+		if recheck == nil && member.backend != metaMemberBackendHosted && needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
 			return !typedConsent && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 		}) {
 			continue
@@ -645,6 +640,7 @@ func (s *Service) admitMetaMembers(
 		}
 		switch {
 		case refusal == nil:
+
 			members = append(members, member)
 			s.recordMemberIssuerParity(ctx, logger, organizationID, member)
 		case candidate.visibility == mcpservers.VisibilityPrivate:
@@ -653,6 +649,33 @@ func (s *Service) admitMetaMembers(
 			denied = append(denied, member)
 		}
 	}
+
+	var hostedIDs []uuid.UUID
+	for _, member := range members {
+		if member.backend == metaMemberBackendHosted {
+			hostedIDs = append(hostedIDs, member.serverID)
+		}
+	}
+	assignments, err := s.hostedAssignments(ctx, organizationID, hostedIDs)
+	if err != nil {
+		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load hosted member sign-in placement").LogError(ctx, logger)
+	}
+	ready := members[:0]
+	for _, member := range members {
+		if member.backend == metaMemberBackendHosted {
+			registration, err := assignments[member.serverID].registration(member.projectID)
+			if err != nil {
+				logger.WarnContext(ctx, "hosted member upstream assignment unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+				continue
+			}
+			member.associatedClients = make(map[uuid.UUID]bool, 1)
+			if registration != uuid.Nil {
+				member.associatedClients[registration] = true
+			}
+		}
+		ready = append(ready, member)
+	}
+	members = ready
 
 	return ctx, members, denied, nil
 }

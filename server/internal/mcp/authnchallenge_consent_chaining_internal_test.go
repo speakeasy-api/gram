@@ -67,7 +67,7 @@ func consentChainingFixture(t *testing.T, g *funcGovernor) (*Service, *ResolvedM
 }
 
 func directRouting(backend consentBackend) consentRouting {
-	return consentRouting{backend: backend, upstream: "", members: nil}
+	return consentRouting{backend: backend, upstream: "", members: nil, hostedClients: nil}
 }
 
 func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
@@ -264,7 +264,7 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 	clientB := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: issuer}
 	member := metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{McpServerID: uuid.New(), ProjectID: endpoint.ProjectID, McpServerVisibility: "private", UpstreamUrl: "https://upstream.example.test/mcp", Tunneled: false}
 	members := []metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{member, member}
-	routing := consentRouting{backend: consentBackendMeta, upstream: "", members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{clientA.ID: members, clientB.ID: members}}
+	routing := consentRouting{backend: consentBackendMeta, upstream: "", members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow{clientA.ID: members, clientB.ID: members}, hostedClients: nil}
 
 	chained := s.consentChainedClients(t.Context(), endpoint, state, []remotesessions.Client{clientA, clientB}, routing)
 	require.True(t, chained[clientA.ID])
