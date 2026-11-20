@@ -44,7 +44,7 @@ import {
  * listMemoryEvalRuns admin
  *
  * @remarks
- * Organizational Memory eval runs, newest first, without their reports.
+ * Organizational Memory eval runs, newest first, without their reports. Read one run with getMemoryEvalRun for its report.
  */
 export function adminListMemoryEvalRuns(
   client: GramCore,

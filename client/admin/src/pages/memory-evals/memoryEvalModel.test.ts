@@ -5,7 +5,6 @@ import {
   citationRate,
   comparisonRows,
   isActive,
-  MAX_ANSWER_MODELS,
   memoryWriteCost,
   parseReport,
   runLabel,
@@ -242,7 +241,11 @@ describe("memory eval model", () => {
   });
 
   it("validates configs like the server", () => {
-    const allowed = ["a/one", "j/judge", "s/sum", "d/dig"];
+    const allowed = {
+      allowed_models: ["a/one", "j/judge", "s/sum", "d/dig"],
+      max_answer_models: 4,
+      max_runs: 3,
+    };
     expect(validateConfig(config, allowed)).toBeNull();
     expect(validateConfig({ ...config, runs: 4 }, allowed)).toMatch(/Runs/);
     expect(validateConfig({ ...config, answer_models: [] }, allowed)).toMatch(
@@ -260,10 +263,16 @@ describe("memory eval model", () => {
     const many = ["a/one", "a/two", "a/three", "a/four", "a/five"];
     expect(
       validateConfig(
-        { ...config, answer_models: many.slice(0, MAX_ANSWER_MODELS + 1) },
-        [...allowed, ...many],
+        { ...config, answer_models: many },
+        { ...allowed, allowed_models: [...allowed.allowed_models, ...many] },
       ),
-    ).toMatch(/at most/);
+    ).toMatch(/at most 4/);
+    expect(
+      validateConfig(
+        { ...config, answer_models: ["a/one"], runs: 2 },
+        { ...allowed, max_runs: 1 },
+      ),
+    ).toMatch(/between 1 and 1/);
     expect(
       validateConfig({ ...config, answer_models: ["a/one", "a/one"] }, allowed),
     ).toMatch(/once/);

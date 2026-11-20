@@ -31,8 +31,6 @@ import {
   citationRate,
   comparisonRows,
   isActive,
-  MAX_ANSWER_MODELS,
-  MAX_RUNS,
   memoryWriteCost,
   parseReport,
   runLabel,
@@ -116,7 +114,7 @@ export function MemoryEvalsPage(): JSX.Element {
   const active = allRuns?.some(isActive) ?? false;
   const limitReached =
     options.data !== undefined &&
-    options.data.runs_today >= options.data.daily_run_limit;
+    options.data.runs_last_24h >= options.data.daily_run_limit;
 
   return (
     <div className="space-y-6 p-6">
@@ -200,7 +198,7 @@ function StartRunForm(props: {
   const [config, setConfig] = useState<MemoryEvalConfig>(options.defaults);
   const [adding, setAdding] = useState("");
   const [confirm, confirmDialog] = useConfirmDialog();
-  const invalid = validateConfig(config, options.allowed_models);
+  const invalid = validateConfig(config, options);
 
   // A start spends model credit, uses a slot of the shared daily limit and
   // blocks every other start until it finishes, so it is confirmed first.
@@ -248,14 +246,14 @@ function StartRunForm(props: {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Start a run</h2>
         <span className="text-sm text-muted-foreground">
-          {options.runs_today} of {options.daily_run_limit} runs used in the
+          {options.runs_last_24h} of {options.daily_run_limit} runs used in the
           last 24 hours
         </span>
       </div>
 
       <div className="space-y-2">
         <span className="text-sm">
-          Answer models (up to {MAX_ANSWER_MODELS})
+          Answer models (up to {options.max_answer_models})
         </span>
         <div className="flex flex-wrap gap-2">
           {config.answer_models.map((m) => (
@@ -298,7 +296,7 @@ function StartRunForm(props: {
             disabled={
               !adding ||
               config.answer_models.includes(adding) ||
-              config.answer_models.length >= MAX_ANSWER_MODELS
+              config.answer_models.length >= options.max_answer_models
             }
             onClick={() => {
               setConfig({
@@ -322,7 +320,7 @@ function StartRunForm(props: {
           <Input
             type="number"
             min={1}
-            max={MAX_RUNS}
+            max={options.max_runs}
             value={config.runs}
             onChange={(event) =>
               setConfig({ ...config, runs: Number(event.target.value) })
