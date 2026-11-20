@@ -37,79 +37,75 @@ export function configRevision(now: Date): string {
 }
 
 export function configScript(c: IntuneConfig): string {
+  const template = JSON.stringify(
+    {
+      v: 1,
+      email: "{{mail}}",
+      org_token: c.orgToken,
+      org_slug: c.orgSlug,
+      org_name: c.orgName,
+      auto_update: c.autoUpdate,
+    },
+    null,
+    2,
+  );
   return `# Writes the Speakeasy device agent identity file. Runs as SYSTEM from Intune.
 $ErrorActionPreference = 'Stop'
-
-$orgToken = ${psQuote(c.orgToken)}
-$orgSlug = ${psQuote(c.orgSlug)}
-$orgName = ${psQuote(c.orgName)}
-$autoUpdate = ${psQuote(c.autoUpdate)}
 $configRevision = ${psQuote(c.revision)}
+$template = @'
+${template}
+'@
 
-function Test-Upn([string]$upn) {
-  if (-not $upn) { return $false }
-  if ($upn -notmatch '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$') { return $false }
-  return $upn -notmatch '^(foouser|autopilot)@'
-}
-
-function Get-UserEmail {
-  foreach ($key in Get-ChildItem 'HKLM:\\SOFTWARE\\Microsoft\\Enrollments' -ErrorAction SilentlyContinue) {
-    $upn = (Get-ItemProperty -Path $key.PSPath -ErrorAction SilentlyContinue).UPN
-    if (Test-Upn $upn) { return $upn }
-  }
-
-  $account = (Get-CimInstance Win32_ComputerSystem).UserName
-  if ($account) {
-    try {
-      $sid = (New-Object System.Security.Principal.NTAccount($account)).Translate([System.Security.Principal.SecurityIdentifier]).Value
-      $cache = "HKLM:\\SOFTWARE\\Microsoft\\IdentityStore\\Cache\\$sid\\IdentityCache\\$sid"
-      $upn = (Get-ItemProperty -Path $cache -ErrorAction SilentlyContinue).UserName
-      if (Test-Upn $upn) { return $upn }
-    } catch {}
-  }
-
-  foreach ($key in Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\CloudDomainJoin\\JoinInfo' -ErrorAction SilentlyContinue) {
-    $upn = (Get-ItemProperty -Path $key.PSPath -ErrorAction SilentlyContinue).UserEmail
-    if (Test-Upn $upn) { return $upn }
-  }
-
-  return $null
-}
-
-$email = Get-UserEmail
-if (-not $email) {
-  Write-Error 'No user email found yet. Intune retries this install after a user signs in.'
-  exit 1
-}
-
-$dir = Join-Path $env:ProgramData 'Speakeasy'
-New-Item -ItemType Directory -Force -Path $dir | Out-Null
-
-$config = [ordered]@{
-  v = 1
-  email = $email.ToLowerInvariant()
-  org_token = $orgToken
-  org_slug = $orgSlug
-  org_name = $orgName
-  auto_update = $autoUpdate
-}
-$path = Join-Path $dir 'managed.json'
-[System.IO.File]::WriteAllText($path, ($config | ConvertTo-Json), (New-Object System.Text.UTF8Encoding $false))
-
-# The agent runs as the signed-in user, so Users need read access.
-& icacls.exe $dir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
-if ($LASTEXITCODE -ne 0) { Write-Error "icacls failed on $dir ($LASTEXITCODE)"; exit 1 }
-& icacls.exe $path /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' '*S-1-5-32-545:R' | Out-Null
-if ($LASTEXITCODE -ne 0) { Write-Error "icacls failed on $path ($LASTEXITCODE)"; exit 1 }
-
+$dir    = Join-Path $env:ProgramData 'Speakeasy'
+$file   = Join-Path $dir 'managed.json'
 $daemon = Join-Path $env:ProgramFiles 'Speakeasy\\speakeasyd.exe'
-if (Test-Path $daemon) {
-  & $daemon -service restart
-  if ($LASTEXITCODE -ne 0) { Write-Error "speakeasyd restart failed ($LASTEXITCODE)"; exit 1 }
+
+function Test-UserEmail([string]$value) {
+    $value -match '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' -and
+        $value -notmatch '^(foouser|autopilot)@'
 }
 
+function Get-EnrolledUserEmail {
+    foreach ($e in Get-ChildItem 'HKLM:\\SOFTWARE\\Microsoft\\Enrollments' -ErrorAction SilentlyContinue) {
+        $upn = (Get-ItemProperty $e.PSPath -ErrorAction SilentlyContinue).UPN
+        if (Test-UserEmail $upn) { return $upn }
+    }
+    $user = (Get-CimInstance Win32_ComputerSystem).UserName
+    if ($user) {
+        try {
+            $sid = (New-Object System.Security.Principal.NTAccount($user)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+            $name = (Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\IdentityStore\\Cache\\$sid\\IdentityCache\\$sid" -ErrorAction SilentlyContinue).UserName
+            if (Test-UserEmail $name) { return $name }
+        } catch {
+            # Fall back to CloudDomainJoin if the signed-in account cannot be resolved.
+        }
+    }
+    foreach ($j in Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\CloudDomainJoin\\JoinInfo' -ErrorAction SilentlyContinue) {
+        $mail = (Get-ItemProperty $j.PSPath -ErrorAction SilentlyContinue).UserEmail
+        if (Test-UserEmail $mail) { return $mail }
+    }
+    throw 'Could not determine the enrolled user''s email.'
+}
+
+$config = $template | ConvertFrom-Json
+if ($config.org_token -like 'REPLACE_*') { throw 'Set org_token before packaging this script.' }
+if ($config.auto_update -notin 'notify', 'automatic') { throw 'Set auto_update to "notify" or "automatic".' }
+
+# Set the JSON field rather than replacing text that can also occur in org settings.
+$config.email = Get-EnrolledUserEmail
+$json = $config | ConvertTo-Json
+New-Item -ItemType Directory -Path $dir -Force | Out-Null
+[System.IO.File]::WriteAllText($file, $json, [System.Text.UTF8Encoding]::new($false))
+icacls $dir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "icacls failed on $dir ($LASTEXITCODE)." }
+icacls $file /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' '*S-1-5-32-545:R' | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "icacls failed on $file ($LASTEXITCODE)." }
+if (Test-Path $daemon) {
+    & $daemon -service restart
+    if ($LASTEXITCODE -ne 0) { throw "speakeasyd restart failed with exit code $LASTEXITCODE." }
+}
 Get-ChildItem -Path $dir -Filter 'managed-*.installed' | Remove-Item -Force
-New-Item -ItemType File -Force -Path (Join-Path $dir "managed-$configRevision.installed") | Out-Null
+New-Item -ItemType File -Path (Join-Path $dir "managed-$configRevision.installed") -Force | Out-Null
 `;
 }
 
