@@ -109338,6 +109338,7 @@ components:
                         - risk_findings
                         - tool_call_logs
                         - mcp_connection_logs
+                        - mcp_feedback
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -111829,6 +111830,7 @@ components:
                         - risk_findings
                         - tool_call_logs
                         - mcp_connection_logs
+                        - mcp_feedback
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -140343,6 +140345,7 @@ components:
                         - risk_findings
                         - tool_call_logs
                         - mcp_connection_logs
+                        - mcp_feedback
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -141550,6 +141553,7 @@ components:
                         - risk_findings
                         - tool_call_logs
                         - mcp_connection_logs
+                        - mcp_feedback
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.

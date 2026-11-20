@@ -26,7 +26,7 @@ import (
 func serveFeedback(t *testing.T, ti *testInstance) {
 	t.Helper()
 
-	ti.service.SetFeedback(mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), mcpfeedback.Limits{Caller: nil, Server: nil}))
+	ti.service.SetFeedback(mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), mcpfeedback.Limits{Caller: nil, Server: nil}, "gram-server"))
 }
 
 // setFeedbackTool stores a server's feedback tool settings. An empty name uses the default.

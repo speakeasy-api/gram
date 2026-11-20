@@ -16,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
@@ -30,9 +32,10 @@ const (
 	// task report each of them, while a looping agent is stopped quickly.
 	CallerReportsPerMinute = 5
 
-	// ServerReportsPerMinute bounds what one server stores. A public server's
-	// callers are anonymous and can change session at will, so this is the
-	// limit that holds against them.
+	// ServerReportsPerMinute bounds what one server stores and, with it, the
+	// exported records its callers can cause. A public server's callers are
+	// anonymous and can change session at will, so this is the limit that
+	// holds against them.
 	ServerReportsPerMinute = 60
 
 	meterReports = "mcp.feedback.reports"
@@ -96,8 +99,8 @@ type Caller struct {
 	// the server's organization.
 	UserID string
 
-	// UserEmail is that member's email. It is not stored: readers resolve it
-	// from UserID.
+	// UserEmail is that member's email. It is not stored with the report,
+	// whose readers resolve it from UserID; it leaves with the exported record.
 	UserEmail string
 
 	// ExternalUserID is the caller's subject in the identity provider the
@@ -140,17 +143,21 @@ type CallResult struct {
 }
 
 // Recorder serves the feedback tool for the gateway: it knows which servers
-// offer the tool and stores what agents send through it.
+// offer the tool and stores what agents send through it. Every stored report
+// queues an exported log record in the same transaction, so a report that
+// exists has left, and one that was refused has not.
 type Recorder struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
 	redactor Redactor
+	records  *otelpub.RecordBuilder
 	limits   Limits
 	reports  metric.Int64Counter
 }
 
 // NewRecorder returns the recorder a gateway serves the feedback tool with.
-func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, redactor Redactor, limits Limits) *Recorder {
+// serviceName is the service.name exported records carry.
+func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, redactor Redactor, limits Limits, serviceName string) *Recorder {
 	logger = logger.With(attr.SlogComponent("mcp-feedback"))
 
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpfeedback")
@@ -167,6 +174,7 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pg
 		logger:   logger,
 		db:       db,
 		redactor: redactor,
+		records:  newRecordBuilder(serviceName),
 		limits:   limits,
 		reports:  reports,
 	}
@@ -238,7 +246,7 @@ func (r *Recorder) Call(ctx context.Context, target Target, caller Caller, argum
 	}
 }
 
-// Submit stores one report.
+// Submit stores one report and queues its exported record.
 // It returns ErrRateLimited when the caller or the server has sent too many.
 func (r *Recorder) Submit(ctx context.Context, target Target, caller Caller, report Report) (Receipt, error) {
 	var none Receipt
@@ -278,11 +286,29 @@ func (r *Recorder) Submit(ctx context.Context, target Target, caller Caller, rep
 		return none, fmt.Errorf("insert feedback: %w", err)
 	}
 
+	stored := storedReport{
+		id:        row.ID,
+		createdAt: row.CreatedAt.Time,
+		target:    target,
+		report:    report,
+		caller:    caller,
+	}
+
+	record := exportRecord(stored)
+	recordCtx := otelpub.WithRecordID(otelpub.WithTenant(ctx, target.OrganizationID, target.ProjectID.String()), stored.id.String())
+	inbound, err := r.records.Prepare(recordCtx, &record)
+	if err != nil {
+		return none, fmt.Errorf("build feedback log record: %w", err)
+	}
+	if _, err := outbox.Publish(ctx, dbtx, target.OrganizationID, outbox.Message{Proto: inbound, PublicID: uuid.Nil, Attributes: nil}); err != nil {
+		return none, fmt.Errorf("queue feedback log record: %w", err)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return none, fmt.Errorf("commit feedback: %w", err)
 	}
 
-	return Receipt{ID: row.ID, Status: "received"}, nil
+	return Receipt{ID: stored.id, Status: "received"}, nil
 }
 
 // allow charges the caller's bucket and then the server's, so a throttled

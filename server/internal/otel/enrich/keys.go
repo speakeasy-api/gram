@@ -127,11 +127,19 @@ const (
 
 	// mcpConnectionKeyPrefix holds the attributes on exported MCP connection logs.
 	mcpConnectionKeyPrefix = "speakeasy.mcp_connection."
+
+	// mcpFeedbackKeyPrefix holds the attributes on exported MCP server feedback.
+	mcpFeedbackKeyPrefix = "speakeasy.mcp_feedback."
 )
 
 // IsMcpConnectionKey reports whether a key is one only the connection recorder may write.
 func IsMcpConnectionKey(key string) bool {
 	return strings.HasPrefix(key, mcpConnectionKeyPrefix)
+}
+
+// IsMcpFeedbackKey reports whether a key is one only the feedback recorder may write.
+func IsMcpFeedbackKey(key string) bool {
+	return strings.HasPrefix(key, mcpFeedbackKeyPrefix)
 }
 
 // IsPipelineKey reports whether a key is in a namespace the pipeline owns,
@@ -144,9 +152,13 @@ func IsPipelineKey(key string) bool {
 
 // IsReservedLogKey reports whether a producer with the given provenance source
 // may not write key. It is IsPipelineKey, except that the connection recorder
-// writes speakeasy.mcp_connection itself.
+// writes speakeasy.mcp_connection itself and the feedback recorder writes
+// speakeasy.mcp_feedback itself.
 func IsReservedLogKey(source, key string) bool {
 	if source == dialect.ConnectionLogSource && IsMcpConnectionKey(key) {
+		return false
+	}
+	if source == dialect.FeedbackLogSource && IsMcpFeedbackKey(key) {
 		return false
 	}
 	return IsPipelineKey(key)
