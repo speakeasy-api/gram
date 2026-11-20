@@ -551,6 +551,9 @@ type ClaimDueRemoteSessionRefreshCandidatesRow struct {
 // else about eligibility is the same for these issuers. No agent attachment can
 // name one, because an attachment requires a link, so only a live Speakeasy
 // session keeps such a grant eligible.
+// Attachments follow the current grant generation on the same pinned row;
+// never compare the attachment's recorded attach-time generation here. The
+// worker fences the current row and generation before releasing material.
 func (q *Queries) ClaimDueRemoteSessionRefreshCandidates(ctx context.Context, arg ClaimDueRemoteSessionRefreshCandidatesParams) ([]ClaimDueRemoteSessionRefreshCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, claimDueRemoteSessionRefreshCandidates,
 		arg.NowTs,

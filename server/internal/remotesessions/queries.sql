@@ -2640,6 +2640,9 @@ RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypte
 -- name one, because an attachment requires a link, so only a live Speakeasy
 -- session keeps such a grant eligible.
 
+-- Attachments follow the current grant generation on the same pinned row;
+-- never compare the attachment's recorded attach-time generation here. The
+-- worker fences the current row and generation before releasing material.
 -- name: ClaimDueRemoteSessionRefreshCandidates :many
 WITH due AS (
   -- A live typed offer plus a live subject session, or a live attachment

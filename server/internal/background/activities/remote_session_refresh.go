@@ -126,11 +126,16 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 	sess := candidate.RemoteSession
 
 	scope := mcpconnectionattempts.ProviderSessionScope(input.OrganizationID, candidate.ClientProjectID.UUID, mcpconnectionattempts.AppBackground)
+	var eligibilityReadErr error
 	attribution := remotesessions.RefreshIn(scope).WithScheduledEligibility(func(ctx context.Context, locked remotesessions_repo.RemoteSession) ([]string, error) {
 		params.NowTs = conv.ToPGTimestamptz(time.Now())
 		current, err := q.GetDueRemoteSessionRefreshCandidate(ctx, params)
 		if err != nil {
-			return nil, fmt.Errorf("reload scheduled grant in claimed organization: %w", err)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, pgx.ErrNoRows
+			}
+			eligibilityReadErr = fmt.Errorf("reload scheduled grant in claimed organization: %w", err)
+			return nil, eligibilityReadErr
 		}
 		if locked.ID != current.RemoteSession.ID || locked.GrantGeneration != current.RemoteSession.GrantGeneration || !locked.UpdatedAt.Time.Equal(current.RemoteSession.UpdatedAt.Time) {
 			return nil, pgx.ErrNoRows
@@ -138,6 +143,11 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 		return current.Resources, nil
 	})
 	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, attribution)
+	// The eligibility callback runs before the provider POST. Unlike a failed
+	// POST, retrying this database read cannot replay a rotating token.
+	if eligibilityReadErr != nil {
+		return RefreshRemoteSessionResult{}, eligibilityReadErr
+	}
 	if err != nil {
 		// The issuer URL and outcome are the ones the upstream-refresh metric
 		// recorded, so these lines join to its series; the error code is the

@@ -1162,6 +1162,12 @@ func (s *RefreshService) refresh(
 		return zero, nil, nil, refreshClientLoadError(err)
 	}
 
+	if attribution.scheduledEligibility != nil && resource == "" && (!client.ResourceIndicatorSupported.Valid || client.ResourceIndicatorSupported.Bool) {
+		// Do not silently request a provider-default audience for an older
+		// grant whose typed route does not yield an unambiguous resource.
+		return RefreshResult{Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive}, &client, nil, nil //nolint:exhaustruct_v5 // no grant was presented
+	}
+
 	now := time.Now()
 	postDeadline := refreshPostDeadline(lockAcquiredAt, now)
 	if !postDeadline.After(now) {
