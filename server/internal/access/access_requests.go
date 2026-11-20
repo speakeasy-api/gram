@@ -254,7 +254,7 @@ func (s *Service) ListAccessRequests(ctx context.Context, payload *gen.ListAcces
 
 	requester := pgtype.Text{String: ac.UserID, Valid: true}
 	if !payload.Mine {
-		admin, err := s.authz.Can(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+		admin, err := s.authz.Can(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check organization admin").LogError(ctx, logger)
 		}
@@ -736,7 +736,7 @@ func isOrganizationAdmin(ctx context.Context, db database.DBTX, organizationID, 
 	if err != nil {
 		return false, fmt.Errorf("load grants: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
+	allowed, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return false, fmt.Errorf("evaluate org:admin: %w", err)
 	}
