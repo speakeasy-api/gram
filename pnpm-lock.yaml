@@ -343,8 +343,8 @@ importers:
         specifier: 7.0.171
         version: 7.0.171(zod@4.6.7)
       assistant-stream:
-        specifier: ^0.3.55
-        version: 0.3.55(ai@7.0.171(zod@4.6.7))
+        specifier: ^0.3.58
+        version: 0.3.58(ai@7.0.171(zod@4.6.7))
       canvas-confetti:
         specifier: ^1.9.4
         version: 1.9.4
@@ -4535,20 +4535,6 @@ packages:
       ioredis: ^5.10.1 || ^6.0.0
       redis: ^5.12.1
     peerDependenciesMeta:
-      ioredis:
-        optional: true
-      redis:
-        optional: true
-
-  assistant-stream@0.3.55:
-    resolution: {integrity: sha512-hwdutUKnpM/93isBoQdmqGfEUVaxz36mORF7LdNwRQ1bmFDH6H7QOGbD8trIFU3eC4LL4CNJCA4PHFLgCubI6A==}
-    peerDependencies:
-      ai: ^6.0.0 || ^7.0.0
-      ioredis: ^5.10.1 || ^6.0.0
-      redis: ^5.12.1
-    peerDependenciesMeta:
-      ai:
-        optional: true
       ioredis:
         optional: true
       redis:
@@ -11442,14 +11428,6 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       nanoid: 6.0.1
       secure-json-parse: 4.1.0
-
-  assistant-stream@0.3.55(ai@7.0.171(zod@4.6.7)):
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      '@types/json-schema': 7.0.15
-      ai: 7.0.171(zod@4.6.7)
-      nanoid: 6.0.2
-      secure-json-parse: 4.1.1
 
   assistant-stream@0.3.58(ai@7.0.171(zod@4.6.7)):
     dependencies:
