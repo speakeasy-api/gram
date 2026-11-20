@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -60,15 +61,19 @@ func TestSummarizeHooksReleaseFleet(t *testing.T) {
 		{OrganizationID: "a", BinaryVersion: "0.3.40", EndpointGeneration: "ingest_binary", Installs: 2, Events: 0, LegacyEvents: 0},
 		{OrganizationID: "a", BinaryVersion: "0.3.46", EndpointGeneration: "ingest_binary", Installs: 3, Events: 0, LegacyEvents: 0},
 		{OrganizationID: "b", BinaryVersion: "0.3.46", EndpointGeneration: "ingest_binary", Installs: 1, Events: 0, LegacyEvents: 0},
+		{OrganizationID: "b", BinaryVersion: "0.3.46", EndpointGeneration: "legacy_keyed", Installs: 2, Events: 0, LegacyEvents: 0},
+		{OrganizationID: "b", BinaryVersion: "0.3.47", EndpointGeneration: "ingest_binary", Installs: 5, Events: 0, LegacyEvents: 0},
 		{OrganizationID: "b", BinaryVersion: "", EndpointGeneration: "legacy_keyed", Installs: 4, Events: 0, LegacyEvents: 0},
 		{OrganizationID: "b", BinaryVersion: "", EndpointGeneration: "ingest_script", Installs: 1, Events: 0, LegacyEvents: 0},
 	}
 	fleet := summarizeHooksReleaseFleet(rows, hookFleetTestVersions(""))
 	require.Equal(t, hooksReleaseFleetWindowDays, fleet.WindowDays)
-	require.Equal(t, int64(11), fleet.Installs)
-	require.Equal(t, int64(4), fleet.InstallsOnCurrent)
+	require.Equal(t, int64(18), fleet.Installs)
+	require.Equal(t, int64(6), fleet.InstallsOnCurrent, "only installs on exactly the shipped binary count, whatever endpoint they use")
 	require.Equal(t, []*gen.AdminHooksReleaseInstallVersion{
+		{Version: "0.3.47", Status: "current", Installs: 5},
 		{Version: "0.3.46", Status: "current", Installs: 4},
+		{Version: "0.3.46", Status: "unsupported", Installs: 2},
 		{Version: "0.3.40", Status: "behind", Installs: 2},
 		{Version: "", Status: "unknown", Installs: 1},
 		{Version: "", Status: "unsupported", Installs: 4},
@@ -113,4 +118,12 @@ func TestGetHooksReleaseProgress(t *testing.T) {
 	require.Equal(t, "0.3.46", *result.CurrentBinaryVersion)
 	require.NotNil(t, result.Fleet)
 	require.Equal(t, int64(2), result.Fleet.InstallsOnCurrent)
+	require.Equal(t, 7*24*time.Hour, reader.mixTo.Sub(reader.mixFrom))
+	require.Equal(t, time.Now().UTC().Truncate(24*time.Hour), reader.mixTo)
+
+	reader.mixErr = errors.New("clickhouse down")
+	result, err = svc.GetHooksReleaseProgress(ctx, &gen.GetHooksReleaseProgressPayload{AdminSessionToken: nil})
+	require.NoError(t, err, "the repository counts still return without the fleet")
+	require.Nil(t, result.Fleet)
+	require.Equal(t, int64(2), result.Repos)
 }

@@ -19,7 +19,7 @@ import (
 )
 
 // hooksReleaseFleetWindowDays matches the fleet gauges in hookfleetmetrics.go.
-const hooksReleaseFleetWindowDays = 7
+const hooksReleaseFleetWindowDays = int(hookFleetMetricsWindow / (24 * time.Hour))
 
 func (s *Service) GetHooksReleaseProgress(ctx context.Context, _ *gen.GetHooksReleaseProgressPayload) (*gen.AdminHooksReleaseProgress, error) {
 	current, err := plugins.CurrentHooksGeneratorVersion()
@@ -132,7 +132,7 @@ func summarizeHooksReleaseFleet(rows []telemetry.HookVersionMixRow, policy hookv
 		status := policy.Classify(row.BinaryVersion, row.EndpointGeneration)
 		counts[key{version: row.BinaryVersion, status: status}] += installs
 		fleet.Installs += installs
-		if status == hookversions.StatusCurrent {
+		if version, err := semver.NewVersion(row.BinaryVersion); err == nil && policy.Latest != nil && version.Equal(policy.Latest) {
 			fleet.InstallsOnCurrent += installs
 		}
 	}

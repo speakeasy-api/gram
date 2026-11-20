@@ -935,9 +935,12 @@ type AdminHooksReleaseFleet struct {
 	WindowDays int
 	// Installs seen in the window.
 	Installs int64
-	// Installs reporting the binary version this build ships.
+	// Installs reporting exactly the binary version this build ships, on any
+	// endpoint.
 	InstallsOnCurrent int64
-	// Installs per binary version, newest first.
+	// Installs per binary version and status, newest first. A version can appear
+	// once per status, for example current and unsupported when some installs
+	// still send to a legacy endpoint.
 	Versions []*AdminHooksReleaseInstallVersion
 }
 

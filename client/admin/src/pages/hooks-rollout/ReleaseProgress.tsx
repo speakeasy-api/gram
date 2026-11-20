@@ -48,7 +48,23 @@ export function ReleaseProgress(): JSX.Element {
           </Button>
         </div>
       ) : (
-        <ProgressBody progress={query.data} />
+        <>
+          {query.isError && (
+            <div
+              role="alert"
+              className="flex items-center gap-3 px-4 pt-4 text-sm"
+            >
+              <span className="text-destructive">
+                Unable to refresh release progress, so these counts may be out
+                of date.
+              </span>
+              <Button size="sm" onClick={() => void query.refetch()}>
+                Retry
+              </Button>
+            </div>
+          )}
+          <ProgressBody progress={query.data} />
+        </>
       )}
     </section>
   );
@@ -87,7 +103,7 @@ function ProgressBody({
             label="Installs running it"
             value={fleet.installs_on_current}
             total={fleet.installs}
-            note={`Installs that sent a hook in the last ${fleet.window_days} full days.`}
+            note={`Installs on exactly this binary that sent a hook in the last ${fleet.window_days} full days.`}
           />
         ) : (
           <p className="text-muted-foreground text-sm">
@@ -113,6 +129,7 @@ function ProgressBody({
             rows={fleet.versions.map((row) => ({
               key: `${row.version}-${row.status}`,
               version: installVersionLabel(row),
+              status: row.status === "current" ? undefined : row.status,
               current: row.status === "current",
               count: row.installs,
             }))}
@@ -154,7 +171,7 @@ function ProgressRow({
   total: number;
   note: string;
 }): JSX.Element {
-  const percent = total > 0 ? Math.round((value / total) * 100) : 0;
+  const percent = total > 0 ? Math.floor((value / total) * 100) : 0;
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-4 text-sm">
@@ -186,7 +203,13 @@ function VersionTable({
 }: {
   caption: string;
   unit: string;
-  rows: { key: string; version: string; current: boolean; count: number }[];
+  rows: {
+    key: string;
+    version: string;
+    status?: string;
+    current: boolean;
+    count: number;
+  }[];
 }): JSX.Element {
   return (
     <div className="space-y-2">
@@ -208,6 +231,11 @@ function VersionTable({
                   <span className="flex items-center gap-2">
                     {row.version}
                     {row.current && <Badge variant="outline">Current</Badge>}
+                    {row.status && (
+                      <span className="text-muted-foreground text-xs">
+                        {row.status}
+                      </span>
+                    )}
                   </span>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">

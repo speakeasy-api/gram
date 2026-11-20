@@ -68,6 +68,19 @@ describe("ReleaseProgress", () => {
     expect(screen.getByText("Never published")).toBeTruthy();
     expect(screen.getByText("Legacy hooks")).toBeTruthy();
     expect(screen.getAllByText("Current")).toHaveLength(2);
+    expect(screen.getByText("behind")).toBeTruthy();
+    expect(screen.getByText("unsupported")).toBeTruthy();
+  });
+
+  it("shows exact percentages without rounding up to complete", async () => {
+    mocks.getHooksReleaseProgress.mockResolvedValue({
+      ...PROGRESS,
+      repos: 400,
+      repos_on_current: 399,
+    });
+    await renderWithApp(<ReleaseProgress />);
+
+    expect(await screen.findByText("(99%)")).toBeTruthy();
   });
 
   it("keeps repository counts when install data is unavailable", async () => {

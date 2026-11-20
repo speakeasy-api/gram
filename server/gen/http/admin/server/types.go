@@ -30045,9 +30045,12 @@ type AdminHooksReleaseFleetResponseBody struct {
 	WindowDays int `form:"window_days" json:"window_days" xml:"window_days"`
 	// Installs seen in the window.
 	Installs int64 `form:"installs" json:"installs" xml:"installs"`
-	// Installs reporting the binary version this build ships.
+	// Installs reporting exactly the binary version this build ships, on any
+	// endpoint.
 	InstallsOnCurrent int64 `form:"installs_on_current" json:"installs_on_current" xml:"installs_on_current"`
-	// Installs per binary version, newest first.
+	// Installs per binary version and status, newest first. A version can appear
+	// once per status, for example current and unsupported when some installs
+	// still send to a legacy endpoint.
 	Versions []*AdminHooksReleaseInstallVersionResponseBody `form:"versions" json:"versions" xml:"versions"`
 }
 

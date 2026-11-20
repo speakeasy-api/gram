@@ -21,11 +21,11 @@ export type AdminHooksReleaseFleet = {
    */
   installs: number;
   /**
-   * Installs reporting the binary version this build ships.
+   * Installs reporting exactly the binary version this build ships, on any endpoint.
    */
   installsOnCurrent: number;
   /**
-   * Installs per binary version, newest first.
+   * Installs per binary version and status, newest first. A version can appear once per status, for example current and unsupported when some installs still send to a legacy endpoint.
    */
   versions: Array<AdminHooksReleaseInstallVersion>;
   /**

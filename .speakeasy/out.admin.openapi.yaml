@@ -11324,13 +11324,13 @@ components:
           format: int64
         installs_on_current:
           type: integer
-          description: Installs reporting the binary version this build ships.
+          description: Installs reporting exactly the binary version this build ships, on any endpoint.
           format: int64
         versions:
           type: array
           items:
             $ref: '#/components/schemas/AdminHooksReleaseInstallVersion'
-          description: Installs per binary version, newest first.
+          description: Installs per binary version and status, newest first. A version can appear once per status, for example current and unsupported when some installs still send to a legacy endpoint.
         window_days:
           type: integer
           description: Installs count when they sent a hook in this many full UTC days.

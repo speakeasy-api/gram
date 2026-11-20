@@ -93,8 +93,8 @@ var AdminHooksReleaseFleet = Type("AdminHooksReleaseFleet", func() {
 
 	Attribute("window_days", Int, "Installs count when they sent a hook in this many full UTC days.")
 	Attribute("installs", Int64, "Installs seen in the window.")
-	Attribute("installs_on_current", Int64, "Installs reporting the binary version this build ships.")
-	Attribute("versions", ArrayOf(AdminHooksReleaseInstallVersion), "Installs per binary version, newest first.")
+	Attribute("installs_on_current", Int64, "Installs reporting exactly the binary version this build ships, on any endpoint.")
+	Attribute("versions", ArrayOf(AdminHooksReleaseInstallVersion), "Installs per binary version and status, newest first. A version can appear once per status, for example current and unsupported when some installs still send to a legacy endpoint.")
 })
 
 var AdminHooksReleaseProgress = Type("AdminHooksReleaseProgress", func() {

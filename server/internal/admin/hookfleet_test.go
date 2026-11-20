@@ -17,12 +17,15 @@ import (
 )
 
 type stubHookFleet struct {
-	page  telemetry.HookInstallPage
-	err   error
-	org   string
-	since time.Time
-	limit int
-	mix   []telemetry.HookVersionMixRow
+	page    telemetry.HookInstallPage
+	err     error
+	org     string
+	since   time.Time
+	limit   int
+	mix     []telemetry.HookVersionMixRow
+	mixErr  error
+	mixFrom time.Time
+	mixTo   time.Time
 }
 
 func (s *stubHookFleet) HookInstalls(_ context.Context, organizationID string, since time.Time, limit int) (telemetry.HookInstallPage, error) {
@@ -30,8 +33,9 @@ func (s *stubHookFleet) HookInstalls(_ context.Context, organizationID string, s
 	return s.page, s.err
 }
 
-func (s *stubHookFleet) VersionMix(_ context.Context, _, _ time.Time) ([]telemetry.HookVersionMixRow, error) {
-	return s.mix, s.err
+func (s *stubHookFleet) VersionMix(_ context.Context, from, to time.Time) ([]telemetry.HookVersionMixRow, error) {
+	s.mixFrom, s.mixTo = from, to
+	return s.mix, s.mixErr
 }
 
 func hookFleetTestVersions(minimum string) hookversions.Policy {
