@@ -261,12 +261,12 @@ export function IdentityChainingSection({
         {userSessionIssuer && resource && clients.length > 0 && (
           <IdentityChainingField
             userSessionIssuer={userSessionIssuer}
-            providers={providers}
+            providers={providers ?? { external: false }}
             linkedClients={clients}
             resource={resource}
             remoteMcpServerId={remoteMcpServerId}
             onlyWhenOn
-            frame={(content) => content}
+            frame={(content) => <>{content}</>}
           />
         )}
       </Shell>
