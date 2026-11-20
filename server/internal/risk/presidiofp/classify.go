@@ -1,9 +1,10 @@
 // Package presidiofp classifies Presidio PII findings as false positives. It
 // holds the per-entity false-positive catalogs (reserved/placeholder IPs and
-// emails, cloud/CDN ASN attribution, NHS number validity, retired recognizers)
-// and the dispatch over them. It is a leaf domain package with no Temporal or
-// activity dependencies, so it can be reused from the scanner, from offline
-// tools, or anywhere a stored finding needs to be re-evaluated.
+// emails, cloud/CDN ASN attribution, NHS number validity, test and placeholder
+// card numbers, retired recognizers) and the dispatch over them. It is a leaf
+// domain package with no Temporal or activity dependencies, so it can be
+// reused from the scanner, from offline tools, or anywhere a stored finding
+// needs to be re-evaluated.
 package presidiofp
 
 import "strings"
@@ -12,6 +13,7 @@ import "strings"
 type EntityType = string
 
 const (
+	EntityTypeCreditCard      EntityType = "CREDIT_CARD"
 	EntityTypeEmailAddress    EntityType = "EMAIL_ADDRESS"
 	EntityTypeIPAddress       EntityType = "IP_ADDRESS"
 	EntityTypeUKNHS           EntityType = "UK_NHS"
@@ -51,6 +53,8 @@ func ReasonInContext(entityType, match, text string) string {
 			return reason
 		}
 		return nhsContextReason(text)
+	case EntityTypeCreditCard:
+		return nonCardReason(match)
 	default:
 		return ""
 	}
@@ -78,6 +82,7 @@ func RuleIDs() []string {
 		ruleIDForEntity(EntityTypeIPAddress),
 		ruleIDForEntity(EntityTypeEmailAddress),
 		ruleIDForEntity(EntityTypeUKNHS),
+		ruleIDForEntity(EntityTypeCreditCard),
 	}
 	for _, entity := range RetiredEntityTypes() {
 		ids = append(ids, ruleIDForEntity(entity))
