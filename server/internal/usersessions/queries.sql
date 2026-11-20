@@ -476,7 +476,7 @@ RETURNING issuer.*;
 
 -- name: CountUserSessionIssuerIncompatibleProjectReferences :one
 -- Narrowing to a project is safe only when every project-scoped consumer is
--- already in that project and every linked remote client is visible there.
+-- already in that project. Compatibility attachment parents are not consumers.
 WITH scoped_issuer AS (
   SELECT issuer.id
   FROM user_session_issuers AS issuer
@@ -575,16 +575,14 @@ FROM (
 
   UNION ALL
 
-  SELECT client.id
-  FROM remote_session_client_user_session_issuers AS link
-  JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
-  WHERE link.user_session_issuer_id = @user_session_issuer_id
-    AND client.deleted IS FALSE
-    AND NOT (
-      client.project_id = @target_project_id::uuid
-      OR (client.project_id IS NULL AND client.organization_id = @organization_id::text)
-      OR (client.project_id IS NULL AND client.organization_id IS NULL)
-    )
+  SELECT session.id
+  FROM remote_sessions AS session
+  JOIN scoped_issuer ON scoped_issuer.id = session.user_session_issuer_id
+  JOIN remote_session_clients AS registration ON registration.id = session.remote_session_client_id AND NOT registration.deleted
+  JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id AND NOT provider.deleted
+  WHERE NOT session.deleted
+    AND (session.organization_id IS NULL OR session.organization_id = @organization_id::text)
+    AND (registration.project_id <> @target_project_id::uuid OR provider.project_id <> @target_project_id::uuid)
 ) AS incompatible;
 
 -- name: UserSessionIssuerIsPlatformOwned :one
@@ -1082,52 +1080,12 @@ WHERE cimd.user_session_issuer_id = @source_issuer_id
       )
   );
 
--- name: InsertTargetRemoteSessionClientIssuerLinks :execrows
--- Copies the named source bindings to the target. Consolidation names only the
--- bindings something still signs in through after the move, and never a
--- deleted client's.
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-SELECT link.remote_session_client_id, @target_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS client
-  ON client.id = link.remote_session_client_id
- AND client.deleted IS FALSE
-WHERE link.user_session_issuer_id = @source_issuer_id
-  AND link.remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
-  AND 2 = (
-    SELECT COUNT(*)
-    FROM user_session_issuers AS issuer
-    LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-      AND issuer.deleted IS FALSE
-      AND (
-        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
-      )
-  )
-ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING;
-
 -- name: UpdateRemoteSessionsToUserSessionIssuer :execrows
 UPDATE remote_sessions AS session
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
 WHERE session.user_session_issuer_id = @source_issuer_id
   AND session.deleted IS FALSE
-  AND 2 = (
-    SELECT COUNT(*)
-    FROM user_session_issuers AS issuer
-    LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-      AND issuer.deleted IS FALSE
-      AND (
-        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
-      )
-  );
-
--- name: DeleteSourceRemoteSessionClientIssuerLinks :execrows
-DELETE FROM remote_session_client_user_session_issuers AS link
-WHERE link.user_session_issuer_id = @source_issuer_id
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -1151,6 +1109,7 @@ SELECT binding.id, binding.remote_session_client_id
 FROM principal_remote_session_bindings AS binding
 JOIN projects AS project ON project.id = binding.project_id AND project.organization_id = binding.organization_id AND NOT project.deleted
 JOIN agents AS a ON a.id = binding.principal_id AND a.organization_id = binding.organization_id AND NOT a.deleted
+  AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL
 JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
 JOIN organization_user_relationships AS owner_membership ON owner_membership.user_id = owner.id
   AND owner_membership.organization_id = a.organization_id AND owner_membership.deleted_at IS NULL
@@ -1199,6 +1158,15 @@ WHERE user_session_issuer_id = @source_issuer_id::uuid
   AND organization_id = @organization_id::text
   AND id = ANY(@binding_ids::uuid[]);
 
+-- name: RevokeRemainingAttachmentsForRetiredIssuer :exec
+-- Rekey already moved eligible attachments. Retire the remaining references
+-- to the old sign-in issuer without deleting their FK parents or sessions.
+UPDATE principal_remote_session_bindings
+SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id::text
+  AND user_session_issuer_id = @source_issuer_id::uuid
+  AND revoked_at IS NULL;
+
 -- name: UpdateRemoteSessionEMABindingsToUserSessionIssuer :execrows
 UPDATE remote_session_ema_bindings AS binding
 SET user_session_issuer_id = @target_issuer_id,
@@ -1246,9 +1214,17 @@ RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM 
 -- Lock the superset of credential reach and recorded unmapped choices. Only
 -- moved consumers and registration/choice impact need typed synchronization.
 WITH transferred_registrations AS MATERIALIZED (
-    SELECT link.remote_session_client_id AS id
-    FROM remote_session_client_user_session_issuers AS link
-    WHERE link.user_session_issuer_id = @source_issuer_id::uuid
+    SELECT client.remote_session_client_id AS id
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
+    JOIN mcp_server_auth_clients AS offer ON offer.mcp_server_id = server.id
+      AND offer.project_id = project.id AND offer.organization_id = project.organization_id AND NOT offer.deleted
+    JOIN mcp_auth_clients AS client ON client.id = offer.auth_client_id
+      AND client.organization_id = offer.organization_id AND NOT client.deleted AND client.enabled
+      AND (client.project_id IS NULL OR client.project_id = project.id)
+    WHERE server.user_session_issuer_id = @source_issuer_id::uuid AND NOT server.deleted
+      AND project.organization_id = @organization_id::text
+      AND client.remote_session_client_id IS NOT NULL
     UNION
     SELECT binding.remote_session_client_id AS id
     FROM remote_session_ema_bindings AS binding
@@ -1265,7 +1241,7 @@ WITH transferred_registrations AS MATERIALIZED (
     FROM mcp_server_auth_clients AS link
     JOIN mcp_auth_clients AS client ON client.id = link.auth_client_id AND client.organization_id = link.organization_id
     WHERE link.organization_id = @organization_id::text
-      AND client.source = 'backfill'
+      AND NOT link.deleted AND NOT client.deleted AND client.enabled
       AND client.client_type IN ('remote_session', 'service_account', 'ema')
       AND client.remote_session_client_id IN (SELECT id FROM transferred_registrations)
 ), live_credentials AS MATERIALIZED (
@@ -1286,39 +1262,6 @@ WITH transferred_registrations AS MATERIALIZED (
       AND choice.deleted IS FALSE
       AND choice.auth_client_id IS NULL
       AND choice.credential_id IN (SELECT id FROM live_credentials)
-), untyped_servers AS MATERIALIZED (
-    SELECT DISTINCT association.organization_id, association.mcp_server_id
-    FROM mcp_server_remote_session_clients AS association
-    WHERE association.organization_id = @organization_id::text
-      AND association.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM mcp_server_auth_clients AS link
-        JOIN mcp_auth_clients AS client ON client.id = link.auth_client_id AND client.organization_id = link.organization_id
-        WHERE link.mcp_server_id = association.mcp_server_id
-          AND link.organization_id = association.organization_id
-          AND link.deleted IS FALSE
-          AND client.deleted IS FALSE
-          AND client.enabled
-          AND client.client_type IN ('remote_session', 'service_account')
-          AND client.remote_session_client_id = association.remote_session_client_id
-      )
-), untyped_missing_choice_servers AS MATERIALIZED (
-    -- First discard already-typed servers. Without this boundary the planner
-    -- can probe every credential's existing choice for every typed server.
-    SELECT untyped.mcp_server_id
-    FROM untyped_servers AS untyped
-    WHERE EXISTS (
-        SELECT 1 FROM live_credentials AS credential
-        WHERE NOT EXISTS (
-          SELECT 1 FROM upstream_client_selections AS choice
-          WHERE choice.organization_id = untyped.organization_id
-            AND choice.mcp_server_id = untyped.mcp_server_id
-            AND choice.credential_kind = 'user_session'
-            AND choice.credential_id = credential.id
-            AND choice.deleted IS FALSE
-        )
-      )
 )
 SELECT server.id, server.project_id,
        (server.user_session_issuer_id IS NOT DISTINCT FROM @source_issuer_id::uuid
@@ -1333,8 +1276,7 @@ SELECT server.id, server.project_id,
             AND gateway.user_session_issuer_id = @source_issuer_id::uuid
         )
         OR server.id IN (SELECT mcp_server_id FROM impacted_servers)
-        OR server.id IN (SELECT mcp_server_id FROM unmapped_servers)
-        OR server.id IN (SELECT mcp_server_id FROM untyped_missing_choice_servers))::boolean AS needs_sync
+        OR server.id IN (SELECT mcp_server_id FROM unmapped_servers))::boolean AS needs_sync
 FROM mcp_servers AS server
 JOIN projects AS project ON project.id = server.project_id
 WHERE server.deleted IS FALSE
@@ -1362,184 +1304,54 @@ WHERE server.deleted IS FALSE
     OR server.id IN (SELECT mcp_server_id FROM impacted_servers))
 ORDER BY server.id;
 
--- name: ListBoundOAuthRegistrationsForUserSessionIssuerMigration :many
--- Include prospective sole-consumer associations, including global upstream
--- registrations, in the ordered preflight. Tenant scope follows the issuer.
-SELECT DISTINCT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN user_session_issuers AS issuer ON issuer.id = link.user_session_issuer_id
-LEFT JOIN projects AS project ON project.id = issuer.project_id
-WHERE issuer.id = ANY(@issuer_ids::uuid[])
-  AND issuer.deleted IS FALSE
-  AND COALESCE(issuer.organization_id, project.organization_id) = @organization_id::text
-ORDER BY link.remote_session_client_id;
-
--- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
--- Every affected project must recompute its denormalized remote-session issuer
--- after client links and server ownership move to the target issuer.
-SELECT DISTINCT server.project_id
+-- name: ListIssuerRetierServers :many
+SELECT server.id
 FROM mcp_servers AS server
-JOIN projects AS project ON project.id = server.project_id
-WHERE server.user_session_issuer_id IN (@source_issuer_id, @target_issuer_id)
-  AND server.deleted IS FALSE
-  AND project.organization_id = @organization_id::text
-  AND project.deleted IS FALSE
-ORDER BY server.project_id;
-
--- name: ListMCPServersOnClaimingOrganizationIssuerForMigration :many
--- Live servers on the organization's only organization-level issuer once the
--- source is retired, when that issuer is neither the source nor the target
--- and binds a client either of them binds. Serving counts an association with
--- such a client, from a server anywhere in the organization, as a claim on
--- that issuer, so a consolidation that associates it changes what these
--- servers require.
-WITH organization_issuer AS (
-    SELECT (array_agg(issuer.id))[1] AS id
-    FROM user_session_issuers AS issuer
-    WHERE issuer.organization_id = @organization_id::text
-      AND issuer.project_id IS NULL
-      AND issuer.deleted IS FALSE
-      AND issuer.id <> @source_issuer_id::uuid
-    HAVING count(*) = 1
-)
-SELECT server.id, server.project_id, organization_issuer.id::uuid AS user_session_issuer_id
-FROM organization_issuer
-JOIN mcp_servers AS server
-  ON server.user_session_issuer_id = organization_issuer.id
- AND server.deleted IS FALSE
-JOIN projects AS project
-  ON project.id = server.project_id
- AND project.deleted IS FALSE
- AND project.organization_id = @organization_id::text
-WHERE organization_issuer.id <> @target_issuer_id::uuid
-  AND EXISTS (
-    SELECT 1
-    FROM remote_session_client_user_session_issuers AS shared
-    JOIN remote_session_client_user_session_issuers AS ours
-      ON ours.remote_session_client_id = shared.remote_session_client_id
-    WHERE shared.user_session_issuer_id = organization_issuer.id
-      AND ours.user_session_issuer_id IN (@source_issuer_id::uuid, @target_issuer_id::uuid)
-  )
+JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
+WHERE project.organization_id = @organization_id::text
+  AND project.id = ANY(@project_ids::uuid[])
+  AND NOT server.deleted
 ORDER BY server.id;
 
--- name: ListSourceClientLinksForUserSessionIssuerMigration :many
--- Every client the source issuer binds, with whether consolidation carries the
--- binding to the target. A binding is needed when something still signs in
--- through it after the move:
---
---   - a client the caller found a server on the source requiring
---     (required_client_ids), which covers servers that resolve the issuer's
---     bindings without an association;
---   - a live association of a server on the source or target issuer, of a
---     member of a gateway on either, or of any server in the organization
---     when the target is the organization's only organization-level issuer
---     once the source is retired, since the organization gateway then fronts
---     every server through it;
---   - an agent attachment, EMA binding or Okta connection naming the client
---     through the source issuer;
---   - either issuer's trusted client;
---   - any binding at all while a live gateway signs in through the source,
---     since a gateway resolves every client its issuer binds and routes each
---     member by its recorded resource, associated or not.
---
--- A deleted client's binding is never needed.
-SELECT link.remote_session_client_id,
-       client.client_id,
-       client.deleted AS client_deleted,
-       provider.id AS provider_id,
-       provider.issuer AS provider_issuer,
-       EXISTS (
-         SELECT 1
-         FROM remote_session_client_user_session_issuers AS existing
-         WHERE existing.user_session_issuer_id = @target_issuer_id::uuid
-           AND existing.remote_session_client_id = link.remote_session_client_id
-       )::boolean AS already_on_target,
-       COALESCE(client.deleted IS FALSE AND (
-         COALESCE(link.remote_session_client_id = ANY(@required_client_ids::uuid[]), FALSE)
-         OR EXISTS (
-           SELECT 1
-           FROM mcp_server_remote_session_clients AS association
-           JOIN mcp_servers AS server
-             ON server.id = association.mcp_server_id
-            AND server.deleted IS FALSE
-           WHERE association.remote_session_client_id = link.remote_session_client_id
-             AND association.organization_id = @organization_id::text
-             AND association.deleted IS FALSE
-             AND (
-               server.user_session_issuer_id IN (@source_issuer_id::uuid, @target_issuer_id::uuid)
-               OR (target.project_id IS NULL AND (
-                 SELECT count(*)
-                 FROM user_session_issuers AS organization_issuer
-                 WHERE organization_issuer.organization_id = @organization_id::text
-                   AND organization_issuer.project_id IS NULL
-                   AND organization_issuer.deleted IS FALSE
-                   AND organization_issuer.id <> @source_issuer_id::uuid
-               ) = 1)
-               OR EXISTS (
-                 SELECT 1
-                 FROM meta_mcp_server_members AS member
-                 JOIN meta_mcp_servers AS gateway
-                   ON gateway.id = member.meta_mcp_server_id
-                  AND gateway.deleted IS FALSE
-                 WHERE member.mcp_server_id = server.id
-                   AND member.deleted IS FALSE
-                   AND gateway.organization_id = @organization_id::text
-                   AND gateway.user_session_issuer_id IN (@source_issuer_id::uuid, @target_issuer_id::uuid)
-               )
-             )
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM principal_remote_session_bindings AS binding
-           WHERE binding.remote_session_client_id = link.remote_session_client_id
-             AND binding.user_session_issuer_id = @source_issuer_id::uuid
-             AND binding.organization_id = @organization_id::text
-             AND binding.revoked_at IS NULL
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM remote_session_ema_bindings AS binding
-           WHERE binding.remote_session_client_id = link.remote_session_client_id
-             AND binding.user_session_issuer_id = @source_issuer_id::uuid
-             AND binding.organization_id = @organization_id::text
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM okta_identity_provider_connections AS connection
-           WHERE connection.remote_session_client_id = link.remote_session_client_id
-             AND connection.organization_id = @organization_id::text
-             AND connection.deleted IS FALSE
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM user_session_issuers AS trusting
-           WHERE trusting.id IN (@source_issuer_id::uuid, @target_issuer_id::uuid)
-             AND trusting.trusted_remote_session_client_id = link.remote_session_client_id
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM meta_mcp_servers AS gateway
-           JOIN projects AS gateway_project
-             ON gateway_project.id = gateway.project_id
-            AND gateway_project.deleted IS FALSE
-           WHERE gateway.user_session_issuer_id = @source_issuer_id::uuid
-             AND gateway.organization_id = @organization_id::text
-             AND gateway.deleted IS FALSE
-         )
-       ), FALSE)::boolean AS needed
-FROM remote_session_client_user_session_issuers AS link
-JOIN user_session_issuers AS target
-  ON target.id = @target_issuer_id::uuid
-JOIN remote_session_clients AS client
-  ON client.id = link.remote_session_client_id
-LEFT JOIN projects AS client_project
-  ON client_project.id = client.project_id
-LEFT JOIN remote_session_issuers AS provider
-  ON provider.id = client.remote_session_issuer_id
-WHERE link.user_session_issuer_id = @source_issuer_id::uuid
-  AND (client_project.organization_id = @organization_id::text
-       OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = @organization_id::text)))
-ORDER BY link.remote_session_client_id;
+-- name: ListIssuerMigrationOAuthOffers :many
+-- Typed OAuth offer history is authoritative; where it does not exist, report
+-- direct server associations. Compatibility issuer-client parents never count.
+WITH scoped AS (
+    SELECT server.id, project.id AS project_id, project.organization_id
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
+    WHERE server.id = ANY(@server_ids::uuid[]) AND NOT server.deleted
+      AND project.organization_id = @organization_id::text
+), typed AS (
+    SELECT server.id, auth_client.remote_session_client_id,
+           NOT offer.deleted AND auth_client.enabled AND NOT auth_client.deleted AS live
+    FROM scoped AS server
+    JOIN mcp_server_auth_clients AS offer ON offer.mcp_server_id = server.id
+      AND offer.project_id = server.project_id AND offer.organization_id = server.organization_id
+    JOIN mcp_auth_clients AS auth_client ON auth_client.id = offer.auth_client_id
+      AND auth_client.organization_id = server.organization_id
+      AND (auth_client.project_id IS NULL OR auth_client.project_id = server.project_id)
+    WHERE auth_client.client_type IN ('remote_session', 'service_account', 'ema')
+), candidates AS (
+    SELECT id, remote_session_client_id FROM typed WHERE live
+    UNION ALL
+    SELECT server.id, association.remote_session_client_id
+    FROM scoped AS server
+    JOIN mcp_server_remote_session_clients AS association ON association.mcp_server_id = server.id
+      AND association.project_id = server.project_id AND association.organization_id = server.organization_id
+      AND NOT association.deleted
+    WHERE NOT EXISTS (SELECT 1 FROM typed WHERE typed.id = server.id)
+)
+SELECT DISTINCT server.id AS mcp_server_id, registration.id AS remote_session_client_id
+FROM scoped AS server
+JOIN candidates ON candidates.id = server.id
+JOIN remote_session_clients AS registration ON registration.id = candidates.remote_session_client_id
+  AND NOT registration.deleted
+  AND (registration.project_id = server.project_id OR (registration.project_id IS NULL AND (registration.organization_id IS NULL OR registration.organization_id = server.organization_id)))
+JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id
+  AND NOT provider.deleted
+  AND (provider.project_id = server.project_id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = server.organization_id)))
+ORDER BY server.id, registration.id;
 
 -- name: ListUserSessionIssuerMigrationImpactServers :many
 -- What a consolidation preview reports about each affected server: where it
@@ -1584,28 +1396,6 @@ WHERE s.id = ANY(@mcp_server_ids::uuid[])
   AND s.deleted IS FALSE
   AND p.organization_id = @organization_id::text
 ORDER BY s.id;
-
--- name: ListUserSessionIssuerMigrationImpactAssociations :many
--- The live client associations of each server, counted the way serving counts
--- them: a live client and provider visible to the association's own project,
--- its organization, or globally.
-SELECT a.mcp_server_id,
-       a.remote_session_client_id
-FROM mcp_server_remote_session_clients AS a
-JOIN remote_session_clients AS c
-  ON c.id = a.remote_session_client_id
- AND c.deleted IS FALSE
- AND (c.project_id = a.project_id
-      OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
-JOIN remote_session_issuers AS provider
-  ON provider.id = c.remote_session_issuer_id
- AND provider.deleted IS FALSE
- AND (provider.project_id = a.project_id
-      OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
-WHERE a.mcp_server_id = ANY(@mcp_server_ids::uuid[])
-  AND a.organization_id = @organization_id::text
-  AND a.deleted IS FALSE
-ORDER BY a.mcp_server_id, a.remote_session_client_id;
 
 -- name: ListUserSessionIssuerMigrationImpactClients :many
 -- The provider of each named client, for labelling a consolidation preview.
@@ -3512,14 +3302,20 @@ eligible AS (
     JOIN remote_session_issuers AS rsi
       ON rsi.id = c.remote_session_issuer_id
      AND rsi.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS binding
-      ON binding.remote_session_client_id = ac.remote_session_client_id
-     AND binding.user_session_issuer_id = @user_session_issuer_id
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
       AND @typed_only::boolean
-    GROUP BY l.mcp_server_id, ac.remote_session_client_id
-    HAVING count(DISTINCT ac.id) = 1
+      AND l.project_id = r.project_id
+      AND (c.project_id = r.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = l.organization_id)))
+      AND (rsi.project_id = r.project_id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = l.organization_id)))
+      AND (@typed_offer_repair::boolean OR EXISTS (
+        SELECT 1 FROM remote_session_client_user_session_issuers AS binding
+        WHERE binding.remote_session_client_id = ac.remote_session_client_id
+          AND binding.user_session_issuer_id = @user_session_issuer_id
+      ))
+    GROUP BY l.mcp_server_id, ac.remote_session_client_id,
+             CASE WHEN @typed_offer_repair::boolean THEN ac.id END
+    HAVING @typed_offer_repair::boolean OR count(DISTINCT ac.id) = 1
 ),
 decided AS MATERIALIZED (
     SELECT r.id AS mcp_server_id,
@@ -3602,10 +3398,13 @@ mapped AS MATERIALIZED (
     CROSS JOIN session_issuer AS si
     JOIN mcp_server_auth_clients AS l
       ON l.mcp_server_id = d.mcp_server_id
+     AND l.project_id = d.project_id
+     AND l.organization_id = si.organization_id
      AND l.deleted IS FALSE
     JOIN mcp_auth_clients AS ac
       ON ac.id = l.auth_client_id
      AND ac.organization_id = si.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = d.project_id)
      AND ac.deleted IS FALSE
      AND ac.enabled
     WHERE (d.remote_session_client_id IS NOT NULL
@@ -3743,6 +3542,7 @@ LEFT JOIN mcp_auth_clients AS named
 WHERE (chosen.id IS NOT NULL
        OR (d.remote_session_client_id IS NULL AND (auth_client.id IS NOT NULL OR d.no_auth)))
   AND (pick.auth_client_id IS NULL OR auth_client.id IS NOT NULL)
+  AND (NOT @typed_offer_repair::boolean OR d.remote_session_client_id IS NOT NULL OR named.id IS NOT NULL)
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO UPDATE
 SET remote_session_client_id = EXCLUDED.remote_session_client_id,
     client_attachment_scope = EXCLUDED.client_attachment_scope,

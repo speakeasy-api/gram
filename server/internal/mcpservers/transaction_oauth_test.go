@@ -128,11 +128,7 @@ func TestCreateMCPServerInTransaction_InheritsIssuerClientOnlyWithoutEnforcement
 
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, second)
 			require.NoError(t, err)
-			if tc.enforced {
-				require.Empty(t, links, "an enforced server offers a client nobody configured for it")
-			} else {
-				require.Equal(t, []uuid.UUID{typedClient}, links)
-			}
+			require.Empty(t, links, "the sibling's offer cannot stamp or qualify a new server")
 			links, err = fixtures.ListServerAuthClientsFixture(ctx, first)
 			require.NoError(t, err)
 			require.Equal(t, []uuid.UUID{typedClient}, links)

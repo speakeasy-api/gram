@@ -31,6 +31,8 @@ type organizationGatewayAssociation struct {
 	organizationIssuer uuid.UUID
 	projectID          uuid.UUID
 	serverID           uuid.UUID
+	registrationID     uuid.UUID
+	authClientID       uuid.UUID
 }
 
 func seedOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti *testInstance, slug string) organizationGatewayAssociation {
@@ -108,7 +110,7 @@ func seedOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti *t
 	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, orgID, server.ID))
 	require.NoError(t, tx.Commit(ctx))
 
-	seeded := organizationGatewayAssociation{organizationIssuer: organizationIssuer, projectID: projectID, serverID: server.ID}
+	seeded := organizationGatewayAssociation{organizationIssuer: organizationIssuer, projectID: projectID, serverID: server.ID, registrationID: client.ID, authClientID: authclientbackfill.OAuthClientID(orgID, client.ID, authclientbackfill.TypeRemoteSession)}
 	require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, orgID, projectID, nil))
 	requireOrganizationGatewayAssociation(t, ctx, ti, seeded, true)
 	return seeded
@@ -125,7 +127,8 @@ func requireOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti
 	require.NoError(t, err)
 	if present {
 		require.Len(t, rows, 1)
-		require.Len(t, links, 1)
+		require.Equal(t, seeded.registrationID, rows[0].RemoteSessionClientID)
+		require.Equal(t, []uuid.UUID{seeded.authClientID}, links)
 		return
 	}
 	require.Empty(t, rows, "the organization gateway no longer fronts the server")
@@ -133,8 +136,8 @@ func requireOrganizationGatewayAssociation(t *testing.T, ctx context.Context, ti
 }
 
 // Whether an organization has one organization-level issuer decides whether
-// its organization gateway fronts every server. Each writer that changes it
-// re-decides the associations that gateway served, in its own transaction.
+// its organization gateway fronts every server. Creation and deletion still
+// prune legacy associations; a scope move does not infer offer ownership.
 func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testing.T) {
 	t.Parallel()
 
@@ -164,7 +167,7 @@ func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testin
 		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, false)
 	})
 
-	t.Run("moving the organization issuer into a project", func(t *testing.T) {
+	t.Run("moving the organization issuer preserves an existing offer", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -174,6 +177,6 @@ func TestOrganizationIssuerWritersPruneOrganizationGatewayAssociations(t *testin
 		_, err := ti.service.MoveIssuer(ctx, &orggen.MoveIssuerPayload{ID: seeded.organizationIssuer.String(), ProjectID: new(authCtx.ProjectID.String()), SessionToken: nil})
 		require.NoError(t, err)
 
-		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, false)
+		requireOrganizationGatewayAssociation(t, ctx, ti, seeded, true)
 	})
 }
