@@ -2593,6 +2593,13 @@ SET expires_at = clock_timestamp()
 WHERE id = @id
   AND expires_at IS NOT NULL;
 
+-- name: LapsePrincipalGrantFixture :exec
+-- Test-only fixture: turns a grant into a temporary grant that has already
+-- lapsed.
+UPDATE principal_grants
+SET expires_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE id = @id;
+
 -- name: GetPrincipalGrantExpiresAtFixture :one
 -- Test-only fixture: reads a grant row's deadline (NULL when permanent).
 SELECT expires_at FROM principal_grants WHERE id = @id;
