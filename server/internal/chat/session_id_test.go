@@ -9,6 +9,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 )
 
+func TestAccountChatID(t *testing.T) {
+	t.Parallel()
+
+	chatID := uuid.New()
+	account := chat.TranscriptAccount{UserAccountID: uuid.Nil, UserID: "user-1", Email: "Dev@Example.test"}
+	id, ok := chat.AccountChatID(chatID, account)
+	require.True(t, ok)
+	require.NotEqual(t, chatID, id, "a different account gets a chat of its own")
+
+	again, ok := chat.AccountChatID(chatID, chat.TranscriptAccount{UserAccountID: uuid.Nil, UserID: " user-1 ", Email: "dev@example.test"})
+	require.True(t, ok)
+	require.Equal(t, id, again, "the same account always maps to the same chat")
+
+	other, ok := chat.AccountChatID(chatID, chat.TranscriptAccount{UserAccountID: uuid.Nil, UserID: "user-2", Email: ""})
+	require.True(t, ok)
+	require.NotEqual(t, id, other)
+
+	otherSession, ok := chat.AccountChatID(uuid.New(), account)
+	require.True(t, ok)
+	require.NotEqual(t, id, otherSession)
+
+	_, ok = chat.AccountChatID(chatID, chat.TranscriptAccount{UserAccountID: uuid.Nil, UserID: "", Email: " "})
+	require.False(t, ok, "an account with no identity cannot own a transcript")
+}
+
 func TestSessionIDToChatID(t *testing.T) {
 	t.Parallel()
 

@@ -21,3 +21,20 @@ func SessionIDToChatID(sessionID string) uuid.UUID {
 
 	return uuid.NewSHA1(agentSessionNamespace, []byte(sessionID))
 }
+
+// AccountChatID returns the chat that holds a session's transcript for an
+// account that does not own the session's chat (chatID, usually from
+// SessionIDToChatID): when WriteDelivery returns ErrAccountMismatch, the
+// sender's deliveries go here instead, so it gets a transcript of its own.
+//
+// The id is a UUIDv5 of the account's first identity (AI account, Speakeasy
+// user, email) under chatID, so every delivery the account sends with the same
+// identity fields lands in the same chat. It reports false for an account with
+// no identity, which cannot own a transcript.
+func AccountChatID(chatID uuid.UUID, account TranscriptAccount) (uuid.UUID, bool) {
+	key := account.key()
+	if key == "" {
+		return uuid.Nil, false
+	}
+	return uuid.NewSHA1(chatID, []byte(key)), true
+}

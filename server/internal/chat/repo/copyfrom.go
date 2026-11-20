@@ -113,3 +113,62 @@ func (r iteratorForCreateChatMessage) Err() error {
 func (q *Queries) CreateChatMessage(ctx context.Context, arg []CreateChatMessageParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"id", "chat_id", "role", "project_id", "content", "content_raw", "content_asset_url", "storage_error", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens", "origin", "user_agent", "ip_address", "source", "content_hash", "generation", "replayed", "created_at"}, &iteratorForCreateChatMessage{rows: arg})
 }
+
+// iteratorForCreateTranscriptChatMessage implements pgx.CopyFromSource.
+type iteratorForCreateTranscriptChatMessage struct {
+	rows                 []CreateTranscriptChatMessageParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForCreateTranscriptChatMessage) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForCreateTranscriptChatMessage) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ID,
+		r.rows[0].ChatID,
+		r.rows[0].Role,
+		r.rows[0].ProjectID,
+		r.rows[0].Content,
+		r.rows[0].ContentRaw,
+		r.rows[0].Model,
+		r.rows[0].MessageID,
+		r.rows[0].ToolCallID,
+		r.rows[0].UserID,
+		r.rows[0].ExternalUserID,
+		r.rows[0].FinishReason,
+		r.rows[0].ToolCalls,
+		r.rows[0].Origin,
+		r.rows[0].UserAgent,
+		r.rows[0].IpAddress,
+		r.rows[0].Source,
+		r.rows[0].CaptureKind,
+		r.rows[0].RiskAnalyzedAt,
+		r.rows[0].CreatedAt,
+		r.rows[0].ParentMessageID,
+		r.rows[0].ContinuesMessageID,
+		r.rows[0].ContentKey,
+		r.rows[0].ContentKeyVersion,
+		r.rows[0].PathKey,
+		r.rows[0].SiblingKey,
+	}, nil
+}
+
+func (r iteratorForCreateTranscriptChatMessage) Err() error {
+	return nil
+}
+
+// Stores new transcript entries. The transcript merge is the only writer of
+// the tree columns, and it keeps parent and continued entries in one chat.
+func (q *Queries) CreateTranscriptChatMessage(ctx context.Context, arg []CreateTranscriptChatMessageParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"id", "chat_id", "role", "project_id", "content", "content_raw", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "origin", "user_agent", "ip_address", "source", "capture_kind", "risk_analyzed_at", "created_at", "parent_message_id", "continues_message_id", "content_key", "content_key_version", "path_key", "sibling_key"}, &iteratorForCreateTranscriptChatMessage{rows: arg})
+}
