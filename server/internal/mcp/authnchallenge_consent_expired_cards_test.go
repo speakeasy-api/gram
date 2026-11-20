@@ -509,6 +509,7 @@ func TestServeConsentAction_VerifyNeverConnectedAsksToConnect(t *testing.T) {
 	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, client)
 	member := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "verify-never-other", "https://never.example.com/mcp", conv.ToNullUUID(issuer), 1)
 	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, client, "remote_session")
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, orgID, fx.subject.ID, member.mcpServerID.String())
 
 	fx.server = "verify-never-other"
 	requireVerifyNotice(t, fx, client, verifyNotConnectedCard)

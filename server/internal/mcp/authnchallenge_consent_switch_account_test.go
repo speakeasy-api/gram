@@ -672,7 +672,7 @@ func TestConsentSwitchAccount_FreshSignInIsCheckedAgain(t *testing.T) {
 	fx.managed[*consent.SignInID] = true
 	require.Equal(t, map[string]string{"status": "connected", "message": "Connected through your identity provider"}, checkCard(t, fx))
 
-	loc := postConsentAction(t, fx.ctx, fx.ti, fx.endpoint.Slug, fx.stateID, "approve")
+	loc := postConsentAction(t, fx.ctx, fx.ti, fx.endpoint.Slug, fx.stateID, "approve", chainedConsentChoice(t, fx.consentActionFixture))
 	require.Equal(t, "example.com", loc.Host)
 	require.Equal(t, "/cb", loc.Path, "back to the client's own redirect URI")
 	require.Equal(t, switchClientState, loc.Query().Get("state"), "with the client's state")

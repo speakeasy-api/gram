@@ -12,35 +12,40 @@ import (
 // consentDirectPreviewAuth uses the same offered choices and authorization as
 // approval. A successful preview always captures a typed choice or no auth.
 func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, posted string) (*authClientResolution, error) {
-	cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
-	if err != nil {
-		return nil, fmt.Errorf("build consent connection cards: %w", err)
-	}
-	// A preview may show the page's current option, but this does not make
-	// it an explicit EMA pick on the approval POST.
-	if posted == "" {
+	var selected uuid.UUID
+	if posted != "" {
+		id, err := uuid.Parse(posted)
+		if err != nil || id == uuid.Nil {
+			return nil, errConsentConfigurationChanged
+		}
+		// Resolve the posted offer exactly. A card may have become stale;
+		// let token resolution report why this credential cannot preview.
+		selected = id
+	} else {
+		cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
+		if err != nil {
+			return nil, fmt.Errorf("build consent connection cards: %w", err)
+		}
 		auth, err := s.directConsentAuthChoice(ctx, endpoint, state, cards, uuid.Nil)
 		if err != nil {
 			return nil, err
 		}
-		if auth != nil && auth.Selected() != nil {
-			posted = auth.Selected().ID.String()
+		if option := auth.Selected(); option != nil {
+			selected = option.ID
+		} else {
+			if _, err := s.consentDirectAuthClientPick(ctx, endpoint, state, "", nil, cards); err != nil {
+				return nil, err
+			}
+			res := gapResolution("")
+			res.outcome = authClientNoAuth
+			return &res, nil
 		}
 	}
-	picks, err := s.consentDirectAuthClientPick(ctx, endpoint, state, posted, nil, cards)
-	if err != nil {
-		return nil, err
-	}
-	if len(picks) == 0 {
-		res := gapResolution("")
-		res.outcome = authClientNoAuth
-		return &res, nil
-	}
-	ctx, err = s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
+	ctx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
 	if err != nil {
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
 	}
-	res, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(withMandatoryAdmission(ctx)), endpoint.OrganizationID, endpoint.McpServerID.UUID, endpoint.ProjectID, picks[endpoint.McpServerID.UUID], *state.Subject)
+	res, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(withMandatoryAdmission(ctx)), endpoint.OrganizationID, endpoint.McpServerID.UUID, endpoint.ProjectID, selected, *state.Subject)
 	if err != nil {
 		return nil, err
 	}

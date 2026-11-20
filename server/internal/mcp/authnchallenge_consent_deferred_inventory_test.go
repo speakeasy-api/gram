@@ -353,6 +353,7 @@ func TestConsentPost_DeferredInventoryApprovesAllTools(t *testing.T) {
 	form.Set("state", fx.stateID)
 	form.Set("csrf_token", "csrf-token")
 	form.Set("action", "approve")
+	form.Set("auth_client", chainedConsentChoice(t, fx))
 	form.Set("tool_filtering", "off")
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

@@ -787,6 +787,10 @@ func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *test
 	require.Equal(t, conv.ToNullUUID(rsiID), server.RemoteSessionIssuerID)
 	requireConnectRefused(t, fx, gatewayClientID, "the issuer written by resync does not offer a proxied registration")
 
-	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, gatewayClientID, "remote_session")
-	require.Equal(t, "https://aim87-composed.example.com/mcp", postConnectAction(t, fx, gatewayClientID).Query().Get("resource"))
+	authClientID := seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, gatewayClientID, "remote_session")
+	location := postConnectAction(t, fx, gatewayClientID)
+	require.Equal(t, "https://aim87-composed.example.com/mcp", location.Query().Get("resource"))
+	login := mintedRemoteLoginState(t, ctx, fx, location.Query().Get("state"))
+	require.NotNil(t, login.TypedAuthorization)
+	require.Equal(t, authClientID, login.TypedAuthorization.AuthClientID)
 }

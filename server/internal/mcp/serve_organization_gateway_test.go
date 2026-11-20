@@ -347,8 +347,8 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	require.NoError(t, err)
 	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{otherServer.UserSessionIssuerID.UUID, fx.issuerID})
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, otherProject.ID, []uuid.UUID{otherServer.UserSessionIssuerID.UUID}))
-	seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, otherProject.ID, otherServer.ID, client, "remote_session")
-	seedMetaMemberConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherServer.ID)
+	authClientID := seedConsentAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, otherProject.ID, otherServer.ID, client, "remote_session")
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, fx.subject.ID, otherServer.ID.String())
 
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(t.Context(), testenv.NewLogger(t), fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)
@@ -388,6 +388,9 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 	require.Equal(t, client, login.RemoteSessionClientID)
 	require.Equal(t, otherProject.ID, login.ProjectID, "the login runs in the project that owns the client")
 	require.Equal(t, mcproute.OrganizationGateway, login.RouteBase, "the login returns to the gateway's consent page")
+	require.NotNil(t, login.TypedAuthorization)
+	require.Equal(t, otherServer.ID, login.TypedAuthorization.ServerID)
+	require.Equal(t, authClientID, login.TypedAuthorization.AuthClientID)
 	require.Equal(t, fx.organizationSlug, login.McpSlug)
 }
 

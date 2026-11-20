@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -179,8 +180,19 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	ti.service.manual = true
 	chainer := &singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient), upstream: upstream.url}
 	ti.service.SetIdentityChainer(chainer)
-	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
-	inventory := gatewayInventoryFromPage(t, consentGetPageWithContext(t, ctx, ti, slug, stateID))
+	stateID, csrf := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	path := "/mcp/" + slug + "/connect"
+	// Both typed offers share a registration. Review the tools reached by the
+	// personal connection explicitly, rather than approving the default EMA offer.
+	pick := "auth_client." + memberSlug
+	query := url.Values{"state": {stateID}, pick: {typedClientID.String()}}
+	page := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, path+"?"+query.Encode(), nil).WithContext(ctx)
+	require.NoError(t, ti.service.ServeConsent(page, request, endpoint))
+	require.Equal(t, http.StatusOK, page.Code, page.Body.String())
+	inventory := gatewayInventoryFromPage(t, page.Body.String())
 	require.Len(t, inventory.MemberOutcomes, 1)
 	require.Equal(t, memberSlug, inventory.MemberOutcomes[0].Slug)
 	require.Equal(t, "chained", inventory.MemberOutcomes[0].Status)
@@ -197,8 +209,30 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	ema, err := fixtures.GetEMAFixture(ctx, emaClientID)
 	require.NoError(t, err)
 	require.Equal(t, upstream.url, ema.Resource)
-	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
-	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
+	form := url.Values{
+		"state": {stateID}, "csrf_token": {csrf}, "action": {"approve"}, "tool_inventory_id": {inventory.Attempt},
+		"tool_filtering": {"off"}, "tool_catalog_mode": {string(toolfilter.CatalogModeCached)}, "discovery_mode": {string(metamcp.DiscoveryModeDirect)},
+		pick: {typedClientID.String()},
+	}
+	request = httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode())).WithContext(t.Context())
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	approved := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(approved, request, endpoint))
+	require.Equal(t, http.StatusSeeOther, approved.Code, approved.Body.String())
+	redirect, err := url.Parse(approved.Header().Get("Location"))
+	require.NoError(t, err)
+	code := redirect.Query().Get("code")
+	require.NotEmpty(t, code)
+	issued := postForm(t, ti, slug, "token", url.Values{
+		"grant_type": {"authorization_code"}, "code": {code}, "client_id": {client.ClientID},
+		"redirect_uri": {client.RedirectUris[0]}, "code_verifier": {gatewayConsentVerifier},
+	})
+	require.Equal(t, http.StatusOK, issued.Code, issued.Body.String())
+	var tokens struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &tokens))
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(tokens.AccessToken, urn.NewUserSessionIssuer(issuer.ID).String())
 	require.NoError(t, err)
 	session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
 	require.NoError(t, err)
@@ -207,11 +241,11 @@ func TestGatewayConsentDiscoversChainedMember(t *testing.T) {
 	require.Len(t, choices, 1)
 	require.Equal(t, uuid.NullUUID{UUID: typedClientID, Valid: true}, choices[0].AuthClientID)
 	before := chainer.acquireCount()
-	response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
+	response, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), tokens.AccessToken, nil)
 	require.NoError(t, err)
 	require.Contains(t, response.Body.String(), memberSlug+"--note")
 	require.Equal(t, before, chainer.acquireCount(), "cached discovery never exchanges")
-	require.NotContains(t, callGatewayTool(t, ti, slug, connection.token, memberSlug+"--note", map[string]any{}), `"isError":true`)
+	require.NotContains(t, callGatewayTool(t, ti, slug, tokens.AccessToken, memberSlug+"--note", map[string]any{}), `"isError":true`)
 	require.Equal(t, 1, upstream.toolCalls())
 	require.Greater(t, chainer.acquireCount(), before, "execution resolves current identity")
 }

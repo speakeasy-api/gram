@@ -78,9 +78,12 @@ func seedAttemptChallenge(t *testing.T, ctx context.Context, ti *testInstance, t
 	return stateID
 }
 
-func postConsentAction(t *testing.T, ctx context.Context, ti *testInstance, slug, stateID, action string) *url.URL {
+func postConsentAction(t *testing.T, ctx context.Context, ti *testInstance, slug, stateID, action string, authClient ...string) *url.URL {
 	t.Helper()
 	form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {action}}
+	if len(authClient) > 0 {
+		form.Set("auth_client", authClient[0])
+	}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := serveConsentRoute(t, ctx, ti, slug, req)

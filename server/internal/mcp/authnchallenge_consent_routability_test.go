@@ -188,6 +188,7 @@ func TestServeConsent_MetaRemoteMemberLegacyGrantAsksForReconnect(t *testing.T) 
 	const upstream = "https://member.example.com/mcp"
 	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-legacy-member", upstream, conv.ToNullUUID(issuerID), 0)
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, member.mcpServerID.String())
 	fx.server = "rt-legacy-member"
 
 	grant(t, ctx, fx, clientID, "")
@@ -208,6 +209,7 @@ func TestServeConsent_MetaTunneledMemberHonoursIdentifierRule(t *testing.T) {
 	const identifier = "urn:gram:tunnel:routability"
 	member := createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-tunnel-member", identifier, conv.ToNullUUID(issuerID), 0)
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, member.mcpServerID.String())
 	fx.server = "rt-tunnel-member"
 
 	grant(t, ctx, fx, clientID, "")
@@ -265,6 +267,7 @@ func TestServeConsent_RemoteServerLegacyGrantAsksForReconnect(t *testing.T) {
 	})
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-remote", "", []uuid.UUID{fx.shared})
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, clientID, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, fx.endpoint.McpServerID.UUID.String())
 
 	grant(t, ctx, fx, clientID, "")
 	expectAutoReconnect(t, fx, upstream)
@@ -356,6 +359,7 @@ func TestServeConsent_GatewayServerLinkGoesStraightToProvider(t *testing.T) {
 	const upstream = "https://link.example.com/mcp"
 	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-link-member", upstream, conv.ToNullUUID(issuerID), 0)
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, member.mcpServerID.String())
 
 	fx.server = "rt-link-member"
 	code, html, _ := render(t, fx)

@@ -18,6 +18,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
@@ -496,6 +498,23 @@ func (s *Service) serveConsentProxiedMCP(
 		var options []remotemcp.BuildOption
 		if auth.outcome != authClientLegacy || auth.sendsClientHeaders() {
 			options = append(options, remotemcp.WithAuthClientHeaders(auth.headers))
+			// The typed proxy omits legacy credentials. Their header names are
+			// still owned by the server, not by the caller of the preview.
+			r = r.Clone(ctx)
+			for _, header := range headers {
+				if !proxy.IsCredentialHeader(header.Name, header.IsSecret, header.ValueFromRequestHeader.String != "") {
+					continue
+				}
+				name := strings.ReplaceAll(strings.TrimSpace(header.Name), "_", "-")
+				if proxy.IsProtectedInboundHeader(name) || httpheaders.IsStandardMCPRequestHeader(name) {
+					continue
+				}
+				for inbound := range r.Header {
+					if strings.EqualFold(strings.ReplaceAll(inbound, "_", "-"), name) {
+						delete(r.Header, inbound)
+					}
+				}
+			}
 		}
 		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil, options...)
 	} else {
