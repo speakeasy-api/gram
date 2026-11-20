@@ -71,10 +71,11 @@ func newIDJAGGatewayFixture(t *testing.T) (context.Context, idJAGGatewayFixture)
 }
 
 // personalClient gives serverID one personal upstream connection as its only
-// typed auth client and returns the connection's registration. bound has the
+// typed auth client and returns the connection's registration and auth
+// client. bound has the
 // gateway's issuer bind the registration, which lets issuance decide it for a
 // server nobody picked.
-func (f idJAGGatewayFixture) personalClient(t *testing.T, ctx context.Context, serverID uuid.UUID, bound bool) uuid.UUID {
+func (f idJAGGatewayFixture) personalClient(t *testing.T, ctx context.Context, serverID uuid.UUID, bound bool) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	var issuers []uuid.UUID
 	if bound {
@@ -88,7 +89,7 @@ func (f idJAGGatewayFixture) personalClient(t *testing.T, ctx context.Context, s
 	_, err = clients.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{OrganizationID: f.orgID, McpServerID: serverID, AuthClientID: client.ID})
 	require.NoError(t, err)
 	seedUserMCPConnectGrant(t, ctx, f.ti.conn, f.orgID, mockidp.MockUserID, serverID.String())
-	return registration
+	return registration, client.ID
 }
 
 // connect stores the subject's upstream token for registration, as finishing
@@ -173,8 +174,9 @@ func TestIDJAGGatewaySessionSkipsUnconnectedMember(t *testing.T) {
 			unconnectedUpstream := newRecordingUpstream(t, "ping")
 			connectedID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Connected", "connected", 0, connectedUpstream.url)
 			unconnectedID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Unconnected", "unconnected", 1, unconnectedUpstream.url)
-			f.connect(t, ctx, f.personalClient(t, ctx, connectedID, bound), "token-connected", connectedUpstream.url)
-			unconnected := f.personalClient(t, ctx, unconnectedID, bound)
+			connected, _ := f.personalClient(t, ctx, connectedID, bound)
+			f.connect(t, ctx, connected, "token-connected", connectedUpstream.url)
+			unconnected, _ := f.personalClient(t, ctx, unconnectedID, bound)
 
 			bearer := f.accessToken(t, ctx, slug)
 			require.True(t, f.recordsChoice(t, ctx, slug, bearer, connectedID), "the connected member's choice is recorded")
@@ -207,7 +209,9 @@ func TestIDJAGGatewaySessionSkipsUnconnectedMember(t *testing.T) {
 
 // A member whose sign-in is not set up is deferred only when the request
 // names no credential for it: a named credential cannot be checked against a
-// server offering none, so the exchange keeps refusing it.
+// server offering none, so the exchange keeps refusing it. Calling the
+// deferred member sends the person to an administrator, since connecting
+// cannot fix it.
 func TestIDJAGGatewayNamedChoiceForIncompleteMemberIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIDJAGGatewayFixture(t)
@@ -218,18 +222,53 @@ func TestIDJAGGatewayNamedChoiceForIncompleteMemberIsRefused(t *testing.T) {
 	incompleteUpstream := newRecordingUpstream(t, "ping")
 	connectedID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Connected", "connected", 0, connectedUpstream.url)
 	incompleteID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Incomplete", "incomplete", 1, incompleteUpstream.url)
-	f.connect(t, ctx, f.personalClient(t, ctx, connectedID, false), "token-connected", connectedUpstream.url)
+	connected, _ := f.personalClient(t, ctx, connectedID, false)
+	f.connect(t, ctx, connected, "token-connected", connectedUpstream.url)
 	// An upstream OAuth client that no auth client offers yet.
 	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "incomplete-"+uuid.NewString()[:8], "", nil)
 	require.NoError(t, testrepo.New(f.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: incompleteID, RemoteSessionClientID: registration}))
 	seedUserMCPConnectGrant(t, ctx, f.ti.conn, f.orgID, mockidp.MockUserID, incompleteID.String())
 
-	status, body := f.exchange(t, ctx, slug, nil)
-	require.Equal(t, http.StatusOK, status, "with no credential named, the incomplete member is deferred: %s", body)
+	bearer := f.accessToken(t, ctx, slug)
+	text, isError := metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "connected--ping"))
+	require.False(t, isError, "the session serves its connected member: %s", text)
+	text, isError = metaToolResultText(t, executeMetaTool(t, f.ti, slug, bearer, "incomplete--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "Ask your administrator")
+	require.NotContains(t, text, "/connect/first-party", "connecting cannot fix a sign-in nobody has set up")
+	incompleteUpstream.requireNeverCarried(t, "Bearer token-connected", "the incomplete member never receives a sibling's bearer")
 
-	status, body = f.exchange(t, ctx, slug, url.Values{"upstream_auth_client": {incompleteID.String() + ":" + uuid.NewString()}})
+	status, body := f.exchange(t, ctx, slug, url.Values{"upstream_auth_client": {incompleteID.String() + ":" + uuid.NewString()}})
 	require.Equal(t, http.StatusBadRequest, status, body)
 	require.Contains(t, body, `"error":"setup_required"`)
+}
+
+// Naming an unconnected credential defers its member even when the member
+// also offers a ready credential the issuer binds: the session records
+// neither, rather than substituting the ready one for the one the caller named.
+func TestIDJAGGatewayNamedUnconnectedChoiceRecordsNoSubstitute(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIDJAGGatewayFixture(t)
+
+	slug := "id-jag-named-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, f.ti.conn, f.projectID, f.orgID, slug, f.issuerID)
+	upstream := newRecordingUpstream(t, "ping")
+	memberID := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Two clients", "two-clients", 0, upstream.url)
+	ready, _ := f.personalClient(t, ctx, memberID, true)
+	f.connect(t, ctx, ready, "token-ready", upstream.url)
+	_, named := f.personalClient(t, ctx, memberID, true)
+
+	status, body := f.exchange(t, ctx, slug, url.Values{"upstream_auth_client": {memberID.String() + ":" + named.String()}})
+	require.Equal(t, http.StatusOK, status, body)
+	var token struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(body), &token))
+	require.False(t, f.recordsChoice(t, ctx, slug, token.AccessToken, memberID), "the session records neither the named nor the ready credential")
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, f.ti, slug, token.AccessToken, "two-clients--ping"))
+	require.True(t, isError, text)
+	upstream.requireNeverCarried(t, "Bearer token-ready", "the ready credential is never substituted for the named one")
 }
 
 // A single server's session is useless without its credential, so the
@@ -241,7 +280,7 @@ func TestIDJAGSingleServerSessionNeedsItsConnection(t *testing.T) {
 	slug := "id-jag-direct-" + uuid.NewString()[:8]
 	upstream := newRecordingUpstream(t, "ping")
 	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", f.issuerID)
-	f.personalClient(t, ctx, server.ID, false)
+	_, _ = f.personalClient(t, ctx, server.ID, false)
 
 	status, body := f.exchange(t, ctx, slug, nil)
 	require.Equal(t, http.StatusBadRequest, status, body)
