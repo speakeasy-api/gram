@@ -45,7 +45,7 @@ func TestInferenceSetupLifecycle(t *testing.T) {
 	require.True(t, saved.HasSigningSecret)
 	row, err := service.store.repo.GetAnthropicInferenceConfig(ctx, orgID)
 	require.NoError(t, err)
-	require.NotContains(t, row.ApiKeyEncrypted, secret)
+	require.NotContains(t, row.ApiKeyEncrypted.String, secret)
 	require.NotContains(t, *saved.WebhookPath, secret)
 	binding, err = resolver.Resolve(ctx, *saved.ID)
 	require.NoError(t, err)
