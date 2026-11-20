@@ -6574,7 +6574,7 @@ WITH bound AS (
   SELECT usi.id, reach.reach_project_id AS reach_project_id, reach.attached, reach.offered_server_id, c.id AS client_id, COALESCE(p.organization_id, usi.organization_id) AS organization_id
   FROM remote_sessions AS s
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
-  JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+  JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
   LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
   CROSS JOIN LATERAL (
     SELECT b.user_session_issuer_id, TRUE AS attached, bp.id AS reach_project_id, NULL::uuid AS offered_server_id

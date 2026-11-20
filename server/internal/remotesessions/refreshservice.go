@@ -877,6 +877,11 @@ func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.
 	// The grant the POST actually presented, which a concurrent reconnect can move past sess.
 	attempted := sess
 	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource, &attempted, attribution)
+	if attribution.scheduledEligibility != nil && result.Outcome == remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner {
+		// A scheduled worker does not need the winner's token. Its old claim
+		// cannot authorize material from a grant already refreshed elsewhere.
+		result = RefreshResult{Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive} //nolint:exhaustruct_v5 // no grant is published
+	}
 	if postLockClient != nil {
 		client = *postLockClient
 	}
