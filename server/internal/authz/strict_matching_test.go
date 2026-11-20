@@ -13,10 +13,10 @@ import (
 
 const missingKeyLog = "authz check refused: a grant names a key the check does not carry"
 
-// readOnlyConnect is a connect grant on server limited to read-only tools.
-func readOnlyConnect(server uuid.UUID) []Grant {
+// searchOnlyConnect is a connect grant on server limited to the search tool.
+func searchOnlyConnect(server uuid.UUID) []Grant {
 	selector := NewSelector(ScopeMCPConnect, server.String())
-	selector[SelectorKeyDisposition] = DispositionReadOnly
+	selector[SelectorKeyTool] = "search"
 	return []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)}
 }
 
@@ -28,13 +28,13 @@ func TestMatching_MissingKeyNeverMatches(t *testing.T) {
 
 	server := uuid.New()
 	project := uuid.New()
-	grants := readOnlyConnect(server)
+	grants := searchOnlyConnect(server)
 	ref := MCPServer(MCPServerIDOf(server), ProjectIDOf(project))
 
 	for name, check := range map[string]Check{
 		"generated connection":   ref.Connect(),
 		"constructed connection": MCPCheck(ScopeMCPConnect, server.String(), project.String()),
-		"probe of a tool call":   ref.ToolCall("mystery", "").Probe(),
+		"probe of a tool call":   ref.ToolCall("", DispositionReadOnly).Probe(),
 	} {
 		allowed, err := GrantsAuthorize(grants, check)
 		require.NoError(t, err, name)
@@ -42,7 +42,7 @@ func TestMatching_MissingKeyNeverMatches(t *testing.T) {
 	}
 
 	for name, check := range map[string]Check{
-		"tool call without a disposition": ref.ToolCall("mystery", ""),
+		"tool call without a tool": ref.ToolCall("", DispositionReadOnly),
 		"connect check not built as a connection": {
 			Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: server.String(),
 			Dimensions: map[string]string{SelectorKeyProjectID: project.String()},
@@ -107,14 +107,14 @@ func TestMatching_MissingKeyRefusalIsLogged(t *testing.T) {
 
 	var logs bytes.Buffer
 	engine := NewEngine(slog.New(slog.NewTextHandler(&logs, nil)), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), readOnlyConnect(server))
+	ctx := GrantsToContext(enterpriseSessionCtx(t), searchOnlyConnect(server))
 
-	requireForbidden(t, engine.Require(ctx, ref.ToolCall("mystery", "")))
+	requireForbidden(t, engine.Require(ctx, ref.ToolCall("", DispositionReadOnly)))
 	require.Contains(t, logs.String(), missingKeyLog)
-	require.Contains(t, logs.String(), SelectorKeyDisposition)
+	require.Contains(t, logs.String(), SelectorKeyTool)
 
 	logs.Reset()
-	requireForbidden(t, engine.RequireAny(ctx, ref.ToolCall("mystery", "")))
+	requireForbidden(t, engine.RequireAny(ctx, ref.ToolCall("", DispositionReadOnly)))
 	require.Contains(t, logs.String(), missingKeyLog)
 
 	logs.Reset()
@@ -131,15 +131,15 @@ func TestMatching_MissingKeysComeFromRefusingPolicies(t *testing.T) {
 
 	server := uuid.New()
 	project := uuid.New()
-	call := MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("mystery", "")
+	call := MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("", DispositionReadOnly)
 	otherServer := []Grant{NewGrant(ScopeMCPConnect, uuid.NewString())}
-	allowing := append([]Grant{NewGrant(ScopeMCPConnect, server.String())}, readOnlyConnect(server)...)
+	allowing := append([]Grant{NewGrant(ScopeMCPConnect, server.String())}, searchOnlyConnect(server)...)
 
 	refusedElsewhere := grantAuthorization{policies: [][]Grant{otherServer, allowing}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
 	require.Empty(t, refusedElsewhere.keysMissingFrom(call))
 
-	refusedForTheKey := grantAuthorization{policies: [][]Grant{readOnlyConnect(server), allowing}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
-	require.Equal(t, []string{SelectorKeyDisposition}, refusedForTheKey.keysMissingFrom(call))
+	refusedForTheKey := grantAuthorization{policies: [][]Grant{searchOnlyConnect(server), allowing}, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false}
+	require.Equal(t, []string{SelectorKeyTool}, refusedForTheKey.keysMissingFrom(call))
 }
 
 // RequireAny still reports a missing key on an alternative that no block
@@ -150,7 +150,7 @@ func TestMatching_RequireAnyLogsUnblockedAlternatives(t *testing.T) {
 	server := uuid.New()
 	blockedServer := uuid.New()
 	project := uuid.New()
-	grants := append(readOnlyConnect(server),
+	grants := append(searchOnlyConnect(server),
 		NewGrant(ScopeMCPConnect, blockedServer.String()),
 		NewGrant(ScopeMCPBlockedConnect, blockedServer.String()),
 	)
@@ -161,7 +161,7 @@ func TestMatching_RequireAnyLogsUnblockedAlternatives(t *testing.T) {
 
 	requireForbidden(t, engine.RequireAny(ctx,
 		MCPServer(MCPServerIDOf(blockedServer), ProjectIDOf(project)).Connect(),
-		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("mystery", ""),
+		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("", DispositionReadOnly),
 	))
 	require.Contains(t, logs.String(), missingKeyLog)
 }

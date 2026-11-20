@@ -256,11 +256,13 @@ func handleToolsCall(
 	// privacy read and the resource id follow the wrapper when one fronts
 	// the request.
 	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
-		var disposition string
+		// A tool whose annotations cannot be read is refused: classifying it
+		// as unannotated would guess at a value the tool may not have.
 		baseTool, err := conv.ToBaseTool(tool)
-		if err == nil {
-			disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read tool annotations for authorization").LogError(ctx, logger)
 		}
+		disposition := toolDisposition(ctx, logger, params.Name, baseTool.Annotations)
 		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
 			Tool:        params.Name,
 			Disposition: disposition,

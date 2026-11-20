@@ -104353,6 +104353,7 @@ components:
                         - destructive
                         - idempotent
                         - open_world
+                        - unannotated
                 project_id:
                     type: string
                     description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
@@ -113630,6 +113631,7 @@ components:
                             - destructive
                             - idempotent
                             - open_world
+                            - unannotated
                     description: Tool annotations the rule is narrowed to, when it is not the whole resource.
                 effect:
                     type: string
@@ -128603,6 +128605,7 @@ components:
                             - destructive
                             - idempotent
                             - open_world
+                            - unannotated
                     description: Tool annotations the rule is narrowed to, when it is not the whole resource.
                 kind:
                     type: string
@@ -131606,6 +131609,7 @@ components:
                         - destructive
                         - idempotent
                         - open_world
+                        - unannotated
                 project_id:
                     type: string
                     description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
@@ -133045,6 +133049,7 @@ components:
                             - destructive
                             - idempotent
                             - open_world
+                            - unannotated
                     description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
                 level:
                     type: string

@@ -221,3 +221,19 @@ func TestAccessRoleMutationOutputsExposeNoRawIdentifiersOrSelectors(t *testing.T
 	}
 	require.ElementsMatch(t, []string{"name", "description", "reference", "version", "mcp_access"}, roleKeys)
 }
+
+func TestAccessRoleDispositionsMatchTheAccessAPI(t *testing.T) {
+	t.Parallel()
+
+	for _, disposition := range []string{
+		authz.DispositionReadOnly,
+		authz.DispositionDestructive,
+		authz.DispositionIdempotent,
+		authz.DispositionOpenWorld,
+		authz.DispositionUnannotated,
+	} {
+		require.True(t, validAccessRoleDisposition(disposition), disposition)
+	}
+	require.False(t, validAccessRoleDisposition("unknown"))
+	require.False(t, validAccessRoleDisposition(""))
+}

@@ -1124,8 +1124,7 @@ function ServerToolRows({
     if (access.connect === "none") return false;
     if (limit.kind === "all") return true;
     if (limit.kind === "tools") return limit.tools.includes(tool.name);
-    const disposition = toolDisposition(tool);
-    return !!disposition && limit.dispositions.includes(disposition);
+    return limit.dispositions.includes(toolDisposition(tool));
   };
   const blocked = new Set(mcpBlockedTools(grants, row));
 
@@ -1204,7 +1203,7 @@ function ServerToolRows({
                 <Text as="span" mono small className="min-w-0 truncate">
                   {tool.name}
                 </Text>
-                {disposition && (
+                {disposition !== "unannotated" && (
                   <Badge variant="neutral" size="sm">
                     {dispositionCopy(disposition).label}
                   </Badge>

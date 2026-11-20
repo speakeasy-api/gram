@@ -263,7 +263,8 @@ func renderDimensionSet(b *strings.Builder, ref, scope, match string, set regist
 		params = append(params, paramName(key))
 	}
 	fmt.Fprintf(b, "// %s requests %s with %s. An empty value is left out of the\n", set.Method, scope, strings.Join(set.Keys, " and "))
-	b.WriteString("// check.\n")
+	b.WriteString("// check: a tool with no true hint is unannotated, and an empty disposition\n")
+	b.WriteString("// means the tool's annotations are unknown.\n")
 	fmt.Fprintf(b, "func (r %sRef) %s(%s string) Check {\n", ref, set.Method, strings.Join(params, ", "))
 	b.WriteString("\tdimensions := r.dimensions()\n\tif dimensions == nil {\n\t\tdimensions = map[string]string{}\n\t}\n")
 	for i, key := range set.Keys {
