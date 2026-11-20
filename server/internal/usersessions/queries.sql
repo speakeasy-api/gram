@@ -572,6 +572,17 @@ FROM (
   WHERE binding.user_session_issuer_id = @user_session_issuer_id
     AND binding.organization_id = @organization_id::text
     AND binding.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT session.id
+  FROM remote_sessions AS session
+  JOIN scoped_issuer ON scoped_issuer.id = session.user_session_issuer_id
+  JOIN remote_session_clients AS registration ON registration.id = session.remote_session_client_id AND NOT registration.deleted
+  JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id AND NOT provider.deleted
+  WHERE NOT session.deleted
+    AND (session.organization_id IS NULL OR session.organization_id = @organization_id::text)
+    AND (registration.project_id <> @target_project_id::uuid OR provider.project_id <> @target_project_id::uuid)
 ) AS incompatible;
 
 -- name: UserSessionIssuerIsPlatformOwned :one
@@ -1098,6 +1109,7 @@ SELECT binding.id, binding.remote_session_client_id
 FROM principal_remote_session_bindings AS binding
 JOIN projects AS project ON project.id = binding.project_id AND project.organization_id = binding.organization_id AND NOT project.deleted
 JOIN agents AS a ON a.id = binding.principal_id AND a.organization_id = binding.organization_id AND NOT a.deleted
+  AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL
 JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
 JOIN organization_user_relationships AS owner_membership ON owner_membership.user_id = owner.id
   AND owner_membership.organization_id = a.organization_id AND owner_membership.deleted_at IS NULL

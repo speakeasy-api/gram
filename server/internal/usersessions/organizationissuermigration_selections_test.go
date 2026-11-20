@@ -332,10 +332,8 @@ func TestOrganizationUserSessionIssuerMigrateKeepsExistingTargetChoice(t *testin
 	}
 }
 
-// A server both issuers bound a registration for has one eligible client per
-// credential before consolidation and two after it. A credential with no
-// recorded choice is decided by the bindings it was served through, not left
-// to reconnect.
+// Repair can preserve explicit choices but cannot resolve an ambiguity with
+// the old issuer bindings, even when each issuer used a different client.
 func TestOrganizationUserSessionIssuerMigrateDoesNotPickAmongAmbiguousOffers(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
