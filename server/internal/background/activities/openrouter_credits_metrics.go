@@ -12,7 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
@@ -29,21 +29,21 @@ type CollectOpenRouterCreditsMetrics struct {
 	db         *pgxpool.Pool
 	repo       *repo.Queries
 	openRouter openrouter.Provisioner
-	enc        *encryption.Client
+	keys       *aiproviderkeys.Keys
 }
 
 func NewCollectOpenRouterCreditsMetrics(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	openRouterProvisioner openrouter.Provisioner,
-	enc *encryption.Client,
+	keys *aiproviderkeys.Keys,
 ) *CollectOpenRouterCreditsMetrics {
 	return &CollectOpenRouterCreditsMetrics{
 		logger:     logger.With(attr.SlogComponent("collect_openrouter_credits_metrics")),
 		db:         db,
 		repo:       repo.New(db),
 		openRouter: openRouterProvisioner,
-		enc:        enc,
+		keys:       keys,
 	}
 }
 
@@ -82,14 +82,15 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 		g.Go(func() error {
 			// Resolution failures are logged and skipped so one bad row does
 			// not blank the batch.
-			if !row.ApiKeyEncrypted.Valid {
+			stored := aiproviderkeys.Stored(row.ApiKeyEncrypted, row.ApiKeyOrgEncrypted)
+			if !aiproviderkeys.Has(stored) {
 				c.logger.ErrorContext(gctx, "openrouter key row holds no encrypted key material",
 					attr.SlogOrganizationID(row.OrganizationID),
 					attr.SlogOrganizationSlug(row.OrganizationSlug),
 				)
 				return nil
 			}
-			apiKey, decErr := c.enc.Decrypt(row.ApiKeyEncrypted.String)
+			plaintext, decErr := c.keys.Open(gctx, nil, row.OrganizationID, aiproviderkeys.OpenRouterAPIKeys, stored)
 			if decErr != nil {
 				c.logger.ErrorContext(gctx, "decrypt openrouter key for usage polling",
 					attr.SlogOrganizationID(row.OrganizationID),
@@ -98,6 +99,7 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 				)
 				return nil
 			}
+			apiKey := string(plaintext)
 			if apiKey == "" {
 				c.logger.ErrorContext(gctx, "openrouter key row holds no key material",
 					attr.SlogOrganizationID(row.OrganizationID),

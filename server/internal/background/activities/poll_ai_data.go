@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -72,12 +72,12 @@ type PollAIData struct {
 func NewPollAIData(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	encryptionClient *encryption.Client,
+	keys *aiproviderkeys.Keys,
 	telemetryLogger *telemetry.Logger,
 	guardianPolicy *guardian.Policy,
 	chatWriter *chat.ChatMessageWriter,
 ) *PollAIData {
-	store := aiintegrations.NewStore(logger, db, encryptionClient)
+	store := aiintegrations.NewStore(logger, db, keys)
 	complianceHeartbeat := func(ctx context.Context, scope string, page int) {
 		activity.RecordHeartbeat(ctx, map[string]any{
 			"schedule": aiintegrations.ScheduleAnthropicCompliance,

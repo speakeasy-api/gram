@@ -25,6 +25,11 @@ const (
 	// and related values Speakeasy stores for remote sessions, trusted issuer
 	// sessions and EMA credentials.
 	UseCaseOAuthSessionTokens UseCase = "oauth-session-tokens" //nolint:gosec // G101: a use case name, not a credential
+
+	// UseCaseAIProviderKeys is the use case for AI provider and model keys:
+	// AI integration API keys and webhook signing secrets, customer model
+	// provider keys, and provisioned OpenRouter keys.
+	UseCaseAIProviderKeys UseCase = "ai-provider-keys"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -33,6 +38,7 @@ var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
 	UseCaseOAuthClientSecrets,
 	UseCaseOAuthSessionTokens,
+	UseCaseAIProviderKeys,
 }
 
 // ParseUseCase returns the registered use case named value.

@@ -21,15 +21,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -413,7 +414,7 @@ type OpenRouter struct {
 	orgRepo         *orgRepo.Queries
 	orClient        *guardian.HTTPClient
 	featureClient   *productfeatures.Client
-	enc             *encryption.Client
+	keys            *aiproviderkeys.Keys
 	// baseURL is OpenRouterBaseURL outside of tests.
 	baseURL string
 }
@@ -422,6 +423,16 @@ var _ Provisioner = (*OpenRouter)(nil)
 
 // Option customizes an OpenRouter client without changing production defaults.
 type Option func(*OpenRouter)
+
+// WithAIProviderKeys seals and opens stored keys over the process's
+// organization encryption. Without it, keys are handled as in a process
+// without organization encryption: organizations still on the platform key
+// work, and enrolled organizations fail closed.
+func WithAIProviderKeys(keys *aiproviderkeys.Keys) Option {
+	return func(openRouter *OpenRouter) {
+		openRouter.keys = keys
+	}
+}
 
 // WithTestBaseURL points OpenRouter requests at a loopback HTTP test server.
 func WithTestBaseURL(baseURL string) (Option, error) {
@@ -457,31 +468,35 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		orgRepo:         orgRepo.New(db),
 		orClient:        orClient,
 		featureClient:   featureClient,
-		enc:             enc,
+		keys:            nil,
 		baseURL:         OpenRouterBaseURL,
 	}
 	for _, option := range options {
 		option(openRouter)
 	}
+	if openRouter.keys == nil {
+		openRouter.keys = aiproviderkeys.WithoutOrganizationEncryption(logger, db, enc)
+	}
 
 	return openRouter
 }
 
-// keyMaterial resolves the usable API key for a row by decrypting the
-// encrypted column, the only place key material lives. A row without a
-// ciphertext is a hard error, as is a decrypt failure, which means this
-// process runs with the wrong encryption key.
-func (o *OpenRouter) keyMaterial(key repo.OpenrouterApiKey) (string, error) {
-	if !key.KeyEncrypted.Valid {
+// keyMaterial resolves the usable API key for a row by opening the copy the
+// organization's transition state reads, the only place key material lives.
+// A row without a ciphertext is a hard error, as is a decrypt failure. db is
+// the caller's transaction, or nil.
+func (o *OpenRouter) keyMaterial(ctx context.Context, db DBTX, key repo.OpenrouterApiKey) (string, error) {
+	stored := aiproviderkeys.Stored(key.KeyEncrypted, key.KeyOrgEncrypted)
+	if !aiproviderkeys.Has(stored) {
 		return "", fmt.Errorf("openrouter key row for organization %s (%s) holds no encrypted key material", key.OrganizationID, key.KeyType)
 	}
 
-	plaintext, err := o.enc.Decrypt(key.KeyEncrypted.String)
+	plaintext, err := o.keys.Open(ctx, db, key.OrganizationID, aiproviderkeys.OpenRouterAPIKeys, stored)
 	if err != nil {
-		return "", fmt.Errorf("decrypt openrouter key for organization %s (%s): %w", key.OrganizationID, key.KeyType, err)
+		return "", fmt.Errorf("open openrouter key for organization %s (%s): %w", key.OrganizationID, key.KeyType, err)
 	}
 
-	return plaintext, nil
+	return string(plaintext), nil
 }
 
 func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
@@ -515,7 +530,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		if EffectiveDisabled(key.Disabled, key.DisableCauses) {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
-		openrouterKey, err = o.keyMaterial(key)
+		openrouterKey, err = o.keyMaterial(ctx, nil, key)
 		if err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 		}
@@ -549,7 +564,7 @@ func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType Key
 	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
 		return "", false, fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 	}
-	plaintext, err := o.keyMaterial(key)
+	plaintext, err := o.keyMaterial(ctx, nil, key)
 	if err != nil {
 		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 	}
@@ -572,6 +587,13 @@ func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType Key
 // is time-boxed below, because the lock and a pooled DB connection are held
 // across it and every waiter pins its own pool connection.
 func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
+	// Check the organization's key before taking a connection and the locks:
+	// a minted upstream key that cannot be stored is orphaned, and this also
+	// loads the organization's key while no pooled connection is held.
+	if err := o.keys.RequireUsable(ctx, nil, orgID); err != nil {
+		return "", oops.E(oops.CodeUnavailable, err, "error provisioning openrouter key").LogError(ctx, o.logger)
+	}
+
 	dbtx, err := o.db.Begin(ctx)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error provisioning openrouter key").LogError(ctx, o.logger)
@@ -608,7 +630,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		if EffectiveDisabled(key.Disabled, key.DisableCauses) {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
-		plaintext, keyErr := o.keyMaterial(key)
+		plaintext, keyErr := o.keyMaterial(ctx, dbtx, key)
 		if keyErr != nil {
 			return "", oops.E(oops.CodeUnexpected, keyErr, "error reading open router key data").LogError(ctx, o.logger)
 		}
@@ -636,17 +658,23 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", err
 	}
 
-	keyCiphertext, err := o.enc.Encrypt([]byte(*keyResponse.Key))
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to encrypt openrouter key").LogError(ctx, o.logger)
-	}
-
-	_, err = txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(keyType),
-		KeyEncrypted:   conv.ToPGText(keyCiphertext),
-		KeyHash:        keyResponse.Data.Hash,
-		MonthlyCredits: int64(creditAmount),
+	err = o.keys.Store(ctx, dbtx, orgID, aiproviderkeys.OpenRouterAPIKeys, []byte(*keyResponse.Key), func(ctx context.Context, copies orgencryption.Copies, generation int64) (bool, error) {
+		_, err := txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+			OrganizationID:    orgID,
+			KeyType:           string(keyType),
+			KeyEncrypted:      copies.Platform,
+			KeyOrgEncrypted:   copies.Org,
+			KeyHash:           keyResponse.Data.Hash,
+			MonthlyCredits:    int64(creditAmount),
+			DecidedGeneration: generation,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("create openrouter key row: %w", err)
+		}
+		return true, nil
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
@@ -1196,7 +1224,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		return used, limit, nil
 	}
 
-	apiKey, err := o.keyMaterial(key)
+	apiKey, err := o.keyMaterial(ctx, nil, key)
 	if err != nil {
 		return 0, limit, fmt.Errorf("resolve openrouter key material: %w", err)
 	}
@@ -1511,7 +1539,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
 
-	apiKey, err := o.keyMaterial(key)
+	apiKey, err := o.keyMaterial(ctx, nil, key)
 	if err != nil {
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to resolve openrouter API key material").LogError(ctx, o.logger)
 	}

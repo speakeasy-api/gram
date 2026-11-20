@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -112,7 +113,12 @@ type WorkerOptions struct {
 	// UpstreamTokens opens and stores upstream OAuth tokens over the process's
 	// organization encryption. Nil handles them as a process without
 	// organization encryption.
-	UpstreamTokens  *upstreamtokens.Tokens
+	UpstreamTokens *upstreamtokens.Tokens
+
+	// AIProviderKeys opens AI provider and model keys over the process's
+	// organization encryption. Nil opens them as a process without
+	// organization encryption.
+	AIProviderKeys  *aiproviderkeys.Keys
 	FeatureProvider feature.Provider
 	AssetStorage    assets.BlobStore
 	SlackClient     *slack_client.SlackClient
@@ -247,6 +253,7 @@ func ForDeploymentProcessing(
 		EncryptionClient:               enc,
 		ClientSecrets:                  nil,
 		UpstreamTokens:                 nil,
+		AIProviderKeys:                 nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -355,6 +362,7 @@ func NewTemporalWorker(
 		EncryptionClient:               nil,
 		ClientSecrets:                  nil,
 		UpstreamTokens:                 nil,
+		AIProviderKeys:                 nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -420,6 +428,7 @@ func NewTemporalWorker(
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			ClientSecrets:                  conv.Default(o.ClientSecrets, opts.ClientSecrets),
 			UpstreamTokens:                 conv.Default(o.UpstreamTokens, opts.UpstreamTokens),
+			AIProviderKeys:                 conv.Default(o.AIProviderKeys, opts.AIProviderKeys),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -529,6 +538,13 @@ func NewTemporalWorker(
 		}
 	}
 
+	// Workers wired without the process's seam (test workers) open AI
+	// provider keys as a process without organization encryption.
+	aiProviderKeys := opts.AIProviderKeys
+	if aiProviderKeys == nil {
+		aiProviderKeys = aiproviderkeys.WithoutOrganizationEncryption(logger, opts.DB, opts.EncryptionClient)
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -539,6 +555,7 @@ func NewTemporalWorker(
 		opts.EncryptionClient,
 		opts.ClientSecrets,
 		opts.UpstreamTokens,
+		aiProviderKeys,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
