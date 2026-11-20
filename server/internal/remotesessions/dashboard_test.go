@@ -1088,14 +1088,10 @@ func TestCommitServerIdentityConfigurationRefusesReplacingOrgClientWithAgentBind
 	currentProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-current", "", false, []string{"none"})
 	orgClientID := bindServerIdentityClient(t, ctx, ti, "org-agent-replace-client", currentProviderID, targetID, true)
 
-	// The client and issuer are organization-scoped, so the attachment can
-	// live in another project without offering the client on a server there.
+	// The historical attachment is in another project. The provider and
+	// its FK parent still come from the caller's project.
 	otherProjectID := createProject(t, ctx, ti.conn, "org-agent-replace-other")
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	otherAuth := *authCtx
-	otherAuth.ProjectID = &otherProjectID
-	seedLiveAgentBinding(t, contextvalues.SetAuthContext(ctx, &otherAuth), ti, orgClientID, userIssuerID)
+	seedLiveAgentBindingInProject(t, ctx, ti, orgClientID, userIssuerID, otherProjectID)
 
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "org-agent-replace-next", "", false, []string{"none"})
 	nextClientID := createServerIdentityClient(t, ctx, ti, "org-agent-replace-next-client", nextProviderID, true)

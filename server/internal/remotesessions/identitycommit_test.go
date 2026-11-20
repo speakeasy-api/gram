@@ -144,6 +144,13 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 // through clientID's binding to userIssuerID.
 func seedLiveAgentBinding(t *testing.T, ctx context.Context, ti *testInstance, clientID, userIssuerID uuid.UUID) {
 	t.Helper()
+	seedLiveAgentBindingInProject(t, ctx, ti, clientID, userIssuerID, projectIDFromContext(t, ctx))
+}
+
+// The caller's project supplies the FK parent scope for the provider; the
+// fixture can insert a historical attachment in a different project.
+func seedLiveAgentBindingInProject(t *testing.T, ctx context.Context, ti *testInstance, clientID, userIssuerID, attachmentProjectID uuid.UUID) {
+	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
@@ -156,7 +163,7 @@ func seedLiveAgentBinding(t *testing.T, ctx context.Context, ti *testInstance, c
 	session := insertRemoteSession(t, ctx, ti.conn, subject, userIssuerID.String(), clientID.String())
 	ensureAttachmentParent(t, ctx, ti.conn, clientID, userIssuerID)
 	_, err = testrepo.New(ti.conn).InsertPrincipalRemoteSessionBindingFixture(ctx, testrepo.InsertPrincipalRemoteSessionBindingFixtureParams{
-		ProjectID:             *authCtx.ProjectID,
+		ProjectID:             attachmentProjectID,
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		PrincipalID:           agent.ID,
 		UserSessionIssuerID:   userIssuerID,

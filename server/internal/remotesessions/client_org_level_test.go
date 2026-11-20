@@ -238,7 +238,7 @@ func TestAttachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
-	requireClientBound(t, ctx, ti, orgClient, userIssuer, false)
+	require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, orgClient, userIssuer))
 }
 
 func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
@@ -250,7 +250,8 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 
 	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "orgwide-detach-issuer")
 	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-detach-usi")
-	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-detach-cid", userIssuer)
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-detach-cid")
+	ensureAttachmentParent(t, ctx, ti.conn, orgClient, userIssuer)
 
 	_, err := ti.service.DetachLegacyIssuerForTest(withoutOrganizationAdmin(t, ctx), &remotesessions.LegacyIssuerBindingForTest{
 		ID:                  orgClient.String(),
@@ -258,7 +259,7 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
-	requireClientBound(t, ctx, ti, orgClient, userIssuer, true)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, orgClient, userIssuer))
 }
 
 // The pre-lock binding snapshot must not turn a concurrent org-wide change
@@ -313,7 +314,11 @@ func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
 			case <-time.After(30 * time.Second):
 				t.Fatal("binding change did not complete after releasing issuer lock")
 			}
-			requireClientBound(t, ctx, ti, orgClient, userIssuer, !attach)
+			want := 1
+			if attach {
+				want = 0
+			}
+			require.Equal(t, want, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, orgClient, userIssuer))
 		})
 	}
 }
