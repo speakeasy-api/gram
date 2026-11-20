@@ -200,6 +200,7 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 					requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
 
 					registration := g.attachSignIn(t, ctx, typed)
+					g.ti.service.SetAuthClientPermitted(true)
 					before := g.source.requests.Load()
 					requireStaleError(t, g.call(t, connection.token, "source--tool_000"), `This server's `+staleReconnectCopy)
 					require.Equal(t, before, g.source.requests.Load(), "refused before any upstream request")
@@ -214,6 +215,11 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 					requireExecuted(t, g.call(t, rotated.AccessToken, "other--tool_000"))
 					requireStaleError(t, g.call(t, rotated.AccessToken, "source--tool_000"), staleReconnectCopy)
 
+					if !typed {
+						// The old association can stale a runtime choice, but new
+						// consent must see a native offer before it can approve it.
+						seedConsentAuthOffer(t, ctx, g.ti, g.org, g.project, g.serverID, registration, "remote_session")
+					}
 					insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
 					renewed := g.approve(t, ctx)
 					if !typed {
@@ -327,6 +333,7 @@ func TestValidGatewayChoiceIsUntouched(t *testing.T) {
 	t.Parallel()
 	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect)
 	registration := g.attachSignIn(t, ctx, true)
+	g.ti.service.SetAuthClientPermitted(true)
 	insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
 	connection := g.approve(t, ctx)
 	requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
@@ -421,19 +428,16 @@ func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 	})
 }
 
-// Resynchronizing a no-auth gateway member's derived authorization server is
-// not a change an approval covers under enforcement, so the frozen approval
-// keeps serving. Without enforcement the same resync asks for the approval
-// again.
+// Consent captures a typed fingerprint even if runtime enforcement is off.
+// A derived issuer resync does not change that approval.
 func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		enforced bool
-		served   bool
 	}{
-		{name: "no-auth member under enforcement", enforced: true, served: true},
-		{name: "no-auth member without enforcement", enforced: false, served: false},
+		{name: "no-auth member under enforcement", enforced: true},
+		{name: "no-auth member without enforcement", enforced: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -452,12 +456,7 @@ func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, authclientfixtures.New(g.ti.conn).SetServerRemoteSessionIssuerFixture(ctx, authclientfixtures.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(issuer.ID), ID: g.serverID}))
 
-			w := g.call(t, connection.token, "source--tool_000")
-			if tc.served {
-				requireExecuted(t, w)
-				return
-			}
-			require.Contains(t, w.Body.String(), "changed since you approved it")
+			requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
 		})
 	}
 }

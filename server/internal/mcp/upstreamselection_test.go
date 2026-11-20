@@ -342,7 +342,9 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
-	// With one client left to offer, consent goes straight to it.
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, serverID, own, "remote_session")
+	seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, serverID)
+	// With one typed offer, consent goes straight to it.
 	code, html, location := render(t, fx)
 	require.Equal(t, http.StatusSeeOther, code, html)
 	require.NotNil(t, location)

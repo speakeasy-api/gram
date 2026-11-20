@@ -19,6 +19,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -40,6 +41,7 @@ type serviceChoiceGateway struct {
 	serverID uuid.UUID
 	orgID    string
 	services []uuid.UUID
+	offers   map[uuid.UUID]uuid.UUID
 	upstream string
 }
 
@@ -52,11 +54,10 @@ func seedServiceChoiceGateway(t *testing.T, connected int) (context.Context, ser
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
 	upstream := newCatalogUpstream(t, 1)
 	serverID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
-	fx := serviceChoiceGateway{ti: ti, issuerID: issuer.ID, client: client, gateway: gateway.ID, slug: slug, serverID: serverID, orgID: auth.ActiveOrganizationID, services: nil, upstream: upstream.url}
+	fx := serviceChoiceGateway{ti: ti, issuerID: issuer.ID, client: client, gateway: gateway.ID, slug: slug, serverID: serverID, orgID: auth.ActiveOrganizationID, services: nil, offers: make(map[uuid.UUID]uuid.UUID), upstream: upstream.url}
 	for i := range connected {
 		registration := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "service-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
-		_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: serverID, RemoteSessionClientID: registration})
-		require.NoError(t, err)
+		fx.offers[registration] = seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, serverID, registration, authz.AuthClientTypeRemoteSession)
 		insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, registration, urn.NewUserSubject(mockidp.MockUserID), "service-token-"+string(rune('a'+i)), upstream.url)
 		fx.services = append(fx.services, registration)
 	}
@@ -79,16 +80,23 @@ func consentPageWithPicks(t *testing.T, ctx context.Context, fx serviceChoiceGat
 	return w.Body.String()
 }
 
-// selectedService is the service the page's picker selects for the source member.
-func selectedService(t *testing.T, page string) uuid.UUID {
+// selectedService maps the selected typed offer back to its registration.
+func selectedService(t *testing.T, fx serviceChoiceGateway, page string) uuid.UUID {
 	t.Helper()
 	match := regexp.MustCompile(`<option value="([0-9a-f-]{36})" selected`).FindStringSubmatch(page)
 	require.Len(t, match, 2, "the picker selects one service")
-	return uuid.MustParse(match[1])
+	id := uuid.MustParse(match[1])
+	for registration, offer := range fx.offers {
+		if offer == id {
+			return registration
+		}
+	}
+	require.FailNow(t, "selected offer does not belong to the fixture")
+	return uuid.Nil
 }
 
-// approveLegacyServiceChoice approves the page but must not persist a legacy choice.
-func approveLegacyServiceChoice(t *testing.T, ctx context.Context, fx serviceChoiceGateway, stateID, csrf, page string) {
+// approveServiceChoice approves the page the person last loaded and returns the service the new connection records for the member.
+func approveServiceChoice(t *testing.T, ctx context.Context, fx serviceChoiceGateway, stateID, csrf, page string) uuid.NullUUID {
 	t.Helper()
 	endpoint, err := fx.ti.service.LoadResolvedMcpEndpointBySlug(ctx, fx.ti.logger, fx.slug, "mcp")
 	require.NoError(t, err)
@@ -118,11 +126,15 @@ func approveLegacyServiceChoice(t *testing.T, ctx context.Context, fx serviceCho
 	}
 	_, err = usersessionsrepo.New(fx.ti.conn).GetUpstreamClientSelection(ctx, usersessionsrepo.GetUpstreamClientSelectionParams{UserSessionIssuerID: fx.issuerID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerID: fx.serverID, OrganizationID: fx.orgID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+	choices, err := upstreamclientsrepo.New(fx.ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{OrganizationID: fx.orgID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerIds: []uuid.UUID{fx.serverID}})
+	require.NoError(t, err)
+	require.Len(t, choices, 1)
+	return choices[0].RegistrationID
 }
 
 // With sign-in enforcement off, a member with two connected services offers a
-// choice between them for the consent page but does not create a legacy
-// choice at issuance.
+// choice between them instead of reading as not set up, and the chosen one
+// becomes the connection's choice and the next consent's default.
 func TestGatewayConsentChoosesBetweenConnectedServices(t *testing.T) {
 	t.Parallel()
 	ctx, fx := seedServiceChoiceGateway(t, 2)
@@ -131,20 +143,22 @@ func TestGatewayConsentChoosesBetweenConnectedServices(t *testing.T) {
 	page := consentPageWithPicks(t, ctx, fx, stateID, nil)
 	require.Contains(t, page, `name="auth_client.source"`)
 	for _, service := range fx.services {
-		require.Contains(t, page, `value="`+service.String()+`"`)
+		require.Contains(t, page, `value="`+fx.offers[service].String()+`"`)
 	}
 	outcomes := gatewayOutcomesFromPage(page)
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "connected", outcomes[0].Status)
 
 	chosen := fx.services[0]
-	if selectedService(t, page) == chosen {
+	if selectedService(t, fx, page) == chosen {
 		chosen = fx.services[1]
 	}
-	page = consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {chosen.String()}})
-	require.Equal(t, chosen, selectedService(t, page))
-	approveLegacyServiceChoice(t, ctx, fx, stateID, csrf, page)
+	page = consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {fx.offers[chosen].String()}})
+	require.Equal(t, chosen, selectedService(t, fx, page))
+	require.Equal(t, uuid.NullUUID{UUID: chosen, Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
 
+	next, _ := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
+	require.Equal(t, chosen, selectedService(t, fx, consentPageWithPicks(t, ctx, fx, next, nil)), "the last approved service stays the default")
 }
 
 // A member with one connected service has nothing to choose.
@@ -154,7 +168,7 @@ func TestGatewayConsentOneConnectedServiceShowsNoPicker(t *testing.T) {
 	stateID, csrf := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
 	page := consentPageWithPicks(t, ctx, fx, stateID, nil)
 	require.NotContains(t, page, `name="auth_client.source"`)
-	approveLegacyServiceChoice(t, ctx, fx, stateID, csrf, page)
+	require.Equal(t, uuid.NullUUID{UUID: fx.services[0], Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
 }
 
 // A pick naming a service the person has not connected for this server is ignored, and the default is approved instead.
@@ -164,17 +178,17 @@ func TestGatewayConsentIgnoresAPickOutsideTheConnectedServices(t *testing.T) {
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	unconnected := createConsentRemoteClient(t, ctx, fx.ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unconnected-"+uuid.NewString()[:8], "", []uuid.UUID{fx.issuerID})
 	stateID, csrf := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
-	fallback := selectedService(t, consentPageWithPicks(t, ctx, fx, stateID, nil))
+	fallback := selectedService(t, fx, consentPageWithPicks(t, ctx, fx, stateID, nil))
 	for _, forged := range []uuid.UUID{uuid.New(), unconnected} {
 		page := consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {forged.String()}})
 		require.NotContains(t, page, `value="`+forged.String()+`"`)
-		require.Equal(t, fallback, selectedService(t, page))
+		require.Equal(t, fallback, selectedService(t, fx, page))
 	}
 	page := consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {unconnected.String()}})
-	approveLegacyServiceChoice(t, ctx, fx, stateID, csrf, page)
+	require.Equal(t, uuid.NullUUID{UUID: fallback, Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
 }
 
-// A connection in an outage stays a choice, since the outage leaves it in place, but is not the default.
+// A connection in an outage stays a choice, but its tools cannot be previewed.
 func TestGatewayConsentOffersAServiceInAnOutage(t *testing.T) {
 	t.Parallel()
 	ctx, fx := seedServiceChoiceGateway(t, 2)
@@ -196,14 +210,15 @@ func TestGatewayConsentOffersAServiceInAnOutage(t *testing.T) {
 
 	page := consentPageWithPicks(t, ctx, fx, stateID, nil)
 	for _, service := range fx.services {
-		require.Contains(t, page, `value="`+service.String()+`"`)
+		require.Contains(t, page, `value="`+fx.offers[service].String()+`"`)
 	}
-	require.Equal(t, fx.services[0], selectedService(t, page), "the default is the working connection")
-	approveLegacyServiceChoice(t, ctx, fx, stateID, csrf, page)
+	page = consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {fx.offers[fx.services[0]].String()}})
+	require.Equal(t, fx.services[0], selectedService(t, fx, page))
+	require.Equal(t, uuid.NullUUID{UUID: fx.services[0], Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
 
 	next, _ := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
-	page = consentPageWithPicks(t, ctx, fx, next, url.Values{"auth_client.source": {outage.String()}})
-	require.Equal(t, outage, selectedService(t, page), "the person can still pick it")
+	page = consentPageWithPicks(t, ctx, fx, next, url.Values{"auth_client.source": {fx.offers[outage].String()}})
+	require.Equal(t, outage, selectedService(t, fx, page), "the person can still pick it")
 	outcomes := gatewayOutcomesFromPage(page)
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "unavailable", outcomes[0].Status, "its tools can't be listed until the outage ends")

@@ -19,7 +19,6 @@ import (
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -231,8 +230,6 @@ func seedMetaConsentEndpoint(t *testing.T, slug string) (context.Context, consen
 	metaServerID := createMetaServer(t, ctx, ti.conn, projectID, orgID, slug, shared)
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug)
 	endpoint.MetaMcpServerID = conv.ToNullUUID(metaServerID)
-	_, err := organizationsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: orgID, UserID: conv.ToPGText(subject.ID)})
-	require.NoError(t, err)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, orgID, subject.ID, metaServerID.String())
 
 	return ctx, consentActionFixture{
@@ -250,9 +247,16 @@ func seedMetaConsentEndpoint(t *testing.T, slug string) (context.Context, consen
 	}, metaServerID
 }
 
-// The member whose upstream authenticates against the connecting client's
-// authorization server is the one that qualifies the credential.
-func TestServeConsentAction_MetaMCPConnectResolvesMemberByStoredIssuer(t *testing.T) {
+// The member that offers the connecting registration qualifies the credential.
+// seedAuthorizedMetaConsentOffer creates a typed offer and grants its consent
+// subject access. Public visibility alone does not admit a represented user.
+func seedAuthorizedMetaConsentOffer(t *testing.T, ctx context.Context, fx consentActionFixture, member seededMetaMember, clientID uuid.UUID) {
+	t.Helper()
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, "remote_session")
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, member.mcpServerID.String())
+}
+
+func TestServeConsentAction_MetaMCPConnectResolvesMemberByTypedOffer(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-lookup-gw")
@@ -261,14 +265,16 @@ func TestServeConsentAction_MetaMCPConnectResolvesMemberByStoredIssuer(t *testin
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	const matched = "https://matched.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-match", matched, conv.ToNullUUID(issuerID), 0)
-	// A sibling on a different authorization server must not be chosen.
+	match := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-match", matched, conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, match, clientID)
+	// A sibling that offers a different registration must not be chosen.
 	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup-other", "", []uuid.UUID{fx.shared})
 	otherIssuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, other)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-sibling", "https://sibling.example.com/mcp", conv.ToNullUUID(otherIssuerID), 1)
+	sibling := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-sibling", "https://sibling.example.com/mcp", conv.ToNullUUID(otherIssuerID), 1)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, sibling, other)
 
 	loc := postConnectAction(t, fx, clientID)
-	require.Equal(t, matched, loc.Query().Get("resource"), "the credential must be qualified to the member behind its own authorization server")
+	require.Equal(t, matched, loc.Query().Get("resource"), "the credential must be qualified to the member that offers its registration")
 	require.Equal(t, matched, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource, "and the resolved member must survive onto the login state")
 }
 
@@ -301,10 +307,9 @@ func TestServeConsentAction_MetaMCPConnectAllowsAClientOnlyAHostedMemberUses(t *
 	require.NotNil(t, postConnectAction(t, fx, clientID), "the hosted member's client connects")
 }
 
-// One authorization server fronting two members of the same meta MCP is
-// unsupported: a grant records one resource per (subject, client), so there is
-// no value that routes both correctly.
-func TestServeConsentAction_MetaMCPConnectSharedIssuerSendsNoResource(t *testing.T) {
+// One registration serving members at two different resources is ambiguous:
+// a typed login must identify one server, rather than mint an unqualified grant.
+func TestServeConsentAction_MetaMCPConnectRejectsSharedRegistrationAcrossResources(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-shared-gw")
@@ -312,18 +317,17 @@ func TestServeConsentAction_MetaMCPConnectSharedIssuerSendsNoResource(t *testing
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-shared", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-shared-a", "https://shared-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-shared-b", "https://shared-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	memberA := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-shared-a", "https://shared-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, memberA, clientID)
+	memberB := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-shared-b", "https://shared-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, memberB, clientID)
 
-	loc := postConnectAction(t, fx, clientID)
-	_, hasResource := loc.Query()["resource"]
-	require.False(t, hasResource, "two members behind one authorization server must fail closed, not pick one")
-	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+	err := requireConnectActionFailsClosed(t, fx, clientID, oops.CodeForbidden)
+	require.ErrorIs(t, err, remotesessions.ErrTypedAuthorizationConfiguration)
 }
 
-// Declining to choose between two members is a decision: the grant carries no
-// resource, even though a server outside the gateway would derive one.
-func TestServeConsentAction_MetaMCPConnectAmbiguityQualifiesNothing(t *testing.T) {
+// An ambiguous typed offer cannot fall back to a server outside the gateway.
+func TestServeConsentAction_MetaMCPConnectAmbiguityDoesNotFallBack(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-ambig-fb-gw")
@@ -338,13 +342,13 @@ func TestServeConsentAction_MetaMCPConnectAmbiguityQualifiesNothing(t *testing.T
 	requireConnectRefused(t, fx, clientID, "a server outside the gateway never qualifies a gateway credential")
 
 	// Now two members behind that one authorization server.
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-ambig-fb-a", "https://ambig-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-ambig-fb-b", "https://ambig-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	memberA := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-ambig-fb-a", "https://ambig-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, memberA, clientID)
+	memberB := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-ambig-fb-b", "https://ambig-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, memberB, clientID)
 
-	loc := postConnectAction(t, fx, clientID)
-	_, hasResource := loc.Query()["resource"]
-	require.False(t, hasResource, "an ambiguous gateway must not qualify the credential to either member")
-	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+	err := requireConnectActionFailsClosed(t, fx, clientID, oops.CodeForbidden)
+	require.ErrorIs(t, err, remotesessions.ErrTypedAuthorizationConfiguration)
 }
 
 // A member the caller cannot see offers its client to nobody, and nothing
@@ -362,7 +366,8 @@ func TestServeConsentAction_MetaMCPConnectInvisibleMemberQualifiesNothing(t *tes
 
 	requireConnectRefused(t, fx, clientID, "a server outside the gateway never qualifies a gateway credential")
 
-	createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-invis-member", "https://invisible.example.com/mcp", conv.ToNullUUID(issuerID), 0, "private")
+	invisible := createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-invis-member", "https://invisible.example.com/mcp", conv.ToNullUUID(issuerID), 0, "private")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, invisible.mcpServerID, clientID, "remote_session")
 
 	requireConnectRefused(t, fx, clientID, "a member the subject cannot see offers nothing, so nothing weaker may qualify the client")
 }
@@ -378,9 +383,11 @@ func TestServeConsentAction_MetaMCPConnectMembersSharingOneURLCollapse(t *testin
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	const upstream = "https://dupe.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dupe-a", upstream, conv.ToNullUUID(issuerID), 0)
+	memberA := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dupe-a", upstream, conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, memberA, clientID)
 	// The trailing slash is the same destination once routing trims it.
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dupe-b", upstream+"/", conv.ToNullUUID(issuerID), 1)
+	memberB := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dupe-b", upstream+"/", conv.ToNullUUID(issuerID), 1)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, memberB, clientID)
 
 	require.Equal(t, upstream, postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
@@ -401,13 +408,15 @@ func TestServeConsentAction_MetaMCPConnectExcludesMembersTheSubjectCannotConnect
 	// Require would answer CodeUnauthorized, which fails the consent instead of
 	// excluding the member. Unreachable here — a meta endpoint always has an issuer,
 	// so /authorize forces the IDP first.
-	createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-rbac-private", "https://private.example.com/mcp", conv.ToNullUUID(issuerID), 0, "private")
+	private := createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-rbac-private", "https://private.example.com/mcp", conv.ToNullUUID(issuerID), 0, "private")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, private.mcpServerID, clientID, "remote_session")
 
 	requireConnectRefused(t, fx, clientID, "an unreachable member must not claim the credential")
 
-	// The same member, now public, does resolve — so the exclusion above was
-	// the authorization check and not the lookup failing to see it at all.
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-rbac-public", "https://public.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	// A reachable member offering the same client does resolve, so the
+	// ungranted member neither claims the client nor makes it ambiguous.
+	public := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-rbac-public", "https://public.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, public, clientID)
 	require.Equal(t, "https://public.example.com/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
@@ -424,10 +433,12 @@ func TestServeConsentAction_MetaMCPConnectResolvesAPrivateMemberTheSubjectCanCon
 
 	const granted = "https://granted.example.com/mcp"
 	reachable := createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-grant-reachable", granted, conv.ToNullUUID(issuerID), 0, "private")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, reachable.mcpServerID, clientID, "remote_session")
 	// Behind the same authorization server and left ungranted, so it stays
 	// unreachable throughout and must never contest the claim of the member the
 	// subject can reach.
-	createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-grant-unreachable", "https://ungranted.example.com/mcp", conv.ToNullUUID(issuerID), 1, "private")
+	unreachable := createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-grant-unreachable", "https://ungranted.example.com/mcp", conv.ToNullUUID(issuerID), 1, "private")
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, unreachable.mcpServerID, clientID, "remote_session")
 
 	requireConnectRefused(t, fx, clientID, "neither member is reachable yet, so the grant below is what changes the answer")
 
@@ -456,7 +467,8 @@ func TestServeConsentAction_MetaMCPConnectAssociatedMemberDecidesTheResource(t *
 	requireConnectRefused(t, fx, clientID, "a server outside the gateway never qualifies a gateway credential")
 
 	const claimed = "https://claimed.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-precedence-member", claimed, conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-precedence-member", claimed, conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
 
 	loc := postConnectAction(t, fx, clientID)
 	require.Equal(t, claimed, loc.Query().Get("resource"), "the member associated with the client decides the resource")
@@ -465,7 +477,7 @@ func TestServeConsentAction_MetaMCPConnectAssociatedMemberDecidesTheResource(t *
 }
 
 // A disabled member does not exist for the serving path, so it must not
-// qualify a credential either.
+// qualify a credential even if the subject still holds mcp:connect.
 func TestServeConsentAction_MetaMCPConnectIgnoresDisabledMembers(t *testing.T) {
 	t.Parallel()
 
@@ -474,7 +486,8 @@ func TestServeConsentAction_MetaMCPConnectIgnoresDisabledMembers(t *testing.T) {
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-disabled", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
-	createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-disabled-member", "https://disabled.example.com/mcp", conv.ToNullUUID(issuerID), 0, "disabled")
+	member := createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-disabled-member", "https://disabled.example.com/mcp", conv.ToNullUUID(issuerID), 0, "disabled")
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
 
 	requireConnectRefused(t, fx, clientID, "a disabled member must not qualify a credential")
 }
@@ -493,7 +506,8 @@ func TestServeConsentAction_MetaMCPConnectIgnoresUnknownVisibility(t *testing.T)
 	// mcp_servers.visibility is only constrained to be non-empty, so a value
 	// outside the known set is storable exactly as a future migration would
 	// introduce one.
-	createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-unknown-vis-member", "https://unknown-visibility.example.com/mcp", conv.ToNullUUID(issuerID), 0, "unlisted")
+	member := createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-unknown-vis-member", "https://unknown-visibility.example.com/mcp", conv.ToNullUUID(issuerID), 0, "unlisted")
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
 
 	requireConnectRefused(t, fx, clientID, "a visibility the authorization switch cannot evaluate must not qualify a credential")
 }
@@ -511,13 +525,15 @@ func TestServeConsentAction_MetaMCPConnectIgnoresAnotherProjectsUpstream(t *test
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	sibling := createSiblingProject(t, ctx, fx.ti.conn, fx.orgID)
-	createMetaMemberWithUpstreamIn(t, ctx, fx.ti.conn, fx.projectID, sibling, metaServerID, "aim87-tenancy-foreign", "https://another-tenant.example.com/mcp", conv.ToNullUUID(issuerID), 0, "public")
+	foreign := createMetaMemberWithUpstreamIn(t, ctx, fx.ti.conn, fx.projectID, sibling, metaServerID, "aim87-tenancy-foreign", "https://another-tenant.example.com/mcp", conv.ToNullUUID(issuerID), 0, "public")
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, foreign, clientID)
 
 	requireConnectRefused(t, fx, clientID, "an upstream row owned by another project must not qualify this project's credential")
 
 	// The same member with its upstream in this project does resolve, so the
 	// exclusion above was the project predicate and not the stamp or the join.
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tenancy-mine", "https://mine.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	mine := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tenancy-mine", "https://mine.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, mine, clientID)
 	require.Equal(t, "https://mine.example.com/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
@@ -534,6 +550,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresTombstonedRows(t *testing.T) {
 
 	const upstreamA = "https://dead-srv.example.com/mcp"
 	memberA := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dead-srv-member", upstreamA, conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, memberA, clientID)
 	require.Equal(t, upstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"), "the member must resolve while it is live")
 
 	_, err := mcpservers_repo.New(fx.ti.conn).DeleteMCPServer(ctx, mcpservers_repo.DeleteMCPServerParams{
@@ -548,6 +565,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresTombstonedRows(t *testing.T) {
 	// tombstone predicates and not general breakage.
 	const upstreamB = "https://dead-upstream.example.com/mcp"
 	memberB := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dead-upstream-member", upstreamB, conv.ToNullUUID(issuerID), 1)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, memberB, clientID)
 	require.Equal(t, upstreamB, postConnectAction(t, fx, clientID).Query().Get("resource"), "the member must resolve while its upstream is live")
 
 	_, err = remotemcp_repo.New(fx.ti.conn).DeleteServer(ctx, remotemcp_repo.DeleteServerParams{
@@ -562,7 +580,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresTombstonedRows(t *testing.T) {
 // requireConnectActionFailsClosed drives one client's connect action and
 // asserts it errored before minting anything: no upstream redirect, no login
 // state, and therefore no grant that could carry a wrongly derived resource.
-func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clientID uuid.UUID) {
+func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clientID uuid.UUID, code oops.Code) error {
 	t.Helper()
 
 	form := url.Values{}
@@ -579,8 +597,9 @@ func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clie
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.Equal(t, code, oopsErr.Code)
 	require.Empty(t, w.Header().Get("Location"), "fail closed: no upstream redirect may be minted")
+	return err
 }
 
 // requireConnectRefused asserts the gateway refuses to connect a client that
@@ -617,14 +636,15 @@ func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
 
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup-fault", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-fault-member", "https://lookup-fault.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-fault-member", "https://lookup-fault.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
 
 	// Break only the member lookup's table; everything the connect arm touches
 	// before it is already seeded (per-test cloned DB, safe to mutate).
 	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE meta_mcp_server_members RENAME TO meta_mcp_server_members_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a member-lookup DB error; not expressible as an SQLc query
 	require.NoError(t, err)
 
-	requireConnectActionFailsClosed(t, fx, clientID)
+	requireConnectActionFailsClosed(t, fx, clientID, oops.CodeUnexpected)
 }
 
 // A tunneled member with no recorded resource identifier still claims its
@@ -639,7 +659,8 @@ func TestServeConsentAction_MetaMCPConnectTunneledMemberWithoutIdentifierSendsNo
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-tunnel", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
-	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tunnel-member", "", conv.ToNullUUID(issuerID), 0)
+	member := createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tunnel-member", "", conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
 	// A derivable per-client resource exists, so an omitted one proves the
 	// claim happened and suppressed it — without this the assertion would
 	// hold even if the tunneled member stopped claiming altogether.
@@ -661,7 +682,8 @@ func TestServeConsentAction_MetaMCPConnectResolvesTunneledMemberIdentifier(t *te
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim151-tunnel", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
-	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim151-tunnel-member", "https://tunneled.internal/mcp", conv.ToNullUUID(issuerID), 0)
+	member := createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim151-tunnel-member", "https://tunneled.internal/mcp", conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
 
 	require.Equal(t, "https://tunneled.internal/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"),
 		"the credential must be qualified to the tunneled member's recorded resource identifier")
@@ -678,13 +700,15 @@ func TestServeConsentAction_MetaMCPConnectIgnoresAnotherMetasMembers(t *testing.
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	otherMeta := createMetaServer(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-scope-other", createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID))
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, otherMeta, "aim87-scope-elsewhere", "https://elsewhere.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	elsewhere := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, otherMeta, "aim87-scope-elsewhere", "https://elsewhere.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, elsewhere, clientID)
 
 	requireConnectRefused(t, fx, clientID, "the lookup must be scoped to this meta MCP's members")
 
 	// An equivalent member attached to this meta MCP does resolve, so the
 	// exclusion above was the scoping and not the stamp being unreadable.
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-scope-mine", "https://mine.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	mine := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-scope-mine", "https://mine.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	seedAuthorizedMetaConsentOffer(t, ctx, fx, mine, clientID)
 	require.Equal(t, "https://mine.example.com/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
@@ -718,10 +742,8 @@ func TestServeConsentAction_NonMetaEndpointKeepsPerClientDerivation(t *testing.T
 	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
-// The sync and the lookup meet only in production: every other test stamps the
-// member column through a fixture. Here the real resync derives it from a
-// client binding, and consent must resolve the member from what it wrote.
-func TestServeConsentAction_MetaMCPConnectResolvesFromTheRealResync(t *testing.T) {
+// A real issuer resync does not create a native typed offer.
+func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-composed-gw")
@@ -756,10 +778,15 @@ func TestServeConsentAction_MetaMCPConnectResolvesFromTheRealResync(t *testing.T
 		UserSessionIssuerID:   memberIssuerID,
 	}))
 
-	// The production write path.
+	// The production write path. The grant alone does not make resync offer the client.
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, orgID, fx.subject.ID, member.mcpServerID.String())
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, fx.ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 
-	loc := postConnectAction(t, fx, gatewayClientID)
-	require.Equal(t, "https://aim87-composed.example.com/mcp", loc.Query().Get("resource"),
-		"the member must resolve from the value the resync wrote, not from any fixture")
+	server, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: member.mcpServerID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(rsiID), server.RemoteSessionIssuerID)
+	requireConnectRefused(t, fx, gatewayClientID, "the issuer written by resync does not offer a proxied registration")
+
+	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, gatewayClientID, "remote_session")
+	require.Equal(t, "https://aim87-composed.example.com/mcp", postConnectAction(t, fx, gatewayClientID).Query().Get("resource"))
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -151,6 +152,7 @@ func seedSwitchConsent(t *testing.T, tag string, wrap func(cache.Cache) cache.Ca
 	}
 	registerPageClient(t, ctx, fx.consentActionFixture)
 	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "", []uuid.UUID{issuerID})
+	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, serverID, fx.clientA, authz.AuthClientTypeEMA)
 	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID), Slug: slug,
 	})
@@ -795,7 +797,8 @@ func TestConsentSwitchAccount_KeepsTheGatewayServerPage(t *testing.T) {
 
 	ctx, base, metaID, clientID, issuerID := metaConsent(t, "aim852-gw")
 	const upstream = "https://aim852-gw.example.com/mcp"
-	createMetaMember(t, ctx, base.ti.conn, base.projectID, metaID, "aim852-gw-member", upstream, conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, base.ti.conn, base.projectID, metaID, "aim852-gw-member", upstream, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, base.ti, base.orgID, base.projectID, member.mcpServerID, clientID, authz.AuthClientTypeEMA)
 	base.server = "aim852-gw-member"
 	base.clientA = clientID
 	fx := &switchFixture{

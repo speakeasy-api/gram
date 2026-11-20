@@ -53,8 +53,8 @@ func TestFreezeConnectionCatalogRejectsInvalidDefinitions(t *testing.T) {
 			if hash == "" {
 				hash = consentEvidenceHash(definition)
 			}
-			inventory := &consentToolInventory{StateID: state.ID, Resource: endpointToolSelectionResource(endpoint), Complete: true, Tools: []consentInventoryTool{{Name: tc.tool, Definition: definition, DefinitionHash: hash}}}
-			_, err := service.freezeConnectionCatalog(t.Context(), endpoint, state, state.ClientID, inventory, nil, toolfilter.CatalogModeCached, nil, time.Now().Add(time.Hour), true)
+			inventory := &consentToolInventory{TypedGateway: true, StateID: state.ID, Resource: endpointToolSelectionResource(endpoint), Complete: true, Tools: []consentInventoryTool{{Name: tc.tool, Definition: definition, DefinitionHash: hash}}}
+			_, err := service.freezeConnectionCatalog(t.Context(), endpoint, state, state.ClientID, inventory, nil, toolfilter.CatalogModeCached, time.Now().Add(time.Hour))
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -109,4 +109,14 @@ func TestReconnectRecordsOnlyReviewedTypedChoices(t *testing.T) {
 	choice, err = f.q.GetSelectionFixture(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, validUUID(ema), choice.AuthClientID)
+}
+
+func TestFreezeConnectionCatalogRefusesLegacyPreview(t *testing.T) {
+	t.Parallel()
+	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: validUUID(uuid.New())}
+	subject := urn.NewAnonymousSubject(uuid.NewString())
+	state := AuthnChallengeState{ID: uuid.NewString(), Subject: &subject}
+	inventory := &consentToolInventory{StateID: state.ID, Resource: endpointToolSelectionResource(endpoint), Complete: true}
+	_, err := (&Service{}).freezeConnectionCatalog(t.Context(), endpoint, state, state.ClientID, inventory, nil, toolfilter.CatalogModeCached, time.Now().Add(time.Hour))
+	require.ErrorIs(t, err, errConsentConfigurationChanged)
 }

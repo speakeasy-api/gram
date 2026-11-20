@@ -232,17 +232,25 @@ func (s *Service) resolveMetaMemberSnapshot(
 // gateway endpoint authorizes against: a stored gateway's membership rows, or
 // an organization gateway's derived members.
 func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, surface string, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
+	var members []metaMember
+	var err error
 	if endpoint.IsOrganizationGateway() {
-		ctx, members, _, err := s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID)
-		return ctx, members, err
+		if surface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) {
+			ctx = withTypedConsentAuth(ctx)
+		}
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID)
+	} else {
+		ctx, members, _, err = s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	}
-	ctx, members, _, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	if err != nil {
 		return ctx, nil, err
 	}
-	// Only consent and its validation read a stored gateway's associated
-	// clients, and only a gateway that signs people in has any to match.
-	if endpoint.UserSessionIssuerID != uuid.Nil {
+	switch {
+	case surface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) && !endpoint.IsOrganizationGateway():
+		if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member offers").LogError(ctx, logger)
+		}
+	case !endpoint.IsOrganizationGateway() && endpoint.UserSessionIssuerID != uuid.Nil:
 		if err := s.attachAssociatedClients(ctx, endpoint.OrganizationID, members); err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
 		}
@@ -396,7 +404,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	var offers map[uuid.UUID]configuredAuthOffer
 	var offerMetadata gatewayOfferMetadata
 	if userSessionIssuerID != uuid.Nil {
-		enforced, err := s.consentAuthChoicesEnforced(ctx, organizationID)
+		enforced, err := s.typedConsentAuth(ctx, organizationID)
 		if err != nil {
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway auth client mode").LogError(ctx, logger)
 		}
@@ -422,10 +430,15 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 
 	var clients []remotesessions.Client
 	if userSessionIssuerID != uuid.Nil {
+		if authzSurface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) {
+			applyTypedMemberRegistrations(members, offers)
+		}
 		// The agent gateway signs nobody in, so its callers never read
 		// associations and its members keep the derived match.
-		if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
-			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+		if authzSurface != mandatorySurfaceConsent || !usesTypedConsentInventory(ctx) {
+			if err := s.attachAssociatedClients(ctx, organizationID, members); err != nil {
+				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member clients").LogError(ctx, logger)
+			}
 		}
 		clients, err = s.remoteChallengeMgr.ListOrganizationClients(ctx, organizationID, userSessionIssuerID)
 		if err != nil {
@@ -469,7 +482,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			continue
 		}
 		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
-			return clientServesAnyMember(client, []metaMember{member})
+			return (authzSurface != mandatorySurfaceConsent || !usesTypedConsentInventory(ctx) || member.backend != metaMemberBackendProxied) && memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
 		}) {
 			continue
 		}

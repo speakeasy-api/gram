@@ -25,11 +25,12 @@ import (
 // without an older association or a link to the gateway's sign-in, and
 // nothing an older association alone names. A hosted member keeps signing in
 // through its authorization server's client.
-func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
+func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 	t.Parallel()
 	const upstream = "https://typed-member.example.com/mcp"
 	for _, tc := range []struct {
 		name            string
+		legacyRuntime   bool
 		orgGateway      bool
 		orgClient       bool
 		resourceDisplay bool
@@ -40,6 +41,7 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 		wantTyped       bool
 		wantErr         string
 	}{
+		{name: "typed offer with legacy runtime", legacyRuntime: true, typed: true, wantTyped: true},
 		{name: "typed offer alone", typed: true, resourceDisplay: true, wantTyped: true},
 		{name: "organization gateway typed offer", orgGateway: true, typed: true, resourceDisplay: true, wantTyped: true},
 		{name: "organization gateway organization client", orgGateway: true, orgClient: true, typed: true, signInLink: true, wantTyped: true},
@@ -52,8 +54,10 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "typed-gw-"+uuid.NewString()[:8])
-			_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-			require.NoError(t, err)
+			if !tc.legacyRuntime {
+				_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				require.NoError(t, err)
+			}
 			fx.ti.service.SetAuthClientPermission(func() bool { return true })
 
 			if tc.orgGateway {

@@ -1544,20 +1544,21 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		toolSelection, duration = approval.selection, approval.duration
 	}
 
-	// For each server offering several upstream clients, the one usable card
-	// the credential goes through is recorded as its choice. Read before the
-	// challenge is consumed, so a failure leaves the page retryable.
+	// Revalidate the picked typed option before consuming the challenge.
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, pickState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnavailable, err, "build remote session cards").LogError(ctx, logger)
 	}
-	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState, cards, inventoryUpstreamPicks(boundInventory))
-	if err != nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)
+	upstreamPicks := inventoryUpstreamPicks(boundInventory)
+	if upstreamPicks == nil {
+		upstreamPicks = make(map[uuid.UUID]uuid.UUID)
 	}
-	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks, cards)
+	postedAuthClient := r.PostForm.Get("auth_client")
+	if reuse && boundInventory != nil && boundInventory.DirectAuthClient != nil && *boundInventory.DirectAuthClient != uuid.Nil {
+		postedAuthClient = boundInventory.DirectAuthClient.String()
+	}
+	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, postedAuthClient, upstreamPicks, cards)
 	if err != nil {
 		if errors.Is(err, errConsentNoUsableConnection) {
 			t.Continue()
@@ -1584,7 +1585,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	if materializeGateway {
-		reference, err := s.approveInitialConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
+		reference, err := s.approveInitialConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", duration, time.Now())
 		if err != nil {
 			if errors.Is(err, errConnectionCatalogTooLarge) {
 				t.Refuse(ctx, mcpconnectionattempts.CodeCatalogTooLarge)
@@ -2126,15 +2127,8 @@ func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint, challen
 	return &resourceDisplayOwner{
 		endpoint: endpoint,
 		load: func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
-			// Where typed auth client resolution is enforced, a member lends
-			// its resource to the registrations it offers through typed auth
-			// clients.
-			typedOffers, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-			if err != nil {
-				return nil, err
-			}
 			if endpoint.IsOrganizationGateway() {
-				rows, err := metamcprepo.New(s.db).ListOrganizationProxiedMCPServerResources(ctx, metamcprepo.ListOrganizationProxiedMCPServerResourcesParams{TypedOffers: typedOffers, OrganizationID: endpoint.OrganizationID})
+				rows, err := metamcprepo.New(s.db).ListOrganizationProxiedMCPServerResources(ctx, metamcprepo.ListOrganizationProxiedMCPServerResourcesParams{TypedOffers: true, OrganizationID: endpoint.OrganizationID})
 				if err != nil {
 					return nil, fmt.Errorf("list organization proxied MCP server resources: %w", err)
 				}
@@ -2157,7 +2151,7 @@ func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint, challen
 				return converted, nil
 			}
 			return metamcprepo.New(s.db).ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{
-				TypedOffers:     typedOffers,
+				TypedOffers:     true,
 				MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
 				ProjectID:       endpoint.ProjectID,
 			})

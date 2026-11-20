@@ -70,6 +70,9 @@ func TestConsentPost_RefusesWhenNoConnectionCanServe(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, fx := seedTwoClientConsentEndpoint(t, "no-serving-"+uuid.NewString()[:8])
+			for _, id := range []uuid.UUID{fx.clientA, fx.clientB} {
+				seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, id, "remote_session")
+			}
 			if tc.expire {
 				expireConsentGrant(t, ctx, fx.ti, fx.shared, fx.clientA, fx.subject, consentChainedUpstream)
 			}
@@ -107,6 +110,9 @@ func TestConsentPost_ApprovesWhenAnotherConnectionStillWorks(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedTwoClientConsentEndpoint(t, "expired-one")
+	for _, id := range []uuid.UUID{fx.clientA, fx.clientB} {
+		seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, id, "remote_session")
+	}
 	expireConsentGrant(t, ctx, fx.ti, fx.shared, fx.clientA, fx.subject, consentChainedUpstream)
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, fx.clientB, fx.subject, "token-b", consentChainedUpstream)
 
@@ -139,10 +145,11 @@ func TestConsentPost_TypedChoiceRefusesAnExpiredPersonalClient(t *testing.T) {
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
 	expireConsentGrant(t, ctx, fx.ti, fx.shared, registration, fx.subject, consentChainedUpstream)
 
-	_, err = postApproveResult(t, ctx, fx)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeFailedPrecondition, shareable.Code)
+	w := postApprove(t, ctx, fx)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	location, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Empty(t, location.Query().Get("code"))
 }
 
 // A shared credential needs no connection, so an expired service card does not block it.

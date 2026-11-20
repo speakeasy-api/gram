@@ -7,14 +7,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 func TestConsentPage_MetaGovernedRemoteMemberIsManaged(t *testing.T) {
 	t.Parallel()
-	ctx, fx, metaID, _, issuerID := metaConsent(t, "aim61-meta-chained")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "aim61-meta-chained")
 	const upstream = "https://meta-chained.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-chained-member", upstream, conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-chained-member", upstream, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeEMA)
 	fx.server = "aim61-meta-chained-member"
 	g := setConsentGovernor(t, fx, issuerID, upstream)
 
@@ -38,7 +40,8 @@ func TestConsentPage_MetaUngovernedMemberStillConnectsInteractively(t *testing.T
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "aim61-meta-unchained")
 	fx.clientA = clientID
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-unchained-member", "https://meta-unchained.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-unchained-member", "https://meta-unchained.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
 	fx.server = "aim61-meta-unchained-member"
 	setConsentGovernor(t, fx, issuerID)
 
@@ -51,10 +54,12 @@ func TestConsentPage_MetaUngovernedMemberStillConnectsInteractively(t *testing.T
 
 func TestConsentPage_MetaCardWithAnUngovernedMemberIsNotChained(t *testing.T) {
 	t.Parallel()
-	ctx, fx, metaID, _, issuerID := metaConsent(t, "aim61-meta-partial")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "aim61-meta-partial")
 	const governed = "https://meta-partial-a.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-partial-a", governed, conv.ToNullUUID(issuerID), 0)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-partial-b", "https://meta-partial-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-partial-a", governed, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeEMA)
+	otherMember := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-partial-b", "https://meta-partial-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, otherMember.mcpServerID, clientID, authz.AuthClientTypeEMA)
 	fx.server = "aim61-meta-partial-a"
 	setConsentGovernor(t, fx, issuerID, governed)
 
@@ -78,9 +83,10 @@ func TestConsentPage_MetaUnclaimedProviderIsNotChained(t *testing.T) {
 
 func TestConsentPage_MetaGovernedTunneledMemberCarriesCardIssuer(t *testing.T) {
 	t.Parallel()
-	ctx, fx, metaID, _, issuerID := metaConsent(t, "aim61-meta-tunnel")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "aim61-meta-tunnel")
 	const identifier = "urn:gram:tunnel:aim61-meta"
-	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-tunnel-member", identifier, conv.ToNullUUID(issuerID), 0)
+	member := createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-tunnel-member", identifier, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeEMA)
 	fx.server = "aim61-meta-tunnel-member"
 	g := setConsentGovernor(t, fx, issuerID, identifier)
 
@@ -99,7 +105,8 @@ func TestServeConsentAction_MetaConnectGovernedServiceStillAuthorizes(t *testing
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "aim61-meta-action")
 	const upstream = "https://meta-action.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-action-member", upstream, conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-action-member", upstream, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeEMA)
 	setConsentGovernor(t, fx, issuerID, upstream)
 	fx.clientA = clientID
 
@@ -109,9 +116,10 @@ func TestServeConsentAction_MetaConnectGovernedServiceStillAuthorizes(t *testing
 
 func TestConsentPage_MetaMemberServedThroughAnotherIssuerIsNotChained(t *testing.T) {
 	t.Parallel()
-	ctx, fx, metaID, _, issuerID := metaConsent(t, "aim61-meta-other")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "aim61-meta-other")
 	const upstream = "https://meta-other.example.com/mcp"
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-other-member", upstream, conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-other-member", upstream, conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeEMA)
 	setConsentGovernor(t, fx, uuid.New(), upstream)
 
 	_, page, _ := render(t, fx)
@@ -121,7 +129,8 @@ func TestConsentPage_MetaMemberServedThroughAnotherIssuerIsNotChained(t *testing
 func TestServeConsentAction_MetaConnectUngovernedServiceAuthorizesInteractively(t *testing.T) {
 	t.Parallel()
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "aim61-meta-action-open")
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-action-open-member", "https://meta-action-open.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-action-open-member", "https://meta-action-open.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession)
 	setConsentGovernor(t, fx, issuerID)
 	fx.clientA = clientID
 
