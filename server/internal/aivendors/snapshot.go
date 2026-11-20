@@ -227,7 +227,7 @@ func (s *Snapshot) GatewayMatchersFor(p Product) GatewayMatchers {
 }
 
 // Derived computes a value once per snapshot and caller-owned key; callers must not mutate it.
-func Derived[T any](s *Snapshot, key any, compute func(*Snapshot) T) T {
+func Derived[K comparable, T any](s *Snapshot, key K, compute func(*Snapshot) T) T {
 	v, ok := s.derived.Load(key)
 	if !ok {
 		v, _ = s.derived.LoadOrStore(key, sync.OnceValue(func() T { return compute(s) }))
@@ -263,19 +263,19 @@ func (s *Store) Snapshot() *Snapshot {
 	return s.snapshot
 }
 
-type pinnedSnapshotKey struct{}
+type pinnedSnapshotKey struct{ store *Store }
 
 // Pin captures one snapshot for the rest of a request, keeping one already pinned.
 func (s *Store) Pin(ctx context.Context) context.Context {
-	if _, ok := ctx.Value(pinnedSnapshotKey{}).(*Snapshot); ok {
+	if _, ok := ctx.Value(pinnedSnapshotKey{store: s}).(*Snapshot); ok {
 		return ctx
 	}
-	return context.WithValue(ctx, pinnedSnapshotKey{}, s.Snapshot())
+	return context.WithValue(ctx, pinnedSnapshotKey{store: s}, s.Snapshot())
 }
 
 // SnapshotFor returns the snapshot pinned on ctx, or captures the current one.
 func (s *Store) SnapshotFor(ctx context.Context) *Snapshot {
-	if snapshot, ok := ctx.Value(pinnedSnapshotKey{}).(*Snapshot); ok {
+	if snapshot, ok := ctx.Value(pinnedSnapshotKey{store: s}).(*Snapshot); ok {
 		return snapshot
 	}
 	return s.Snapshot()

@@ -314,3 +314,12 @@ func TestDerivedRefusesAKeyReusedForAnotherType(t *testing.T) {
 	require.Equal(t, 1, Derived(snapshot, key{}, func(*Snapshot) int { return 1 }))
 	require.Panics(t, func() { Derived(snapshot, key{}, func(*Snapshot) string { return "" }) })
 }
+
+func TestPinBelongsToItsStore(t *testing.T) {
+	t.Parallel()
+	first := NewStore(NewSnapshot(Products()))
+	second := NewStore(NewSnapshot(Products()))
+	ctx := first.Pin(t.Context())
+	require.Same(t, first.Snapshot(), first.SnapshotFor(ctx))
+	require.Same(t, second.Snapshot(), second.SnapshotFor(ctx))
+}
