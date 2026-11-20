@@ -55,6 +55,10 @@ const attemptColumns = attemptEndingColumns + `,
 		groupUniqArray(remote_session_issuer_id), groupUniqArray(user_session_issuer_id),
 		groupUniqArray(remote_session_client_id))))) AS touched`
 
+// NotServedRow leaves out ResultServed rows. Each is a one-row attempt sampled per connection
+// per window, so counting it would turn requests into connected attempts.
+const NotServedRow = `NOT (step = 'mcp_request' AND step_result = 'served')`
+
 // ExcludedOrganizations are left out of cross-organization reads: the demo organization's attempts are made up.
 func ExcludedOrganizations() []string {
 	return []string{constants.DemoOrganizationID}
@@ -102,7 +106,7 @@ func (f AttemptFilter) where() (string, []any, error) {
 	if f.PeopleFailingFrom.IsZero() != f.PeopleFailingBefore.IsZero() {
 		return "", nil, errors.New("attempt filter needs both ends of the people range")
 	}
-	conds := []string{"attempt_started_at >= fromUnixTimestamp64Nano(?)", "attempt_started_at < fromUnixTimestamp64Nano(?)"}
+	conds := []string{"attempt_started_at >= fromUnixTimestamp64Nano(?)", "attempt_started_at < fromUnixTimestamp64Nano(?)", NotServedRow}
 	args := []any{f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()}
 	if f.OrganizationID != "" {
 		conds, args = append(conds, "organization_id = ?"), append(args, f.OrganizationID)

@@ -38,4 +38,5 @@ func InstallConnections(p *proxy.Proxy, attribution ConnectionAttribution, recor
 	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
 	p.ToolsCallRefusalInterceptors = connections.refusals()
 	p.RequestFailureInterceptors = connections.requestFailures()
+	p.RequestServedInterceptors = connections.served()
 }

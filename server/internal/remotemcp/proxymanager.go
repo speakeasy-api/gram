@@ -53,7 +53,7 @@ type proxyBuildOptions struct {
 	authClientHeaders  []proxy.ConfiguredHeader
 	authClientSelected bool
 
-	// connections, when set, records refused and failed tools/call requests.
+	// connections, when set, records refused and failed tools/call requests, and served ones on direct servers.
 	connections *ConnectionAttribution
 }
 
@@ -532,6 +532,7 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
 		ToolsCallRefusalInterceptors: connections.refusals(),
 		RequestFailureInterceptors:   connections.requestFailures(),
+		RequestServedInterceptors:    connections.served(),
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

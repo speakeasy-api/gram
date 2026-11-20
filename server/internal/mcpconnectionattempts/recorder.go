@@ -99,7 +99,7 @@ const (
 	unknownTableCode = 60
 )
 
-// dropReason says why events were not written. rate_limited and queue_reserved apply only to Start rows.
+// dropReason says why events were not written. rate_limited and queue_reserved apply only to Start and served rows.
 type dropReason string
 
 const (
@@ -426,6 +426,7 @@ type Recorder struct {
 	logger      *slog.Logger
 	conn        driver.Conn
 	limiter     *onceLimiter
+	served      *servedConnections
 	logsEnabled func(context.Context, string) (bool, error)
 	deviceKeys  DeriveKey
 	exporter    *exporter
@@ -540,6 +541,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		logger:      logger,
 		conn:        conn,
 		limiter:     newOnceLimiter(),
+		served:      newServedConnections(),
 		logsEnabled: logsEnabled,
 		deviceKeys:  nil,
 		exporter:    nil,
@@ -582,6 +584,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		logger:      slog.New(slog.DiscardHandler),
 		conn:        nil,
 		limiter:     nil,
+		served:      newServedConnections(),
 		logsEnabled: logsEnabled,
 		deviceKeys:  nil,
 		exporter:    nil,
@@ -661,6 +664,9 @@ func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happen
 }
 
 func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, held limit, opts []Option) (accepted bool) {
+	if _, failed := what.(Code); failed {
+		MarkFailed(ctx)
+	}
 	if r == nil || attempt.IsZero() {
 		return false
 	}
@@ -726,6 +732,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
 			r.stampClient(&row)
 			r.capture(row)
+			r.forgetServed(step, what, row)
 			r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
 			referenced = true
 			return true
@@ -737,6 +744,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, reason, events(row), nil)
 		return false
 	}
+	r.forgetServed(step, what, row)
 	r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
 	referenced = true
 	return true

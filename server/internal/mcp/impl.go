@@ -1613,7 +1613,13 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		return oops.C(oops.CodeUnauthorized)
 	}
 
+	ctx = mcpconnectionattempts.WithFailureMark(ctx)
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
+	if err == nil && mcpInputs.upstreamRejection == (mcpconnectionattempts.Code{}) {
+		s.recordServed(ctx, hostedConnectionScope(ctx, toolset, cfg), uuid.Nil, resolvedCaller(ctx), r, func() mcpconnectionattempts.Option {
+			return s.reportedClient(ctx, r, toolset.ProjectID, toolset.Slug)
+		})
+	}
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)

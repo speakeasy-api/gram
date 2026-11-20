@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
@@ -52,9 +54,80 @@ func recordingConnections(rec *mcpconnectionattemptstest.Recording, upstreamAuth
 		Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 		Details:          nil,
 		UpstreamFailures: true,
+		Caller:           nil,
 		SelfCredential:   false,
 		Request:          nil,
 	}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", upstreamAuth, nil)
+}
+
+func answeringUpstream(t *testing.T) string {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body strings.Builder
+		_, _ = io.Copy(&body, r.Body)
+		if !strings.Contains(body.String(), `"id"`) {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		id := "7"
+		if strings.Contains(body.String(), `"id":1`) {
+			id = "1"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":` + id + `,"result":{"content":[]}}`))
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+// A named caller's served requests write one served row a window, without the provider host.
+func TestRequestConnections_ServedRequestRecordsOnce(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	caller := urn.NewUserSubject("user-1")
+	upstream := answeringUpstream(t)
+	scope := mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified)
+	for range 2 {
+		connections := recordingConnections(rec, "token")
+		connections.Scope = scope
+		connections.Caller = &caller
+		connections.Details = []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&caller)}
+		serveRequest(t, connections, upstream, connectionInitialize)
+	}
+	rows := rec.Rows()
+	require.Len(t, rows, 1)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed)
+	require.Equal(t, caller.String(), row.SubjectURN)
+	require.Empty(t, row.ProviderHost)
+	require.Empty(t, row.MemberID)
+}
+
+// No served row for an unnamed caller, a notification, or a request whose upstream refused it.
+func TestRequestConnections_ServedNeedsANamedCallerAndAnAnswer(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	serveRequest(t, recordingConnections(rec, "token"), answeringUpstream(t), connectionInitialize)
+	rec.RequireNothing()
+
+	caller := urn.NewUserSubject("user-1")
+	connections := recordingConnections(rec, "token")
+	connections.Caller = &caller
+	serveRequest(t, connections, answeringUpstream(t), connectionNotice)
+	rec.RequireNothing()
+
+	connections = recordingConnections(rec, "token")
+	connections.Caller = &caller
+	serveRequest(t, connections, rejectingUpstream(t, http.StatusUnauthorized), connectionInitialize)
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	require.Len(t, rec.Rows(), 1)
+
+	connections = recordingConnections(rec, "token")
+	connections.Caller = &caller
+	connections.UpstreamFailures = false
+	require.Nil(t, connections.served(), "a gateway member records its own served rows")
 }
 
 // connectionsUnderTest is a proxy's connection interceptor with the credentials that proxy sends.
@@ -79,13 +152,14 @@ func (c connectionsUnderTest) install(p *proxy.Proxy) {
 	p.ToolsCallFailureInterceptors = c.withFailures(nil)
 	p.ToolsCallRefusalInterceptors = c.refusals()
 	p.RequestFailureInterceptors = c.requestFailures()
+	p.RequestServedInterceptors = c.served()
 }
 
 func continueCheckpoint() ToolsCallKillswitchCheckpoint {
 	return &fakeKillswitchCheckpoint{disposition: killswitches.NewContinueDisposition()}
 }
 
-// A healthy tool call must write nothing: at tool-call rates, success rows crowd out failures.
+// A healthy tool call with no named caller writes nothing.
 func TestToolsCallConnections_HealthyCallRecordsNothing(t *testing.T) {
 	t.Parallel()
 

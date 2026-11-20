@@ -265,10 +265,17 @@ func (s *Service) handleMetaExecuteToolCall(
 func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
 	attempt := newMetaToolCallAttempt(time.Now())
 	// A row from earlier in the request is about something else, not this call.
-	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
+	callCtx := mcpconnectionattempts.WithFailureMark(contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt)))
 	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
 	if err != nil {
 		contextvalues.ReplaceConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
+	}
+	if err != nil || attempt.status != 0 {
+		mcpconnectionattempts.MarkFailed(callCtx)
+	} else if member := attempt.member; member != nil {
+		s.recordServed(callCtx, gate.connectionScope(ctx), member.serverID, gate.resolvedSubject(ctx), gate.request, func() mcpconnectionattempts.Option {
+			return s.gatewayReportedClient(ctx, gate)
+		})
 	}
 	if attempt.logged || attempt.proxied || (err == nil && attempt.status == 0) {
 		return body, err

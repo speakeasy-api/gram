@@ -171,7 +171,7 @@ func (b *Builder) DaysToBuild(ctx context.Context, now time.Time) ([]time.Time, 
 	rawDays, err := b.distinctDays(ctx,
 		`SELECT DISTINCT toDate(attempt_started_at) AS d FROM mcp_connection_events
 		WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
-		AND NOT has(?, organization_id)`,
+		AND NOT has(?, organization_id) AND `+mcpconnectionattempts.NotServedRow,
 		scanFrom.UnixNano(), last.Add(day24h).UnixNano(), mcpconnectionattempts.ExcludedOrganizations())
 	if err != nil {
 		return nil, fmt.Errorf("list days with raw events: %w", err)

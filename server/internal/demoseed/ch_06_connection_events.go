@@ -85,8 +85,10 @@ var connectionEndings = []connectionEnding{
 }
 
 // connectionRequestEndings are the single-row outcomes: a refused or failed
-// request, and a refresh. A served request has no row.
+// request, a refresh, and a served request as the hourly served row records it.
 var connectionRequestEndings = []connectionEnding{
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed},
+	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStoredSignInUnreadable},
 	{mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken},

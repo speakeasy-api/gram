@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync/atomic"
+
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
@@ -15,9 +18,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// ConnectionAttribution files a proxy's refused and failed tool calls.
+// ConnectionAttribution files a proxy's refused and failed tool calls, and with
+// UpstreamFailures and Caller, its served requests.
 type ConnectionAttribution struct {
 	// Scope is what the rows are filed under.
 	Scope mcpconnectionattempts.Scope
@@ -25,9 +30,13 @@ type ConnectionAttribution struct {
 	// Details are added to every row.
 	Details []mcpconnectionattempts.Option
 
-	// UpstreamFailures also records calls the upstream failed. A gateway leaves
-	// this off and records from its own classification, which covers the handshake.
+	// UpstreamFailures also records calls the upstream failed, and requests it
+	// served. A gateway leaves this off and records from its own classification,
+	// which covers the handshake. Served rows assume one proxy per request.
 	UpstreamFailures bool
+
+	// Caller is the named subject a served request is filed under. Nil records none.
+	Caller *urn.SessionSubject
 
 	// SelfCredential marks a credential the server holds for itself, which the
 	// person connected did not supply and cannot replace.
@@ -54,6 +63,9 @@ type requestConnections struct {
 
 	// provider is the upstream URL, empty for a tunnel's internal gateway address.
 	provider string
+
+	// failed is set once this request is refused or fails, so it is not also served.
+	failed atomic.Bool
 }
 
 // newRequestConnections is nil when the proxy has no attribution.
@@ -61,7 +73,7 @@ func newRequestConnections(attribution *ConnectionAttribution, recorder *mcpconn
 	if attribution == nil {
 		return nil
 	}
-	connections := &requestConnections{ConnectionAttribution: *attribution, recorder: recorder, tunneled: identity.TunneledMCPServerID != "", upstreamAuth: upstreamAuth != "", credentialHeaders: configuredCredentialNames(headers), provider: ""}
+	connections := &requestConnections{ConnectionAttribution: *attribution, recorder: recorder, tunneled: identity.TunneledMCPServerID != "", upstreamAuth: upstreamAuth != "", credentialHeaders: configuredCredentialNames(headers), provider: "", failed: atomic.Bool{}}
 	if !connections.tunneled {
 		connections.provider = upstreamURL
 	}
@@ -69,6 +81,7 @@ func newRequestConnections(attribution *ConnectionAttribution, recorder *mcpconn
 }
 
 func (c *requestConnections) record(ctx context.Context, code mcpconnectionattempts.Code, extra ...mcpconnectionattempts.Option) {
+	c.failed.Store(true)
 	// A caller that went away says nothing about the server.
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
@@ -92,6 +105,14 @@ func (c *requestConnections) withFailures(interceptors []proxy.ToolsCallFailureI
 	return append(interceptors, c)
 }
 
+// served records requests the upstream answered, on servers whose upstream failures are recorded here.
+func (c *requestConnections) served() []proxy.RequestServedInterceptor {
+	if c == nil || !c.UpstreamFailures || c.Caller == nil {
+		return nil
+	}
+	return []proxy.RequestServedInterceptor{c}
+}
+
 // requestFailures records credential rejections on requests other than tools/call.
 func (c *requestConnections) requestFailures() []proxy.RequestFailureInterceptor {
 	if c == nil || !c.UpstreamFailures {
@@ -107,6 +128,7 @@ func (c *requestConnections) Name() string {
 
 // InterceptToolsCallRefusal implements [proxy.ToolsCallRefusalInterceptor].
 func (c *requestConnections) InterceptToolsCallRefusal(ctx context.Context, err error) {
+	c.failed.Store(true)
 	if code, ok := refusalHappened(err, c.tunneled); ok {
 		c.record(ctx, code)
 	}
@@ -114,6 +136,7 @@ func (c *requestConnections) InterceptToolsCallRefusal(ctx context.Context, err 
 
 // InterceptToolsCallFailure implements [proxy.ToolsCallFailureInterceptor].
 func (c *requestConnections) InterceptToolsCallFailure(ctx context.Context, failure *proxy.ToolsCallFailure) {
+	c.failed.Store(true)
 	if errors.Is(failure.Err, shutdowndrain.ErrInterrupted) {
 		return
 	}
@@ -127,12 +150,23 @@ func (c *requestConnections) InterceptToolsCallFailure(ctx context.Context, fail
 // tunnel gateway's own refusal. Other statuses on these requests say less about
 // the connection than a failed tool call does. The row names the method.
 func (c *requestConnections) InterceptRequestFailure(ctx context.Context, failure *proxy.RequestFailure) {
+	c.failed.Store(true)
 	if failure.StatusCode != http.StatusUnauthorized && failure.StatusCode != http.StatusForbidden {
 		return
 	}
 	if code, ok := c.upstreamFailureHappened(failure.StatusCode, failure.SentHeader, failure.Header, failure.Err); ok {
 		c.record(ctx, code, append(outageAddressOptions(code, failure.Err), mcpconnectionattempts.RequestMethod(requestMethodDetail(failure.Method)))...)
 	}
+}
+
+// InterceptRequestServed implements [proxy.RequestServedInterceptor].
+func (c *requestConnections) InterceptRequestServed(ctx context.Context) {
+	if c.failed.Load() {
+		return
+	}
+	c.recorder.Served(ctx, c.Scope, uuid.Nil, c.Caller, func() []mcpconnectionattempts.Option {
+		return append([]mcpconnectionattempts.Option{mcpconnectionattempts.FromRequest(c.Request)}, c.Details...)
+	})
 }
 
 // outageAddressOptions name the sign-in provider when its address, not the server's, stopped the call.

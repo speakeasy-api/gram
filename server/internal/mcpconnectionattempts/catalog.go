@@ -106,6 +106,9 @@ var (
 	ResultComplete                = Result{"complete"}
 	ResultReviewShown             = Result{"review_shown"}
 
+	// ResultServed is a request served for a named caller, written at most once a window per connection.
+	ResultServed = Result{"served"}
+
 	resultPartial       = Result{"partial"}
 	resultFailed        = Result{"failed"}
 	resultPolicyBlocked = Result{"policy_blocked"}

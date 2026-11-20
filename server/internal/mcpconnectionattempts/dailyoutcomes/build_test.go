@@ -42,6 +42,8 @@ const (
 	daysAgoEndingProvider = 27
 	daysAgoAdminReason    = 22
 	daysAgoUsedToken      = 14
+	daysAgoServed         = 18
+	daysAgoServedOnly     = 21
 )
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
@@ -575,4 +577,31 @@ func TestBuildDayLeavesAnAttributedUsedTokenUnpaired(t *testing.T) {
 		"|dcr||inbound_token|connected||":                                   1,
 		"|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|": 1,
 	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day), "the same as when the row named nobody")
+}
+
+func TestBuildDayLeavesServedRequestsOut(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day, servedOnly := f.day(daysAgoServed), f.day(daysAgoServedOnly)
+	subject := urn.NewUserSubject("user-" + uuid.NewString())
+	server := uuid.New()
+	at := day.Add(time.Hour)
+
+	failed := f.attempt(server, mcpconnectionattempts.AppDCR, at)
+	served := f.attempt(server, mcpconnectionattempts.AppDCR, at.Add(time.Hour))
+	alone := f.attempt(server, mcpconnectionattempts.AppDCR, servedOnly.Add(time.Hour))
+	f.write(
+		f.row(failed, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken, true, 0, mcpconnectionattempts.Subject(&subject)),
+		f.row(served, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed, true, 0, mcpconnectionattempts.Subject(&subject)),
+		f.row(alone, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.ResultServed, true, 0, mcpconnectionattempts.Subject(&subject)),
+	)
+
+	f.build(day)
+	require.Equal(t, map[string]uint64{
+		"|dcr||mcp_request|failed|invalid_bearer_token|": 1,
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day), "a served request is neither an attempt nor a fix")
+
+	days, err := f.b.DaysToBuild(t.Context(), f.now)
+	require.NoError(t, err)
+	require.NotContains(t, days, servedOnly, "a day with only served requests has nothing to build")
 }

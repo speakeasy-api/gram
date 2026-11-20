@@ -18,7 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Per-request rows record refusals and failures only: a served request writes nothing.
+// Per-request rows record refusals and failures, and a served request by a named caller,
+// sampled to one row per connection per window.
 
 // errRiskPolicyDenied marks a tools/call a risk policy stopped.
 var errRiskPolicyDenied = errors.New("risk policy denied the call")
@@ -52,6 +53,14 @@ func (s *Service) recordRequestOutcome(ctx context.Context, scope mcpconnectiona
 		return
 	}
 	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, append(opts, mcpconnectionattempts.FromRequest(r))...)
+}
+
+// recordServed writes a served row for a named caller, at most once a window per connection,
+// unless anything under ctx's failure mark failed. client is built only when a row is due.
+func (s *Service) recordServed(ctx context.Context, scope mcpconnectionattempts.Scope, member uuid.UUID, subject *urn.SessionSubject, r *http.Request, client func() mcpconnectionattempts.Option) {
+	s.connections.Served(ctx, scope, member, subject, func() []mcpconnectionattempts.Option {
+		return []mcpconnectionattempts.Option{mcpconnectionattempts.FromRequest(r), client()}
+	})
 }
 
 // recordGateRejection attributes invalid bearers only when their signature proves a subject.
@@ -92,10 +101,12 @@ func directConnectionOptions(ctx context.Context, r *http.Request, organizationI
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
 		return nil
 	}
+	caller := resolvedCaller(ctx)
 	return []remotemcp.BuildOption{remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
 		Scope:            mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx)),
-		Details:          []mcpconnectionattempts.Option{callerSubject(ctx), client},
+		Details:          []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(caller), client},
 		UpstreamFailures: true,
+		Caller:           caller,
 		SelfCredential:   upstream.CredentialOwner == remotesessions.CredentialOwnerSelf,
 		Request:          r,
 	})}
@@ -149,6 +160,7 @@ func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateCont
 		Scope:            gate.connectionScope(ctx),
 		Details:          []mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)},
 		UpstreamFailures: false,
+		Caller:           nil,
 		SelfCredential:   false,
 		Request:          gate.request,
 	})

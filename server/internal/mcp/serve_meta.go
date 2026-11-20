@@ -306,8 +306,14 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	// Every member and toolset check this request shadows shares one
 	// admission of its caller.
-	ctx = withMandatoryAdmission(ctx)
+	ctx = mcpconnectionattempts.WithFailureMark(withMandatoryAdmission(ctx))
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
+	if err == nil {
+		// Each member call records its own row; a failed one marks this request too.
+		s.recordServed(ctx, gate.connectionScope(ctx), uuid.Nil, gate.resolvedSubject(ctx), r, func() mcpconnectionattempts.Option {
+			return s.gatewayReportedClient(ctx, gate)
+		})
+	}
 
 	switch {
 	case body == nil && err == nil:

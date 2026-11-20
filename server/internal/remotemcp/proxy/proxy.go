@@ -400,6 +400,11 @@ type Proxy struct {
 	// See [RequestFailureInterceptor].
 	RequestFailureInterceptors []RequestFailureInterceptor
 
+	// RequestServedInterceptors run once for a request whose JSON-RPC
+	// response the remote MCP server sent with a 2xx status and the proxy
+	// relayed. See [RequestServedInterceptor].
+	RequestServedInterceptors []RequestServedInterceptor
+
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
 	// completed. Non-tools/list requests skip this loop entirely.
@@ -1212,6 +1217,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		return err
 	}
 	observeResponse(ctx, msg)
+	p.runRequestServedInterceptors(ctx, upstreamStatus, msg, userReqID)
 	return nil
 }
 
@@ -1659,6 +1665,7 @@ func (p *Proxy) relaySSEStream(
 			result.markResponseRelayed(p.Drain, upstreamResp.Body)
 		}
 		observeResponse(ctx, msg)
+		p.runRequestServedInterceptors(ctx, upstreamResp.StatusCode, msg, responseID)
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -1924,6 +1931,18 @@ func (p *Proxy) runRequestFailureInterceptors(ctx context.Context, failure *Requ
 			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
 		interceptor.InterceptRequestFailure(iterCtx, failure)
 		span.End()
+	}
+}
+
+// runRequestServedInterceptors invokes each configured RequestServedInterceptor
+// when msg, relayed with status, is the response to the request id. They
+// observe only, on every served request, so no span is started.
+func (p *Proxy) runRequestServedInterceptors(ctx context.Context, status int, msg jsonrpc.Message, id jsonrpc.ID) {
+	if len(p.RequestServedInterceptors) == 0 || status < 200 || status >= 300 || !isResponseTo(msg, id) {
+		return
+	}
+	for _, interceptor := range p.RequestServedInterceptors {
+		interceptor.InterceptRequestServed(ctx)
 	}
 }
 

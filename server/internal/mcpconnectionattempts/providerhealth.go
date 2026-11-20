@@ -334,6 +334,7 @@ func providerAttemptsQuery(filter string) string {
 	FROM ` + eventsTable + `
 	WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 		AND NOT has(?, organization_id)
+		AND ` + NotServedRow + `
 	GROUP BY organization_id, attempt_id
 	HAVING provider != ''` + filter
 }
