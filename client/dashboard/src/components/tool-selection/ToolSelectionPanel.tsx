@@ -145,8 +145,9 @@ export function ToolSelectionPanel({
     const counts = new Map<ToolAnnotation, number>();
     for (const server of servers) {
       for (const tool of server.tools) {
-        if (isToolAnnotation(tool.disposition)) {
-          counts.set(tool.disposition, (counts.get(tool.disposition) ?? 0) + 1);
+        const disposition = tool.disposition;
+        if (isToolAnnotation(disposition)) {
+          counts.set(disposition, (counts.get(disposition) ?? 0) + 1);
         }
       }
     }
