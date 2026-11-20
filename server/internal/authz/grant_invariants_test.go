@@ -450,11 +450,14 @@ func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
 	forEachGrantSet(serverLevelGrants(), func(grants []Grant) {
 		for i, a := range checks {
 			blockScope, _ := ExclusionScopeFor(a.check.Scope)
-			namesServer := slices.ContainsFunc(grants, func(g Grant) bool {
-				return !IsBlocklistScope(g.Scope) && IsDirectGrant(g) && g.Selector.ResourceID() == a.server.id
-			})
+			// Only a grant that could outrank the block skips a case: one made
+			// to the user by name, not backfilled, that allows this alternative
+			// on its own. For example, the user's own mcp:connect on s1 skips a
+			// role's block on connecting to s1, but the user's mcp:read on s1,
+			// or a backfilled connect on s1, does not.
+			outranksBlock := isAllowed(t, DirectOverrideGrants(grants), a.check)
 			for _, holder := range allPrincipals {
-				if holder != principalUser && namesServer {
+				if holder != principalUser && outranksBlock {
 					continue
 				}
 				block := NewGrant(blockScope, a.server.id)
