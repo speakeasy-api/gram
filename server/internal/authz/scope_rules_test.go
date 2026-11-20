@@ -56,13 +56,20 @@ func TestInferenceExecuteRequiresExplicitProjectGrant(t *testing.T) {
 	require.Equal(t, "project_a", InferenceExecuteCheck("project_a").ResourceID)
 	require.NoError(t, validateInput(InferenceExecuteCheck("project_a")))
 	require.Error(t, validateInput(InferenceExecuteCheck("")))
-	for _, project := range []string{"project_a", "project_b", ""} {
-		got, _ := matchingGrant([]Grant{grant}, InferenceExecuteCheck(project).expand())
-		if project == "project_a" {
-			require.NotNil(t, got)
-		} else {
-			require.Nil(t, got)
-		}
+	for _, tc := range []struct {
+		name    string
+		project string
+		want    bool
+	}{
+		{"the granted project", "project_a", true},
+		{"another project", "project_b", false},
+		{"no project", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, _ := matchingGrant([]Grant{grant}, InferenceExecuteCheck(tc.project).expand())
+			require.Equal(t, tc.want, got != nil)
+		})
 	}
 	for _, scope := range []Scope{ScopeChatWrite, ScopeProjectWrite, ScopeOrgAdmin} {
 		got, _ := matchingGrant([]Grant{NewGrant(scope, WildcardResource)}, InferenceExecuteCheck("project_a").expand())

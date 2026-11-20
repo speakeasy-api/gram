@@ -143,7 +143,7 @@ func TestToolCallConstructorsBuildToolCalls(t *testing.T) {
 	checks := []Check{
 		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("search", DispositionReadOnly),
 		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("search", ""),
-		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("search", DispositionReadOnly),
+		mcpToolCallCheck(server.String(), mcpToolCallDimensions{Tool: "search", Disposition: DispositionReadOnly, ProjectID: project.String()}),
 	}
 	for _, check := range checks {
 		require.True(t, check.isToolCall())
