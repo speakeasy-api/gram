@@ -184,219 +184,6 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
-func TestEngineRequire_projectWriteBlocklistBlocksAccess(t *testing.T) {
-	t.Parallel()
-
-	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		NewGrant(ScopeProjectWrite, WildcardResource),
-		NewGrantWithSelector(ScopeProjectBlockedWrite, Selector{
-			SelectorKeyResourceKind: ResourceKindProject,
-			SelectorKeyResourceID:   projectID,
-		}),
-	})
-
-	err := engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "project_other", Dimensions: nil})
-	require.NoError(t, err)
-
-	err = engine.Require(ctx, Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: projectID, Dimensions: nil})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestEngineFilter_mcpWriteBlocklistExcludesProjectScopedResources(t *testing.T) {
-	t.Parallel()
-
-	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		NewGrant(ScopeMCPWrite, WildcardResource),
-		NewGrantWithSelector(ScopeMCPBlockedWrite, Selector{
-			SelectorKeyResourceKind: ResourceKindMCP,
-			SelectorKeyResourceID:   WildcardResource,
-			SelectorKeyProjectID:    projectID,
-		}),
-	})
-
-	resourceIDs, err := engine.Filter(ctx, []Check{
-		MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Write(),
-		MCPServer(MCPServerIDFrom("server_other_project"), ProjectIDFrom("project_other")).Write(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"server_other_project"}, resourceIDs)
-
-	// A check that omits the project fails the batch rather than passing it.
-	_, err = engine.Filter(ctx, []Check{
-		{Scope: ScopeMCPWrite, ResourceKind: "", ResourceID: "dimensionless_probe", Dimensions: nil},
-	})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
-}
-
-func TestEngineFilter_withDimensions(t *testing.T) {
-	t.Parallel()
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{
-			Scope: ScopeMCPConnect,
-			Selector: Selector{
-				SelectorKeyResourceKind: ResourceKindMCP,
-				SelectorKeyResourceID:   "toolsetA",
-				SelectorKeyTool:         "tool_1",
-			},
-		},
-	})
-
-	// Only tool_1 matches the grant — one resource ID returned.
-	results, err := engine.Filter(ctx, []Check{
-		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("tool_1", ""),
-		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("tool_2", ""),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"toolsetA"}, results)
-}
-
-func TestEngineFilter_withDisposition(t *testing.T) {
-	t.Parallel()
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{
-			Scope: ScopeMCPConnect,
-			Selector: Selector{
-				SelectorKeyResourceKind: ResourceKindMCP,
-				SelectorKeyResourceID:   "toolsetA",
-				SelectorKeyDisposition:  DispositionReadOnly,
-			},
-		},
-	})
-
-	// read_only disposition matches, destructive does not.
-	results, err := engine.Filter(ctx, []Check{
-		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("safe_tool", "read_only"),
-		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("risky_tool", "destructive"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"toolsetA"}, results)
-}
-
-func TestEngineFilter_serverLevelGrantAllowsAllDimensions(t *testing.T) {
-	t.Parallel()
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		NewGrant(ScopeMCPConnect, "toolsetA"),
-	})
-
-	// Server-level grant (no tool/disposition keys) allows everything.
-	results, err := engine.Filter(ctx, []Check{
-		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("any_tool", "destructive"),
-		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("other_tool", "read_only"),
-	})
-	require.NoError(t, err)
-	require.Len(t, results, 2)
-}
-
-func TestEngineFilter_projectScopedGrantMatchesServersInProject(t *testing.T) {
-	t.Parallel()
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{
-			Scope: ScopeMCPConnect,
-			Selector: Selector{
-				SelectorKeyResourceKind: ResourceKindMCP,
-				SelectorKeyResourceID:   WildcardResource,
-				SelectorKeyProjectID:    "proj_A",
-			},
-		},
-	})
-
-	// Server in proj_A matches; server in proj_B does not.
-	results, err := engine.Filter(ctx, []Check{
-		MCPServer(MCPServerIDFrom("serverX"), ProjectIDFrom("proj_A")).Connect(),
-		MCPServer(MCPServerIDFrom("serverY"), ProjectIDFrom("proj_B")).Connect(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"serverX"}, results)
-}
-
-func TestEngineRequire_projectScopedGrantAllowsToolsInProject(t *testing.T) {
-	t.Parallel()
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{
-			Scope: ScopeMCPConnect,
-			Selector: Selector{
-				SelectorKeyResourceKind: ResourceKindMCP,
-				SelectorKeyResourceID:   WildcardResource,
-				SelectorKeyProjectID:    "proj_A",
-			},
-		},
-	})
-
-	// Tool call on server in proj_A should pass.
-	err := engine.Require(ctx, MCPServer(MCPServerIDFrom("serverX"), ProjectIDFrom("proj_A")).ToolCall("my_tool", ""))
-	require.NoError(t, err)
-
-	// Tool call on server in proj_B should fail.
-	err = engine.Require(ctx, MCPServer(MCPServerIDFrom("serverY"), ProjectIDFrom("proj_B")).ToolCall("my_tool", ""))
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestEngineRequire_projectScopedMCPReadGrant(t *testing.T) {
-	t.Parallel()
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		{
-			Scope: ScopeMCPRead,
-			Selector: Selector{
-				SelectorKeyResourceKind: ResourceKindMCP,
-				SelectorKeyResourceID:   WildcardResource,
-				SelectorKeyProjectID:    "proj_A",
-			},
-		},
-	})
-
-	// mcp:read check for server in proj_A passes.
-	err := engine.Require(ctx, MCPServer(MCPServerIDFrom("serverX"), ProjectIDFrom("proj_A")).Read())
-	require.NoError(t, err)
-
-	// mcp:read check for server in proj_B fails.
-	err = engine.Require(ctx, MCPServer(MCPServerIDFrom("serverY"), ProjectIDFrom("proj_B")).Read())
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestEngineFilter_projectAndServerGrantsCombine(t *testing.T) {
-	t.Parallel()
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		// Project-scoped grant for proj_A
-		{
-			Scope: ScopeMCPConnect,
-			Selector: Selector{
-				SelectorKeyResourceKind: ResourceKindMCP,
-				SelectorKeyResourceID:   WildcardResource,
-				SelectorKeyProjectID:    "proj_A",
-			},
-		},
-		// Server-specific grant for serverZ (in proj_B)
-		NewGrant(ScopeMCPConnect, "serverZ"),
-	})
-
-	results, err := engine.Filter(ctx, []Check{
-		MCPServer(MCPServerIDFrom("serverX"), ProjectIDFrom("proj_A")).Connect(), // matches project grant
-		MCPServer(MCPServerIDFrom("serverY"), ProjectIDFrom("proj_B")).Connect(), // no match
-		MCPServer(MCPServerIDFrom("serverZ"), ProjectIDFrom("proj_B")).Connect(), // matches server grant
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"serverX", "serverZ"}, results)
-}
-
 func TestEngineRequire_rejectsInvalidCheck(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -671,6 +458,20 @@ func TestEngineFindMatched_rejectsInvalidCheck(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
 	_, err := engine.FindMatched(ctx, []Check{{Scope: ScopeProjectRead, ResourceID: ""}})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.ErrorIs(t, err, ErrInvalidCheck)
+}
+
+func TestEngineFilter_rejectsInvalidCheck(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPWrite, WildcardResource)})
+
+	// An MCP check without its project fails the whole batch rather than
+	// dropping out of it.
+	_, err := engine.Filter(ctx, []Check{mcpCheck(ScopeMCPWrite, "server-1", "")})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)

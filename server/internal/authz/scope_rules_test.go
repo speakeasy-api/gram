@@ -1,5 +1,9 @@
 package authz
 
+// Rules that belong to one family of scopes: chat:read needs a grant on every
+// chat, inference needs a grant naming the project, and the channels scopes
+// are implied by nothing else and enforced even without a session.
+
 import (
 	"context"
 	"testing"
@@ -10,6 +14,86 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// An unrestricted chat:read grant (held by admins) satisfies the chat read
+// check; a principal with no chat:read grant does not. Members never hold a
+// chat:read grant — their access to sessions they own is granted by
+// owner-matching in the chat handlers, not by this scope.
+func TestChatRead_RequiresUnrestrictedGrant(t *testing.T) {
+	t.Parallel()
+
+	admin := []Grant{NewGrant(ScopeChatRead, WildcardResource)}
+	got, _ := matchingGrant(admin, Chat(ChatIDFrom("chat_1")).Read().expand())
+	require.NotNil(t, got, "admin chat:read satisfies the read check")
+
+	none, _ := matchingGrant(nil, Chat(ChatIDFrom("chat_1")).Read().expand())
+	require.Nil(t, none, "no chat:read grant means no chat read access")
+}
+
+// chat:read carries no extra selector dimensions: only resource_kind and
+// resource_id are valid on the chat family.
+func TestChatRead_SelectorRejectsExtraKeys(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, ValidateSelector(ScopeChatRead, Selector{
+		SelectorKeyResourceKind: ResourceKindChat,
+		SelectorKeyResourceID:   WildcardResource,
+	}))
+
+	require.Error(t, ValidateSelector(ScopeChatRead, Selector{
+		SelectorKeyResourceKind: ResourceKindChat,
+		SelectorKeyResourceID:   WildcardResource,
+		"user_id":               "user_self",
+	}), "chat scopes allow no extra selector keys")
+}
+
+func TestInferenceExecuteRequiresExplicitProjectGrant(t *testing.T) {
+	t.Parallel()
+	grant := NewGrant(ScopeInferenceExecute, WildcardResource)
+	grant.Selector[SelectorKeyProjectID] = "project_a"
+	require.NoError(t, ValidateSelector(grant.Scope, grant.Selector))
+	require.Equal(t, ResourceKindInference, ResourceKindForScope(grant.Scope))
+	require.Equal(t, "project_a", InferenceExecuteCheck("project_a").ResourceID)
+	require.NoError(t, validateInput(InferenceExecuteCheck("project_a")))
+	require.Error(t, validateInput(InferenceExecuteCheck("")))
+	for _, project := range []string{"project_a", "project_b", ""} {
+		got, _ := matchingGrant([]Grant{grant}, InferenceExecuteCheck(project).expand())
+		if project == "project_a" {
+			require.NotNil(t, got)
+		} else {
+			require.Nil(t, got)
+		}
+	}
+	for _, scope := range []Scope{ScopeChatWrite, ScopeProjectWrite, ScopeOrgAdmin} {
+		got, _ := matchingGrant([]Grant{NewGrant(scope, WildcardResource)}, InferenceExecuteCheck("project_a").expand())
+		require.Nil(t, got, scope)
+	}
+	got, _ := matchingGrant([]Grant{grant}, Chat(ChatIDFrom("chat_a")).Write().expand())
+	require.Nil(t, got)
+	require.Equal(t, []Scope{ScopeInferenceExecute}, ScopeImplicationClosure(ScopeInferenceExecute))
+	for role, grants := range SystemRoleGrants {
+		for _, g := range grants {
+			require.NotEqual(t, string(ScopeInferenceExecute), g.Scope, role)
+		}
+	}
+	require.NoError(t, ValidateGrantSource(GrantSourceRoles, []*RoleGrant{{Scope: string(ScopeInferenceExecute)}}))
+}
+
+func TestInferenceSelector(t *testing.T) {
+	t.Parallel()
+	for _, project := range []string{"project_a", WildcardResource} {
+		grant := NewGrant(ScopeInferenceExecute, WildcardResource)
+		grant.Selector[SelectorKeyProjectID] = project
+		require.NoError(t, ValidateSelector(grant.Scope, grant.Selector))
+	}
+	require.NoError(t, ValidateSelector(ScopeInferenceExecute, NewGrant(ScopeInferenceExecute, WildcardResource).Selector))
+	require.Error(t, ValidateSelector(ScopeInferenceExecute, NewGrant(ScopeInferenceExecute, "project_a").Selector))
+	for key, value := range map[string]string{SelectorKeyProjectID: "", SelectorKeyTool: "tool_a"} {
+		grant := NewGrant(ScopeInferenceExecute, WildcardResource)
+		grant.Selector[key] = value
+		require.Error(t, ValidateSelector(grant.Scope, grant.Selector))
+	}
+}
 
 func TestChannelsScopesAreIndependent(t *testing.T) {
 	t.Parallel()
