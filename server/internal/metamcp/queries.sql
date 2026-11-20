@@ -614,6 +614,16 @@ JOIN projects AS p
 WHERE s.user_session_issuer_id = @gateway_issuer_id
   AND s.deleted IS FALSE;
 
+-- name: LockMemberProviderClientParents :exec
+-- Lock parents before the attachment check in the delete's fresh snapshot.
+SELECT l.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+WHERE l.user_session_issuer_id = @gateway_issuer_id
+  AND c.remote_session_issuer_id = @remote_issuer_id
+ORDER BY l.remote_session_client_id
+FOR UPDATE OF l;
+
 -- name: AutoDetachMemberProviderClient :execrows
 -- Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
 -- client(s) for a removed member's upstream so the provider stops appearing on
@@ -629,6 +639,13 @@ USING remote_session_clients AS c
 WHERE l.remote_session_client_id = c.id
   AND l.user_session_issuer_id = @gateway_issuer_id
   AND c.remote_session_issuer_id = @remote_issuer_id
+  -- This is mirror cleanup, not a principal attachment revocation.
+  AND NOT EXISTS (
+    SELECT 1 FROM principal_remote_session_bindings AS binding
+    WHERE binding.remote_session_client_id = l.remote_session_client_id
+      AND binding.user_session_issuer_id = l.user_session_issuer_id
+      AND binding.revoked_at IS NULL
+  )
   AND NOT EXISTS (
     -- All consumers of the gateway issuer live in its project (the issuer is
     -- project-scoped), so scope the scan there — both for tenancy and to keep

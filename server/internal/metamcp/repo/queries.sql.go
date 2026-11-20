@@ -80,6 +80,13 @@ USING remote_session_clients AS c
 WHERE l.remote_session_client_id = c.id
   AND l.user_session_issuer_id = $1
   AND c.remote_session_issuer_id = $2
+  -- This is mirror cleanup, not a principal attachment revocation.
+  AND NOT EXISTS (
+    SELECT 1 FROM principal_remote_session_bindings AS binding
+    WHERE binding.remote_session_client_id = l.remote_session_client_id
+      AND binding.user_session_issuer_id = l.user_session_issuer_id
+      AND binding.revoked_at IS NULL
+  )
   AND NOT EXISTS (
     -- All consumers of the gateway issuer live in its project (the issuer is
     -- project-scoped), so scope the scan there — both for tenancy and to keep
@@ -1520,6 +1527,27 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMemberProviderClientParents = `-- name: LockMemberProviderClientParents :exec
+SELECT l.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+WHERE l.user_session_issuer_id = $1
+  AND c.remote_session_issuer_id = $2
+ORDER BY l.remote_session_client_id
+FOR UPDATE OF l
+`
+
+type LockMemberProviderClientParentsParams struct {
+	GatewayIssuerID uuid.UUID
+	RemoteIssuerID  uuid.UUID
+}
+
+// Lock parents before the attachment check in the delete's fresh snapshot.
+func (q *Queries) LockMemberProviderClientParents(ctx context.Context, arg LockMemberProviderClientParentsParams) error {
+	_, err := q.db.Exec(ctx, lockMemberProviderClientParents, arg.GatewayIssuerID, arg.RemoteIssuerID)
+	return err
 }
 
 const lockMetaMCPMember = `-- name: LockMetaMCPMember :one

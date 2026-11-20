@@ -3530,13 +3530,9 @@ WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: ListOrganizationRemoteSessionClientsByIssuerID :many
--- Clients registered with a given issuer in the org, each with the list of
--- user_session_issuers it is attached to (from the join table), its count of
--- attached MCP servers, and its active remote_sessions. The mcp_server_count
--- counts DISTINCT mcp_servers reachable through the client's join-table
--- attachments. The active_session_count counts non-deleted remote_sessions
--- minted against the client, matching CountActiveRemoteSessionsByClientID and
--- the delete preflight.
+-- Clients registered with an issuer, with the servers that offer each
+-- registration and its active remote sessions. The issuer attachment IDs are
+-- retained for consumers of the legacy attachment contract, not reachability.
 --
 -- ORG REACHABILITY (this predicate is repeated across every org-admin client
 -- and session query; change them together):
@@ -3573,13 +3569,17 @@ SELECT
     )::uuid[] AS user_session_issuer_ids,
     (
         SELECT COUNT(DISTINCT m.id)
-        FROM mcp_servers AS m
-        WHERE m.deleted IS FALSE
-          AND m.user_session_issuer_id IN (
-              SELECT link.user_session_issuer_id
-              FROM remote_session_client_user_session_issuers AS link
-              WHERE link.remote_session_client_id = c.id
-          )
+        FROM mcp_auth_clients AS ac
+        JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id
+          AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+        JOIN mcp_servers AS m ON m.id = offer.mcp_server_id
+          AND m.project_id = offer.project_id AND m.deleted IS FALSE
+        JOIN projects AS p ON p.id = m.project_id
+          AND p.organization_id = offer.organization_id AND p.deleted IS FALSE
+        WHERE ac.remote_session_client_id = c.id
+          AND ac.organization_id = @organization_id
+          AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+          AND ac.enabled AND ac.deleted IS FALSE
     )::bigint AS mcp_server_count,
     (
         SELECT COUNT(*)
@@ -3605,6 +3605,17 @@ WHERE c.remote_session_issuer_id = @remote_session_issuer_id
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
 ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
+
+-- name: GetOrganizationRemoteSessionRegistration :one
+-- Apply the same registration tenancy as the legacy detail view without
+-- reading the issuer attachment IDs that only that view exposes.
+SELECT c.id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @id
+  AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE;
 
 -- name: GetOrganizationRemoteSessionClientByID :one
 -- A client in the org by id. See the ORG REACHABILITY note on
@@ -3700,6 +3711,41 @@ WHERE c.id = @id
       AND usi.deleted IS FALSE
   )
 RETURNING c.*;
+
+-- name: ListOrganizationMcpServersUsingRegistration :many
+-- Inventory describes live typed offers. Delete previews additionally include
+-- disabled offers and concrete server associations that deletion could prune.
+-- Neither derives server usage from a shared downstream sign-in issuer.
+WITH affected AS (
+    SELECT offer.mcp_server_id, offer.project_id
+    FROM mcp_auth_clients AS ac
+    JOIN remote_session_clients AS c ON c.id = ac.remote_session_client_id AND c.deleted IS FALSE
+    JOIN mcp_server_auth_clients AS offer ON offer.auth_client_id = ac.id
+      AND offer.organization_id = ac.organization_id AND offer.deleted IS FALSE
+    WHERE ac.organization_id = @organization_id::text AND ac.deleted IS FALSE
+      AND (ac.project_id IS NULL OR ac.project_id = offer.project_id)
+      AND (ac.enabled OR @include_delete_impact::boolean)
+      AND (sqlc.narg('client_id')::uuid IS NULL OR c.id = sqlc.narg('client_id'))
+      AND (sqlc.narg('issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('issuer_id'))
+    UNION
+    SELECT a.mcp_server_id, a.project_id
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+    WHERE @include_delete_impact::boolean AND a.organization_id = @organization_id::text
+      AND a.deleted IS FALSE
+      AND (sqlc.narg('client_id')::uuid IS NULL OR c.id = sqlc.narg('client_id'))
+      AND (sqlc.narg('issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('issuer_id'))
+)
+SELECT m.id, m.project_id, p.slug AS project_slug, m.name, m.slug,
+       COALESCE(rms.url, '')::text AS url
+FROM affected
+JOIN mcp_servers AS m ON m.id = affected.mcp_server_id
+  AND m.project_id = affected.project_id AND m.deleted IS FALSE
+JOIN projects AS p ON p.id = m.project_id
+  AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+  AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+ORDER BY m.id DESC;
 
 -- name: ListOrganizationMcpServersForClient :many
 -- MCP servers attached to a client through its user_session_issuer(s). Callers
@@ -4108,10 +4154,18 @@ WHERE remote_session_issuer_id = @source_issuer_id
 -- concurrent attachment either commits first, and the check sees it, or waits
 -- for this transaction to end.
 SELECT 1
-FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @remote_session_client_id
-  AND user_session_issuer_id = @user_session_issuer_id
-FOR UPDATE;
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c ON c.id = l.remote_session_client_id
+JOIN user_session_issuers AS u ON u.id = l.user_session_issuer_id
+WHERE l.remote_session_client_id = @remote_session_client_id
+  AND l.user_session_issuer_id = @user_session_issuer_id
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    WHERE p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  )
+FOR UPDATE OF l;
 
 -- name: DescribeBoundClientUse :many
 -- For each client bound to one user session issuer, who signs in through it on
@@ -5114,7 +5168,6 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
 JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
 JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
 WHERE b.project_id = @project_id::uuid
   AND b.organization_id = @organization_id::text
@@ -5150,7 +5203,6 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = b.user_session_issuer_id
 JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
 JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
 WHERE b.project_id = @project_id::uuid
   AND b.organization_id = @organization_id::text
@@ -5172,17 +5224,12 @@ SELECT sqlc.embed(s), u.display_name AS subject_display_name, u.email AS subject
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = @user_session_issuer_id::uuid
 JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE link.user_session_issuer_id = @user_session_issuer_id
-  -- The issuer a connection was made through, such as a team gateway's, is
-  -- provenance only, as at runtime: it must still exist in this tenant, but
-  -- whether it binds the client now does not matter. The binding's own issuer
-  -- must bind the client.
-  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+-- The sign-in a connection came from is provenance, not registration authority.
+WHERE (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id = p.organization_id OR i.organization_id IS NULL)))
@@ -5193,23 +5240,51 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY s.id DESC
 LIMIT sqlc.narg('limit_value')::int;
 
+-- name: LockPrincipalAttachmentIssuer :one
+-- Serialize creation/refresh with an issuer rekey or deletion before taking
+-- any attachment-parent or grant locks.
+SELECT usi.id
+FROM user_session_issuers AS usi
+JOIN projects AS p ON p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND NOT p.deleted
+WHERE usi.id = @user_session_issuer_id::uuid AND NOT usi.deleted
+  AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+FOR SHARE OF usi;
+
+-- name: EnsurePrincipalAttachmentParents :exec
+-- Temporary FK compatibility only. Call inside the transaction that inserts
+-- or rekeys validated attachments. Lock existing parents without updating
+-- them, so a guarded legacy unlink cannot delete one before the FK check.
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+SELECT DISTINCT c.id, u.id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+JOIN user_session_issuers AS u ON u.id = @user_session_issuer_id::uuid AND NOT u.deleted
+WHERE c.id = ANY(@client_ids::uuid[]) AND NOT c.deleted
+  AND EXISTS (
+    SELECT 1 FROM projects AS p
+    WHERE p.organization_id = @organization_id::text AND NOT p.deleted
+      AND (sqlc.narg('project_id')::uuid IS NULL OR p.id = sqlc.narg('project_id')::uuid)
+      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+      AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  )
+ORDER BY c.id, u.id
+ON CONFLICT (remote_session_client_id, user_session_issuer_id)
+DO UPDATE SET user_session_issuer_id = EXCLUDED.user_session_issuer_id WHERE FALSE;
+
 -- name: AttachPrincipalRemoteSessionBinding :one
+-- Lock the exact grant to serialize insertion with session revoke/reconnect.
 INSERT INTO principal_remote_session_bindings
 (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
 SELECT p.id, p.organization_id, @principal_id, usi.id, c.id, s.id, s.grant_generation, @subject_urn
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = @user_session_issuer_id::uuid
 JOIN user_session_issuers AS source ON source.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
-WHERE link.user_session_issuer_id = @user_session_issuer_id
-  -- The issuer a connection was made through, such as a team gateway's, is
-  -- provenance only, as at runtime: it must still exist in this tenant, but
-  -- whether it binds the client now does not matter. The binding's own issuer
-  -- must bind the client.
-  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+-- The sign-in a connection came from is provenance, not registration authority.
+WHERE (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
   AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
   AND (source.project_id = p.id OR (source.project_id IS NULL AND source.organization_id = p.organization_id))
   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id = p.organization_id OR i.organization_id IS NULL)))
@@ -5217,6 +5292,7 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND s.deleted IS FALSE AND s.subject_urn = @subject_urn
   AND s.id = @remote_session_id
   AND EXISTS (SELECT 1 FROM agents AS a WHERE a.id = @principal_id AND a.organization_id = p.organization_id AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL AND a.owner_reassignment_required_at IS NULL)
+FOR UPDATE OF s
 ON CONFLICT (project_id, principal_id, user_session_issuer_id, remote_session_client_id) WHERE revoked_at IS NULL
 DO UPDATE SET grant_generation = EXCLUDED.grant_generation, updated_at = clock_timestamp()
 WHERE principal_remote_session_bindings.remote_session_id = EXCLUDED.remote_session_id
@@ -7192,7 +7268,6 @@ JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND NOT c.
 JOIN remote_session_issuers AS ri ON ri.id = c.remote_session_issuer_id AND NOT ri.deleted
 JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
 JOIN user_session_issuers AS target ON target.id = @user_session_issuer_id AND NOT target.deleted
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
 JOIN projects AS p ON p.id = @project_id AND p.organization_id = @organization_id AND NOT p.deleted
 JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 JOIN organization_user_relationships AS membership ON membership.user_id = u.id AND membership.organization_id = p.organization_id AND membership.deleted_at IS NULL
