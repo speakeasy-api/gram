@@ -223,7 +223,12 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteRejectsFirstGrant(t *te
 	require.Empty(t, creds, "the waiting callback has not stored any grant")
 	require.NoError(t, tx.Commit(ctx))
 
-	require.ErrorContains(t, <-done, "no longer exists")
+	select {
+	case err := <-done:
+		require.ErrorContains(t, err, "no longer exists")
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback still waiting after issuer retirement committed")
+	}
 
 	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            fx.subject,

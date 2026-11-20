@@ -2526,7 +2526,7 @@ WHERE s.subject_urn = @subject_urn
   AND (
     (@already_revoked::boolean AND EXISTS (
       SELECT 1 FROM user_sessions downstream
-      WHERE downstream.id = sqlc.narg('downstream_session_id')::uuid AND downstream.subject_urn = s.subject_urn
+      WHERE downstream.id = ANY(@downstream_session_ids::uuid[]) AND downstream.subject_urn = s.subject_urn
         AND downstream.user_session_issuer_id = usi.id AND downstream.deleted_at = sqlc.narg('revoked_at')::timestamptz
     ))
     OR s.user_session_issuer_id = usi.id
@@ -2547,7 +2547,7 @@ WHERE s.subject_urn = @subject_urn
         AND auth.client_type = 'remote_session' AND auth.remote_session_client_id = s.remote_session_client_id
       JOIN remote_session_issuers provider ON provider.id = c.remote_session_issuer_id AND NOT provider.deleted
         AND (provider.project_id = p.id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = p.organization_id)))
-      WHERE downstream.id = sqlc.narg('downstream_session_id')::uuid
+      WHERE downstream.id = ANY(@downstream_session_ids::uuid[])
         AND downstream.deleted AND downstream.user_session_issuer_id = usi.id AND downstream.subject_urn = s.subject_urn
         AND (downstream.project_id IS NULL OR downstream.project_id = p.id)
         AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR p.id = @project_id::uuid)

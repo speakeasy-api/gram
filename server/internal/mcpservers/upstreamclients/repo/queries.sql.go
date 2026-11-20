@@ -1594,10 +1594,11 @@ FROM (
   SELECT offer.organization_id, offer.mcp_server_id, offer.project_id
   FROM mcp_server_auth_clients offer
   JOIN mcp_auth_clients auth ON auth.id = offer.auth_client_id AND auth.organization_id = offer.organization_id
+  JOIN mcp_servers server ON server.id = offer.mcp_server_id AND server.project_id = offer.project_id AND NOT server.deleted
+  JOIN projects p ON p.id = offer.project_id AND p.organization_id = offer.organization_id AND NOT p.deleted
   WHERE auth.remote_session_client_id = $1::uuid AND NOT offer.deleted
 ) reach
-JOIN mcp_servers s ON s.id = reach.mcp_server_id AND s.project_id = reach.project_id AND NOT s.deleted
-JOIN projects p ON p.id = s.project_id AND p.organization_id = reach.organization_id AND NOT p.deleted
+JOIN projects p ON p.id = reach.project_id AND p.organization_id = reach.organization_id
 WHERE $2::text IS NULL OR reach.organization_id = $2::text
 ORDER BY reach.organization_id, reach.mcp_server_id
 `
@@ -1614,7 +1615,8 @@ type ListServersAssociatedWithClientRow struct {
 }
 
 // Discover both records that the caller may mutate: the association writer's
-// mirror (including tombstones) and typed offers, including unmirrored ones.
+// mirror (including tombstones and associations of retired servers/projects)
+// and typed offers, including unmirrored ones.
 func (q *Queries) ListServersAssociatedWithClient(ctx context.Context, arg ListServersAssociatedWithClientParams) ([]ListServersAssociatedWithClientRow, error) {
 	rows, err := q.db.Query(ctx, listServersAssociatedWithClient, arg.RemoteSessionClientID, arg.OrganizationID)
 	if err != nil {
