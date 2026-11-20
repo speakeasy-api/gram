@@ -1940,6 +1940,21 @@ WHERE cli.id = @id
   AND cli.deleted IS FALSE
 RETURNING cli.*;
 
+-- name: UpdateUserSessionClientRedirectURIs :one
+-- Replaces an operator-managed client's redirect URIs. CIMD rows are
+-- excluded: their redirect URIs come from the metadata document and would be
+-- overwritten on the next re-read.
+UPDATE user_session_clients AS cli
+SET redirect_uris = @redirect_uris,
+    updated_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cli.id = @id
+  AND iss.id = cli.user_session_issuer_id
+  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND cli.client_id_metadata_uri IS NULL
+  AND cli.deleted IS FALSE
+RETURNING cli.*;
+
 -- name: SoftDeleteUserSessionsByClientID :many
 -- Cascading soft-delete of user_sessions issued through a client being revoked.
 -- Returns the affected rows so the handler can emit per-row audit events.

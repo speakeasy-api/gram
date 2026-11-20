@@ -864,10 +864,12 @@ trackedFiles:
   src/funcs/usageSetBillingEmail.ts: {}
   src/funcs/usageSetBillingMetadata.ts: {}
   src/funcs/usageSetSpendCap.ts: {}
+  src/funcs/userSessionClientsCreate.ts: {}
   src/funcs/userSessionClientsGet.ts: {}
   src/funcs/userSessionClientsList.ts: {}
   src/funcs/userSessionClientsRefreshCIMD.ts: {}
   src/funcs/userSessionClientsRevoke.ts: {}
+  src/funcs/userSessionClientsUpdateRedirectURIs.ts: {}
   src/funcs/userSessionConsentsList.ts: {}
   src/funcs/userSessionConsentsRevoke.ts: {}
   src/funcs/userSessionIssuersCimdClientsCreate.ts: {}
@@ -1180,6 +1182,8 @@ trackedFiles:
   src/models/components/createtunneledmcpserverform.ts: {}
   src/models/components/createtunneledmcpserverresult.ts: {}
   src/models/components/createunproxiedmcpserverform.ts: {}
+  src/models/components/createusersessionclientrequestbody.ts: {}
+  src/models/components/createusersessionclientresult.ts: {}
   src/models/components/createusersessionissuercimdclientform.ts: {}
   src/models/components/createusersessionissuercimdclientresult.ts: {}
   src/models/components/createusersessionissuerform.ts: {}
@@ -2231,6 +2235,7 @@ trackedFiles:
   src/models/components/updatetoolsetrequestbody.ts: {}
   src/models/components/updatetriggerinstanceform.ts: {}
   src/models/components/updatetunneledmcpserverform.ts: {}
+  src/models/components/updateusersessionclientredirecturisrequestbody.ts: {}
   src/models/components/updateusersessionissuerform.ts: {}
   src/models/components/updatewidgetrequestbody.ts: {}
   src/models/components/updateworkloadissuerform.ts: {}
@@ -2432,6 +2437,7 @@ trackedFiles:
   src/models/operations/createtriggerinstance.ts: {}
   src/models/operations/createtunneledmcpserver.ts: {}
   src/models/operations/createunproxiedmcpserver.ts: {}
+  src/models/operations/createusersessionclient.ts: {}
   src/models/operations/createusersessionissuer.ts: {}
   src/models/operations/createusersessionissuercimdclient.ts: {}
   src/models/operations/createwidget.ts: {}
@@ -3156,6 +3162,7 @@ trackedFiles:
   src/models/operations/updatetoolset.ts: {}
   src/models/operations/updatetriggerinstance.ts: {}
   src/models/operations/updatetunneledmcpserver.ts: {}
+  src/models/operations/updateusersessionclientredirecturis.ts: {}
   src/models/operations/updateusersessionissuer.ts: {}
   src/models/operations/updatewidget.ts: {}
   src/models/operations/updateworkloadissuer.ts: {}
@@ -3380,6 +3387,7 @@ trackedFiles:
   src/react-query/createTrigger.ts: {}
   src/react-query/createTunneledMcpServer.ts: {}
   src/react-query/createUnproxiedMcpServer.ts: {}
+  src/react-query/createUserSessionClient.ts: {}
   src/react-query/createUserSessionIssuer.ts: {}
   src/react-query/createUserSessionIssuerCimdClient.ts: {}
   src/react-query/createWidget.ts: {}
@@ -4379,6 +4387,7 @@ trackedFiles:
   src/react-query/updateToolset.ts: {}
   src/react-query/updateTrigger.ts: {}
   src/react-query/updateTunneledMcpServer.ts: {}
+  src/react-query/updateUserSessionClientRedirectURIs.ts: {}
   src/react-query/updateUserSessionIssuer.ts: {}
   src/react-query/updateWidget.ts: {}
   src/react-query/updateWorkloadIssuer.ts: {}
@@ -6058,6 +6067,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  createUserSessionClient:
+    speakeasy-default-create-user-session-client:
+      requestBody:
+        application/json: {"client_name": "<value>", "redirect_uris": ["<value 1>", "<value 2>", "<value 3>"], "token_endpoint_auth_method": "client_secret_basic", "user_session_issuer_id": "24536890-ee8e-4d16-a897-40832562e999"}
+      responses:
+        "200":
+          application/json: {"client": {"active_session_count": 339762, "client_id": "<id>", "client_id_issued_at": "2026-02-18T07:39:09.792Z", "client_name": "<value>", "created_at": "2024-02-13T17:37:18.077Z", "credential_kind": "public", "id": "bc6405ca-fdbd-4b30-8796-aa6d30a63749", "redirect_uris": [], "updated_at": "2026-06-19T02:47:16.238Z", "user_session_issuer_id": "a5660aaf-9485-49bb-b9b2-0d9ce8b4a980"}, "client_secret": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   createUserSessionIssuer:
     speakeasy-default-create-user-session-issuer:
       requestBody:
@@ -14791,6 +14811,17 @@ examples:
       responses:
         "200":
           application/json: {"active_connection_count": 408126, "active_consumer_session_count": 923001, "allow_public": false, "connection_status": "connected", "created_at": "2025-03-07T12:23:20.151Z", "effective_public_request_burst": 932305, "effective_public_request_rate_per_second": 93802, "id": "1bf5c61a-7401-4732-9a1c-7572bf19031e", "key_prefix": "<value>", "name": "<value>", "project_id": "f095b93d-e0ba-430e-a940-6ea2b3b7de5d", "status": "revoked", "updated_at": "2025-02-19T20:11:46.920Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateUserSessionClientRedirectURIs:
+    speakeasy-default-update-user-session-client-redirect-UR-is:
+      requestBody:
+        application/json: {"id": "0aa49c20-2f9b-46e1-a4b0-620c9c1170d5", "redirect_uris": []}
+      responses:
+        "200":
+          application/json: {"active_session_count": 121792, "client_id": "<id>", "client_id_issued_at": "2026-10-03T15:08:12.132Z", "client_name": "<value>", "created_at": "2025-08-26T20:04:09.477Z", "credential_kind": "public", "id": "051861eb-1bbb-4d59-b812-1c022a218636", "redirect_uris": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2026-06-06T04:50:02.198Z", "user_session_issuer_id": "1125b667-c531-478d-92e3-a4758cd8ae51"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
