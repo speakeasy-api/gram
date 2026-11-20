@@ -86,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
@@ -2068,6 +2069,13 @@ func (d orgEncryptionDeps) MarketplaceTokens(logger *slog.Logger, platform *encr
 // organization encryption and transition state.
 func (d orgEncryptionDeps) RunnerKeys(logger *slog.Logger, platform *encryption.Client) *runnerkeys.Keys {
 	return runnerkeys.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// NetworkIngressCredentials builds the seal and storage seam for network
+// ingress provider credentials over the process's organization encryption and
+// transition state.
+func (d orgEncryptionDeps) NetworkIngressCredentials(logger *slog.Logger, platform *encryption.Client) *ingresscredentials.Credentials {
+	return ingresscredentials.New(logger, d.Cipher(logger, platform))
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.

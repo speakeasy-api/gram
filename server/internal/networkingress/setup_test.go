@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -136,8 +137,7 @@ func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkin
 
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	admission := networkingress.NewExpansionAdmission(features, true, enabled)
-	enc := testenv.NewEncryptionClient(t)
-	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, requester, publicationRequester, nil)
+	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), newPlatformCredentials(t, conn), audit.NewLogger(), admission, requester, publicationRequester, nil)
 
 	ti := &testInstance{service: service, conn: conn, features: features, orgID: orgID, orgSlug: orgSlug}
 	productfeaturestest.Enable(t, ctx, conn, features, orgID, productfeatures.FeatureNetworkIngress)
@@ -165,4 +165,13 @@ func loadRow(t *testing.T, ctx context.Context, ti *testInstance) repo.NetworkIn
 	row, err := repo.New(ti.conn).GetNetworkIngressByOrganization(ctx, ti.orgID)
 	require.NoError(t, err)
 	return row
+}
+
+// newPlatformCredentials builds the credential seam of a process without
+// organization encryption over the test platform key, so every organization
+// stays in platform_key.
+func newPlatformCredentials(t *testing.T, conn *pgxpool.Pool) *ingresscredentials.Credentials {
+	t.Helper()
+
+	return ingresscredentials.WithoutOrganizationEncryption(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t))
 }
