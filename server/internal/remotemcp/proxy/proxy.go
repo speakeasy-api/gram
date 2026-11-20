@@ -419,6 +419,11 @@ type Proxy struct {
 	// run, and never forwarded. Nil serves none. See [LocalTool].
 	LocalTools LocalToolsResolver
 
+	// LocalToolResultObservers see the result of every tools/call a local tool
+	// answers. They observe only. ToolsCallResponseInterceptors do not run for
+	// a local answer, because no remote server sent it.
+	LocalToolResultObservers []LocalToolResultObserver
+
 	// ResourcesReadRequestInterceptors run for inbound "resources/read"
 	// JSON-RPC requests only, after the generic UserRequestInterceptors
 	// chain has completed. Non-resources/read requests skip this loop

@@ -175,6 +175,9 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	}
 	if capture, ok := ctx.Value(memberToolResultKey{}).(*memberToolResult); ok {
 		p.ToolsCallResponseInterceptors = append(p.ToolsCallResponseInterceptors, capture)
+		// A tool the member's proxy answers itself, such as its feedback
+		// tool, has no remote response; its result arrives here instead.
+		p.LocalToolResultObservers = append(p.LocalToolResultObservers, capture)
 	}
 	if rpc.Method == "tools/call" {
 		attempt.mu.Lock()
@@ -645,6 +648,15 @@ type memberToolResult struct {
 }
 
 func (*memberToolResult) Name() string { return "meta_member_result" }
+
+// ObserveLocalToolResult captures the result of a tool the member's proxy
+// answered itself.
+func (c *memberToolResult) ObserveLocalToolResult(_ context.Context, _ *proxy.ToolsCallRequest, result json.RawMessage) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.raw = bytes.Clone(result)
+	c.refusal = nil
+}
 
 func (c *memberToolResult) InterceptToolsCallResponse(_ context.Context, call *proxy.ToolsCallResponse) error {
 	if call.RemoteMessage == nil || call.Request == nil || call.Request.UserRequest == nil || len(call.Request.UserRequest.JSONRPCMessages) != 1 {

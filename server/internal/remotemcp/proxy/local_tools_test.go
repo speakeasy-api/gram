@@ -282,6 +282,52 @@ func TestLocalTool_CallIsAnsweredWithoutTheRemoteServer(t *testing.T) {
 	require.Zero(t, refused.Load(), "nor a refused one")
 }
 
+// A checkpoint that pauses every tool call, such as the kill switch, pauses
+// local tools too: they are answered only after it lets the call through.
+func TestLocalTool_IsRefusedWhenThePreForwardCheckpointRefuses(t *testing.T) {
+	t.Parallel()
+
+	upstream, requests := remoteServer(t, "application/json", ``)
+	var calls, resolutions atomic.Int32
+	var preForward int
+	p := newProxyForTest(t, upstream.URL)
+	p.LocalTools = resolveLocalTools(&resolutions, localTool(&calls, nil))
+	p.ToolsCallPreForwardInterceptors = []proxy.ToolsCallRequestInterceptor{&mockToolsCallRequestInterceptor{name: "kill-switch", called: &preForward, order: nil, err: errors.New("tool calls are paused"), lastCall: nil}}
+
+	rr := postToProxy(t, p, localToolsCallRequest(localToolName))
+	require.Equal(t, 1, preForward)
+	require.Zero(t, calls.Load(), "the local tool never runs")
+	require.Zero(t, requests.Load())
+	require.NotContains(t, rr.Body.String(), "received")
+}
+
+// resultRecorder keeps the local tool results the proxy reports.
+type resultRecorder struct{ results []json.RawMessage }
+
+func (r *resultRecorder) ObserveLocalToolResult(_ context.Context, _ *proxy.ToolsCallRequest, result json.RawMessage) {
+	r.results = append(r.results, result)
+}
+
+// A local tool's result is reported to its observers, since no remote
+// response passes through the response interceptors.
+func TestLocalTool_ResultIsReportedToItsObservers(t *testing.T) {
+	t.Parallel()
+
+	upstream, _ := remoteServer(t, "application/json", ``)
+	var calls, resolutions atomic.Int32
+	var responses int
+	observer := &resultRecorder{results: nil}
+	p := newProxyForTest(t, upstream.URL)
+	p.LocalTools = resolveLocalTools(&resolutions, localTool(&calls, nil))
+	p.LocalToolResultObservers = []proxy.LocalToolResultObserver{observer}
+	p.ToolsCallResponseInterceptors = []proxy.ToolsCallResponseInterceptor{&mockToolsCallResponseInterceptor{name: "billing", called: &responses, order: nil, err: nil, lastCall: nil}}
+
+	postToProxy(t, p, localToolsCallRequest(localToolName))
+	require.Len(t, observer.results, 1)
+	require.JSONEq(t, `{"content":[{"type":"text","text":"received {\"content\":\"it broke\"}"}],"structuredContent":{"status":"received"}}`, string(observer.results[0]))
+	require.Zero(t, responses, "no remote response passed through")
+}
+
 func TestLocalTool_OtherCallsReachTheRemoteServer(t *testing.T) {
 	t.Parallel()
 

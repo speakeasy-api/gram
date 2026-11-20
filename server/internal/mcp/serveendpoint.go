@@ -776,7 +776,7 @@ func (s *Service) serveRemoteBackend(
 	}
 
 	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
-	buildOptions = append(buildOptions, s.feedbackLocalTools(logger, organizationID, endpoint.ProjectID, mcpServer))
+	buildOptions = append(buildOptions, s.proxyLocalTools(logger, localToolServer{organizationID: organizationID, projectID: endpoint.ProjectID, mcpServerID: mcpServer.ID}, mcpServerClientInfoScope(mcpServer)))
 
 	// Identity auth above stamps an AuthContext for every caller that
 	// presented a Speakeasy credential, so its absence marks an anonymous caller.
@@ -1004,7 +1004,7 @@ func (s *Service) serveTunneledBackend(
 	}
 
 	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream, s.reportedClient(ctx, r, endpoint.ProjectID, mcpServerClientInfoScope(mcpServer)))...)
-	buildOptions = append(buildOptions, s.feedbackLocalTools(logger, organizationID, endpoint.ProjectID, mcpServer))
+	buildOptions = append(buildOptions, s.proxyLocalTools(logger, localToolServer{organizationID: organizationID, projectID: endpoint.ProjectID, mcpServerID: mcpServer.ID}, mcpServerClientInfoScope(mcpServer)))
 	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
 		ProjectID:          endpoint.ProjectID,

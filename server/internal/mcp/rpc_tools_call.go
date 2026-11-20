@@ -36,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
@@ -110,7 +109,7 @@ func handleToolsCall(
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
 	scan *mcpriskscan.Evaluator,
-	feedback *mcpfeedback.Recorder,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -141,10 +140,12 @@ func handleToolsCall(
 	attributionErr := payload.resolveServingAttribution(ctx, logger, db, toolsetID)
 	attributedMCPServerID := payload.servingServerID()
 
-	// The feedback tool's name is taken on the server, so it is matched before
-	// any of the server's own tools and before the filters that narrow them.
-	if tool, ok := hostedFeedbackTool(ctx, logger, feedback, payload); ok && params.Name == tool.Name && attributedMCPServerID != nil {
-		return handleHostedFeedbackToolCall(ctx, logger, feedback, clientInfoStore, payload, req.ID, toolset.OrganizationID, *attributedMCPServerID, params.Arguments, reqMeta.ClientInfo)
+	// A local tool's name is taken on the server, so it is matched before any
+	// of the server's own tools and before the filters that narrow them.
+	if local != nil && attributedMCPServerID != nil {
+		if tool, ok := localToolNamed(local(ctx, logger, toolset.OrganizationID, payload), params.Name); ok {
+			return answerHostedLocalToolCall(ctx, logger, clientInfoStore, payload, req.ID, tool, params.Arguments, reqMeta.ClientInfo)
+		}
 	}
 
 	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
