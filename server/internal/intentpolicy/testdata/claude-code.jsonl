@@ -1,0 +1,6 @@
+{"type":"summary","summary":"Example session"}
+{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-01-02T10:00:00.000Z","isSidechain":false,"cwd":"/work/example","sessionId":"s1","message":{"role":"user","content":"Run the tests"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-01-02T10:00:01.000Z","isSidechain":false,"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_a","name":"Bash","input":{"command":"go test ./..."}}]}}
+{"type":"assistant","uuid":"side","parentUuid":"a1","timestamp":"2026-01-02T10:00:01.500Z","isSidechain":true,"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_side","name":"Read","input":{"file_path":"x"}}]}}
+not json
+{"type":"user","uuid":"u2","parentUuid":"a1","timestamp":"2026-01-02T10:00:02.000Z","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a","content":"ok"}]}}
