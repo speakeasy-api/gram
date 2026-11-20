@@ -208,8 +208,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				ProjectID: proj, Resource: fixtureauth.OAuthResource(fixtureauth.BaseURL(s.serverURL)),
 			})
 		}, 1, "demo seed postflight: expected the Example OAuth server's protected resource on the hosted fixture with both scopes pinned, found %d matching rows"},
-		// Example OAuth's one OAuth client, Acme Wiki's own client, and
-		// Linear's and Notion's.
+		// The Example OAuth, Linear, and Notion OAuth registrations.
 		{byProj(s.q.PostflightIDServerClientAssociations), 3, "demo seed postflight: expected 3 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Example OAuth server
 		// and Example Shared Credential server sign-ins on their own server, the gateway

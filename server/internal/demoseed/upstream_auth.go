@@ -55,6 +55,9 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 	}
 	for _, kind := range authclientbackfill.Kinds {
 		counts := clients.ByKind[kind]
+		if counts == nil {
+			continue
+		}
 		pending(fmt.Sprintf("%s auth clients to record", kind), counts.PendingClients)
 		pending(fmt.Sprintf("%s auth client server links to record", kind), counts.PendingLinks)
 	}
