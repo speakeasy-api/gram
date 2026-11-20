@@ -61,7 +61,7 @@ func TestConsentPage_ChainedServiceDefersToolInventory(t *testing.T) {
 
 	// The transport still answers "not connected"; the page flag is what
 	// turns that answer into the deferred state.
-	requireConsentInventoryError(t, fx, oops.CodeConflict)
+	requireConsentInventoryError(t, fx, chainedConsentChoice(t, fx), oops.CodeConflict)
 }
 
 // chainUnavailable is an identity provider exchange that cannot run yet.
@@ -141,7 +141,7 @@ func TestConsentInventory_ChainedServiceLoadsToolsBeforeApproval(t *testing.T) {
 				}
 				require.NotEqual(t, authClientID, fx.clientA)
 			} else {
-				seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, authz.AuthClientTypeEMA)
+				authClientID = seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, authz.AuthClientTypeEMA)
 			}
 			g := setConsentGovernor(t, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA), upstream.URL)
 			g.token = "chained-token"
@@ -155,9 +155,7 @@ func TestConsentInventory_ChainedServiceLoadsToolsBeforeApproval(t *testing.T) {
 			req.Header.Set("Gram-Consent-State", fx.stateID)
 			req.Header.Set("Gram-Consent-Csrf", "csrf-token")
 			req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
-			if tc.legacy {
-				req.Header.Set("Gram-Consent-Auth-Client", authClientID.String())
-			}
+			req.Header.Set("Gram-Consent-Auth-Client", authClientID.String())
 			w := httptest.NewRecorder()
 			serveErr := fx.ti.service.ServeConsentMCP(w, req, fx.endpoint)
 
@@ -181,7 +179,7 @@ func TestConsentInventory_ChainedServiceLoadsToolsBeforeApproval(t *testing.T) {
 	}
 }
 
-func requireConsentInventoryError(t *testing.T, fx consentActionFixture, code oops.Code) {
+func requireConsentInventoryError(t *testing.T, fx consentActionFixture, authClient string, code oops.Code) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Accept", "application/json, text/event-stream")
@@ -189,6 +187,9 @@ func requireConsentInventoryError(t *testing.T, fx consentActionFixture, code oo
 	req.Header.Set("Gram-Consent-State", fx.stateID)
 	req.Header.Set("Gram-Consent-Csrf", "csrf-token")
 	req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
+	if authClient != "" {
+		req.Header.Set("Gram-Consent-Auth-Client", authClient)
+	}
 	err := fx.ti.service.ServeConsentMCP(httptest.NewRecorder(), req, fx.endpoint)
 	var se *oops.ShareableError
 	require.ErrorAs(t, err, &se)
@@ -214,7 +215,7 @@ func logRecords(t *testing.T, logs *syncBuffer, msg string) []map[string]any {
 
 // seedLoggedChainedConsent is seedChainedConsentEndpoint over a service
 // whose logs are captured.
-func seedLoggedChainedConsent(t *testing.T, tag string) (context.Context, consentActionFixture, uuid.UUID, *syncBuffer) {
+func seedLoggedChainedConsent(t *testing.T, tag string) (context.Context, consentActionFixture, uuid.UUID, uuid.UUID, *syncBuffer) {
 	t.Helper()
 	logs := &syncBuffer{mu: sync.Mutex{}, buf: bytes.Buffer{}}
 	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{AddSource: false, Level: slog.LevelDebug, ReplaceAttr: nil})), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
@@ -234,8 +235,9 @@ func seedLoggedChainedConsent(t *testing.T, tag string) (context.Context, consen
 	fx := consentActionFixture{ti: ti, endpoint: endpoint, stateID: stateID, projectID: projectID, orgID: orgID, shared: issuerID, subject: subject, clientA: uuid.Nil, clientB: uuid.Nil, clientC: uuid.Nil, clientD: uuid.Nil}
 	registerPageClient(t, ctx, fx)
 	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "", []uuid.UUID{issuerID})
-	seedConsentAuthOffer(t, ctx, ti, orgID, projectID, serverID, fx.clientA, authz.AuthClientTypeEMA)
-	return ctx, fx, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, fx.clientA), logs
+	authClientID := seedConsentAuthOffer(t, ctx, ti, orgID, projectID, serverID, fx.clientA, authz.AuthClientTypeEMA)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, orgID, subject.ID, serverID.String())
+	return ctx, fx, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, fx.clientA), authClientID, logs
 }
 
 const (
@@ -246,10 +248,10 @@ const (
 func TestConsentInventory_DeferredConflictLogsAtInfo(t *testing.T) {
 	t.Parallel()
 
-	_, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-deferred")
+	_, fx, issuer, authClientID, logs := seedLoggedChainedConsent(t, "aim524-log-deferred")
 	setConsentGovernor(t, fx, issuer, consentChainedUpstream).acquire = chainUnavailable
 
-	requireConsentInventoryError(t, fx, oops.CodeConflict)
+	requireConsentInventoryError(t, fx, authClientID.String(), oops.CodeConflict)
 	deferred := logRecords(t, logs, deferredConflictLog)
 	require.Len(t, deferred, 1)
 	require.Equal(t, "INFO", deferred[0]["level"])
@@ -260,11 +262,11 @@ func TestConsentInventory_DeferredConflictLogsAtInfo(t *testing.T) {
 func TestConsentInventory_StoredSelectionConflictStaysWarn(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-prefill")
+	ctx, fx, issuer, authClientID, logs := seedLoggedChainedConsent(t, "aim524-log-prefill")
 	setConsentGovernor(t, fx, issuer, consentChainedUpstream).acquire = chainUnavailable
 	seedSubjectToolSelection(t, ctx, fx, []string{"get_thing"})
 
-	requireConsentInventoryError(t, fx, oops.CodeConflict)
+	requireConsentInventoryError(t, fx, authClientID.String(), oops.CodeConflict)
 	require.Empty(t, logRecords(t, logs, deferredConflictLog), "the page keeps blocking, so the conflict is not expected")
 	warned := logRecords(t, logs, realConflictLog)
 	require.Len(t, warned, 1)
@@ -275,12 +277,12 @@ func TestConsentInventory_StoredSelectionConflictStaysWarn(t *testing.T) {
 func TestConsentInventory_AmbiguousBindingRequiresAConnection(t *testing.T) {
 	t.Parallel()
 
-	_, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-ambiguous")
+	_, fx, issuer, _, logs := seedLoggedChainedConsent(t, "aim524-log-ambiguous")
 	g := setConsentGovernor(t, fx, issuer)
 	// Governed but served by no single binding: the page renders no chained card.
 	g.governs = true
 
-	requireConsentInventoryError(t, fx, oops.CodeFailedPrecondition)
+	requireConsentInventoryError(t, fx, "", oops.CodeFailedPrecondition)
 	require.Empty(t, logRecords(t, logs, deferredConflictLog))
 	warned := logRecords(t, logs, "Connect a credential before previewing tools.")
 	require.Len(t, warned, 1)

@@ -291,6 +291,17 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 			continue
 		}
 		selectConsentAuthClient(auth, picked[server.id], remembered[server.id])
+		selected := auth.Selected()
+		if selected == nil || selected.ID == picked[server.id] || !selected.registrationID.Valid {
+			continue
+		}
+		// Sharing a registration does not make two typed offers equivalent.
+		// Keep both visible but require a pick before previewing either.
+		if slices.ContainsFunc(auth.Options, func(other consentAuthClientOption) bool {
+			return other.ID != selected.ID && other.Usable() && other.registrationID == selected.registrationID
+		}) {
+			selected.Selected = false
+		}
 	}
 	return choices, nil
 }
@@ -500,24 +511,7 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 			}
 		}
 	}
-	choices, err := s.consentAuthChoices(withTypedConsentAuth(ctx), endpoint.OrganizationID, subject, servers, cards, picked, false)
-	if err != nil {
-		return nil, err
-	}
-	for serverID, auth := range choices {
-		selected := auth.Selected()
-		if selected == nil || selected.ID == picked[serverID] || !selected.registrationID.Valid {
-			continue
-		}
-		// Sharing a registration does not make two typed offers equivalent.
-		// Keep both visible but require a pick before previewing either.
-		if slices.ContainsFunc(auth.Options, func(other consentAuthClientOption) bool {
-			return other.ID != selected.ID && other.Usable() && other.registrationID == selected.registrationID
-		}) {
-			selected.Selected = false
-		}
-	}
-	return choices, nil
+	return s.consentAuthChoices(withTypedConsentAuth(ctx), endpoint.OrganizationID, subject, servers, cards, picked, false)
 }
 
 func (s *Service) resolveMemberAuthChoice(ctx context.Context, endpoint *ResolvedMcpEndpoint, member metaMember, auth *consentServerAuth, subject urn.SessionSubject) (authClientResolution, error) {

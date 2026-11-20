@@ -799,6 +799,7 @@ func TestConsentSwitchAccount_KeepsTheGatewayServerPage(t *testing.T) {
 	const upstream = "https://aim852-gw.example.com/mcp"
 	member := createMetaMember(t, ctx, base.ti.conn, base.projectID, metaID, "aim852-gw-member", upstream, conv.ToNullUUID(issuerID), 0)
 	seedConsentAuthOffer(t, ctx, base.ti, base.orgID, base.projectID, member.mcpServerID, clientID, authz.AuthClientTypeEMA)
+	seedUserMCPConnectGrant(t, ctx, base.ti.conn, base.orgID, base.subject.ID, member.mcpServerID.String())
 	base.server = "aim852-gw-member"
 	base.clientA = clientID
 	fx := &switchFixture{

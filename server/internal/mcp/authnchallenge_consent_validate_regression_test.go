@@ -60,6 +60,7 @@ func TestConsentValidationVerifiesAnOfferedGatewayMemberBesideAnotherProvidersDu
 
 	sibling := newValidationMember(t)
 	server := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "validate-associated-sibling", sibling.url, conv.ToNullUUID(otherIssuer), 1)
+	seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, orgID, server.mcpServerID)
 	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, server.mcpServerID, first, authz.AuthClientTypeRemoteSession)
 	seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, server.mcpServerID, second.ID, authz.AuthClientTypeRemoteSession)
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, first, fx.subject, "token-other-first", sibling.url)

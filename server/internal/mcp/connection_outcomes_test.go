@@ -1283,6 +1283,7 @@ func TestConnectionOutcome_GatewayChainCheckRecordsRefusal(t *testing.T) {
 			_, err := upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: memberID, RemoteSessionClientID: upstreamClient})
 			require.NoError(t, err)
 			seedConsentAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, memberID, upstreamClient, "ema")
+			seedMetaMemberConnectGrant(t, ctx, ti.conn, auth.ActiveOrganizationID, memberID)
 			ti.service.SetIdentityChainer(&refusingConsentChainer{singleUpstreamChainer: &singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, upstreamClient), upstream: upstream}, reason: tc.reason})
 			rec := recordConnections(t, ti)
 

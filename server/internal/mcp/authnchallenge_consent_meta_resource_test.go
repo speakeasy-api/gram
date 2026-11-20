@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -778,14 +779,18 @@ func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *test
 		UserSessionIssuerID:   memberIssuerID,
 	}))
 
-	// The production write path. The grant alone does not make resync offer the client.
+	// The production write path can also reconcile typed offers.
 	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, orgID, fx.subject.ID, member.mcpServerID.String())
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, fx.ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
 
 	server, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: member.mcpServerID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(rsiID), server.RemoteSessionIssuerID)
-	_ = requireConnectActionFailsClosed(t, fx, gatewayClientID, oops.CodeForbidden)
+	// Keep the derived issuer but remove the reconciled offers. The column
+	// alone must not qualify the registration for browser consent.
+	require.NoError(t, authclientbackfill.New(fx.ti.conn).SoftDeleteServerAuthClientLinksFixture(ctx, member.mcpServerID))
+	err = requireConnectActionFailsClosed(t, fx, gatewayClientID, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "unknown remote session client for this MCP server")
 
 	authClientID := seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, member.mcpServerID, gatewayClientID, "remote_session")
 	location := postConnectAction(t, fx, gatewayClientID)

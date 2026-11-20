@@ -63,6 +63,7 @@ func TestConsentPage_MetaCardWithAnUngovernedMemberIsNotChained(t *testing.T) {
 	seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, member.mcpServerID)
 	otherMember := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-partial-b", "https://meta-partial-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, otherMember.mcpServerID, clientID, authz.AuthClientTypeEMA)
+	seedMetaMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, otherMember.mcpServerID)
 	fx.server = "aim61-meta-partial-a"
 	setConsentGovernor(t, fx, issuerID, governed)
 
