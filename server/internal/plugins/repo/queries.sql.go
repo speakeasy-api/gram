@@ -720,40 +720,6 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 	return i, err
 }
 
-const getGitHubConnectionByMarketplaceToken = `-- name: GetGitHubConnectionByMarketplaceToken :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, organization_id, marketplace_token_hash, marketplace_token_encrypted, marketplace_token_org_encrypted, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
-FROM plugin_github_connections
-WHERE marketplace_token = $1
-  AND marketplace_token_hash IS NULL
-`
-
-// DEPRECATED: resolves a marketplace proxy URL token through the plaintext
-// marketplace_token column, for connections the marketplace token backfill has
-// not moved yet. Removed with that column.
-func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, marketplaceToken pgtype.Text) (PluginGithubConnection, error) {
-	row := q.db.QueryRow(ctx, getGitHubConnectionByMarketplaceToken, marketplaceToken)
-	var i PluginGithubConnection
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.InstallationID,
-		&i.RepoOwner,
-		&i.RepoName,
-		&i.MarketplaceToken,
-		&i.OrganizationID,
-		&i.MarketplaceTokenHash,
-		&i.MarketplaceTokenEncrypted,
-		&i.MarketplaceTokenOrgEncrypted,
-		&i.PublishedFingerprint,
-		&i.PublishedMcpFingerprints,
-		&i.PublishedHooksVersion,
-		&i.PublishedHooksConfig,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getGitHubConnectionByMarketplaceTokenHash = `-- name: GetGitHubConnectionByMarketplaceTokenHash :one
 SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, organization_id, marketplace_token_hash, marketplace_token_encrypted, marketplace_token_org_encrypted, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 FROM plugin_github_connections
@@ -3512,6 +3478,58 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 	return i, err
 }
 
+const resolveGitHubConnectionByMarketplaceToken = `-- name: ResolveGitHubConnectionByMarketplaceToken :one
+SELECT plugin_github_connections.id, plugin_github_connections.project_id, plugin_github_connections.installation_id, plugin_github_connections.repo_owner, plugin_github_connections.repo_name, plugin_github_connections.marketplace_token, plugin_github_connections.organization_id, plugin_github_connections.marketplace_token_hash, plugin_github_connections.marketplace_token_encrypted, plugin_github_connections.marketplace_token_org_encrypted, plugin_github_connections.published_fingerprint, plugin_github_connections.published_mcp_fingerprints, plugin_github_connections.published_hooks_version, plugin_github_connections.published_hooks_config, plugin_github_connections.created_at, plugin_github_connections.updated_at, (plugin_github_connections.marketplace_token_hash IS NULL)::boolean AS plaintext_token
+FROM plugin_github_connections
+WHERE plugin_github_connections.marketplace_token_hash = $1
+   OR (
+       plugin_github_connections.marketplace_token_hash IS NULL
+       AND plugin_github_connections.marketplace_token = $2::text
+   )
+LIMIT 1
+`
+
+type ResolveGitHubConnectionByMarketplaceTokenParams struct {
+	MarketplaceTokenHash pgtype.Text
+	MarketplaceToken     string
+}
+
+type ResolveGitHubConnectionByMarketplaceTokenRow struct {
+	PluginGithubConnection PluginGithubConnection
+	PlaintextToken         bool
+}
+
+// Resolves a marketplace proxy URL token to the upstream connection by the
+// token's hash or, until the marketplace token backfill moves it, through the
+// deprecated plaintext marketplace_token column. One statement reads one
+// snapshot, so a token the backfill moves during a request still resolves.
+// plaintext_token reports which form matched. The token is the auth
+// credential, so there's no project scope to apply ahead of it.
+func (q *Queries) ResolveGitHubConnectionByMarketplaceToken(ctx context.Context, arg ResolveGitHubConnectionByMarketplaceTokenParams) (ResolveGitHubConnectionByMarketplaceTokenRow, error) {
+	row := q.db.QueryRow(ctx, resolveGitHubConnectionByMarketplaceToken, arg.MarketplaceTokenHash, arg.MarketplaceToken)
+	var i ResolveGitHubConnectionByMarketplaceTokenRow
+	err := row.Scan(
+		&i.PluginGithubConnection.ID,
+		&i.PluginGithubConnection.ProjectID,
+		&i.PluginGithubConnection.InstallationID,
+		&i.PluginGithubConnection.RepoOwner,
+		&i.PluginGithubConnection.RepoName,
+		&i.PluginGithubConnection.MarketplaceToken,
+		&i.PluginGithubConnection.OrganizationID,
+		&i.PluginGithubConnection.MarketplaceTokenHash,
+		&i.PluginGithubConnection.MarketplaceTokenEncrypted,
+		&i.PluginGithubConnection.MarketplaceTokenOrgEncrypted,
+		&i.PluginGithubConnection.PublishedFingerprint,
+		&i.PluginGithubConnection.PublishedMcpFingerprints,
+		&i.PluginGithubConnection.PublishedHooksVersion,
+		&i.PluginGithubConnection.PublishedHooksConfig,
+		&i.PluginGithubConnection.CreatedAt,
+		&i.PluginGithubConnection.UpdatedAt,
+		&i.PlaintextToken,
+	)
+	return i, err
+}
+
 const resolvePluginPublishActor = `-- name: ResolvePluginPublishActor :one
 SELECT COALESCE(
   (
@@ -4073,8 +4091,8 @@ type UpsertGitHubConnectionParams struct {
 }
 
 // Inserts or refreshes a project's GitHub connection. It never writes the
-// marketplace token: the publish path gives a connection without one its token
-// through package marketplacetokens, in the same transaction.
+// marketplace token. When the connection has no token yet, the publish path
+// stores one through package marketplacetokens, in the same transaction.
 // organization_id is the project's organization; an existing value is kept, so
 // a connection never moves to another organization's key. published_mcp_fingerprints,
 // published_hooks_version, and published_hooks_config record the per-plugin MCP

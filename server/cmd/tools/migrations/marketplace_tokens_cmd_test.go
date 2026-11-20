@@ -43,6 +43,13 @@ func TestParseMarketplaceTokensFlags(t *testing.T) {
 	_, err = parseMarketplaceTokensFlags([]string{"-environment=staging", "-batch-size=0"}, getenv)
 	require.ErrorContains(t, err, "batch-size")
 
+	_, err = parseMarketplaceTokensFlags([]string{"-environment=staging", "-batch-size=10001"}, getenv)
+	require.ErrorContains(t, err, "batch-size")
+
+	cfg, err = parseMarketplaceTokensFlags([]string{"-environment=staging", "-batch-size=10000"}, getenv)
+	require.NoError(t, err)
+	require.EqualValues(t, marketplaceTokensMaxBatch, cfg.batchSize)
+
 	_, err = parseMarketplaceTokensFlags([]string{"-apply", "-environment=staging"}, getenv)
 	require.ErrorContains(t, err, "confirm-environment")
 

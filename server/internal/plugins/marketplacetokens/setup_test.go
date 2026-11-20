@@ -31,7 +31,6 @@ func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
-		os.Exit(1)
 	}
 
 	infra = res
@@ -40,7 +39,6 @@ func TestMain(m *testing.M) {
 
 	if err := cleanup(); err != nil {
 		log.Fatalf("cleanup test infrastructure: %v", err)
-		os.Exit(1)
 	}
 
 	os.Exit(code)
