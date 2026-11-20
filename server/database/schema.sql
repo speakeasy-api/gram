@@ -11795,10 +11795,11 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   installation_id BIGINT NOT NULL,
   repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
   repo_name TEXT NOT NULL CHECK (repo_name <> ''),
-  -- DEPRECATED: the marketplace token in plaintext, superseded by
-  -- marketplace_token_hash and its two sealed copies below. No longer written.
-  -- Read only as a fallback for connections the marketplace token backfill has
-  -- not moved yet, which clears it; dropped in a later contract migration.
+  -- The marketplace token in plaintext, being replaced by
+  -- marketplace_token_hash and its two sealed copies below. Once the publish
+  -- path stores those instead, nothing writes this column: it is read only as a
+  -- fallback for connections the marketplace token backfill has not moved yet,
+  -- which clears it, and is dropped in a later contract migration.
   marketplace_token TEXT,
   -- The organization that owns the connection's project, stored on the row so
   -- the organization encryption fence of the marketplace token copies compares
@@ -11856,7 +11857,10 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
 
   CONSTRAINT plugin_github_connections_pkey PRIMARY KEY (id),
   CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT plugin_github_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT plugin_github_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- organization_id must be the project's own organization: the encryption
+  -- fence reads it, and token copies are sealed for it.
+  CONSTRAINT plugin_github_connections_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN plugin_github_connections.id IS '@access: confidential';

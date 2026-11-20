@@ -1,7 +1,7 @@
 -- atlas:txmode none
 
 -- Modify "plugin_github_connections" table
-ALTER TABLE "plugin_github_connections" ADD CONSTRAINT "plugin_github_connections_marketplace_token_hash_check" CHECK (marketplace_token_hash <> ''::text), ADD COLUMN "organization_id" text NULL, ADD COLUMN "marketplace_token_hash" text NULL, ADD COLUMN "marketplace_token_encrypted" text NULL, ADD COLUMN "marketplace_token_org_encrypted" text NULL, ADD CONSTRAINT "plugin_github_connections_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE;
+ALTER TABLE "plugin_github_connections" ADD CONSTRAINT "plugin_github_connections_marketplace_token_hash_check" CHECK (marketplace_token_hash <> ''::text), ADD COLUMN "organization_id" text NULL, ADD COLUMN "marketplace_token_hash" text NULL, ADD COLUMN "marketplace_token_encrypted" text NULL, ADD COLUMN "marketplace_token_org_encrypted" text NULL, ADD CONSTRAINT "plugin_github_connections_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE, ADD CONSTRAINT "plugin_github_connections_project_tenant_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE;
 -- Create index "plugin_github_connections_marketplace_token_hash_key" to table: "plugin_github_connections"
 CREATE UNIQUE INDEX CONCURRENTLY "plugin_github_connections_marketplace_token_hash_key" ON "plugin_github_connections" ("marketplace_token_hash") WHERE (marketplace_token_hash IS NOT NULL);
 -- Create index "plugin_github_connections_organization_id_idx" to table: "plugin_github_connections"
