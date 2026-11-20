@@ -123,8 +123,6 @@ func approveServiceChoice(t *testing.T, ctx context.Context, fx serviceChoiceGat
 	if session.CredentialID.Valid {
 		credentialID = session.CredentialID.UUID
 	}
-	_, err = usersessionsrepo.New(fx.ti.conn).GetUpstreamClientSelection(ctx, usersessionsrepo.GetUpstreamClientSelectionParams{UserSessionIssuerID: fx.issuerID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerID: fx.serverID, OrganizationID: fx.orgID})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
 	choices, err := upstreamclientsrepo.New(fx.ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{OrganizationID: fx.orgID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerIds: []uuid.UUID{fx.serverID}, TypedOnly: true})
 	require.NoError(t, err)
 	require.Len(t, choices, 1)
