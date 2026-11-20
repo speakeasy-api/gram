@@ -532,6 +532,8 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 		return err
 	}
 	switch c.plan.Bound {
+	case OfferNewClient:
+		return nil
 	case ReplaceBound:
 		// A new provider has no id yet, so every bound client belongs to another.
 		decision, err := decideOfferedClients(ctx, q, boundClientsRequest{
@@ -1039,7 +1041,8 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 			return err
 		}
 		moved, replaced = decision.moved, decision.replaced
-		released = append(decision.detach, decision.release...)
+		released = append(released, decision.detach...)
+		released = append(released, decision.release...)
 		for _, current := range decision.detach {
 			if err := c.releaseReplacedClient(ctx, tx, current); err != nil {
 				return err
@@ -1580,34 +1583,6 @@ func countProviderClients(bound []repo.RemoteSessionClient, providerID uuid.UUID
 		}
 	}
 	return n
-}
-
-// listUserSessionIssuerClients pages through every client bound to
-// userIssuerID, whatever its Remote Identity Provider.
-func listUserSessionIssuerClients(ctx context.Context, q *repo.Queries, projectID uuid.UUID, organizationID string, userIssuerID uuid.UUID) ([]repo.RemoteSessionClient, error) {
-	const pageSize = 100
-	var clients []repo.RemoteSessionClient
-	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	for {
-		page, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
-			UserSessionIssuerID:   userIssuerID,
-			ProjectID:             projectID,
-			OrganizationID:        organizationID,
-			RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			Cursor:                cursor,
-			LimitValue:            pageSize,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("list clients bound to user session issuer: %w", err)
-		}
-		for _, row := range page {
-			clients = append(clients, row.RemoteSessionClient)
-		}
-		if len(page) < pageSize {
-			return clients, nil
-		}
-		cursor = uuid.NullUUID{UUID: page[len(page)-1].RemoteSessionClient.ID, Valid: true}
-	}
 }
 
 // refuseOrgWideBinding refuses to link or unlink client when that binding is

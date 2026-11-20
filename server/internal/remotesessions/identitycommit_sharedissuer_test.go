@@ -446,6 +446,7 @@ func TestGetServerIdentityImpactSaysWhichClientsLeavingRemoves(t *testing.T) {
 	createImpactGateway(t, ctx, ti, "leaving-gateway", issuer)
 	provider := createServerIdentityProvider(t, ctx, ti, "leaving-gateway-provider", "", false, []string{"none"})
 	client := commitManualClient(t, ctx, ti, target, provider, "leaving-gateway-client")
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer}))
 
 	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(issuer, &target, "detach", nil, nil))
 	require.NoError(t, err)

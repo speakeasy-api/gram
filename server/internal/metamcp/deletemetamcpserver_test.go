@@ -21,6 +21,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -357,9 +358,7 @@ func TestDeleteMetaMcpServer_PreservesMemberOffers(t *testing.T) {
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: clientID,
 	})
 	require.NoError(t, err)
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{projectID}))
 	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, authCtx.ActiveOrganizationID, serverID))
 	require.NoError(t, tx.Commit(ctx))
@@ -402,9 +401,7 @@ func TestRemoveMetaMcpMember_PreservesMemberOffers(t *testing.T) {
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: clientID,
 	})
 	require.NoError(t, err)
-	tx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{projectID}))
 	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, authCtx.ActiveOrganizationID, serverID))
 	require.NoError(t, tx.Commit(ctx))

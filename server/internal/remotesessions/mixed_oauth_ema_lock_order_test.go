@@ -88,7 +88,8 @@ func TestMixedOAuthEMA_OpposingWriterScope(t *testing.T) {
 				copies = int(fixtureValue6)
 				require.Equal(t, 2, copies)
 				if operation == "reconcile_inherited_tx" {
-					// Restore sole-consumer evidence and remove only the legacy association.
+					// Restore the legacy issuer link and sole-consumer evidence, then remove the association.
+					require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: in.ClientID, UserSessionIssuerID: in.UserSessionIssuerID}))
 					// Reconcile must really capture a missing row, not take its no-op path.
 					err = repo.New(ti.conn).LockingFixtureClearUserIssuer(ctx, repo.LockingFixtureClearUserIssuerParams{ProjectID: projectID, ServerID: detachedServer})
 					require.NoError(t, err)

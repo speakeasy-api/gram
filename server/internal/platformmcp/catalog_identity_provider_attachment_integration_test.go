@@ -395,7 +395,7 @@ func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttach
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
-	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, attachmentTestTarget(t, service.db, project, userSessionIssuerID), userSessionIssuerID, uuid.Nil, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
+	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, attachmentTestTarget(t, service.db, project, userSessionIssuerID), metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
 	require.NoError(t, commit.Preflight(ctx))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)
@@ -562,10 +562,19 @@ func TestMatchingAttachmentFollowsTypedOffers(t *testing.T) {
 	serverID := attachmentTestMCPServer(t, conn, project.ID, shared)
 	// A second server keeps the issuer shared, so its binding proves nothing
 	// about this server and no association is captured from it.
-	attachmentTestMCPServer(t, conn, project.ID, shared)
-	other := attachmentTestIssuerMetadata("https://other.example.test")
-	otherResource := attachmentTestResource("https://other.example.test/mcp", "Other", "")
-	require.NoError(t, attachmentTestCommit(t, service, principal, project, shared, other, "client-other", otherResource.Resource, otherResource))
+	otherServer := attachmentTestMCPServer(t, conn, project.ID, shared)
+	otherProvider := attachmentTestIssuerMetadata("https://other.example.test")
+	legacyProvider, err := remotesessionsrepo.New(conn).CreateRemoteSessionIssuer(ctx, discoveredIssuerParams(principal, project, uuid.New(), otherProvider))
+	require.NoError(t, err)
+	legacyClient, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID), RemoteSessionIssuerID: legacyProvider.ID,
+		ClientID: "client-other", ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now()),
+	})
+	require.NoError(t, err)
+	require.NoError(t, remotesessionsrepo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: legacyClient.ID, UserSessionIssuerID: shared,
+	}))
+	require.NotEqual(t, serverID, otherServer)
 	var upstream *httptest.Server
 	upstream = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -585,7 +594,7 @@ func TestMatchingAttachmentFollowsTypedOffers(t *testing.T) {
 	attached, err := service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, provider)
 	require.NoError(t, err, "another server's provider on the shared issuer must not refuse the attachment")
 	require.False(t, attached)
-	attached, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, other.Issuer)
+	attached, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, otherProvider.Issuer)
 	require.NoError(t, err)
 	require.False(t, attached, "a client the issuer binds is not this server's until the server offers it")
 
