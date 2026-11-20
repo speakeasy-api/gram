@@ -141,9 +141,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 		}
 		return s.finishCodeReconnectApproval(w, r, t, endpoint, state, jtis)
 	}
-	// Read on the approval transaction, and only once a new catalogue is to be
-	// recorded, so a retry of a committed approval does not depend on it.
-	enforced, err := authenforcement.ReadEnforced(ctx, tx, endpoint.OrganizationID)
+	typedChoices, err := authenforcement.ReadEnforced(ctx, tx, endpoint.OrganizationID)
 	if err != nil {
 		return fail(err)
 	}
@@ -155,13 +153,13 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 	if err != nil {
 		return fail(err)
 	}
-	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, picks, previous.ExpiresAt)
+	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, picks, previous.ExpiresAt, typedChoices)
 	if err != nil {
 		return fail(err)
 	}
 	frozen.ApprovalChallengeID = state.ID
 	b := state.CodeReconnect
-	if err := replaceReconnectUpstreamChoices(ctx, q, b.CredentialID, previous, frozen, enforced); err != nil {
+	if err := replaceReconnectUpstreamChoices(ctx, q, b.CredentialID, previous, frozen); err != nil {
 		return fail(err)
 	}
 	policy.Selection = selection
@@ -236,13 +234,13 @@ func reconnectMemberIDs(catalogs ...*connectionCatalog) []uuid.UUID {
 // replaceReconnectUpstreamChoices runs inside the approval transaction, after
 // locking the connection. Removed members are retired; only the new catalogue's
 // members can receive choices. Other servers on the issuer are untouched.
-func replaceReconnectUpstreamChoices(ctx context.Context, q *usersessionsrepo.Queries, credentialID uuid.UUID, previous, next *connectionCatalog, typedOnly bool) error {
+func replaceReconnectUpstreamChoices(ctx context.Context, q *usersessionsrepo.Queries, credentialID uuid.UUID, previous, next *connectionCatalog) error {
 	if err := q.SoftDeleteReconnectUpstreamChoices(ctx, usersessionsrepo.SoftDeleteReconnectUpstreamChoicesParams{
 		CredentialID: credentialID, OrganizationID: next.OrganizationID, McpServerIds: reconnectMemberIDs(previous, next),
 	}); err != nil {
 		return fmt.Errorf("retire reviewed upstream choices: %w", err)
 	}
-	if _, err := q.RecordUpstreamClientSelections(ctx, next.upstreamChoices(credentialID, typedOnly)); err != nil {
+	if _, err := q.RecordIssuedAuthClientChoices(ctx, next.upstreamChoices(credentialID)); err != nil {
 		return fmt.Errorf("record reviewed upstream choices: %w", err)
 	}
 	return nil

@@ -86,7 +86,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 				projectID: uuid.New(), metaServerID: uuid.New(), discoveryMode: metamcp.DiscoveryModeCode, execute: true, userID: "private user", sessionID: "private session",
 				catalogRef: &toolfilter.CatalogReference{Mode: toolfilter.CatalogModeCached},
 				catalog: &connectionCatalog{ID: uuid.New(), ClientID: "private OAuth client", Subject: urn.NewUserSubject("private subject"), Members: map[string]connectionCatalogMember{
-					"source": {ServerID: member.serverID, ProjectID: member.projectID, BackendHash: member.configuration.hash, TypedBackendHash: member.configuration.typedHash, Auth: &connectionCatalogAuth{ClientID: member.authClient.clientID, RegistrationID: member.chosenClientID}},
+					"source": {ServerID: member.serverID, ProjectID: member.projectID, BackendHash: member.configuration.hash, TypedBackendHash: member.configuration.typedHash, Auth: &connectionCatalogAuth{ClientID: member.authClient.clientID, RegistrationID: member.chosenClientID, ExplicitPick: false}},
 				}},
 			}
 			tt.change(gate, &member)
