@@ -840,15 +840,6 @@ func (s *seeder) seedServersEMAWiki(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("insert demo acme wiki vendor client: %w", err)
 	}
-	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
-		ID:                    s.det("server-client-association-ema-wiki"),
-		ProjectID:             proj,
-		OrgID:                 org,
-		McpServerID:           s.det("mcpserver-ema-wiki"),
-		RemoteSessionClientID: s.det("ema-client-wiki"),
-	}); err != nil {
-		return fmt.Errorf("associate demo acme wiki server with its client: %w", err)
-	}
 	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("ema-vendor-wiki"),
 		McpServerID:           s.det("mcpserver-ema-wiki"),

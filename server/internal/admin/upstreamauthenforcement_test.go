@@ -81,7 +81,7 @@ func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRejectsRollback(t *testing
 	enforced, err = authenforcement.NewGate(db).Enforced(ctx, org.id)
 	require.NoError(t, err)
 	require.True(t, enforced, "a retired rollback request must leave enforcement enabled")
-	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	status, err = svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
 	require.True(t, status.Enforcement.Enabled)
 }

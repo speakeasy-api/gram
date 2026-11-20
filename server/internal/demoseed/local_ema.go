@@ -162,9 +162,6 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 		{"insert the authorization server client", func() error {
 			return q.LocalEMAInsertVendorClient(ctx, repo.LocalEMAInsertVendorClientParams{ID: client, ProjectID: proj, OrgID: org, IssuerID: vendor, ClientID: clientID, ClientSecretEncrypted: secret, Scopes: scopes})
 		}},
-		{"associate the server with its client", func() error {
-			return q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{ID: s.det("server-client-association-ema-tracker"), ProjectID: proj, OrgID: org, McpServerID: server, RemoteSessionClientID: client})
-		}},
 		{"stamp the authorization server", func() error {
 			return q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{RemoteSessionIssuerID: vendor, McpServerID: server, ProjectID: proj})
 		}},

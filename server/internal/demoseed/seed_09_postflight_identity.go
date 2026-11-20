@@ -210,7 +210,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the Example OAuth server's protected resource on the hosted fixture with both scopes pinned, found %d matching rows"},
 		// Example OAuth's one OAuth client, Acme Wiki's own client, and
 		// Linear's and Notion's.
-		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
+		{byProj(s.q.PostflightIDServerClientAssociations), 3, "demo seed postflight: expected 3 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Example OAuth server
 		// and Example Shared Credential server sign-ins on their own server, the gateway
 		// sign-ins on both members, and the organization sign-ins' no-auth

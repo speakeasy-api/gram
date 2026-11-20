@@ -47,8 +47,11 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 	if len(clients.PhaseErrors) > 0 {
 		problems = append(problems, "failed phases "+phaseErrors(clients.PhaseErrors))
 	}
-	pending("typed auth clients to record", clients.PendingClients)
-	pending("typed auth client server links to record", clients.PendingLinks)
+	for _, kind := range authclientbackfill.Kinds {
+		counts := clients.ByKind[kind]
+		pending(fmt.Sprintf("%s auth clients to record", kind), counts.PendingClients)
+		pending(fmt.Sprintf("%s auth client server links to record", kind), counts.PendingLinks)
+	}
 	pending("typed auth client header copies to record", clients.PendingHeaders)
 	pending("typed auth client decisions unresolved", clients.Gaps)
 	pending("typed auth clients or links to retire", clients.PendingRetiredClients+clients.PendingRetiredLinks)
