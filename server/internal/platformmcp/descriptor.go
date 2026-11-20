@@ -365,6 +365,11 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 				continue
 			}
 			check = authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID])).ToolCall(dimensions[authz.SelectorKeyTool], dimensions[authz.SelectorKeyDisposition])
+		} else if scope == authz.ScopeMCPConnect {
+			// Probe connect as a connection, which may leave the tool and
+			// disposition out, so a grant whose tool or disposition is a
+			// wildcard still matches.
+			check = authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID])).Connect()
 		}
 		allowed, err := authz.GrantsAuthorize(grants, check)
 		if err == nil && allowed {

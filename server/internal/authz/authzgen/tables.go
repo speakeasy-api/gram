@@ -59,6 +59,10 @@ declares. Kinds not listed here allow no extra keys, except where
 scopeAllowsSelectorKey admits one for a single scope.`, "map[string]map[string]bool", r.DeriveAllowedSelectorKeys()},
 		{"scopeSelectorKeys", `scopeSelectorKeys holds the keys single permissions declare beyond their
 type's.`, "map[Scope]map[string]bool", r.DeriveScopeSelectorKeys()},
+		{"scopeOpenKeys", `scopeOpenKeys lists, per scope, the grant keys a probe, a connection or a
+risk policy audience question may leave out and still match a grant limited
+on them: the Open keys each permission declares. Every other check, and
+every block or exemption, must carry each key a grant names.`, "map[Scope]openKeys", r.DeriveOpenKeys()},
 		{"validAuthClientTypes", `validAuthClientTypes is the closed value set of client_type.`, "map[string]bool", r.DeriveDimensionValues("mcp_auth_client", registry.SelectorKeyClientType)},
 		{"validDispositions", `validDispositions is the closed value set of disposition.`, "map[string]bool", r.DeriveDimensionValues("mcp", registry.SelectorKeyDisposition)},
 		{"systemRoleScopes", `systemRoleScopes lists the scopes each built-in role is seeded with.`, "map[string][]Scope", r.SystemRoles},
@@ -223,7 +227,14 @@ func writeLiteral(b *strings.Builder, v reflect.Value, indent string, goType str
 				b.WriteString(", ")
 			}
 			b.WriteString(f.Name + ": ")
-			if err := writeLiteral(b, v.Field(i), indent, ""); err != nil {
+			// A field's composite literal cannot elide its type. Only
+			// unnamed collections of basic values are written this way, so
+			// their Go spelling is the same in package authz.
+			fieldType := ""
+			if k := f.Type.Kind(); (k == reflect.Slice || k == reflect.Map) && f.Type.Name() == "" && basic(f.Type.Elem()) {
+				fieldType = f.Type.String()
+			}
+			if err := writeLiteral(b, v.Field(i), indent, fieldType); err != nil {
 				return err
 			}
 		}
