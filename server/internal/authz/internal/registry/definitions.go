@@ -283,8 +283,6 @@ var Definitions = Registry{
 			Category: ScopeCategoryMCP,
 			Match:    MatchLoose,
 			Dimensions: []Dimension{
-				{Key: SelectorKeyTool, Values: nil, Required: false},
-				{Key: SelectorKeyDisposition, Values: []string{DispositionReadOnly, DispositionDestructive, DispositionIdempotent, DispositionOpenWorld}, Required: false},
 				// Required since the hotfix: a project-bounded grant must
 				// never match a check that does not name its project.
 				{Key: SelectorKeyProjectID, Values: nil, Required: true},
@@ -325,8 +323,14 @@ var Definitions = Registry{
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  Blocked(SafeSince(4), "MCP connect access"),
-					Dimensions:  nil,
-					Source:      GrantSourceRoles,
+					// A grant or a block may be limited to some tools or
+					// dispositions on connect only. Viewing or managing a
+					// server has no tool, so read and write carry neither.
+					Dimensions: []Dimension{
+						{Key: SelectorKeyTool, Values: nil, Required: false},
+						{Key: SelectorKeyDisposition, Values: []string{DispositionReadOnly, DispositionDestructive, DispositionIdempotent, DispositionOpenWorld}, Required: false},
+					},
+					Source: GrantSourceRoles,
 					// ToolCall carries the tool and its disposition; plain
 					// Connect() asks about the server as a whole.
 					DimensionSets: []DimensionSet{
