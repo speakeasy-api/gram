@@ -6,11 +6,13 @@ package aitargets_test
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -31,18 +33,46 @@ type compiledDefaultsGolden struct {
 	Envelope map[string]any `json:"envelope"`
 }
 
-func TestCompiledSnapshotServesTheRegistryScanList(t *testing.T) {
-	t.Parallel()
-
-	catalog := aivendorstest.CompiledSnapshot()
-	defaults := aitargets.Defaults(catalog)
+func defaultsGolden(t *testing.T, catalog *aivendors.Snapshot) []byte {
+	t.Helper()
 	snapshot := aitargets.NewOrganizationList(catalog, nil).Snapshot
 	data, err := json.Marshal(compiledDefaultsGolden{
-		Defaults:    defaults,
+		Defaults:    aitargets.Defaults(catalog),
 		ListVersion: snapshot.ListVersion,
 		ETag:        snapshot.ETag,
 		Envelope:    snapshot.EnvelopeValue(),
 	})
 	require.NoError(t, err)
-	testenv.RequireJSONGolden(t, "testdata/defaults_golden.json", data)
+	return data
+}
+
+func TestCompiledSnapshotServesTheRegistryScanList(t *testing.T) {
+	t.Parallel()
+	testenv.RequireJSONGolden(t, "testdata/defaults_golden.json", defaultsGolden(t, aivendorstest.CompiledSnapshot()))
+}
+
+// A freshly seeded database serves devices the same list, version and ETag.
+// Only the order of Defaults and of each target's matcher lists changes; the
+// envelope carries no matchers.
+func TestDatabaseSnapshotServesTheRegistryScanList(t *testing.T) {
+	t.Parallel()
+	compiled := aivendorstest.CompiledSnapshot()
+	database := aivendorstest.DatabaseSnapshot()
+	want := aitargets.NewOrganizationList(compiled, nil).Snapshot
+	got := aitargets.NewOrganizationList(database, nil).Snapshot
+	require.Equal(t, want.ListVersion, got.ListVersion)
+	require.Equal(t, want.ETag, got.ETag)
+	require.Equal(t, want.EnvelopeValue(), got.EnvelopeValue())
+	require.Equal(t, sortedMatchers(want.Targets()), sortedMatchers(got.Targets()))
+	require.ElementsMatch(t, sortedMatchers(aitargets.Defaults(compiled)), sortedMatchers(aitargets.Defaults(database)))
+	testenv.RequireJSONGolden(t, "testdata/defaults_database_order_golden.json", defaultsGolden(t, database))
+}
+
+func sortedMatchers(targets []aitargets.Target) []aitargets.Target {
+	for i := range targets {
+		slices.Sort(targets[i].GatewayClient.CIMDVendorKeys)
+		slices.Sort(targets[i].GatewayClient.OAuthClientIDs)
+		slices.Sort(targets[i].GatewayClient.ClientInfoNames)
+	}
+	return targets
 }

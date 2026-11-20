@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -35,13 +36,13 @@ type goldenLabel struct {
 	Label  string `json:"label"`
 }
 
-func TestCompiledSnapshotNamesAppsAsTheRegistryDid(t *testing.T) {
-	t.Parallel()
-
-	catalog := aivendorstest.CompiledSnapshot()
+// appGolden resolves the golden client IDs and app keys, listed in the
+// compiled registry's order, against catalog.
+func appGolden(t *testing.T, catalog *aivendors.Snapshot) []byte {
+	t.Helper()
 	hosts := CatalogAppHosts(catalog)
 	var ids, keys []string
-	for _, preset := range catalog.Catalog() {
+	for _, preset := range aivendorstest.CompiledSnapshot().Catalog() {
 		ids = append(ids, strings.ReplaceAll(preset.URL, "*", "probe"))
 		keys = append(keys, NormalizeProviderHost(preset.URL))
 	}
@@ -65,5 +66,16 @@ func TestCompiledSnapshotNamesAppsAsTheRegistryDid(t *testing.T) {
 	}
 	data, err := json.Marshal(golden)
 	require.NoError(t, err)
-	testenv.RequireJSONGolden(t, "testdata/app_golden.json", data)
+	return data
+}
+
+func TestCompiledSnapshotNamesAppsAsTheRegistryDid(t *testing.T) {
+	t.Parallel()
+	testenv.RequireJSONGolden(t, "testdata/app_golden.json", appGolden(t, aivendorstest.CompiledSnapshot()))
+}
+
+// A freshly seeded database names every app and label as the registry did.
+func TestDatabaseSnapshotNamesAppsAsTheRegistryDid(t *testing.T) {
+	t.Parallel()
+	testenv.RequireJSONGolden(t, "testdata/app_golden.json", appGolden(t, aivendorstest.DatabaseSnapshot()))
 }
