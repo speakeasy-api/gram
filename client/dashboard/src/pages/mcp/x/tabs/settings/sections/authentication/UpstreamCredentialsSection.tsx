@@ -53,9 +53,11 @@ export function UpstreamCredentialsSection({
   );
   const [openClientId, setOpenClientId] = useState<string | null>(null);
   const setupStep = useSetupStep();
-  const [adding, setAdding] = useState(
-    canManage && (setupStep === "credentials" || setupStep === "oauth-client"),
-  );
+  const [addOverride, setAdding] = useState<boolean | null>(null);
+  const adding =
+    addOverride ??
+    (canManage &&
+      (setupStep === "credentials" || setupStep === "oauth-client"));
   const openClient =
     query.data?.clients.find((client) => client.id === openClientId) ?? null;
 
@@ -150,7 +152,7 @@ export function UpstreamCredentialsSection({
           )}
         </div>
       </SettingsSection.Panel>
-      {adding ? (
+      {canManage && adding && !query.isError && query.data ? (
         <AddCredentialSheet
           mcpServerId={mcpServer.id}
           projectId={mcpServer.projectId}

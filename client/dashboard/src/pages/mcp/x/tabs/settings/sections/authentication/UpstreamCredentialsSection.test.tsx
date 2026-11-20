@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -39,16 +40,22 @@ vi.mock("@gram/client/react-query/updateAuthClient.js", () => ({
   useUpdateAuthClientMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-function renderSection(server: Partial<McpServer>) {
+vi.mock("./AddCredentialSheet", () => ({
+  AddCredentialSheet: () => <div data-testid="add-credential-sheet" />,
+}));
+
+function renderSection(server: Partial<McpServer>, url = "/") {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <TooltipProvider>
-        <UpstreamCredentialsSection
-          mcpServer={
-            { id: "server-1", projectId: "project-1", ...server } as McpServer
-          }
-        />
-      </TooltipProvider>
+      <MemoryRouter initialEntries={[url]}>
+        <TooltipProvider>
+          <UpstreamCredentialsSection
+            mcpServer={
+              { id: "server-1", projectId: "project-1", ...server } as McpServer
+            }
+          />
+        </TooltipProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -113,6 +120,18 @@ describe("UpstreamCredentialsSection", () => {
     expect(screen.getByText("Status unavailable")).toBeTruthy();
     expect(screen.queryByText("No authentication")).toBeNull();
   });
+
+  it.each([true, false])(
+    "opens a credential repair deep link only for an organization admin (%s)",
+    (admin) => {
+      mocks.admin = admin;
+      renderSection(
+        { remoteMcpServerId: "remote-1" },
+        "/settings?setup=credentials#authentication",
+      );
+      expect(!!screen.queryByTestId("add-credential-sheet")).toBe(admin);
+    },
+  );
 
   it("does not probe a server with no remote upstream", () => {
     renderSection({ tunneledMcpServerId: "tunnel-1" });
