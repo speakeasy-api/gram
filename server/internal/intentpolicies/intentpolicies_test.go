@@ -104,3 +104,22 @@ func TestUploadRejectsUnknownFormat(t *testing.T) {
 	_, err := svc.UploadTranscript(withAdmin(t, ctx), &gen.UploadTranscriptPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "x", Content: "hello"})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
+
+func TestUploadStripsNULCharacters(t *testing.T) {
+	t.Parallel()
+	ctx, svc := newTestService(t, classifier.Noop{})
+	ctx = withAdmin(t, ctx)
+
+	content := `{"messages":[` +
+		`{"role":"user","content":"read the log\u0000"},` +
+		`{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"cat a\u0000b"}}]},` +
+		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"bin\u0000ary"}]}]}`
+	up, err := svc.UploadTranscript(ctx, &gen.UploadTranscriptPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "nul.json", Content: content})
+	require.NoError(t, err)
+	require.Equal(t, 3, up.MessageCount)
+
+	res, err := svc.AnalyzeSession(ctx, &gen.AnalyzeSessionPayload{SessionToken: nil, ProjectSlugInput: nil, ChatID: up.ChatID, Evaluator: "gemini", Generation: nil})
+	require.NoError(t, err)
+	require.Len(t, res.Assessments, 1)
+	require.JSONEq(t, `{"command":"cat ab"}`, res.Assessments[0].Arguments)
+}

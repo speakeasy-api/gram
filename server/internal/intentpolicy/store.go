@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,7 +103,7 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 		if len(m.ToolCalls) > 0 {
 			calls := make([]storedCall, 0, len(m.ToolCalls))
 			for _, c := range m.ToolCalls {
-				calls = append(calls, storedCall{ID: c.ID, Type: "function", Function: storedCallFunction{Name: c.Name, Arguments: string(c.Arguments)}})
+				calls = append(calls, storedCall{ID: c.ID, Type: "function", Function: storedCallFunction{Name: stripNUL(c.Name), Arguments: stripNUL(string(c.Arguments))}})
 			}
 			encoded, err := json.Marshal(calls)
 			if err != nil {
@@ -117,7 +118,7 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 				ChatID:           chatID,
 				Role:             m.Role,
 				ProjectID:        p.ProjectID,
-				Content:          m.Content,
+				Content:          stripNUL(m.Content),
 				ContentRaw:       nil,
 				ContentAssetUrl:  pgtype.Text{String: "", Valid: false},
 				StorageError:     pgtype.Text{String: "", Valid: false},
@@ -157,4 +158,10 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 		return uuid.Nil, fmt.Errorf("write transcript messages: %w", err)
 	}
 	return chatID, nil
+}
+
+// stripNUL removes NUL characters, raw or JSON-escaped, which Postgres text
+// and jsonb columns reject. Captured tool output sometimes contains them.
+func stripNUL(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\x00", ""), `\u0000`, "")
 }
