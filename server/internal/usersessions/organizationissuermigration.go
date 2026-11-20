@@ -754,40 +754,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate CIMD clients").LogError(ctx, logger)
 	}
-<<<<<<< HEAD
-=======
-	// Read before the source's bindings join the target's: only these were
-	// configured for sign-in through the target.
-	targetRegistrations, err := q.ListBoundOAuthRegistrationsForUserSessionIssuerMigration(ctx, repo.ListBoundOAuthRegistrationsForUserSessionIssuerMigrationParams{
-		IssuerIds: []uuid.UUID{target.ID}, OrganizationID: organizationID,
-	})
-	if err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "list target remote-session client links").LogError(ctx, logger)
-	}
-	// Carry only the bindings something still signs in through. The rest
-	// leave with the source; users' grants for them still move below, so
-	// binding such a client to the target later makes them usable again. A
-	// deleted client's binding is never carried and changes nothing, so it is
-	// not reported either.
-	links, err := q.ListSourceClientLinksForUserSessionIssuerMigration(ctx, repo.ListSourceClientLinksForUserSessionIssuerMigrationParams{
-		SourceIssuerID: source.ID, TargetIssuerID: target.ID, RequiredClientIds: before.clientsOfServersOn(source.ID), OrganizationID: organizationID,
-	})
-	if err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "classify source remote-session client links").LogError(ctx, logger)
-	}
-	carried := make([]uuid.UUID, 0, len(links))
-	for _, link := range links {
-		switch {
-		case link.Needed:
-			carried = append(carried, link.RemoteSessionClientID)
-		case !link.AlreadyOnTarget && !link.ClientDeleted:
-			run.dropped = append(run.dropped, migrationClient{
-				id: link.RemoteSessionClientID, clientID: link.ClientID,
-				providerID: link.ProviderID.UUID, providerIssuer: link.ProviderIssuer.String,
-			})
-		}
-	}
->>>>>>> origin/cleanup/aim-1145
 	run.remoteSessionsMigrated, err = q.UpdateRemoteSessionsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID})
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate remote-session provenance").LogError(ctx, logger)
@@ -809,15 +775,6 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 			return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
 		}
 	}
-<<<<<<< HEAD
-=======
-	if _, err := q.InsertTargetRemoteSessionClientIssuerLinks(ctx, repo.InsertTargetRemoteSessionClientIssuerLinksParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, RemoteSessionClientIds: carried, OrganizationID: organizationID}); err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "create target remote-session client links").LogError(ctx, logger)
-	}
-	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: organizationID}); err != nil {
-		return run, oops.E(oops.CodeUnexpected, err, "remove source remote-session client links").LogError(ctx, logger)
-	}
->>>>>>> origin/cleanup/aim-1145
 	if _, err := q.UpdateRemoteSessionEMABindingsToUserSessionIssuer(ctx, repo.UpdateRemoteSessionEMABindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate EMA bindings").LogError(ctx, logger)
 	}
