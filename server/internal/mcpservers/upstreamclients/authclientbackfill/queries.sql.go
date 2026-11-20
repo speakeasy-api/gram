@@ -4373,6 +4373,7 @@ WHERE sel.id = ANY($1::uuid[])
   AND sel.remote_session_client_id IS NOT DISTINCT FROM $5::uuid
   AND ac.id = $6::uuid
   AND ac.organization_id = sel.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
   AND ac.deleted IS FALSE
   AND ac.enabled
   AND EXISTS (
@@ -4380,6 +4381,8 @@ WHERE sel.id = ANY($1::uuid[])
     FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id
       AND l.mcp_server_id = sel.mcp_server_id
+      AND l.project_id = sel.project_id
+      AND l.organization_id = sel.organization_id
       AND l.deleted IS FALSE
   )
 `
@@ -4427,6 +4430,7 @@ WHERE sel.id = $1::uuid
   AND sel.remote_session_client_id IS NOT DISTINCT FROM $4::uuid
   AND ac.id = $5::uuid
   AND ac.organization_id = sel.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = sel.project_id)
   AND ac.deleted IS FALSE
   AND ac.enabled
   AND EXISTS (
@@ -4434,6 +4438,8 @@ WHERE sel.id = $1::uuid
     FROM mcp_server_auth_clients AS l
     WHERE l.auth_client_id = ac.id
       AND l.mcp_server_id = sel.mcp_server_id
+      AND l.project_id = sel.project_id
+      AND l.organization_id = sel.organization_id
       AND l.deleted IS FALSE
   )
 `

@@ -636,7 +636,7 @@ ORDER BY id;
 -- typed OAuth history may still use direct server associations. Sign-in
 -- issuer links are FK compatibility only and never determine this stamp.
 WITH scoped AS (
-    SELECT server.id, project.id AS project_id, project.organization_id, signin.id AS signin_id, NOT signin.deleted AS signin_live
+    SELECT server.id, project.id AS project_id, project.organization_id, signin.id AS signin_id
     FROM mcp_servers AS server
     JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
     JOIN user_session_issuers AS signin ON signin.id = server.user_session_issuer_id
@@ -669,7 +669,7 @@ WITH scoped AS (
     FROM scoped AS server
     LEFT JOIN candidates ON candidates.id = server.id
     LEFT JOIN remote_session_clients AS registration ON registration.id = candidates.remote_session_client_id
-      AND server.signin_live AND NOT registration.deleted
+      AND NOT registration.deleted
       AND (registration.project_id = server.project_id OR (registration.project_id IS NULL AND (registration.organization_id IS NULL OR registration.organization_id = server.organization_id)))
     LEFT JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id
       AND NOT provider.deleted

@@ -109,6 +109,24 @@ func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLin
 	require.Error(t, err, "retry with a retired source does not repeat writes")
 }
 
+func TestIssuerMigrationPreviewReadsDirectAssociationWithoutTypedHistory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer := seedIssuer(t, ctx, ti, "association-preview")
+	server, registration := seedIssuerMigrationOAuthServer(t, ctx, ti, *auth.ProjectID, issuer)
+	params := usersessionsrepo.ListIssuerMigrationOAuthOffersParams{ServerIds: []uuid.UUID{server}, OrganizationID: auth.ActiveOrganizationID}
+	offers, err := usersessionsrepo.New(ti.conn).ListIssuerMigrationOAuthOffers(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, []usersessionsrepo.ListIssuerMigrationOAuthOffersRow{{McpServerID: server, RemoteSessionClientID: registration}}, offers)
+	typedClient := seedMigrationTypedOffer(t, ctx, ti, *auth.ProjectID, server, registration)
+	require.NoError(t, authclientbackfill.New(ti.conn).SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{ID: typedClient, Enabled: false}))
+	offers, err = usersessionsrepo.New(ti.conn).ListIssuerMigrationOAuthOffers(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, offers, "disabled typed history suppresses association fallback")
+}
+
 func seedMigrationTypedOffer(t *testing.T, ctx context.Context, ti *testInstance, projectID, serverID, registration uuid.UUID) uuid.UUID {
 	t.Helper()
 	auth, ok := contextvalues.GetAuthContext(ctx)

@@ -394,7 +394,7 @@ func serverImpactViews(impacts []serverImpact) []*orggen.UserSessionIssuerMigrat
 			ClientsBefore:   migrationClientViews(impact.before),
 			ClientsAfter:    migrationClientViews(impact.after),
 			PinnedClientIds: []string{},
-			Hosted:          impact.server.Hosted,
+			Hosted:          false, // No impact is resolved by issuer-wide bindings.
 		})
 	}
 	return views

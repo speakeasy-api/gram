@@ -1314,26 +1314,43 @@ WHERE project.organization_id = @organization_id::text
 ORDER BY server.id;
 
 -- name: ListIssuerMigrationOAuthOffers :many
--- Only live typed offers count. The server is the project/tenant anchor even
--- when its sign-in issuer, registration, or provider is shared.
-SELECT server.id AS mcp_server_id, registration.id AS remote_session_client_id
-FROM mcp_servers AS server
-JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
-JOIN mcp_server_auth_clients AS offer ON offer.mcp_server_id = server.id
-  AND offer.project_id = project.id AND offer.organization_id = project.organization_id AND NOT offer.deleted
-JOIN mcp_auth_clients AS auth_client ON auth_client.id = offer.auth_client_id
-  AND auth_client.organization_id = project.organization_id
-  AND (auth_client.project_id IS NULL OR auth_client.project_id = project.id)
-  AND auth_client.enabled AND NOT auth_client.deleted
-JOIN remote_session_clients AS registration ON registration.id = auth_client.remote_session_client_id
+-- Typed OAuth offer history is authoritative; where it does not exist, report
+-- direct server associations. Compatibility issuer-client parents never count.
+WITH scoped AS (
+    SELECT server.id, project.id AS project_id, project.organization_id
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id AND NOT project.deleted
+    WHERE server.id = ANY(@server_ids::uuid[]) AND NOT server.deleted
+      AND project.organization_id = @organization_id::text
+), typed AS (
+    SELECT server.id, auth_client.remote_session_client_id,
+           NOT offer.deleted AND auth_client.enabled AND NOT auth_client.deleted AS live
+    FROM scoped AS server
+    JOIN mcp_server_auth_clients AS offer ON offer.mcp_server_id = server.id
+      AND offer.project_id = server.project_id AND offer.organization_id = server.organization_id
+    JOIN mcp_auth_clients AS auth_client ON auth_client.id = offer.auth_client_id
+      AND auth_client.organization_id = server.organization_id
+      AND (auth_client.project_id IS NULL OR auth_client.project_id = server.project_id)
+    WHERE auth_client.client_type IN ('remote_session', 'service_account', 'ema')
+), candidates AS (
+    SELECT id, remote_session_client_id FROM typed WHERE live
+    UNION ALL
+    SELECT server.id, association.remote_session_client_id
+    FROM scoped AS server
+    JOIN mcp_server_remote_session_clients AS association ON association.mcp_server_id = server.id
+      AND association.project_id = server.project_id AND association.organization_id = server.organization_id
+      AND NOT association.deleted
+    WHERE NOT EXISTS (SELECT 1 FROM typed WHERE typed.id = server.id)
+)
+SELECT DISTINCT server.id AS mcp_server_id, registration.id AS remote_session_client_id
+FROM scoped AS server
+JOIN candidates ON candidates.id = server.id
+JOIN remote_session_clients AS registration ON registration.id = candidates.remote_session_client_id
   AND NOT registration.deleted
-  AND (registration.project_id = project.id OR (registration.project_id IS NULL AND (registration.organization_id IS NULL OR registration.organization_id = project.organization_id)))
+  AND (registration.project_id = server.project_id OR (registration.project_id IS NULL AND (registration.organization_id IS NULL OR registration.organization_id = server.organization_id)))
 JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id
   AND NOT provider.deleted
-  AND (provider.project_id = project.id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = project.organization_id)))
-WHERE server.id = ANY(@server_ids::uuid[]) AND NOT server.deleted
-  AND project.organization_id = @organization_id::text
-  AND auth_client.client_type IN ('remote_session', 'service_account', 'ema')
+  AND (provider.project_id = server.project_id OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = server.organization_id)))
 ORDER BY server.id, registration.id;
 
 -- name: ListUserSessionIssuerMigrationImpactServers :many
@@ -3381,10 +3398,13 @@ mapped AS MATERIALIZED (
     CROSS JOIN session_issuer AS si
     JOIN mcp_server_auth_clients AS l
       ON l.mcp_server_id = d.mcp_server_id
+     AND l.project_id = d.project_id
+     AND l.organization_id = si.organization_id
      AND l.deleted IS FALSE
     JOIN mcp_auth_clients AS ac
       ON ac.id = l.auth_client_id
      AND ac.organization_id = si.organization_id
+     AND (ac.project_id IS NULL OR ac.project_id = d.project_id)
      AND ac.deleted IS FALSE
      AND ac.enabled
     WHERE (d.remote_session_client_id IS NOT NULL
