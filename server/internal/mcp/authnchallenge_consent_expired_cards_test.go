@@ -543,6 +543,9 @@ func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *te
 
 			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
 			fixtures := authclientfixtures.New(fx.ti.conn)
+			// The shared fixture offers linked by default. Remove that offer
+			// without removing its token or the sibling case's issuer binding.
+			require.NoError(t, fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, fx.endpoint.McpServerID.UUID))
 			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
 			require.NoError(t, err)
 			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: authClientID, Source: "admin"}))
@@ -558,6 +561,16 @@ func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *te
 			requireValidated(t, fx)
 			requireProbe(t, fx.member.drain(), "typed-token", true, true)
 			require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
+
+			if tc.sibling {
+				// The stale issuer binding and saved grant cannot make the sibling connectable.
+				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"connect"}, "client_id": {linked.String()}}
+				req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				refused := httptest.NewRecorder()
+				require.ErrorContains(t, fx.ti.service.ServeConsentAction(refused, req, fx.endpoint), "unknown remote session client for this MCP server")
+				require.Empty(t, refused.Header().Get("Location"))
+			}
 
 			form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"disconnect"}, "client_id": {registration.String()}}
 			req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
