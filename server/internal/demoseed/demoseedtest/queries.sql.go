@@ -81,6 +81,38 @@ func (q *Queries) GetVisitorEMAFixtureParents(ctx context.Context, arg GetVisito
 	return i, err
 }
 
+const hasSeedPersonalOAuthOffer = `-- name: HasSeedPersonalOAuthOffer :one
+SELECT EXISTS (
+ SELECT 1
+ FROM mcp_server_auth_clients offer
+ JOIN mcp_auth_clients client
+   ON client.id = offer.auth_client_id
+  AND client.organization_id = offer.organization_id
+ JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id
+ WHERE offer.organization_id = $1::text
+   AND offer.mcp_server_id = $2::text::uuid
+   AND offer.deleted IS FALSE
+   AND client.deleted IS FALSE
+   AND client.client_type = 'remote_session'
+   AND registration.id = $3::text::uuid
+   AND registration.credential_owner = 'subject'
+   AND registration.deleted IS FALSE
+)
+`
+
+type HasSeedPersonalOAuthOfferParams struct {
+	OrgID          string
+	ServerID       string
+	RegistrationID string
+}
+
+func (q *Queries) HasSeedPersonalOAuthOffer(ctx context.Context, arg HasSeedPersonalOAuthOfferParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSeedPersonalOAuthOffer, arg.OrgID, arg.ServerID, arg.RegistrationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const plantVisitorEMABinding = `-- name: PlantVisitorEMABinding :execrows
 INSERT INTO remote_session_ema_bindings (
  organization_id, project_id, user_session_issuer_id,

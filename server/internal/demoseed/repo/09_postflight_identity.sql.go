@@ -704,26 +704,39 @@ func (q *Queries) PostflightIDJamfSelfClient(ctx context.Context, arg Postflight
 	return count, err
 }
 
-const postflightIDLinearIssuerStamp = `-- name: PostflightIDLinearIssuerStamp :one
+const postflightIDLinearPersonalOffer = `-- name: PostflightIDLinearPersonalOffer :one
 SELECT count(*)
-FROM remote_session_client_user_session_issuers link
-JOIN remote_session_clients c ON c.id = link.remote_session_client_id
-WHERE link.user_session_issuer_id = $1::uuid
-  AND c.deleted IS FALSE
-HAVING bool_and(c.remote_session_issuer_id = $2::uuid)
+FROM mcp_server_auth_clients AS offer
+JOIN mcp_auth_clients AS auth_client
+  ON auth_client.id = offer.auth_client_id
+ AND auth_client.organization_id = offer.organization_id
+JOIN remote_session_clients AS registration ON registration.id = auth_client.remote_session_client_id
+WHERE offer.mcp_server_id = $1::uuid
+  AND offer.project_id = $2::uuid
+  AND offer.organization_id = $3::text
+  AND offer.deleted IS FALSE
+  AND auth_client.deleted IS FALSE
+  AND auth_client.client_type = 'remote_session'
+  AND registration.deleted IS FALSE
+  AND registration.credential_owner = 'subject'
+  AND registration.remote_session_issuer_id = $4::uuid
 `
 
-type PostflightIDLinearIssuerStampParams struct {
-	LinearIssuer       uuid.UUID
+type PostflightIDLinearPersonalOfferParams struct {
+	LinearServer       uuid.UUID
+	ProjectID          uuid.UUID
+	OrgID              string
 	LinearRemoteIssuer uuid.UUID
 }
 
-// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
-// every live client bound to the Example OAuth server's user session issuer names one remote
-// issuer, and it is the stamped one. Returns no row (pgx.ErrNoRows) when the
-// HAVING fails, including when no live client is bound at all.
-func (q *Queries) PostflightIDLinearIssuerStamp(ctx context.Context, arg PostflightIDLinearIssuerStampParams) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDLinearIssuerStamp, arg.LinearIssuer, arg.LinearRemoteIssuer)
+// The Example OAuth server offers one personal registration, owned by its stamped provider.
+func (q *Queries) PostflightIDLinearPersonalOffer(ctx context.Context, arg PostflightIDLinearPersonalOfferParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDLinearPersonalOffer,
+		arg.LinearServer,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.LinearRemoteIssuer,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -792,10 +805,18 @@ WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
       OR (u.credential_id = ANY($5::uuid[])
           AND u.mcp_server_id = ANY($6::uuid[]) AND u.no_auth)
       OR (u.credential_id = ANY($5::uuid[]) AND NOT u.no_auth
-          AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
-                      WHERE a.mcp_server_id = u.mcp_server_id
-                        AND a.remote_session_client_id = u.remote_session_client_id
-                        AND a.deleted IS FALSE))
+          AND EXISTS (SELECT 1 FROM mcp_server_auth_clients offer
+                      JOIN mcp_auth_clients client
+                        ON client.id = offer.auth_client_id
+                       AND client.organization_id = offer.organization_id
+                      WHERE offer.mcp_server_id = u.mcp_server_id
+                        AND offer.project_id = u.project_id
+                        AND offer.organization_id = u.organization_id
+                        AND offer.deleted IS FALSE
+                        AND client.id = u.auth_client_id
+                        AND client.remote_session_client_id = u.remote_session_client_id
+                        AND client.client_type IN ('remote_session', 'ema')
+                        AND client.deleted IS FALSE AND client.enabled))
     )
   )
 `
@@ -1062,9 +1083,6 @@ FROM principal_remote_session_bindings b
 JOIN agents a ON a.id = b.principal_id AND a.organization_id = b.organization_id
 JOIN remote_sessions rs ON rs.id = b.remote_session_id
 JOIN user_sessions us ON us.id = $1::uuid
-JOIN remote_session_client_user_session_issuers link
-  ON link.remote_session_client_id = rs.remote_session_client_id
- AND link.user_session_issuer_id = us.user_session_issuer_id
 WHERE b.organization_id = $2::text AND b.project_id = $3::uuid
   AND b.revoked_at IS NULL AND a.suspended_at IS NULL AND a.revoked_at IS NULL
   AND b.remote_session_id = ANY($4::uuid[])
@@ -1417,9 +1435,23 @@ func (q *Queries) PostflightIDUnregisteredConnections(ctx context.Context, proje
 
 const postflightIDUpstreamClientChoices = `-- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
-  SELECT id, project_id, organization_id, credential_kind, credential_id, mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth, source, auth_client_id, auth_client_attachment_scope, created_at, updated_at, deleted_at, deleted FROM upstream_client_selections
-  WHERE project_id = $8::uuid AND deleted IS FALSE
-    AND credential_kind = 'user_session'
+  SELECT choice.id, choice.project_id, choice.organization_id, choice.credential_kind, choice.credential_id, choice.mcp_server_id, choice.remote_session_client_id, choice.client_attachment_scope, choice.no_auth, choice.source, choice.auth_client_id, choice.auth_client_attachment_scope, choice.created_at, choice.updated_at, choice.deleted_at, choice.deleted, EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients offer
+    JOIN mcp_auth_clients client
+      ON client.id = offer.auth_client_id
+     AND client.organization_id = offer.organization_id
+    WHERE offer.mcp_server_id = choice.mcp_server_id
+      AND offer.project_id = choice.project_id
+      AND offer.organization_id = choice.organization_id
+      AND offer.deleted IS FALSE
+      AND client.id = choice.auth_client_id
+      AND client.remote_session_client_id = choice.remote_session_client_id
+      AND client.client_type IN ('remote_session', 'ema')
+      AND client.deleted IS FALSE AND client.enabled
+  ) AS personal_offer
+  FROM upstream_client_selections choice
+  WHERE choice.project_id = $8::uuid AND choice.deleted IS FALSE
+    AND choice.credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
 WHERE (SELECT count(*) FROM live) = 26
@@ -1428,7 +1460,8 @@ WHERE (SELECT count(*) FROM live) = 26
     (credential_id = ANY($1::uuid[])
      AND mcp_server_id = $2::uuid
      AND remote_session_client_id = $3::uuid
-     AND no_auth IS FALSE)
+     AND no_auth IS FALSE
+     AND personal_offer)
     OR
     (credential_id = ANY($4::uuid[])
      AND mcp_server_id = $5::uuid
@@ -1444,15 +1477,7 @@ WHERE (SELECT count(*) FROM live) = 26
     OR
     (credential_id = ANY($6::uuid[])
      AND no_auth IS FALSE
-     AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
-                 JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
-                 JOIN user_sessions us ON us.id = live.credential_id
-                 JOIN remote_session_client_user_session_issuers binding
-                   ON binding.remote_session_client_id = c.id
-                  AND binding.user_session_issuer_id = us.user_session_issuer_id
-                 WHERE a.mcp_server_id = live.mcp_server_id
-                   AND a.remote_session_client_id = live.remote_session_client_id
-                   AND a.deleted IS FALSE))
+     AND personal_offer)
   )
 `
 

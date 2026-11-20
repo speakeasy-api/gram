@@ -28,7 +28,6 @@ import {
 import { errorMessage } from "@/lib/gramAdminApi";
 import { needsMigrationRun } from "@/lib/upstreamOAuthMigration";
 import {
-  backfillMcpAuthGrants,
   enableUpstreamAuthEnforcement,
   runUpstreamOAuthMigration,
   upstreamOAuthMigrationOrganizationsQuery,
@@ -48,7 +47,6 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(
     null,
   );
-  const [backfilling, setBackfilling] = useState(false);
 
   const all = organizations.data?.organizations ?? [];
   const term = filter.trim().toLowerCase();
@@ -199,25 +197,6 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     }
   }
 
-  async function backfillAuthGrants() {
-    const ok = await confirm({
-      title: "Grant mcp:auth to everyone with mcp:connect?",
-      description:
-        "Every principal holding any mcp:connect grant, in every organization, gets unrestricted mcp:auth. It only adds grants and is safe to run again.",
-      confirmLabel: "Grant",
-    });
-    if (!ok) return;
-    setBackfilling(true);
-    try {
-      const result = await backfillMcpAuthGrants();
-      toast.success(`Granted mcp:auth to ${result.granted} principals`);
-    } catch (e) {
-      toast.error(errorMessage(e));
-    } finally {
-      setBackfilling(false);
-    }
-  }
-
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between gap-4">
@@ -233,15 +212,6 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => void backfillAuthGrants()}
-            disabled={backfilling}
-          >
-            {backfilling
-              ? "Granting mcp:auth"
-              : "Grant mcp:auth from mcp:connect"}
-          </Button>
           <Button
             onClick={() => void migrateAllPending()}
             disabled={

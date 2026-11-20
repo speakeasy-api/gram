@@ -399,10 +399,23 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	// client per (user session issuer, remote issuer) pair, and the Example OAuth server's main
 	// client already holds that pair. Exact-session attachments use the main
 	// client, so the Example OAuth server offers one OAuth client.
+	if err := s.seedAuthClients(ctx); err != nil {
+		return err
+	}
 	// Each seeded sign-in carries the choice its consent page would have
 	// recorded for every server it reaches: the Example OAuth server through
 	// its main client, the Example Shared Credential server with no upstream
 	// authentication.
+	personalOffers := map[string]string{
+		"linear": "auth-client-linear", "linear-app": "auth-client-linear-app", "notion-app": "auth-client-notion-app", "ema-wiki": "auth-client-ema-wiki",
+	}
+	typedChoice := func(server string) uuid.NullUUID {
+		if key, ok := personalOffers[server]; ok {
+			return uuid.NullUUID{UUID: s.det(key), Valid: true}
+		}
+		return uuid.NullUUID{}
+	}
+
 	choices := []struct {
 		session int
 		server  string
@@ -431,6 +444,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			CredentialID:          s.det("user-session-" + num),
 			McpServerID:           s.det("mcpserver-" + c.server),
 			RemoteSessionClientID: client,
+			AuthClientID:          typedChoice(c.server),
 			Source:                upstreamclients.SelectionSourceIssuance,
 		}); err != nil {
 			return fmt.Errorf("insert demo upstream client choice for session %d on %s: %w", c.session, c.server, err)
@@ -457,7 +471,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 			if err := s.q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
 				ID: s.det("org-gateway-choice-" + strconv.Itoa(i) + "-" + server), ProjectID: proj, OrgID: org,
 				CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: s.det("org-gateway-session-" + strconv.Itoa(i)),
-				McpServerID: s.det("mcpserver-" + server), RemoteSessionClientID: client, Source: upstreamclients.SelectionSourceIssuance,
+				McpServerID: s.det("mcpserver-" + server), RemoteSessionClientID: client, AuthClientID: typedChoice(server), Source: upstreamclients.SelectionSourceIssuance,
 			}); err != nil {
 				return fmt.Errorf("insert organization gateway upstream choice: %w", err)
 			}
@@ -623,7 +637,18 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err := s.seedInspect(ctx); err != nil {
 		return err
 	}
-	return s.seedAuthClients(ctx)
+	return nil
+}
+
+func seedAuthClientEMA(ctx context.Context, q *repo.Queries, authClientID, bindingID uuid.UUID) error {
+	n, err := q.ServersInsertAuthClientEMA(ctx, repo.ServersInsertAuthClientEMAParams{AuthClientID: authClientID, BindingID: bindingID})
+	if err != nil {
+		return fmt.Errorf("insert typed EMA client details: %w", err)
+	}
+	if n != 1 {
+		return fmt.Errorf("insert typed EMA client details: expected 1 ready binding, found %d", n)
+	}
+	return nil
 }
 
 // seedAuthClients records the Example OAuth server's OAuth client as the
@@ -637,12 +662,16 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 
 	clients := []repo.ServersInsertAuthClientParams{
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Fixture OAuth sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
+		{ID: s.det("auth-client-ema-wiki"), OrgID: org, ProjectID: proj, ClientType: "ema", Source: "backfill", Name: "Acme Wiki", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("ema-client-wiki"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Shared service token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 	}
 	for _, client := range clients {
 		if err := s.q.ServersInsertAuthClient(ctx, client); err != nil {
 			return fmt.Errorf("insert demo auth client %s: %w", client.Name, err)
 		}
+	}
+	if err := seedAuthClientEMA(ctx, s.q, s.det("auth-client-ema-wiki"), s.det("ema-binding-wiki")); err != nil {
+		return err
 	}
 	if err := s.q.ServersInsertAuthClientHeader(ctx, repo.ServersInsertAuthClientHeaderParams{
 		ID: s.det("auth-client-github-token-header"), AuthClientID: s.det("auth-client-github-token"), OrgID: org,
@@ -653,6 +682,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 
 	associations := []struct{ key, server, client string }{
 		{"auth-client-assoc-linear", "mcpserver-linear", "auth-client-linear"},
+		{"auth-client-assoc-ema-wiki", "mcpserver-ema-wiki", "auth-client-ema-wiki"},
 		{"auth-client-assoc-linear-token", "mcpserver-linear", "auth-client-github-token"},
 	}
 	for _, a := range associations {

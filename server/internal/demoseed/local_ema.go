@@ -193,6 +193,21 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 			return fmt.Errorf("wire local ema: %s: %w", step.what, err)
 		}
 	}
+	authClient := s.det("auth-client-ema-tracker")
+	if err := q.ServersInsertAuthClient(ctx, repo.ServersInsertAuthClientParams{
+		ID: authClient, OrgID: org, ProjectID: proj, ClientType: "ema", Source: "backfill",
+		Name: "Enterprise Sign-In", RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("wire local ema: insert typed auth client: %w", err)
+	}
+	if err := seedAuthClientEMA(ctx, q, authClient, s.det("ema-binding-tracker")); err != nil {
+		return err
+	}
+	if err := q.ServersInsertServerAuthClient(ctx, repo.ServersInsertServerAuthClientParams{
+		ID: s.det("auth-client-assoc-ema-tracker"), OrgID: org, ProjectID: proj, McpServerID: server, AuthClientID: authClient,
+	}); err != nil {
+		return fmt.Errorf("wire local ema: offer typed auth client: %w", err)
+	}
 	// An organization sign-in reaches every server in the organization, so
 	// each seeded one, the expired history row included, chose the server's
 	// client, as the shared seed's do for the other servers.
@@ -201,6 +216,7 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 			ID: s.det("org-gateway-choice-" + strconv.Itoa(i) + "-ema-tracker"), ProjectID: proj, OrgID: org,
 			CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: s.det("org-gateway-session-" + strconv.Itoa(i)),
 			McpServerID: server, RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true}, Source: upstreamclients.SelectionSourceIssuance,
+			AuthClientID: uuid.NullUUID{UUID: authClient, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("wire local ema: record organization sign-in %d's client choice: %w", i, err)
 		}

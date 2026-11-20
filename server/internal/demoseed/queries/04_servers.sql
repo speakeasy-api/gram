@@ -311,14 +311,18 @@ WHERE c.id = @remote_session_client_id::uuid;
 -- name: ServersInsertUpstreamClientChoice :exec
 INSERT INTO upstream_client_selections
   (id, project_id, organization_id, credential_kind, credential_id,
-   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
-   source)
+   mcp_server_id, remote_session_client_id, client_attachment_scope,
+   auth_client_id, auth_client_attachment_scope, no_auth, source)
 SELECT @id::uuid, @project_id::uuid, @org_id::text, @credential_kind::text,
        @credential_id::uuid, @mcp_server_id::uuid, c.id, c.attachment_scope,
-       sqlc.narg(remote_session_client_id)::uuid IS NULL, @source::text
+       sqlc.narg(auth_client_id)::uuid, auth_client.attachment_scope,
+       sqlc.narg(auth_client_id)::uuid IS NULL, @source::text
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
-  ON c.id = sqlc.narg(remote_session_client_id)::uuid;
+  ON c.id = sqlc.narg(remote_session_client_id)::uuid
+LEFT JOIN mcp_auth_clients AS auth_client
+  ON auth_client.id = sqlc.narg(auth_client_id)::uuid
+ AND auth_client.organization_id = @org_id::text;
 
 -- The Example OAuth server's protected resource, read recently, with a scope
 -- pin for the server's scope panel.
@@ -786,6 +790,19 @@ SELECT @id::uuid, @org_id::text, @project_id::uuid, @client_type::text,
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
   ON c.id = sqlc.narg(remote_session_client_id)::uuid;
+
+-- name: ServersInsertAuthClientEMA :execrows
+INSERT INTO mcp_auth_client_emas
+  (auth_client_id, organization_id, remote_session_client_id, remote_session_issuer_id, resource, requested_scopes)
+SELECT client.id, binding.organization_id, binding.remote_session_client_id,
+       binding.remote_session_issuer_id, binding.resource, binding.requested_scopes
+FROM remote_session_ema_bindings AS binding
+JOIN mcp_auth_clients AS client
+  ON client.id = @auth_client_id::uuid
+ AND client.organization_id = binding.organization_id
+ AND client.remote_session_client_id = binding.remote_session_client_id
+WHERE binding.id = @binding_id::uuid
+  AND binding.state = 'ready';
 
 -- The value is a placeholder; stored values are never returned.
 -- name: ServersInsertAuthClientHeader :exec

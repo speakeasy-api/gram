@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
@@ -196,18 +195,13 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// row when its HAVING fails (the SQL's IF NOT FOUND), so a row counts
 		// as 1 and no row as 0.
 		{func(ctx context.Context) (int64, error) {
-			_, err := s.q.PostflightIDLinearIssuerStamp(ctx, repo.PostflightIDLinearIssuerStampParams{
-				LinearIssuer:       s.det("issuer-linear"),
+			return s.q.PostflightIDLinearPersonalOffer(ctx, repo.PostflightIDLinearPersonalOfferParams{
+				LinearServer:       s.det("mcpserver-linear"),
+				ProjectID:          proj,
+				OrgID:              org,
 				LinearRemoteIssuer: linearRemoteIssuer,
 			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				return 0, nil
-			case err != nil:
-				return 0, fmt.Errorf("linear issuer stamp: %w", err)
-			}
-			return 1, nil
-		}, 1, "demo seed postflight: the Example OAuth server user session issuer must bind clients of exactly one remote issuer, its stamped provider"},
+		}, 1, "demo seed postflight: expected one personal typed offer from the Example OAuth server's provider, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDLinearStampedServers(ctx, repo.PostflightIDLinearStampedServersParams{
 				ProjectID:          proj,

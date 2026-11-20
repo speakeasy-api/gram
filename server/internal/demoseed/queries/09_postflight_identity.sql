@@ -27,9 +27,6 @@ FROM principal_remote_session_bindings b
 JOIN agents a ON a.id = b.principal_id AND a.organization_id = b.organization_id
 JOIN remote_sessions rs ON rs.id = b.remote_session_id
 JOIN user_sessions us ON us.id = @user_session_id::uuid
-JOIN remote_session_client_user_session_issuers link
-  ON link.remote_session_client_id = rs.remote_session_client_id
- AND link.user_session_issuer_id = us.user_session_issuer_id
 WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.revoked_at IS NULL AND a.suspended_at IS NULL AND a.revoked_at IS NULL
   AND b.remote_session_id = ANY(@remote_session_ids::uuid[])
@@ -194,17 +191,23 @@ FROM remote_session_client_user_session_issuers link
 JOIN user_session_issuers usi ON usi.id = link.user_session_issuer_id
 WHERE usi.project_id = @project_id::uuid;
 
--- The stamp has to be what ResyncMCPServerRemoteSessionIssuers would derive:
--- every live client bound to the Example OAuth server's user session issuer names one remote
--- issuer, and it is the stamped one. Returns no row (pgx.ErrNoRows) when the
--- HAVING fails, including when no live client is bound at all.
--- name: PostflightIDLinearIssuerStamp :one
+-- The Example OAuth server offers one personal registration, owned by its stamped provider.
+-- name: PostflightIDLinearPersonalOffer :one
 SELECT count(*)
-FROM remote_session_client_user_session_issuers link
-JOIN remote_session_clients c ON c.id = link.remote_session_client_id
-WHERE link.user_session_issuer_id = @linear_issuer::uuid
-  AND c.deleted IS FALSE
-HAVING bool_and(c.remote_session_issuer_id = @linear_remote_issuer::uuid);
+FROM mcp_server_auth_clients AS offer
+JOIN mcp_auth_clients AS auth_client
+  ON auth_client.id = offer.auth_client_id
+ AND auth_client.organization_id = offer.organization_id
+JOIN remote_session_clients AS registration ON registration.id = auth_client.remote_session_client_id
+WHERE offer.mcp_server_id = @linear_server::uuid
+  AND offer.project_id = @project_id::uuid
+  AND offer.organization_id = @org_id::text
+  AND offer.deleted IS FALSE
+  AND auth_client.deleted IS FALSE
+  AND auth_client.client_type = 'remote_session'
+  AND registration.deleted IS FALSE
+  AND registration.credential_owner = 'subject'
+  AND registration.remote_session_issuer_id = @linear_remote_issuer::uuid;
 
 -- name: PostflightIDLinearStampedServers :one
 SELECT count(*) FROM mcp_servers
@@ -227,9 +230,23 @@ WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 -- twenty-six misassigned choices cannot satisfy postflight.
 -- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
-  SELECT * FROM upstream_client_selections
-  WHERE project_id = @project_id::uuid AND deleted IS FALSE
-    AND credential_kind = 'user_session'
+  SELECT choice.*, EXISTS (
+    SELECT 1 FROM mcp_server_auth_clients offer
+    JOIN mcp_auth_clients client
+      ON client.id = offer.auth_client_id
+     AND client.organization_id = offer.organization_id
+    WHERE offer.mcp_server_id = choice.mcp_server_id
+      AND offer.project_id = choice.project_id
+      AND offer.organization_id = choice.organization_id
+      AND offer.deleted IS FALSE
+      AND client.id = choice.auth_client_id
+      AND client.remote_session_client_id = choice.remote_session_client_id
+      AND client.client_type IN ('remote_session', 'ema')
+      AND client.deleted IS FALSE AND client.enabled
+  ) AS personal_offer
+  FROM upstream_client_selections choice
+  WHERE choice.project_id = @project_id::uuid AND choice.deleted IS FALSE
+    AND choice.credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
 WHERE (SELECT count(*) FROM live) = 26
@@ -238,7 +255,8 @@ WHERE (SELECT count(*) FROM live) = 26
     (credential_id = ANY(@linear_session_ids::uuid[])
      AND mcp_server_id = @linear_server_id::uuid
      AND remote_session_client_id = @linear_client_id::uuid
-     AND no_auth IS FALSE)
+     AND no_auth IS FALSE
+     AND personal_offer)
     OR
     (credential_id = ANY(@slack_session_ids::uuid[])
      AND mcp_server_id = @slack_server_id::uuid
@@ -254,15 +272,7 @@ WHERE (SELECT count(*) FROM live) = 26
     OR
     (credential_id = ANY(@org_session_ids::uuid[])
      AND no_auth IS FALSE
-     AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
-                 JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
-                 JOIN user_sessions us ON us.id = live.credential_id
-                 JOIN remote_session_client_user_session_issuers binding
-                   ON binding.remote_session_client_id = c.id
-                  AND binding.user_session_issuer_id = us.user_session_issuer_id
-                 WHERE a.mcp_server_id = live.mcp_server_id
-                   AND a.remote_session_client_id = live.remote_session_client_id
-                   AND a.deleted IS FALSE))
+     AND personal_offer)
   );
 
 -- Count live choices outside the intended set: the Example OAuth server
@@ -282,10 +292,18 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
       OR (u.credential_id = ANY(@org_session_ids::uuid[])
           AND u.mcp_server_id = ANY(@org_no_auth_server_ids::uuid[]) AND u.no_auth)
       OR (u.credential_id = ANY(@org_session_ids::uuid[]) AND NOT u.no_auth
-          AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
-                      WHERE a.mcp_server_id = u.mcp_server_id
-                        AND a.remote_session_client_id = u.remote_session_client_id
-                        AND a.deleted IS FALSE))
+          AND EXISTS (SELECT 1 FROM mcp_server_auth_clients offer
+                      JOIN mcp_auth_clients client
+                        ON client.id = offer.auth_client_id
+                       AND client.organization_id = offer.organization_id
+                      WHERE offer.mcp_server_id = u.mcp_server_id
+                        AND offer.project_id = u.project_id
+                        AND offer.organization_id = u.organization_id
+                        AND offer.deleted IS FALSE
+                        AND client.id = u.auth_client_id
+                        AND client.remote_session_client_id = u.remote_session_client_id
+                        AND client.client_type IN ('remote_session', 'ema')
+                        AND client.deleted IS FALSE AND client.enabled))
     )
   );
 
