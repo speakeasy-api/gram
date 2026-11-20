@@ -1203,6 +1203,14 @@ UPDATE api_keys
 SET expires_at = @expires_at
 WHERE key_hash = @key_hash;
 
+-- name: SetAPIKeysCreatedAtFixture :exec
+-- Pins created_at on an organization's keys so keys.list paging tests can
+-- force ties on the first half of its (created_at, id) ordering.
+UPDATE api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[]);
+
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
 SELECT count(*) AS mcp_servers FROM assistant_mcp_servers ams

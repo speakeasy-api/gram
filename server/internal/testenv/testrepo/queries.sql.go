@@ -6716,6 +6716,26 @@ func (q *Queries) SetAPIKeyExpiresAtFixture(ctx context.Context, arg SetAPIKeyEx
 	return err
 }
 
+const setAPIKeysCreatedAtFixture = `-- name: SetAPIKeysCreatedAtFixture :exec
+UPDATE api_keys
+SET created_at = $1
+WHERE organization_id = $2
+  AND id = ANY($3::uuid[])
+`
+
+type SetAPIKeysCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+// Pins created_at on an organization's keys so keys.list paging tests can
+// force ties on the first half of its (created_at, id) ordering.
+func (q *Queries) SetAPIKeysCreatedAtFixture(ctx context.Context, arg SetAPIKeysCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeysCreatedAtFixture, arg.CreatedAt, arg.OrganizationID, arg.Ids)
+	return err
+}
+
 const setAgentInvalidLifecycleFixture = `-- name: SetAgentInvalidLifecycleFixture :exec
 UPDATE agents
 SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()

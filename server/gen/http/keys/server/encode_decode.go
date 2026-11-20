@@ -12,7 +12,9 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	keys "github.com/speakeasy-api/gram/server/gen/keys"
 	goahttp "goa.design/goa/v3/http"
@@ -677,15 +679,58 @@ func DecodeListKeysRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		var payload *keys.ListKeysPayload
 		var (
 			agentID      *string
+			cursor       *string
+			limit        *int
+			search       *string
 			sessionToken *string
 			err          error
 		)
-		agentIDRaw := r.URL.Query().Get("agent_id")
+		qp := r.URL.Query()
+		agentIDRaw := qp.Get("agent_id")
 		if agentIDRaw != "" {
 			agentID = &agentIDRaw
 		}
 		if agentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
+		}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		if cursor != nil {
+			if utf8.RuneCountInString(*cursor) > 512 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("cursor", *cursor, utf8.RuneCountInString(*cursor), 512, false))
+			}
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				pv := int(v)
+				limit = &pv
+			}
+		}
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+		}
+		if limit != nil {
+			if *limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 100, false))
+			}
+		}
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
+		if search != nil {
+			if utf8.RuneCountInString(*search) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 255, false))
+			}
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -694,7 +739,7 @@ func DecodeListKeysRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListKeysPayload(agentID, sessionToken)
+		payload = NewListKeysPayload(agentID, cursor, limit, search, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
