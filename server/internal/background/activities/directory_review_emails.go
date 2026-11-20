@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/directoryreview/repo"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -113,10 +114,7 @@ func (d *DirectoryReviewEmails) sendOne(ctx context.Context, candidate repo.List
 	organizationID := candidate.OrganizationID
 	total := candidate.NewGroupCount + candidate.NewAttributeValueCount + candidate.SourceMissingCount
 
-	reviewURL := ""
-	if siteURL := d.orgHosts.SiteURL(candidate.DefaultHost); siteURL != nil {
-		reviewURL = siteURL.JoinPath(candidate.OrganizationSlug, "identity").String()
-	}
+	reviewURL := dashboardlinks.Identity(candidate.OrganizationSlug).URL(d.orgHosts.SiteURL(candidate.DefaultHost))
 	tmpl := email.DirectoryReviewPending{
 		OrganizationName:       conv.Default(candidate.OrganizationName, "your organization"),
 		Summary:                directoryReviewEmailSummary(total),

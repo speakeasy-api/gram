@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -81,10 +82,11 @@ func (s *Service) CreateStripePortalSession(ctx context.Context, _ *gen.CreateSt
 	}
 	// The portal returns to the platform host the request came from, because
 	// the session cookie is host-only.
-	returnURL, err := url.JoinPath(s.platformHostBaseURL(ctx, s.siteURL), authCtx.OrganizationSlug, "billing")
+	returnBase, err := url.Parse(s.platformHostBaseURL(ctx, s.siteURL))
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to build the billing return URL").LogError(ctx, s.logger)
 	}
+	returnURL := dashboardlinks.Billing(authCtx.OrganizationSlug).URL(returnBase)
 	portal, err := s.stripeClient.CreatePortalSession(ctx, stripeclient.CreatePortalSessionInput{
 		CustomerID: state.CustomerID,
 		ReturnURL:  returnURL,

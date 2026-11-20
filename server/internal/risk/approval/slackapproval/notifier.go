@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
@@ -569,9 +569,7 @@ func (c *Cards) dashboardURL(ctx context.Context, row repo.RiskPolicyApproval) (
 	if siteURL == nil {
 		return "", nil
 	}
-	link := siteURL.JoinPath(slugs.OrganizationSlug, "projects", slugs.ProjectSlug, "risk-policies")
-	link.RawQuery = url.Values{"tab": {"tool-approvals"}, "request": {row.ID.String()}}.Encode()
-	return link.String(), nil
+	return dashboardlinks.ToolApprovalRequest(slugs.OrganizationSlug, slugs.ProjectSlug, row.ID.String()).URL(siteURL), nil
 }
 
 // retryable reports a Slack failure worth trying again: Slack's own errors,

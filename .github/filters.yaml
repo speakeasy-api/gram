@@ -6,6 +6,8 @@ server:
   - "agents/**"
   - "ci/**"
   - "server/**"
+  # The dashboard link contract: server/internal/dashboardlinks tests read it.
+  - "client/dashboard/src/server-links.json"
   - "infra/**"
   - ".mise-tasks/build/gcl.sh"
   - ".mise-tasks/go/server-lint-packages.sh"
