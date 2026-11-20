@@ -3595,6 +3595,53 @@ func BuildBackfillMcpAuthGrantsPayload(adminBackfillMcpAuthGrantsAdminSessionTok
 	return v, nil
 }
 
+// BuildListTailscaleOAuthMigrationPayload builds the payload for the admin
+// listTailscaleOAuthMigration endpoint from CLI flags.
+func BuildListTailscaleOAuthMigrationPayload(adminListTailscaleOAuthMigrationAdminSessionToken string) (*admin.ListTailscaleOAuthMigrationPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListTailscaleOAuthMigrationAdminSessionToken != "" {
+			adminSessionToken = &adminListTailscaleOAuthMigrationAdminSessionToken
+		}
+	}
+	v := &admin.ListTailscaleOAuthMigrationPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRunTailscaleOAuthMigrationStepPayload builds the payload for the admin
+// runTailscaleOAuthMigrationStep endpoint from CLI flags.
+func BuildRunTailscaleOAuthMigrationStepPayload(adminRunTailscaleOAuthMigrationStepBody string, adminRunTailscaleOAuthMigrationStepAdminSessionToken string) (*admin.RunTailscaleOAuthMigrationStepPayload, error) {
+	var err error
+	var body RunTailscaleOAuthMigrationStepRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRunTailscaleOAuthMigrationStepBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"step\": \"backfill\"\n   }'")
+		}
+		if !(body.Step == "enroll" || body.Step == "backfill" || body.Step == "finalize" || body.Step == "clear_platform_copies" || body.Step == "rollback") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.step", body.Step, []any{"enroll", "backfill", "finalize", "clear_platform_copies", "rollback"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRunTailscaleOAuthMigrationStepAdminSessionToken != "" {
+			adminSessionToken = &adminRunTailscaleOAuthMigrationStepAdminSessionToken
+		}
+	}
+	v := &admin.RunTailscaleOAuthMigrationStepPayload{
+		OrganizationID: body.OrganizationID,
+		Step:           body.Step,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildBackfillMcpConnectGrantsPayload builds the payload for the admin
 // backfillMcpConnectGrants endpoint from CLI flags.
 func BuildBackfillMcpConnectGrantsPayload(adminBackfillMcpConnectGrantsBody string, adminBackfillMcpConnectGrantsAdminSessionToken string) (*admin.BackfillMcpConnectGrantsPayload, error) {

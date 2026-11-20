@@ -527,6 +527,16 @@ func BackfillMcpAuthGrantsAdminPath() string {
 	return "/admin/mcpAuthGrants.backfill"
 }
 
+// ListTailscaleOAuthMigrationAdminPath returns the URL path to the admin service listTailscaleOAuthMigration HTTP endpoint.
+func ListTailscaleOAuthMigrationAdminPath() string {
+	return "/admin/tailscaleOAuthMigration.organizations"
+}
+
+// RunTailscaleOAuthMigrationStepAdminPath returns the URL path to the admin service runTailscaleOAuthMigrationStep HTTP endpoint.
+func RunTailscaleOAuthMigrationStepAdminPath() string {
+	return "/admin/tailscaleOAuthMigration.run"
+}
+
 // BackfillMcpConnectGrantsAdminPath returns the URL path to the admin service backfillMcpConnectGrants HTTP endpoint.
 func BackfillMcpConnectGrantsAdminPath() string {
 	return "/admin/mcpConnectGrants.backfill"

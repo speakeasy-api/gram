@@ -121,6 +121,8 @@ type Endpoints struct {
 	EnableUpstreamAuthEnforcement           goa.Endpoint
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
+	ListTailscaleOAuthMigration             goa.Endpoint
+	RunTailscaleOAuthMigrationStep          goa.Endpoint
 	BackfillMcpConnectGrants                goa.Endpoint
 	GetProjectRedeployPreview               goa.Endpoint
 	RedeployProject                         goa.Endpoint
@@ -274,6 +276,8 @@ func NewEndpoints(s Service) *Endpoints {
 		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
+		ListTailscaleOAuthMigration:             NewListTailscaleOAuthMigrationEndpoint(s, a.APIKeyAuth),
+		RunTailscaleOAuthMigrationStep:          NewRunTailscaleOAuthMigrationStepEndpoint(s, a.APIKeyAuth),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
 		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
@@ -407,6 +411,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.EnableUpstreamAuthEnforcement = m(e.EnableUpstreamAuthEnforcement)
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
+	e.ListTailscaleOAuthMigration = m(e.ListTailscaleOAuthMigration)
+	e.RunTailscaleOAuthMigrationStep = m(e.RunTailscaleOAuthMigrationStep)
 	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
 	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
 	e.RedeployProject = m(e.RedeployProject)
@@ -2785,6 +2791,52 @@ func NewBackfillMcpAuthGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.BackfillMcpAuthGrants(ctx, p)
+	}
+}
+
+// NewListTailscaleOAuthMigrationEndpoint returns an endpoint function that
+// calls the method "listTailscaleOAuthMigration" of service "admin".
+func NewListTailscaleOAuthMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListTailscaleOAuthMigrationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListTailscaleOAuthMigration(ctx, p)
+	}
+}
+
+// NewRunTailscaleOAuthMigrationStepEndpoint returns an endpoint function that
+// calls the method "runTailscaleOAuthMigrationStep" of service "admin".
+func NewRunTailscaleOAuthMigrationStepEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RunTailscaleOAuthMigrationStepPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RunTailscaleOAuthMigrationStep(ctx, p)
 	}
 }
 

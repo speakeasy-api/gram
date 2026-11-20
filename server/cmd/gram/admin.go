@@ -47,7 +47,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/networkingress/ingresscredentials"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -591,6 +593,13 @@ func newAdminCommand() *cli.Command {
 					return err
 				}
 				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, orgEncryption.ClientSecrets(logger, applicationEncryption), guardianPolicy))
+				if orgEncryption.Provisioner != nil {
+					adminService.SetTailscaleOAuthMigration(&admin.TailscaleOAuthMigration{
+						Transitions: orgEncryption.Transitions,
+						Runner:      orgencryption.NewRunner(logger, db, orgEncryption.Cipher(logger, applicationEncryption), meterProvider),
+						Store:       ingresscredentials.NewCopyStore(db),
+					})
+				}
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
 			}

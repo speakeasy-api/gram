@@ -1486,3 +1486,20 @@ WHERE h.id = ANY(@tool_ids::uuid[]) AND h.project_id = @project_id
     AND a.project_id = @project_id AND a.deleted IS FALSE
     AND h.deleted IS FALSE
 ORDER BY a.name, a.id;
+
+-- name: AdminListTailscaleOAuthMigrationOrganizations :many
+-- Organizations with saved network ingress credentials in either copy,
+-- soft-deleted ingresses included, for the temporary Tailscale OAuth client
+-- move to organization keys.
+SELECT DISTINCT o.id, o.name, o.slug
+FROM network_ingresses AS n
+JOIN organization_metadata AS o ON o.id = n.organization_id
+WHERE n.credentials_encrypted IS NOT NULL
+   OR n.credentials_org_encrypted IS NOT NULL
+ORDER BY o.name, o.id;
+
+-- name: AdminGetTailscaleOAuthMigrationOrganization :one
+-- The organization a Tailscale OAuth client migration step targets.
+SELECT o.id, o.name, o.slug
+FROM organization_metadata AS o
+WHERE o.id = @id;

@@ -208,7 +208,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -5027,6 +5027,13 @@ func ParseEndpoint(
 		adminBackfillMcpAuthGrantsFlags                 = flag.NewFlagSet("backfill-mcp-auth-grants", flag.ExitOnError)
 		adminBackfillMcpAuthGrantsAdminSessionTokenFlag = adminBackfillMcpAuthGrantsFlags.String("admin-session-token", "", "")
 
+		adminListTailscaleOAuthMigrationFlags                 = flag.NewFlagSet("list-tailscaleoauth-migration", flag.ExitOnError)
+		adminListTailscaleOAuthMigrationAdminSessionTokenFlag = adminListTailscaleOAuthMigrationFlags.String("admin-session-token", "", "")
+
+		adminRunTailscaleOAuthMigrationStepFlags                 = flag.NewFlagSet("run-tailscaleoauth-migration-step", flag.ExitOnError)
+		adminRunTailscaleOAuthMigrationStepBodyFlag              = adminRunTailscaleOAuthMigrationStepFlags.String("body", "REQUIRED", "")
+		adminRunTailscaleOAuthMigrationStepAdminSessionTokenFlag = adminRunTailscaleOAuthMigrationStepFlags.String("admin-session-token", "", "")
+
 		adminBackfillMcpConnectGrantsFlags                 = flag.NewFlagSet("backfill-mcp-connect-grants", flag.ExitOnError)
 		adminBackfillMcpConnectGrantsBodyFlag              = adminBackfillMcpConnectGrantsFlags.String("body", "REQUIRED", "")
 		adminBackfillMcpConnectGrantsAdminSessionTokenFlag = adminBackfillMcpConnectGrantsFlags.String("admin-session-token", "", "")
@@ -6829,6 +6836,8 @@ func ParseEndpoint(
 	adminEnableUpstreamAuthEnforcementFlags.Usage = adminEnableUpstreamAuthEnforcementUsage
 	adminDisableUpstreamAuthEnforcementFlags.Usage = adminDisableUpstreamAuthEnforcementUsage
 	adminBackfillMcpAuthGrantsFlags.Usage = adminBackfillMcpAuthGrantsUsage
+	adminListTailscaleOAuthMigrationFlags.Usage = adminListTailscaleOAuthMigrationUsage
+	adminRunTailscaleOAuthMigrationStepFlags.Usage = adminRunTailscaleOAuthMigrationStepUsage
 	adminBackfillMcpConnectGrantsFlags.Usage = adminBackfillMcpConnectGrantsUsage
 	adminGetProjectRedeployPreviewFlags.Usage = adminGetProjectRedeployPreviewUsage
 	adminRedeployProjectFlags.Usage = adminRedeployProjectUsage
@@ -10212,6 +10221,12 @@ func ParseEndpoint(
 
 			case "backfill-mcp-auth-grants":
 				epf = adminBackfillMcpAuthGrantsFlags
+
+			case "list-tailscaleoauth-migration":
+				epf = adminListTailscaleOAuthMigrationFlags
+
+			case "run-tailscaleoauth-migration-step":
+				epf = adminRunTailscaleOAuthMigrationStepFlags
 
 			case "backfill-mcp-connect-grants":
 				epf = adminBackfillMcpConnectGrantsFlags
@@ -13724,6 +13739,12 @@ func ParseEndpoint(
 			case "backfill-mcp-auth-grants":
 				endpoint = c.BackfillMcpAuthGrants()
 				data, err = adminc.BuildBackfillMcpAuthGrantsPayload(*adminBackfillMcpAuthGrantsAdminSessionTokenFlag)
+			case "list-tailscaleoauth-migration":
+				endpoint = c.ListTailscaleOAuthMigration()
+				data, err = adminc.BuildListTailscaleOAuthMigrationPayload(*adminListTailscaleOAuthMigrationAdminSessionTokenFlag)
+			case "run-tailscaleoauth-migration-step":
+				endpoint = c.RunTailscaleOAuthMigrationStep()
+				data, err = adminc.BuildRunTailscaleOAuthMigrationStepPayload(*adminRunTailscaleOAuthMigrationStepBodyFlag, *adminRunTailscaleOAuthMigrationStepAdminSessionTokenFlag)
 			case "backfill-mcp-connect-grants":
 				endpoint = c.BackfillMcpConnectGrants()
 				data, err = adminc.BuildBackfillMcpConnectGrantsPayload(*adminBackfillMcpConnectGrantsBodyFlag, *adminBackfillMcpConnectGrantsAdminSessionTokenFlag)
@@ -33606,6 +33627,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    enable-upstream-auth-enforcement: Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.`)
 	fmt.Fprintln(os.Stderr, `    disable-upstream-auth-enforcement: Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-auth-grants: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.`)
+	fmt.Fprintln(os.Stderr, `    list-tailscaleoauth-migration: Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
+	fmt.Fprintln(os.Stderr, `    run-tailscaleoauth-migration-step: Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-connect-grants: Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    get-project-redeploy-preview: Returns what redeploying a project would act on, for review before redeployProject.`)
 	fmt.Fprintln(os.Stderr, `    redeploy-project: Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.`)
@@ -35790,6 +35813,44 @@ func adminBackfillMcpAuthGrantsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin backfill-mcp-auth-grants --admin-session-token \"abc123\"")
+}
+
+func adminListTailscaleOAuthMigrationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-tailscaleoauth-migration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-tailscaleoauth-migration --admin-session-token \"abc123\"")
+}
+
+func adminRunTailscaleOAuthMigrationStepUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin run-tailscaleoauth-migration-step", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-tailscaleoauth-migration-step --body '{\n      \"organization_id\": \"abc123\",\n      \"step\": \"backfill\"\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminBackfillMcpConnectGrantsUsage() {
