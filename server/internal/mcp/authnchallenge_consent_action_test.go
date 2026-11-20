@@ -199,11 +199,16 @@ func mintConsentEndpointState(t *testing.T, ctx context.Context, ti *testInstanc
 }
 
 // seedMultiClientConsentEndpoint: one shared user_session_issuer with four
-// bound clients, two pinned to distinct upstreams via their own issuer link.
+// bound clients, two pinned to distinct upstreams via their server associations.
 func seedMultiClientConsentEndpoint(t *testing.T) (context.Context, consentActionFixture) {
 	t.Helper()
 
 	ctx, ti := newTestMCPService(t)
+	return seedMultiClientConsentEndpointWithService(t, ctx, ti)
+}
+
+func seedMultiClientConsentEndpointWithService(t *testing.T, ctx context.Context, ti *testInstance) (context.Context, consentActionFixture) {
+	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -486,12 +491,12 @@ func TestServeConsentAction_ConnectTwoOffersKeepTheSameTarget(t *testing.T) {
 func TestServeConsentAction_ConnectDerivationErrorFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx := seedMultiClientConsentEndpoint(t)
-
-	// Break only the derivation query's table; nothing earlier in the connect
-	// arm touches mcp_servers (per-test cloned DB, safe to mutate).
-	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE mcp_servers RENAME TO mcp_servers_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a derivation DB error; not expressible as an SQLc query
-	require.NoError(t, err)
+	ctx, ti := newTestMCPServiceWithPoolConfig(t, testenv.NewLogger(t), testenv.NewMeterProvider(t),
+		&mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil,
+		func(config *pgxpool.Config) {
+			config.ConnConfig.Tracer = queryFailureTracer("ListOrganizationMcpServersForClients")
+		}, mcp.MetaRuntimeConfig{})
+	ctx, fx := seedMultiClientConsentEndpointWithService(t, ctx, ti)
 
 	form := url.Values{}
 	form.Set("state", fx.stateID)
@@ -502,7 +507,7 @@ func TestServeConsentAction_ConnectDerivationErrorFailsClosed(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 
-	err = fx.ti.service.ServeConsentAction(w, req, fx.endpoint)
+	err := fx.ti.service.ServeConsentAction(w, req, fx.endpoint)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "derive client upstream resource")
 	var oopsErr *oops.ShareableError
