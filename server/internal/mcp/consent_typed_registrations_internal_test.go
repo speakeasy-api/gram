@@ -20,48 +20,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func TestTypedConsentRegistrationsSkipsMembersUnlessEnforced(t *testing.T) {
-	t.Parallel()
-	pool, err := TestInfra.CloneTestDatabase(t, "mcp_typed_consent_members")
-	require.NoError(t, err)
-	f := newAuthClientFixture(t, pool)
-	flags := new(feature.InMemory)
-	f.service.features = flags
-	f.service.authEnforcement = authenforcement.NewGate(pool)
-	endpoint := &ResolvedMcpEndpoint{OrganizationID: f.orgID, MetaMcpServerID: validUUID(uuid.New())}
-	for _, shadow := range []bool{false, true} {
-		flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, shadow)
-		typed, err := f.service.typedConsentRegistrations(t.Context(), endpoint, func() ([]metaMember, error) {
-			t.Fatal("disabled typed resolution must not load the member snapshot")
-			return nil, nil
-		})
-		require.NoError(t, err)
-		require.Empty(t, typed)
-		subject := urn.NewUserSubject("user_1")
-		picks, err := f.service.consentDirectAuthClientPick(t.Context(), &ResolvedMcpEndpoint{OrganizationID: f.orgID, McpServerID: validUUID(f.serverID)}, AuthnChallengeState{Subject: &subject}, "", nil, nil)
-		require.NoError(t, err)
-		require.Nil(t, picks, "non-enforced approval must not need card-building dependencies")
-	}
-	f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
-	f.enforce()
-	members := []metaMember{{serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}
-	require.NoError(t, f.service.withTypedMemberRegistrations(t.Context(), f.orgID, members))
-	calls := 0
-	typed, err := f.service.typedConsentRegistrations(t.Context(), endpoint, func() ([]metaMember, error) {
-		calls++
-		return members, nil
-	})
-	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]uuid.UUID{f.registration: f.projectID}, typed)
-	require.Equal(t, 1, calls)
-}
-
 func TestTypedConsentRegistrationsReuseMemberSnapshot(t *testing.T) {
 	t.Parallel()
 	pool, err := TestInfra.CloneTestDatabase(t, "mcp_typed_consent_snapshot")
 	require.NoError(t, err)
 	f := newAuthClientFixture(t, pool)
-	f.enforce()
 	registration, legacyRegistration := uuid.New(), uuid.New()
 	members := []metaMember{
 		{projectID: uuid.New(), associatedClients: map[uuid.UUID]bool{legacyRegistration: true}},
@@ -91,7 +54,7 @@ func TestTypedMemberRegistrationsDecideMemberClients(t *testing.T) {
 		usesOlder    bool
 		serverStatus gatewayServerStatus
 	}{
-		{name: "not enforced keeps the association", offer: authClientTypeRemoteSession, usesOlder: true, serverStatus: gatewayServerNotSetUp},
+		{name: "personal offer replaces association without rollout flag", offer: authClientTypeRemoteSession, usesTyped: true, serverStatus: gatewayServerNotSetUp},
 		{name: "personal offer replaces the association", enforced: true, offer: authClientTypeRemoteSession, usesTyped: true, serverStatus: gatewayServerNotSetUp},
 		{name: "identity provider offer replaces the association", enforced: true, offer: authClientTypeEMA, usesTyped: true, serverStatus: gatewayServerNotSetUp},
 		{name: "shared credential offers no sign-in", enforced: true, offer: authClientTypeStaticCredential, serverStatus: gatewayServerNoSignIn},
