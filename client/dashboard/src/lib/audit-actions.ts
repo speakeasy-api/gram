@@ -1039,8 +1039,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "changed the official server choice of Shadow MCP server";
     case "shadow_mcp_official_server:delete":
       return "removed the official server choice of Shadow MCP server";
-    // Entries written before links lost their on/off switch: one action
-    // covered every change, so the phrase names the link.
+    // Entries written before official servers lost their on/off switch:
+    // one action covered every change, so the phrase stays generic.
     case "shadow_mcp_official_server:set":
       return "changed the official server choice of Shadow MCP server";
 
