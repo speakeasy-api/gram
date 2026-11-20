@@ -182,6 +182,7 @@ func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 		// A process still on the fallback picks up removals made since it booted.
 		if current := s.Snapshot(); current.builtIn && current.Fingerprint() != next.Fingerprint() {
 			s.Publish(next)
+			logger.InfoContext(ctx, "AI catalog still rejected; the built-in catalog now reflects new removals")
 		}
 	}
 	if err != nil {

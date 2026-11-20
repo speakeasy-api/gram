@@ -133,7 +133,7 @@ func TestRefreshMetricsMove(t *testing.T) {
 			var collected metricdata.ResourceMetrics
 			require.NoError(t, reader.Collect(context.Background(), &collected))
 			var count, builtIn int64
-			var age float64
+			age := float64(-1)
 			for _, scope := range collected.ScopeMetrics {
 				for _, m := range scope.Metrics {
 					switch data := m.Data.(type) {
@@ -172,7 +172,7 @@ func TestRefreshMetricsMove(t *testing.T) {
 		synctest.Wait()
 		count, age, builtIn := read()
 		require.Equal(t, int64(2), count)
-		require.Zero(t, age, "no age is reported while the built-in catalog is served")
+		require.InDelta(t, -1, age, 0, "no age is reported while the built-in catalog is served")
 		require.Equal(t, int64(1), builtIn)
 		<-time.After(RefreshInterval)
 		synctest.Wait()
