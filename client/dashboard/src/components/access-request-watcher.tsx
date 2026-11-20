@@ -15,12 +15,18 @@ import { invalidateTemporaryAccess } from "./temporary-access-helpers";
 export const ACCESS_REQUEST_POLL_MS = 15_000;
 
 /**
+ * How often they are checked otherwise, to pick up a request made in another
+ * tab. Returning to this tab refetches as well.
+ */
+export const ACCESS_REQUEST_IDLE_POLL_MS = 5 * 60_000;
+
+/**
  * Watches the viewer's own access requests from one place in the app, so a
  * page opens up without a reload once an admin decides a request, from
  * Speakeasy or Slack, wherever the request was made: an inline banner, a
- * popover on a disabled control or a full page. It polls only while one of
- * the viewer's requests is pending; React Query pauses the polling in
- * background tabs. Renders nothing.
+ * popover on a disabled control or a full page. It polls often while one of
+ * the viewer's requests is pending and rarely otherwise; React Query pauses
+ * the polling in background tabs. Renders nothing.
  */
 export function AccessRequestWatcher(): React.JSX.Element | null {
   const accessRequestsOn =
@@ -41,7 +47,7 @@ function PendingAccessRequestWatcher(): null {
     refetchInterval: (query) =>
       query.state.data?.requests.some((r) => r.status === "pending")
         ? ACCESS_REQUEST_POLL_MS
-        : false,
+        : ACCESS_REQUEST_IDLE_POLL_MS,
     throwOnError: false,
   });
 

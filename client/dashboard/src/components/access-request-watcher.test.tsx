@@ -59,6 +59,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 
 import {
+  ACCESS_REQUEST_IDLE_POLL_MS,
   ACCESS_REQUEST_POLL_MS,
   AccessRequestWatcher,
 } from "./access-request-watcher";
@@ -93,7 +94,7 @@ function refetchedEverything(): boolean {
 }
 
 describe("AccessRequestWatcher", () => {
-  it("polls only the viewer's own requests, only while one is pending", () => {
+  it("polls the viewer's own requests, often only while one is pending", () => {
     render(<AccessRequestWatcher />);
     const interval = state.options?.refetchInterval;
 
@@ -105,7 +106,7 @@ describe("AccessRequestWatcher", () => {
       interval?.({
         state: { data: { requests: [{ ...pending, status: "denied" }] } },
       }),
-    ).toBe(false);
+    ).toBe(ACCESS_REQUEST_IDLE_POLL_MS);
   });
 
   it("tells the viewer once a request is approved and refetches the page", () => {
