@@ -165,9 +165,7 @@ function Library(): JSX.Element {
 
   const save = useUpsertAiScanTargetMutation({
     onSuccess: async (result) => {
-      toast.success(
-        `Saved ${result.target.id}. Agents get the updated list the next time they check in.`,
-      );
+      toast.success(`Saved ${result.target.id}.`);
       setEditor(null);
       setEditorError(null);
       await invalidate();

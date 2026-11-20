@@ -375,13 +375,11 @@ describe("AiScanTargetsSection", () => {
     // The editor's save mutation is the first one the section creates.
     await act(async () => {
       await mocks.upsertOptions[0]?.onSuccess({
-        listVersion: 12,
+        listVersion: 11,
         target: { id: "chatgpt-desktop" },
       });
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      "Saved chatgpt-desktop. Agents get the updated list the next time they check in.",
-    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Saved chatgpt-desktop.");
     expect(mocks.invalidateList).toHaveBeenCalled();
   });
 

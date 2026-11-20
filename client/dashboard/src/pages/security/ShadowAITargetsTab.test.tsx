@@ -28,7 +28,19 @@ vi.mock("@/pages/device-agent/ai-scan-targets", () => ({
 }));
 
 vi.mock("@gram/client/react-query/aiScanTargets.js", () => ({
-  useAiScanTargets: () => ({ data: { listVersion: 7, targets: [] } }),
+  useAiScanTargets: () => ({
+    data: {
+      listVersion: 7,
+      targets: [
+        {
+          id: "cursor",
+          displayName: "Cursor",
+          category: "harness",
+          origin: "default",
+        },
+      ],
+    },
+  }),
 }));
 
 vi.mock("@/components/insights-dock", () => ({
@@ -63,7 +75,7 @@ describe("ShadowAITargetsTab", () => {
     expect(insights.getAttribute("data-title")).toBe(
       "Shadow AI target insights",
     );
-    expect(insights.textContent).toContain("Built-in targets: 0");
+    expect(insights.textContent).toContain("Built-in targets: 1 (harnesses 1,");
   });
 
   it("gates the library behind org:admin with the page-level notice", () => {
