@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -38,7 +38,7 @@ type goldenLabel struct {
 func TestCompiledSnapshotNamesAppsAsTheRegistryDid(t *testing.T) {
 	t.Parallel()
 
-	catalog := aivendors.CompiledSnapshot()
+	catalog := aivendorstest.CompiledSnapshot()
 	hosts := CatalogAppHosts(catalog)
 	var ids, keys []string
 	for _, preset := range catalog.Catalog() {

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -98,7 +99,7 @@ func goldenClientIDs(catalog *aivendors.Snapshot) []string {
 func TestCompiledSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
 	t.Parallel()
 
-	catalog := aivendors.CompiledSnapshot()
+	catalog := aivendorstest.CompiledSnapshot()
 	ids := goldenClientIDs(catalog)
 	cases := make([]goldenCase, 0, len(ids))
 	for _, id := range ids {
@@ -130,7 +131,7 @@ func TestCompiledSnapshotAdmitsAsTheRegistryDid(t *testing.T) {
 func TestCompiledSnapshotListsPresetsAsTheRegistryDid(t *testing.T) {
 	t.Parallel()
 
-	presets := aivendors.CompiledSnapshot().Catalog()
+	presets := aivendorstest.CompiledSnapshot().Catalog()
 	listing := make([]goldenPreset, 0, len(presets))
 	for _, preset := range presets {
 		listing = append(listing, toGoldenPreset(preset))

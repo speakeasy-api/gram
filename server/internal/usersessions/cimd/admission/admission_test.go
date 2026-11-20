@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 )
 
 // Shared fixtures for the package's tests. claudeCodeURL is a catalog
@@ -55,7 +55,7 @@ func TestEvaluate_ModeMatrix(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		require.Equalf(t, tc.want, Evaluate(aivendors.CompiledSnapshot(), tc.mode, tc.clientID), "case %s", tc.name)
+		require.Equalf(t, tc.want, Evaluate(aivendorstest.CompiledSnapshot(), tc.mode, tc.clientID), "case %s", tc.name)
 	}
 }
 
@@ -69,7 +69,7 @@ func TestEvaluate_DecisionCarriesExactlyOneReason(t *testing.T) {
 	inputs := []string{claudeCodeURL, chatGPTConnectorURL, customURL, unknownURL, strings.Repeat("x", MaxClientIDLength+1)}
 	for _, mode := range append(Modes(), Mode("nonsense")) {
 		for _, clientID := range inputs {
-			decision := Evaluate(aivendors.CompiledSnapshot(), mode, clientID)
+			decision := Evaluate(aivendorstest.CompiledSnapshot(), mode, clientID)
 			switch decision.Outcome {
 			case OutcomeAdmit:
 				require.NotEmpty(t, decision.Admit, "admit decision must carry a reason")
@@ -94,7 +94,7 @@ func TestEvaluate_NeverReturnsAdmitCustom(t *testing.T) {
 
 	for _, mode := range Modes() {
 		for _, clientID := range []string{claudeCodeURL, chatGPTConnectorURL, customURL, unknownURL} {
-			require.NotEqual(t, AdmitCustom, Evaluate(aivendors.CompiledSnapshot(), mode, clientID).Admit)
+			require.NotEqual(t, AdmitCustom, Evaluate(aivendorstest.CompiledSnapshot(), mode, clientID).Admit)
 		}
 	}
 }
@@ -115,7 +115,7 @@ func TestEvaluate_ReportingDecidesExactlyAsPresets(t *testing.T) {
 		"",
 	}
 	for _, clientID := range inputs {
-		require.Equalf(t, Evaluate(aivendors.CompiledSnapshot(), ModePresets, clientID), Evaluate(aivendors.CompiledSnapshot(), ModeReporting, clientID),
+		require.Equalf(t, Evaluate(aivendorstest.CompiledSnapshot(), ModePresets, clientID), Evaluate(aivendorstest.CompiledSnapshot(), ModeReporting, clientID),
 			"reporting and presets must agree on %q", clientID)
 	}
 }
@@ -129,7 +129,7 @@ func TestEvaluate_OversizedDeniedBeforeCustomLookup(t *testing.T) {
 	oversized := "https://client.example.com/" + strings.Repeat("a", MaxClientIDLength)
 	require.Greater(t, len(oversized), MaxClientIDLength)
 
-	decision := Evaluate(aivendors.CompiledSnapshot(), ModePresets, oversized)
+	decision := Evaluate(aivendorstest.CompiledSnapshot(), ModePresets, oversized)
 	require.Equal(t, OutcomeDeny, decision.Outcome)
 	require.Equal(t, DenialOversized, decision.Denial)
 }
@@ -142,7 +142,7 @@ func TestEvaluate_OversizedAdmittedWhenOpen(t *testing.T) {
 
 	oversized := "https://client.example.com/" + strings.Repeat("a", MaxClientIDLength)
 
-	require.Equal(t, OutcomeAdmit, Evaluate(aivendors.CompiledSnapshot(), ModeOpen, oversized).Outcome)
+	require.Equal(t, OutcomeAdmit, Evaluate(aivendorstest.CompiledSnapshot(), ModeOpen, oversized).Outcome)
 }
 
 // TestEvaluate_UnknownModeFailsClosed guards the backstop branch for a Mode
@@ -150,7 +150,7 @@ func TestEvaluate_OversizedAdmittedWhenOpen(t *testing.T) {
 func TestEvaluate_UnknownModeFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	decision := Evaluate(aivendors.CompiledSnapshot(), Mode("nonsense"), claudeCodeURL)
+	decision := Evaluate(aivendorstest.CompiledSnapshot(), Mode("nonsense"), claudeCodeURL)
 	require.Equal(t, OutcomeDeny, decision.Outcome)
 	require.Equal(t, DenialUnknownMode, decision.Denial)
 }
@@ -161,7 +161,7 @@ func TestEvaluate_ZeroValueModeFailsClosed(t *testing.T) {
 	t.Parallel()
 
 	var zero Mode
-	decision := Evaluate(aivendors.CompiledSnapshot(), zero, claudeCodeURL)
+	decision := Evaluate(aivendorstest.CompiledSnapshot(), zero, claudeCodeURL)
 	require.Equal(t, OutcomeDeny, decision.Outcome)
 	require.Equal(t, DenialUnknownMode, decision.Denial)
 }
@@ -182,7 +182,7 @@ func TestEvaluateShadow_DecidesExactlyAsPresets(t *testing.T) {
 		"",
 	}
 	for _, clientID := range inputs {
-		require.Equalf(t, Evaluate(aivendors.CompiledSnapshot(), ModePresets, clientID), EvaluateShadow(aivendors.CompiledSnapshot(), clientID),
+		require.Equalf(t, Evaluate(aivendorstest.CompiledSnapshot(), ModePresets, clientID), EvaluateShadow(aivendorstest.CompiledSnapshot(), clientID),
 			"the shadow and presets must agree on %q", clientID)
 	}
 }
@@ -207,7 +207,7 @@ func TestEvaluate_OpenAdmitsWhateverTheShadowSays(t *testing.T) {
 		"",
 	}
 	for _, clientID := range inputs {
-		require.Equalf(t, admitDecision(AdmitOpen), Evaluate(aivendors.CompiledSnapshot(), ModeOpen, clientID),
+		require.Equalf(t, admitDecision(AdmitOpen), Evaluate(aivendorstest.CompiledSnapshot(), ModeOpen, clientID),
 			"open must admit %q whatever the shadow decides about it", clientID)
 	}
 }
@@ -221,6 +221,6 @@ func TestEvaluateShadow_SurvivesTheOpenDefault(t *testing.T) {
 
 	mode, _ := ResolveMode("", false)
 	require.Equal(t, ModeOpen, mode)
-	require.Equal(t, OutcomeCheckCustom, EvaluateShadow(aivendors.CompiledSnapshot(), unknownURL).Outcome,
+	require.Equal(t, OutcomeCheckCustom, EvaluateShadow(aivendorstest.CompiledSnapshot(), unknownURL).Outcome,
 		"an unconfigured issuer must still ask what presets would decide")
 }

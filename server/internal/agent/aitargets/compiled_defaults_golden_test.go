@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -34,7 +34,7 @@ type compiledDefaultsGolden struct {
 func TestCompiledSnapshotServesTheRegistryScanList(t *testing.T) {
 	t.Parallel()
 
-	catalog := aivendors.CompiledSnapshot()
+	catalog := aivendorstest.CompiledSnapshot()
 	defaults := aitargets.Defaults(catalog)
 	snapshot := aitargets.NewOrganizationList(catalog, nil).Snapshot
 	data, err := json.Marshal(compiledDefaultsGolden{

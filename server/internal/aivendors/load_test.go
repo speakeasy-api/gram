@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	seedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -51,7 +52,7 @@ func TestDatabaseCatalogPreservesShippedAdmissionAndProducts(t *testing.T) {
 		require.Equal(t, strings.Contains(preset.URL, "*"), preset.IsPattern(), preset.URL)
 	}
 	// Documents load in URL order, so matcher lists may differ in order only.
-	require.ElementsMatch(t, sortedMatchers(aitargets.Defaults(aivendors.CompiledSnapshot())), sortedMatchers(aitargets.Defaults(snapshot)))
+	require.ElementsMatch(t, sortedMatchers(aitargets.Defaults(aivendorstest.CompiledSnapshot())), sortedMatchers(aitargets.Defaults(snapshot)))
 	require.NoError(t, aitargets.Validate(snapshot, aitargets.Defaults(snapshot)))
 }
 
@@ -323,7 +324,7 @@ func TestLoadedSnapshotMatchesCompiledSnapshot(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
-	compiled := aivendors.CompiledSnapshot()
+	compiled := aivendorstest.CompiledSnapshot()
 	ids := func(s *aivendors.Snapshot) []string {
 		var out []string
 		for _, p := range s.Products() {
@@ -348,14 +349,10 @@ func TestLoadedSnapshotMatchesCompiledSnapshot(t *testing.T) {
 		require.Equal(t, want, got, probe)
 	}
 	// Fingerprints differ only by order: the database lists products by id and
-	// documents by URL in byte order, the registry by declaration.
+	// documents by URL in byte order, the registry by declaration. The equal
+	// fingerprint lets other packages test against DatabaseSnapshot without Postgres.
 	require.NotEqual(t, compiled.Fingerprint(), loaded.Fingerprint())
-	reordered := compiled.Products()
-	slices.SortFunc(reordered, func(a, b aivendors.Product) int { return strings.Compare(a.ID, b.ID) })
-	for i := range reordered {
-		slices.SortFunc(reordered[i].Documents, func(a, b aivendors.Document) int { return strings.Compare(a.URL, b.URL) })
-	}
-	require.Equal(t, loaded.Fingerprint(), aivendors.NewSnapshot(reordered).Fingerprint())
+	require.Equal(t, aivendorstest.DatabaseSnapshot().Fingerprint(), loaded.Fingerprint())
 }
 
 func TestLoadRequiresValidator(t *testing.T) {
@@ -404,9 +401,9 @@ func TestLoadedSnapshotServesTheCompiledListVersionAndETag(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
-	t.Logf("compiled fingerprint %s, loaded fingerprint %s", aivendors.CompiledSnapshot().Fingerprint(), loaded.Fingerprint())
+	t.Logf("compiled fingerprint %s, loaded fingerprint %s", aivendorstest.CompiledSnapshot().Fingerprint(), loaded.Fingerprint())
 
-	want := aitargets.NewOrganizationList(aivendors.CompiledSnapshot(), nil).Snapshot
+	want := aitargets.NewOrganizationList(aivendorstest.CompiledSnapshot(), nil).Snapshot
 	got := aitargets.NewOrganizationList(loaded, nil).Snapshot
 	require.Equal(t, want.ListVersion, got.ListVersion)
 	require.Equal(t, want.ETag, got.ETag)

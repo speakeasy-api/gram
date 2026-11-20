@@ -39,6 +39,10 @@ every product keeps the last snapshot.
 Full fingerprints drive refresh detection. The device scan list version is
 derived from the served targets in `agent/aitargets`, not from the snapshot.
 
+Tests build stores from the compiled registry with `aivendorstest`.
+`aivendorstest.DatabaseSnapshot` is the same content in database order; a load
+test proves its fingerprint equals a freshly seeded database's.
+
 Product families and reported-name aliases stay in the compiled registry by
 design: they change with plugin and telemetry code, so the database does not
 store them and snapshots leave them empty.

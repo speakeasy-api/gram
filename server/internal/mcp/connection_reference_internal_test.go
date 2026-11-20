@@ -11,8 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
-
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -152,7 +150,7 @@ func TestConnectionReference_AnAcceptedEndingLeavesItsID(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	attempt := openState().connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
+	attempt := openState().connectionAttempt(aivendorstest.CompiledSnapshot(), directEndpoint())
 	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
 
 	endingService(t, rec.Recorder, &addOnlyCache{}).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
@@ -163,7 +161,7 @@ func TestConnectionReference_ARejectedEndingLeavesNone(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.NewLogsOff(t)
-	attempt := openState().connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
+	attempt := openState().connectionAttempt(aivendorstest.CompiledSnapshot(), directEndpoint())
 	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
 
 	endingService(t, rec.Recorder, &addOnlyCache{}).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
@@ -173,7 +171,7 @@ func TestConnectionReference_ARejectedEndingLeavesNone(t *testing.T) {
 func TestConnectionReference_ALostOrStalledClaimLeavesNone(t *testing.T) {
 	t.Parallel()
 
-	attempt := openState().connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
+	attempt := openState().connectionAttempt(aivendorstest.CompiledSnapshot(), directEndpoint())
 	lost := &addOnlyCache{seen: map[string]bool{attemptEndMarker(attempt): true}}
 	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
 	endingService(t, mcpconnectionattemptstest.New(t).Recorder, lost).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)

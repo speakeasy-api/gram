@@ -11,7 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -42,7 +42,7 @@ func TestOrganizationWithoutRowsIsServedTheRegistryScanList(t *testing.T) {
 	ctx, ti := newTestAgentService(t)
 	golden := readRegistryScanListGolden(t)
 
-	list, err := aitargets.LoadOrganizationList(ctx, repo.New(ti.conn), ti.orgID, aivendors.CompiledSnapshot())
+	list, err := aitargets.LoadOrganizationList(ctx, repo.New(ti.conn), ti.orgID, aivendorstest.CompiledSnapshot())
 	require.NoError(t, err)
 	require.Equal(t, golden.ListVersion, list.Snapshot.ListVersion)
 	require.Equal(t, golden.ETag, list.Snapshot.ETag)
@@ -58,7 +58,7 @@ func TestUnlinkedDecisionRowResolvesAsTheBuiltIn(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	golden := readRegistryScanListGolden(t)
-	catalog := aivendors.CompiledSnapshot()
+	catalog := aivendorstest.CompiledSnapshot()
 
 	builtin, ok := aitargets.DefaultByID(catalog, "aider")
 	require.True(t, ok)

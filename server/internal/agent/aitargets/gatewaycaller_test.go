@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 )
 
 // gatewayTarget is a minimal target carrying one gateway-client block.
@@ -25,7 +26,7 @@ func gatewayTarget(id string, gateway aitargets.GatewayClient) aitargets.Target 
 func TestPiMetadataDocumentsMatchEnforceableDefault(t *testing.T) {
 	t.Parallel()
 
-	catalog := aivendors.CompiledSnapshot()
+	catalog := aivendorstest.CompiledSnapshot()
 	targets := aitargets.Defaults(catalog)
 	for _, clientID := range []string{
 		"https://pi.dev/oauth/client.json",
@@ -176,7 +177,7 @@ func TestMatchGatewayCallerIgnoresUnverifiedCallers(t *testing.T) {
 // firstBlockableVendorKey borrows a vendor key the registry says the gateway
 // can resolve. Which vendor that is moves as the registry grows.
 func firstBlockableVendorKey() (string, bool) {
-	for _, target := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
+	for _, target := range aitargets.Defaults(aivendorstest.CompiledSnapshot()) {
 		for _, key := range target.GatewayClient.CIMDVendorKeys {
 			return key, true
 		}
@@ -204,14 +205,14 @@ func TestValidateRejectsTwoTargetsClaimingOneMatcher(t *testing.T) {
 		ClientInfoNames: nil,
 	})
 
-	err := aitargets.Validate(aivendors.CompiledSnapshot(), []aitargets.Target{first, second})
+	err := aitargets.Validate(aivendorstest.CompiledSnapshot(), []aitargets.Target{first, second})
 	require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
 	require.Contains(t, err.Error(), "CIMD vendor key")
 
 	// Dropping one resolves the ambiguity. Leaving the inventory is the only
 	// way a target stops being matched against a caller, so it is also the
 	// only way this collision clears.
-	require.NoError(t, aitargets.Validate(aivendors.CompiledSnapshot(), []aitargets.Target{first}))
+	require.NoError(t, aitargets.Validate(aivendorstest.CompiledSnapshot(), []aitargets.Target{first}))
 }
 
 func TestGatewayMatchersStayOutOfTheAgentEnvelope(t *testing.T) {
@@ -258,7 +259,7 @@ func TestDefaultsNeverClaimAMultiProductVendorKey(t *testing.T) {
 		}
 	}
 
-	for _, target := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
+	for _, target := range aitargets.Defaults(aivendorstest.CompiledSnapshot()) {
 		for _, key := range target.GatewayClient.CIMDVendorKeys {
 			require.Equal(t, 1, productsPerKey[key],
 				"target %q claims vendor key %q, which covers %d products",
@@ -269,7 +270,7 @@ func TestDefaultsNeverClaimAMultiProductVendorKey(t *testing.T) {
 	// The two known multi-product vendors, named so a regression reads clearly.
 	for _, key := range []string{"openai", "anthropic"} {
 		require.Greater(t, productsPerKey[key], 1, "expected %q to cover several products", key)
-		for _, target := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
+		for _, target := range aitargets.Defaults(aivendorstest.CompiledSnapshot()) {
 			require.NotContains(t, target.GatewayClient.CIMDVendorKeys, key, "target %q", target.ID)
 		}
 	}
@@ -282,9 +283,9 @@ func TestDefaultsNeverClaimAMultiProductVendorKey(t *testing.T) {
 func TestEveryBlockableDefaultIsAdmissible(t *testing.T) {
 	t.Parallel()
 
-	for _, target := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
+	for _, target := range aitargets.Defaults(aivendorstest.CompiledSnapshot()) {
 		for _, clientID := range target.GatewayClient.OAuthClientIDs {
-			_, known := aivendors.CompiledSnapshot().CatalogPreset(clientID)
+			_, known := aivendorstest.CompiledSnapshot().CatalogPreset(clientID)
 			require.True(t, known, "target %q names client id %q, which admission does not admit", target.ID, clientID)
 		}
 	}
@@ -323,7 +324,7 @@ func TestOverlappingVendorDocumentsDoNotCrossAttribute(t *testing.T) {
 	// exercises the real resolution path rather than a hand-made caller.
 	callerFor := func(clientID string) aitargets.GatewayCaller {
 		caller := aitargets.GatewayCaller{OAuthClientID: clientID, CIMDVendorKey: "", CIMDCatalogURL: ""}
-		if preset, known := aivendors.CompiledSnapshot().CatalogPreset(clientID); known {
+		if preset, known := aivendorstest.CompiledSnapshot().CatalogPreset(clientID); known {
 			caller.CIMDVendorKey = preset.VendorKey
 			caller.CIMDCatalogURL = preset.URL
 		}
@@ -331,7 +332,7 @@ func TestOverlappingVendorDocumentsDoNotCrossAttribute(t *testing.T) {
 	}
 
 	defaultsWithout := func(absent string) []aitargets.Target {
-		defaults := aitargets.Defaults(aivendors.CompiledSnapshot())
+		defaults := aitargets.Defaults(aivendorstest.CompiledSnapshot())
 		targets := make([]aitargets.Target, 0, len(defaults))
 		for _, target := range defaults {
 			if target.ID == absent {

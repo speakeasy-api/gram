@@ -18,7 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/stretchr/testify/require"
 	otellog "go.opentelemetry.io/otel/log"
@@ -67,7 +66,7 @@ func TestTokenAdmissionRefusalKeepsCIMDApp(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
 			s.recordTokenClientRefusal(req, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, clientID, reason)
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDAdmissionDenied)
-			require.Equal(t, mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
+			require.Equal(t, mcpconnectionattempts.AppOf(aivendorstest.CompiledSnapshot(), clientID, mcpconnectionattempts.ClientIDAdmitted).String(), row.AppKey)
 			require.NotEqual(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey)
 		})
 	}
@@ -530,7 +529,7 @@ func TestEndAttemptOnce_StalledRedisDoesNotBlockTheRequest(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	service := &Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: newAttemptEndings()}
 	state := openState()
-	attempt := state.connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint())
+	attempt := state.connectionAttempt(aivendorstest.CompiledSnapshot(), directEndpoint())
 	logger := testenv.NewLogger(t)
 
 	returned := make(chan struct{})
@@ -561,7 +560,7 @@ func TestEndAttemptOnce_FullQueueLeavesTheAttemptOpen(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	for range maxPendingAttemptEndings + 5 {
 		state := openState()
-		service.endAttemptOnce(t.Context(), logger, state.connectionAttempt(aivendors.CompiledSnapshot(), directEndpoint()), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+		service.endAttemptOnce(t.Context(), logger, state.connectionAttempt(aivendorstest.CompiledSnapshot(), directEndpoint()), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 	}
 	close(stalled.release)
 	require.NoError(t, endings.drain(t.Context()))
@@ -741,7 +740,7 @@ func TestForgetMemberStatuses_DroppedRowIsRecordedAgain(t *testing.T) {
 
 	service, _, _ := memberStatusService(t)
 	endpoint, state := gatewayEndpoint(), openState()
-	attempt := state.connectionAttempt(aivendors.CompiledSnapshot(), endpoint)
+	attempt := state.connectionAttempt(aivendorstest.CompiledSnapshot(), endpoint)
 	kept := memberStatus{id: uuid.NewString(), status: "allowed|connected", what: mcpconnectionattempts.ResultAllowed, opts: nil}
 	dropped := memberStatus{id: uuid.NewString(), status: "needs_sign_in|needs_sign_in", what: mcpconnectionattempts.CodeNeedsSignIn, opts: nil}
 	logger := testenv.NewLogger(t)

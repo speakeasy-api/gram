@@ -48,7 +48,7 @@ func goldenCatalogClientIDs(t *testing.T) []string {
 // everyHarness serves one discovery variant to every harness.
 func everyHarness(variant feature.Variant) harnessFlags {
 	flags := harnessFlags{"unknown": variant}
-	for _, product := range aivendors.CompiledSnapshot().Products() {
+	for _, product := range aivendorstest.CompiledSnapshot().Products() {
 		flags[product.ID] = variant
 	}
 	return flags
@@ -78,7 +78,7 @@ func TestClientCatalogDecisionsMatchGolden(t *testing.T) {
 	progressive := runtimeFor(feature.VariantPlatformMCPDiscoveryProgressive)
 	codeMode := runtimeFor(feature.VariantPlatformMCPDiscoveryCodeMode)
 
-	catalog := aivendors.CompiledSnapshot()
+	catalog := aivendorstest.CompiledSnapshot()
 	ids := goldenCatalogClientIDs(t)
 	decisions := make([]goldenClientDecision, 0, len(ids))
 	for _, id := range ids {
@@ -235,7 +235,7 @@ func TestOAuthClientAdmissionMatchesGolden(t *testing.T) {
 func TestInboundEMAPresetClientsMatchGolden(t *testing.T) {
 	t.Parallel()
 
-	data, err := json.Marshal(inboundEMAPresetClients(aivendors.CompiledSnapshot()))
+	data, err := json.Marshal(inboundEMAPresetClients(aivendorstest.CompiledSnapshot()))
 	require.NoError(t, err)
 	testenv.RequireJSONGolden(t, "testdata/ai_catalog_inbound_ema_presets_golden.json", data)
 }

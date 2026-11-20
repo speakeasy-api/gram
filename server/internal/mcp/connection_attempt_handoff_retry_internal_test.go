@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
@@ -34,7 +33,7 @@ func TestFederatedOnwardPreservesResponse(t *testing.T) {
 			rec := mcpconnectionattemptstest.New(t)
 			endpoint := directEndpoint()
 			tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundSignIn)
-			tracker.Attach(openState().connectionAttempt(aivendors.CompiledSnapshot(), endpoint))
+			tracker.Attach(openState().connectionAttempt(aivendorstest.CompiledSnapshot(), endpoint))
 			tracker.Consumed()
 			got := federatedOnward(t.Context(), tracker, tt.err)
 			if tt.err == nil {

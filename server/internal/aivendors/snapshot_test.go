@@ -2,7 +2,6 @@ package aivendors
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -150,34 +149,6 @@ func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {
 	t.Parallel()
 	empty := Product{ID: "p", Signatures: Signatures{BundleIDs: []string{}, Binaries: []string{}, ConfigDirs: []string{}, ProcessNames: []string{}}, ClientInfoNames: []string{}, Aliases: []Alias{}, Documents: []Document{}}
 	require.Equal(t, NewSnapshot([]Product{{ID: "p"}}).Fingerprint(), NewSnapshot([]Product{empty}).Fingerprint())
-}
-
-func TestCompiledSnapshotMatchesRegistry(t *testing.T) {
-	t.Parallel()
-	snapshot := CompiledSnapshot()
-	want := Products()
-	for i := range want {
-		want[i].Family = ""
-		want[i].Aliases = nil
-	}
-	require.Equal(t, want, snapshot.Products())
-	scanned := ScanProducts()
-	for i := range scanned {
-		scanned[i].Family = ""
-		scanned[i].Aliases = nil
-	}
-	require.Equal(t, scanned, snapshot.ScanProducts())
-	require.Same(t, snapshot, CompiledSnapshot(), "every caller shares one compiled snapshot")
-	var documents []Preset
-	for _, entry := range CIMDDocuments() {
-		require.Equal(t, strings.Contains(entry.Document.URL, "*"), entry.Document.Pattern, entry.Document.URL)
-		documents = append(documents, Preset{ProductID: entry.Product.ID, VendorKey: entry.Product.VendorKey, DisplayName: entry.Document.DisplayName, URL: entry.Document.URL, Enabled: entry.Document.Enabled, Pattern: entry.Document.Pattern})
-	}
-	require.Equal(t, documents, snapshot.Catalog())
-	for _, p := range Products() {
-		require.Equal(t, GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p), p.ID)
-		require.Equal(t, BlockableVendorKey(p.VendorKey), snapshot.BlockableVendorKey(p.VendorKey), p.ID)
-	}
 }
 
 func TestSnapshotOwnsAllMutableData(t *testing.T) {

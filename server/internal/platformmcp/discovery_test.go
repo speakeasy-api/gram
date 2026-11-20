@@ -13,7 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -62,7 +62,7 @@ func TestHarnessForClient(t *testing.T) {
 		testOtherClientID:                                       "unknown",
 		"00000000-0000-0000-0000-000000000000":                  "unknown",
 	} {
-		require.Equal(t, want, harnessForClient(aivendors.CompiledSnapshot(), clientID), clientID)
+		require.Equal(t, want, harnessForClient(aivendorstest.CompiledSnapshot(), clientID), clientID)
 	}
 }
 

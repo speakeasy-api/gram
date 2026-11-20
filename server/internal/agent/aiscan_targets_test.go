@@ -8,7 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -72,7 +72,7 @@ func TestUpsertAiScanTargetUnlinksAProductReference(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
 
 	// "claude" stands in for a built-in since removed from the registry.
-	_, isBuiltin := aitargets.DefaultByID(aivendors.CompiledSnapshot(), "claude")
+	_, isBuiltin := aitargets.DefaultByID(aivendorstest.CompiledSnapshot(), "claude")
 	require.False(t, isBuiltin)
 	q := repo.New(ti.conn)
 	linked, err := q.SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
@@ -100,7 +100,7 @@ func TestUpsertAiScanTargetUnlinksAProductReference(t *testing.T) {
 // way the dashboard writes one back.
 func defaultPayload(t *testing.T, id string) *gen.UpsertAiScanTargetPayload {
 	t.Helper()
-	for _, target := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
+	for _, target := range aitargets.Defaults(aivendorstest.CompiledSnapshot()) {
 		if target.ID != id {
 			continue
 		}
@@ -143,7 +143,7 @@ func TestGetPluginsServesTheDefaultsToAnOrganizationWithNoTargets(t *testing.T) 
 	require.EqualValues(t, builtinListVersion(), envelope["list_version"])
 	require.NotEmpty(t, envelope["etag"])
 	ids := servedTargetIDs(t, envelope)
-	require.Len(t, ids, len(aitargets.Defaults(aivendors.CompiledSnapshot())))
+	require.Len(t, ids, len(aitargets.Defaults(aivendorstest.CompiledSnapshot())))
 	require.Equal(t, "aider", ids[0], "targets are served ordered by id")
 }
 
@@ -195,7 +195,7 @@ func TestUpsertAiScanTargetAddsATargetAgentsReceive(t *testing.T) {
 
 	listed, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{SessionToken: nil})
 	require.NoError(t, err)
-	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendors.CompiledSnapshot()))+1)
+	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendorstest.CompiledSnapshot()))+1)
 	require.EqualValues(t, builtinListVersion(), listed.ListVersion)
 
 	createdAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAiScanTargetCreate)
@@ -240,7 +240,7 @@ func TestUpsertAiScanTargetRecordsARowForADefaultAndDeleteDropsIt(t *testing.T) 
 
 	listed, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{SessionToken: nil})
 	require.NoError(t, err)
-	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendors.CompiledSnapshot())), "a default carrying a decision stays in the list")
+	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendorstest.CompiledSnapshot())), "a default carrying a decision stays in the list")
 	for _, entry := range listed.Targets {
 		if entry.ID == "aider" {
 			require.True(t, entry.Customized, "a row makes the built-in customized")
@@ -256,7 +256,7 @@ func TestUpsertAiScanTargetRecordsARowForADefaultAndDeleteDropsIt(t *testing.T) 
 
 	listed, err = ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{SessionToken: nil})
 	require.NoError(t, err)
-	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendors.CompiledSnapshot())))
+	require.Len(t, listed.Targets, len(aitargets.Defaults(aivendorstest.CompiledSnapshot())))
 	for _, entry := range listed.Targets {
 		if entry.ID == "aider" {
 			require.False(t, entry.Customized, "dropping the row leaves the built-in as it shipped")
@@ -275,7 +275,7 @@ func TestUpsertAiScanTargetRecordsARowForADefaultAndDeleteDropsIt(t *testing.T) 
 // when the vendor publishes exactly one product — so the test asks rather than
 // naming a product.
 func firstDefaultWithGatewayMatchers() (aitargets.Target, bool) {
-	for _, target := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
+	for _, target := range aitargets.Defaults(aivendorstest.CompiledSnapshot()) {
 		if !target.GatewayClient.IsZero() {
 			return target, true
 		}
@@ -362,7 +362,7 @@ func TestUpsertAiScanTargetRefusesToGrowTheServedSetPastWhatAgentsAccept(t *test
 
 	queries := repo.New(ti.conn)
 	var lastFiller string
-	for i := len(aitargets.Defaults(aivendors.CompiledSnapshot())); i < aitargets.MaxTargets; i++ {
+	for i := len(aitargets.Defaults(aivendorstest.CompiledSnapshot())); i < aitargets.MaxTargets; i++ {
 		filler := aitargets.Target{
 			ID:          "filler-" + string(rune('a'+i%26)) + "-" + string(rune('a'+i/26)),
 			DisplayName: "Filler",
@@ -561,7 +561,7 @@ func TestListAiScanTargetsCarriesEachTargetsAccessDecision(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
 
 	var decided, untouched, inert *aitargets.Target
-	for _, target := range aitargets.Defaults(aivendors.CompiledSnapshot()) {
+	for _, target := range aitargets.Defaults(aivendorstest.CompiledSnapshot()) {
 		switch {
 		case aitargets.Enforceable(target) && decided == nil:
 			decided = &target
@@ -607,5 +607,5 @@ func TestListAiScanTargetsCarriesEachTargetsAccessDecision(t *testing.T) {
 }
 
 func builtinListVersion() int32 {
-	return aitargets.ListVersion(aitargets.Defaults(aivendors.CompiledSnapshot()))
+	return aitargets.ListVersion(aitargets.Defaults(aivendorstest.CompiledSnapshot()))
 }

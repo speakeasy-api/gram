@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -237,7 +237,7 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 	}
 
 	spec := LocalSpec()
-	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
+	s := &seeder{spec: spec, catalog: aivendorstest.CompiledSnapshot()}
 	q := testrepo.New(db)
 	resource := fixtureauth.Resource(base, fixtureauth.PathEMAMCP)
 	for run := range 2 {

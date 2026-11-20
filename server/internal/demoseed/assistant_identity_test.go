@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -29,7 +29,7 @@ func TestSeededLegacyAssistantProvisions(t *testing.T) {
 			require.NoError(t, err)
 			seedLocalPostgres(ctx, t, db, spec)
 
-			s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
+			s := &seeder{spec: spec, catalog: aivendorstest.CompiledSnapshot()}
 			project := s.projectID()
 			bound, legacy := s.det("assistant-bound"), s.det("assistant-legacy")
 

@@ -4,14 +4,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/aivendors"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/stretchr/testify/require"
 )
 
 func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 	t.Parallel()
-	s := &seeder{spec: DefaultSpec(), catalog: aivendors.CompiledSnapshot(), now: time.Now()}
+	s := &seeder{spec: DefaultSpec(), catalog: aivendorstest.CompiledSnapshot(), now: time.Now()}
 	rows, err := s.connectionRequestRows()
 	require.NoError(t, err)
 	require.Len(t, rows, ConnectionAttemptDays*len(connectionRequestEndings))
@@ -115,7 +115,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 
 func TestConnectionOutcomeSeedKeepsAbandonedBrowserIdentity(t *testing.T) {
 	t.Parallel()
-	s := &seeder{spec: DefaultSpec(), catalog: aivendors.CompiledSnapshot()}
+	s := &seeder{spec: DefaultSpec(), catalog: aivendorstest.CompiledSnapshot()}
 	attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), s.connectionServerScope())
 	rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
 	require.NoError(t, err)
