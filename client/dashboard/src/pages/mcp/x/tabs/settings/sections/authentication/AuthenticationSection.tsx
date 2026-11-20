@@ -29,6 +29,7 @@ import {
   useRemoteSessionIssuersByIds,
 } from "@/lib/remote-identity";
 import { SetupStepBanner } from "./SetupStepBanner";
+import { UpstreamCredentialsSection } from "./UpstreamCredentialsSection";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
@@ -62,6 +63,15 @@ export function AuthenticationSection({
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   const isRemoteMcp = !!mcpServer.remoteMcpServerId;
   const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
+
+  if (isRemoteMcp && !isUnproxied) {
+    return (
+      <div id={MCP_AUTHENTICATION_SECTION_ID}>
+        <SetupStepBanner mcpServer={mcpServer} />
+        <UpstreamCredentialsSection key={mcpServer.id} mcpServer={mcpServer} />
+      </div>
+    );
+  }
 
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
@@ -119,6 +129,8 @@ export function AuthenticationSectionBody({
   target: AuthTarget;
   additionalSetupAction?: ReactNode;
 }): JSX.Element {
+  // Remote targets configure upstream through the server-scoped typed panel.
+  if (target.kind === "remote-mcp") return <></>;
   return (
     <StandardAuthenticationSectionBody
       target={target}

@@ -269,7 +269,6 @@ export function usesTypedOwnerConnections(server: InventoryServer): boolean {
 export async function attachOwnerConnections(
   api: ConnectionApi,
   agentId: string,
-  ownerUserId: string,
   servers: InventoryServer[],
   signal?: AbortSignal,
   skipMissing = false,
@@ -318,13 +317,10 @@ export async function attachOwnerConnections(
             ),
           )
         : [],
-      collectPageItems(
-        api.remoteSessions.list(
-          { gramProject, subjectUrn: userSubject(ownerUserId) },
-          undefined,
-          { signal },
-        ),
-      ),
+      // Let the attachment API enforce live session and provenance eligibility.
+      // The issuer passed in scope is the attachment target, not the issuer
+      // the caller used to establish the session (for example, a gateway).
+      collectPageItems(api.remoteSessions.list(scope, undefined, { signal })),
       api.remoteSessions.listBindings(scope, undefined, { signal }),
     ]);
     const ownSignIns = (item: InventoryServer) =>

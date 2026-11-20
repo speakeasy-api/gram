@@ -610,6 +610,8 @@ function identitySummary(
       };
     }
   }
+  if (auth.needsHeaderCleanup)
+    return { label: "Needs cleanup", href, warn: true, tone: "warning" };
   if (setupPending) return setupPending;
   const presentation = enumPresentation(
     UPSTREAM_AUTH_STATUS,
@@ -620,8 +622,7 @@ function identitySummary(
     label: presentation.label,
     href,
     warn: presentation.tone === "warning",
-    // No credential turned on, so callers reach the upstream without one.
-    tone: presentation.tone === "warning" ? "warning" : "destructive",
+    tone: presentation.tone,
   };
 }
 

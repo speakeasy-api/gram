@@ -30,6 +30,8 @@ import { invalidateAuthClientQueries } from "./authClientQueries";
 import { AuthRow } from "./AuthRow";
 import { HeadlessCallersSection } from "./HeadlessCallersSection";
 
+import { useSetupStep } from "./useSetupStep";
+
 export const UPSTREAM_CREDENTIALS_SECTION_ID = "upstream-credentials";
 
 /**
@@ -50,7 +52,10 @@ export function UpstreamCredentialsSection({
     { throwOnError: false },
   );
   const [openClientId, setOpenClientId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const setupStep = useSetupStep();
+  const [adding, setAdding] = useState(
+    canManage && (setupStep === "credentials" || setupStep === "oauth-client"),
+  );
   const openClient =
     query.data?.clients.find((client) => client.id === openClientId) ?? null;
 
@@ -80,6 +85,7 @@ export function UpstreamCredentialsSection({
                 <Button
                   variant="secondary"
                   size="sm"
+                  disabled={query.isFetching}
                   onClick={() => void query.refetch()}
                 >
                   <Button.Text>Retry</Button.Text>

@@ -1,3 +1,5 @@
+import { useRoutes } from "@/routes";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { ServerInfoPopover } from "./ServerInfoPopover";
 import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 import {
@@ -28,6 +30,21 @@ import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
+
+function IdentityRepairLink({ server }: { server: InventoryServer }) {
+  const routes = useRoutes({ projectSlug: server.projectSlug });
+  const href = routes.mcp.details.settings.href(mcpServerRouteParam(server));
+  return (
+    <a
+      className="underline"
+      href={`${href}#authentication`}
+      target="_blank"
+      rel="noreferrer"
+    >
+      Open Identity settings
+    </a>
+  );
+}
 
 export function StepAuthentication({
   servers,
@@ -298,11 +315,14 @@ export function StepAuthentication({
                     </div>
                     {connection?.status === "setup-required" && (
                       <Text small muted>
-                        Finish configuring this server’s upstream credentials in
-                        its Identity settings.
+                        Finish configuring this server’s upstream credentials.{" "}
+                        <IdentityRepairLink server={server} />
                       </Text>
                     )}
                     {connection?.status !== "setup-required" &&
+                      connection?.status !== "error" &&
+                      connection?.status !== "checking" &&
+                      connection &&
                       server.connectUrl && (
                         <Button
                           size="xs"

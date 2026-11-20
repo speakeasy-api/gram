@@ -362,7 +362,7 @@ describe("attachOwnerConnections", () => {
       candidates: [session({})],
       bindings: [],
     });
-    await attachOwnerConnections(fake, "agent_new", "user_owner", [
+    await attachOwnerConnections(fake, "agent_new", [
       server,
       { ...server, id: "server_linear_copy" },
       { ...server, id: "server_plain", issuerId: undefined },
@@ -401,7 +401,6 @@ describe("attachOwnerConnections", () => {
       const missing = await attachOwnerConnections(
         fake,
         "agent_new",
-        "user_owner",
         [server],
         undefined,
         false,
@@ -412,7 +411,11 @@ describe("attachOwnerConnections", () => {
       });
       expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
       expect(fake.remoteSessions.list).toHaveBeenCalledWith(
-        { gramProject: "project-one", subjectUrn: "user:user_owner" },
+        {
+          gramProject: "project-one",
+          principalId: "agent_new",
+          userSessionIssuerId: "issuer_one",
+        },
         undefined,
         expect.anything(),
       );
@@ -429,7 +432,7 @@ describe("attachOwnerConnections", () => {
         bindings: [],
       });
       await expect(
-        attachOwnerConnections(fake, "agent_new", "user_owner", [server]),
+        attachOwnerConnections(fake, "agent_new", [server]),
       ).rejects.toThrow(/Finish upstream credential setup/);
       expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
       expect(attachBinding).not.toHaveBeenCalled();
@@ -455,7 +458,6 @@ describe("attachOwnerConnections", () => {
       const missing = await attachOwnerConnections(
         fake,
         "agent_new",
-        "user_owner",
         [server],
         undefined,
         false,
@@ -488,7 +490,6 @@ describe("attachOwnerConnections", () => {
             bindings: [],
           }).fake,
           "agent_new",
-          "user_owner",
           [server, second],
           undefined,
           skipMissing,
@@ -509,7 +510,7 @@ describe("attachOwnerConnections", () => {
         required: { [server.id]: ["client_one"] },
       });
       await expect(
-        attachOwnerConnections(fake, "agent_new", "user_owner", [hostedServer]),
+        attachOwnerConnections(fake, "agent_new", [hostedServer]),
       ).rejects.toThrow(/no longer available/);
       expect(attachBinding).not.toHaveBeenCalled();
     });
@@ -527,7 +528,7 @@ describe("attachOwnerConnections", () => {
         },
       ],
     });
-    await attachOwnerConnections(fake, "agent_new", "user_owner", [server]);
+    await attachOwnerConnections(fake, "agent_new", [server]);
     expect(attachBinding).not.toHaveBeenCalled();
     expect(detachBinding).not.toHaveBeenCalled();
   });
@@ -538,7 +539,7 @@ describe("attachOwnerConnections", () => {
       candidates: [session({ id: "session_new" })],
       bindings: [{ id: "binding_stale", remoteSessionClientId: "client_one" }],
     });
-    await attachOwnerConnections(fake, "agent_new", "user_owner", [server]);
+    await attachOwnerConnections(fake, "agent_new", [server]);
     expect(detachBinding).toHaveBeenCalledWith(
       {
         gramProject: "project-one",
@@ -574,7 +575,7 @@ describe("attachOwnerConnections", () => {
         },
       ],
     });
-    await attachOwnerConnections(fake, "agent_new", "user_owner", [server]);
+    await attachOwnerConnections(fake, "agent_new", [server]);
     expect(detachBinding.mock.calls[0]?.[0]).toMatchObject({
       detachBindingRequestBody: { id: "binding_ended" },
     });
@@ -590,14 +591,7 @@ describe("attachOwnerConnections", () => {
       bindings: [],
     });
     await expect(
-      attachOwnerConnections(
-        fake,
-        "agent_new",
-        "user_owner",
-        [server],
-        undefined,
-        true,
-      ),
+      attachOwnerConnections(fake, "agent_new", [server], undefined, true),
     ).resolves.toEqual(["Linear"]);
     expect(attachBinding).not.toHaveBeenCalled();
     expect(detachBinding).not.toHaveBeenCalled();
@@ -610,7 +604,7 @@ describe("attachOwnerConnections", () => {
       bindings: [],
     });
     await expect(
-      attachOwnerConnections(fake, "agent_new", "user_owner", [server]),
+      attachOwnerConnections(fake, "agent_new", [server]),
     ).rejects.toThrow(/Your connection to Linear is no longer available/);
     expect(attachBinding).not.toHaveBeenCalled();
   });
@@ -625,7 +619,7 @@ describe("attachOwnerConnections", () => {
       bindings: [],
     });
     await expect(
-      attachOwnerConnections(fake, "agent_new", "user_owner", [server]),
+      attachOwnerConnections(fake, "agent_new", [server]),
     ).resolves.toEqual([]);
     expect(fake.remoteSessionClients.list).not.toHaveBeenCalled();
     expect(attachBinding).not.toHaveBeenCalled();
@@ -639,7 +633,7 @@ describe("attachOwnerConnections", () => {
       bindings: [],
     });
     await expect(
-      attachOwnerConnections(fake, "agent_new", "user_owner", [server]),
+      attachOwnerConnections(fake, "agent_new", [server]),
     ).rejects.toThrow("Could not check how Linear signs in. Try again.");
     expect(attachBinding).not.toHaveBeenCalled();
   });
@@ -666,7 +660,6 @@ describe("attachOwnerConnections", () => {
       attachOwnerConnections(
         fake,
         "agent_new",
-        "user_owner",
         [
           server,
           {

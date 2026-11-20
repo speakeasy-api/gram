@@ -4004,14 +4004,13 @@ describe("Servers that sign in as a person", () => {
       },
     ]);
     expect(mocks.sessionClients).not.toHaveBeenCalled();
-    // Both preview and save use the caller's project-scoped sessions.
-    expect(
-      mocks.sessions.mock.calls.filter(
-        ([request]) =>
-          request.gramProject === "project-one" &&
-          request.subjectUrn === "user:user_owner",
-      ).length,
-    ).toBeGreaterThanOrEqual(2);
+    expect(mocks.sessions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gramProject: "project-one",
+        principalId: "agent_new",
+        userSessionIssuerId: "issuer_linear",
+      }),
+    );
     expect(mocks.attach).toHaveBeenCalledWith(
       {
         gramProject: "project-one",
@@ -4204,7 +4203,7 @@ describe("Servers that sign in as a person", () => {
     expect(mocks.attach).not.toHaveBeenCalled();
   });
 
-  it("attaches only the server's own sign-in when its issuer also links a sibling registration", async () => {
+  it("attaches only the caller session matching the server's typed offer", async () => {
     mocks.authEnforced = "error";
     // The organization-wide issuer also lists another server's sign-in,
     // which the creator happens to have connected.

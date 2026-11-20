@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   publishStatus: {} as Record<string, unknown>,
   missingEnvVars: 0,
   upstreamAuthQuery: {} as Record<string, unknown>,
+  sourceHeaders: [] as { name: string; valueFromRequestHeader: string }[],
   guide: null as {
     only: { title: string } | undefined;
     openGuide: null;
@@ -109,7 +110,7 @@ vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
   useMcpEndpoints: () => ({ data: { mcpEndpoints: [] } }),
 }));
 vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
-  useRemoteMcpServerHeaders: () => ({}),
+  useRemoteMcpServerHeaders: () => ({ data: { headers: state.sourceHeaders } }),
 }));
 vi.mock("@gram/client/react-query/plugins", () => ({
   usePlugins: () => ({ data: { plugins: state.plugins } }),
@@ -176,6 +177,7 @@ beforeEach(() => {
   state.publishStatus = {};
   state.missingEnvVars = 0;
   state.upstreamAuthQuery = {};
+  state.sourceHeaders = [];
   state.guide = null;
 });
 it("offers Setup for a supported provider", () => {
@@ -435,6 +437,20 @@ it.each(["setup_incomplete", "no_auth_required"])(
     );
   },
 );
+
+it("points legacy forwarded Authorization cleanup to Identity, not guided Setup", () => {
+  state.upstreamAuthQuery = {
+    data: { status: "setup_incomplete", clients: [] },
+  };
+  state.sourceHeaders = [
+    { name: "Authorization", valueFromRequestHeader: "Authorization" },
+  ];
+  renderIdentity();
+  expect(screen.getByText("Needs cleanup").getAttribute("data-href")).toMatch(
+    /settings#settings-sign-in$/,
+  );
+  expect(screen.queryByText("Setup pending")).toBeNull();
+});
 
 it("keeps a guided server's configured credentials", () => {
   state.upstreamAuthQuery = {

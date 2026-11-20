@@ -306,8 +306,10 @@ describe("IdentityChainingSection", () => {
             failure === "missing ID" ? undefined : "missing",
         },
       ];
-      if (failure === "incomplete setup")
+      if (failure === "incomplete setup") {
         state.credentialsStatus = "setup_incomplete";
+        state.credentials = [];
+      }
       render(<IdentityChainingSection mcpServer={server} />, {
         wrapper: Router,
       });
@@ -320,6 +322,17 @@ describe("IdentityChainingSection", () => {
       });
     },
   );
+
+  it("retains existing-binding controls for resolved offers while another offer needs repair", () => {
+    state.credentials.push({ clientType: "remote_session", enabled: true });
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen.getByText(/Finish configuring the upstream credentials/),
+    ).toBeTruthy();
+    const control = screen.getByTestId("identity-chaining");
+    expect(control.getAttribute("data-linked-clients")).toBe("client");
+    expect(control.textContent).toContain('"onlyWhenOn":true');
+  });
 
   it("ignores a disabled per-person credential that names no registration", () => {
     // The organization-wide sign-in binds another server's registration.

@@ -423,7 +423,7 @@ describe("CatalogOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks turning on the server when the sign-in check cannot run", async () => {
+  it("shows an unavailable check without blocking turn on", async () => {
     mocks.signInReady = false;
     mocks.signInUnavailable = true;
     installWith([
@@ -439,12 +439,8 @@ describe("CatalogOfficialSheet", () => {
     const turnOn = await screen.findByRole("button", {
       name: "Turn on and link",
     });
-    expect((turnOn as HTMLButtonElement).disabled).toBe(true);
-    expect(
-      screen.getByText(
-        "Could not verify upstream sign-in. Retry the check above.",
-      ),
-    ).toBeTruthy();
+    expect((turnOn as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("Could not verify upstream sign-in.")).toBeTruthy();
   });
 
   it("keeps Add and link off while the catalog entry loads", () => {

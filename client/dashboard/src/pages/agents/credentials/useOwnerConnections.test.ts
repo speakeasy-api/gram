@@ -339,7 +339,10 @@ it("keeps focus refreshes in flight until all owner reads finish", async () => {
     .mockReturnValueOnce(clientsPending)
     .mockResolvedValue(undefined);
   renderHook(() => {
-    const connections = useOwnerConnections([server], true);
+    const connections = useOwnerConnections(
+      [{ ...server, kind: "Hosted" }],
+      true,
+    );
     useOAuthPopup(connections.refetch);
   });
   fireEvent(window, new Event("focus"));

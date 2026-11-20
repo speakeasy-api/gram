@@ -373,7 +373,10 @@ export function SettingsTab({
                 <div id={MCP_AUTHENTICATION_SECTION_ID} className="space-y-4">
                   <ReadinessIssueFrame anchorId={MCP_AUTHENTICATION_SECTION_ID}>
                     <SetupStepBanner mcpServer={mcpServer} />
-                    <UpstreamCredentialsSection mcpServer={mcpServer} />
+                    <UpstreamCredentialsSection
+                      key={mcpServer.id}
+                      mcpServer={mcpServer}
+                    />
                   </ReadinessIssueFrame>
                 </div>
                 <IdentityChainingSection mcpServer={mcpServer} />
@@ -463,8 +466,11 @@ export function SettingsTab({
           content: (
             <>
               <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
-              {mcpServer.tunneledMcpServerId ? (
-                <UpstreamCredentialsSection mcpServer={mcpServer} />
+              {mcpServer.tunneledMcpServerId && !mcpServer.toolsetId ? (
+                <UpstreamCredentialsSection
+                  key={mcpServer.id}
+                  mcpServer={mcpServer}
+                />
               ) : null}
               {tunneledMcpServer ? (
                 <Fragment key={tunneledMcpServer.id}>

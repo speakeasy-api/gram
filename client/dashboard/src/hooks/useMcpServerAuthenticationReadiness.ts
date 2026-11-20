@@ -1,3 +1,5 @@
+import { findPassThroughAuthorizationHeader } from "@/lib/remote-identity/model/headers";
+import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
 import { useUpstreamProbe } from "@/lib/remote-identity";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
@@ -10,6 +12,7 @@ export interface McpServerAuthenticationReadiness {
   unavailable: boolean;
   description: string;
   upstreamAuthQuery: ReturnType<typeof useMcpServerAuthentication>;
+  needsHeaderCleanup: boolean;
   identityProbeStatus: ReturnType<typeof useUpstreamProbe>;
 }
 
@@ -26,10 +29,31 @@ export function useMcpServerAuthenticationReadiness(
     { enabled: remote || tunneled, throwOnError: false },
   );
   const status = upstreamAuthQuery.data?.status;
+  // Legacy source headers are diagnostic only; they do not decide readiness.
+  const sourceHeaders = useRemoteMcpServerHeaders(
+    { remoteMcpServerId },
+    undefined,
+    {
+      enabled:
+        remote &&
+        (status === "setup_incomplete" || status === "no_auth_required"),
+      throwOnError: false,
+    },
+  );
+  const needsHeaderCleanup =
+    remote &&
+    !sourceHeaders.isError &&
+    !upstreamAuthQuery.isError &&
+    (status === "setup_incomplete" || status === "no_auth_required") &&
+    !!findPassThroughAuthorizationHeader(sourceHeaders.data?.headers ?? []);
   const identityProbeStatus = useUpstreamProbe(
     remoteMcpServerId,
     remote && !upstreamAuthQuery.isError && status === "no_auth_required",
   );
+  const knownStatus =
+    status === "configured" ||
+    status === "setup_incomplete" ||
+    status === "no_auth_required";
   const configured = !upstreamAuthQuery.isError && status === "configured";
   const acceptsAnonymous =
     !upstreamAuthQuery.isError &&
@@ -63,9 +87,12 @@ export function useMcpServerAuthenticationReadiness(
       (upstreamAuthQuery.isPending || identityProbeStatus === "loading"),
     unavailable:
       remote &&
-      (upstreamAuthQuery.isError || identityProbeStatus === "unknown"),
+      (upstreamAuthQuery.isError ||
+        identityProbeStatus === "unknown" ||
+        (status !== undefined && !knownStatus)),
     description,
     upstreamAuthQuery,
+    needsHeaderCleanup,
     identityProbeStatus,
   };
 }

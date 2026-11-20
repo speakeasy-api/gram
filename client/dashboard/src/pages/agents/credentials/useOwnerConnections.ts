@@ -30,8 +30,8 @@ export interface OwnerConnections {
  *
  * The agent does not exist yet, so this reads the person's sessions in each
  * server's project. Proxied servers choose among their own offers, while hosted
- * servers still use their issuer's registrations. Saving rechecks those same
- * sources and keeps any existing, usable attachment.
+ * servers still use their issuer's registrations. Saving rechecks eligibility
+ * with the attachment API and keeps existing, usable attachments.
  */
 export function useOwnerConnections(
   servers: InventoryServer[],
@@ -94,6 +94,14 @@ export function useOwnerConnections(
       throwOnError: false,
     })),
   });
+  const readsHostedClients = (request: (typeof issuers)[number]) =>
+    enabled &&
+    personal.some(
+      (server) =>
+        !usesTypedOwnerConnections(server) &&
+        server.projectSlug === request.gramProject &&
+        server.issuerId === request.userSessionIssuerId,
+    );
   const clients = useQueries({
     queries: issuers.map((request) => ({
       queryKey: ["owner-connections", "clients", ownerScope, request],
@@ -101,14 +109,7 @@ export function useOwnerConnections(
         collectPageItems(
           sdk.remoteSessionClients.list(request, undefined, { signal }),
         ),
-      enabled:
-        enabled &&
-        personal.some(
-          (server) =>
-            !usesTypedOwnerConnections(server) &&
-            server.projectSlug === request.gramProject &&
-            server.issuerId === request.userSessionIssuerId,
-        ),
+      enabled: readsHostedClients(request),
       retry: false,
       throwOnError: false,
     })),
@@ -276,9 +277,7 @@ export function useOwnerConnections(
       await Promise.all(
         [
           ...sessions,
-          ...clients.filter(
-            (read) => read.fetchStatus !== "idle" || read.data || read.isError,
-          ),
+          ...clients.filter((_, index) => readsHostedClients(issuers[index]!)),
           ...(agentId ? bindings : []),
           // A server's auth does not change when someone signs in, but a
           // failed read gets another try.

@@ -1482,7 +1482,6 @@ export function CredentialsWizard({
       const missing = await attachOwnerConnections(
         sdk,
         agent.id,
-        user.id,
         (allServers
           ? listedServers
           : selected.map((entry) => entry.server)
@@ -1579,7 +1578,6 @@ export function CredentialsWizard({
         const missing = await attachOwnerConnections(
           sdk,
           targetId,
-          user.id,
           reach.filter(usesOwnConnection),
           signal,
           allServers,

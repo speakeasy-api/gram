@@ -110,13 +110,8 @@ export function IdentityChainingSection({
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
   const userSessionIssuer = issuerQuery.data;
-  // Enforcing organizations attach registrations to the server as
-  // credentials, and those decide which one a call signs in through. The
-  // issuer can be shared across the organization and binds one registration,
-  // which may belong to another server, so it is read only where it still
-  // routes calls: without enforcement, or while the server's credentials do
-  // not record the upstream yet (setup is incomplete, or a per-person
-  // credential names no registration).
+  // A shared sign-in can belong to several servers. Only this server's
+  // enabled typed offers can nominate registrations for chaining.
   const credentialsQuery = useMcpServerAuthentication(
     { mcpServerId: mcpServer.id },
     undefined,
@@ -263,6 +258,17 @@ export function IdentityChainingSection({
             </Text>
           </Alert>
         </SettingsSection.Body>
+        {userSessionIssuer && resource && clients.length > 0 && (
+          <IdentityChainingField
+            userSessionIssuer={userSessionIssuer}
+            providers={providers}
+            linkedClients={clients}
+            resource={resource}
+            remoteMcpServerId={remoteMcpServerId}
+            onlyWhenOn
+            frame={(content) => content}
+          />
+        )}
       </Shell>
     );
   }

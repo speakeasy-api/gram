@@ -129,6 +129,7 @@ export function CatalogOfficialSheet({
   const link = useSaveShadowMCPOfficialServer();
   const project = useProject();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canManageCredentials = hasScope("org:admin");
   const canCreateIdentity =
     !rbacLoading && hasScope("project:write", project.id);
   const agentCredential = useAgentCredentialFields();
@@ -337,7 +338,9 @@ export function CatalogOfficialSheet({
             {stage.kind === "done"
               ? shadowMCPCreatedDescription(stage.created, shadowName)
               : stage.kind === "sign-in"
-                ? `${entryTitle} is added but stays off until people can sign in. Enter the client you registered with its provider, save it, then turn the server on.`
+                ? canManageCredentials
+                  ? `${entryTitle} is added but stays off until people can sign in. Add an upstream credential, then turn the server on.`
+                  : `${entryTitle} is added but needs an organization admin to add its upstream credential.`
                 : `Speakeasy adds the catalog version of ${entryTitle} and links it as the official version of ${shadowName}.`}
           </SheetDescription>
         </SheetHeader>
@@ -352,6 +355,12 @@ export function CatalogOfficialSheet({
               <Alert variant="warning" dismissible={false}>
                 {stage.message}
               </Alert>
+              {!canManageCredentials && (
+                <Alert variant="warning" dismissible={false}>
+                  Ask an organization admin to open this server’s Settings and
+                  finish setup under Identity.
+                </Alert>
+              )}
               <SignInSetup mcpServerId={stage.mcpServerId} />
             </Stack>
           ) : null}
@@ -587,14 +596,14 @@ function TurnOnAndLink({
   const update = useUpdateMcpServerMutation();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  // Do not publish a server whose upstream sign-in cannot be verified.
+  // A failed check is unknown, not a definitive open setup step.
   const serverQuery = useGetMcpServer({ id: mcpServerId }, undefined, {
     throwOnError: false,
   });
   const readiness = useMcpServerAuthenticationReadiness(serverQuery.data);
   const checking = serverQuery.isLoading || readiness.loading;
   const unavailable = serverQuery.isError || readiness.unavailable;
-  const signInOpen = !readiness.ready;
+  const signInOpen = !unavailable && !readiness.ready;
 
   const turnOn = async () => {
     setPending(true);
@@ -633,14 +642,14 @@ function TurnOnAndLink({
       <Text muted small className={failed ? "text-destructive" : undefined}>
         {failed ??
           (unavailable
-            ? "Could not verify upstream sign-in. Retry the check above."
+            ? "Could not verify upstream sign-in."
             : signInOpen && !checking
               ? "Save the sign-in settings above to turn it on."
               : "")}
       </Text>
       <Button
         variant="primary"
-        disabled={pending || checking || unavailable || signInOpen}
+        disabled={pending || checking || signInOpen}
         onClick={() => void turnOn()}
       >
         {pending ? (
