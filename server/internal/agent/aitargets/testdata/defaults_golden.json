@@ -1,50 +1,79 @@
 {
   "defaults": [
     {
-      "id": "claude-code",
-      "display_name": "Claude Code",
+      "id": "aider",
+      "display_name": "Aider",
       "category": "harness",
       "signatures": {
         "bundle_ids": [],
-        "binaries": ["claude"],
-        "config_dirs": ["~/.claude"],
-        "process_names": ["claude"]
+        "binaries": ["aider"],
+        "config_dirs": ["~/.aider"],
+        "process_names": ["aider"]
+      },
+      "gateway_client": {
+        "client_info_names": ["aider"]
+      }
+    },
+    {
+      "id": "amp",
+      "display_name": "Amp",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["amp"],
+        "config_dirs": [],
+        "process_names": ["amp"]
+      },
+      "gateway_client": {
+        "client_info_names": ["amp", "Amp"]
+      }
+    },
+    {
+      "id": "antigravity",
+      "display_name": "Google Antigravity",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": ["com.google.antigravity"],
+        "binaries": ["agy"],
+        "config_dirs": ["~/.gemini/antigravity", "~/.gemini/antigravity-cli"],
+        "process_names": ["Antigravity", "agy", "antigravity"]
       },
       "gateway_client": {
         "oauth_client_ids": [
-          "https://claude.ai/oauth/claude-code-client-metadata"
-        ],
-        "client_info_names": ["claude-code", "Claude Code"]
+          "https://antigravity.google/oauth/client-metadata.json"
+        ]
       }
     },
     {
-      "id": "zed",
-      "display_name": "Zed",
-      "category": "harness",
+      "id": "anythingllm",
+      "display_name": "AnythingLLM",
+      "category": "assistant",
       "signatures": {
-        "bundle_ids": ["dev.zed.Zed"],
+        "bundle_ids": [],
         "binaries": [],
-        "config_dirs": ["~/.config/zed"],
-        "process_names": ["Zed"]
+        "config_dirs": ["~/Library/Application Support/anythingllm-desktop"],
+        "process_names": ["AnythingLLM"]
       },
       "gateway_client": {
-        "cimd_vendor_keys": ["zed"],
-        "oauth_client_ids": ["https://zed.dev/oauth/client-metadata.json"]
+        "client_info_names": ["anythingllm", "AnythingLLM"]
       }
     },
     {
-      "id": "goose",
-      "display_name": "Goose",
+      "id": "augment",
+      "display_name": "Augment Code",
       "category": "harness",
       "signatures": {
         "bundle_ids": [],
-        "binaries": ["goose"],
-        "config_dirs": ["~/.config/goose"],
-        "process_names": ["goose"]
+        "binaries": [],
+        "config_dirs": [
+          "~/.vscode*/extensions/augment.vscode-augment-*",
+          "~/.cursor/extensions/augment.vscode-augment-*",
+          "~/.windsurf/extensions/augment.vscode-augment-*"
+        ],
+        "process_names": []
       },
       "gateway_client": {
-        "cimd_vendor_keys": ["block"],
-        "oauth_client_ids": ["https://goose-docs.ai/oauth/client-metadata.json"]
+        "client_info_names": ["augment", "Augment Code"]
       }
     },
     {
@@ -77,218 +106,34 @@
       }
     },
     {
-      "id": "codex",
-      "display_name": "Codex",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["codex"],
-        "config_dirs": ["~/.codex"],
-        "process_names": ["codex"]
-      },
-      "gateway_client": {
-        "oauth_client_ids": [
-          "https://chatgpt.com/oauth/codex/*/client.json",
-          "https://chatgpt.com/oauth/codex/client.json"
-        ],
-        "client_info_names": ["codex", "codex-cli", "Codex CLI"]
-      }
-    },
-    {
-      "id": "hermes-agent",
-      "display_name": "Hermes Agent",
+      "id": "cherry-studio",
+      "display_name": "Cherry Studio",
       "category": "assistant",
       "signatures": {
-        "bundle_ids": [],
-        "binaries": ["hermes"],
-        "config_dirs": ["~/.hermes"],
-        "process_names": ["hermes"]
-      },
-      "gateway_client": {
-        "cimd_vendor_keys": ["nousresearch"],
-        "oauth_client_ids": [
-          "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json"
-        ]
-      }
-    },
-    {
-      "id": "opencode",
-      "display_name": "opencode",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["opencode"],
-        "config_dirs": ["~/.config/opencode"],
-        "process_names": ["opencode"]
-      },
-      "gateway_client": {
-        "cimd_vendor_keys": ["opencode"],
-        "oauth_client_ids": ["https://opencode.ai/oauth/opencode/client.json"],
-        "client_info_names": ["opencode"]
-      }
-    },
-    {
-      "id": "conductor",
-      "display_name": "Conductor",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": ["com.conductor.app"],
+        "bundle_ids": ["com.kangfenmao.CherryStudio"],
         "binaries": [],
-        "config_dirs": ["~/.conductor"],
-        "process_names": ["conductor"]
+        "config_dirs": ["~/Library/Application Support/CherryStudio"],
+        "process_names": ["Cherry Studio"]
       },
       "gateway_client": {
-        "cimd_vendor_keys": ["conductor"],
-        "oauth_client_ids": [
-          "https://api.conductor.build/oauth/client-metadata.json"
-        ]
+        "client_info_names": ["cherry-studio", "Cherry Studio"]
       }
     },
     {
-      "id": "antigravity",
-      "display_name": "Google Antigravity",
+      "id": "claude-code",
+      "display_name": "Claude Code",
       "category": "harness",
       "signatures": {
-        "bundle_ids": ["com.google.antigravity"],
-        "binaries": ["agy"],
-        "config_dirs": ["~/.gemini/antigravity", "~/.gemini/antigravity-cli"],
-        "process_names": ["Antigravity", "agy", "antigravity"]
+        "bundle_ids": [],
+        "binaries": ["claude"],
+        "config_dirs": ["~/.claude"],
+        "process_names": ["claude"]
       },
       "gateway_client": {
         "oauth_client_ids": [
-          "https://antigravity.google/oauth/client-metadata.json"
-        ]
-      }
-    },
-    {
-      "id": "cursor",
-      "display_name": "Cursor",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": ["com.todesktop.230313mzl4w4u92"],
-        "binaries": ["cursor"],
-        "config_dirs": ["~/.cursor"],
-        "process_names": ["Cursor"]
-      },
-      "gateway_client": {
-        "client_info_names": ["Cursor", "cursor", "cursor-vscode"]
-      }
-    },
-    {
-      "id": "gemini-cli",
-      "display_name": "Gemini CLI",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["gemini"],
-        "config_dirs": ["~/.gemini/tmp"],
-        "process_names": ["gemini"]
-      },
-      "gateway_client": {
-        "client_info_names": ["gemini-cli", "Gemini CLI"]
-      }
-    },
-    {
-      "id": "windsurf",
-      "display_name": "Windsurf",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": ["com.exafunction.windsurf"],
-        "binaries": ["windsurf"],
-        "config_dirs": ["~/.codeium/windsurf"],
-        "process_names": ["Windsurf"]
-      },
-      "gateway_client": {
-        "client_info_names": ["Windsurf", "windsurf"]
-      }
-    },
-    {
-      "id": "aider",
-      "display_name": "Aider",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["aider"],
-        "config_dirs": ["~/.aider"],
-        "process_names": ["aider"]
-      },
-      "gateway_client": {
-        "client_info_names": ["aider"]
-      }
-    },
-    {
-      "id": "openclaw",
-      "display_name": "OpenClaw",
-      "category": "assistant",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["openclaw"],
-        "config_dirs": ["~/.openclaw"],
-        "process_names": ["openclaw"]
-      },
-      "gateway_client": {
-        "client_info_names": ["openclaw", "OpenClaw"]
-      }
-    },
-    {
-      "id": "pi",
-      "display_name": "Pi",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["pi"],
-        "config_dirs": ["~/.pi"],
-        "process_names": ["pi"]
-      },
-      "gateway_client": {
-        "cimd_vendor_keys": ["pi"],
-        "oauth_client_ids": [
-          "https://pi.dev/oauth/client.json",
-          "https://pi.dev/oauth/*/client.json"
+          "https://claude.ai/oauth/claude-code-client-metadata"
         ],
-        "client_info_names": ["pi"]
-      }
-    },
-    {
-      "id": "vibe",
-      "display_name": "Mistral Vibe",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["vibe"],
-        "config_dirs": ["~/.vibe"],
-        "process_names": ["vibe"]
-      },
-      "gateway_client": {
-        "client_info_names": ["vibe", "mistral-vibe", "Mistral Vibe"]
-      }
-    },
-    {
-      "id": "crush",
-      "display_name": "Crush",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["crush"],
-        "config_dirs": ["~/.config/crush"],
-        "process_names": ["crush"]
-      },
-      "gateway_client": {
-        "client_info_names": ["crush", "Crush"]
-      }
-    },
-    {
-      "id": "qwen-code",
-      "display_name": "Qwen Code",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": [],
-        "binaries": ["qwen"],
-        "config_dirs": [],
-        "process_names": ["qwen"]
-      },
-      "gateway_client": {
-        "client_info_names": ["qwen-code", "Qwen Code"]
+        "client_info_names": ["claude-code", "Claude Code"]
       }
     },
     {
@@ -310,21 +155,38 @@
       }
     },
     {
-      "id": "roo-code",
-      "display_name": "Roo Code",
+      "id": "codex",
+      "display_name": "Codex",
       "category": "harness",
       "signatures": {
         "bundle_ids": [],
-        "binaries": [],
-        "config_dirs": [
-          "~/.vscode*/extensions/rooveterinaryinc.roo-cline-*",
-          "~/.cursor/extensions/rooveterinaryinc.roo-cline-*",
-          "~/.windsurf/extensions/rooveterinaryinc.roo-cline-*"
-        ],
-        "process_names": []
+        "binaries": ["codex"],
+        "config_dirs": ["~/.codex"],
+        "process_names": ["codex"]
       },
       "gateway_client": {
-        "client_info_names": ["roo-code", "Roo Code"]
+        "oauth_client_ids": [
+          "https://chatgpt.com/oauth/codex/*/client.json",
+          "https://chatgpt.com/oauth/codex/client.json"
+        ],
+        "client_info_names": ["codex", "codex-cli", "Codex CLI"]
+      }
+    },
+    {
+      "id": "conductor",
+      "display_name": "Conductor",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": ["com.conductor.app"],
+        "binaries": [],
+        "config_dirs": ["~/.conductor"],
+        "process_names": ["conductor"]
+      },
+      "gateway_client": {
+        "cimd_vendor_keys": ["conductor"],
+        "oauth_client_ids": [
+          "https://api.conductor.build/oauth/client-metadata.json"
+        ]
       }
     },
     {
@@ -346,39 +208,31 @@
       }
     },
     {
-      "id": "kilo-code",
-      "display_name": "Kilo Code",
+      "id": "crush",
+      "display_name": "Crush",
       "category": "harness",
       "signatures": {
         "bundle_ids": [],
-        "binaries": ["kilo", "kilocode"],
-        "config_dirs": [
-          "~/.vscode*/extensions/kilocode.kilo-code-*",
-          "~/.cursor/extensions/kilocode.kilo-code-*",
-          "~/.windsurf/extensions/kilocode.kilo-code-*"
-        ],
-        "process_names": []
+        "binaries": ["crush"],
+        "config_dirs": ["~/.config/crush"],
+        "process_names": ["crush"]
       },
       "gateway_client": {
-        "client_info_names": ["kilo-code", "Kilo Code"]
+        "client_info_names": ["crush", "Crush"]
       }
     },
     {
-      "id": "augment",
-      "display_name": "Augment Code",
+      "id": "cursor",
+      "display_name": "Cursor",
       "category": "harness",
       "signatures": {
-        "bundle_ids": [],
-        "binaries": [],
-        "config_dirs": [
-          "~/.vscode*/extensions/augment.vscode-augment-*",
-          "~/.cursor/extensions/augment.vscode-augment-*",
-          "~/.windsurf/extensions/augment.vscode-augment-*"
-        ],
-        "process_names": []
+        "bundle_ids": ["com.todesktop.230313mzl4w4u92"],
+        "binaries": ["cursor"],
+        "config_dirs": ["~/.cursor"],
+        "process_names": ["Cursor"]
       },
       "gateway_client": {
-        "client_info_names": ["augment", "Augment Code"]
+        "client_info_names": ["Cursor", "cursor", "cursor-vscode"]
       }
     },
     {
@@ -400,73 +254,133 @@
       }
     },
     {
-      "id": "amp",
-      "display_name": "Amp",
+      "id": "gemini-cli",
+      "display_name": "Gemini CLI",
       "category": "harness",
       "signatures": {
         "bundle_ids": [],
-        "binaries": ["amp"],
-        "config_dirs": [],
-        "process_names": ["amp"]
+        "binaries": ["gemini"],
+        "config_dirs": ["~/.gemini/tmp"],
+        "process_names": ["gemini"]
       },
       "gateway_client": {
-        "client_info_names": ["amp", "Amp"]
+        "client_info_names": ["gemini-cli", "Gemini CLI"]
       }
     },
     {
-      "id": "openhands",
-      "display_name": "OpenHands",
+      "id": "goose",
+      "display_name": "Goose",
       "category": "harness",
       "signatures": {
         "bundle_ids": [],
-        "binaries": ["openhands"],
-        "config_dirs": [],
-        "process_names": ["openhands"]
+        "binaries": ["goose"],
+        "config_dirs": ["~/.config/goose"],
+        "process_names": ["goose"]
       },
       "gateway_client": {
-        "client_info_names": ["openhands", "OpenHands"]
+        "cimd_vendor_keys": ["block"],
+        "oauth_client_ids": ["https://goose-docs.ai/oauth/client-metadata.json"]
       }
     },
     {
-      "id": "trae",
-      "display_name": "Trae",
-      "category": "harness",
+      "id": "gpt4all",
+      "display_name": "GPT4All",
+      "category": "local_model",
       "signatures": {
-        "bundle_ids": ["com.trae.app"],
+        "bundle_ids": ["com.nomic-ai.gpt4all"],
         "binaries": [],
-        "config_dirs": ["~/.trae", "~/Library/Application Support/Trae"],
-        "process_names": ["Trae"]
-      },
-      "gateway_client": {
-        "client_info_names": ["trae", "Trae"]
+        "config_dirs": ["~/Library/Application Support/GPT4All"],
+        "process_names": ["gpt4all"]
       }
     },
     {
-      "id": "warp",
-      "display_name": "Warp",
-      "category": "harness",
-      "signatures": {
-        "bundle_ids": ["dev.warp.Warp-Stable"],
-        "binaries": [],
-        "config_dirs": ["~/.warp"],
-        "process_names": ["Warp"]
-      },
-      "gateway_client": {
-        "client_info_names": ["warp", "Warp"]
-      }
-    },
-    {
-      "id": "cherry-studio",
-      "display_name": "Cherry Studio",
+      "id": "hermes-agent",
+      "display_name": "Hermes Agent",
       "category": "assistant",
       "signatures": {
-        "bundle_ids": ["com.kangfenmao.CherryStudio"],
-        "binaries": [],
-        "config_dirs": ["~/Library/Application Support/CherryStudio"],
-        "process_names": ["Cherry Studio"]
+        "bundle_ids": [],
+        "binaries": ["hermes"],
+        "config_dirs": ["~/.hermes"],
+        "process_names": ["hermes"]
       },
       "gateway_client": {
-        "client_info_names": ["cherry-studio", "Cherry Studio"]
+        "cimd_vendor_keys": ["nousresearch"],
+        "oauth_client_ids": [
+          "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json"
+        ]
+      }
+    },
+    {
+      "id": "jan",
+      "display_name": "Jan",
+      "category": "local_model",
+      "signatures": {
+        "bundle_ids": ["jan.ai.app"],
+        "binaries": [],
+        "config_dirs": ["~/Library/Application Support/Jan", "~/.config/jan"],
+        "process_names": ["Jan"]
+      }
+    },
+    {
+      "id": "kilo-code",
+      "display_name": "Kilo Code",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["kilo", "kilocode"],
+        "config_dirs": [
+          "~/.vscode*/extensions/kilocode.kilo-code-*",
+          "~/.cursor/extensions/kilocode.kilo-code-*",
+          "~/.windsurf/extensions/kilocode.kilo-code-*"
+        ],
+        "process_names": []
+      },
+      "gateway_client": {
+        "client_info_names": ["kilo-code", "Kilo Code"]
+      }
+    },
+    {
+      "id": "koboldcpp",
+      "display_name": "KoboldCpp",
+      "category": "local_model",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["koboldcpp"],
+        "config_dirs": [],
+        "process_names": ["koboldcpp"]
+      }
+    },
+    {
+      "id": "llamacpp",
+      "display_name": "llama.cpp",
+      "category": "local_model",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["llama-server", "llama-cli"],
+        "config_dirs": [],
+        "process_names": ["llama-server"]
+      }
+    },
+    {
+      "id": "lmstudio",
+      "display_name": "LM Studio",
+      "category": "local_model",
+      "signatures": {
+        "bundle_ids": ["ai.elementlabs.lmstudio"],
+        "binaries": ["lms"],
+        "config_dirs": ["~/.lmstudio"],
+        "process_names": ["LM Studio"]
+      }
+    },
+    {
+      "id": "localai",
+      "display_name": "LocalAI",
+      "category": "local_model",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["local-ai"],
+        "config_dirs": [],
+        "process_names": ["local-ai"]
       }
     },
     {
@@ -484,17 +398,14 @@
       }
     },
     {
-      "id": "anythingllm",
-      "display_name": "AnythingLLM",
-      "category": "assistant",
+      "id": "ollama",
+      "display_name": "Ollama",
+      "category": "local_model",
       "signatures": {
-        "bundle_ids": [],
-        "binaries": [],
-        "config_dirs": ["~/Library/Application Support/anythingllm-desktop"],
-        "process_names": ["AnythingLLM"]
-      },
-      "gateway_client": {
-        "client_info_names": ["anythingllm", "AnythingLLM"]
+        "bundle_ids": ["com.electron.ollama"],
+        "binaries": ["ollama"],
+        "config_dirs": ["~/.ollama"],
+        "process_names": ["ollama"]
       }
     },
     {
@@ -512,36 +423,126 @@
       }
     },
     {
-      "id": "jan",
-      "display_name": "Jan",
-      "category": "local_model",
-      "signatures": {
-        "bundle_ids": ["jan.ai.app"],
-        "binaries": [],
-        "config_dirs": ["~/Library/Application Support/Jan", "~/.config/jan"],
-        "process_names": ["Jan"]
-      }
-    },
-    {
-      "id": "gpt4all",
-      "display_name": "GPT4All",
-      "category": "local_model",
-      "signatures": {
-        "bundle_ids": ["com.nomic-ai.gpt4all"],
-        "binaries": [],
-        "config_dirs": ["~/Library/Application Support/GPT4All"],
-        "process_names": ["gpt4all"]
-      }
-    },
-    {
-      "id": "llamacpp",
-      "display_name": "llama.cpp",
-      "category": "local_model",
+      "id": "openclaw",
+      "display_name": "OpenClaw",
+      "category": "assistant",
       "signatures": {
         "bundle_ids": [],
-        "binaries": ["llama-server", "llama-cli"],
+        "binaries": ["openclaw"],
+        "config_dirs": ["~/.openclaw"],
+        "process_names": ["openclaw"]
+      },
+      "gateway_client": {
+        "client_info_names": ["openclaw", "OpenClaw"]
+      }
+    },
+    {
+      "id": "opencode",
+      "display_name": "opencode",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["opencode"],
+        "config_dirs": ["~/.config/opencode"],
+        "process_names": ["opencode"]
+      },
+      "gateway_client": {
+        "cimd_vendor_keys": ["opencode"],
+        "oauth_client_ids": ["https://opencode.ai/oauth/opencode/client.json"],
+        "client_info_names": ["opencode"]
+      }
+    },
+    {
+      "id": "openhands",
+      "display_name": "OpenHands",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["openhands"],
         "config_dirs": [],
-        "process_names": ["llama-server"]
+        "process_names": ["openhands"]
+      },
+      "gateway_client": {
+        "client_info_names": ["openhands", "OpenHands"]
+      }
+    },
+    {
+      "id": "pi",
+      "display_name": "Pi",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["pi"],
+        "config_dirs": ["~/.pi"],
+        "process_names": ["pi"]
+      },
+      "gateway_client": {
+        "cimd_vendor_keys": ["pi"],
+        "oauth_client_ids": [
+          "https://pi.dev/oauth/*/client.json",
+          "https://pi.dev/oauth/client.json"
+        ],
+        "client_info_names": ["pi"]
+      }
+    },
+    {
+      "id": "qwen-code",
+      "display_name": "Qwen Code",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["qwen"],
+        "config_dirs": [],
+        "process_names": ["qwen"]
+      },
+      "gateway_client": {
+        "client_info_names": ["qwen-code", "Qwen Code"]
+      }
+    },
+    {
+      "id": "roo-code",
+      "display_name": "Roo Code",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": [],
+        "config_dirs": [
+          "~/.vscode*/extensions/rooveterinaryinc.roo-cline-*",
+          "~/.cursor/extensions/rooveterinaryinc.roo-cline-*",
+          "~/.windsurf/extensions/rooveterinaryinc.roo-cline-*"
+        ],
+        "process_names": []
+      },
+      "gateway_client": {
+        "client_info_names": ["roo-code", "Roo Code"]
+      }
+    },
+    {
+      "id": "trae",
+      "display_name": "Trae",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": ["com.trae.app"],
+        "binaries": [],
+        "config_dirs": ["~/.trae", "~/Library/Application Support/Trae"],
+        "process_names": ["Trae"]
+      },
+      "gateway_client": {
+        "client_info_names": ["trae", "Trae"]
+      }
+    },
+    {
+      "id": "vibe",
+      "display_name": "Mistral Vibe",
+      "category": "harness",
+      "signatures": {
+        "bundle_ids": [],
+        "binaries": ["vibe"],
+        "config_dirs": ["~/.vibe"],
+        "process_names": ["vibe"]
+      },
+      "gateway_client": {
+        "client_info_names": ["vibe", "mistral-vibe", "Mistral Vibe"]
       }
     },
     {
@@ -556,47 +557,46 @@
       }
     },
     {
-      "id": "localai",
-      "display_name": "LocalAI",
-      "category": "local_model",
+      "id": "warp",
+      "display_name": "Warp",
+      "category": "harness",
       "signatures": {
-        "bundle_ids": [],
-        "binaries": ["local-ai"],
-        "config_dirs": [],
-        "process_names": ["local-ai"]
+        "bundle_ids": ["dev.warp.Warp-Stable"],
+        "binaries": [],
+        "config_dirs": ["~/.warp"],
+        "process_names": ["Warp"]
+      },
+      "gateway_client": {
+        "client_info_names": ["warp", "Warp"]
       }
     },
     {
-      "id": "koboldcpp",
-      "display_name": "KoboldCpp",
-      "category": "local_model",
+      "id": "windsurf",
+      "display_name": "Windsurf",
+      "category": "harness",
       "signatures": {
-        "bundle_ids": [],
-        "binaries": ["koboldcpp"],
-        "config_dirs": [],
-        "process_names": ["koboldcpp"]
+        "bundle_ids": ["com.exafunction.windsurf"],
+        "binaries": ["windsurf"],
+        "config_dirs": ["~/.codeium/windsurf"],
+        "process_names": ["Windsurf"]
+      },
+      "gateway_client": {
+        "client_info_names": ["Windsurf", "windsurf"]
       }
     },
     {
-      "id": "ollama",
-      "display_name": "Ollama",
-      "category": "local_model",
+      "id": "zed",
+      "display_name": "Zed",
+      "category": "harness",
       "signatures": {
-        "bundle_ids": ["com.electron.ollama"],
-        "binaries": ["ollama"],
-        "config_dirs": ["~/.ollama"],
-        "process_names": ["ollama"]
-      }
-    },
-    {
-      "id": "lmstudio",
-      "display_name": "LM Studio",
-      "category": "local_model",
-      "signatures": {
-        "bundle_ids": ["ai.elementlabs.lmstudio"],
-        "binaries": ["lms"],
-        "config_dirs": ["~/.lmstudio"],
-        "process_names": ["LM Studio"]
+        "bundle_ids": ["dev.zed.Zed"],
+        "binaries": [],
+        "config_dirs": ["~/.config/zed"],
+        "process_names": ["Zed"]
+      },
+      "gateway_client": {
+        "cimd_vendor_keys": ["zed"],
+        "oauth_client_ids": ["https://zed.dev/oauth/client-metadata.json"]
       }
     }
   ],

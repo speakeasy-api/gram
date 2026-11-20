@@ -1,9 +1,11 @@
 package aivendors_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
@@ -19,6 +22,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +33,7 @@ func TestDatabaseCatalogPreservesShippedAdmissionAndProducts(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	snapshot, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
+	require.False(t, snapshot.BuiltIn(), "the seeded catalog loads from the database")
 	require.Len(t, snapshot.Products(), len(aivendors.Products()))
 	require.Len(t, snapshot.Catalog(), 26)
 	// Frozen expected documents and publishers are independent of the DB reader.
@@ -104,7 +109,7 @@ func TestLoadOmitsInvalidPatternsAndDeletedProducts(t *testing.T) {
 	require.NoError(t, err)
 	for _, d := range docs {
 		if d.Url == "https://chatgpt.com/oauth/*/client.json" {
-			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://*.example.com/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
+			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://*.example.com/client.json", DisplayName: d.DisplayName, Enabled: false, DeletedAt: pgtype.Timestamptz{}}))
 		}
 	}
 	require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
@@ -124,7 +129,7 @@ func TestLoadOmitsInvalidPatternsAndDeletedProducts(t *testing.T) {
 	}
 }
 
-func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
+func TestLoadOmitsDisabledPatternsWithoutRealPath(t *testing.T) {
 	t.Parallel()
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -137,7 +142,7 @@ func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
 	}
 	for _, pattern := range patterns {
 		_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
-			ID: uuid.New(), AiProductID: "zed", Url: pattern, DisplayName: "Malformed pattern", Enabled: true, IsPattern: true,
+			ID: uuid.New(), AiProductID: "zed", Url: pattern, DisplayName: "Malformed pattern", Enabled: false, IsPattern: true,
 		})
 		require.NoError(t, err)
 	}
@@ -155,7 +160,7 @@ func TestLoadOmitsPatternsWithoutRealPath(t *testing.T) {
 	}
 }
 
-func TestRefreshAcceptsIntentionallyEmptyCatalog(t *testing.T) {
+func TestRefreshRejectsEmptyCatalog(t *testing.T) {
 	t.Parallel()
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -171,10 +176,55 @@ func TestRefreshAcceptsIntentionallyEmptyCatalog(t *testing.T) {
 		require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: p.ID, DisplayName: p.DisplayName, DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}}))
 	}
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db), "startup does not restore soft-deleted products")
+	require.ErrorContains(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), "invalid AI client catalog")
+	require.Same(t, initial, store.Snapshot(), "an empty load never replaces a good snapshot")
+	loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.True(t, loaded.BuiltIn())
+	require.Empty(t, loaded.Products(), "every built-in product was soft-deleted, so the fallback keeps none")
+}
+
+func TestLoadFallsBackToTheBuiltInCatalogBeforeTheSeedRuns(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.Same(t, aivendors.CompiledSnapshot(), loaded)
+}
+
+func TestRefreshReplacesTheBuiltInCatalogOnceALoadValidates(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	logger := testenv.NewLogger(t)
+	store := aivendors.NewStore(aivendors.CompiledSnapshot())
+	require.ErrorContains(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog), "invalid AI client catalog")
+	require.Same(t, aivendors.CompiledSnapshot(), store.Snapshot())
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
-	require.Empty(t, store.Snapshot().Products())
-	require.Empty(t, store.Snapshot().Catalog())
-	require.NotEqual(t, initial.Fingerprint(), store.Snapshot().Fingerprint())
+	require.NotSame(t, aivendors.CompiledSnapshot(), store.Snapshot(), "a validated load replaces the built-in catalog even with equal content")
+	require.Equal(t, aivendors.CompiledSnapshot().Fingerprint(), store.Snapshot().Fingerprint())
+}
+
+func TestRefreshRejectsOverlappingPatternsOfTwoProducts(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	logger := testenv.NewLogger(t)
+	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	// Neither this nor the ChatGPT pattern is narrower, so attribution would depend on URL order.
+	_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
+		ID: uuid.New(), AiProductID: "zed", Url: "https://chatgpt.com/*/fixture/client.json", DisplayName: "Overlapping pattern", Enabled: true, IsPattern: true,
+	})
+	require.NoError(t, err)
+	err = store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.ErrorContains(t, err, "invalid AI client catalog")
+	require.ErrorContains(t, err, "overlap")
+	require.Same(t, initial, store.Snapshot())
 }
 
 func TestLoadListsDisabledDocumentsWithoutAdmittingThem(t *testing.T) {
@@ -235,8 +285,8 @@ func TestInvalidDeviceDefinitionsDoNotReplaceCatalog(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 			require.Same(t, initial, store.Snapshot(), "a bad definition must not replace the usable catalog")
 			loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
-			require.ErrorIs(t, err, aitargets.ErrInvalidTarget)
-			require.Nil(t, loaded, "initial reads reject the same invalid definitions")
+			require.NoError(t, err)
+			require.Same(t, aivendors.CompiledSnapshot(), loaded, "initial reads fall back on the same invalid definitions")
 		})
 	}
 }
@@ -297,6 +347,7 @@ func TestLoadedSnapshotMatchesCompiledSnapshot(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
+	require.False(t, loaded.BuiltIn(), "the seeded catalog loads from the database")
 	compiled := aivendors.CompiledSnapshot()
 	ids := func(s *aivendors.Snapshot) []string {
 		var out []string
@@ -321,15 +372,7 @@ func TestLoadedSnapshotMatchesCompiledSnapshot(t *testing.T) {
 		require.Equal(t, wantOK, gotOK, probe)
 		require.Equal(t, want, got, probe)
 	}
-	// Fingerprints differ only by order: the database lists products by id and
-	// documents by URL in byte order, the registry by declaration.
-	require.NotEqual(t, compiled.Fingerprint(), loaded.Fingerprint())
-	reordered := compiled.Products()
-	slices.SortFunc(reordered, func(a, b aivendors.Product) int { return strings.Compare(a.ID, b.ID) })
-	for i := range reordered {
-		slices.SortFunc(reordered[i].Documents, func(a, b aivendors.Document) int { return strings.Compare(a.URL, b.URL) })
-	}
-	require.Equal(t, loaded.Fingerprint(), aivendors.NewSnapshot(reordered).Fingerprint())
+	require.Equal(t, compiled.Fingerprint(), loaded.Fingerprint(), "a freshly seeded database loads the built-in catalog, order included")
 }
 
 func TestLoadRequiresValidator(t *testing.T) {
@@ -350,8 +393,8 @@ func TestRejectedCatalogIsNotPublished(t *testing.T) {
 	errRejected := errors.New("rejected")
 	reject := func(*aivendors.Snapshot) error { return errRejected }
 	snapshot, err := aivendors.Load(t.Context(), db, logger, reject)
-	require.ErrorIs(t, err, errRejected)
-	require.Nil(t, snapshot)
+	require.NoError(t, err)
+	require.Same(t, aivendors.CompiledSnapshot(), snapshot)
 	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
 	require.NoError(t, err)
 	store := aivendors.NewStore(initial)
@@ -378,10 +421,177 @@ func TestLoadedSnapshotServesTheCompiledListVersionAndETag(t *testing.T) {
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
 	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
 	require.NoError(t, err)
+	require.False(t, loaded.BuiltIn(), "the seeded catalog loads from the database")
 	t.Logf("compiled fingerprint %s, loaded fingerprint %s", aivendors.CompiledSnapshot().Fingerprint(), loaded.Fingerprint())
 
 	want := aitargets.NewOrganizationList(aivendors.CompiledSnapshot(), nil).Snapshot
 	got := aitargets.NewOrganizationList(loaded, nil).Snapshot
 	require.Equal(t, want.ListVersion, got.ListVersion)
 	require.Equal(t, want.ETag, got.ETag)
+}
+
+func TestSkippedRowIsLoggedOnceAcrossBootAndRefreshes(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	_, err = seedrepo.New(db).InsertDocument(t.Context(), seedrepo.InsertDocumentParams{
+		ID: uuid.New(), AiProductID: "zed", Url: "https://*.example.com/client.json", DisplayName: "Malformed pattern", Enabled: false, IsPattern: true,
+	})
+	require.NoError(t, err)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.Error(t, store.Refresh(cancelled, db, logger, aitargets.ValidateCatalog))
+	require.NoError(t, store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog))
+	require.Equal(t, 1, strings.Count(logs.String(), "skip AI catalog row"), "boot logs the row; refreshes and a failed read do not repeat it")
+}
+
+func TestMalformedEnabledPatternRejectsTheCatalog(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	logger := testenv.NewLogger(t)
+	initial, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	store := aivendors.NewStore(initial)
+	docs, err := seedrepo.New(db).ListDocuments(t.Context())
+	require.NoError(t, err)
+	for _, d := range docs {
+		if d.Url == "https://chatgpt.com/oauth/*/client.json" {
+			require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: "https://chatgpt.com/oauth/x*/client.json", DisplayName: d.DisplayName, Enabled: true, DeletedAt: pgtype.Timestamptz{}}))
+		}
+	}
+	err = store.Refresh(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.ErrorContains(t, err, "invalid AI client catalog")
+	require.ErrorContains(t, err, "complete path segment")
+	require.Same(t, initial, store.Snapshot(), "a broken enabled pattern keeps the working client")
+	loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.True(t, loaded.BuiltIn(), "boot falls back to the built-in catalog")
+}
+
+func TestLoadDropsNullArrayElements(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	require.NoError(t, testrepo.New(db).AddNullArrayElementsToProductFixture(t.Context(), "zed"))
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.False(t, loaded.BuiltIn())
+	target, ok := aitargets.DefaultByID(loaded, "zed")
+	require.True(t, ok)
+	want, ok := aitargets.DefaultByID(aivendors.CompiledSnapshot(), "zed")
+	require.True(t, ok)
+	require.Equal(t, want, target, "NULL elements are dropped and nothing else changes")
+}
+
+func TestBuiltInFallbackKeepsDatabaseRemovals(t *testing.T) {
+	t.Parallel()
+	const zedURL = "https://zed.dev/oauth/client-metadata.json"
+	deletedAt := pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	editZedDocument := func(t *testing.T, db *pgxpool.Pool, enabled bool, deleted pgtype.Timestamptz) {
+		t.Helper()
+		docs, err := seedrepo.New(db).ListDocuments(t.Context())
+		require.NoError(t, err)
+		for _, d := range docs {
+			if d.Url == zedURL {
+				require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: d.Url, DisplayName: d.DisplayName, Enabled: enabled, DeletedAt: deleted}))
+			}
+		}
+	}
+	for _, tc := range []struct {
+		name     string
+		remove   func(t *testing.T, db *pgxpool.Pool)
+		listed   bool
+		readdURL bool
+	}{
+		{name: "soft-deleted product", remove: func(t *testing.T, db *pgxpool.Pool) {
+			t.Helper()
+			require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: deletedAt}))
+		}},
+		{name: "disabled document", remove: func(t *testing.T, db *pgxpool.Pool) { t.Helper(); editZedDocument(t, db, false, pgtype.Timestamptz{}) }, listed: true},
+		{name: "soft-deleted document", remove: func(t *testing.T, db *pgxpool.Pool) { t.Helper(); editZedDocument(t, db, true, deletedAt) }},
+		{name: "soft-deleted then re-added document", remove: func(t *testing.T, db *pgxpool.Pool) { t.Helper(); editZedDocument(t, db, true, deletedAt) }, readdURL: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			db, err := infra.CloneTestDatabase(t, "testdb")
+			require.NoError(t, err)
+			require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+			tc.remove(t, db)
+			if tc.readdURL {
+				require.NoError(t, testrepo.New(db).InsertDocumentFixture(t.Context(), testrepo.InsertDocumentFixtureParams{ID: uuid.New(), AiProductID: "zed", Url: zedURL, DisplayName: "Zed", Enabled: true, IsPattern: false}))
+			}
+			insertInvalidProduct(t, db)
+			loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+			require.NoError(t, err)
+			require.True(t, loaded.BuiltIn())
+			decision := admission.Evaluate(loaded, admission.ModePresets, zedURL)
+			if tc.readdURL {
+				require.Equal(t, admission.OutcomeAdmit, decision.Outcome, "a live row with the same URL is not a removal")
+				return
+			}
+			require.NotEqual(t, admission.OutcomeAdmit, decision.Outcome)
+			listed := false
+			for _, preset := range loaded.Catalog() {
+				if preset.URL == zedURL {
+					listed = true
+					require.False(t, preset.Enabled)
+				}
+			}
+			require.Equal(t, tc.listed, listed)
+		})
+	}
+}
+
+func TestRefreshAppliesRemovalsWhileStillOnTheBuiltInCatalog(t *testing.T) {
+	t.Parallel()
+	const zedURL = "https://zed.dev/oauth/client-metadata.json"
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	insertInvalidProduct(t, db)
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.True(t, loaded.BuiltIn())
+	store := aivendors.NewStore(loaded)
+	require.Equal(t, admission.OutcomeAdmit, admission.Evaluate(store.Snapshot(), admission.ModePresets, zedURL).Outcome)
+
+	require.Error(t, store.Refresh(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog))
+	require.Same(t, loaded, store.Snapshot(), "an unchanged fallback is not republished")
+
+	deletedAt := pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: deletedAt}))
+	require.Error(t, store.Refresh(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog))
+	require.True(t, store.Snapshot().BuiltIn())
+	require.NotEqual(t, admission.OutcomeAdmit, admission.Evaluate(store.Snapshot(), admission.ModePresets, zedURL).Outcome)
+}
+
+func TestBuiltInFallbackWithNothingRemovedIsTheBuiltInCatalog(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	insertInvalidProduct(t, db)
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.Same(t, aivendors.CompiledSnapshot(), loaded)
+}
+
+// insertInvalidProduct adds a row aitargets rejects, so the catalog falls back.
+func insertInvalidProduct(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	_, err := seedrepo.New(db).InsertProduct(t.Context(), seedrepo.InsertProductParams{
+		ID: "invalid-fixture", VendorKey: "fixture", DisplayName: "Fixture", Category: pgtype.Text{String: "unknown", Valid: true},
+		BundleIds: []string{}, Binaries: []string{"fixture"}, ConfigDirs: []string{}, ProcessNames: []string{}, ClientInfoNames: []string{},
+	})
+	require.NoError(t, err)
 }

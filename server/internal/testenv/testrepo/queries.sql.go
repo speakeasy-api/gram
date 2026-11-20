@@ -35,6 +35,22 @@ func (q *Queries) AddAttachmentReplacementOwnerMembershipFixture(ctx context.Con
 	return result.RowsAffected(), nil
 }
 
+const addNullArrayElementsToProductFixture = `-- name: AddNullArrayElementsToProductFixture :exec
+UPDATE ai_products
+SET bundle_ids = array_append(bundle_ids, NULL),
+  binaries = array_append(binaries, NULL),
+  config_dirs = array_append(config_dirs, NULL),
+  process_names = array_append(process_names, NULL),
+  client_info_names = array_append(client_info_names, NULL)
+WHERE id = $1
+`
+
+// Appends a NULL to every array column, which the schema allows.
+func (q *Queries) AddNullArrayElementsToProductFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, addNullArrayElementsToProductFixture, id)
+	return err
+}
+
 const agePreparationFixtureClaim = `-- name: AgePreparationFixtureClaim :exec
 UPDATE remote_session_ema_bindings SET state='in_progress', claimed_at=clock_timestamp()-interval '2 minutes' WHERE id = $1 AND project_id = $2
 `
@@ -3582,6 +3598,33 @@ type InsertDeviceAgentSyncFixtureParams struct {
 
 func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDeviceAgentSyncFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertDeviceAgentSyncFixture, arg.OrganizationID, arg.Email, arg.SeenAt)
+	return err
+}
+
+const insertDocumentFixture = `-- name: InsertDocumentFixture :exec
+INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertDocumentFixtureParams struct {
+	ID          uuid.UUID
+	AiProductID string
+	Url         string
+	DisplayName string
+	Enabled     bool
+	IsPattern   bool
+}
+
+// Inserts even where a soft-deleted row holds the URL, unlike the seed.
+func (q *Queries) InsertDocumentFixture(ctx context.Context, arg InsertDocumentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDocumentFixture,
+		arg.ID,
+		arg.AiProductID,
+		arg.Url,
+		arg.DisplayName,
+		arg.Enabled,
+		arg.IsPattern,
+	)
 	return err
 }
 

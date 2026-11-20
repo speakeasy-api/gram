@@ -27,7 +27,7 @@ var catalog []byte
 
 // applyRevision changes when the application logic needs to run again even
 // though the frozen bootstrap data is unchanged.
-const applyRevision = "1"
+const applyRevision = "2"
 
 // Version hashes both the frozen data and the revision of its application logic.
 func Version() string {

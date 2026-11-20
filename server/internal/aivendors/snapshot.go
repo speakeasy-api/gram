@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // Preset identifies a document and the product that publishes it.
@@ -45,7 +47,10 @@ type Snapshot struct {
 	patterns    []Preset
 	vendors     map[string]int
 	fingerprint string
-	derived     sync.Map // values other packages compute once per snapshot
+	builtIn     bool
+	// skipped are the rows the load that built this snapshot left out.
+	skipped []string
+	derived sync.Map // values other packages compute once per snapshot
 }
 
 // NewSnapshot builds indexes over validated catalog data and takes ownership of
@@ -59,6 +64,8 @@ func NewSnapshot(products []Product) *Snapshot {
 		patterns:    nil,
 		vendors:     make(map[string]int),
 		fingerprint: "",
+		builtIn:     false,
+		skipped:     nil,
 		derived:     sync.Map{},
 	}
 	for _, p := range products {
@@ -140,19 +147,50 @@ func (p Product) withEmptyAsNil() Product {
 	return p
 }
 
-// CompiledSnapshot returns the process's one immutable snapshot of the compiled
-// registry, shaped like a database snapshot: families and aliases stay with the
-// package-level registry.
+// CompiledSnapshot is the built-in registry in database order: products by id, then documents by URL.
 func CompiledSnapshot() *Snapshot { return compiledSnapshot() }
 
-var compiledSnapshot = sync.OnceValue(func() *Snapshot {
-	products := Products()
-	for i := range products {
-		products[i].Family = ""
-		products[i].Aliases = nil
+var compiledSnapshot = sync.OnceValue(func() *Snapshot { return builtInSnapshot(removals{products: nil, documents: nil}) })
+
+// removals are the built-in rows the database soft-deleted or disabled.
+type removals struct {
+	products map[string]struct{}
+	// documents maps a URL to true when a disabled live row holds it, false when it is deleted.
+	documents map[string]bool
+}
+
+// builtInSnapshot is the built-in registry in database order with removals applied.
+func builtInSnapshot(removed removals) *Snapshot {
+	registry := Products()
+	products := make([]Product, 0, len(registry))
+	for _, p := range registry {
+		if _, gone := removed.products[p.ID]; gone {
+			continue
+		}
+		p.Family = ""
+		p.Aliases = nil
+		var documents []Document
+		for _, d := range p.Documents {
+			if live, ok := removed.documents[d.URL]; ok {
+				if !live {
+					continue
+				}
+				d.Enabled = false
+			}
+			documents = append(documents, d)
+		}
+		p.Documents = documents
+		slices.SortFunc(p.Documents, func(a, b Document) int { return strings.Compare(a.URL, b.URL) })
+		products = append(products, p)
 	}
-	return NewSnapshot(products)
-})
+	slices.SortFunc(products, func(a, b Product) int { return strings.Compare(a.ID, b.ID) })
+	s := NewSnapshot(products)
+	s.builtIn = true
+	return s
+}
+
+// BuiltIn reports whether this is the built-in catalog rather than a database load.
+func (s *Snapshot) BuiltIn() bool { return s.builtIn }
 
 // Fingerprint hashes the complete snapshot, including product and document
 // order, which is listing order.
@@ -243,6 +281,10 @@ func Derived[K comparable, T any](s *Snapshot, key K, compute func(*Snapshot) T)
 // and uses that view throughout; refreshing never mutates a captured view.
 type Store struct {
 	refreshMu sync.Mutex
+	// reported holds the skipped rows already logged, guarded by refreshMu.
+	reported map[string]struct{}
+	// confirmed is when the served snapshot last matched the database, in Unix nanoseconds.
+	confirmed atomic.Int64
 
 	mu       sync.RWMutex
 	snapshot *Snapshot
@@ -253,7 +295,13 @@ func NewStore(snapshot *Snapshot) *Store {
 	if snapshot == nil {
 		panic("AI catalog requires an initial snapshot")
 	}
-	return &Store{refreshMu: sync.Mutex{}, mu: sync.RWMutex{}, snapshot: snapshot}
+	reported := make(map[string]struct{}, len(snapshot.skipped))
+	for _, row := range snapshot.skipped {
+		reported[row] = struct{}{}
+	}
+	s := &Store{refreshMu: sync.Mutex{}, reported: reported, confirmed: atomic.Int64{}, mu: sync.RWMutex{}, snapshot: snapshot}
+	s.confirmed.Store(time.Now().UnixNano())
+	return s
 }
 
 // Snapshot captures one catalog revision.
@@ -291,11 +339,14 @@ func (s *Store) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// Publish replaces the current snapshot unless next has the same content.
+// Publish replaces the current snapshot unless next has the same content; it always replaces the built-in one.
 func (s *Store) Publish(next *Snapshot) {
+	if next == nil {
+		panic("aivendors: publish requires a snapshot")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.snapshot.Fingerprint() != next.Fingerprint() {
+	if s.snapshot.builtIn || s.snapshot.Fingerprint() != next.Fingerprint() {
 		s.snapshot = next
 	}
 }

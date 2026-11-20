@@ -191,3 +191,14 @@ func TestValidateTargetAcceptsALegallyEscapedMatcher(t *testing.T) {
 	_, err := cimd.ValidateClientIDURL(clientID)
 	require.NoError(t, err, "the authorization-time gate must accept it too")
 }
+
+func TestValidateCatalogChecksDocumentURLsOfUnscannedProducts(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, aitargets.ValidateCatalog(aivendors.CompiledSnapshot()))
+	for _, url := range []string{"http://example.com/client.json", "https://example.com", "https://example.com/client.json#x", "https://user@example.com/client.json", "https://example.com/../client.json"} {
+		catalog := aivendors.NewSnapshot([]aivendors.Product{{ID: "oauth-only", VendorKey: "oauth-only", DisplayName: "OAuth only", Documents: []aivendors.Document{{URL: url, DisplayName: "Doc", Enabled: true}}}})
+		require.ErrorIs(t, aitargets.ValidateCatalog(catalog), aitargets.ErrInvalidTarget, url)
+	}
+	disabled := aivendors.NewSnapshot([]aivendors.Product{{ID: "oauth-only", VendorKey: "oauth-only", DisplayName: "OAuth only", Documents: []aivendors.Document{{URL: "http://example.com/client.json", DisplayName: "Doc", Enabled: false}}}})
+	require.NoError(t, aitargets.ValidateCatalog(disabled), "disabled documents admit nobody")
+}
