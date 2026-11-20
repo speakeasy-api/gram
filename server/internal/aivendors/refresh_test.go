@@ -157,7 +157,7 @@ func TestRefreshMetricsMove(t *testing.T) {
 		go func() {
 			defer close(done)
 			store.run(ctx, logger, failures, func(context.Context) error {
-				if calls.Add(1) <= 2 {
+				if n := calls.Add(1); n != 3 {
 					return errors.New("database unavailable")
 				}
 				store.confirmed.Store(time.Now().UnixNano())
@@ -172,13 +172,19 @@ func TestRefreshMetricsMove(t *testing.T) {
 		synctest.Wait()
 		count, age, builtIn := read()
 		require.Equal(t, int64(2), count)
-		require.InDelta(t, (2 * RefreshInterval).Seconds(), age, 1)
+		require.Zero(t, age, "no age is reported while the built-in catalog is served")
 		require.Equal(t, int64(1), builtIn)
 		<-time.After(RefreshInterval)
 		synctest.Wait()
 		count, age, builtIn = read()
 		require.Equal(t, int64(2), count)
 		require.InDelta(t, 0, age, 1)
+		require.Equal(t, int64(0), builtIn)
+		<-time.After(2 * RefreshInterval)
+		synctest.Wait()
+		count, age, builtIn = read()
+		require.Equal(t, int64(4), count)
+		require.InDelta(t, (2 * RefreshInterval).Seconds(), age, 1)
 		require.Equal(t, int64(0), builtIn)
 		cancel()
 		<-done

@@ -552,6 +552,29 @@ func TestBuiltInFallbackKeepsDatabaseRemovals(t *testing.T) {
 	}
 }
 
+func TestRefreshAppliesRemovalsWhileStillOnTheBuiltInCatalog(t *testing.T) {
+	t.Parallel()
+	const zedURL = "https://zed.dev/oauth/client-metadata.json"
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	insertInvalidProduct(t, db)
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.True(t, loaded.BuiltIn())
+	store := aivendors.NewStore(loaded)
+	require.Equal(t, admission.OutcomeAdmit, admission.Evaluate(store.Snapshot(), admission.ModePresets, zedURL).Outcome)
+
+	require.Error(t, store.Refresh(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog))
+	require.Same(t, loaded, store.Snapshot(), "an unchanged fallback is not republished")
+
+	deletedAt := pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: deletedAt}))
+	require.Error(t, store.Refresh(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog))
+	require.True(t, store.Snapshot().BuiltIn())
+	require.NotEqual(t, admission.OutcomeAdmit, admission.Evaluate(store.Snapshot(), admission.ModePresets, zedURL).Outcome)
+}
+
 func TestBuiltInFallbackWithNothingRemovedIsTheBuiltInCatalog(t *testing.T) {
 	t.Parallel()
 	db, err := infra.CloneTestDatabase(t, "testdb")

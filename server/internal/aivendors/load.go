@@ -178,6 +178,12 @@ func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 		}
 		s.reported = reported
 	}
+	if errors.Is(err, errRejected) {
+		// A process still on the fallback picks up removals made since it booted.
+		if current := s.Snapshot(); current.builtIn && current.Fingerprint() != next.Fingerprint() {
+			s.Publish(next)
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -231,10 +237,11 @@ func (s *Store) refreshMetrics(logger *slog.Logger, meterProvider metric.MeterPr
 		return failures, func() {}
 	}
 	registration, err := meter.RegisterCallback(func(_ context.Context, o metric.Observer) error {
-		o.ObserveFloat64(age, time.Since(time.Unix(0, s.confirmed.Load())).Seconds())
 		var serving int64
 		if s.Snapshot().builtIn {
 			serving = 1
+		} else {
+			o.ObserveFloat64(age, time.Since(time.Unix(0, s.confirmed.Load())).Seconds())
 		}
 		o.ObserveInt64(builtIn, serving)
 		return nil

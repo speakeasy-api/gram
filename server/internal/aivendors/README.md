@@ -8,7 +8,9 @@ removed: a soft-deleted product is dropped, a URL whose only live rows are
 disabled is disabled, and a URL with no live row is dropped. A live row with the
 same id or URL is not a removal. Other edits, such as a renamed product or
 changed signatures, are not carried into the fallback. Reading the removals is
-part of the read, so if it fails the process does not start. A fresh
+part of the read, so if it fails the process does not start. A process still
+on the fallback applies later removals on its next refresh; a process serving a
+database snapshot keeps that snapshot while the table is invalid. A fresh
 environment that has not run the seed has nothing removed and serves
 `CompiledSnapshot` itself. Only the `ai-client-catalog` startup seed and the
 demo seed write catalog rows.
@@ -35,7 +37,7 @@ the read itself.
 
 Metrics: `ai_catalog.refresh.failures` counts failed refreshes,
 `ai_catalog.snapshot.age` is the seconds since the served snapshot last matched
-the database, and `ai_catalog.built_in` is 1 while a process serves the
+the database (not reported while the built-in catalog is served), and `ai_catalog.built_in` is 1 while a process serves the
 built-in catalog. A skipped row is logged by the load that first sees it, and a
 refresh error is logged when it changes, not every minute.
 
