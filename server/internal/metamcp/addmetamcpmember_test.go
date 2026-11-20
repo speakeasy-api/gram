@@ -582,7 +582,7 @@ func TestAddMetaMcpMember_RejectsRetiredApprovalsServer(t *testing.T) {
 // OAuth client to the gateway's issuer, so consent offers the provider with
 // no manual attach. A second member on the same upstream is a no-op: one
 // client per upstream per issuer.
-func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
+func TestAddMetaMcpMember_DoesNotBindProviderClients(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -693,8 +693,8 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 		SortOrder:        nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, gatewayClientsForUpstream(remoteIssuerID),
-		"member's client must be bound to the gateway issuer")
+	require.Zero(t, gatewayClientsForUpstream(remoteIssuerID),
+		"adding a member does not write an issuer-client pair")
 
 	// Second member on the same upstream: attach succeeds, binding count for
 	// that upstream stays at one.
@@ -710,7 +710,7 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 		SortOrder:        nil,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, gatewayClientsForUpstream(remoteIssuerID),
+	require.Zero(t, gatewayClientsForUpstream(remoteIssuerID),
 		"one client per upstream per issuer")
 }
 
