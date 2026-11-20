@@ -114,11 +114,18 @@ func seedAttachedResource(t *testing.T, ctx context.Context, ti *testInstance, s
 	})
 	require.NoError(t, err)
 	client := seedIssuerClient(t, ctx, ti, issuer, usi.ID, resourceIdentifier)
-	offers := authclientbackfill.New(ti.conn)
-	authClientID, err := offers.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client.ID)})
-	require.NoError(t, err)
-	require.NoError(t, offers.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: target.ID, AuthClientID: authClientID, Source: "admin"}))
+	offerResourceDisplayClient(t, ctx, ti, target.ID, client)
+
 	return attachedResource{serverID: target.ID, userSessionIssuerID: usi.ID, issuer: issuer, client: client}
+}
+
+func offerResourceDisplayClient(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID, client remotesessionsrepo.RemoteSessionClient) {
+	t.Helper()
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	q := authclientbackfill.New(ti.conn)
+	id, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: client.ProjectID, ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client.ID)})
+	require.NoError(t, err)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: serverID, AuthClientID: id, Source: "admin"}))
 }
 
 // seedIssuerClient registers one client on issuer, binds it to the
@@ -422,7 +429,7 @@ func TestUpdateServer_ReprobeRetriesOnResaveAfterFailedMove(t *testing.T) {
 // With two clients bound to the registration, a failed move leaves both
 // claiming the new URL with nothing to show; once discovery recovers, saving
 // again fills both — an empty identifier would have left neither selectable.
-func TestUpdateServer_FailedMoveRecoversEveryBoundClient(t *testing.T) {
+func TestUpdateServer_FailedMoveRecoversEveryOfferedClient(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestServiceForProbe(t)
@@ -449,6 +456,7 @@ func TestUpdateServer_FailedMoveRecoversEveryBoundClient(t *testing.T) {
 	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://a.example.test/mcp")
 	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
 	second := seedIssuerClient(t, ctx, ti, attached.issuer, attached.userSessionIssuerID, "https://a.example.test/mcp")
+	offerResourceDisplayClient(t, ctx, ti, attached.serverID, second)
 
 	updateServerURL(t, ctx, ti, server, origin)
 	requireClaimWithoutDisplay(t, loadClient(t, ctx, ti, attached.client), origin)
@@ -697,7 +705,7 @@ func TestUpdateServer_OverlappingSavesReadPreviousURLUnderLock(t *testing.T) {
 	require.Equal(t, "Resource C", conv.FromPGTextOrEmpty[string](client.ResourceName))
 }
 
-// A bound client deleted between the claim's list and its re-read is stale,
+// An offered client deleted between the claim's list and its re-read is stale,
 // not a failed save: the move lands and the surviving client is claimed.
 func TestUpdateServer_ClientDeletedDuringClaimIsSkipped(t *testing.T) {
 	t.Parallel()
@@ -709,6 +717,7 @@ func TestUpdateServer_ClientDeletedDuringClaimIsSkipped(t *testing.T) {
 	server := seedRemoteMcpServerWithURL(t, ctx, ti, "https://a.example.test/mcp")
 	attached := seedAttachedResource(t, ctx, ti, server, "https://a.example.test/mcp")
 	doomed := seedIssuerClient(t, ctx, ti, attached.issuer, attached.userSessionIssuerID, "https://a.example.test/mcp")
+	offerResourceDisplayClient(t, ctx, ti, attached.serverID, doomed)
 
 	ti.service.SetBeforeClaim(func(uint32, string) {
 		_, err := remotesessionsrepo.New(ti.conn).DeleteRemoteSessionClient(ctx, remotesessionsrepo.DeleteRemoteSessionClientParams{
@@ -747,11 +756,7 @@ func TestUpdateServer_ReprobesOrganizationScopedClient(t *testing.T) {
 	orgClient := seedScopedIssuerClient(t, ctx, ti, attached.issuer, uuid.NullUUID{}, attached.userSessionIssuerID, "https://a.example.test/mcp")
 	require.False(t, orgClient.ProjectID.Valid)
 
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	offers := authclientbackfill.New(ti.conn)
-	authClientID, err := offers.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.NullUUID{}, ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(orgClient.ID)})
-	require.NoError(t, err)
-	require.NoError(t, offers.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: attached.serverID, AuthClientID: authClientID, Source: "admin"}))
+	offerResourceDisplayClient(t, ctx, ti, attached.serverID, orgClient)
 
 	updateServerURL(t, ctx, ti, server, upstream.URL)
 
