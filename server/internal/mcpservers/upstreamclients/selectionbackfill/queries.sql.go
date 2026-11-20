@@ -284,6 +284,7 @@ offered_oauth AS (
     FROM mcp_server_auth_clients AS l
     JOIN reachable AS r
       ON r.id = l.mcp_server_id
+     AND r.project_id = l.project_id
     JOIN mcp_auth_clients AS ac
       ON ac.id = l.auth_client_id
      AND ac.organization_id = l.organization_id
@@ -304,10 +305,11 @@ typed_eligible AS (
     JOIN remote_session_issuers AS rsi
       ON rsi.id = c.remote_session_issuer_id
      AND rsi.deleted IS FALSE
-    JOIN remote_session_client_user_session_issuers AS binding
-      ON binding.remote_session_client_id = o.remote_session_client_id
-     AND binding.user_session_issuer_id = $4
+    JOIN reachable AS r ON r.id = o.mcp_server_id
+    CROSS JOIN session_issuer AS si
     WHERE o.client_type IN ('remote_session', 'service_account')
+      AND (c.project_id = r.project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = si.organization_id)))
+      AND (rsi.project_id = r.project_id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = si.organization_id)))
     GROUP BY o.mcp_server_id, o.remote_session_client_id
     HAVING count(DISTINCT o.auth_client_id) = 1
 )
@@ -377,9 +379,6 @@ SELECT r.id AS mcp_server_id,
                JOIN remote_session_clients AS c
                  ON c.id = a.remote_session_client_id
                 AND c.deleted IS FALSE
-               JOIN remote_session_client_user_session_issuers AS link
-                 ON link.remote_session_client_id = a.remote_session_client_id
-                AND link.user_session_issuer_id = $4
                WHERE a.mcp_server_id = r.id
                  AND a.remote_session_client_id = sel.remote_session_client_id
                  AND a.deleted IS FALSE
@@ -421,9 +420,6 @@ SELECT r.id AS mcp_server_id,
            JOIN remote_session_clients AS c
              ON c.id = a.remote_session_client_id
             AND c.deleted IS FALSE
-           JOIN remote_session_client_user_session_issuers AS link
-             ON link.remote_session_client_id = a.remote_session_client_id
-            AND link.user_session_issuer_id = $4
            WHERE a.mcp_server_id = r.id
              AND a.deleted IS FALSE
          ) END
@@ -465,11 +461,8 @@ type ListUpstreamClientSelectionCoverageRow struct {
 // is the auth clients a server offers, not its upstream OAuth client
 // associations, and a recorded choice counts as the typed resolver reads it.
 // The enabled OAuth-backed auth clients each reachable server offers.
-// The registrations of those clients the credential's issuer binds, which is
-// what a choice can be decided from without a person picking it, as
-// RecordUpstreamClientSelections decides it: the registration and its issuer
-// are live, and exactly one offered client uses it. A registration two
-// clients share names neither, so the resolver serves its choice as ambiguous.
+// Match the live recorder: distinct typed offers with live registrations
+// and providers in scope. Compatibility parents do not confer eligibility.
 func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg ListUpstreamClientSelectionCoverageParams) ([]ListUpstreamClientSelectionCoverageRow, error) {
 	rows, err := q.db.Query(ctx, listUpstreamClientSelectionCoverage,
 		arg.CredentialKind,
