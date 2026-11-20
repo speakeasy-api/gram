@@ -147,7 +147,7 @@ func authClientGapHappened(reason string) mcpconnectionattempts.Code {
 // memberConnectionOption records a member proxy's refused tool calls under its gateway.
 func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateContext, member metaMember) remotemcp.BuildOption {
 	return remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
-		Scope:            gate.connectionScope(ctx, s.aiCatalog.Snapshot()),
+		Scope:            gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx)),
 		Details:          []mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)},
 		UpstreamFailures: false,
 		SelfCredential:   false,
@@ -161,7 +161,7 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 		what = gate.memberNoCredentialHappened(member)
 	}
 	// Kept beside a provider_refresh row: only this row carries member_id.
-	s.recordRequestOutcome(ctx, gate.connectionScope(ctx, s.aiCatalog.Snapshot()), what, gate.request, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)}, opts...)...)
+	s.recordRequestOutcome(ctx, gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx)), what, gate.request, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)}, opts...)...)
 }
 
 // consentRefusalHappened is the code for whoever a consent refusal's message tells to act first.
@@ -232,7 +232,7 @@ func (s *Service) recordHostedToolsCallOutcome(ctx context.Context, payload *mcp
 	if code == mcpconnectionattempts.CodeProviderRejected && resolvedCaller(ctx) == nil {
 		return
 	}
-	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx, s.aiCatalog.Snapshot()))
+	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx, s.aiCatalog.SnapshotFor(ctx)))
 	s.recordRequestOutcome(ctx, scope, code, payload.request, callerSubject(ctx), s.reportedClient(ctx, payload.request, sessionClientInfoProjectID(payload), sessionClientInfoScope(payload)))
 }
 

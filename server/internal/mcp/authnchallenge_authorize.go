@@ -104,7 +104,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	baseURL := s.resourceBaseURL(r, endpoint)
 
 	// One snapshot drives admission, the AI tool block check and attribution here.
-	clientCatalog := s.aiCatalog.Snapshot()
+	clientCatalog := s.aiCatalog.SnapshotFor(ctx)
 
 	// A client_id naming this endpoint is a misconfigured client, not a client
 	// metadata document. Refused ahead of admission so every admission mode

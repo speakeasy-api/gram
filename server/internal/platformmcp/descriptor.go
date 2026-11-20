@@ -248,22 +248,20 @@ func (r *Registrar) withAICatalog(catalog *aivendors.Store) {
 	}
 }
 
-type aiCatalogSnapshotKey struct{}
-
 // withAICatalogSnapshot pins one catalog snapshot for the rest of a request.
 func (r *Registrar) withAICatalogSnapshot(ctx context.Context) context.Context {
-	return context.WithValue(ctx, aiCatalogSnapshotKey{}, r.aiCatalogSnapshot(ctx))
+	if r.aiCatalog == nil {
+		panic("platformmcp: AI client catalog store was not injected")
+	}
+	return r.aiCatalog.Pin(ctx)
 }
 
 // aiCatalogSnapshot returns the request's pinned snapshot, or captures one.
 func (r *Registrar) aiCatalogSnapshot(ctx context.Context) *aivendors.Snapshot {
-	if snapshot, ok := ctx.Value(aiCatalogSnapshotKey{}).(*aivendors.Snapshot); ok {
-		return snapshot
-	}
 	if r.aiCatalog == nil {
 		panic("platformmcp: AI client catalog store was not injected")
 	}
-	return r.aiCatalog.Snapshot()
+	return r.aiCatalog.SnapshotFor(ctx)
 }
 
 func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {

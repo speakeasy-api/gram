@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -32,23 +33,26 @@ import (
 )
 
 type mcpServerRuntime struct {
-	MCP      *mcp.Service
-	Metadata *mcpmetadata.Service
+	AICatalog *aivendors.Store
+	MCP       *mcp.Service
+	Metadata  *mcpmetadata.Service
 }
 
 type mcpServerRuntimeDependencies struct {
-	MCP      *mcp.Service
-	Metadata *mcpmetadata.Service
+	AICatalog *aivendors.Store
+	MCP       *mcp.Service
+	Metadata  *mcpmetadata.Service
 }
 
 func buildMCPServerRuntime(deps mcpServerRuntimeDependencies) (*mcpServerRuntime, error) {
-	if deps.MCP == nil || deps.Metadata == nil {
+	if deps.AICatalog == nil || deps.MCP == nil || deps.Metadata == nil {
 		return nil, errors.New("MCP server runtime dependencies are incomplete")
 	}
 
 	return &mcpServerRuntime{
-		MCP:      deps.MCP,
-		Metadata: deps.Metadata,
+		AICatalog: deps.AICatalog,
+		MCP:       deps.MCP,
+		Metadata:  deps.Metadata,
 	}, nil
 }
 
@@ -256,6 +260,7 @@ func servePrivateIngress(
 		telemetry,
 	))
 	mux.Use(middleware.SessionMiddleware)
+	mux.Use(deps.Runtime.AICatalog.Middleware)
 	mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
 
 	listener, err := net.Listen("tcp", address)

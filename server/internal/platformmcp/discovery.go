@@ -158,7 +158,6 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			principal := mustPrincipal(ctx)
-			ctx = runtime.registrar.withAICatalogSnapshot(ctx)
 			mode := runtime.discoveryModeFor(ctx, logger, principal)
 			ctx = context.WithValue(ctx, discoveryModeKey{}, mode)
 			if mode == discoveryFull {

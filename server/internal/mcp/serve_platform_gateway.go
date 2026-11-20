@@ -124,7 +124,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		organizationGateway: true,
 		organizationID:      organization.ID,
 		tokens:              nil,
-		projectTokens:       s.newOrganizationGatewayTokens(nil, resolved, urn.NewUserSubject(userID), skipped),
+		projectTokens:       s.newOrganizationGatewayTokens(ctx, nil, resolved, urn.NewUserSubject(userID), skipped),
 		memberChoices:       choices,
 		userSessionIssuerID: metaServer.UserSessionIssuerID.UUID,
 		connectRoot:         connectRoot,

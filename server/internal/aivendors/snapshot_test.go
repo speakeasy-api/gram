@@ -1,9 +1,14 @@
 package aivendors
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -216,4 +221,105 @@ func TestSnapshotOwnsAllMutableData(t *testing.T) {
 	require.Equal(t, expectedCatalog, snapshot.Catalog())
 	require.Equal(t, fingerprint, NewSnapshot(snapshot.Products()).Fingerprint())
 	require.Equal(t, fingerprint, snapshot.Fingerprint())
+}
+
+func swappedSnapshot() *Snapshot {
+	products := Products()
+	products[0].DisplayName = "Swapped"
+	return NewSnapshot(products)
+}
+
+func TestPinnedSnapshotSurvivesPublish(t *testing.T) {
+	t.Parallel()
+	initial := NewSnapshot(Products())
+	store := NewStore(initial)
+	ctx := store.Pin(t.Context())
+	next := swappedSnapshot()
+	store.Publish(next)
+	require.Same(t, initial, store.SnapshotFor(ctx))
+	require.Same(t, initial, store.SnapshotFor(store.Pin(ctx)), "an existing pin is kept")
+	require.Same(t, next, store.SnapshotFor(t.Context()))
+}
+
+func TestMiddlewarePinsOneSnapshotPerRequest(t *testing.T) {
+	t.Parallel()
+	initial := NewSnapshot(Products())
+	store := NewStore(initial)
+	next := swappedSnapshot()
+	var first, second *Snapshot
+	handler := store.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		first = store.SnapshotFor(r.Context())
+		store.Publish(next)
+		second = store.SnapshotFor(r.Context())
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	require.Same(t, initial, first)
+	require.Same(t, initial, second)
+	require.Same(t, next, store.Snapshot())
+}
+
+func TestMiddlewareWithoutStoreFailsWhenRegistered(t *testing.T) {
+	t.Parallel()
+	var store *Store
+	require.Panics(t, func() { store.Middleware(http.NotFoundHandler()) })
+}
+
+func TestDerivedComputesOncePerSnapshot(t *testing.T) {
+	t.Parallel()
+	type key struct{}
+	calls := 0
+	compute := func(*Snapshot) int {
+		calls++
+		return calls
+	}
+	first := NewSnapshot(Products())
+	require.Equal(t, 1, Derived(first, key{}, compute))
+	require.Equal(t, 1, Derived(first, key{}, compute))
+	require.Equal(t, 2, Derived(NewSnapshot(Products()), key{}, compute))
+}
+
+func TestDerivedComputesOnceUnderConcurrentFirstReads(t *testing.T) {
+	t.Parallel()
+	type key struct{}
+	snapshot := NewSnapshot(Products())
+	var calls atomic.Int32
+	release := make(chan struct{})
+	compute := func(*Snapshot) int {
+		calls.Add(1)
+		<-release
+		return 7
+	}
+	var wg sync.WaitGroup
+	var started atomic.Int32
+	results := make([]int, 16)
+	for i := range results {
+		wg.Go(func() {
+			started.Add(1)
+			results[i] = Derived(snapshot, key{}, compute)
+		})
+	}
+	require.Eventually(t, func() bool { return started.Load() == int32(len(results)) && calls.Load() > 0 }, 5*time.Second, time.Millisecond)
+	close(release)
+	wg.Wait()
+	require.Equal(t, int32(1), calls.Load())
+	for _, got := range results {
+		require.Equal(t, 7, got)
+	}
+}
+
+func TestDerivedRefusesAKeyReusedForAnotherType(t *testing.T) {
+	t.Parallel()
+	type key struct{}
+	snapshot := NewSnapshot(Products())
+	require.Equal(t, 1, Derived(snapshot, key{}, func(*Snapshot) int { return 1 }))
+	require.Panics(t, func() { Derived(snapshot, key{}, func(*Snapshot) string { return "" }) })
+}
+
+func TestPinBelongsToItsStore(t *testing.T) {
+	t.Parallel()
+	first := NewStore(NewSnapshot(Products()))
+	second := NewStore(NewSnapshot(Products()))
+	ctx := first.Pin(t.Context())
+	require.Same(t, first.Snapshot(), first.SnapshotFor(ctx))
+	require.Same(t, second.Snapshot(), second.SnapshotFor(ctx))
 }

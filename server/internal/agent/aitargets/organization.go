@@ -133,9 +133,9 @@ func Served(entries []Entry) []Target {
 
 // DefaultByID resolves a catalog default by id.
 func DefaultByID(catalog *aivendors.Snapshot, id string) (Target, bool) {
-	for _, target := range Defaults(catalog) {
+	for _, target := range catalogDefaultsOf(catalog).targets {
 		if target.ID == id {
-			return target, true
+			return target.Clone(), true
 		}
 	}
 	return ZeroTarget(), false
@@ -239,12 +239,11 @@ func LoadOrganizationList(ctx context.Context, queries *repo.Queries, organizati
 // list_version identifies the built-in targets; organization edits move only
 // the ETag.
 func NewOrganizationList(catalog *aivendors.Snapshot, entries []Entry) *OrganizationList {
-	defaults := Defaults(catalog)
-	listVersion := ListVersion(defaults)
-	overlaid := Overlay(defaults, entries)
+	defaults := catalogDefaultsOf(catalog)
+	overlaid := Overlay(defaults.targets, entries)
 	return &OrganizationList{
 		Entries:  overlaid,
-		Snapshot: NewSnapshot(listVersion, Served(overlaid)),
+		Snapshot: NewSnapshot(defaults.listVersion, Served(overlaid)),
 	}
 }
 

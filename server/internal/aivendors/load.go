@@ -102,11 +102,7 @@ func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.snapshot.Fingerprint() != next.Fingerprint() {
-		s.snapshot = next
-	}
+	s.Publish(next)
 	return nil
 }
 

@@ -458,12 +458,12 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// containment still resolve through the same admission checks.
 	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
 	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
-	runtime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{MCP: mcpService, Metadata: metadata})
+	runtime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{AICatalog: aiCatalog, MCP: mcpService, Metadata: metadata})
 	if err != nil {
 		return fmt.Errorf("build MCP server runtime: %w", err)
 	}
 
-	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, platformHosts, chatSessions, publishers)
+	mux, err := newMCPServerMux(c, logger, db, serverURL, aiCatalog, authenticationHost, platformHosts, chatSessions, publishers)
 	if err != nil {
 		return err
 	}
@@ -545,7 +545,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 // newMCPServerMux builds the public listener middleware chain for the MCP
 // tier. It mirrors the public-route portion of the `gram start` chain and
 // omits the marketplace, hooks, and management-API layers.
-func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, platformHosts map[string]string, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
+func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, aiCatalog *aivendors.Store, authenticationHost *mcp.AuthenticationHost, platformHosts map[string]string, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
 	mux := goahttp.NewMuxer()
 	mux.Use(middleware.NetworkServingPolicyVersion)
 	mux.Use(middleware.StripPrivateIngressHeaders)
@@ -581,6 +581,8 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
 	// every route the host does not serve, and above customdomains.Middleware,
 	// which refuses hosts it does not know.
+	// Above the authentication host, whose router serves its routes itself.
+	mux.Use(aiCatalog.Middleware)
 	mux.Use(authenticationHost.Middleware)
 	mux.Use(mcpSecurity)
 	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
