@@ -5,6 +5,7 @@ import {
   selectorMatches,
   selectorMatchesStrict,
 } from "@/hooks/useRBAC";
+import { scopeExclusions } from "@/lib/authz.gen";
 
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant } from "@gram/client/models/components/rolegrant.js";
@@ -90,22 +91,21 @@ function grantCoversResource(
 
 /**
  * True when the role itself blocks the scope on the requested resource: it
- * holds the scope's exclusion scope, or a broader exclusion that includes it,
- * on a selector that matches the request. The permission the role grants
+ * holds any block that takes the scope away, on a selector that matches the
+ * request. For mcp:write that is mcp:blocked_write or mcp:blocked_read, since
+ * a block on read also takes write away. The permission the role grants
  * elsewhere would not apply there, so the role is no answer to the request.
  * Without a resource only an unrestricted block counts.
  */
 function roleBlocksScope(
   role: Role,
   scope: string,
-  catalogue: ScopeCatalogue,
   check: CheckSelector | null,
 ): boolean {
-  const exclusion = catalogue.get(scope)?.exclusionScope;
-  if (!exclusion) return false;
+  const blocks = scopeExclusions[scope] ?? [];
   return role.grants.some(
     (grant) =>
-      scopeCovers(catalogue, grant.scope, exclusion) &&
+      blocks.includes(grant.scope) &&
       (check ? grantCoversSelector(grant, check, true) : !grant.selectors),
   );
 }
@@ -207,7 +207,7 @@ function coveringRoles(
         grantCoversResource(grant, scope, resourceId, projectId, false),
     );
     if (covering.length === 0) continue;
-    if (roleBlocksScope(role, scope, catalogue, check)) continue;
+    if (roleBlocksScope(role, scope, check)) continue;
     suggested.push({
       role,
       breadth: broadest(covering.map((grant) => grantBreadth(grant, scope))),
@@ -357,7 +357,7 @@ export function rolesCoveringChallengeScopes(
           (grant) =>
             scopeCovers(catalogue, grant.scope, scope) &&
             grantCoversSelector(grant, selector!, true),
-        ) && !roleBlocksScope(role, scope, catalogue, selector!),
+        ) && !roleBlocksScope(role, scope, selector!),
     ),
   );
 }
