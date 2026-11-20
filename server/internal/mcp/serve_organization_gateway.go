@@ -437,9 +437,9 @@ func resolvesByAssociation(member metaMember) bool {
 // so a member whose provider is not connected degrades on its own. A stored
 // gateway uses it too, for its hosted members, so the issuer's clients
 // resolve only when one needs them.
-func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, skipped *remotesessions.SkippedClients) *projectTokenCache {
+func (s *Service) newOrganizationGatewayTokens(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, skipped *remotesessions.SkippedClients) *projectTokenCache {
 	// One snapshot attributes every resolution in this request.
-	catalog := s.aiCatalog.SnapshotFor(r.Context())
+	catalog := s.aiCatalog.SnapshotFor(ctx)
 	return &projectTokenCache{
 		resolve: func(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx, catalog))).NotingSkips(skipped).FromRequest(r), projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
