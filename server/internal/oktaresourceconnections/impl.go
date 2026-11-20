@@ -144,7 +144,7 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, logger, err
 	}
 	if mutation {
@@ -163,7 +163,7 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 func (s *Service) readable(ctx context.Context, servers []repo.ListEligibleServersRow) ([]repo.ListEligibleServersRow, error) {
 	checks := make([]authz.Check, len(servers))
 	for i, sv := range servers {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, sv.ID.String(), sv.ProjectID.String())
+		checks[i] = authz.MCPServer(authz.MCPServerIDOf(sv.ID), authz.ProjectIDOf(sv.ProjectID)).Read()
 	}
 	allowedIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {
