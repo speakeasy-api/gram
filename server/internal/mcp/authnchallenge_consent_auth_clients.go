@@ -165,6 +165,19 @@ type consentAuthServer struct {
 	projectID uuid.UUID
 }
 
+type typedConsentAuthKey struct{}
+
+func withTypedConsentAuth(ctx context.Context) context.Context {
+	return context.WithValue(ctx, typedConsentAuthKey{}, true)
+}
+
+func (s *Service) typedConsentAuth(ctx context.Context, organizationID string) (bool, error) {
+	if typed, _ := ctx.Value(typedConsentAuthKey{}).(bool); typed {
+		return true, nil
+	}
+	return s.authEnforcement.Enforced(ctx, organizationID)
+}
+
 // consentAuthChoicesEnforced reports whether the organization chooses
 // upstream authentication through typed auth clients. Elsewhere the consent
 // screen keeps choosing through its service cards.
@@ -363,14 +376,10 @@ func preselectionRank(clientType string) int {
 // directConsentAuthChoice is the upstream credential choice of a direct
 // proxied server's consent page, with picked selected when it is usable. It
 // is nil for gateways, hosted servers, first-party pages and organizations
-// where typed auth client resolution is not enforced.
+// not using browser consent.
 func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, cards []remoteSessionCard, picked uuid.UUID) (*consentServerAuth, error) {
 	if challengeState.FirstParty || challengeState.Subject == nil || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid || endpoint.MetaMcpServerID.Valid {
 		return nil, nil
-	}
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil || !enforced {
-		return nil, err
 	}
 	// Permission is judged for the consenting person, as their requests will
 	// be.
@@ -456,12 +465,7 @@ const gatewayAuthClientParam = "auth_client."
 
 // gatewayConsentAuthChoices is each proxied member's upstream credential
 // choice on a gateway's consent page, with the picks the page's query names.
-// It is nil where typed auth client resolution is not enforced.
 func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, members []metaMember, cards []remoteSessionCard) (map[uuid.UUID]*consentServerAuth, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil || !enforced {
-		return nil, err
-	}
 	servers := make([]consentAuthServer, 0, len(members))
 	picked := map[uuid.UUID]uuid.UUID{}
 	query := r.URL.Query()
@@ -479,99 +483,12 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked, false)
 }
 
-// gatewayConsentServiceChoices offers a choice between a member's connected services where typed auth clients are not enforced.
-// It selects the page's pick, else the person's last approved service, else the first, preferring one not in an outage.
-func (s *Service) gatewayConsentServiceChoices(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, members []metaMember, cards []remoteSessionCard) (map[uuid.UUID]*consentServerAuth, error) {
-	choices := map[uuid.UUID]*consentServerAuth{}
-	outages := map[uuid.UUID]bool{}
-	ids := make([]uuid.UUID, 0, len(members))
-	for _, member := range members {
-		if member.backend != metaMemberBackendProxied {
-			continue
-		}
-		var options []consentAuthClientOption
-		for _, card := range cards {
-			if !usableConsentCard(card) || !cardServesMember(card, member) {
-				continue
-			}
-			id, err := uuid.Parse(card.ClientID)
-			if err != nil {
-				continue
-			}
-			clientType := authz.AuthClientTypeRemoteSession
-			if card.Chained && !card.Connected {
-				clientType = authz.AuthClientTypeEMA
-			}
-			name := card.IssuerDisplay
-			if card.ConnectedAs != "" {
-				name += " (" + card.ConnectedAs + ")"
-			}
-			options = append(options, consentAuthClientOption{ID: id, Name: name, Type: clientType, State: consentClientReady, ConnectClientID: "", Selected: false, registrationID: uuid.NullUUID{UUID: id, Valid: true}})
-			if card.connectionDown() {
-				outages[id] = true
-			}
-		}
-		if len(options) < 2 {
-			continue
-		}
-		choices[member.serverID] = &consentServerAuth{ServerID: member.serverID, Status: consentAuthChoose, Options: options}
-		ids = append(ids, member.serverID)
-	}
-	if len(choices) == 0 {
-		return choices, nil
-	}
-	rows, err := upstreamclientsrepo.New(s.db).ListRememberedAuthClients(ctx, upstreamclientsrepo.ListRememberedAuthClientsParams{SubjectUrn: subject.String(), OrganizationID: endpoint.OrganizationID, McpServerIds: ids})
-	if err != nil {
-		return nil, fmt.Errorf("list remembered upstream clients: %w", err)
-	}
-	remembered := make(map[uuid.UUID]uuid.UUID, len(rows))
-	for _, row := range rows {
-		if row.RemoteSessionClientID.Valid {
-			remembered[row.McpServerID] = row.RemoteSessionClientID.UUID
-		}
-	}
-	query := r.URL.Query()
-	for _, member := range members {
-		auth := choices[member.serverID]
-		if auth == nil {
-			continue
-		}
-		picked := uuid.Nil
-		if id, err := uuid.Parse(query.Get(gatewayAuthClientParam + member.slug)); err == nil {
-			picked = id
-		}
-		selectConsentAuthClient(auth, picked, remembered[member.serverID])
-		if selected := auth.Selected(); selected != nil && outages[selected.ID] && selected.ID != picked && selected.ID != remembered[member.serverID] {
-			// A default lands on a working connection when there is one.
-			if healthy := slices.IndexFunc(auth.Options, func(o consentAuthClientOption) bool { return !outages[o.ID] }); healthy >= 0 {
-				selected.Selected = false
-				auth.Options[healthy].Selected = true
-			}
-		}
-	}
-	return choices, nil
-}
-
-// selectedServices is the service each choice selects.
-func selectedServices(choices map[uuid.UUID]*consentServerAuth) map[uuid.UUID]uuid.UUID {
-	selected := make(map[uuid.UUID]uuid.UUID, len(choices))
-	for serverID, auth := range choices {
-		if option := auth.Selected(); option != nil {
-			selected[serverID] = option.ID
-		}
-	}
-	return selected
-}
-
-// resolveMemberAuthChoice is the resolution a gateway member's credential
-// choice gives its discovery: the selected client, no upstream
-// authentication, or a refusal that leaves the member unavailable.
 func (s *Service) resolveMemberAuthChoice(ctx context.Context, endpoint *ResolvedMcpEndpoint, member metaMember, auth *consentServerAuth, subject urn.SessionSubject) (authClientResolution, error) {
 	switch {
 	case auth == nil:
 		return gapResolution(authClientReasonMissingChoice), nil
 	case auth.Status == consentAuthNoAuth:
-		return s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.serverID, member.projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+		return s.resolveNoAuthChoice(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.serverID)
 	case auth.Status == consentAuthNoAccess:
 		res := gapResolution(authClientReasonNotPermitted)
 		res.outcome = authClientNoAccess

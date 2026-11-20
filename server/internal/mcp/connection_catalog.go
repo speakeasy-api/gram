@@ -176,7 +176,7 @@ func (c connectionCatalog) CacheKey() string { return connectionCatalogKey(c.Org
 // approveInitialConnectionCatalog completes all fallible catalog work while the
 // challenge remains retryable. A losing approval may leave an unreferenced
 // record, which expires; an authorization code never names a partial record.
-func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, upstreamPicks map[uuid.UUID]uuid.UUID, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
+func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
 	issuer, err := usersessionsrepo.New(s.db).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
 		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 	})
@@ -191,7 +191,7 @@ func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint 
 	if durationHours > 0 {
 		lifetime = min(lifetime, time.Duration(durationHours)*time.Hour)
 	}
-	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, upstreamPicks, now.Add(lifetime+userSessionGrantTTL))
+	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, now.Add(lifetime+userSessionGrantTTL))
 	if err != nil {
 		return nil, err
 	}
@@ -254,9 +254,12 @@ func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID, typedOnly bo
 
 // freezeConnectionCatalog validates the captured routes, credentials and tool
 // definitions for both initial approval and a member's reconnect approval.
-func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, clientID string, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, upstreamPicks map[uuid.UUID]uuid.UUID, expiresAt time.Time) (*connectionCatalog, error) {
+func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, clientID string, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, expiresAt time.Time) (*connectionCatalog, error) {
 	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
 		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
+	}
+	if !inventory.TypedGateway {
+		return nil, errConsentConfigurationChanged
 	}
 	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
 		return nil, fmt.Errorf("invalid connection catalog approval")
@@ -274,12 +277,6 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	if err != nil {
 		return nil, err
 	}
-	typedChoices, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	// Each member's credential is judged for the consenting person, as their
-	// requests will be.
 	subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
@@ -288,20 +285,20 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	members := make(map[string]connectionCatalogMember, len(inventory.MemberBindings))
 	for slug, member := range inventory.MemberBindings {
 		if member.ServerID != uuid.Nil {
-			typedCompared := member.typedCompared(typedChoices)
+			typedCompared := member.typedCompared(true)
 			s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
 				organizationID: endpoint.OrganizationID,
 				serverID:       member.ServerID,
 				site:           upstreamIssuerReconsentSiteCatalogFreeze,
 				consenter:      state.Subject.String(),
-				outcome:        upstreamIssuerReconsent(member.approvedHash(typedChoices), hashes[member.ServerID].forMode(typedCompared), otherHashes[member.ServerID].forMode(typedCompared), nil),
+				outcome:        upstreamIssuerReconsent(member.approvedHash(true), hashes[member.ServerID].forMode(typedCompared), otherHashes[member.ServerID].forMode(typedCompared), nil),
 			})
 		}
-		if member.ServerID == uuid.Nil || member.configurationChanged(hashes[member.ServerID], typedChoices) {
+		if member.ServerID == uuid.Nil || member.configurationChanged(hashes[member.ServerID], true) {
 			return nil, errConsentConfigurationChanged
 		}
 		if member.Auth != nil {
-			if err := s.validateCatalogMemberAuth(subjectCtx, endpoint, *state.Subject, member, upstreamPicks, typedChoices); err != nil {
+			if err := s.validateCatalogMemberAuth(subjectCtx, endpoint, *state.Subject, member); err != nil {
 				return nil, err
 			}
 		}
@@ -765,15 +762,11 @@ func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationI
 	return hashes, others, nil
 }
 
-// validateCatalogMemberAuth checks that a member's captured credential can
-// still be used as it was approved. Where typed auth client resolution is
-// enforced the person picked the typed client, so it is checked by itself;
-// elsewhere the captured client must still be the one the person's connected
-// service maps to.
-func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, member connectionCatalogMember, upstreamPicks map[uuid.UUID]uuid.UUID, typedChoices bool) error {
-	if typedChoices && member.Auth.ClientID == uuid.Nil {
-		// The member was approved needing no upstream authentication.
-		resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject)
+// validateCatalogMemberAuth rechecks the exact captured option; a registration
+// is never used to infer a new selection.
+func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, member connectionCatalogMember) error {
+	if member.Auth.ClientID == uuid.Nil {
+		resolved, err := s.resolveNoAuthChoice(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.ServerID)
 		if err != nil {
 			return err
 		}
@@ -782,24 +775,11 @@ func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *Resol
 		}
 		return nil
 	}
-	if typedChoices {
-		resolved, err := s.resolveAuthClientChoiceForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.ClientID, subject)
-		if err != nil {
-			return err
-		}
-		if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.choice.clientID != member.Auth.RegistrationID {
-			return errConsentConfigurationChanged
-		}
-		return nil
-	}
-	if member.Auth.RegistrationID.UUID != upstreamPicks[member.ServerID] {
-		return errConsentConfigurationChanged
-	}
-	resolved, err := s.resolveAuthClientForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.RegistrationID, subject)
+	resolved, err := s.resolveAuthClientChoiceForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.ClientID, subject)
 	if err != nil {
 		return err
 	}
-	if resolved.outcome == authClientGap || resolved.outcome == authClientNoAccess || resolved.clientID != member.Auth.ClientID {
+	if (resolved.outcome != authClientResolved && resolved.outcome != authClientLegacy) || resolved.clientID != member.Auth.ClientID || resolved.choice.clientID != member.Auth.RegistrationID {
 		return errConsentConfigurationChanged
 	}
 	return nil

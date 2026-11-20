@@ -286,17 +286,9 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-// connectionRecoveryTypedLogin is what a link's login carries where typed auth
-// clients are enforced: the exact offer the link names, which authorizes the
-// login in place of a user session issuer link, and the server's upstream
-// resource, falling back to its offers when absent. Elsewhere it returns nil and no resource,
-// and the login relies on the link. A refused login returns remotesessions.ErrTypedAuthorizationDenied
-// here, before the person signs in to the provider, as it would at the callback.
+// connectionRecoveryTypedLogin revalidates the exact offer the recovery link
+// names before sending the browser upstream. It never falls back to a sign-in link.
 func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery connectionRecovery, loginID string, subject urn.SessionSubject) (*remotesessions.TypedAuthorization, string, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, recovery.OrganizationID)
-	if err != nil || !enforced {
-		return nil, "", err
-	}
 	authorization := &remotesessions.TypedAuthorization{
 		OrganizationID:        recovery.OrganizationID,
 		ProjectID:             recovery.ProjectID,

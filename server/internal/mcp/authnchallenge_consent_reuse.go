@@ -376,19 +376,15 @@ type consentBackendHashes struct {
 // upstream issuer decides nothing and is left out, so resynchronizing it
 // changes no evidence.
 func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *ResolvedMcpEndpoint) (consentBackendHashes, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return consentBackendHashes{}, err
-	}
 	evidence, err := s.consentBackendEvidence(ctx, endpoint)
 	if err != nil {
 		return consentBackendHashes{}, err
 	}
 	return consentBackendHashes{
-		decided:   evidence.decided.forMode(enforced),
-		other:     evidence.other.forMode(enforced),
+		decided:   evidence.decided.forMode(true),
+		other:     evidence.other.forMode(true),
 		otherErr:  evidence.otherErr,
-		otherMode: evidence.decided.forMode(!enforced),
+		otherMode: evidence.decided.forMode(false),
 	}, nil
 }
 

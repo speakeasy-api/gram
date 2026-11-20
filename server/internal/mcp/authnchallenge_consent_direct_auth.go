@@ -10,12 +10,8 @@ import (
 )
 
 // consentDirectPreviewAuth uses the same offered choices and authorization as
-// approval. A nil result means the legacy path, never an enforcement error.
+// approval. A successful preview always captures a typed choice or no auth.
 func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, posted string) (*authClientResolution, error) {
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil || !enforced {
-		return nil, err
-	}
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
 	if err != nil {
 		return nil, fmt.Errorf("build consent connection cards: %w", err)
@@ -25,8 +21,13 @@ func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *Resolv
 		return nil, err
 	}
 	if len(picks) == 0 {
-		res := gapResolution("")
-		res.outcome = authClientNoAuth
+		res, err := s.resolveNoAuthChoice(withTypedConsentAuth(ctx), endpoint.OrganizationID, endpoint.McpServerID.UUID)
+		if err != nil {
+			return nil, err
+		}
+		if res.outcome != authClientNoAuth {
+			return nil, errConsentConfigurationChanged
+		}
 		return &res, nil
 	}
 	ctx, err = s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
@@ -81,16 +82,8 @@ func (s *Service) validateDirectConsentInventory(ctx context.Context, endpoint *
 	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
 		return nil
 	}
-	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
-	if err != nil {
-		return err
-	}
-	var selected *uuid.UUID
-	if enforced {
-		id := picks[endpoint.McpServerID.UUID]
-		selected = &id
-	}
-	if !sameConsentAuthClient(inventory.DirectAuthClient, selected) {
+	selected := picks[endpoint.McpServerID.UUID]
+	if !sameConsentAuthClient(inventory.DirectAuthClient, &selected) {
 		return errConsentConfigurationChanged
 	}
 	return nil

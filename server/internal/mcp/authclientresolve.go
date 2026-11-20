@@ -503,11 +503,11 @@ func (s *Service) resolveAuthClientForConsent(ctx context.Context, organizationI
 // picked on the consent screen, through the same resolver as an established
 // credential. A client the server does not offer is a gap.
 func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organizationID string, serverID, projectID, authClientID uuid.UUID, subject urn.SessionSubject) (authClientResolution, error) {
-	return s.resolveProposedAuthClient(ctx, organizationID, serverID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: authClientID, Valid: true}, subject)
+	return s.resolveProposedAuthClient(withTypedConsentAuth(ctx), organizationID, serverID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: authClientID, Valid: true}, subject)
 }
 
 func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
-	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	enforced, err := s.typedConsentAuth(ctx, organizationID)
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
@@ -537,7 +537,7 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 // is decided, so the server's own credential headers still make it a setup
 // gap. The query must not infer a client whose headers the choice will not send.
 func (s *Service) resolveNoAuthChoice(ctx context.Context, organizationID string, serverID uuid.UUID) (authClientResolution, error) {
-	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	enforced, err := s.typedConsentAuth(ctx, organizationID)
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
@@ -734,11 +734,11 @@ func (s *Service) authClientPermitFor(ctx context.Context, organizationID string
 	if s.authClientPermitter != nil {
 		return s.authClientPermitter, nil
 	}
-	mode, err := s.authClientMode(ctx, organizationID)
+	typed, err := s.typedConsentAuth(ctx, organizationID)
 	if err != nil {
 		return nil, err
 	}
-	if mode != feature.AuthClientResolverEnforced {
+	if !typed {
 		return connectPermitter{}, nil
 	}
 	// An enforcing organization never falls back to the connect-equivalent

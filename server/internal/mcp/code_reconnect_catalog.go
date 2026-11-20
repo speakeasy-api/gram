@@ -147,15 +147,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 	if err != nil {
 		return fail(err)
 	}
-	cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
-	if err != nil {
-		return fail(err)
-	}
-	picks, err := s.consentUpstreamClientPicks(ctx, endpoint, state, cards, inventoryUpstreamPicks(inventory))
-	if err != nil {
-		return fail(err)
-	}
-	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, picks, previous.ExpiresAt)
+	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, previous.ExpiresAt)
 	if err != nil {
 		return fail(err)
 	}
