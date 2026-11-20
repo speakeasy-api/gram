@@ -551,15 +551,6 @@ func (s *Service) finalizeClientCreate(
 	userIssuerIDs []uuid.UUID,
 	templateID uuid.NullUUID,
 ) (*types.RemoteSessionClient, error) {
-	for _, userIssuerID := range userIssuerIDs {
-		if err := txRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: created.ID,
-			UserSessionIssuerID:   userIssuerID,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to attach remote session client to user session issuer").LogError(ctx, logger)
-		}
-	}
-
 	snapshot, err := mv.BuildRemoteSessionClientView(created, userIssuerIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)

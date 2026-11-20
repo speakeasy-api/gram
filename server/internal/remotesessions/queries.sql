@@ -1163,11 +1163,16 @@ SELECT
     sqlc.embed(c),
     i.tunneled_mcp_server_id,
     (
-        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS link
-        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-        WHERE link.remote_session_client_id = c.id
-          AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = @organization_id::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
@@ -1209,11 +1214,16 @@ FOR SHARE;
 SELECT
     sqlc.embed(c),
     (
-        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS link
-        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-        WHERE link.remote_session_client_id = c.id
-          AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = @organization_id::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 WHERE (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
@@ -1224,27 +1234,35 @@ ORDER BY c.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: ListRemoteSessionClientsByProjectIDForUserSessionIssuer :many
--- Filters to clients bound to the given user_session_issuer through the join
--- table, while user_session_issuer_ids reports every issuer each client is
--- attached to (a correlated subquery independent of the filter join).
+-- Filters registrations by a live server association on the given sign-in.
 -- Includes both the project's own clients and organization-level clients
 -- (project_id NULL) belonging to the project's org.
 SELECT
     sqlc.embed(c),
     (
-        SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS all_link
-        JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
-        WHERE all_link.remote_session_client_id = c.id
-          AND (all_usi.project_id = @project_id::uuid OR (all_usi.project_id IS NULL AND all_usi.organization_id = @organization_id::text))
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = @organization_id::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = @user_session_issuer_id
-  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
-  AND usi.deleted IS FALSE
-  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
+FROM remote_session_clients AS c
+WHERE (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
+  AND EXISTS (
+    SELECT 1 FROM mcp_server_remote_session_clients AS link
+    JOIN mcp_servers AS server ON server.id = link.mcp_server_id AND server.project_id = link.project_id AND NOT server.deleted
+    JOIN projects AS project ON project.id = server.project_id AND project.organization_id = link.organization_id AND NOT project.deleted
+    JOIN user_session_issuers AS usi ON usi.id = server.user_session_issuer_id AND NOT usi.deleted
+    WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+      AND link.organization_id = @organization_id::text AND link.project_id = @project_id::uuid
+      AND usi.id = @user_session_issuer_id
+      AND (usi.project_id = project.id OR (usi.project_id IS NULL AND usi.organization_id = project.organization_id))
+  )
   AND c.deleted IS FALSE
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR c.remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
@@ -3880,9 +3898,16 @@ RETURNING *;
 SELECT
     sqlc.embed(c),
     (
-        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS link
-        WHERE link.remote_session_client_id = c.id
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = @organization_id::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids,
     (
         SELECT COUNT(DISTINCT m.id)
@@ -3941,9 +3966,16 @@ WHERE c.id = @id
 SELECT
     sqlc.embed(c),
     (
-        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS link
-        WHERE link.remote_session_client_id = c.id
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = @organization_id::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id

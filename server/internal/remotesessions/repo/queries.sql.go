@@ -5048,21 +5048,28 @@ const getOrganizationRemoteSessionClientByID = `-- name: GetOrganizationRemoteSe
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
-        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS link
-        WHERE link.remote_session_client_id = c.id
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = $1::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-WHERE c.id = $1
-  AND (i.organization_id = $2 OR c.organization_id = $2)
+WHERE c.id = $2
+  AND (i.organization_id = $1 OR c.organization_id = $1)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 `
 
 type GetOrganizationRemoteSessionClientByIDParams struct {
+	OrganizationID string
 	ID             uuid.UUID
-	OrganizationID pgtype.Text
 }
 
 type GetOrganizationRemoteSessionClientByIDRow struct {
@@ -5074,7 +5081,7 @@ type GetOrganizationRemoteSessionClientByIDRow struct {
 // ListOrganizationRemoteSessionClientsByIssuerID for why the org is reached
 // through either the issuer or the client.
 func (q *Queries) GetOrganizationRemoteSessionClientByID(ctx context.Context, arg GetOrganizationRemoteSessionClientByIDParams) (GetOrganizationRemoteSessionClientByIDRow, error) {
-	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionClientByID, arg.ID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionClientByID, arg.OrganizationID, arg.ID)
 	var i GetOrganizationRemoteSessionClientByIDRow
 	err := row.Scan(
 		&i.RemoteSessionClient.ID,
@@ -5731,23 +5738,28 @@ SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     i.tunneled_mcp_server_id,
     (
-        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS link
-        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-        WHERE link.remote_session_client_id = c.id
-          AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = $1::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-WHERE c.id = $3
-  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $2))
+WHERE c.id = $2
+  AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND c.organization_id = $1))
   AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionClientByIDParams struct {
-	ProjectID      uuid.UUID
 	OrganizationID string
 	ID             uuid.UUID
+	ProjectID      uuid.UUID
 }
 
 type GetRemoteSessionClientByIDRow struct {
@@ -5757,7 +5769,7 @@ type GetRemoteSessionClientByIDRow struct {
 }
 
 func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteSessionClientByIDParams) (GetRemoteSessionClientByIDRow, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionClientByID, arg.ProjectID, arg.OrganizationID, arg.ID)
+	row := q.db.QueryRow(ctx, getRemoteSessionClientByID, arg.OrganizationID, arg.ID, arg.ProjectID)
 	var i GetRemoteSessionClientByIDRow
 	err := row.Scan(
 		&i.RemoteSessionClient.ID,
@@ -10277,9 +10289,16 @@ const listOrganizationRemoteSessionClientsByIssuerID = `-- name: ListOrganizatio
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
-        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS link
-        WHERE link.remote_session_client_id = c.id
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = $1::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids,
     (
         SELECT COUNT(DISTINCT m.id)
@@ -11560,14 +11579,19 @@ const listRemoteSessionClientsByProjectID = `-- name: ListRemoteSessionClientsBy
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
-        SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS link
-        JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-        WHERE link.remote_session_client_id = c.id
-          AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = $1::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $2))
+WHERE (c.project_id = $2::uuid OR (c.project_id IS NULL AND c.organization_id = $1))
   AND c.deleted IS FALSE
   AND ($3::uuid IS NULL OR c.remote_session_issuer_id = $3::uuid)
   AND ($4::uuid IS NULL OR c.id < $4::uuid)
@@ -11576,8 +11600,8 @@ LIMIT $5
 `
 
 type ListRemoteSessionClientsByProjectIDParams struct {
-	ProjectID             uuid.UUID
 	OrganizationID        string
+	ProjectID             uuid.UUID
 	RemoteSessionIssuerID uuid.NullUUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
@@ -11590,8 +11614,8 @@ type ListRemoteSessionClientsByProjectIDRow struct {
 
 func (q *Queries) ListRemoteSessionClientsByProjectID(ctx context.Context, arg ListRemoteSessionClientsByProjectIDParams) ([]ListRemoteSessionClientsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectID,
-		arg.ProjectID,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.RemoteSessionIssuerID,
 		arg.Cursor,
 		arg.LimitValue,
@@ -11654,19 +11678,29 @@ const listRemoteSessionClientsByProjectIDForUserSessionIssuer = `-- name: ListRe
 SELECT
     c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_secret_org_encrypted, c.client_secret_generation, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted,
     (
-        SELECT COALESCE(array_agg(all_link.user_session_issuer_id ORDER BY all_link.user_session_issuer_id), '{}'::uuid[])
-        FROM remote_session_client_user_session_issuers AS all_link
-        JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
-        WHERE all_link.remote_session_client_id = c.id
-          AND (all_usi.project_id = $1::uuid OR (all_usi.project_id IS NULL AND all_usi.organization_id = $2::text))
+        SELECT COALESCE(array_agg(DISTINCT usi.id ORDER BY usi.id), '{}'::uuid[])
+        FROM mcp_server_remote_session_clients AS link
+        JOIN mcp_servers AS associated ON associated.id = link.mcp_server_id
+          AND associated.project_id = link.project_id AND NOT associated.deleted
+        JOIN projects AS associated_project ON associated_project.id = associated.project_id
+          AND associated_project.organization_id = link.organization_id AND NOT associated_project.deleted
+        JOIN user_session_issuers AS usi ON usi.id = associated.user_session_issuer_id AND NOT usi.deleted
+        WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+          AND link.organization_id = $1::text
+          AND (usi.project_id = associated_project.id OR (usi.project_id IS NULL AND usi.organization_id = associated_project.organization_id))
     )::uuid[] AS user_session_issuer_ids
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = $3
-  AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
-  AND usi.deleted IS FALSE
-  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $2))
+FROM remote_session_clients AS c
+WHERE (c.project_id = $2::uuid OR (c.project_id IS NULL AND c.organization_id = $1))
+  AND EXISTS (
+    SELECT 1 FROM mcp_server_remote_session_clients AS link
+    JOIN mcp_servers AS server ON server.id = link.mcp_server_id AND server.project_id = link.project_id AND NOT server.deleted
+    JOIN projects AS project ON project.id = server.project_id AND project.organization_id = link.organization_id AND NOT project.deleted
+    JOIN user_session_issuers AS usi ON usi.id = server.user_session_issuer_id AND NOT usi.deleted
+    WHERE link.remote_session_client_id = c.id AND NOT link.deleted
+      AND link.organization_id = $1::text AND link.project_id = $2::uuid
+      AND usi.id = $3
+      AND (usi.project_id = project.id OR (usi.project_id IS NULL AND usi.organization_id = project.organization_id))
+  )
   AND c.deleted IS FALSE
   AND ($4::uuid IS NULL OR c.remote_session_issuer_id = $4::uuid)
   AND ($5::uuid IS NULL OR c.id < $5::uuid)
@@ -11675,8 +11709,8 @@ LIMIT $6
 `
 
 type ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams struct {
-	ProjectID             uuid.UUID
 	OrganizationID        string
+	ProjectID             uuid.UUID
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionIssuerID uuid.NullUUID
 	Cursor                uuid.NullUUID
@@ -11688,15 +11722,13 @@ type ListRemoteSessionClientsByProjectIDForUserSessionIssuerRow struct {
 	UserSessionIssuerIds []uuid.UUID
 }
 
-// Filters to clients bound to the given user_session_issuer through the join
-// table, while user_session_issuer_ids reports every issuer each client is
-// attached to (a correlated subquery independent of the filter join).
+// Filters registrations by a live server association on the given sign-in.
 // Includes both the project's own clients and organization-level clients
 // (project_id NULL) belonging to the project's org.
 func (q *Queries) ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams) ([]ListRemoteSessionClientsByProjectIDForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectIDForUserSessionIssuer,
-		arg.ProjectID,
 		arg.OrganizationID,
+		arg.ProjectID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionIssuerID,
 		arg.Cursor,
