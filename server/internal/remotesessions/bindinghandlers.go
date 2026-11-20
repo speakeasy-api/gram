@@ -164,6 +164,16 @@ func (op *bindingOperation) lockAttachmentIssuer(ctx context.Context) error {
 	return nil
 }
 
+func (op *bindingOperation) lockAttachmentRegistration(ctx context.Context, clientID uuid.UUID) error {
+	if _, err := op.queries.LockRegistrationForAttachmentPublication(ctx, clientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeConflict, err, "attachment registration is no longer available")
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock attachment registration")
+	}
+	return nil
+}
+
 func (op *bindingOperation) ensureAttachmentParent(ctx context.Context, clientID uuid.UUID) error {
 	if err := op.queries.EnsurePrincipalAttachmentParents(ctx, repo.EnsurePrincipalAttachmentParentsParams{ClientIds: []uuid.UUID{clientID}, UserSessionIssuerID: op.issuerID, OrganizationID: op.organizationID, ProjectID: conv.ToNullUUID(op.projectID)}); err != nil {
 		return fmt.Errorf("ensure compatibility link for attachment: %w", err)
@@ -217,6 +227,9 @@ func (s *Service) AttachBinding(ctx context.Context, payload *gen.AttachBindingP
 	}
 	if sessionView == nil {
 		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err := op.lockAttachmentRegistration(ctx, clientID); err != nil {
+		return nil, err
 	}
 	if err := op.ensureAttachmentParent(ctx, clientID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "ensure attachment parent")

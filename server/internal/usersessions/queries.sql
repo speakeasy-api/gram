@@ -226,11 +226,9 @@ SELECT pg_advisory_xact_lock(hashtextextended((@user_session_issuer_id::uuid)::t
 -- guarantees the follow-up ownership statements read a snapshot that
 -- includes any reference committed by a concurrent attach.
 --
--- FOR NO KEY UPDATE, not FOR UPDATE: it still conflicts with the meta MCP
--- attach lock, but not with the FOR KEY SHARE a foreign key check takes. A
--- remote-login callback inserting a remote_sessions row holds the client row
--- this deletion's orphan cascade wants and then hits that foreign key, so the
--- stronger mode would deadlock the two against each other.
+-- FOR NO KEY UPDATE conflicts with upstream callback publication's issuer
+-- FOR SHARE. It stays compatible with the KEY SHARE used by CreateUserSession
+-- and by foreign-key checks, including when a writer holds a registration.
 SELECT id
 FROM user_session_issuers
 WHERE id = @id

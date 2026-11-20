@@ -2791,3 +2791,10 @@ UPDATE network_ingress_certificate_states
 SET updated_at = updated_at - interval '1 hour'
 WHERE network_ingress_id = @network_ingress_id
   AND state_key = 'issuance-lease';
+
+-- name: DeleteRegistrationJunctionFixture :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = @remote_session_client_id
+  AND c.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid;
