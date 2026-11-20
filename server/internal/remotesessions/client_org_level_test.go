@@ -5,12 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -43,9 +45,8 @@ func TestListClients_OrgLevelClientResolvedForProject(t *testing.T) {
 }
 
 // TestListClients_OrgLevelClientFromOtherOrgNotResolved is the cross-tenant
-// guard: an org-level client owned by a different organization, even when
-// (defensively) linked to this project's user_session_issuer, must not resolve
-// for this org because the org-OR predicate matches only the caller's org.
+// guard: a client placed in a foreign organization must not resolve for the
+// caller's sign-in. The schema also refuses placing it in the caller's project.
 func TestListClients_OrgLevelClientFromOtherOrgNotResolved(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +58,17 @@ func TestListClients_OrgLevelClientFromOtherOrgNotResolved(t *testing.T) {
 	otherOrg := createOrganization(t, ctx, ti.conn, "other-org")
 	otherOrgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, otherOrg, "other-org-issuer")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cross-org-usi")
-	seedOrgLevelRemoteClient(t, ctx, ti.conn, otherOrg, otherOrgIssuer, "other-org-cid")
+	otherClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, otherOrg, otherOrgIssuer, "other-org-cid")
+	foreignServer := seedMCPServerInOrg(t, ctx, ti.conn, otherOrg, "foreign-placement")
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: foreignServer, OrganizationID: otherOrg})
+	require.NoError(t, err)
+	associateClient(t, ctx, ti.conn, otherOrg, server.ProjectID, foreignServer, otherClient)
+	callerServer := seedServerOnIssuer(t, ctx, ti.conn, *authCtx.ProjectID, userIssuer, "caller-placement")
+	association := testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: callerServer, RemoteSessionClientID: otherClient}
+	err = testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, association)
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "mcp_server_remote_session_clients_client_scope_check", pgErr.ConstraintName)
 
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)

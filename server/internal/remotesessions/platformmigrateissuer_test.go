@@ -111,6 +111,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 	targetID := seedConvergencePlatformIssuer(t, ctx, ti.conn, "plat-mig-target")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "plat-mig-usi")
 	clientID := createRemoteClient(t, ctx, ti, sourceID, userIssuerID.String(), "plat-mig-client")
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(clientID), userIssuerID)
 
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)

@@ -203,7 +203,7 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 	require.Empty(t, impactsByServer(result))
 	_, err = ti.service.CommitServerIdentityConfiguration(editorCtx, existingServerIdentityPayload(targetID, nextProviderID, orgClientID))
 	require.NoError(t, err)
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
 
 	// An organization admin may, and the preview lists the other project's
 	// server among those it reaches.

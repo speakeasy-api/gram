@@ -118,6 +118,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
+	placeClientForSignIn(t, ctx, ti.conn, clientUUID, userIssuerID)
 	sourceUUID, err := uuid.Parse(sourceID)
 	require.NoError(t, err)
 
@@ -335,8 +336,8 @@ func TestMigrateIssuer_DuplicateBindingConflict(t *testing.T) {
 	targetID := createRemoteIssuer(t, ctx, ti, "mig-dupe-target", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "mig-dupe-usi")
 
-	createRemoteClient(t, ctx, ti, sourceID, userIssuerID.String(), "mig-dupe-source-client")
-	createRemoteClient(t, ctx, ti, targetID, userIssuerID.String(), "mig-dupe-target-client")
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(createRemoteClient(t, ctx, ti, sourceID, userIssuerID.String(), "mig-dupe-source-client")), userIssuerID)
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(createRemoteClient(t, ctx, ti, targetID, userIssuerID.String(), "mig-dupe-target-client")), userIssuerID)
 
 	_, err := ti.service.MigrateIssuer(ctx, migratePayload(sourceID, targetID))
 	require.Error(t, err)
@@ -492,8 +493,8 @@ func TestGetIssuerMigratePreflight_ReportsConflictingBindings(t *testing.T) {
 	targetID := createRemoteIssuer(t, ctx, ti, "mig-pf-dupe-target", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "mig-pf-dupe-usi")
 
-	createRemoteClient(t, ctx, ti, sourceID, userIssuerID.String(), "mig-pf-dupe-source-client")
-	createRemoteClient(t, ctx, ti, targetID, userIssuerID.String(), "mig-pf-dupe-target-client")
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(createRemoteClient(t, ctx, ti, sourceID, userIssuerID.String(), "mig-pf-dupe-source-client")), userIssuerID)
+	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(createRemoteClient(t, ctx, ti, targetID, userIssuerID.String(), "mig-pf-dupe-target-client")), userIssuerID)
 
 	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(sourceID, targetID))
 	require.NoError(t, err)

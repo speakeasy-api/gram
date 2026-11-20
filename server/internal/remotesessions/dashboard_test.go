@@ -974,6 +974,11 @@ func createServerIdentityClient(t *testing.T, ctx context.Context, ti *testInsta
 	return client.ID
 }
 
+func requireNoAttachmentParent(t *testing.T, ctx context.Context, ti *testInstance, clientID, signInID uuid.UUID) {
+	t.Helper()
+	require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientID, signInID), "server configuration must not write an attachment compatibility parent")
+}
+
 func requireClientBound(t *testing.T, ctx context.Context, ti *testInstance, clientID, userIssuerID uuid.UUID, bound bool) {
 	t.Helper()
 	client, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
@@ -1046,7 +1051,7 @@ func TestCommitServerIdentityConfigurationOffersOrgClientWithoutChangingOrganiza
 	_, err := ti.service.CommitServerIdentityConfiguration(withoutOrganizationAdmin(t, ctx), existingServerIdentityPayload(targetID, providerID, orgClientID))
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{orgClientID}, serverAssociatedClients(t, ctx, ti, targetID))
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
 }
 
 // An organization admin may link an organization-level client to an
@@ -1066,7 +1071,7 @@ func TestCommitServerIdentityConfigurationDoesNotRepublishOrgClientToOtherProjec
 	result, err := ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, orgClientID))
 	require.NoError(t, err)
 	require.Equal(t, "linked", *result.Status)
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
 
 	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: otherServerID, ProjectID: otherProjectID})
 	require.NoError(t, err)
@@ -1198,7 +1203,7 @@ func TestCommitServerIdentityConfigurationReplacesClientWhenServerIssuerColumnIs
 	require.NoError(t, err)
 
 	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
-	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, nextClientID, userIssuerID)
 	require.Equal(t, conv.ToNullUUID(nextProviderID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
 
@@ -1242,7 +1247,7 @@ func TestCommitServerIdentityConfigurationReplacesClientForSameProvider(t *testi
 	require.NoError(t, err)
 
 	requireClientBound(t, ctx, ti, currentClientID, userIssuerID, true)
-	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, nextClientID, userIssuerID)
 	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID))
 }
 

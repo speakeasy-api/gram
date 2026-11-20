@@ -139,6 +139,7 @@ func TestCreateRemoteSessionClient_RejectsDuplicateRemoteIssuerBinding(t *testin
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-dup").String()
 
 	// First client binds (user_session_issuer, remote_session_issuer).
+	seedServerOnIssuer(t, ctx, ti.conn, projectIDFromContext(t, ctx), uuid.MustParse(userIssuerID), "dup-client-server")
 	createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "dup-client-1")
 
 	// Second client for the same pair must be rejected by the attach-time
@@ -965,6 +966,7 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	userIssuerUUID, err := uuid.Parse(userIssuerID)
 	require.NoError(t, err)
 
+	ensureAttachmentParent(t, ctx, ti.conn, clientUUID, userIssuerUUID)
 	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject("test-principal"),
 		UserSessionIssuerID:   userIssuerUUID,

@@ -115,8 +115,8 @@ func TestCommitAddsAnotherProviderAlongsideAServersClient(t *testing.T) {
 			second := createCapturingServer(t, ctx, ti, "alongside-second", issuer)
 			betaClient := commitManualClient(t, ctx, ti, second, beta, "alongside-beta-client")
 
-			requireClientBound(t, ctx, ti, alphaClient, issuer, false)
-			requireClientBound(t, ctx, ti, betaClient, issuer, false)
+			requireNoAttachmentParent(t, ctx, ti, alphaClient, issuer)
+			requireNoAttachmentParent(t, ctx, ti, betaClient, issuer)
 			require.Equal(t, []uuid.UUID{alphaClient}, serverAssociatedClients(t, ctx, ti, first))
 			require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, second), "only this server is associated with its new client")
 		})
@@ -153,7 +153,7 @@ func TestCommitReusesItsOwnTypedOffer(t *testing.T) {
 	}
 
 	require.Zero(t, requests.Load(), "reusing a client registers nothing upstream")
-	requireClientBound(t, ctx, ti, client, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, second))
 }
@@ -179,7 +179,7 @@ func TestCommitAutomaticRegistrationKeepsTheServersOwnClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, client.String(), result.Client.ID)
 	require.Zero(t, requests.Load())
-	requireClientBound(t, ctx, ti, client, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 }
 
 // Two servers that share downstream sign-in can offer distinct registrations.
@@ -195,10 +195,10 @@ func TestCommitKeepsDistinctClientsForServersSharingAnIssuer(t *testing.T) {
 
 	other := commitManualClient(t, ctx, ti, second, provider, "credentials-other-client")
 
-	requireClientBound(t, ctx, ti, client, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{other}, serverAssociatedClients(t, ctx, ti, second))
-	requireClientBound(t, ctx, ti, other, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, other, issuer)
 }
 
 // Moving a server to another provider releases a client other servers use: it
@@ -222,7 +222,7 @@ func TestCommitMovingToAnotherProviderReleasesASharedClient(t *testing.T) {
 
 	betaClient := commitManualClient(t, ctx, ti, moving, beta, "move-beta-client")
 
-	requireClientBound(t, ctx, ti, alphaClient, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, alphaClient, issuer)
 	require.Equal(t, []uuid.UUID{alphaClient}, serverAssociatedClients(t, ctx, ti, staying))
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, moving))
 
@@ -249,8 +249,8 @@ func TestCommitMovingToAnotherProviderUnbindsAClientOnlyThisServerUses(t *testin
 
 	betaClient := commitManualClient(t, ctx, ti, moving, beta, "sole-beta-client")
 
-	requireClientBound(t, ctx, ti, alphaClient, issuer, false)
-	requireClientBound(t, ctx, ti, betaClient, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, alphaClient, issuer)
+	requireNoAttachmentParent(t, ctx, ti, betaClient, issuer)
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, moving))
 }
 
@@ -268,7 +268,7 @@ func TestCommitKeepsAClientAGatewayMayUse(t *testing.T) {
 
 	betaClient := commitManualClient(t, ctx, ti, target, beta, "gateway-keep-beta-client")
 
-	requireClientBound(t, ctx, ti, alphaClient, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, alphaClient, issuer)
 	require.Equal(t, []uuid.UUID{betaClient}, serverAssociatedClients(t, ctx, ti, target))
 }
 
@@ -290,7 +290,7 @@ func TestCommitAddingAServerIsNotBlockedByAnotherServersAgents(t *testing.T) {
 	betaClient := commitManualClient(t, ctx, ti, second, beta, "agents-beta-client")
 
 	requireClientBound(t, ctx, ti, alphaClient, issuer, true)
-	requireClientBound(t, ctx, ti, betaClient, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, betaClient, issuer)
 	requireLiveAgentBindings(t, ctx, ti, alphaClient, issuer)
 }
 
@@ -432,7 +432,7 @@ func TestCommitAutomaticRegistrationNeverReusesAServiceAccountClient(t *testing.
 	require.Nil(t, result.Failure)
 	require.Equal(t, int64(2), requests.Load())
 	require.NotEqual(t, selfClient.String(), result.Client.ID)
-	requireClientBound(t, ctx, ti, selfClient, issuer, true)
+	require.Equal(t, []uuid.UUID{uuid.MustParse(result.Client.ID)}, serverAssociatedClients(t, ctx, ti, own), "the new personal registration is the only placement")
 }
 
 // The preview tells a server leaving User Identity what to remove, and the
@@ -487,7 +487,7 @@ func TestCommitExplicitReplaceRequiresWriteOnTheServersItMoves(t *testing.T) {
 	payload.ReplaceClientServerIds = []string{outside.String()}
 	_, err := ti.service.CommitServerIdentityConfiguration(limited, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
-	requireClientBound(t, ctx, ti, client, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 }
 
 // Replacing a client other servers use is an explicit choice: the preview names
@@ -524,8 +524,8 @@ func TestCommitExplicitReplaceMovesEveryServerToTheNewClient(t *testing.T) {
 	newClient, err := uuid.Parse(result.Client.ID)
 	require.NoError(t, err)
 
-	requireClientBound(t, ctx, ti, oldClient, issuer, false)
-	requireClientBound(t, ctx, ti, newClient, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, oldClient, issuer)
+	requireNoAttachmentParent(t, ctx, ti, newClient, issuer)
 	require.Equal(t, []uuid.UUID{newClient}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{newClient}, serverAssociatedClients(t, ctx, ti, second))
 
@@ -556,7 +556,7 @@ func TestCommitExplicitReplaceRefusesAnUnconfirmedServerList(t *testing.T) {
 		require.ErrorContains(t, err, "changed")
 	}
 
-	requireClientBound(t, ctx, ti, client, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, first))
 	require.Equal(t, []uuid.UUID{client}, serverAssociatedClients(t, ctx, ti, second))
 }
@@ -582,7 +582,7 @@ func TestCommitExplicitReplaceDoesNotTreatGatewayIssuerAsAnOffer(t *testing.T) {
 	preview.ReplaceClient = new(true)
 	_, err = ti.service.GetServerIdentityImpact(ctx, preview)
 	require.NoError(t, err)
-	requireClientBound(t, ctx, ti, client, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 }
 
 // A server in another project is outside the commit's writer scope, so its
@@ -656,5 +656,5 @@ func TestCommitExplicitReplaceRegistersANewClient(t *testing.T) {
 	require.Nil(t, result.Failure)
 	require.Equal(t, int64(1), requests.Load())
 	require.NotEqual(t, oldClient.String(), result.Client.ID)
-	requireClientBound(t, ctx, ti, oldClient, issuer, false)
+	requireNoAttachmentParent(t, ctx, ti, oldClient, issuer)
 }

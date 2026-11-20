@@ -191,6 +191,7 @@ func testAttachmentReconnectDuringRefresh(t *testing.T, reattach bool) {
 	require.NoError(t, err)
 	agent, err := agentrepo.New(env.db).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: env.organizationID, OwnerUserID: auth.UserID, Name: "Refresh reconnect agent"})
 	require.NoError(t, err)
+	ensureAttachmentParent(t, ctx, env.db, env.session.RemoteSessionClientID, env.session.UserSessionIssuerID)
 	binding, err := env.q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: env.projectID, OrganizationID: env.organizationID, PrincipalID: agent.ID, UserSessionIssuerID: env.session.UserSessionIssuerID, SubjectUrn: env.subject.String(), RemoteSessionID: env.session.ID})
 	require.NoError(t, err)
 	agentCtx := contextvalues.WithAuthenticatedActor(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()))

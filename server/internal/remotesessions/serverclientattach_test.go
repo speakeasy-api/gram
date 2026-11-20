@@ -419,7 +419,7 @@ func TestAttachServerClientAssociation_OffersRegistrationWithoutServersIssuerPai
 
 	_, err := f.attach(ctx, server, client)
 	require.NoError(t, err)
-	requireClientBound(t, ctx, f.ti, client, own, false)
+	requireNoAttachmentParent(t, ctx, f.ti, client, own)
 	require.NotEmpty(t, offeredAuthClients(t, ctx, f.ti.conn, server))
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, server))
 }

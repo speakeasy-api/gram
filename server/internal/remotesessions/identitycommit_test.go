@@ -42,7 +42,7 @@ func TestIdentityCommitBindRefusesDetachingOrgClientOnOrgIssuer(t *testing.T) {
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityOrgWideBinding)
 	require.NoError(t, tx.Rollback(ctx))
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
-	requireClientBound(t, ctx, ti, nextClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, nextClientID, userIssuerID)
 }
 
 func TestIdentityCommitBindOffersOrgRegistrationWithoutBinding(t *testing.T) {
@@ -58,7 +58,7 @@ func TestIdentityCommitBindOffersOrgRegistrationWithoutBinding(t *testing.T) {
 	require.NoError(t, commit.Bind(ctx, tx, reg))
 	_, err := commit.Commit(ctx, tx)
 	require.NoError(t, err)
-	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, orgClientID, userIssuerID)
 	require.Equal(t, []uuid.UUID{orgClientID}, associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), plan.MCPServerID))
 }
 
@@ -98,7 +98,7 @@ func TestIdentityCommitBindRequiresLock(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) }) })
 	require.ErrorIs(t, commit.Bind(ctx, tx, reg), remotesessions.ErrIdentityStepOrder)
-	requireClientBound(t, ctx, ti, clientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, clientID, userIssuerID)
 }
 
 // A bound client ReuseBound keeps means registration would only leave a new

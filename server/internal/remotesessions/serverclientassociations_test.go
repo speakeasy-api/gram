@@ -350,7 +350,7 @@ func TestCommitServerIdentityConfigurationAssociatesOnlyTheTargetServer(t *testi
 	require.NoError(t, err)
 
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, targetID))
-	requireClientBound(t, ctx, ti, clientID, userIssuerID, false)
+	requireNoAttachmentParent(t, ctx, ti, clientID, userIssuerID)
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, targetID))
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, siblingID), "configuring one server must not associate the issuer's other servers")
 

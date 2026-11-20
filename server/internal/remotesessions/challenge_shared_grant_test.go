@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -39,6 +40,7 @@ type sharedGrantFixture struct {
 	projectID      uuid.UUID
 	organizationID string
 	issuerA        uuid.UUID
+	serverA        uuid.UUID
 	issuerB        uuid.UUID
 	clientID       uuid.UUID
 	subject        urn.SessionSubject
@@ -68,7 +70,7 @@ func seedSharedGrantAcrossIssuers(t *testing.T) (context.Context, sharedGrantFix
 	})
 	require.NoError(t, err)
 
-	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), issuerA)
+	serverA := placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), issuerA)
 	placeClientForSignIn(t, ctx, ti.conn, uuid.MustParse(created.ID), issuerB)
 	subject := urn.NewUserSubject("ais-589-subject")
 	session := insertRemoteSession(t, ctx, ti.conn, subject, issuerA.String(), created.ID)
@@ -79,6 +81,7 @@ func seedSharedGrantAcrossIssuers(t *testing.T) (context.Context, sharedGrantFix
 		projectID:      *authCtx.ProjectID,
 		organizationID: authCtx.ActiveOrganizationID,
 		issuerA:        issuerA,
+		serverA:        serverA,
 		issuerB:        issuerB,
 		clientID:       uuid.MustParse(created.ID),
 		subject:        subject,
@@ -368,9 +371,10 @@ func TestSoftDeleteSubjectSessions_RevokesGrantOnDetachedClient(t *testing.T) {
 	// cascade fires and the upstream tokens stay alive. A revoke arriving on
 	// the detached issuer must still destroy the grant it minted, or it
 	// reports success while the upstream credential survives.
-	detached, err := testrepo.New(fx.ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, testrepo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	detached, err := upstreamclientsrepo.New(fx.ti.conn).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
 		RemoteSessionClientID: fx.clientID,
-		UserSessionIssuerID:   fx.issuerA,
+		ProjectID:             fx.projectID,
+		McpServerID:           fx.serverA,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), detached)

@@ -40,7 +40,8 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					user := createUserSessionIssuer(t, ctx, ti.conn, "interactive-human")
 					client := createCimdClient(t, ctx, ti, issuer.String(), user.String(), []string{"openid"})
 					in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: uuid.MustParse(client.ID), Resource: "https://resource.example.com/", Mechanism: mechanism, Scopes: []string{"openid"}, ConfirmGrants: tc.confirmed}
-					placeClientForSignIn(t, ctx, ti.conn, in.ClientID, user)
+					serverID := seedRemoteMCPServerForIssuer(t, ctx, ti, user, "interactive-ema", in.Resource)
+					associateClient(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), serverID, in.ClientID)
 					preparationConfidentialClient(t, ctx, ti, issuer, in.ClientID)
 					original := []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
 					if legacy {
@@ -85,7 +86,9 @@ func TestPreparationCIMDPreservesInteractiveGrants(t *testing.T) {
 					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &doc))
 					require.ElementsMatch(t, combined, doc.GrantTypes)
 					require.Equal(t, []string{oauthwire.ResponseTypeCode}, doc.ResponseTypes)
-					requireClientBound(t, ctx, ti, in.ClientID, user, true)
+					typedID := assertPreparationTypedClient(t, ctx, ti, in.ClientID, in.Resource)
+					require.Contains(t, offeredAuthClients(t, ctx, ti.conn, serverID), typedID, "preparation publishes its own EMA offer")
+					require.Equal(t, []uuid.UUID{in.ClientID}, associatedClients(t, ctx, ti.conn, *auth.ProjectID, serverID), "the interactive placement survives")
 				})
 			}
 		}

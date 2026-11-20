@@ -343,9 +343,8 @@ func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testIns
 	return server.ID
 }
 
-// attachClientUpstream gives one client a private user session issuer carrying
-// a single remote MCP server, so the client derives mcpURL and its siblings on
-// the shared issuer derive nothing from it.
+// attachClientUpstream associates one client with a remote MCP server, so
+// that registration, not its siblings, derives mcpURL.
 func attachClientUpstream(t *testing.T, ctx context.Context, ti *testInstance, clientID uuid.UUID, slug, mcpURL string) {
 	t.Helper()
 
@@ -354,7 +353,7 @@ func attachClientUpstream(t *testing.T, ctx context.Context, ti *testInstance, c
 	associateClient(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), serverID, clientID)
 }
 
-// Two clients bound to one issuer, each fronting a different upstream: the
+// Two clients reachable from one sign-in, each associated with a different upstream: the
 // backfill must stamp the refreshed client's own derived resource. Before the
 // derivation was per-client one endpoint-level resource reached every client,
 // so refreshing one could stamp a sibling's upstream onto its row — a

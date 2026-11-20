@@ -152,7 +152,8 @@ func TestBuildAuthorizationUrl_OrgLevelIssuer(t *testing.T) {
 
 	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "org-listclients")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "org-listclients")
-	createRemoteClient(t, ctx, ti, issuerID.String(), userIssuerID.String(), "org-list-cid")
+	clientID := uuid.MustParse(createRemoteClient(t, ctx, ti, issuerID.String(), userIssuerID.String(), "org-list-cid"))
+	placeClientForSignIn(t, ctx, ti.conn, clientID, userIssuerID)
 
 	enc := testenv.NewEncryptionClient(t)
 	logger := testenv.NewLogger(t)
