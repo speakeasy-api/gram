@@ -114,46 +114,6 @@ func Has(stored orgencryption.Copies) bool {
 	return stored.Platform.Valid || stored.Org.Valid
 }
 
-// keyProblems are the errors that mean an organization key could not be used:
-// an unreachable, revoked, suspended, disabled or misconfigured key, a process
-// without organization encryption serving an enrolled organization, or
-// transition state that kept moving under a write.
-var keyProblems = []error{
-	orgencryption.ErrKeyUnavailable,
-	orgencryption.ErrSuspended,
-	orgencryption.ErrNotProvisioned,
-	orgencryption.ErrInvalidKey,
-	orgencryption.ErrInvalidState,
-	orgencryption.ErrPlatformCredentialUnusable,
-	orgencryption.ErrOrganizationEncryptionUnavailable,
-	orgencryption.ErrConcurrentChange,
-	orgencryption.ErrFenced,
-	orgencryption.ErrDecisionExpired,
-}
-
-// IsUnreadable reports whether err from Open means the stored secret itself
-// is missing or does not decrypt, so retrying cannot help and the client's
-// configuration needs attention. Every other error from Open, including key
-// problems and database failures, may clear on its own: callers treat it as
-// retryable and never as a broken client configuration.
-func IsUnreadable(err error) bool {
-	return errors.Is(err, orgencryption.ErrUnreadable) || errors.Is(err, orgencryption.ErrMissing)
-}
-
-// IsKeyProblem reports whether err from Open, Set or RequireUsable is a
-// problem with the organization key rather than with the secret or the
-// database. Callers use it to say so in their messages; deciding whether an
-// error is retryable is IsUnreadable's job.
-func IsKeyProblem(err error) bool {
-	for _, problem := range keyProblems {
-		if errors.Is(err, problem) {
-			return true
-		}
-	}
-
-	return false
-}
-
 // Secrets is the one seam for client secrets.
 type Secrets struct {
 	logger   *slog.Logger

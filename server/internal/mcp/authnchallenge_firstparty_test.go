@@ -131,7 +131,7 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Exact popup agent"})
 	require.NoError(t, err)
 	client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "refresh-popup-client", "", []uuid.UUID{issuerID})
-	source, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "fixture-token", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	source, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "fixture-token", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
 	require.NoError(t, err)
 	binding, err := bindings.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: issuerID.String(), RemoteSessionID: source.ID.String()})
 	require.NoError(t, err)
@@ -170,7 +170,7 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	require.NoError(t, err)
 	require.Equal(t, attempt.AttemptID, rotated.BindingRefreshAttemptID)
 	require.Equal(t, client, rotated.ReauthenticateClientID)
-	renewed, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: source.SubjectUrn, UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "renewed-fixture", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	renewed, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: source.SubjectUrn, UserSessionIssuerID: issuerID, RemoteSessionClientID: client, AccessTokenEncrypted: "renewed-fixture", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
 	require.NoError(t, err)
 	grant := remotesessions.RemoteGrant{ConnectionPopup: true, ParentChallengeID: rotatedID, UserSessionIssuerID: issuerID, RemoteSessionClientID: client, Subject: source.SubjectUrn, RemoteSessionID: renewed.ID, RemoteSessionUpdatedAt: renewed.UpdatedAt.Time, GrantGeneration: renewed.GrantGeneration}
 	wrongClient := grant

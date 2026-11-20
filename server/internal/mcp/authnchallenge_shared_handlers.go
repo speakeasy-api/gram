@@ -204,6 +204,9 @@ func (s *Service) rejectSharedAuthorizeResource(w http.ResponseWriter, r *http.R
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
+	if req.ClientID == dashboardInspectClientID {
+		client.RedirectUris = s.dashboardInspectRedirectURIs()
+	}
 	if !redirectURIMatches(&client, req.RedirectURI) {
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, authorizationErrorPage(nil, req.ClientID, ""), oautherr.CodeInvalidTarget, description)
 	}

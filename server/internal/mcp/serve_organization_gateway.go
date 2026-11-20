@@ -63,6 +63,14 @@ func (e *ResolvedMcpEndpoint) IsOrganizationGateway() bool {
 	return e.RouteBase == mcproute.OrganizationGateway
 }
 
+func (e *ResolvedMcpEndpoint) IsProjectGateway() bool {
+	return e.IsOrganizationGateway() && e.ProjectID != uuid.Nil
+}
+
+func (e *ResolvedMcpEndpoint) IsOrganizationWideGateway() bool {
+	return e.IsOrganizationGateway() && e.ProjectID == uuid.Nil
+}
+
 // organizationGateway is a resolved organization gateway: the synthetic rows
 // the meta runtime is shaped around, and the issuer-gate endpoint built from
 // them.

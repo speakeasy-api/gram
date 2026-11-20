@@ -61,7 +61,7 @@ func (f *enforcedCallerFixture) connect(subject urn.SessionSubject, token string
 	f.t.Helper()
 	accessEnc, err := f.service.enc.Encrypt([]byte(token))
 	require.NoError(f.t, err)
-	_, err = remotesessionsrepo.New(f.service.db).UpsertRemoteSession(f.t.Context(), remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(f.service.db).UpsertRemoteSessionFixture(f.t.Context(), remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   f.consentedUnder,
 		RemoteSessionClientID: f.registration,

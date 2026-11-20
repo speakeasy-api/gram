@@ -860,7 +860,7 @@ func seedExpiredCatalogCredential(t *testing.T, ctx context.Context, ti *testIns
 	require.NoError(t, err)
 	refresh, err := ti.enc.Encrypt([]byte("refresh-fixture"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: remoteClient, Scopes: []string{}, AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}, RefreshTokenEncrypted: pgtype.Text{String: refresh, Valid: true}, RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, Resource: pgtype.Text{String: "https://other.example.test/mcp", Valid: true}})
+	_, err = remotesessionsrepo.New(ti.conn).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: remoteClient, Scopes: []string{}, AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}, RefreshTokenEncrypted: pgtype.Text{String: refresh, Valid: true}, RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, Resource: pgtype.Text{String: "https://other.example.test/mcp", Valid: true}})
 	require.NoError(t, err)
 	return &tokenRequests
 }
@@ -953,8 +953,8 @@ func TestConnectionCatalogProgressiveListsOnlySelectedServers(t *testing.T) {
 		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, response)["result"], &result))
 		return result.Instructions
 	}
-	require.True(t, strings.HasPrefix(instructions(specific.token), `Tools from these servers: "Chosen".`+"\n\n"), "a connection names only the servers it approved")
-	require.True(t, strings.HasPrefix(instructions(all.token), `Tools from these servers: "Chosen", "Other".`+"\n\n"))
+	require.True(t, strings.HasPrefix(instructions(specific.token), `Tools from these servers: "Chosen".`+metamcp.ProgressiveMemberInstructionsHint+"\n\n"), "a connection names only the servers it approved")
+	require.True(t, strings.HasPrefix(instructions(all.token), `Tools from these servers: "Chosen", "Other".`+metamcp.ProgressiveMemberInstructionsHint+"\n\n"))
 }
 
 func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T) {

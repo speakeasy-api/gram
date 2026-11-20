@@ -22,6 +22,12 @@ import { subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import { useUserSessionClientsInfinite } from "@gram/client/react-query/userSessionClients.js";
+import { RegisterClientAction } from "@/components/sessions/RegisterClientAction";
+import {
+  PAGE_FETCH_LIMIT,
+  useDrainedPages,
+} from "@/components/sessions/useDrainedPages";
 
 const USER_SESSION_FILTERS = defineFilters([
   // Unpinned: the list already splits itself into active and inactive, so a
@@ -108,6 +114,27 @@ export function ConnectionsTab({
 
   const sessions = useSessionAgents(unresolvedSessions);
 
+  // The provider's registrations, drained like the MCP server tab drains
+  // them: the agent grouping lists a registration with no sessions yet, so an
+  // agent registered here shows up, and its sheet opens, before it signs in.
+  const clientsQuery = useUserSessionClientsInfinite({
+    gramProject: projectSlug,
+    userSessionIssuerId: providerId,
+    limit: PAGE_FETCH_LIMIT,
+  });
+  const { isTruncated: clientsTruncated } = useDrainedPages({
+    enabled: true,
+    pageCount: clientsQuery.data?.pages.length ?? 0,
+    hasNextPage: clientsQuery.hasNextPage,
+    isFetchingNextPage: clientsQuery.isFetchingNextPage,
+    isFetchNextPageError: clientsQuery.isFetchNextPageError,
+    fetchNextPage: clientsQuery.fetchNextPage,
+  });
+  const clients = useMemo(
+    () => clientsQuery.data?.pages.flatMap((p) => p.result.items) ?? [],
+    [clientsQuery.data],
+  );
+
   // Search filters the loaded rows client-side (subject / client / server /
   // upstream provider), matching the loaded-count semantics shown in the
   // toolbar. Deferred so the input stays responsive while the list re-filters.
@@ -125,9 +152,26 @@ export function ConnectionsTab({
         ),
     );
   }, [sessions, deferredSearch]);
+  // Search narrows registrations by name too, so an agent with no sessions
+  // yet can still be found under the agent grouping.
+  const filteredClients = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter((c) => c.clientName.toLowerCase().includes(q));
+  }, [clients, deferredSearch]);
+  // Only the agent grouping seeds a row per registration; the others are cut
+  // from sessions alone, so registrations add nothing to them.
+  const listsRegistrations = grouping === "client";
+  const hasRows =
+    filteredSessions.length > 0 ||
+    (listsRegistrations && filteredClients.length > 0);
+  const retryAll = () => {
+    void refetch();
+    void clientsQuery.refetch();
+  };
 
   let listBody: JSX.Element;
-  if (isPending) {
+  if (isPending || clientsQuery.isPending) {
     listBody = (
       <div className="space-y-2">
         {Array.from({ length: 8 }).map((_, i) => (
@@ -135,13 +179,16 @@ export function ConnectionsTab({
         ))}
       </div>
     );
-  } else if (isError && sessions.length === 0) {
+  } else if (
+    (isError && sessions.length === 0) ||
+    (clientsQuery.isError && clients.length === 0)
+  ) {
     listBody = (
       <div className="flex items-center justify-between gap-3">
         <p className="text-destructive text-sm">
           Couldn&apos;t load connections.
         </p>
-        <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
+        <Button variant="tertiary" size="sm" onClick={retryAll}>
           Retry
         </Button>
       </div>
@@ -155,12 +202,14 @@ export function ConnectionsTab({
         No connections match these filters
       </p>
     );
-  } else if (sessions.length === 0) {
+  } else if (sessions.length === 0 && clients.length === 0) {
     listBody = <MCPSessionsEmptyState />;
-  } else if (filteredSessions.length === 0) {
+  } else if (!hasRows) {
     listBody = (
       <p className="text-muted-foreground text-sm">
-        No connections match your search
+        {deferredSearch.trim()
+          ? "No connections match your search"
+          : "No one has signed in through this provider yet. Group by Agent to see its registered agents."}
       </p>
     );
   } else {
@@ -169,7 +218,8 @@ export function ConnectionsTab({
         sessions={filteredSessions}
         grouping={grouping}
         canRevoke={canRevoke}
-        onRevoked={() => void refetch()}
+        onRevoked={retryAll}
+        clients={filteredClients}
         killswitchContext={{ capabilityKey: "mcp_tool_calls" }}
         project={project}
       />
@@ -178,9 +228,12 @@ export function ConnectionsTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-muted-foreground max-w-3xl text-sm">
-        {CONNECTIONS_DESCRIPTION}
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-muted-foreground max-w-3xl text-sm">
+          {CONNECTIONS_DESCRIPTION}
+        </p>
+        <RegisterClientAction issuerId={providerId} />
+      </div>
       <Page.Toolbar>
         <Page.Toolbar.Search
           value={searchQuery}
@@ -197,8 +250,8 @@ export function ConnectionsTab({
           onClearAll={filters.clearAll}
         />
         <Page.Toolbar.Refresh
-          onRefresh={() => void refetch()}
-          isRefreshing={isFetching}
+          onRefresh={retryAll}
+          isRefreshing={isFetching || clientsQuery.isFetching}
         />
       </Page.Toolbar>
 
@@ -214,6 +267,13 @@ export function ConnectionsTab({
           options={GROUPING_OPTIONS}
         />
       </div>
+
+      {clientsTruncated && (
+        <p className="text-muted-foreground text-sm">
+          Showing the first {clients.length} agents. Later pages were not
+          loaded, so search and the agent grouping cover only these.
+        </p>
+      )}
 
       {listBody}
 

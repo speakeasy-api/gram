@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Use when building, designing, redesigning, or reviewing any UI in the dashboard React frontend (client/dashboard, including the inlined Speakeasy Elements code) — a new page, tab, card, table, form, dialog, sheet, empty or error state, settings section, or UI copy — and when addressing design feedback or Gutternote comments on a preview. Triggers: "build a page for", "add UI for", "make this look better", "redesign", "the UX is confusing", "layout shift", "overflow", "add a tab", "dashboard component".
+description: Use when building, designing, redesigning, or reviewing any UI in the dashboard React frontend (client/dashboard, including the inlined Speakeasy Elements code) — a new page, tab, card, table, form, dialog, sheet, empty or error state, settings section, or UI copy — when writing or optimizing dashboard hook/component tests, and when addressing design feedback or Gutternote comments on a preview. Triggers: "build a page for", "add UI for", "make this look better", "redesign", "the UX is confusing", "layout shift", "overflow", "add a tab", "dashboard component".
 metadata:
   relevant_files:
     - "client/dashboard/**"
@@ -345,6 +345,43 @@ Checklist for the content below the title:
 - Cards white (`bg-card`), page gutter gray, hairline borders, no shadows/gradients/washes, square corners — per the styling rules below.
 
 A page that renders its own `<h1>` instead of this pattern is a defect; if a custom header is unavoidable, it must still render `<PageEyebrow />` + `text-display-sm font-thin`.
+
+## Keep imports lightweight
+
+Vitest evaluates transitive imports for each isolated test file. Production tree-shaking does not remove that test startup work. Keep shared primitives and helpers cheap to import:
+
+```typescript
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
+```
+
+- Use named imports from supported `date-fns/<function>` entry points instead of the package root.
+- Keep `SkeletonTable` in its own module; import it there in components, stories, and test mocks. Keep basic `Skeleton` and `Text` free of the table and animation dependency graph. Re-exporting `SkeletonTable` from `Skeleton` brings that graph back.
+- When rebasing, preserve main's behavior and migrate any new callers to these entry points. Check stories and mocks as well as production imports.
+- Preserve the import-boundary regression tests in `client/dashboard/src/components/ui/Skeleton/imports.test.tsx` and `client/dashboard/src/lib/dates.imports.test.ts`. They load the real lightweight modules and fail if the heavy dependencies are evaluated; mocking the module under test defeats the guard.
+
+## Await hook state without polling delays
+
+`renderHook` state changes need not mutate the DOM, so ordinary Testing Library `waitFor` can repeatedly pay its default 50ms polling interval. Choose the wait by what the assertion observes:
+
+- **Cheap hook state or mock-call assertions:** use `waitForHookState` from `@/test/waitForHookState`. It retries every 1ms while retaining Testing Library's timeout, error propagation, and React handling. Await an actual operation inside `act` when the test already has its completion promise.
+- **DOM queries:** keep Testing Library's `findBy*` or ordinary `waitFor`. In mixed suites, use both helpers explicitly; a blanket import replacement would also accelerate expensive DOM queries. Keep the global polling interval unchanged.
+- **Debounce, polling cadence, cancellation, or timeout behavior:** retain the real or controlled clocks and intermediate-state assertions that prove that behavior. The helper is for observing state, not advancing time or replacing those checks.
+
+```typescript
+import { waitForHookState } from "@/test/waitForHookState";
+
+await waitForHookState(() => expect(result.current.loading).toBe(false));
+await waitForHookState(() =>
+  expect(result.current.state.configChanged).toBe(true),
+);
+```
+
+Await the specific transition the next action needs: `loading === false` does not guarantee a follow-up effect has finished. Preserve every case and assertion when migrating; do not replace failures with sleeps or swallowed errors. Keep the helper's timeout/retry regression tests in `client/dashboard/src/test/waitForHookState.test.ts` passing.
+
+For performance claims, compare alternating before/after runs with the same revision baseline, worker count, and cache settings; preserve test counts and distinguish test execution from whole-command/full-suite wall time. A faster hook file does not by itself prove a faster suite.
 
 ## Design-system inventory (consolidated — don't import the removed ones)
 

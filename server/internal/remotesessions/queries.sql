@@ -1481,7 +1481,7 @@ SET deleted_at = clock_timestamp(),
     validation_status = NULL,
     validation_reason = NULL
 WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE
-RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
+RETURNING remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, refresh_token_encrypted, refresh_token_org_encrypted;
 
 -- name: SoftDeleteRemoteSessionsByClientIDs :many
 -- Bulk form of SoftDeleteRemoteSessionsByClientID: the orphan cascade sweeps
@@ -1500,7 +1500,7 @@ SET deleted_at = clock_timestamp(),
     validation_status = NULL,
     validation_reason = NULL
 WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[]) AND deleted IS FALSE
-RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
+RETURNING remote_session_client_id, organization_id, access_token_encrypted, access_token_org_encrypted, refresh_token_encrypted, refresh_token_org_encrypted;
 
 -- name: CountActiveRemoteSessionsByClientID :one
 SELECT COUNT(*)
@@ -1540,13 +1540,106 @@ WHERE s.subject_urn = @subject_urn
   AND c.id = s.remote_session_client_id
   AND (client_project.organization_id = @organization_id::text OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)));
 
--- name: UpsertRemoteSession :one
+-- name: GetRemoteSessionClientSessionOrganization :one
+-- The organization a session under the client is stored with, resolved as
+-- UpsertRemoteSessionGrant resolves it: the client's project's organization
+-- first, then the client's own. No rows means a session under the client has
+-- no organization and stays on the platform key.
+SELECT org.id
+FROM remote_session_clients AS client
+LEFT JOIN projects AS project ON project.id = client.project_id
+JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+WHERE client.id = @remote_session_client_id;
+
+-- name: UpsertRemoteSessionGrant :one
+-- Used by /mcp/remote_login_callback to materialise a fresh authorization for the
+-- remote_session for a (subject, client) pair. It stores no tokens: the
+-- caller stores them with SetRemoteSessionTokens in the same transaction,
+-- which also replaces the tokens of a row this updates. Conflict target matches the
+-- partial unique index on (subject_urn, remote_session_client_id) WHERE
+-- deleted IS FALSE; on conflict advance the grant generation and replace the
+-- grant's metadata. Attachments keep this source row and read its current
+-- credentials. Token refresh uses UpdateRefreshedRemoteSessionIfUnchanged and
+-- never advances this generation. A
+-- soft-deleted row falls outside the partial index, so a re-auth after
+-- revocation inserts a fresh active row alongside the tombstone.
+-- organization_id is the client's organization, through its project first,
+-- never the sign-in's: the issuer only records where the grant was made.
+-- Joining organization_metadata leaves it NULL rather than failing the
+-- sign-in when a project names an organization with no metadata row.
+INSERT INTO remote_sessions (
+    subject_urn,
+    user_session_issuer_id,
+    remote_session_client_id,
+    organization_id,
+    access_expires_at,
+    authorization_expires_at,
+    refresh_expires_at,
+    scopes,
+    resource,
+    auto_refresh,
+    upstream_subject,
+    upstream_email,
+    upstream_display_name,
+    identity_source,
+    enrichment
+)
+VALUES (
+    @subject_urn,
+    @user_session_issuer_id,
+    @remote_session_client_id,
+    (
+        SELECT org.id
+        FROM remote_session_clients AS client
+        LEFT JOIN projects AS project ON project.id = client.project_id
+        JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+        WHERE client.id = @remote_session_client_id
+    ),
+    @access_expires_at,
+    @authorization_expires_at,
+    @refresh_expires_at,
+    @scopes,
+    @resource,
+    @auto_refresh,
+    @upstream_subject,
+    @upstream_email,
+    @upstream_display_name,
+    @identity_source,
+    @enrichment
+)
+ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+DO UPDATE SET
+    grant_generation = remote_sessions.grant_generation + 1,
+    -- Same client, so the same organization; this fills rows written before
+    -- the column existed.
+    organization_id = EXCLUDED.organization_id,
+    access_expires_at = EXCLUDED.access_expires_at,
+    authorization_expires_at = EXCLUDED.authorization_expires_at,
+    refresh_expires_at = EXCLUDED.refresh_expires_at,
+    scopes = EXCLUDED.scopes,
+    resource = EXCLUDED.resource,
+    -- A new grant replaces the identity wholesale and resets observed validity.
+    upstream_subject = EXCLUDED.upstream_subject,
+    upstream_email = EXCLUDED.upstream_email,
+    upstream_display_name = EXCLUDED.upstream_display_name,
+    identity_source = EXCLUDED.identity_source,
+    enrichment = EXCLUDED.enrichment,
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: UpsertRemoteSessionFixture :one
+-- Test fixture: UpsertRemoteSessionGrant that also stores platform-key token
+-- copies, for tests of organizations in platform_key. Production stores
+-- tokens through upstreamtokens.Tokens.SetRemoteSession instead.
 -- Used by /mcp/remote_login_callback to materialise a fresh authorization for the
 -- remote_session for a (subject, client) pair. Conflict target matches the
 -- partial unique index on (subject_urn, remote_session_client_id) WHERE
 -- deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
 -- Attachments keep this source row and read its current credentials. Token refresh uses
--- UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
+-- UpdateRefreshedRemoteSessionIfUnchanged and never advances this generation. A
 -- soft-deleted row falls outside the partial index, so a re-auth after
 -- revocation inserts a fresh active row alongside the tombstone.
 -- organization_id is the client's organization, through its project first,
@@ -1583,10 +1676,6 @@ VALUES (
         JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
         WHERE client.id = @remote_session_client_id
     ),
-    -- The column is nullable, but every writer still stores a platform-key
-    -- token, so the cast keeps the parameter a string. Switch it to
-    -- sqlc.narg when a finalized organization starts writing NULL here; never
-    -- write '' in place of NULL.
     @access_token_encrypted::text,
     @access_expires_at,
     @refresh_token_encrypted,
@@ -1626,7 +1715,53 @@ DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING *;
 
--- name: UpdateRemoteSessionTokensIfUnchanged :one
+-- name: UpdateRefreshedRemoteSessionIfUnchanged :one
+-- Compare-and-swap write for the refresh path. It stores no tokens: the
+-- caller stores them with SetRemoteSessionTokens in the same transaction. Update-only on purpose: an
+-- INSERT here would undo a revocation that landed mid-refresh. No rows means
+-- another writer won or the session was revoked; both end in a re-auth challenge.
+-- Keyed by (subject, client) + CAS only: the session's user_session_issuer_id
+-- is provenance, never part of the credential's identity.
+-- backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
+-- COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
+-- refresh_token_rotated is decided in Go on the plaintexts: ciphertexts differ on
+-- every encryption, so they cannot say whether the provider echoed the same token.
+UPDATE remote_sessions
+SET
+    access_expires_at = @access_expires_at,
+    authorization_expires_at = @authorization_expires_at,
+    -- A refresh that keeps the same refresh token and reports no deadline leaves the known one standing.
+    refresh_expires_at = CASE
+        WHEN @refresh_token_rotated::boolean THEN @refresh_expires_at
+        ELSE COALESCE(@refresh_expires_at, refresh_expires_at) END,
+    scopes = @scopes,
+    resource = COALESCE(resource, NULLIF(sqlc.narg('backfill_resource')::text, '')),
+    -- JWT-derived display identity describes the access token being replaced;
+    -- the subject binding stays so a replacement token for another account is
+    -- still rejected. Higher ranked sources survive rotation until they restate.
+    upstream_email = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_email END,
+    upstream_display_name = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_display_name END,
+    identity_source = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE identity_source END,
+    -- A refreshed token has not been presented anywhere yet, and the stored
+    -- introspection answer described the token it replaces; a rotated refresh
+    -- token likewise retires the record of having introspected the old one.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
+    enrichment = CASE
+        WHEN @refresh_token_rotated::boolean
+        THEN ((((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
+        ELSE (((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
+    updated_at = clock_timestamp()
+WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id
+  AND deleted IS FALSE
+  AND updated_at = @expected_updated_at
+RETURNING *;
+
+-- name: UpdateRemoteSessionTokensIfUnchangedFixture :one
+-- Test fixture: UpdateRefreshedRemoteSessionIfUnchanged that also stores
+-- platform-key token copies, for tests of organizations in platform_key.
 -- Compare-and-swap write for the refresh path. Update-only on purpose: an
 -- INSERT here would undo a revocation that landed mid-refresh. No rows means
 -- another writer won or the session was revoked; both end in a re-auth challenge.
@@ -1638,8 +1773,6 @@ RETURNING *;
 -- every encryption, so they cannot say whether the provider echoed the same token.
 UPDATE remote_sessions
 SET
-    -- Cast for the same reason as in UpsertRemoteSession: switch to sqlc.narg
-    -- when finalized organizations write NULL, and never write '' instead.
     access_token_encrypted = @access_token_encrypted::text,
     access_expires_at = @access_expires_at,
     refresh_token_encrypted = @refresh_token_encrypted,
@@ -1771,6 +1904,7 @@ WHERE subject_urn = @subject_urn
 UPDATE remote_sessions
 SET
   refresh_token_encrypted = NULL,
+  refresh_token_org_encrypted = NULL,
   refresh_expires_at = NULL,
   updated_at = clock_timestamp()
 WHERE id = @id
@@ -1862,9 +1996,12 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.organization_id,
   s.access_token_encrypted,
+  s.access_token_org_encrypted,
   s.refresh_token_encrypted,
-  (s.refresh_token_encrypted IS NOT NULL
+  s.refresh_token_org_encrypted,
+  ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
   (CASE
@@ -1872,7 +2009,7 @@ SELECT
       AND (
         s.access_expires_at IS NULL
         OR s.access_expires_at > now()
-        OR (s.refresh_token_encrypted IS NOT NULL
+        OR ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
             AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))
       ) THEN 'active'
     ELSE 'expired'
@@ -2056,7 +2193,7 @@ WHERE s.id = @id
   AND s.remote_session_client_id = @remote_session_client_id
   AND s.deleted IS FALSE
   AND s.updated_at = @expected_updated_at
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
   AND s.refresh_expires_at IS NULL
   AND EXISTS (
     SELECT 1 FROM remote_session_clients AS c
@@ -2422,7 +2559,7 @@ WHERE s.subject_urn = @subject_urn
     )
     OR s.user_session_issuer_id = usi.id
   )
-RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
+RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted;
 
 -- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 -- Consent-screen disconnect: soft-deletes the subject's grant for one
@@ -2464,7 +2601,7 @@ WHERE s.subject_urn = @subject_urn
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
-RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
+RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted;
 
 -- Best-effort refresh-grant keepalive. Each hourly workflow chain drains
 -- cross-project batches. Claiming stamps an independent attempt clock before
@@ -2625,7 +2762,7 @@ WITH due AS (
     LIMIT 1
   ) AS elig
   WHERE s.deleted IS FALSE
-    AND s.refresh_token_encrypted IS NOT NULL
+    AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
     AND s.updated_at <= @keepalive_cutoff::timestamptz
@@ -2660,7 +2797,7 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.dele
 LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
 WHERE s.id = @id
   AND s.deleted IS FALSE
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
   AND s.updated_at <= @keepalive_cutoff::timestamptz
@@ -2825,7 +2962,7 @@ WITH due AS (
     HAVING count(*) > 0
   ) AS elig
   WHERE s.deleted IS FALSE
-    AND s.refresh_token_encrypted IS NULL
+    AND (s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL)
     AND s.refresh_expires_at IS NULL
     AND (s.access_expires_at IS NULL OR s.access_expires_at > @now_ts::timestamptz)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
@@ -2856,7 +2993,7 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
   AND c.deleted IS FALSE
-  AND s.refresh_token_encrypted IS NULL
+  AND (s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL)
   AND EXISTS (
     SELECT 1
     FROM (
@@ -2899,7 +3036,7 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.dele
 LEFT JOIN projects AS cp ON cp.id = c.project_id AND cp.deleted IS FALSE
 WHERE s.id = @id
   AND s.deleted IS FALSE
-  AND s.refresh_token_encrypted IS NULL
+  AND (s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL)
   AND s.refresh_expires_at IS NULL
   AND (s.access_expires_at IS NULL OR s.access_expires_at > @now_ts::timestamptz)
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
@@ -4319,15 +4456,15 @@ WHERE s.remote_session_client_id = @remote_session_client_id
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
 
   AND (@search::text = '' OR strpos(lower(s.subject_urn::text || ' ' || COALESCE(u.display_name, '') || ' ' || COALESCE(u.email, '') || ' ' || COALESCE(a.name, '')), lower(@search)) > 0)
-  AND CASE @status::text WHEN 'active' THEN (LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) IS NULL OR LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) > now()) WHEN 'expired' THEN LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END) <= now() ELSE TRUE END
+  AND CASE @status::text WHEN 'active' THEN (LEAST(s.authorization_expires_at, CASE WHEN (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) THEN s.refresh_expires_at ELSE s.access_expires_at END) IS NULL OR LEAST(s.authorization_expires_at, CASE WHEN (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) THEN s.refresh_expires_at ELSE s.access_expires_at END) > now()) WHEN 'expired' THEN LEAST(s.authorization_expires_at, CASE WHEN (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) THEN s.refresh_expires_at ELSE s.access_expires_at END) <= now() ELSE TRUE END
   AND (sqlc.narg('created_after')::timestamptz IS NULL OR s.created_at >= sqlc.narg('created_after'))
   AND (sqlc.narg('created_before')::timestamptz IS NULL OR s.created_at < sqlc.narg('created_before'))
   AND (sqlc.narg('cursor_id')::uuid IS NULL OR CASE WHEN @sort::text IN ('oldest','expiry') THEN
-  (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) > (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid)
-  ELSE (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) < (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid) END)
+  (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) > (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid)
+  ELSE (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END, s.id) < (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid) END)
 ORDER BY
- CASE WHEN @sort::text IN ('oldest','expiry') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END ASC,
- CASE WHEN @sort::text NOT IN ('oldest','expiry','id') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN s.refresh_token_encrypted IS NOT NULL THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END DESC,
+ CASE WHEN @sort::text IN ('oldest','expiry') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END ASC,
+ CASE WHEN @sort::text NOT IN ('oldest','expiry','id') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN COALESCE(LEAST(s.authorization_expires_at, CASE WHEN (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) THEN s.refresh_expires_at ELSE s.access_expires_at END), '9999-12-31'::timestamptz) ELSE s.created_at END END DESC,
  CASE WHEN @sort::text IN ('oldest','expiry') THEN s.id END ASC,
  CASE WHEN @sort::text NOT IN ('oldest','expiry') THEN s.id END DESC
 LIMIT sqlc.arg('limit_value');
@@ -5363,6 +5500,62 @@ WHERE s.organization_id = @organization_id::text
   );
 
 -- name: UpsertTrustedDelegationCredential :one
+-- Expected generation is zero for absence. Prepare explicit fields, then
+-- re-read and prepare again after a CAS miss. It stores no tokens: the caller
+-- stores, keeps or erases each value with SetTrustedIssuerSessionTokens in the
+-- same transaction.
+-- Refresh completion also advances generation, preventing stale preservation.
+INSERT INTO trusted_issuer_sessions AS s (
+  organization_id, remote_session_client_id, subject_urn,
+  identity_assertion_expires_at, refresh_expires_at, credential_config_hash, observation_status, observed_at, credential_obtained_at, last_refresh_succeeded_at, retry_after, offline_access_refused_at, offline_access_request_config_hash
+)
+SELECT @organization_id::text, @client_id::uuid, @subject_urn::text,
+  sqlc.narg(identity_assertion_expires_at), sqlc.narg(refresh_expires_at), sqlc.narg(credential_config_hash), sqlc.narg(observation_status), sqlc.narg(observed_at), sqlc.narg(credential_obtained_at), sqlc.narg(last_refresh_succeeded_at), sqlc.narg(retry_after), sqlc.narg(offline_access_refused_at), sqlc.narg(offline_access_request_config_hash)
+WHERE EXISTS (
+    SELECT 1 FROM organization_metadata AS o
+    JOIN remote_session_clients AS c ON c.organization_id = o.id
+    JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+    WHERE o.id = @organization_id::text AND o.disabled_at IS NULL
+      AND c.id = @client_id::uuid AND c.remote_session_issuer_id = @issuer_id::uuid
+      AND c.project_id IS NULL AND c.deleted IS FALSE
+      AND i.project_id IS NULL AND (i.organization_id = o.id OR i.organization_id IS NULL)
+      AND i.deleted IS FALSE
+      AND EXISTS (SELECT 1 FROM user_session_issuers AS usi
+        WHERE usi.organization_id = o.id AND usi.project_id IS NULL AND usi.deleted IS FALSE
+          AND usi.trusted_remote_session_client_id = c.id
+          AND usi.trusted_remote_session_issuer_id = i.id)
+      AND EXISTS (SELECT 1 FROM users AS u
+        JOIN organization_user_relationships AS m ON m.user_id = u.id AND m.organization_id = o.id
+        WHERE 'user:' || u.id = @subject_urn::text AND u.deleted_at IS NULL
+          AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE)
+  )
+  AND (@expected_generation::bigint = 0 OR EXISTS (
+    SELECT 1 FROM trusted_issuer_sessions AS current
+    WHERE current.organization_id = @organization_id::text
+      AND current.remote_session_client_id = @client_id::uuid
+      AND current.subject_urn = @subject_urn::text AND current.project_id IS NULL
+      AND current.deleted IS FALSE AND COALESCE(current.credential_generation, 1) = @expected_generation::bigint))
+ON CONFLICT (remote_session_client_id, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+  identity_assertion_expires_at = EXCLUDED.identity_assertion_expires_at,
+  refresh_expires_at = EXCLUDED.refresh_expires_at,
+  credential_config_hash = EXCLUDED.credential_config_hash,
+  observation_status = EXCLUDED.observation_status,
+  observed_at = EXCLUDED.observed_at,
+  credential_obtained_at = EXCLUDED.credential_obtained_at,
+  last_refresh_succeeded_at = EXCLUDED.last_refresh_succeeded_at,
+  retry_after = EXCLUDED.retry_after,
+  offline_access_refused_at = EXCLUDED.offline_access_refused_at,
+  offline_access_request_config_hash = EXCLUDED.offline_access_request_config_hash,
+  credential_generation = COALESCE(s.credential_generation, 1) + 1,
+  refresh_claim_id = NULL, updated_at = clock_timestamp()
+WHERE s.organization_id = @organization_id::text AND s.project_id IS NULL
+  AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint
+RETURNING s.*;
+
+-- name: UpsertTrustedDelegationCredentialFixture :one
+-- Test fixture: UpsertTrustedDelegationCredential that also stores platform-key
+-- copies, for tests of organizations in platform_key.
 -- Expected generation is zero for absence. Prepare explicit fields, including
 -- preserved refresh tokens, then re-read and prepare again after a CAS miss.
 -- Refresh completion also advances generation, preventing stale preservation.
@@ -5428,7 +5621,7 @@ WHERE s.organization_id = @organization_id::text
   AND s.remote_session_client_id = @client_id::uuid
   AND s.subject_urn = @subject_urn::text AND s.project_id IS NULL AND s.deleted IS FALSE
   AND COALESCE(s.credential_generation, 1) = @expected_generation::bigint AND s.refresh_claim_id IS NULL
-  AND s.refresh_token_encrypted IS NOT NULL
+  AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > clock_timestamp())
   AND (s.retry_after IS NULL OR s.retry_after <= clock_timestamp())
   AND EXISTS (
@@ -5498,14 +5691,12 @@ WHERE s.organization_id = @organization_id::text
 
 -- name: CompleteTrustedDelegationRefresh :one
 -- Retain the claim for ambiguous outcomes; only definitive completion releases
--- it. Explicit fields allow rotation without inventing an assertion.
+-- it. Explicit fields allow rotation without inventing an assertion. It stores
+-- no tokens: the caller stores, keeps or erases each value with
+-- SetTrustedIssuerSessionTokens in the same transaction.
 UPDATE trusted_issuer_sessions AS s SET
-  identity_assertion_encrypted = sqlc.narg(identity_assertion_encrypted),
   identity_assertion_expires_at = sqlc.narg(identity_assertion_expires_at),
-  refresh_token_encrypted = sqlc.narg(refresh_token_encrypted),
   refresh_expires_at = sqlc.narg(refresh_expires_at),
-  upstream_subject_encrypted = sqlc.narg(upstream_subject_encrypted),
-  nonce_encrypted = sqlc.narg(nonce_encrypted),
   credential_config_hash = sqlc.narg(credential_config_hash),
   observation_status = sqlc.narg(observation_status),
   observed_at = sqlc.narg(observed_at),
@@ -5543,7 +5734,7 @@ RETURNING s.*;
 
 -- name: ClearExpiredTrustedDelegationAssertion :execrows
 UPDATE trusted_issuer_sessions AS s
-SET identity_assertion_encrypted = NULL, identity_assertion_expires_at = NULL,
+SET identity_assertion_encrypted = NULL, identity_assertion_org_encrypted = NULL, identity_assertion_expires_at = NULL,
     updated_at = clock_timestamp()
 WHERE s.organization_id = @organization_id::text
   AND s.remote_session_client_id = @client_id::uuid
@@ -5551,18 +5742,22 @@ WHERE s.organization_id = @organization_id::text
   AND EXISTS (SELECT 1 FROM remote_session_clients AS c
     WHERE c.id = s.remote_session_client_id AND c.organization_id = s.organization_id
       AND c.project_id IS NULL AND c.remote_session_issuer_id = @issuer_id::uuid)
-  AND s.identity_assertion_encrypted IS NOT NULL
+  AND (s.identity_assertion_encrypted IS NOT NULL OR s.identity_assertion_org_encrypted IS NOT NULL)
   AND (s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp());
 
 -- name: RevokeTrustedDelegationCredential :execrows
 -- Works after trust removal; revocation never reads secrets.
 UPDATE trusted_issuer_sessions AS s SET
   identity_assertion_encrypted = NULL,
+  identity_assertion_org_encrypted = NULL,
   identity_assertion_expires_at = NULL,
   refresh_token_encrypted = NULL,
+  refresh_token_org_encrypted = NULL,
   refresh_expires_at = NULL,
   upstream_subject_encrypted = NULL,
+  upstream_subject_org_encrypted = NULL,
   nonce_encrypted = NULL,
+  nonce_org_encrypted = NULL,
   credential_config_hash = NULL,
   credential_obtained_at = NULL,
   last_refresh_succeeded_at = NULL,
@@ -5584,25 +5779,27 @@ WHERE s.organization_id = @organization_id::text
 -- Include inactive rows and use bounded
 -- row locking. Orphans are deleted even without ciphertext: subject_urn is personal
 -- data. Live expired credentials are erased without releasing refresh claims.
+-- Every expiry comparison uses statement_timestamp(), so the rows picked and
+-- every column erased agree on one cutoff and both copies of a value go together.
 WITH cleanup_budget AS (
   SELECT @batch_size::int AS batch_size
 ), expired_ids AS MATERIALIZED (
   -- Bound each indexed scan before combining it with lifecycle cleanup.
   (SELECT s.id FROM trusted_issuer_sessions AS s
    WHERE s.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
-     AND s.identity_assertion_encrypted IS NOT NULL
+     AND (s.identity_assertion_encrypted IS NOT NULL OR s.identity_assertion_org_encrypted IS NOT NULL)
      AND (s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp())
    ORDER BY s.identity_assertion_expires_at NULLS FIRST, s.id LIMIT (SELECT batch_size FROM cleanup_budget))
   UNION
   (SELECT s.id FROM trusted_issuer_sessions AS s
    WHERE s.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
-     AND s.refresh_token_encrypted IS NOT NULL AND s.refresh_expires_at <= statement_timestamp()
+     AND (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) AND s.refresh_expires_at <= statement_timestamp()
    ORDER BY s.refresh_expires_at, s.id LIMIT (SELECT batch_size FROM cleanup_budget))
   UNION
   (SELECT s.id FROM trusted_issuer_sessions AS s
    WHERE s.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
-     AND s.identity_assertion_encrypted IS NULL AND s.refresh_token_encrypted IS NULL
-     AND (s.upstream_subject_encrypted IS NOT NULL OR s.nonce_encrypted IS NOT NULL)
+     AND (s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) AND (s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL)
+     AND ((s.upstream_subject_encrypted IS NOT NULL OR s.upstream_subject_org_encrypted IS NOT NULL) OR (s.nonce_encrypted IS NOT NULL OR s.nonce_org_encrypted IS NOT NULL))
    ORDER BY s.id LIMIT (SELECT batch_size FROM cleanup_budget))
 ), expired_candidates AS MATERIALIZED (
   SELECT s.id, (s.project_id IS NOT NULL OR s.deleted OR NOT EXISTS (
@@ -5664,14 +5861,18 @@ WITH cleanup_budget AS (
   RETURNING s.id
 ), expired AS (
 UPDATE trusted_issuer_sessions AS s SET
-  identity_assertion_encrypted = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp() THEN NULL ELSE s.identity_assertion_encrypted END,
-  identity_assertion_expires_at = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp() THEN NULL ELSE s.identity_assertion_expires_at END,
-  refresh_token_encrypted = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN NULL ELSE s.refresh_token_encrypted END,
-  refresh_expires_at = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN NULL ELSE s.refresh_expires_at END,
-  upstream_subject_encrypted = CASE WHEN c.orphaned OR ((s.identity_assertion_encrypted IS NULL OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp()) AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= clock_timestamp())) THEN NULL ELSE s.upstream_subject_encrypted END,
-  nonce_encrypted = CASE WHEN c.orphaned OR ((s.identity_assertion_encrypted IS NULL OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= clock_timestamp()) AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= clock_timestamp())) THEN NULL ELSE s.nonce_encrypted END,
+  identity_assertion_encrypted = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp() THEN NULL ELSE s.identity_assertion_encrypted END,
+  identity_assertion_org_encrypted = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp() THEN NULL ELSE s.identity_assertion_org_encrypted END,
+  identity_assertion_expires_at = CASE WHEN c.orphaned OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp() THEN NULL ELSE s.identity_assertion_expires_at END,
+  refresh_token_encrypted = CASE WHEN c.orphaned OR s.refresh_expires_at <= statement_timestamp() THEN NULL ELSE s.refresh_token_encrypted END,
+  refresh_token_org_encrypted = CASE WHEN c.orphaned OR s.refresh_expires_at <= statement_timestamp() THEN NULL ELSE s.refresh_token_org_encrypted END,
+  refresh_expires_at = CASE WHEN c.orphaned OR s.refresh_expires_at <= statement_timestamp() THEN NULL ELSE s.refresh_expires_at END,
+  upstream_subject_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= statement_timestamp())) THEN NULL ELSE s.upstream_subject_encrypted END,
+  upstream_subject_org_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= statement_timestamp())) THEN NULL ELSE s.upstream_subject_org_encrypted END,
+  nonce_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= statement_timestamp())) THEN NULL ELSE s.nonce_encrypted END,
+  nonce_org_encrypted = CASE WHEN c.orphaned OR (((s.identity_assertion_encrypted IS NULL AND s.identity_assertion_org_encrypted IS NULL) OR s.identity_assertion_expires_at IS NULL OR s.identity_assertion_expires_at <= statement_timestamp()) AND ((s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL) OR s.refresh_expires_at <= statement_timestamp())) THEN NULL ELSE s.nonce_org_encrypted END,
   refresh_claim_id = CASE WHEN c.orphaned THEN NULL ELSE s.refresh_claim_id END,
-  credential_generation = CASE WHEN c.orphaned OR s.refresh_expires_at <= clock_timestamp() THEN COALESCE(s.credential_generation, 1) + 1 ELSE s.credential_generation END,
+  credential_generation = CASE WHEN c.orphaned OR s.refresh_expires_at <= statement_timestamp() THEN COALESCE(s.credential_generation, 1) + 1 ELSE s.credential_generation END,
   updated_at = clock_timestamp()
 FROM candidates AS c WHERE s.id = c.id AND NOT c.orphaned
 RETURNING s.id
@@ -5682,10 +5883,10 @@ SELECT ((SELECT count(*) FROM erased) + (SELECT count(*) FROM expired))::bigint 
 -- Status reads never exercise or disclose credentials. Ignore prior configs.
 SELECT CASE
     WHEN s.observation_status IN ('durable_credential_present', 'assertion_only') THEN
-      CASE WHEN s.refresh_token_encrypted IS NOT NULL
+      CASE WHEN (s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
           AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > clock_timestamp())
         THEN 'durable_credential_present'
-        WHEN s.identity_assertion_encrypted IS NOT NULL AND s.identity_assertion_expires_at > clock_timestamp()
+        WHEN (s.identity_assertion_encrypted IS NOT NULL OR s.identity_assertion_org_encrypted IS NOT NULL) AND s.identity_assertion_expires_at > clock_timestamp()
         THEN 'assertion_only'
         ELSE 'reauthentication_required' END
     ELSE coalesce(s.observation_status, 'unknown')
@@ -5826,12 +6027,12 @@ SELECT EXISTS (
 
 -- name: GetEMACredentialForUse :one
 -- Reads the live slot for one chained identity and whether its provenance
--- still matches the request's current binding and delegation. Callers decrypt
--- access_token_encrypted only when usable is true, and retire the slot when
+-- still matches the request's current binding and delegation. Callers open
+-- the access token only when usable is true, and retire the slot when
 -- it is false. A credential published before the human's latest sign-in is
 -- unusable, so signing in again replaces a token the upstream revoked.
 -- NULL provenance left by a parent delete reads as unusable, never as NULL.
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'external'
     AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
@@ -5839,7 +6040,7 @@ SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.gran
     AND c.remote_session_ema_binding_id = @binding_id::uuid
     AND c.ema_binding_generation = @binding_generation::bigint
     AND c.requested_scopes = @requested_scopes::text[]
-    AND c.access_token_encrypted IS NOT NULL
+    AND (c.access_token_encrypted IS NOT NULL OR c.access_token_org_encrypted IS NOT NULL)
     AND c.access_expires_at > @usable_after::timestamptz
     AND EXISTS (
       SELECT 1 FROM remote_session_ema_bindings AS b
@@ -5870,6 +6071,8 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
   AND c.ema_provider = 'external';
 
 -- name: UpsertEMACredential :one
+-- Stores no token: the caller stores it with SetEMACredentialAccessToken in the
+-- same transaction, which also replaces the token of a slot this updates.
 -- Publishes a chained credential only while the binding generation, the
 -- human's latest sign-in, and the delegation and endpoint authority it was
 -- acquired under still hold, so a sign-in, revocation, unlink, rebind or
@@ -5879,12 +6082,12 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
 INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
-  trusted_issuer_session_id, ema_provider, requested_scopes, granted_scopes, access_token_encrypted, access_expires_at,
+  trusted_issuer_session_id, ema_provider, requested_scopes, granted_scopes, access_expires_at,
   downstream_refresh_token_observed, last_used_at
 )
 SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid, @remote_session_issuer_id::uuid, @remote_session_client_id::uuid,
   @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
-  @trusted_issuer_session_id::uuid, 'external', @requested_scopes::text[], @granted_scopes::text[], @access_token_encrypted::text, @access_expires_at::timestamptz,
+  @trusted_issuer_session_id::uuid, 'external', @requested_scopes::text[], @granted_scopes::text[], @access_expires_at::timestamptz,
   @downstream_refresh_token_observed::boolean, clock_timestamp()
 WHERE EXISTS (
     SELECT 1 FROM remote_session_ema_bindings AS b
@@ -5952,7 +6155,6 @@ DO UPDATE SET
   trusted_issuer_session_id = EXCLUDED.trusted_issuer_session_id,
   requested_scopes = EXCLUDED.requested_scopes,
   granted_scopes = EXCLUDED.granted_scopes,
-  access_token_encrypted = EXCLUDED.access_token_encrypted,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
@@ -5965,7 +6167,7 @@ RETURNING id, updated_at;
 -- concurrent publish into the same slot is never erased; it then retires
 -- nothing and reports zero rows.
 UPDATE remote_session_ema_credentials
-SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+SET access_token_encrypted = NULL, access_token_org_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id AND project_id = @project_id AND deleted IS FALSE
   AND updated_at = @expected_updated_at;
 
@@ -5982,12 +6184,12 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 -- provider discriminator excludes external-provider credentials. Retired
 -- rows may still contain ciphertext and must be erased as well.
 UPDATE remote_session_ema_credentials
-SET access_token_encrypted = NULL,
+SET access_token_encrypted = NULL, access_token_org_encrypted = NULL,
     deleted_at = COALESCE(deleted_at, clock_timestamp()),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id::text
   AND ema_provider = 'speakeasy'
-  AND (deleted IS FALSE OR access_token_encrypted IS NOT NULL);
+  AND (deleted IS FALSE OR (access_token_encrypted IS NOT NULL OR access_token_org_encrypted IS NOT NULL));
 
 -- name: CreateEMAIssuerPurgeCredentialFixture :one
 -- TEST FIXTURE ONLY. Retained credentials with independent provider and
@@ -6074,7 +6276,7 @@ WHERE id = @id AND project_id = @project_id::uuid;
 
 -- name: ListEMACredentialsFixture :many
 -- TEST FIXTURE ONLY. Every credential slot in a project, live and retired.
-SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
+SELECT id, deleted, access_token_encrypted, access_token_org_encrypted, ema_binding_generation, subject_urn, updated_at
 FROM remote_session_ema_credentials
 WHERE project_id = @project_id
 ORDER BY created_at, id;
@@ -6303,9 +6505,12 @@ SELECT
   s.last_validated_at,
   s.validation_status,
   s.validation_reason,
+  s.organization_id,
   s.access_token_encrypted,
+  s.access_token_org_encrypted,
   s.refresh_token_encrypted,
-  (s.refresh_token_encrypted IS NOT NULL
+  s.refresh_token_org_encrypted,
+  ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
     AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
   (CASE
@@ -6313,7 +6518,7 @@ SELECT
       AND (
         s.access_expires_at IS NULL
         OR s.access_expires_at > now()
-        OR (s.refresh_token_encrypted IS NOT NULL
+        OR ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL)
             AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))
       ) THEN 'active'
     ELSE 'expired'
@@ -6370,7 +6575,7 @@ WHERE s.subject_urn = @subject_urn
   AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
   AND c.deleted IS FALSE
   AND s.deleted IS FALSE
-RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
+RETURNING s.remote_session_client_id, s.organization_id, s.access_token_encrypted, s.access_token_org_encrypted, s.refresh_token_encrypted, s.refresh_token_org_encrypted;
 
 -- name: SetRemoteSessionAutoRefreshInTenant :execrows
 -- SetRemoteSessionAutoRefresh for a registration a server offers through an
@@ -6582,7 +6787,7 @@ WHERE i.id = @id AND i.organization_id = @organization_id
 FOR SHARE OF s;
 
 -- name: GetSpeakeasyEMACredentialForUse :one
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'speakeasy'
     AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
@@ -6595,7 +6800,7 @@ SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.gran
     AND c.internal_session_issuer_key_id = @internal_session_issuer_key_id::uuid
     AND c.sign_in_id = @sign_in_id::uuid
     AND c.user_session_id = @user_session_id::uuid
-    AND c.access_token_encrypted IS NOT NULL
+    AND (c.access_token_encrypted IS NOT NULL OR c.access_token_org_encrypted IS NOT NULL)
     AND c.access_expires_at > @usable_after::timestamptz
     AND EXISTS (
       SELECT 1 FROM remote_session_ema_bindings b
@@ -6617,7 +6822,7 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
 -- A consent credential has no MCP grant yet and belongs to the sign-in whose
 -- consent page minted it. Its provenance predicate matches
 -- GetSpeakeasyEMACredentialForUse, so adoption and reuse judge it alike.
-SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+SELECT c.id, c.updated_at, c.organization_id, c.access_token_encrypted, c.access_token_org_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
     c.ema_provider = 'speakeasy'
     AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
@@ -6630,7 +6835,7 @@ SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.gran
     AND c.internal_session_issuer_key_id = @internal_session_issuer_key_id::uuid
     AND c.sign_in_id = @sign_in_id::uuid
     AND c.user_session_id IS NULL
-    AND c.access_token_encrypted IS NOT NULL
+    AND (c.access_token_encrypted IS NOT NULL OR c.access_token_org_encrypted IS NOT NULL)
     AND c.access_expires_at > @usable_after::timestamptz
     AND EXISTS (
       SELECT 1 FROM remote_session_ema_bindings b
@@ -6651,6 +6856,8 @@ ORDER BY c.updated_at DESC, c.id DESC
 LIMIT 1;
 
 -- name: UpsertSpeakeasyEMACredential :one
+-- Stores no token: the caller stores it with SetEMACredentialAccessToken in the
+-- same transaction, which also replaces the token of a slot this updates.
 -- The caller locks the binding, sign-in and issuer and checks the exact
 -- grant before this statement. Client changes during redemption still fence
 -- publication. Each authenticated MCP grant keeps its own slot; a consent
@@ -6659,13 +6866,13 @@ INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
   ema_provider, internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id,
-  sign_in_id, user_session_id, requested_scopes, granted_scopes, access_token_encrypted,
+  sign_in_id, user_session_id, requested_scopes, granted_scopes,
   access_expires_at, downstream_refresh_token_observed, last_used_at
 )
 SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid, @remote_session_issuer_id::uuid, @remote_session_client_id::uuid,
   @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
   'speakeasy', @internal_session_issuer_id::uuid, @internal_session_issuer_updated_at::timestamptz, @internal_session_issuer_key_id::uuid,
-  @sign_in_id::uuid, sqlc.narg('user_session_id')::uuid, @requested_scopes::text[], @granted_scopes::text[], @access_token_encrypted::text,
+  @sign_in_id::uuid, sqlc.narg('user_session_id')::uuid, @requested_scopes::text[], @granted_scopes::text[],
   @access_expires_at::timestamptz, @downstream_refresh_token_observed::boolean, clock_timestamp()
 WHERE EXISTS (
   SELECT 1 FROM remote_session_ema_bindings b
@@ -6697,7 +6904,6 @@ DO UPDATE SET
   user_session_id = EXCLUDED.user_session_id,
   requested_scopes = EXCLUDED.requested_scopes,
   granted_scopes = EXCLUDED.granted_scopes,
-  access_token_encrypted = EXCLUDED.access_token_encrypted,
   access_expires_at = EXCLUDED.access_expires_at,
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
@@ -6765,7 +6971,7 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id:
   AND c.user_session_issuer_id = @user_session_issuer_id::uuid
   AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
   AND c.resource = @resource::text
-  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+  AND c.deleted IS FALSE AND (c.access_token_encrypted IS NOT NULL OR c.access_token_org_encrypted IS NOT NULL)
 GROUP BY c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
 
 -- name: ListEMABindingAcceptanceForOrganization :many
@@ -6785,7 +6991,7 @@ LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.
   AND t.deleted IS FALSE
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
 WHERE c.organization_id = @organization_id::text
-  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+  AND c.deleted IS FALSE AND (c.access_token_encrypted IS NOT NULL OR c.access_token_org_encrypted IS NOT NULL)
 GROUP BY c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.resource, c.ema_provider,
   rc.remote_session_issuer_id, c.internal_session_issuer_id;
 
@@ -6889,7 +7095,7 @@ LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.
   AND t.deleted IS FALSE
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
 WHERE c.organization_id = @organization_id::text
-  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+  AND c.deleted IS FALSE AND (c.access_token_encrypted IS NOT NULL OR c.access_token_org_encrypted IS NOT NULL)
 GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
 
 -- name: ListEMAVendorIssuerCandidates :many
@@ -6923,14 +7129,14 @@ LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
 WHERE c.organization_id = @organization_id::text
   AND c.remote_session_issuer_id = ANY(@remote_session_issuer_ids::uuid[])
-  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+  AND c.deleted IS FALSE AND (c.access_token_encrypted IS NOT NULL OR c.access_token_org_encrypted IS NOT NULL)
 GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
 
 -- name: RetireLegacyEMACredentialSlot :exec
 -- Only while remote_session_ema_credentials_subject_key still exists: it allows
 -- one live row per subject, so a new grant's slot replaces the old one as before.
 UPDATE remote_session_ema_credentials
-SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+SET access_token_encrypted = NULL, access_token_org_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
   AND user_session_issuer_id = @user_session_issuer_id::uuid
   AND remote_session_client_id = @remote_session_client_id::uuid
@@ -6941,7 +7147,7 @@ WHERE organization_id = @organization_id::text AND project_id = @project_id::uui
 -- NULL grants never conflict in the per-grant key, so a sign-in's earlier
 -- consent credentials are retired before it publishes a new one.
 UPDATE remote_session_ema_credentials
-SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+SET access_token_encrypted = NULL, access_token_org_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
   AND user_session_issuer_id = @user_session_issuer_id::uuid
   AND remote_session_client_id = @remote_session_client_id::uuid
@@ -6954,7 +7160,7 @@ WHERE organization_id = @organization_id::text AND project_id = @project_id::uui
 -- Erases every credential a sign-in's consent pages minted for one user
 -- session issuer that no grant adopted, when the user denies consent.
 UPDATE remote_session_ema_credentials
-SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+SET access_token_encrypted = NULL, access_token_org_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id::text
   AND user_session_issuer_id = @user_session_issuer_id::uuid
   AND subject_urn = @subject_urn::text AND sign_in_id = @sign_in_id::uuid
@@ -6998,7 +7204,7 @@ WHERE s.id = @id AND s.remote_session_client_id = @remote_session_client_id
   AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = p.organization_id))
   AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = p.organization_id))
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
-  AND (s.access_expires_at IS NULL OR s.access_expires_at > now() OR (s.refresh_token_encrypted IS NOT NULL AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())))
+  AND (s.access_expires_at IS NULL OR s.access_expires_at > now() OR ((s.refresh_token_encrypted IS NOT NULL OR s.refresh_token_org_encrypted IS NOT NULL) AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())))
 FOR UPDATE OF s;
 
 -- name: LockTypedRemoteLoginServer :one

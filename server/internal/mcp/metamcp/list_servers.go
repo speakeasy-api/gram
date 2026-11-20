@@ -41,6 +41,9 @@ const UnapprovedNote = "The servers under unapproved are on this gateway but out
 // user can show them again.
 const HiddenNote = "The user hid these servers, so their tools are unavailable. The user can show one again at connectUrl."
 
+// DescribeServerNote directs the model from the server list to member instructions.
+const DescribeServerNote = "Before using a member server, call describe_server with its slug to read its instructions, when available, and find its tools."
+
 // UnknownNote tells the model that "unknown" is an unchecked status, not a
 // failure, and which tool does check it.
 const UnknownNote = `Status "unknown" means not checked: this list does not contact remote servers. Call connection_status to check sign-in.`

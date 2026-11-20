@@ -2141,9 +2141,9 @@ func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
 // events. Pin the whole shape — flat ZIP layout, TOML wiring, schema
 // validation, and which credentials ride in which file.
 // allowVibeHooks adds the vibe provider to the pinned release's provider list
-// for the duration of the test. No release carries it yet — the gate opens
-// only when pin-hooks-release pins one — so tests that call this must not be
-// parallel (the list is a package var).
+// for the duration of the test, so the test opens the gate whatever the
+// checked-in pin carries. Tests that call this must not be parallel (the list
+// is a package var).
 func allowVibeHooks(t *testing.T) {
 	t.Helper()
 	SetReleasedHooksProvidersForTest(t, append(append([]string{}, hooksReleaseProviders...), VibeProviderSlugForTest))
@@ -2466,12 +2466,13 @@ func TestHooksConfigHashIgnoresPublishedMarketplaceName(t *testing.T) {
 	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(restamped))
 }
 
-// The vibe gate is closed at the checked-in pin: no pinned release carries
-// the vibe provider yet, so the Vibe observability package is skipped without
-// failing the whole publish, and availability reports false. Not parallel:
-// reads the package var that allowVibeHooks tests write.
-func TestGenerateHooksFilesSkipsVibeUntilReleaseCarriesProvider(t *testing.T) { //nolint:paralleltest // Reads releasedHooksProviders, which sibling tests write.
-	require.NotContains(t, hooksReleaseProviders, VibeProviderSlugForTest, "checked-in pin must not list vibe before a release carries it")
+// When the pinned release does not carry the vibe provider, the Vibe
+// observability package is skipped without failing the whole publish, and
+// availability reports false. The test closes the gate itself, so it holds
+// whatever the checked-in pin carries. Not parallel: writes the
+// releasedHooksProviders package var.
+func TestGenerateHooksFilesSkipsVibeWhenReleaseLacksProvider(t *testing.T) { //nolint:paralleltest // Writes the releasedHooksProviders package var.
+	SetReleasedHooksProvidersForTest(t, slices.DeleteFunc(slices.Clone(hooksReleaseProviders), func(p string) bool { return p == VibeProviderSlugForTest }))
 
 	cfg := GenerateConfig{
 		OrgName:     "Acme",

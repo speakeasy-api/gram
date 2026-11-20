@@ -134,7 +134,11 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 	// looks at the caller — which would hand a machine every grant written for
 	// every member.
 	if actor, hasActor := contextvalues.AuthenticatedActor(ctx); hasActor && actor.Type == urn.PrincipalTypeWorkload {
-		return e.AdmitWorkloadSession(ctx)
+		prepared, err := e.AdmitWorkloadSession(ctx)
+		if err == nil && ctx.Value(withoutCredentialCeilingKey{}) == true {
+			prepared = WithoutCredentialCeiling(prepared)
+		}
+		return prepared, err
 	}
 
 	// Future principal-backed transports, including agent MCP sessions, attach
@@ -224,11 +228,15 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	if err := validateShape(checks, false); err != nil {
 		return e.mapError(ctx, err)
 	}
+	if _, refused := e.withoutOtherOrganization(ctx, checks); len(refused) > 0 {
+		return e.mapError(ctx, Denied(refused[0].Scope, refused[0].selector()))
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
 	}
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		if !all(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
 		}
@@ -351,6 +359,10 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 }
 
 func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
+	checks, refused := e.withoutOtherOrganization(ctx, checks)
+	if len(checks) == 0 && len(refused) > 0 {
+		return e.mapError(ctx, Denied(refused[0].Scope, refused[0].selector()))
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -359,6 +371,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, err)
 	}
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		if len(checks) > 0 && !slices.ContainsFunc(checks, unenforcedAllows) {
 			return e.mapError(ctx, Denied(ScopeMCPAuth, nil))
 		}
@@ -529,11 +542,15 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	if err := validateShape(checks, true); err != nil {
 		return false, e.mapError(ctx, err)
 	}
+	if _, refused := e.withoutOtherOrganization(ctx, checks); len(refused) > 0 {
+		return false, nil
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
 	}
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		return all(checks, unenforcedAllows), nil
 	}
 	if len(checks) == 0 {
@@ -578,11 +595,16 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 	if err := validateShape(alternatives, true); err != nil {
 		return false, e.mapError(ctx, err)
 	}
+	alternatives, refused := e.withoutOtherOrganization(ctx, alternatives)
+	if len(alternatives) == 0 && len(refused) > 0 {
+		return false, nil
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
 	}
 	if !enforce {
+		e.logInvalidUnenforced(ctx, alternatives)
 		return slices.ContainsFunc(alternatives, unenforcedAllows), nil
 	}
 	authorization, ok := grantAuthorizationFromContext(ctx)
@@ -652,12 +674,14 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	if err := validateShape(checks, true); err != nil {
 		return nil, e.mapError(ctx, err)
 	}
+	checks, _ = e.withoutOtherOrganization(ctx, checks)
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		ids := make([]string, 0, len(checks))
 		for _, c := range checks {
 			if unenforcedAllows(c) {
@@ -762,12 +786,31 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	if err := validateShape(checks, true); err != nil {
 		return nil, e.mapError(ctx, err)
 	}
+	if kept, refused := e.withoutOtherOrganization(ctx, checks); len(refused) > 0 {
+		// Decide the rest, then put a false in the place of every refused check.
+		rest, err := e.FindMatched(ctx, kept)
+		if err != nil {
+			return nil, err
+		}
+		other := e.aboutOtherOrganization(ctx)
+		out := make([]bool, 0, len(checks))
+		for _, c := range checks {
+			if other(c) {
+				out = append(out, false)
+				continue
+			}
+			out = append(out, rest[0])
+			rest = rest[1:]
+		}
+		return out, nil
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	if !enforce {
+		e.logInvalidUnenforced(ctx, checks)
 		out := make([]bool, len(checks))
 		for i, c := range checks {
 			out[i] = unenforcedAllows(c)
@@ -931,11 +974,110 @@ func validateInput(c Check) error {
 	case WildcardResource:
 		return InvalidCheck(c.Scope, c.ResourceID)
 	default:
+		if err := validateCheckIdentity(c); err != nil {
+			return err
+		}
+		if err := validateCheckOperation(c); err != nil {
+			return err
+		}
+		if err := validateCheckDimensions(c); err != nil {
+			return err
+		}
 		if err := validateRequiredDimensions(c); err != nil {
 			return err
 		}
 		return validateAuthClientCheck(c)
 	}
+}
+
+// logInvalidUnenforced reports checks that would be refused as invalid if the
+// caller were enforced. Enforcement is skipped for this caller, so the request
+// still goes through: this is the logging window before such checks are
+// refused for every caller.
+func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
+	for _, check := range checks {
+		err := validateInput(check)
+		if err == nil {
+			continue
+		}
+		e.logger.ErrorContext(
+			ctx,
+			"invalid authz check on a path that skips enforcement",
+			attr.SlogResourceID(check.ResourceID),
+			attr.SlogError(err),
+		)
+	}
+}
+
+// aboutOtherOrganization reports whether a check is an org check about an
+// organization other than the one the caller is acting in. Grants are loaded
+// for the caller's organization, so such a check would ask one organization's
+// grants about another organization. An id that cannot be compared is never
+// read as the caller's organization. Nothing at the call site turns this on:
+// the organization is the check's own resource.
+func (e *Engine) aboutOtherOrganization(ctx context.Context) func(Check) bool {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		// No caller: the entry points refuse the request on their own.
+		return func(Check) bool { return false }
+	}
+	caller := OrgIDFrom(authCtx.ActiveOrganizationID)
+	return func(c Check) bool {
+		if c.resourceKind() != ResourceKindOrg {
+			return false
+		}
+		same, err := OrgIDFrom(c.ResourceID).Equals(caller)
+		return err != nil || !same
+	}
+}
+
+// withoutOtherOrganization splits checks into the ones the engine goes on to
+// decide and the org checks about another organization, which no caller
+// satisfies, whether or not enforcement is skipped for them. Each refused
+// check is logged.
+func (e *Engine) withoutOtherOrganization(ctx context.Context, checks []Check) (kept []Check, refused []Check) {
+	other := e.aboutOtherOrganization(ctx)
+	if !slices.ContainsFunc(checks, other) {
+		return checks, nil
+	}
+	kept = make([]Check, 0, len(checks))
+	for _, c := range checks {
+		if !other(c) {
+			kept = append(kept, c)
+			continue
+		}
+		refused = append(refused, c)
+		e.logger.ErrorContext(
+			ctx,
+			"authz check refused: it is about another organization than the caller's",
+			attr.SlogResourceID(c.ResourceID),
+			attr.SlogError(Denied(c.Scope, c.selector())),
+		)
+	}
+	return kept, refused
+}
+
+// validateCheckIdentity rejects a check whose scope the registry does not
+// know, whose resource kind is not its scope's kind, or whose dimensions use
+// a key the scope does not declare. resource_kind and resource_id are never
+// dimensions: they would replace the resource the check names.
+func validateCheckIdentity(c Check) error {
+	kind, known := scopeResourceKinds[c.Scope]
+	if !known {
+		return invalidCheckReason(c.Scope, c.ResourceID, "unknown scope")
+	}
+	if c.ResourceKind != "" && c.ResourceKind != kind {
+		return invalidCheckReason(c.Scope, c.ResourceID, "resource kind "+c.ResourceKind+" is not the scope's kind")
+	}
+	for key := range c.Dimensions {
+		if key == SelectorKeyResourceKind || key == SelectorKeyResourceID {
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is reserved")
+		}
+		if !allowedSelectorKeys[kind][key] && !scopeAllowsSelectorKey(c.Scope, key) {
+			return invalidCheckReason(c.Scope, c.ResourceID, "dimension "+key+" is not declared for the scope")
+		}
+	}
+	return nil
 }
 
 // validateRequireInput is validateInput for the Require family, which also

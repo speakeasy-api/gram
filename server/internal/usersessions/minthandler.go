@@ -240,6 +240,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		PickedClientIds:     []uuid.UUID{},
 		PickedAuthClientIds: nil,
 		ScopeMcpServerIds:   nil,
+		ExcludeMcpServerIds: nil,
 		TypedOnly:           enforced,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)

@@ -1631,12 +1631,7 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 					dimensions[key] = value
 				}
 			}
-			check := authz.Check{
-				Scope:        authz.Scope(challenge.Scope),
-				ResourceKind: challenge.ResourceKind,
-				ResourceID:   challenge.ResourceID,
-				Dimensions:   dimensions,
-			}
+			check := authz.RecordedCheck(authz.Scope(challenge.Scope), challenge.ResourceKind, challenge.ResourceID, dimensions)
 			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "challenge cannot be granted through this role").LogError(ctx, s.logger)

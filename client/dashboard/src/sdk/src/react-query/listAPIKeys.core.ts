@@ -48,6 +48,9 @@ export function buildListAPIKeysQuery(
   return {
     queryKey: queryKeyListAPIKeys({
       agentId: request?.agentId,
+      cursor: request?.cursor,
+      limit: request?.limit,
+      search: request?.search,
       gramSession: request?.gramSession,
     }),
     queryFn: async function listAPIKeysQueryFn(
@@ -77,6 +80,9 @@ export function buildListAPIKeysQuery(
 export function queryKeyListAPIKeys(
   parameters: {
     agentId?: string | undefined;
+    cursor?: string | undefined;
+    limit?: number | undefined;
+    search?: string | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

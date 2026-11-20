@@ -29,7 +29,6 @@ export default function ShadowMCP(): JSX.Element {
       title="Shadow MCP"
       description="Decide which MCP servers your team's agents may connect to."
       hideToolbar
-      fullHeight
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <ShadowMCPPolicySummary />

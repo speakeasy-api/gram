@@ -328,16 +328,87 @@ it("saves an unproxied server without verifying connectivity", async () => {
   fireEvent.click(
     screen.getByRole("radio", { name: /Clients connect directly/ }),
   );
-  state.verifyResult.mockReturnValue({ verified: true });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+  });
   view.rerender(<CreateRemoteMcp />);
   expect(screen.queryByRole("button", { name: "Re-verify" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  // A checked URL fills an empty name in.
   await waitFor(() =>
     expect(state.create).toHaveBeenCalledWith({
-      name: undefined,
+      name: "Example",
       url: "https://example.com/mcp",
     }),
   );
+});
+
+it("prefers the name the server reports over one read from its address", () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Example Server");
+});
+
+it("keeps a name a setup link filled in when the URL checks out", () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, {
+    wrapper: ({ children }) => (
+      <MemoryRouter
+        initialEntries={[
+          "/?url=https%3A%2F%2Fexample.com%2Fmcp&name=Team%20tools",
+        ]}
+      >
+        {children}
+      </MemoryRouter>
+    ),
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Team tools");
+});
+
+it("keeps a name the person typed when the URL checks out", async () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />, { wrapper: Router });
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  fireEvent.change(screen.getByLabelText("Display name (optional)"), {
+    target: { value: "Team tools" },
+  });
+  state.verifyResult.mockReturnValue({
+    verified: true,
+    url: "https://example.com/mcp",
+    serverName: "Example Server",
+  });
+  view.rerender(<CreateRemoteMcp />);
+  expect(
+    (screen.getByLabelText("Display name (optional)") as HTMLInputElement)
+      .value,
+  ).toBe("Team tools");
 });
 
 it("preselects User Identity only when the challenge advertised OAuth", () => {

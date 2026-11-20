@@ -46,6 +46,10 @@ export type ListAgentsRequest = {
    */
   limit?: number | undefined;
   /**
+   * Keep only agents assigned to this project in the active organization.
+   */
+  projectId?: string | undefined;
+  /**
    * Case-insensitive substring match on the agent name.
    */
   search?: string | undefined;
@@ -121,6 +125,7 @@ export const Lifecycle$outboundSchema: z.ZodMiniEnum<typeof Lifecycle> = z.enum(
 export type ListAgentsRequest$Outbound = {
   cursor?: string | undefined;
   limit: number;
+  project_id?: string | undefined;
   search?: string | undefined;
   name_order: string;
   lifecycle?: Array<string> | undefined;
@@ -138,6 +143,7 @@ export const ListAgentsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 50),
+    projectId: z.optional(z.string()),
     search: z.optional(z.string()),
     nameOrder: z._default(NameOrder$outboundSchema, "asc"),
     lifecycle: z.optional(z.array(Lifecycle$outboundSchema)),
@@ -152,6 +158,7 @@ export const ListAgentsRequest$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      projectId: "project_id",
       nameOrder: "name_order",
       ownerUserIds: "owner_user_ids",
       registeredAfter: "registered_after",

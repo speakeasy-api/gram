@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";

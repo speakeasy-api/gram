@@ -62,7 +62,7 @@ ok, err := s.authz.Can(ctx, authz.MCPServer(id, p).Connect().Probe())
 | Narrow a list                                    | `Filter(ctx, checks)` returns the allowed `ResourceID`s. `FindMatched` returns a bool per check, for many checks that share one resource id (tools in a `tools/list`). |
 | MCP tool call                                    | `authz.MCPServer(id, p).ToolCall(tool, disposition)`. A tool with no annotations carries no disposition.                                                               |
 
-Ref constructors take each id as you hold it, a `uuid.UUID` or a string: `authz.Environment(env.ID, projectID)`. The argument order is always the resource, then its project. A project collection (`authz.Environments(p)`, `authz.MCPServers(p)`, `authz.Assistants(p)`) builds a check on the resource type whose resource id is the project id, exactly what `EnvironmentCheck(scope, p, p)` built before, so existing grants match it the same way and `Filter` returns the project id for it.
+Ref constructors take typed ids, never a raw string or `uuid.UUID`: `authz.Environment(authz.EnvironmentIDOf(env.ID), authz.ProjectIDOf(projectID))`. Each kind that has a ref has an id type generated in `ids_gen.go` with two constructors, `<Kind>IDOf(uuid.UUID)` and `<Kind>IDFrom(string)`, so ids of different kinds cannot be swapped. The hand-written `mcp_auth_client`, `risk_policy` and `inference` checks keep their own constructors, listed below. An id that cannot name a resource (the nil uuid, an empty string, `*`, a `$` marker, a string containing whitespace) is kept as absent, and every check built from it is refused with `ErrInvalidCheck`: an absent id never grants. In the examples and the migration table here `id`, `envID`, `p` and `project` are such typed ids, already built with `IDOf` or `IDFrom`. The argument order is always the resource, then its project. A project collection (`authz.Environments(p)`, `authz.MCPServers(p)`, `authz.Assistants(p)`) builds a check on the resource type whose resource id is the project id, exactly what `EnvironmentCheck(scope, p, p)` built before, so existing grants match it the same way and `Filter` returns the project id for it.
 
 When migrating a package from the old constructors:
 
@@ -81,6 +81,8 @@ Refs exist for every kind in the model except `mcp_auth_client` (`MCPAuthClientC
 For a list endpoint, load the candidate rows, build one ref per row, call `Filter`, and rebuild the response from the ids it returns. Never call `Require` per item.
 
 In the handler's test, add one case without the grant that asserts `oops.CodeForbidden`, and one case with it through `authztest.WithExactGrants(t, ctx, authz.NewGrant(scope, resourceID))`.
+
+A typed id proves an id is well formed, not that the resource is the caller's. That rests on the handler loading the row inside the caller's project, so keep a handler test in which a caller from another project and organization names the resource (`environments/tenant_binding_test.go`). The engine itself only compares org checks: one about an organization other than the caller's is refused for every caller, so check an org permission on the organization the caller is acting in.
 
 ## Adding or changing a permission
 
@@ -108,9 +110,12 @@ The flag refuses to overwrite a fixture. Never regenerate an existing one, becau
 
 ## Never
 
+- **A tool or disposition goes on a tool call and nowhere else.** `ToolCall` (and `MCPToolCallCheck`) mark the check as a tool call. A check that carries `tool` or `disposition` without being built that way is an invalid check, and so is a tool call you build on any scope but `mcp:connect` (the engine derives the matching `mcp:blocked_connect` check itself). The engine reads that mark, not which dimensions happen to be present, so a tool call can never be evaluated as a connection.
+- **A check with a scope the registry does not know, a resource kind that is not its scope's, or a dimension its scope does not declare is an invalid check.** `resource_kind` and `resource_id` are never dimensions.
 - **Never build a raw `authz.Check{...}`, or call `authz.EnvironmentCheck` / `MCPCheck` / `MCPToolCallCheck` / `AssistantCheck` / `HooksIngestCheck` / `ChatReadCheck` / `ChatWriteCheck`, in a migrated package.** The `norawauthzchecks` glint rule reports it. Once no raw constructor or `authz.Check{}` literal remains anywhere in a package, add it to `noRawAuthzChecksPackages` in `glint/no_raw_authz_checks.go`. A partial migration leaves the list alone.
 - **Never pass a probe to `Require`, or `AnyOf` anywhere but as the single check of `Require` or `Can`.** Both are invalid checks, which map to an unexpected error rather than a 403.
 - **Never build a ref with an empty project.** An empty dimension is an invalid check. Take the project from the row you loaded, not from the request, when they can differ.
+- **Never decide whether a risk policy applies from `RiskPolicyApplies(...).Evaluate(...).Satisfied`.** Call `authz.EvaluateRiskPolicy(grants, policyID, dims)` and use `.Applies()`. It names the two reasons a policy leaves a caller alone (`RiskPolicyExempt`, `RiskPolicyNotInAudience`); anything else, including grants that could not be read or a policy that could not be evaluated, means the policy applies. The caller decides how to report the error and never uses it to skip the policy: the realtime scanner logs it and scans, `policycore` returns it.
 - **Never hand-edit a `*_gen.go` file in `authz`.** Change `registry.Definitions` (or the registry file that declares the name, such as `registry/scopes.go` or `registry/selectors.go`) and regenerate.
 - **Never evaluate grants outside `authz`.** The two SQL list queries in `access/queries.sql` (`ListAccessibleMCPServersForUser`, `ListAccessibleSkillsForUser`) mirror the matcher and precedence. If you change either, change both.
 - **Never read a `principal_grants` row for authorization without `(expires_at IS NULL OR expires_at > clock_timestamp())`.** Temporary grants expire in place.
