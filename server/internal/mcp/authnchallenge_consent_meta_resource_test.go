@@ -297,15 +297,17 @@ func TestServeConsentAction_MetaMCPConnectRefusesAClientNoMemberIsAssociatedWith
 // as configured for no member.
 func TestServeConsentAction_MetaMCPConnectAllowsAClientOnlyAHostedMemberUses(t *testing.T) {
 	t.Parallel()
-
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-hosted-gw")
 
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-hosted", "", []uuid.UUID{fx.shared})
-	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	hosted := seedHostedMetaMember(t, ctx, fx.ti, metaServerID, "Hosted", 0, "public")
-	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, hosted.serverID, conv.ToNullUUID(issuerID))
-
-	require.NotNil(t, postConnectAction(t, fx, clientID), "the hosted member's client connects")
+	requireConnectRefused(t, fx, clientID, "an issuer link alone cannot authorize a hosted login")
+	_, err := authclientbackfill.New(fx.ti.conn).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{
+		ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: hosted.serverID, RemoteSessionClientID: clientID,
+	})
+	require.NoError(t, err)
+	target := postConnectAction(t, fx, clientID)
+	require.False(t, target.Query().Has("resource"), "the hosted member does not borrow a resource")
 }
 
 // One registration serving members at two different resources is ambiguous:
@@ -631,7 +633,7 @@ func requireConnectRefused(t *testing.T, fx consentActionFixture, clientID uuid.
 // as "no member claimed this" would hand the question to the weaker per-client
 // derivation, which answers for a different reason entirely.
 func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
-	t.Parallel()
+	// CI may reuse the shard database. Do not change its schema concurrently.
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-lookup-fault-gw")
 
@@ -640,10 +642,14 @@ func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
 	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-fault-member", "https://lookup-fault.example.com/mcp", conv.ToNullUUID(issuerID), 0)
 	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
 
-	// Break only the member lookup's table; everything the connect arm touches
-	// before it is already seeded (per-test cloned DB, safe to mutate).
+	// Break only the member lookup's table and restore it before other tests run.
 	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE meta_mcp_server_members RENAME TO meta_mcp_server_members_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a member-lookup DB error; not expressible as an SQLc query
 	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_, err := fx.ti.conn.Exec(context.WithoutCancel(ctx), "ALTER TABLE meta_mcp_server_members_unavailable RENAME TO meta_mcp_server_members") //nolint:glint // notestingrawsql: restore the deliberate DDL fault above
+		require.NoError(t, err)
+	})
 
 	_ = requireConnectActionFailsClosed(t, fx, clientID, oops.CodeUnexpected)
 }

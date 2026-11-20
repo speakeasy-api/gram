@@ -604,11 +604,14 @@ func (m *ChallengeManager) validateRemoteLoginAuthorization(ctx context.Context,
 	if state.TypedAuthorization != nil {
 		return m.validateTypedAuthorization(ctx, state)
 	}
-	// Rolling deployments can leave an authorization code in flight that
-	// was granted based only on the issuer inventory. Never upgrade it to a
-	// hosted placement on the callback. Explicitly select a server again.
+	// A legacy gateway callback can finish only when its cached resource or
+	// member identifies a live proxied placement. It may never recover a
+	// hosted placement from issuer inventory.
 	if state.MetaMcpServerID.Valid || state.RouteBase == mcproute.OrganizationGateway {
-		return ErrTypedAuthorizationChanged
+		if m.typedAuthorizationValidator == nil {
+			return ErrTypedAuthorizationChanged
+		}
+		return m.typedAuthorizationValidator(ctx, state)
 	}
 	if state.McpServerID.Valid {
 		srv, err := mcpserversrepo.New(m.db).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: state.McpServerID.UUID, OrganizationID: state.OrganizationID})

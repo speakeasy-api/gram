@@ -592,7 +592,7 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 				}
 				assigned, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, member.projectID, endpoint.OrganizationID, []uuid.UUID{registration})
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("read hosted gateway registration: %w", err)
 				}
 				if len(assigned) == 1 {
 					seen[registration] = true

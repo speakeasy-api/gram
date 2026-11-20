@@ -22,6 +22,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -821,13 +823,25 @@ func TestSharedAuthorizationServer_ModeSwitchClosesInFlightFlows(t *testing.T) {
 // A remote session connect from the shared consent page returns there, while
 // keeping its consent parent: the callback still checks that parent's browser
 // binding.
+// placeHostedConsentRegistration configures the selected hosted endpoint only.
+func placeHostedConsentRegistration(t *testing.T, ctx context.Context, ti *testInstance, slug string, registration uuid.UUID) {
+	t.Helper()
+	auth := requireProjectAuthContext(t, ctx)
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{ProjectID: *auth.ProjectID, Slug: conv.ToPGText(slug)})
+	require.NoError(t, err)
+	require.True(t, server.ToolsetID.Valid)
+	_, err = authclientbackfill.New(ti.conn).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: server.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: server.ID, RemoteSessionClientID: registration})
+	require.NoError(t, err)
+}
+
 func TestSharedAuthorizationServer_RemoteConnectReturnsToSharedConsent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	authCtx := requireProjectAuthContext(t, ctx)
 	f := seedSharedIssuer(t, ctx, ti)
-	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "shared-rc-"+uuid.NewString()[:8], "", []uuid.UUID{f.issuer.ID})
+	remoteClientID := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "shared-rc-"+uuid.NewString()[:8], "", nil)
+	placeHostedConsentRegistration(t, ctx, ti, f.slugA, remoteClientID)
 
 	authorized := sharedAuthorize(t, ctx, ti, f, pkceChallenge(pkceVerifier(t)), f.resource(ti, f.slugA))
 	require.Equal(t, http.StatusFound, authorized.Code, authorized.Body.String())

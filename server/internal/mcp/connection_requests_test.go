@@ -1183,12 +1183,13 @@ func TestHostedReconnectIgnoresRefreshableSibling(t *testing.T) {
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	authCtx := requireProjectAuthContext(t, ctx)
 	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "fresh-outranked")
-	sibling := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "hosted-refresh-sibling-"+uuid.NewString()[:8], "", []uuid.UUID{fixture.UserSessionIssuer.ID})
+	sibling := createConsentRemoteClient(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "hosted-refresh-sibling-"+uuid.NewString()[:8], "", nil)
 
 	neverLinked := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, urn.NewUserSubject("gate-user-"+uuid.NewString()))
 	want, wantErr := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), neverLinked, nil)
 	require.Error(t, wantErr)
 	require.Len(t, rec.Rows(), 1, "a never-linked subject gets the gate row")
+	baselineReason := rec.Rows()[0].Reason
 
 	subject := urn.NewUserSubject("gate-user-" + uuid.NewString())
 	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, sibling, subject)
@@ -1207,7 +1208,7 @@ func TestHostedReconnectIgnoresRefreshableSibling(t *testing.T) {
 	rows := rec.Rows()[1:]
 	require.Len(t, rows, 1)
 	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[0].Step)
-	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession.String(), rows[0].Reason)
+	require.Equal(t, baselineReason, rows[0].Reason, "a sibling grant does not change the exact registration’s reconnect outcome")
 }
 
 // A gateway call is past sign-in and takes no caller headers, so its rows stay as they were.

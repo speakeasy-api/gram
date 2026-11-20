@@ -216,6 +216,14 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 			return signInRow(metamcp.SignInError, "could not check this server's sign-in", nil)
 		}
 		if len(member.associatedClients) == 0 {
+			id, err := s.hostedRegistration(ctx, gate.organizationID, member.projectID, member.serverID)
+			if err != nil {
+				logger.WarnContext(ctx, "check live hosted no-upstream state", attr.SlogError(err))
+				return signInRow(metamcp.SignInError, "could not check this server's sign-in", nil)
+			}
+			if id != uuid.Nil {
+				return notConnectedRow(gate, true)
+			}
 			return signInRow(metamcp.SignInNotRequired, "", nil)
 		}
 		var registrationID uuid.UUID

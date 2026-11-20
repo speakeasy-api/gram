@@ -111,6 +111,8 @@ func TestResolveHostedRegistrationAccessTokens_UsesOnlyAssignedGrant(t *testing.
 	t.Parallel()
 	ctx, f := newAuthClientTokenFixture(t, "hosted-exact-grant")
 	subject := urn.NewUserSubject("hosted-exact-user")
+	sibling := seedRemoteClientAtTier(t, ctx, f.ti.conn, conv.ToNullUUID(f.projectID), conv.ToPGText(f.organizationID), f.issuerID, "hosted-exact-sibling", f.signInA)
+	f.consent(t, subject, f.signInB, sibling, "same-provider-sibling-token")
 	session := f.consent(t, subject, f.signInB, f.clientID, "assignment-token")
 	req := f.request(subject, f.clientID)
 	tokens, err := f.mgr.ResolveHostedRegistrationAccessTokens(ctx, req)
@@ -128,9 +130,11 @@ func TestResolveHostedRegistrationAccessTokens_UsesOnlyAssignedGrant(t *testing.
 	require.NoError(t, err)
 	require.True(t, reconnect)
 
-	// An agent without an exact attachment cannot borrow this user's grant.
-	agent := f.request(urn.NewAgentSubject(uuid.New()), f.clientID)
-	reconnect, err = f.mgr.HostedRegistrationNeedsReconnect(t.Context(), agent)
+	siblingOnly := urn.NewUserSubject("hosted-sibling-only")
+	f.consent(t, siblingOnly, f.signInB, sibling, "sibling-only-token")
+	_, err = f.mgr.ResolveHostedRegistrationAccessTokens(ctx, f.request(siblingOnly, f.clientID))
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	reconnect, err = f.mgr.HostedRegistrationNeedsReconnect(ctx, f.request(siblingOnly, f.clientID))
 	require.NoError(t, err)
 	require.True(t, reconnect)
 }
