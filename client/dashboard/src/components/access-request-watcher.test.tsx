@@ -5,6 +5,7 @@ type Request = {
   id: string;
   scope: string;
   status: string;
+  createdAt: Date;
   grantExpiresAt?: Date;
 };
 
@@ -13,6 +14,7 @@ type Request = {
 const state = vi.hoisted(() => ({
   on: true,
   requests: [] as Request[],
+  query: undefined as unknown,
   options: undefined as
     | {
         refetchInterval?: (query: {
@@ -22,22 +24,27 @@ const state = vi.hoisted(() => ({
     | undefined,
 }));
 
+const invalidation = vi.hoisted(() => ({
+  requests: vi.fn(() => Promise.resolve()),
+  temporaryAccess: vi.fn(),
+}));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: state.on ? "enabled" : "disabled" }),
 }));
 vi.mock("@gram/client/react-query/accessRequests.js", () => ({
   useAccessRequests: (
-    _request: unknown,
+    request: unknown,
     _security: unknown,
     options: typeof state.options,
   ) => {
+    state.query = request;
     state.options = options;
     return { data: { requests: [...state.requests] } };
   },
-  invalidateAllAccessRequests: () => Promise.resolve(),
+  invalidateAllAccessRequests: invalidation.requests,
 }));
 vi.mock("./temporary-access-helpers", () => ({
-  invalidateTemporaryAccess: vi.fn(),
+  invalidateTemporaryAccess: invalidation.temporaryAccess,
 }));
 const toast = vi.hoisted(() => ({
   success: vi.fn(),
@@ -61,13 +68,22 @@ afterEach(() => {
   state.on = true;
   state.requests = [];
   state.options = undefined;
+  state.query = undefined;
+  invalidation.requests.mockClear();
+  invalidation.temporaryAccess.mockClear();
   toast.success.mockClear();
   toast.error.mockClear();
   toast.info.mockClear();
   invalidateQueries.mockClear();
 });
 
-const pending: Request = { id: "r1", scope: "mcp:write", status: "pending" };
+// Made before the watcher mounted.
+const pending: Request = {
+  id: "r1",
+  scope: "mcp:write",
+  status: "pending",
+  createdAt: new Date(2026, 0, 1),
+};
 
 /** Whether every query was refetched, not only the access ones. */
 function refetchedEverything(): boolean {
@@ -77,10 +93,11 @@ function refetchedEverything(): boolean {
 }
 
 describe("AccessRequestWatcher", () => {
-  it("polls only while one of the viewer's requests is pending", () => {
+  it("polls only the viewer's own requests, only while one is pending", () => {
     render(<AccessRequestWatcher />);
     const interval = state.options?.refetchInterval;
 
+    expect(state.query).toEqual({ mine: true });
     expect(interval?.({ state: { data: { requests: [pending] } } })).toBe(
       ACCESS_REQUEST_POLL_MS,
     );
@@ -119,6 +136,40 @@ describe("AccessRequestWatcher", () => {
 
     expect(toast.error).toHaveBeenCalledWith("Your access request was denied.");
     expect(refetchedEverything()).toBe(false);
+    expect(invalidation.requests).toHaveBeenCalledTimes(1);
+    expect(invalidation.temporaryAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the viewer a request expired and refreshes the request lists", () => {
+    state.requests = [pending];
+    const { rerender } = render(<AccessRequestWatcher />);
+
+    state.requests = [{ ...pending, status: "expired" }];
+    rerender(<AccessRequestWatcher />);
+
+    expect(toast.info).toHaveBeenCalledWith(
+      "Your access request expired before anyone decided it.",
+    );
+    expect(invalidation.requests).toHaveBeenCalledTimes(1);
+    expect(invalidation.temporaryAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces a request made after it loaded even if no poll saw it pending", () => {
+    const { rerender } = render(<AccessRequestWatcher />);
+
+    state.requests = [
+      {
+        ...pending,
+        id: "r2",
+        status: "approved",
+        createdAt: new Date(Date.now() + 1_000),
+      },
+    ];
+    rerender(<AccessRequestWatcher />);
+    rerender(<AccessRequestWatcher />);
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(refetchedEverything()).toBe(true);
   });
 
   it("stays quiet about requests decided before the app loaded", () => {

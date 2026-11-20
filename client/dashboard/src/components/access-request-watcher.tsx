@@ -31,9 +31,12 @@ export function AccessRequestWatcher(): React.JSX.Element | null {
 
 function PendingAccessRequestWatcher(): null {
   const queryClient = useQueryClient();
-  // Requests seen pending since the app loaded. Only these are announced
-  // when decided, so a decision made before the page loaded stays quiet.
+  // Requests seen pending since the app loaded, and requests made since, are
+  // announced when decided; a decision made before the app loaded stays
+  // quiet. A request made here can be decided before a poll sees it pending.
   const seenPending = React.useRef(new Set<string>());
+  const announced = React.useRef(new Set<string>());
+  const [mountedAt] = React.useState(() => Date.now());
   const mine = useAccessRequests({ mine: true }, undefined, {
     refetchInterval: (query) =>
       query.state.data?.requests.some((r) => r.status === "pending")
@@ -50,7 +53,13 @@ function PendingAccessRequestWatcher(): null {
     for (const request of mine.data.requests) {
       if (request.status === "pending") {
         seenPending.current.add(request.id);
-      } else if (seenPending.current.delete(request.id)) {
+        continue;
+      }
+      const waitedOn =
+        seenPending.current.delete(request.id) ||
+        request.createdAt.getTime() > mountedAt;
+      if (waitedOn && !announced.current.has(request.id)) {
+        announced.current.add(request.id);
         decided.push(request);
       }
     }
@@ -62,7 +71,7 @@ function PendingAccessRequestWatcher(): null {
       void invalidateAllAccessRequests(queryClient);
     }
     for (const request of decided) announce(request);
-  }, [mine.data, queryClient]);
+  }, [mine.data, mountedAt, queryClient]);
 
   return null;
 }

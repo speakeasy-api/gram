@@ -61,7 +61,14 @@ export const LoginCheck = (): JSX.Element => {
     return <Navigate to={authPagePath("/sign-up", location)} />;
   }
 
-  return <Outlet />;
+  // Every signed-in page, inside the app layout or not, hears when one of
+  // the viewer's access requests is decided.
+  return (
+    <>
+      <Outlet />
+      <AccessRequestWatcher />
+    </>
+  );
 };
 
 export const AppLayout = (): JSX.Element => {
@@ -200,7 +207,6 @@ const AppLayoutContent = ({
           navigation into the chat route. */}
       <ChatLaunchOverlay />
       <TemporaryAccessPanel />
-      <AccessRequestWatcher />
     </div>
   );
 };
@@ -296,7 +302,6 @@ export const OrgLayout = (): JSX.Element => {
           </SidebarInset>
         </ModeSurface>
         <TemporaryAccessPanel />
-        <AccessRequestWatcher />
       </div>
     </SidebarProvider>
   );

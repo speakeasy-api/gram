@@ -13,6 +13,7 @@ const accessRequests = vi.hoisted(() => ({
   on: false,
   catalogueLoaded: true,
   grantable: new Set<string>(),
+  updatedAt: 0,
   pending: [] as {
     scope: string;
     selector: { resourceId: string };
@@ -69,6 +70,7 @@ vi.mock("@gram/client/react-query/accessRequests.js", () => ({
         status: request?.status ?? item.status ?? "pending",
       })),
     },
+    dataUpdatedAt: accessRequests.updatedAt,
     refetch: () => Promise.resolve(),
   }),
   invalidateAllAccessRequests: () => Promise.resolve(),
@@ -100,6 +102,7 @@ afterEach(() => {
   accessRequests.catalogueLoaded = true;
   accessRequests.grantable = new Set();
   accessRequests.pending = [];
+  accessRequests.updatedAt = 0;
   mutateAsync.mockClear();
   toast.success.mockClear();
   toast.error.mockClear();
@@ -202,6 +205,30 @@ describe("RequestScopeAccess", () => {
     expect(screen.getByRole("button", { name: "Request Access" })).toBeTruthy();
   });
 
+  it("offers the request again when it was decided before the list saw it pending", async () => {
+    accessRequests.on = true;
+    accessRequests.grantable = new Set(["log:read"]);
+    mutateAsync.mockResolvedValueOnce({
+      sentToCount: 1,
+      request: { id: "request-1" },
+    });
+    const { rerender } = render(
+      <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Request Access" }));
+    expect(await screen.findByText("Request pending")).toBeTruthy();
+
+    // The first list read after the request no longer holds it.
+    accessRequests.updatedAt = Date.now() + 1_000;
+    rerender(
+      <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Request Access" }),
+    ).toBeTruthy();
+  });
+
   it("offers the request again once the pending request is decided", async () => {
     accessRequests.on = true;
     accessRequests.grantable = new Set(["log:read"]);
@@ -220,11 +247,13 @@ describe("RequestScopeAccess", () => {
     accessRequests.pending = [
       { scope: "log:read", selector: { resourceId: "project-1" } },
     ];
+    accessRequests.updatedAt = Date.now() + 1_000;
     rerender(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );
     expect(screen.getByText("Request pending")).toBeTruthy();
     accessRequests.pending = [];
+    accessRequests.updatedAt = Date.now() + 2_000;
     rerender(
       <RequestScopeAccess scopes={["log:read"]} resourceId="project-1" />,
     );

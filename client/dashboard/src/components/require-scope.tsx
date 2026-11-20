@@ -366,6 +366,7 @@ function RequestScopeAccessForm(
       {...props}
       accessRequestsOn={false}
       pending={NO_PENDING_REQUESTS}
+      pendingUpdatedAt={0}
       onRequested={undefined}
     />
   );
@@ -389,6 +390,7 @@ function StoredRequestScopeAccess(
       {...props}
       accessRequestsOn
       pending={myPending.data?.requests ?? NO_PENDING_REQUESTS}
+      pendingUpdatedAt={myPending.dataUpdatedAt ?? 0}
       onRequested={() => invalidateAllAccessRequests(queryClient)}
     />
   );
@@ -403,10 +405,12 @@ function RequestScopeAccessButton({
   align = "center",
   accessRequestsOn,
   pending,
+  pendingUpdatedAt,
   onRequested,
 }: RequestScopeAccessProps & {
   accessRequestsOn: boolean;
   pending: PendingRequest[];
+  pendingUpdatedAt: number;
   onRequested: (() => Promise<unknown>) | undefined;
 }): React.JSX.Element | null {
   const [requestState, setRequestState] = React.useState<
@@ -443,18 +447,16 @@ function RequestScopeAccessButton({
       request.selector.resourceId === (resourceId ?? "*"),
   );
 
-  // A request made here stays pending until it leaves the viewer's pending
-  // list, which the app-wide watcher refreshes once it is decided.
-  const sawInPendingList = React.useRef(false);
+  // A request made here shows as pending until a pending list read after it
+  // was made no longer holds it: the app-wide watcher refreshes that list
+  // once the request is decided, even when that happens before any poll.
+  const [requestedAt, setRequestedAt] = React.useState(0);
   React.useEffect(() => {
     if (requestState !== "pending") return;
-    if (alreadyPending) {
-      sawInPendingList.current = true;
-    } else if (sawInPendingList.current) {
-      sawInPendingList.current = false;
+    if (pendingUpdatedAt > requestedAt && !alreadyPending) {
       setRequestState("idle");
     }
-  }, [alreadyPending, requestState]);
+  }, [alreadyPending, pendingUpdatedAt, requestedAt, requestState]);
 
   if (missingScopes.length === 0) return null;
   // An all-scopes gate stays shut unless every missing scope can be asked for.
@@ -498,6 +500,7 @@ function RequestScopeAccessButton({
     );
     if (stored) {
       // The app-wide watcher tells the viewer when it is decided.
+      setRequestedAt(Date.now());
       setRequestState("pending");
       void onRequested?.();
       return;
