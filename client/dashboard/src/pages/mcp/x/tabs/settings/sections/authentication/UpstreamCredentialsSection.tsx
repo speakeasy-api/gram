@@ -56,7 +56,8 @@ export function UpstreamCredentialsSection({
   const [addOverride, setAdding] = useState<boolean | null>(null);
   const adding =
     addOverride ??
-    (canManage &&
+    (!query.isError &&
+      !!query.data &&
       (setupStep === "credentials" || setupStep === "oauth-client"));
   const openClient =
     query.data?.clients.find((client) => client.id === openClientId) ?? null;
@@ -152,7 +153,7 @@ export function UpstreamCredentialsSection({
           )}
         </div>
       </SettingsSection.Panel>
-      {canManage && adding && !query.isError && query.data ? (
+      {canManage && adding ? (
         <AddCredentialSheet
           mcpServerId={mcpServer.id}
           projectId={mcpServer.projectId}

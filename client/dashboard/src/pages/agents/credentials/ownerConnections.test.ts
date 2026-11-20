@@ -713,6 +713,22 @@ describe("serverSignIns", () => {
     ]);
   });
 
+  it("counts a registration once without guessing a name when its offers disagree", () => {
+    const credential = {
+      ...authClient("remote_session"),
+      personal: true,
+      remoteSessionClientId: "one",
+    };
+    expect(
+      serverSignIns(
+        authentication([
+          { ...credential, name: "First label" },
+          { ...credential, id: "auth_other", name: "Second label" },
+        ]),
+      ),
+    ).toEqual([{ id: "one", credentialOwner: "subject", name: undefined }]);
+  });
+
   it("has no answer while a personal auth client names no registration", () => {
     expect(
       serverSignIns({
