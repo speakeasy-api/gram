@@ -246,8 +246,8 @@ func TestAIScanLibraryWithoutOverlayMatchesGolden(t *testing.T) {
 
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_ai_catalog_golden")
 	require.NoError(t, err)
-	service := NewShadowAIService(&stubDetectionReader{}, NewPostgresShadowAILibrary(aivendorstest.NewStore(), agentrepo.New(conn)), stubAuthorizer{}, allowingBudget())
-	output, err := service.ListLibrary(t.Context(), shadowAIPrincipal(), ListAIScanLibraryInput{Category: ""})
+	service := NewShadowAIService(&stubDetectionReader{}, NewPostgresShadowAILibrary(agentrepo.New(conn)), stubAuthorizer{}, allowingBudget())
+	output, err := service.ListLibrary(t.Context(), aivendors.CompiledSnapshot(), shadowAIPrincipal(), ListAIScanLibraryInput{Category: ""})
 	require.NoError(t, err)
 	data, err := json.Marshal(output)
 	require.NoError(t, err)
@@ -290,5 +290,4 @@ func TestRuntimeWithoutCatalogFailsAtComposition(t *testing.T) {
 	require.PanicsWithValue(t, "platformmcp: runtime composed without an AI client catalog store; call WithAICatalog", func() { runtime.Handler() })
 	require.Panics(t, func() { runtime.AssistantTools() })
 	require.Panics(t, func() { NewRemoteMCPReadinessProber(nil, testenv.NewLogger(t), nil, nil, nil, nil) })
-	require.Panics(t, func() { NewPostgresShadowAILibrary(nil, nil) })
 }

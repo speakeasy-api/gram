@@ -41,8 +41,7 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 		logger.ErrorContext(ctx, "AI catalog rejected; serving the built-in catalog", attr.SlogError(err))
 		snapshot = CompiledSnapshot()
 		if len(keys) > 0 {
-			builtIn := *snapshot
-			snapshot = &builtIn
+			snapshot = newCompiledSnapshot()
 		}
 		err = nil
 	}
@@ -148,11 +147,7 @@ func (s *Store) Refresh(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 		return err
 	}
 	s.confirmed.Store(time.Now().UnixNano())
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.snapshot.builtIn || s.snapshot.Fingerprint() != next.Fingerprint() {
-		s.snapshot = next
-	}
+	s.Publish(next)
 	return nil
 }
 

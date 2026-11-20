@@ -657,7 +657,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	// Trouble reading the organization's scan targets must not break plugin
 	// delivery: a poll without ai_scan leaves agents on their cached or
 	// embedded list.
-	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, s.aiCatalog.Snapshot()); err != nil {
+	if list, err := aitargets.LoadOrganizationList(ctx, s.repo, authCtx.ActiveOrganizationID, s.aiCatalog.SnapshotFor(ctx)); err != nil {
 		s.logger.WarnContext(ctx, "ai scan targets unavailable; plugin poll omits ai_scan", attr.SlogError(err))
 	} else {
 		attachAIScanEnvelope(configuration, list.Snapshot)

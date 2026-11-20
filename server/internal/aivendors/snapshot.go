@@ -2,9 +2,12 @@ package aivendors
 
 import (
 	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -47,6 +50,7 @@ type Snapshot struct {
 	builtIn     bool
 	// skipped are the rows the load that built this snapshot left out.
 	skipped []string
+	derived sync.Map // values other packages compute once per snapshot
 }
 
 // NewSnapshot builds indexes over validated catalog data and takes ownership of
@@ -62,6 +66,7 @@ func NewSnapshot(products []Product) *Snapshot {
 		fingerprint: "",
 		builtIn:     false,
 		skipped:     nil,
+		derived:     sync.Map{},
 	}
 	for _, p := range products {
 		p = p.clone()
@@ -145,7 +150,9 @@ func (p Product) withEmptyAsNil() Product {
 // CompiledSnapshot is the built-in registry in database order: products by id, then documents by URL.
 func CompiledSnapshot() *Snapshot { return compiledSnapshot() }
 
-var compiledSnapshot = sync.OnceValue(func() *Snapshot {
+var compiledSnapshot = sync.OnceValue(newCompiledSnapshot)
+
+func newCompiledSnapshot() *Snapshot {
 	products := Products()
 	for i := range products {
 		products[i].Family = ""
@@ -156,7 +163,7 @@ var compiledSnapshot = sync.OnceValue(func() *Snapshot {
 	s := NewSnapshot(products)
 	s.builtIn = true
 	return s
-})
+}
 
 // Fingerprint hashes the complete snapshot, including product and document
 // order, which is listing order.
@@ -230,6 +237,19 @@ func (s *Snapshot) GatewayMatchersFor(p Product) GatewayMatchers {
 	return out
 }
 
+// Derived computes a value once per snapshot and caller-owned key; callers must not mutate it.
+func Derived[T any](s *Snapshot, key any, compute func(*Snapshot) T) T {
+	v, ok := s.derived.Load(key)
+	if !ok {
+		v, _ = s.derived.LoadOrStore(key, sync.OnceValue(func() T { return compute(s) }))
+	}
+	get, ok := v.(func() T)
+	if !ok {
+		panic(fmt.Sprintf("aivendors: derived value for key %T is %T, not the requested type", key, v))
+	}
+	return get()
+}
+
 // Store publishes immutable snapshots. A compound operation calls Snapshot once
 // and uses that view throughout; refreshing never mutates a captured view.
 type Store struct {
@@ -262,4 +282,41 @@ func (s *Store) Snapshot() *Snapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.snapshot
+}
+
+type pinnedSnapshotKey struct{}
+
+// Pin captures one snapshot for the rest of a request, keeping one already pinned.
+func (s *Store) Pin(ctx context.Context) context.Context {
+	if _, ok := ctx.Value(pinnedSnapshotKey{}).(*Snapshot); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, pinnedSnapshotKey{}, s.Snapshot())
+}
+
+// SnapshotFor returns the snapshot pinned on ctx, or captures the current one.
+func (s *Store) SnapshotFor(ctx context.Context) *Snapshot {
+	if snapshot, ok := ctx.Value(pinnedSnapshotKey{}).(*Snapshot); ok {
+		return snapshot
+	}
+	return s.Snapshot()
+}
+
+// Middleware pins one snapshot on each request so every reader in it sees the same revision.
+func (s *Store) Middleware(next http.Handler) http.Handler {
+	if s == nil {
+		panic("aivendors: catalog middleware registered without a store")
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(s.Pin(r.Context())))
+	})
+}
+
+// Publish replaces the current snapshot unless next has the same content; it always replaces the built-in one.
+func (s *Store) Publish(next *Snapshot) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.snapshot.builtIn || s.snapshot.Fingerprint() != next.Fingerprint() {
+		s.snapshot = next
+	}
 }

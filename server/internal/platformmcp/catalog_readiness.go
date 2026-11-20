@@ -214,7 +214,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{}, "anonymous"), nil
 	}
 	subject := urn.NewUserSubject(principal.UserID)
-	app := mcpconnectionattempts.AppOf(p.aiCatalog.Snapshot(), principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)
+	app := mcpconnectionattempts.AppOf(p.aiCatalog.SnapshotFor(ctx), principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)
 	var authorization remotesessions.ResolvedAuthorization
 	chosen := clients[0]
 	if enforced {
