@@ -19,12 +19,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -82,6 +81,10 @@ type IdentityChainingReadiness struct {
 // chaining serves the upstream without one. ok is false when chaining does not
 // serve it.
 func ResolveIdentityChainingReadiness(ctx context.Context, governor IdentityChainingGovernor, organizationID, userID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string) (IdentityChainingReadiness, bool) {
+	return resolveIdentityChainingReadiness(ctx, governor, organizationID, userID, projectID, userSessionIssuerID, upstreamResource, uuid.NullUUID{})
+}
+
+func resolveIdentityChainingReadiness(ctx context.Context, governor IdentityChainingGovernor, organizationID, userID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string, clientID uuid.NullUUID) (IdentityChainingReadiness, bool) {
 	var none IdentityChainingReadiness
 	if governor == nil {
 		return none, false
@@ -90,6 +93,7 @@ func ResolveIdentityChainingReadiness(ctx context.Context, governor IdentityChai
 	if !ok {
 		return none, false
 	}
+	req.RemoteSessionClientID = clientID
 	issuer, served := governor.Serves(ctx, req)
 	if !served || issuer == uuid.Nil {
 		return none, false
@@ -105,7 +109,7 @@ func ResolveIdentityChainingReadiness(ctx context.Context, governor IdentityChai
 // normal runtime. Its inputs come exclusively from a lifecycle-owned
 // registration, never from an MCP caller.
 type CatalogReadinessProber interface {
-	ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error)
+	ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, mcpServerID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error)
 }
 
 // RemoteMCPReadinessProber is the generic browser-catalogue readiness path. It
@@ -119,15 +123,10 @@ type RemoteMCPReadinessProber struct {
 	policy   *guardian.Policy
 	sessions *remotesessions.ChallengeManager
 	chaining IdentityChainingGovernor
-
-	// authEnforcement reads which organizations choose upstream
-	// authentication through typed auth clients, whose probes use the
-	// registrations those clients offer.
-	authEnforcement *authenforcement.Gate
 }
 
 func NewRemoteMCPReadinessProber(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, sessions *remotesessions.ChallengeManager) *RemoteMCPReadinessProber {
-	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions, chaining: nil, authEnforcement: authenforcement.NewGate(db)}
+	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions, chaining: nil}
 }
 
 // WithIdentityChaining judges upstreams without an interactive session by
@@ -140,8 +139,8 @@ func (p *RemoteMCPReadinessProber) WithIdentityChaining(governor IdentityChainin
 	return p
 }
 
-func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error) {
-	if p == nil || p.db == nil || p.enc == nil || p.policy == nil || p.sessions == nil || principal.UserID == "" || principal.OrganizationID == "" || projectID == uuid.Nil || registrationID == uuid.Nil || remoteMCPServerID == uuid.Nil || userSessionIssuerID == uuid.Nil || connectionID == uuid.Nil || generation == uuid.Nil {
+func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, mcpServerID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error) {
+	if p == nil || p.db == nil || p.enc == nil || p.policy == nil || p.sessions == nil || principal.UserID == "" || principal.OrganizationID == "" || projectID == uuid.Nil || registrationID == uuid.Nil || mcpServerID == uuid.Nil || remoteMCPServerID == uuid.Nil || userSessionIssuerID == uuid.Nil || connectionID == uuid.Nil || generation == uuid.Nil {
 		return ProviderReadinessProbeResult{}, ErrReadinessInvalid
 	}
 	if _, err := projectsrepo.New(p.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: principal.OrganizationID}); err != nil {
@@ -160,6 +159,9 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	if remote.TransportType != "streamable-http" || !validCatalogReadinessURL(remote.Url) {
 		return ProviderReadinessProbeResult{}, ErrReadinessInvalid
 	}
+	if err := validateRemoteOfferTarget(ctx, p.db, projectID, mcpServerID, remoteMCPServerID, userSessionIssuerID); err != nil {
+		return ProviderReadinessProbeResult{}, err
+	}
 	headers, err := p.loadHeaders(ctx, remote.ID)
 	if err != nil {
 		return ProviderReadinessProbeResult{}, fmt.Errorf("load registered Remote MCP headers: %w", err)
@@ -173,33 +175,11 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		}
 	}
 
-	enforced, err := p.authEnforcement.Enforced(ctx, principal.OrganizationID)
+	clients, err := p.offeredRegistrations(ctx, principal.OrganizationID, projectID, []uuid.UUID{mcpServerID}, []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeEMA})
 	if err != nil {
-		return ProviderReadinessProbeResult{}, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
-	var clients []remotesessions.Client
-	if enforced {
-		// Typed auth clients choose upstream authentication, so the source's
-		// identity providers are the registrations its servers offer,
-		// whatever their sign-in binds.
-		serverIDs, err := authclientbackfill.New(p.db).ListRemoteSourceServerIDs(ctx, authclientbackfill.ListRemoteSourceServerIDsParams{OrganizationID: principal.OrganizationID, SourceID: remote.ID})
-		if err != nil {
-			return ProviderReadinessProbeResult{}, fmt.Errorf("list registered Remote MCP servers: %w", err)
-		}
-		clients, err = p.offeredRegistrations(ctx, principal.OrganizationID, projectID, serverIDs, []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeEMA})
-		if err != nil {
-			return ProviderReadinessProbeResult{}, err
-		}
-	} else {
-		clients, err = p.sessions.ListClients(ctx, projectID, principal.OrganizationID, userSessionIssuerID)
-		if err != nil {
-			return ProviderReadinessProbeResult{}, fmt.Errorf("list configured upstream identity providers: %w", err)
-		}
+		return ProviderReadinessProbeResult{}, err
 	}
 	if len(clients) == 0 {
-		if chained, ok := ResolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url); ok {
-			return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
-		}
 		state, evidence := p.probe(ctx, remote.Url, headers, "")
 		if state == ReadinessUnauthorized {
 			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{}, "no_client"), nil
@@ -209,34 +189,27 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	subject := urn.NewUserSubject(principal.UserID)
 	var authorization remotesessions.ResolvedAuthorization
 	chosen := clients[0]
-	if enforced {
-		// A server may offer several registrations for its callers to choose
-		// among; the caller is ready through the first that yields a credential,
-		// and the first registration's failure is reported when none does.
-		var firstErr error
-		for i, client := range clients {
-			tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)))})
-			token := tokens[client.RemoteSessionIssuerID]
-			if resolveErr == nil && token.Token == "" {
-				resolveErr = remotesessions.ErrNoValidToken
-			}
-			if i == 0 {
-				firstErr = resolveErr
-			}
-			if resolveErr == nil {
-				chosen = client
-				authorization = remotesessions.ResolvedAuthorization{AccessToken: token.Token, RemoteSessionID: token.RemoteSessionID, RemoteSessionUpdatedAt: token.RemoteSessionUpdatedAt, RemoteSessionClientID: client.ID, RemoteSessionIssuerID: client.RemoteSessionIssuerID, CredentialOwner: token.CredentialOwner}
-				break
-			}
+	// A server may offer several registrations for its callers to choose
+	// among; the caller is ready through the first that yields a credential,
+	// and the first registration's failure is reported when none does.
+	var firstErr error
+	for i, client := range clients {
+		tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(principal.ClientID, mcpconnectionattempts.ClientIDAdmitted)))})
+		token := tokens[client.RemoteSessionIssuerID]
+		if resolveErr == nil && token.Token == "" {
+			resolveErr = remotesessions.ErrNoValidToken
 		}
-		if authorization.AccessToken == "" {
-			err = firstErr
+		if i == 0 {
+			firstErr = resolveErr
 		}
-	} else {
-		if len(clients) != 1 {
-			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "multiple_upstream_identity_providers", remotesessions.ResolvedAuthorization{}, "no_client"), nil
+		if resolveErr == nil {
+			chosen = client
+			authorization = remotesessions.ResolvedAuthorization{AccessToken: token.Token, RemoteSessionID: token.RemoteSessionID, RemoteSessionUpdatedAt: token.RemoteSessionUpdatedAt, RemoteSessionClientID: client.ID, RemoteSessionIssuerID: client.RemoteSessionIssuerID, CredentialOwner: token.CredentialOwner}
+			break
 		}
-		authorization, err = p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(principal.ClientID, mcpconnectionattempts.ClientIDAdmitted))), projectID, principal.OrganizationID, userSessionIssuerID, chosen.RemoteSessionIssuerID, subject, remote.Url)
+	}
+	if authorization.AccessToken == "" {
+		err = firstErr
 	}
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) || errors.Is(err, remotesessions.ErrChosenClientUnbound) {
 		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_client"), nil
@@ -245,8 +218,21 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_session"), nil
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
-		if chained, ok := ResolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url); ok {
-			return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
+		var firstConfigured *IdentityChainingReadiness
+		for _, client := range clients {
+			chained, ok := resolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url, conv.ToNullUUID(client.ID))
+			if !ok {
+				continue
+			}
+			if chained.State == ReadinessReady {
+				return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
+			}
+			if firstConfigured == nil {
+				firstConfigured = &chained
+			}
+		}
+		if firstConfigured != nil {
+			return p.result(principal, registrationID, firstConfigured.State, firstConfigured.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: firstConfigured.RemoteSessionIssuerID}, firstConfigured.Absence), nil
 		}
 		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_session"), nil
 	}

@@ -19,8 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -269,8 +267,6 @@ func TestMemberMCPConnectionStatusFollowsTypedAuthClients(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, int64(1), stamped)
-			_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-			require.NoError(t, err)
 
 			fixtures := authclientbackfill.New(conn)
 			var reader testMemberMCPConnectionReader

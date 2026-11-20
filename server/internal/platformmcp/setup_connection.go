@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -37,35 +38,12 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 	if remote.TransportType != "streamable-http" || !urls.IsAbsoluteHTTPSOrLoopback(remote.Url) {
 		return setupConnectionResult("configuration_required", "unsupported_transport"), nil
 	}
-	enforced, err := p.authEnforcement.Enforced(ctx, organizationID)
-	if err != nil {
-		return nil, fmt.Errorf("read upstream auth enforcement: %w", err)
+	if err := validateRemoteOfferTarget(ctx, p.db, projectID, mcpServerID, remoteServerID, userSessionIssuerID); err != nil {
+		return nil, err
 	}
-	var clients []remotesessions.Client
-	if enforced {
-		// Typed auth clients choose the server's upstream authentication, so
-		// the user's client is the registration its personal auth client
-		// offers, whatever the sign-in binds or the server is associated with.
-		clients, err = p.offeredRegistrations(ctx, organizationID, projectID, []uuid.UUID{mcpServerID}, []string{authz.AuthClientTypeRemoteSession})
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		clients, err = p.sessions.ListClients(ctx, projectID, organizationID, userSessionIssuerID)
-		if err != nil {
-			return nil, fmt.Errorf("list connection clients: %w", err)
-		}
-		associated, err := upstreamclientsrepo.New(p.db).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: mcpServerID, ProjectID: projectID})
-		if err != nil {
-			return nil, fmt.Errorf("list connection server clients: %w", err)
-		}
-		// A shared sign-in issuer can bind clients for several upstreams. Only
-		// the target server's explicit associations authorize this diagnostic.
-		clients = slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
-			return !slices.ContainsFunc(associated, func(row upstreamclientsrepo.ListMCPServerRemoteSessionClientsRow) bool {
-				return row.RemoteSessionClientID == client.ID && row.RemoteSessionIssuerID == client.RemoteSessionIssuerID
-			})
-		})
+	clients, err := p.offeredRegistrations(ctx, organizationID, projectID, []uuid.UUID{mcpServerID}, []string{authz.AuthClientTypeRemoteSession})
+	if err != nil {
+		return nil, err
 	}
 	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
 		return setupConnectionResult("configuration_required", "user_identity_client_required"), nil
@@ -76,30 +54,17 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 		ProjectID:   projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
 		Subject: subject, RegistrationID: clients[0].ID, SkipUnusable: false,
 	}
-	var reconnect bool
-	if enforced {
-		reconnect, err = p.sessions.AuthClientNeedsReconnect(ctx, registration)
-	} else {
-		reconnect, err = p.sessions.ClientNeedsReconnect(ctx, projectID, organizationID, userSessionIssuerID, subject, clients[0].ID)
-	}
+	reconnect, err := p.sessions.AuthClientNeedsReconnect(ctx, registration)
 	if err != nil {
 		return nil, fmt.Errorf("check user authorization: %w", err)
 	}
 	if reconnect {
 		return setupConnectionResult("authorization_required", "upstream_authorization_required"), nil
 	}
-	var accessToken string
-	if enforced {
-		var tokens map[uuid.UUID]remotesessions.UpstreamToken
-		tokens, err = p.sessions.ResolveAuthClientAccessTokens(ctx, registration)
-		accessToken = tokens[clients[0].RemoteSessionIssuerID].Token
-		if err == nil && accessToken == "" {
-			err = remotesessions.ErrNoValidToken
-		}
-	} else {
-		var authorization remotesessions.ResolvedAuthorization
-		authorization, err = p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ServerScope(organizationID, projectID, mcpServerID, mcpconnectionattempts.AppFirstParty)), projectID, organizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, subject, remote.Url)
-		accessToken = authorization.AccessToken
+	tokens, err := p.sessions.ResolveAuthClientAccessTokens(ctx, registration)
+	accessToken := tokens[clients[0].RemoteSessionIssuerID].Token
+	if err == nil && accessToken == "" {
+		err = remotesessions.ErrNoValidToken
 	}
 	switch {
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding), errors.Is(err, remotesessions.ErrChosenClientUnbound):
@@ -179,4 +144,20 @@ func (p *RemoteMCPReadinessProber) offeredRegistrations(ctx context.Context, org
 	}
 	slices.SortFunc(clients, func(a, b remotesessions.Client) int { return bytes.Compare(a.ID[:], b.ID[:]) })
 	return clients, nil
+}
+
+// validateRemoteOfferTarget prevents stale registrations from probing a source
+// with credentials offered to a different server or sign-in.
+func validateRemoteOfferTarget(ctx context.Context, db mcpserversrepo.DBTX, projectID, serverID, sourceID, userIssuerID uuid.UUID) error {
+	server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrReadinessInvalid
+	}
+	if err != nil {
+		return fmt.Errorf("load remote offer target: %w", err)
+	}
+	if server.Visibility == "disabled" || !server.RemoteMcpServerID.Valid || server.RemoteMcpServerID.UUID != sourceID || !server.UserSessionIssuerID.Valid || server.UserSessionIssuerID.UUID != userIssuerID {
+		return ErrReadinessInvalid
+	}
+	return nil
 }

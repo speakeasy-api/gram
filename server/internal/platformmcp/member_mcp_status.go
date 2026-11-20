@@ -377,31 +377,18 @@ func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, princ
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("load member MCP authorization target: %w", err)
 	}
-	providerIDs, err := mcpserversrepo.New(s.db).ListMCPServerAssociationProviders(ctx, mcpserversrepo.ListMCPServerAssociationProvidersParams{
-		ID: server.ID, ProjectID: projectID,
-	})
-	if err != nil {
-		return memberMCPStatusTarget{}, fmt.Errorf("list member MCP association providers: %w", err)
-	}
-	upstreamIssuer := remotesessions.AssociationIssuerFromProviders(providerIDs).Provider
 
 	target := memberMCPStatusTarget{
 		projectID: projectID, mcpID: mcpID, name: "", endpointSlug: row.EndpointSlug,
 		canRead: canRead, canConnect: canConnect,
 		userSessionIssuerID:   server.UserSessionIssuerID.UUID,
-		remoteSessionIssuerID: upstreamIssuer.UUID,
+		remoteSessionIssuerID: uuid.Nil,
 		remoteMCPServerID:     server.RemoteMcpServerID,
 		tunneledMCPServerID:   server.TunneledMcpServerID,
 		associatedClients:     nil,
-		typed:                 false,
+		typed:                 server.RemoteMcpServerID.Valid || server.TunneledMcpServerID.Valid,
 		sharedCredential:      false,
 		upstreamAuthPending:   false,
-	}
-	if server.RemoteMcpServerID.Valid || server.TunneledMcpServerID.Valid {
-		target.typed, err = s.authEnforcement.Enforced(ctx, principal.OrganizationID)
-		if err != nil {
-			return memberMCPStatusTarget{}, fmt.Errorf("read upstream auth enforcement: %w", err)
-		}
 	}
 	if target.typed {
 		offered, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{
@@ -425,10 +412,14 @@ func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, princ
 			}
 		}
 	} else {
-		target.associatedClients, err = s.serverAssociatedClients(ctx, principal.OrganizationID, server)
+		providerIDs, err := mcpserversrepo.New(s.db).ListMCPServerAssociationProviders(ctx, mcpserversrepo.ListMCPServerAssociationProvidersParams{
+			ID: server.ID, ProjectID: projectID,
+		})
 		if err != nil {
-			return memberMCPStatusTarget{}, err
+			return memberMCPStatusTarget{}, fmt.Errorf("list member MCP association providers: %w", err)
 		}
+		upstreamIssuer := remotesessions.AssociationIssuerFromProviders(providerIDs).Provider
+		target.remoteSessionIssuerID = upstreamIssuer.UUID
 	}
 	name := row.Name.String
 	if name == "" {
@@ -535,24 +526,6 @@ func matchTargetClients(clients []remotesessions.Client, target memberMCPStatusT
 // serverAssociatedClients returns the live clients associated with a proxied
 // server; nil for a hosted server, which matches clients by its
 // associations' one provider.
-func (s *PluginsService) serverAssociatedClients(ctx context.Context, organizationID string, server mcpserversrepo.McpServer) (map[uuid.UUID]bool, error) {
-	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
-		return nil, nil
-	}
-	rows, err := upstreamclientsrepo.New(s.db).ListServerAssociatedClients(ctx, upstreamclientsrepo.ListServerAssociatedClientsParams{
-		McpServerIds:   []uuid.UUID{server.ID},
-		OrganizationID: organizationID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list server associated clients: %w", err)
-	}
-	associated := make(map[uuid.UUID]bool, len(rows))
-	for _, row := range rows {
-		associated[row.RemoteSessionClientID] = true
-	}
-	return associated, nil
-}
-
 func memberMCPReauthorizationReason(status remotesessions.RemoteSessionState, now time.Time) string {
 	if status.AuthorizationExpiresAt != nil && !now.Before(*status.AuthorizationExpiresAt) {
 		return "authorization_expired"

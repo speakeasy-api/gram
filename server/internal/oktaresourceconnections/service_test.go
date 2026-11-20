@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestList_DerivesStatesAndValues(t *testing.T) {
@@ -96,20 +95,25 @@ func TestList_ClientBindingStates(t *testing.T) {
 	recordAgent(t, ctx, si, "wlp1")
 
 	projectID := createProject(t, ctx, si, si.orgID, "proj")
-	// The associated client is not linked to the server's user session issuer.
+	// A proxied server with no live offer is not eligible.
 	missing, _ := createServerWithBackend(t, ctx, si, projectID, createResourceIssuer(t, ctx, si, si.orgID, projectID, true), uuid.NullUUID{UUID: createUserSessionIssuer(t, ctx, si), Valid: true}, "Missing")
+	dropFixtureOffers(t, ctx, si, missing)
 	ambiguousIssuer := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
-	addClient(t, ctx, si, ambiguousIssuer, uuid.NullUUID{UUID: projectID, Valid: true}, "0oaone")
-	addClient(t, ctx, si, ambiguousIssuer, uuid.NullUUID{}, "0oatwo")
+	first := addClient(t, ctx, si, ambiguousIssuer, uuid.NullUUID{UUID: projectID, Valid: true}, "0oaone")
+	second := addClient(t, ctx, si, ambiguousIssuer, uuid.NullUUID{}, "0oatwo")
 	ambiguous := createServer(t, ctx, si, projectID, ambiguousIssuer, "Ambiguous")
+	dropFixtureOffers(t, ctx, si, ambiguous)
+	offerClient(t, ctx, si, projectID, ambiguous, first)
+	offerClient(t, ctx, si, projectID, ambiguous, second)
 
 	res := list(t, ctx, si, true)
-	require.Equal(t, "missing", rowFor(t, res, missing).ClientBinding)
-	require.Nil(t, rowFor(t, res, missing).ClientID)
+	for _, server := range res.Servers {
+		require.NotEqual(t, missing.String(), server.McpServerID)
+	}
 	require.Equal(t, "ambiguous", rowFor(t, res, ambiguous).ClientBinding)
 }
 
-func TestList_UsesAttachedClient(t *testing.T) {
+func TestList_UsesOfferedClient(t *testing.T) {
 	t.Parallel()
 	ctx, si := newTestService(t)
 	projectID := createProject(t, ctx, si, si.orgID, "proj")
@@ -118,11 +122,8 @@ func TestList_UsesAttachedClient(t *testing.T) {
 	serverID, _ := createServerWithBackend(t, ctx, si, projectID, issuerID, uuid.NullUUID{UUID: login, Valid: true}, "Fronted")
 	addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "unattached")
 	attached := addClient(t, ctx, si, issuerID, uuid.NullUUID{}, "attached")
-	err := remotesessionsrepo.New(si.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: attached,
-		UserSessionIssuerID:   login,
-	})
-	require.NoError(t, err)
+	dropFixtureOffers(t, ctx, si, serverID)
+	offerClient(t, ctx, si, projectID, serverID, attached)
 	row := rowFor(t, list(t, ctx, si, true), serverID)
 	require.Equal(t, "single", row.ClientBinding)
 	require.Equal(t, "attached", conv.PtrValOr(row.ClientID, ""))
@@ -251,15 +252,19 @@ func TestConfirm_RejectsServersWithoutOneClient(t *testing.T) {
 	recordAgent(t, ctx, si, "wlp1")
 	projectID := createProject(t, ctx, si, si.orgID, "proj-"+uuid.NewString()[:8])
 
-	// The associated client is not linked to the server's user session issuer.
+	// A proxied server with no live offer is not eligible.
 	missing, _ := createServerWithBackend(t, ctx, si, projectID, createResourceIssuer(t, ctx, si, si.orgID, projectID, true), uuid.NullUUID{UUID: createUserSessionIssuer(t, ctx, si), Valid: true}, "Missing")
+	dropFixtureOffers(t, ctx, si, missing)
 	_, err := confirm(t, ctx, si, audience, nil, missing)
-	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	requireOopsCode(t, err, oops.CodeNotFound)
 
 	issuerID := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
-	addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oafirstclient")
-	addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oasecondclient")
+	first := addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oafirstclient")
+	second := addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oasecondclient")
 	ambiguous := createServer(t, ctx, si, projectID, issuerID, "Ambiguous")
+	dropFixtureOffers(t, ctx, si, ambiguous)
+	offerClient(t, ctx, si, projectID, ambiguous, first)
+	offerClient(t, ctx, si, projectID, ambiguous, second)
 	_, err = confirm(t, ctx, si, audience, nil, ambiguous)
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 
@@ -325,7 +330,7 @@ func TestSharedUpstream_OneRowManyServers(t *testing.T) {
 	require.NoError(t, err)
 	twin, err := si.q.CreateEligibleMCPServerFixture(ctx, repo.CreateEligibleMCPServerFixtureParams{ProjectID: a.projectID, Name: conv.ToPGText("Twin"), Slug: conv.ToPGText(slug), RemoteMcpServerID: uuid.NullUUID{UUID: backendID, Valid: true}, RemoteSessionIssuerID: uuid.NullUUID{UUID: a.issuerID, Valid: true}, UserSessionIssuerID: uuid.NullUUID{}, Visibility: "private"})
 	require.NoError(t, err)
-	associateServerIssuer(t, ctx, si, a.projectID, twin, a.issuerID)
+	offerIssuerClient(t, ctx, si, a.projectID, twin, a.issuerID)
 
 	confirmed, err := confirm(t, ctx, si, audience, nil, a.serverID)
 	require.NoError(t, err)
@@ -351,8 +356,8 @@ func TestSharedUpstream_OneRowManyServers(t *testing.T) {
 	other := createResourceIssuer(t, ctx, si, si.orgID, a.projectID, true)
 	_, err = si.q.SetMCPServerIssuerFixture(ctx, repo.SetMCPServerIssuerFixtureParams{RemoteSessionIssuerID: uuid.NullUUID{UUID: other, Valid: true}, ID: twin, ProjectID: a.projectID})
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(si.conn).ClearMCPServerRemoteSessionClientsFixture(ctx, twin))
-	associateServerIssuer(t, ctx, si, a.projectID, twin, other)
+	dropFixtureOffers(t, ctx, si, twin)
+	offerIssuerClient(t, ctx, si, a.projectID, twin, other)
 	res = list(t, ctx, si, true)
 	require.Equal(t, "needs_connection", rowFor(t, res, twin).State)
 	require.Equal(t, "connected", rowFor(t, res, a.serverID).State)
@@ -417,7 +422,7 @@ func TestList_SkipsRevokedTunnels(t *testing.T) {
 			RemoteSessionIssuerID: uuid.NullUUID{UUID: f.issuerID, Valid: true},
 		})
 		require.NoError(t, err)
-		associateServerIssuer(t, ctx, si, f.projectID, id, f.issuerID)
+		offerIssuerClient(t, ctx, si, f.projectID, id, f.issuerID)
 		return id
 	}
 	live := tunneled("Live", "active")
@@ -564,7 +569,7 @@ func TestReadinessQueries_ValidateUserSessionIssuerScope(t *testing.T) {
 			got, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID})
 			require.NoError(t, err)
 			require.Equal(t, want, got.UserSessionIssuerID)
-			rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: false})
+			rows, err := si.q.ListEligibleServers(ctx, si.orgID)
 			require.NoError(t, err)
 			found := false
 			for _, row := range rows {
@@ -581,7 +586,7 @@ func TestReadinessQueries_ValidateUserSessionIssuerScope(t *testing.T) {
 // Where typed auth clients choose upstream authentication, a server's
 // authorization server is the one it offers, whatever was derived for it, and a
 // server offering nothing has none. Elsewhere the derived one stands.
-func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
+func TestEligibleServersFollowTypedOffers(t *testing.T) {
 	t.Parallel()
 
 	ctx, si := newTestService(t)
@@ -602,12 +607,12 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 		return client.ID, authClientID
 	}
 
-	personal := createServer(t, ctx, si, projectID, derived, "personal")
+	personal := createServerWithLegacyIssuer(t, ctx, si, projectID, derived, "personal")
 	personalClient, _ := offer(personal, offered, authz.AuthClientTypeRemoteSession)
-	chained := createServer(t, ctx, si, projectID, derived, "chained")
+	chained := createServerWithLegacyIssuer(t, ctx, si, projectID, derived, "chained")
 	offer(chained, offered, authz.AuthClientTypeRemoteSession)
 	offer(chained, identityProvider, authz.AuthClientTypeEMA)
-	nothing := createServer(t, ctx, si, projectID, derived, "nothing")
+	nothing := createServerWithLegacyIssuer(t, ctx, si, projectID, derived, "nothing")
 
 	// Unproxied servers sharing an issuer never receive typed offers.
 	backend, err := unproxiedrepo.New(si.conn).CreateServer(ctx, unproxiedrepo.CreateServerParams{
@@ -622,8 +627,8 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 	require.NoError(t, err)
 	associateServerIssuer(t, ctx, si, projectID, unproxied, derived)
 
-	issuerOf := func(serverID uuid.UUID, enforced bool) (uuid.UUID, bool) {
-		rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: enforced})
+	issuerOf := func(serverID uuid.UUID) (uuid.UUID, bool) {
+		rows, err := si.q.ListEligibleServers(ctx, si.orgID)
 		require.NoError(t, err)
 		listed := uuid.Nil
 		for _, row := range rows {
@@ -631,7 +636,7 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 				listed = row.IssuerID
 			}
 		}
-		one, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID, TypedAuthEnforced: enforced})
+		one, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			require.Equal(t, uuid.Nil, listed, "the list and the single read agree")
 			return uuid.Nil, false
@@ -641,40 +646,35 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 		return one.IssuerID, true
 	}
 
-	for _, serverID := range []uuid.UUID{personal, chained, nothing, unproxied} {
-		issuer, eligible := issuerOf(serverID, false)
-		require.True(t, eligible)
-		require.Equal(t, derived, issuer, "the derived authorization server stands without enforcement")
-	}
-	issuer, eligible := issuerOf(unproxied, true)
+	issuer, eligible := issuerOf(unproxied)
 	require.True(t, eligible, "unproxied servers stay eligible under enforcement without offers")
 	require.Equal(t, derived, issuer)
-	unproxiedRow, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: unproxied, TypedAuthEnforced: true})
+	unproxiedRow, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: unproxied})
 	require.NoError(t, err)
 	require.False(t, unproxiedRow.TypedAuthEnforced, "client resolution must also retain derived clients for unproxied servers")
 	require.Empty(t, unproxiedRow.OfferedClientIds)
-	listed, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: true})
+	listed, err := si.q.ListEligibleServers(ctx, si.orgID)
 	require.NoError(t, err)
 	for _, row := range listed {
 		if row.ID == unproxied {
 			require.False(t, row.TypedAuthEnforced, "list client resolution must retain derived clients too")
 		}
 	}
-	issuer, eligible = issuerOf(personal, true)
+	issuer, eligible = issuerOf(personal)
 	require.True(t, eligible)
 	require.Equal(t, offered, issuer)
-	issuer, eligible = issuerOf(chained, true)
+	issuer, eligible = issuerOf(chained)
 	require.True(t, eligible)
 	require.Equal(t, identityProvider, issuer, "an identity-provider client's authorization server comes first")
-	_, eligible = issuerOf(nothing, true)
+	_, eligible = issuerOf(nothing)
 	require.False(t, eligible, "a server that offers nothing has no authorization server under enforcement")
 
-	row, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: personal, TypedAuthEnforced: true})
+	row, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: personal})
 	require.NoError(t, err)
 	require.True(t, row.TypedAuthEnforced)
 	require.Equal(t, []uuid.UUID{personalClient}, row.OfferedClientIds)
 
-	several, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: chained, TypedAuthEnforced: true})
+	several, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: chained})
 	require.NoError(t, err)
 	require.Len(t, several.OfferedClientIds, 2)
 	require.True(t, slices.IsSortedFunc(several.OfferedClientIds, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) }), "offered clients are in a stable order")
@@ -693,13 +693,13 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 			return fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, serverID)
 		}},
 	} {
-		serverID := createServer(t, ctx, si, projectID, derived, "withdrawn-"+tc.name)
+		serverID := createServerWithLegacyIssuer(t, ctx, si, projectID, derived, "withdrawn-"+tc.name)
 		_, authClientID := offer(serverID, offered, authz.AuthClientTypeRemoteSession)
-		issuer, eligible := issuerOf(serverID, true)
+		issuer, eligible := issuerOf(serverID)
 		require.True(t, eligible, tc.name)
 		require.Equal(t, offered, issuer, tc.name)
 		require.NoError(t, tc.withdraw(serverID, authClientID), tc.name)
-		_, eligible = issuerOf(serverID, true)
+		_, eligible = issuerOf(serverID)
 		require.False(t, eligible, "a %s offer gives the server no authorization server", tc.name)
 	}
 }

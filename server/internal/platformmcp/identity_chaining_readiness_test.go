@@ -70,13 +70,16 @@ type chainedCatalogFixture struct {
 	userSessionIssuerID uuid.UUID
 	remoteIssuerID      uuid.UUID
 	registrationID      uuid.UUID
+	serverID            uuid.UUID
 	sessions            *remotesessions.ChallengeManager
 	policy              *guardian.Policy
 }
 
 func seedChainedCatalogFixture(t *testing.T, ctx context.Context, conn *pgxpool.Pool) chainedCatalogFixture {
 	t.Helper()
-	return seedChainedCatalogFixtureClient(t, ctx, conn, true)
+	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
+	f.serverID = typedCatalogServer(t, ctx, conn, f, 1)
+	return f
 }
 
 // seedChainedCatalogFixtureClient attaches the interactive client only when attach is set.
@@ -130,7 +133,7 @@ func (f chainedCatalogFixture) probe(t *testing.T, conn *pgxpool.Pool, governor 
 	if governor != nil {
 		prober = prober.WithIdentityChaining(governor)
 	}
-	result, err := prober.ProbeCatalogReadiness(t.Context(), f.principal, f.projectID, f.registrationID, f.remoteID, f.userSessionIssuerID, uuid.New(), uuid.New())
+	result, err := prober.ProbeCatalogReadiness(t.Context(), f.principal, f.projectID, f.registrationID, f.serverID, f.remoteID, f.userSessionIssuerID, uuid.New(), uuid.New())
 	require.NoError(t, err)
 	return result
 }
@@ -172,6 +175,9 @@ func TestRemoteMCPReadinessMarksIdentityChainingConfiguredWithoutReady(t *testin
 	require.NoError(t, err)
 	require.NotEmpty(t, fingerprint)
 
+	recorded := governor.recorded()
+	require.Len(t, recorded, 1)
+	require.True(t, recorded[0].RemoteSessionClientID.Valid)
 	require.Equal(t, []identitychaining.Request{{
 		OrganizationID:        fixture.principal.OrganizationID,
 		ProjectID:             fixture.projectID,
@@ -179,7 +185,8 @@ func TestRemoteMCPReadinessMarksIdentityChainingConfiguredWithoutReady(t *testin
 		UserID:                fixture.principal.UserID,
 		UpstreamResource:      fixture.remoteURL,
 		RemoteSessionIssuerID: uuid.NullUUID{},
-	}}, governor.recorded())
+		RemoteSessionClientID: recorded[0].RemoteSessionClientID,
+	}}, recorded)
 }
 
 func TestRemoteMCPReadinessReadyOnUsableChainedCredential(t *testing.T) {
