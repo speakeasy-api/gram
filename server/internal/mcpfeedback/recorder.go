@@ -109,6 +109,11 @@ type Caller struct {
 
 	// ClientVersion is the MCP client's version, from its handshake.
 	ClientVersion string
+
+	// LimitSubject is the authenticated principal behind the call, whatever
+	// its organization. It only picks the caller's rate-limit bucket when no
+	// identity above names the caller, and is never stored or sent on.
+	LimitSubject string
 }
 
 // Receipt identifies a stored report.
@@ -320,6 +325,8 @@ func callerLimitKey(server string, caller Caller) string {
 		return server + ":user:" + caller.UserID
 	case caller.ExternalUserID != "":
 		return server + ":external:" + caller.ExternalUserID
+	case caller.LimitSubject != "":
+		return server + ":principal:" + caller.LimitSubject
 	case caller.SessionID != "":
 		return server + ":session:" + caller.SessionID
 	default:
