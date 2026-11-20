@@ -26,7 +26,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 		clientType   string
 		state        string
 		enforced     bool
-		shadow       bool
 		hosted       bool
 		issuerLinked bool
 		wantCard     bool
@@ -53,7 +52,6 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 			f := newAuthClientFixture(t, pool)
 			ctx := t.Context()
 			flags := new(feature.InMemory)
-			flags.SetFlag(feature.FlagAuthClientResolverShadow, f.orgID, tc.shadow)
 			f.service.features = flags
 			f.service.authEnforcement = authenforcement.NewGate(pool)
 			if tc.enforced {

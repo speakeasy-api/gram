@@ -585,7 +585,7 @@ func gatewayServerConnectURL(endpointRoot string, serverSlug string) string {
 // derived for the member decides nothing there.
 func (g metaGateContext) memberConnectURL(member metaMember) string {
 	signsIn := member.remoteSessionIssuerID.Valid
-	if res := member.authClient; g.memberChoices != nil && g.memberChoices.enforced && res != nil {
+	if res := member.authClient; g.memberChoices != nil && !g.memberChoices.consentPreview && res != nil {
 		signsIn = member.chosenClientID.Valid || (res.outcome == authClientGap && !res.noAuthAllowed && !res.staleNoAuth())
 	}
 	if g.connectRoot == "" || !signsIn {

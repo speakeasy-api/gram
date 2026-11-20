@@ -674,6 +674,8 @@ func seedOwnerAttachedMember(t *testing.T) (context.Context, ownerAttachedMember
 	require.Len(t, sessions, 1)
 	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, PrincipalID: fx.agent.ID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID).String(), RemoteSessionID: sessions[0].RemoteSession.ID})
 	require.NoError(t, err)
+	seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, serverID, client.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(authCtx.UserID))
+	fx.token = issueMemberAuthRegressionKey(t, ctx, ti, fx, serverID)
 	return ctx, ownerAttachedMember{ti: ti, fx: fx, upstream: upstream, binding: binding}
 }
 

@@ -17,14 +17,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // protectedInboundHeaders are synthetic values for the Speakeasy credential,
@@ -105,6 +107,20 @@ func seedRemoteHeader(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 	})
 }
 
+// mintTypedHeaderBearer names a typed copy of the configured headers in an
+// anonymous session.
+func mintTypedHeaderBearer(t *testing.T, ctx context.Context, ti *testInstance, auth *contextvalues.AuthContext, slug string, server mcpserversrepo.McpServer) string {
+	t.Helper()
+	subject := urn.NewAnonymousSubject(uuid.NewString())
+	clientID := seedTypedSessionClient(t, ctx, ti, auth.ActiveOrganizationID, server.ProjectID, server.ID, uuid.Nil, authz.AuthClientTypeStaticCredential, subject)
+	headers, err := remotemcprepo.New(ti.conn).ListHeadersByServerID(ctx, server.RemoteMcpServerID.UUID)
+	require.NoError(t, err)
+	for _, header := range headers {
+		require.NoError(t, authclientbackfill.New(ti.conn).SeedAuthClientHeaderFixture(ctx, authclientbackfill.SeedAuthClientHeaderFixtureParams{AuthClientID: clientID, OrganizationID: auth.ActiveOrganizationID, Name: header.Name, IsRequired: header.IsRequired, IsSecret: header.IsSecret, Value: header.Value, ValueFromRequestHeader: header.ValueFromRequestHeader}))
+	}
+	return mintMetaIssuerBearer(t, ti, slug, server.UserSessionIssuerID.UUID, subject, metaServingChoice{organizationID: auth.ActiveOrganizationID, serverID: server.ID, clientID: clientID})
+}
+
 func TestServePublic_RemoteEndpoint_DoesNotForwardSpeakeasyHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -121,7 +137,7 @@ func TestServePublic_RemoteEndpoint_DoesNotForwardSpeakeasyHeaders(t *testing.T)
 	// an optional row reading a Speakeasy credential is not sent.
 	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "x-api-key", "operator-credential", "", true)
 	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "X-Upstream-Token", "", "Gram-Key", false)
-	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	token := mintTypedHeaderBearer(t, ctx, ti, authCtx, endpointSlug, mcpServer)
 
 	extra := map[string]string{"X-Client-Trace": "allowed"}
 	maps.Copy(extra, protectedInboundHeaders)
@@ -158,7 +174,7 @@ func TestServePublic_RemoteEndpoint_RequiredProtectedSourceRejected(t *testing.T
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.server.URL, endpointSlug, "public", issuerID)
 	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "X-Upstream-Token", "", "gram-chat-session", true)
-	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	token := mintTypedHeaderBearer(t, ctx, ti, authCtx, endpointSlug, mcpServer)
 
 	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, map[string]string{
 		"Gram-Chat-Session": "synthetic-chat-session",
@@ -187,7 +203,7 @@ func TestServeConsentMCP_RemoteDoesNotForwardSpeakeasyHeaders(t *testing.T) {
 	seedRemoteHeader(t, ctx, ti.conn, issuer.ProjectID.UUID, remoteServer.ID, "X-Upstream-Token", "", "Gram-Key", false)
 	orgID := requireProjectAuthContext(t, ctx).ActiveOrganizationID
 	id := seedConsentAuthOffer(t, ctx, ti, orgID, issuer.ProjectID.UUID, mcpServer.ID, uuid.Nil, "static_credential")
-	require.NoError(t, authclientfixtures.New(ti.conn).SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: id, OrganizationID: orgID, Name: "X-Api-Key", Value: pgtype.Text{String: "operator-credential", Valid: true}}))
+	require.NoError(t, authclientbackfill.New(ti.conn).SeedAuthClientHeaderFixture(ctx, authclientbackfill.SeedAuthClientHeaderFixtureParams{AuthClientID: id, OrganizationID: orgID, Name: "X-Api-Key", Value: pgtype.Text{String: "operator-credential", Valid: true}}))
 	stateID, csrfToken := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "mcp")
 	require.NoError(t, err)
@@ -336,7 +352,7 @@ func TestServePublic_RemoteEndpoint_DoesNotForwardSpeakeasyBearerFromConfiguredH
 	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.server.URL, endpointSlug, "public", issuerID)
 	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "X-Token", "", "Authorization", false)
 	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "Authorization", "", "X-Upstream-Credential", false)
-	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	token := mintTypedHeaderBearer(t, ctx, ti, authCtx, endpointSlug, mcpServer)
 	mux := attachedMCPMux(ti)
 
 	// No inherited authentication context: the endpoint is gated.
@@ -347,9 +363,7 @@ func TestServePublic_RemoteEndpoint_DoesNotForwardSpeakeasyBearerFromConfiguredH
 		require.Empty(t, names, "unauthenticated traffic must not reach the upstream")
 	}
 
-	// The caller's own copy under the suppressed row's name must not stand in.
 	w := serveAttached(t, context.Background(), mux, http.MethodPost, "/mcp/"+endpointSlug, token, makeInitializeBody(), map[string]string{
-		"X-Token":               "client-supplied",
 		"X-Upstream-Credential": "Bearer synthetic-upstream",
 	})
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
@@ -375,13 +389,13 @@ func TestServePublic_RemoteEndpoint_RequiredAuthorizationSourceRejected(t *testi
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.server.URL, endpointSlug, "public", issuerID)
 	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "X-Token", "", "authorization", true)
-	token := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	token := mintTypedHeaderBearer(t, ctx, ti, authCtx, endpointSlug, mcpServer)
 
 	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable, "status=%d body=%s", w.Code, w.Body.String())
-	require.Equal(t, oops.CodeBadRequest, shareable.Code)
-	require.Contains(t, shareable.Error(), `"X-Token"`)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Contains(t, shareable.Error(), reconnectDescription)
 	require.NotContains(t, shareable.Error(), token)
 	require.NotContains(t, w.Body.String(), token)
 

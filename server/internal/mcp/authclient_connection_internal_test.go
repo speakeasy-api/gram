@@ -632,17 +632,16 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 				t.Parallel()
 				f, selector, tokens, checked, agent, ctx := setup(t, hb.setup)
 				endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID}
-				choices := &memberChoices{selector: selector, enforced: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
+				choices := &memberChoices{selector: selector, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
 				choices.resolve = func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, agent, true, member)
+					return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, agent, member)
 				}
 				members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
-				choices.apply(ctx, testenv.NewLogger(t), members, true)
+				choices.apply(ctx, testenv.NewLogger(t), members)
 				member := members[0]
 				require.NoError(t, member.upstreamUnavailable)
 				require.Equal(t, authClientLegacy, member.authClient.outcome)
 				require.Equal(t, hb.reason, member.authClient.reason)
-				require.False(t, member.typedAuthClient, "a compatibility path is not served as a typed client")
 				require.Equal(t, checked, member.authClient.attachedSession)
 
 				if replaced {

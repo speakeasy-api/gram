@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -798,8 +797,8 @@ func (s *Service) serveRemoteBackend(
 }
 
 // agentKeyUngatedUpstream serves an agent key's credential choice for a
-// private server reached without an issuer gate, once the organization
-// enforces, through the same resolution as a gated request. Any other caller,
+// server reached without an issuer gate, through the same resolution as a
+// gated request. Any other caller,
 // server or organization keeps upstream and buildOptions as given.
 func (s *Service) agentKeyUngatedUpstream(
 	ctx context.Context,
@@ -823,13 +822,6 @@ func (s *Service) agentKeyUngatedUpstream(
 	agentID, err := uuid.Parse(actor.ID)
 	if err != nil {
 		return upstream, buildOptions, nil //nolint:nilerr // an actor id that does not parse is no agent key
-	}
-	mode, err := s.authClientMode(ctx, organizationID)
-	if err != nil {
-		return upstream, buildOptions, oops.E(oops.CodeUnexpected, err, "load upstream auth enforcement").LogError(ctx, logger)
-	}
-	if mode != feature.AuthClientResolverEnforced {
-		return upstream, buildOptions, nil
 	}
 	resolved := NewResolvedMcpEndpointFromMcpServer(endpoint, mcpServer, organizationID, mcproute.MCP)
 	selector, err := s.agentKeySelectorFor(ctx, resolved)
@@ -1116,7 +1108,7 @@ func (s *Service) prepareProxyBackendContext(
 			if err != nil {
 				return denied(fmt.Errorf("public identity auth: %w", err))
 			}
-			if err := s.refuseForeignCaller(ctx, organizationID); err != nil {
+			if err := s.refuseForeignCallerOutsideTypedServing(ctx, organizationID); err != nil {
 				return denied(err)
 			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)

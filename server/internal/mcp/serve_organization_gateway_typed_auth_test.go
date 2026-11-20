@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
@@ -24,8 +23,7 @@ import (
 )
 
 // A configured offer is discoverable before a user connects it, without the
-// legacy organization issuer binding. Runtime rollback restores legacy
-// filtering, but browser consent always uses typed offers.
+// legacy organization issuer binding. Consent enrollment does not affect serving.
 func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -38,8 +36,8 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 	}{
 		{name: "detached_required_caller_header", detached: true, bound: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true, clientHeader: "fromRequest", visibleLegacy: false, visibleEnforced: false},
 		{name: "detached_unbound_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
-		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: true, visibleEnforced: true},
-		{name: "legacy_pending_bound", pending: true, bound: true, clientHeader: "", visibleLegacy: true, visibleEnforced: true},
+		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: true, visibleEnforced: false},
+		{name: "legacy_pending_bound", pending: true, bound: true, clientHeader: "", visibleLegacy: true, visibleEnforced: false},
 		{name: "legacy_pending_unbound", pending: true, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
 		{name: "personal_pending", clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
 		{name: "shared_pending", clientType: authz.AuthClientTypeServiceAccount, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
@@ -122,8 +120,8 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 			require.NoError(t, err)
 			stateID := uuid.NewString()
 			require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{ID: stateID, UserSessionIssuerID: fx.issuerID, Endpoint: mcp.EndpointRef{McpSlug: endpoint.Slug, RouteBase: endpoint.RouteBase, MetaMcpServerID: endpoint.MetaMcpServerID}, RedirectURI: "http://example.com/cb", CSRFToken: "csrf-token", Subject: &fx.subject, CreatedAt: time.Now(), FirstParty: true, AutoConnectDone: true}))
-			for _, mode := range []string{"off", "shadow", "enforced", "rollback"} {
-				t.Run(mode, func(t *testing.T) { // Sequential transitions verify rollback of the same configuration.
+			for _, mode := range []string{"not_enrolled", "enforced"} {
+				t.Run(mode, func(t *testing.T) { // Serving is identical before and after consent enrollment.
 					q := featuresrepo.New(ti.conn)
 					params := featuresrepo.EnableFeatureParams{OrganizationID: ac.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)}
 					_, err := q.EnableFeature(ctx, params)
@@ -135,10 +133,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					mcp.ResetAuthEnforcementForTest(ti.service.Service)
 					ti.features.SetFlag(feature.FlagAuthClientResolver, ac.ActiveOrganizationID, false)
 					ti.features.SetFlag(feature.FlagAuthClientResolverShadow, ac.ActiveOrganizationID, mode == "shadow")
-					runtimeVisible := tc.visibleLegacy
-					if mode == "enforced" {
-						runtimeVisible = tc.visibleEnforced
-					}
+					runtimeVisible := tc.visibleEnforced
 					w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, listServersBody(t))
 					require.NoError(t, err)
 					require.Equal(t, http.StatusOK, w.Code, w.Body.String())

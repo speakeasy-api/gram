@@ -338,15 +338,20 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 			routeErr = memberConnectionError{routeErr, resolveFailureHappened(routed.ClientCredentialErr)}
 		}
 	}
-	if (routeErr != nil && !held) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
-		return routed, routed.Token, routeErr
+	token := routed.Token
+	if (routeErr == nil || held) && token == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
+		chained, err := gate.chainUpstream(ctx, member, resource)
+		if held && chained == "" {
+			return routed, "", routeErr
+		}
+		routed, token, routeErr = remotesessions.UpstreamToken{}, chained, err
 	}
-	chained, err := gate.chainUpstream(ctx, member, resource)
-	if held && chained == "" {
-		return routed, "", routeErr
+	if routeErr == nil && token == "" && member.authClient != nil && member.chosenClientID.Valid && !member.upstreamNoAuth {
+		// A named client authorizes only its own checked connection. An
+		// unusable or wrong-resource token must not turn into an anonymous dial.
+		routeErr = withMemberConnectLink(memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q can't use its saved sign-in anymore. Reconnect it, then retry", member.slug)}}, member, gate.memberCallerURL(member))
 	}
-	var none remotesessions.UpstreamToken
-	return none, chained, err
+	return routed, token, routeErr
 }
 
 // recordDialFailure records a member that could not be dialed for a call.
