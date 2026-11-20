@@ -17,12 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func staticChallengeLogging(enabled bool) ChallengeLoggingEnabled {
-	return func(context.Context, string) (bool, error) {
-		return enabled, nil
-	}
-}
-
 func TestEngineRequire_requiresAuthContext(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -349,16 +343,6 @@ func TestPrincipalCredentialPoliciesApplyToEvaluationAndFilters(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func principalPolicyTestContext(t *testing.T, credential, agent, owner []Grant) context.Context {
-	t.Helper()
-	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
-	ctx := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org_123",
-		APIKeyID:             "key_123",
-	}, actor, contextvalues.PrincipalCredential{})
-	return admittedPoliciesToContext(ctx, RepresentedUserPolicy{UserID: "", Policy: nil}, false, credential, agent, owner)
-}
-
 func TestEngineFilter_enforcesForNonEnterpriseAccount(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
@@ -564,54 +548,6 @@ func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
-func enterpriseSessionCtx(t *testing.T) context.Context {
-	t.Helper()
-	return enterpriseSessionCtxWithOrg(t, "org_123")
-}
-
-func enterpriseSessionCtxWithOrg(t *testing.T, orgID string) context.Context {
-	t.Helper()
-
-	sessionID := "session_123"
-	return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID:  orgID,
-		UserID:                "user_123",
-		ExternalUserID:        "",
-		APIKeyID:              "",
-		SessionID:             &sessionID,
-		ProjectID:             nil,
-		OrganizationSlug:      "",
-		Email:                 nil,
-		AccountType:           "enterprise",
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-	})
-}
-
-func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Context {
-	t.Helper()
-	sessionID := "session_123"
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID:  "org_123",
-		UserID:                "user_123",
-		ExternalUserID:        "",
-		APIKeyID:              "",
-		SessionID:             &sessionID,
-		ProjectID:             nil,
-		OrganizationSlug:      "",
-		Email:                 nil,
-		AccountType:           accountType,
-		HasActiveSubscription: false,
-		Whitelisted:           false,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-		IsAdmin:               isAdmin,
-	})
-	return contextvalues.SetRBACScopeOverride(ctx, "project:read")
-}
-
 // TestPrepareContext_adminImpersonationGrantsAllScopes verifies that when a
 // platform admin has a validated support session, the
 // engine injects wildcard grants for every scope so that Require() calls
@@ -717,21 +653,6 @@ func TestEngineRequire_skillBlocklistExpansion(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	}
-}
-
-func projectAssistantGrant(scope Scope, projectID string) Grant {
-	return NewGrantWithSelector(scope, Selector{
-		SelectorKeyResourceKind: ResourceKindAssistant,
-		SelectorKeyResourceID:   WildcardResource,
-		SelectorKeyProjectID:    projectID,
-	})
-}
-
-func requireForbidden(t *testing.T, err error) {
-	t.Helper()
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestEngineRequire_assistantProjectGrantCoversProjectAssistants(t *testing.T) {
@@ -859,4 +780,144 @@ func TestShouldEnforce_platformMCPSurfaceEnforcesWithoutASession(t *testing.T) {
 	))
 	require.NoError(t, err)
 	require.True(t, marked)
+}
+
+func TestRequireAnyUnblocked(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	checks := []Check{
+		{Scope: ScopeSkillRead, ResourceID: "project-one", Dimensions: nil},
+		{Scope: ScopeSkillRead, ResourceID: "skill-one", Dimensions: nil},
+	}
+	for _, tc := range []struct {
+		name    string
+		grants  []Grant
+		allowed bool
+	}{
+		{"project allow", []Grant{NewGrant(ScopeSkillWrite, "project-one")}, true},
+		{"skill allow", []Grant{NewGrant(ScopeSkillRead, "skill-one")}, true},
+		{"root is not an exclusion", []Grant{NewGrant(ScopeRoot, "*")}, true},
+		{"project allow skill deny", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrant(ScopeSkillBlockedRead, "skill-one")}, false},
+		{"skill allow project deny", []Grant{NewGrant(ScopeSkillWrite, "skill-one"), NewGrant(ScopeSkillBlockedRead, "project-one")}, false},
+		{"root explicit deny", []Grant{NewGrant(ScopeRoot, "*"), NewGrant(ScopeSkillBlockedRead, "skill-one")}, false},
+		{"other skill exclusion", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrant(ScopeSkillBlockedRead, "skill-two")}, true},
+		{"write exclusion does not deny reads", []Grant{NewGrant(ScopeSkillWrite, "project-one"), NewGrant(ScopeSkillBlockedWrite, "skill-one")}, true},
+		{"no grants", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := GrantsToContext(enterpriseSessionCtx(t), tc.grants)
+			err := engine.RequireAnyUnblocked(ctx, checks...)
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				var denied *oops.ShareableError
+				require.ErrorAs(t, err, &denied)
+				require.Equal(t, oops.CodeForbidden, denied.Code)
+			}
+		})
+	}
+	t.Run("every admitted policy can exclude", func(t *testing.T) {
+		t.Parallel()
+		allow := []Grant{NewGrant(ScopeSkillRead, "project-one")}
+		deny := []Grant{NewGrant(ScopeSkillRead, "project-one"), NewGrant(ScopeSkillBlockedRead, "skill-one")}
+		for i := range 3 {
+			policies := [][]Grant{allow, allow, allow}
+			policies[i] = deny
+			ctx := principalPolicyTestContext(t, policies[0], policies[1], policies[2])
+			var forbidden *oops.ShareableError
+			require.ErrorAs(t, engine.RequireAnyUnblocked(ctx, checks...), &forbidden)
+			require.Equal(t, oops.CodeForbidden, forbidden.Code)
+		}
+	})
+	t.Run("admitted policies cannot combine different allow alternatives", func(t *testing.T) {
+		t.Parallel()
+		ctx := principalPolicyTestContext(t,
+			[]Grant{NewGrant(ScopeSkillRead, "project-one")},
+			[]Grant{NewGrant(ScopeSkillRead, "skill-one")},
+			[]Grant{NewGrant(ScopeSkillRead, "*")},
+		)
+		var forbidden *oops.ShareableError
+		require.ErrorAs(t, engine.RequireAnyUnblocked(ctx, checks...), &forbidden)
+		require.Equal(t, oops.CodeForbidden, forbidden.Code)
+	})
+}
+
+func staticChallengeLogging(enabled bool) ChallengeLoggingEnabled {
+	return func(context.Context, string) (bool, error) {
+		return enabled, nil
+	}
+}
+
+func principalPolicyTestContext(t *testing.T, credential, agent, owner []Grant) context.Context {
+	t.Helper()
+	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, "018f8d7b-58d7-7cc4-bb16-9f8c6b99a001")
+	ctx := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org_123",
+		APIKeyID:             "key_123",
+	}, actor, contextvalues.PrincipalCredential{})
+	return admittedPoliciesToContext(ctx, RepresentedUserPolicy{UserID: "", Policy: nil}, false, credential, agent, owner)
+}
+
+func enterpriseSessionCtx(t *testing.T) context.Context {
+	t.Helper()
+	return enterpriseSessionCtxWithOrg(t, "org_123")
+}
+
+func enterpriseSessionCtxWithOrg(t *testing.T, orgID string) context.Context {
+	t.Helper()
+
+	sessionID := "session_123"
+	return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID:  orgID,
+		UserID:                "user_123",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		SessionID:             &sessionID,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "enterprise",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+	})
+}
+
+func scopeOverrideCtx(t *testing.T, isAdmin bool, accountType string) context.Context {
+	t.Helper()
+	sessionID := "session_123"
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID:  "org_123",
+		UserID:                "user_123",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		SessionID:             &sessionID,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           accountType,
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		IsAdmin:               isAdmin,
+	})
+	return contextvalues.SetRBACScopeOverride(ctx, "project:read")
+}
+
+func projectAssistantGrant(scope Scope, projectID string) Grant {
+	return NewGrantWithSelector(scope, Selector{
+		SelectorKeyResourceKind: ResourceKindAssistant,
+		SelectorKeyResourceID:   WildcardResource,
+		SelectorKeyProjectID:    projectID,
+	})
+}
+
+func requireForbidden(t *testing.T, err error) {
+	t.Helper()
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }

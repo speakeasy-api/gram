@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -173,4 +174,97 @@ func TestRecordedDenial_WithoutARecorder(t *testing.T) {
 
 	_, ok := RecordedDenial(ctx)
 	require.False(t, ok)
+}
+
+func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
+	t.Parallel()
+
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_123", UserID: sessionUserID, AccountType: "enterprise"})
+	enforce, err := engine.ShouldEnforce(ctx)
+	require.NoError(t, err)
+	require.False(t, enforce, "a sessionless context skips RBAC")
+
+	valid := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect()
+	invalid := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "", Dimensions: nil}
+	authClient := MCPAuthClientCheck("ac_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""})
+
+	reasons, err := engine.DenialReasons(ctx, []Check{valid, invalid, authClient})
+	require.NoError(t, err, "unenforced callers get the unenforced result, like FindMatched")
+	require.Equal(t, []DenialReason{DenialReasonNone, DenialReasonNone, DenialReasonNotGranted}, reasons)
+}
+
+// A call refused only because the caller's grant names another disposition
+// than read_only is reported as a disposition refusal, even though a missing
+// key never matches on a decision.
+func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeMCPConnect, "toolset_1")
+	selector[SelectorKeyDisposition] = DispositionIdempotent
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
+
+	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("delete_all", DispositionDestructive)
+	reasons, err := engine.DenialReasons(ctx, []Check{call})
+	require.NoError(t, err)
+	require.Equal(t, []DenialReason{DenialReasonDisposition}, reasons)
+}
+
+// A call refused because it names no tool while the grant is limited to one
+// is not a disposition refusal: no other disposition would allow it.
+func TestDenialReasons_MissingToolIsNotADispositionRefusal(t *testing.T) {
+	t.Parallel()
+
+	selector := NewSelector(ScopeMCPConnect, "toolset_1")
+	selector[SelectorKeyTool] = "search"
+	selector[SelectorKeyDisposition] = DispositionIdempotent
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
+
+	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("", DispositionDestructive)
+	reasons, err := engine.DenialReasons(ctx, []Check{call})
+	require.NoError(t, err)
+	require.Equal(t, []DenialReason{DenialReasonNotGranted}, reasons)
+}
+
+// A tool call recorded as a denial is rebuilt as a tool call, so a grant that
+// covers the original call also covers the rebuilt one.
+func TestRecordedCheckRebuildsToolCalls(t *testing.T) {
+	t.Parallel()
+
+	grant := NewGrantWithSelector(ScopeMCPConnect, Selector{
+		SelectorKeyResourceKind: "mcp",
+		SelectorKeyResourceID:   "server-one",
+		SelectorKeyTool:         "search",
+	})
+	dimensions := map[string]string{SelectorKeyProjectID: "project-one", SelectorKeyTool: "search", SelectorKeyDisposition: DispositionReadOnly}
+
+	recorded := RecordedCheck(ScopeMCPConnect, "", "server-one", dimensions)
+	require.True(t, recorded.isToolCall())
+	allowed, err := GrantsAuthorize([]Grant{grant}, recorded)
+	require.NoError(t, err)
+	require.True(t, allowed)
+
+	other := RecordedCheck(ScopeMCPConnect, "", "server-one", map[string]string{SelectorKeyProjectID: "project-one", SelectorKeyTool: "delete", SelectorKeyDisposition: DispositionDestructive})
+	allowed, err = GrantsAuthorize([]Grant{grant}, other)
+	require.NoError(t, err)
+	require.False(t, allowed)
+}
+
+// Only connect has tool calls: a recorded view check that names a tool is
+// still refused as invalid, and a recorded connection stays a connection.
+func TestRecordedCheckKeepsOtherChecksAsTheyWere(t *testing.T) {
+	t.Parallel()
+
+	root := []Grant{NewGrant(ScopeRoot, WildcardResource)}
+	read := RecordedCheck(ScopeMCPRead, "", "server-one", map[string]string{SelectorKeyProjectID: "project-one", SelectorKeyTool: "search"})
+	_, err := GrantsAuthorize(root, read)
+	require.ErrorIs(t, err, ErrInvalidCheck)
+
+	connection := RecordedCheck(ScopeMCPConnect, "", "server-one", map[string]string{SelectorKeyProjectID: "project-one"})
+	require.False(t, connection.isToolCall())
+	allowed, err := GrantsAuthorize(root, connection)
+	require.NoError(t, err)
+	require.True(t, allowed)
 }

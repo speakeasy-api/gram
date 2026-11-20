@@ -8,7 +8,7 @@ import (
 
 // This file uses only long-standing API, so an older evaluator can answer the
 // same cases and the snapshots can be compared. API that may differ lives in
-// decision_snapshot_refs_test.go.
+// the two helpers at the end of decision_snapshot_test.go.
 
 type snapshotFile struct {
 	Grants []snapshotGrant `json:"grants"`
