@@ -30092,7 +30092,8 @@ type AdminHooksReleaseFleetResponseBody struct {
 type AdminHooksReleaseInstallVersionResponseBody struct {
 	// The hooks binary version, or empty for installs that sent no version.
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	// How the version compares to the release Speakeasy ships.
+	// How the version compares to the release Speakeasy ships: current, behind,
+	// unsupported or unknown.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Installs whose latest version is this one.
 	Installs *int64 `form:"installs,omitempty" json:"installs,omitempty" xml:"installs,omitempty"`
@@ -93043,11 +93044,6 @@ func ValidateAdminHooksReleaseInstallVersionResponseBody(body *AdminHooksRelease
 	}
 	if body.Installs == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("installs", "body"))
-	}
-	if body.Status != nil {
-		if !(*body.Status == "current" || *body.Status == "behind" || *body.Status == "unsupported" || *body.Status == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"current", "behind", "unsupported", "unknown"}))
-		}
 	}
 	return
 }

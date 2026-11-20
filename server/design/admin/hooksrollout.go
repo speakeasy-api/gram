@@ -83,9 +83,7 @@ var AdminHooksReleaseInstallVersion = Type("AdminHooksReleaseInstallVersion", fu
 	Required("version", "status", "installs")
 
 	Attribute("version", String, "The hooks binary version, or empty for installs that sent no version.")
-	Attribute("status", String, "How the version compares to the release Speakeasy ships.", func() {
-		Enum("current", "behind", "unsupported", "unknown")
-	})
+	Attribute("status", String, "How the version compares to the release Speakeasy ships: current, behind, unsupported or unknown.")
 	Attribute("installs", Int64, "Installs whose latest version is this one.")
 })
 

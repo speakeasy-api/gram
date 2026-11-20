@@ -945,7 +945,8 @@ type AdminHooksReleaseFleet struct {
 type AdminHooksReleaseInstallVersion struct {
 	// The hooks binary version, or empty for installs that sent no version.
 	Version string
-	// How the version compares to the release Speakeasy ships.
+	// How the version compares to the release Speakeasy ships: current, behind,
+	// unsupported or unknown.
 	Status string
 	// Installs whose latest version is this one.
 	Installs int64
