@@ -4,9 +4,9 @@ import { queryKeyMcpServerAuthentication } from "@gram/client/react-query/mcpSer
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
-import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import {
   offersPersonalSignIn,
+  usesTypedOwnerConnections,
   serverConnection,
   serverSignIns,
   userSubject,
@@ -45,7 +45,6 @@ export function useOwnerConnections(
   agentId?: string,
 ): OwnerConnections {
   const sdk = useSdkClient();
-  const enforcement = useUpstreamAuthEnforcement();
   const organization = useOrganization();
   const { user } = useSession();
   const personal = servers.filter((server) => server.issuerId);
@@ -108,39 +107,19 @@ export function useOwnerConnections(
         collectPageItems(
           sdk.remoteSessionClients.list(request, undefined, { signal }),
         ),
-      enabled,
+      enabled:
+        enabled &&
+        personal.some(
+          (server) =>
+            !usesTypedOwnerConnections(server) &&
+            server.projectSlug === request.gramProject &&
+            server.issuerId === request.userSessionIssuerId,
+        ),
       retry: false,
       throwOnError: false,
     })),
   });
 
-  /** Whether the runtime narrows a server's issuer to its own registrations. */
-  const proxied = (server: InventoryServer): boolean =>
-    server.kind === "Remote" || server.kind === "Tunneled";
-  // Which of its issuer's registrations each server needs, by the rule the
-  // runtime enforces: its own, not those other servers on a shared issuer
-  // bring. Read for every server, as the issuer's list is the fallback.
-  const required = useQueries({
-    queries: personal.map((server, index) => ({
-      queryKey: ["owner-connections", "required", ownerScope, server.id],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        sdk.remoteSessions.listServerClientAssociations(
-          { gramProject: server.projectSlug, mcpServerId: server.id },
-          undefined,
-          { signal },
-        ),
-      // Only for a server whose own auth asks each person to sign in: a
-      // shared one never reads it.
-      enabled: (() => {
-        const data = auth[index]?.data;
-        return (
-          enabled && proxied(server) && !!data && offersPersonalSignIn(data)
-        );
-      })(),
-      retry: false,
-      throwOnError: false,
-    })),
-  });
   const bindings = useQueries({
     queries: issuers.map((request) => ({
       queryKey: ["owner-connections", "bindings", ownerScope, agentId, request],
@@ -181,46 +160,27 @@ export function useOwnerConnections(
       );
     }
   }
-  /**
-   * The upstream sign-ins a server asks for, once its auth is read: from its
-   * own auth clients when enforced, else from its issuer's registrations.
-   */
   const signIns = (
     server: InventoryServer,
   ): { data?: ServerSignIn[]; isError: boolean; anyOne: boolean } => {
     const authRead = auth[personal.indexOf(server)];
-    if (enforcement === "loading") return { isError: false, anyOne: false };
-    const typed =
-      enforcement === "enforced" && authRead?.data
-        ? serverSignIns(authRead.data)
-        : undefined;
-    // Under enforcement the caller chooses among the server's own sign-ins,
-    // so any one of them serves.
-    if (typed) return { data: typed, isError: false, anyOne: true };
+    if (usesTypedOwnerConnections(server)) {
+      const data = authRead?.data && serverSignIns(authRead.data);
+      return {
+        data,
+        isError: !!authRead?.isError,
+        anyOne: true,
+      };
+    }
+    // Hosted servers still use their downstream issuer's registrations.
     const read = clients[issuerIndex(server)];
-    const named = (list: RemoteSessionClient[] | undefined) =>
-      list?.map((client) => ({
+    return {
+      data: read?.data?.map((client: RemoteSessionClient) => ({
         id: client.id,
         credentialOwner: client.credentialOwner,
         name: signInNames.get(client.id) ?? client.displayName,
-      }));
-    // A hosted server needs every registration its issuer binds, as the
-    // runtime resolves them all; only a proxied one narrows to its own.
-    if (!proxied(server))
-      return {
-        data: named(read?.data),
-        isError: !!read?.isError,
-        anyOne: false,
-      };
-    const requiredRead = required[personal.indexOf(server)];
-    const requiredIds = requiredRead?.data
-      ? new Set(requiredRead.data.requiredClientIds)
-      : undefined;
-    return {
-      data: requiredIds
-        ? named(read?.data?.filter((client) => requiredIds.has(client.id)))
-        : undefined,
-      isError: !!read?.isError || !!requiredRead?.isError,
+      })),
+      isError: !!read?.isError,
       anyOne: false,
     };
   };
@@ -244,6 +204,14 @@ export function useOwnerConnections(
       continue;
     }
     if (
+      usesTypedOwnerConnections(server) &&
+      authRead?.data &&
+      !clientRead.data
+    ) {
+      byServer.set(server.id, { status: "setup-required" });
+      continue;
+    }
+    if (
       !authRead?.data ||
       !sessionRead?.data ||
       !clientRead.data ||
@@ -252,10 +220,8 @@ export function useOwnerConnections(
       byServer.set(server.id, { status: "checking" });
       continue;
     }
-    // A connection made through another issuer, such as a team gateway's,
-    // serves this server too. Where it was made is provenance only: attaching
-    // it needs just this server's issuer to bind its client, as the sign-ins
-    // listed here do.
+    // The issuer a connection was made through is provenance. Match the
+    // registration offered by this server, including gateway-made sessions.
     byServer.set(
       server.id,
       serverConnection(
@@ -316,10 +282,9 @@ export function useOwnerConnections(
       await Promise.all(
         [
           ...sessions,
-          ...clients,
-          // Which sign-ins a server requires does not change on sign-in, but
-          // a failed read gets another try.
-          ...required.filter((read) => read.isError),
+          ...clients.filter(
+            (read) => read.fetchStatus !== "idle" || read.data || read.isError,
+          ),
           ...(agentId ? bindings : []),
           // A server's auth does not change when someone signs in, but a
           // failed read gets another try.

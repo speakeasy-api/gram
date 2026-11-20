@@ -1,3 +1,4 @@
+import { UpstreamCredentialsSection } from "@/pages/mcp/x/tabs/settings/sections/authentication/UpstreamCredentialsSection";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import {
@@ -38,8 +39,6 @@ import {
   type ServerConfig,
   useRemoteMcpInstallWorkflow,
 } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
-import { AuthenticationSectionBody } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
-import { useMcpServerAuthTarget } from "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
 import type { RemoteMcpCreationIdentity } from "@/pages/sources/remote-mcp/configureCreatedIdentity";
 import { useRoutes } from "@/routes";
@@ -547,6 +546,20 @@ function SignInSetup({ mcpServerId }: { mcpServerId: string }) {
   const serverQuery = useGetMcpServer({ id: mcpServerId }, undefined, {
     throwOnError: false,
   });
+  if (serverQuery.isError) {
+    return (
+      <div className="flex items-center gap-2">
+        <Text small>The server could not be loaded.</Text>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void serverQuery.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    );
+  }
   if (!serverQuery.data) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
@@ -555,12 +568,7 @@ function SignInSetup({ mcpServerId }: { mcpServerId: string }) {
       </div>
     );
   }
-  return <SignInSetupBody mcpServer={serverQuery.data} />;
-}
-
-function SignInSetupBody({ mcpServer }: { mcpServer: McpServer }) {
-  const target = useMcpServerAuthTarget(mcpServer);
-  return <AuthenticationSectionBody target={target} />;
+  return <UpstreamCredentialsSection mcpServer={serverQuery.data} />;
 }
 
 /**
@@ -579,15 +587,14 @@ function TurnOnAndLink({
   const update = useUpdateMcpServerMutation();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  // The same readiness the server's settings page shows. A check that could
-  // not run is not an open step, so it does not hold the admin back.
+  // Do not publish a server whose upstream sign-in cannot be verified.
   const serverQuery = useGetMcpServer({ id: mcpServerId }, undefined, {
     throwOnError: false,
   });
   const readiness = useMcpServerAuthenticationReadiness(serverQuery.data);
   const checking = serverQuery.isLoading || readiness.loading;
-  const signInOpen =
-    !serverQuery.isError && !readiness.unavailable && !readiness.ready;
+  const unavailable = serverQuery.isError || readiness.unavailable;
+  const signInOpen = !readiness.ready;
 
   const turnOn = async () => {
     setPending(true);
@@ -625,13 +632,15 @@ function TurnOnAndLink({
     <div className="flex w-full items-center justify-between gap-3">
       <Text muted small className={failed ? "text-destructive" : undefined}>
         {failed ??
-          (signInOpen && !checking
-            ? "Save the sign-in settings above to turn it on."
-            : "")}
+          (unavailable
+            ? "Could not verify upstream sign-in. Retry the check above."
+            : signInOpen && !checking
+              ? "Save the sign-in settings above to turn it on."
+              : "")}
       </Text>
       <Button
         variant="primary"
-        disabled={pending || checking || signInOpen}
+        disabled={pending || checking || unavailable || signInOpen}
         onClick={() => void turnOn()}
       >
         {pending ? (

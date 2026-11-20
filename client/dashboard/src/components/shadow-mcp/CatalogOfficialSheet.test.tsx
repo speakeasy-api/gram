@@ -56,12 +56,8 @@ vi.mock(
   () => ({ CreationIdentityChoice: () => <div>identity choice</div> }),
 );
 vi.mock(
-  "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",
-  () => ({ AuthenticationSectionBody: () => <div>identity settings</div> }),
-);
-vi.mock(
-  "@/pages/mcp/x/tabs/settings/sections/authentication/authTarget",
-  () => ({ useMcpServerAuthTarget: () => ({ kind: "remote-mcp" }) }),
+  "@/pages/mcp/x/tabs/settings/sections/authentication/UpstreamCredentialsSection",
+  () => ({ UpstreamCredentialsSection: () => <div>identity settings</div> }),
 );
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({
@@ -72,7 +68,8 @@ vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
 vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
   useUpdateMcpServerMutation: () => ({ mutateAsync: mocks.mutateUpdate }),
 }));
-vi.mock("@tanstack/react-query", () => ({
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   useQueryClient: () => ({ fetchQuery: mocks.fetchQuery }),
 }));
 vi.mock("@/lib/mcp-server-visibility", () => ({
@@ -426,7 +423,7 @@ describe("CatalogOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledTimes(1);
   });
 
-  it("lets the admin turn the server on when the sign-in check cannot run", async () => {
+  it("blocks turning on the server when the sign-in check cannot run", async () => {
     mocks.signInReady = false;
     mocks.signInUnavailable = true;
     installWith([
@@ -442,10 +439,12 @@ describe("CatalogOfficialSheet", () => {
     const turnOn = await screen.findByRole("button", {
       name: "Turn on and link",
     });
-    expect((turnOn as HTMLButtonElement).disabled).toBe(false);
+    expect((turnOn as HTMLButtonElement).disabled).toBe(true);
     expect(
-      screen.queryByText("Save the sign-in settings above to turn it on."),
-    ).toBeNull();
+      screen.getByText(
+        "Could not verify upstream sign-in. Retry the check above.",
+      ),
+    ).toBeTruthy();
   });
 
   it("keeps Add and link off while the catalog entry loads", () => {

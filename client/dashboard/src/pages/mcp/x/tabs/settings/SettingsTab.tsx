@@ -18,12 +18,7 @@ import {
 } from "./sections/ServerUrlSection";
 
 import { SettingsSection } from "@/components/detail/settings-section";
-import { FieldError } from "@/components/ui/Field";
 import { Text } from "@/components/ui/Text";
-import {
-  type UpstreamAuthEnforcementStatus,
-  useUpstreamAuthEnforcement,
-} from "@/hooks/useUpstreamAuthEnforcement";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import {
@@ -127,9 +122,6 @@ export function SettingsTab({
     !!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId;
   const remoteMcpServerId = mcpServer.remoteMcpServerId;
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
-  // Enforcing organizations configure upstream identity through credentials;
-  // the others keep the legacy Identity panel. Only one renders.
-  const upstreamAuth = useUpstreamAuthEnforcement();
   const { hasScope } = useRBAC();
   const canWritePlugins = usePluginWriteAccess();
   const canWriteToolset =
@@ -167,10 +159,7 @@ export function SettingsTab({
   // `ready` flips once the source-backed sections can be on the page: they
   // mount after the source row loads, so a cold-load deep link would otherwise
   // look for an element that isn't there yet.
-  useScrollToSettingsHash(
-    SCROLLABLE_SECTION_IDS,
-    sourceSettled && upstreamAuth !== "loading",
-  );
+  useScrollToSettingsHash(SCROLLABLE_SECTION_IDS, sourceSettled);
 
   let deleteTarget: SourceBackedDeleteTarget | undefined;
   if (remoteMcpServer) {
@@ -379,31 +368,14 @@ export function SettingsTab({
           publishing,
           {
             ...G.identity,
-            // Upstream headers live inside the Identity panel's Custom
-            // Headers disclosure; the identity choice governs them.
             content: (
               <>
-                {upstreamAuth === "legacy" ? (
-                  <AuthenticationSection
-                    mcpServer={mcpServer}
-                    mcpUrl={mcpUrl}
-                  />
-                ) : upstreamAuth === "enforced" ? (
-                  // Links to the legacy Identity anchor land on its replacement.
-                  <div id={MCP_AUTHENTICATION_SECTION_ID} className="space-y-4">
-                    <ReadinessIssueFrame
-                      anchorId={MCP_AUTHENTICATION_SECTION_ID}
-                    >
-                      <SetupStepBanner mcpServer={mcpServer} />
-                      <UpstreamCredentialsSection mcpServer={mcpServer} />
-                    </ReadinessIssueFrame>
-                  </div>
-                ) : (
-                  <UpstreamIdentityPendingSection
-                    id={MCP_AUTHENTICATION_SECTION_ID}
-                    status={upstreamAuth}
-                  />
-                )}
+                <div id={MCP_AUTHENTICATION_SECTION_ID} className="space-y-4">
+                  <ReadinessIssueFrame anchorId={MCP_AUTHENTICATION_SECTION_ID}>
+                    <SetupStepBanner mcpServer={mcpServer} />
+                    <UpstreamCredentialsSection mcpServer={mcpServer} />
+                  </ReadinessIssueFrame>
+                </div>
                 <IdentityChainingSection mcpServer={mcpServer} />
               </>
             ),
@@ -491,18 +463,9 @@ export function SettingsTab({
           content: (
             <>
               <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
-              {/* Hosted toolsets keep their own authentication, and unproxied
-                  servers reach the upstream without Speakeasy in between. */}
-              {isUnproxied ||
-              mcpServer.toolsetId ||
-              upstreamAuth === "legacy" ? null : upstreamAuth === "enforced" ? (
+              {mcpServer.tunneledMcpServerId ? (
                 <UpstreamCredentialsSection mcpServer={mcpServer} />
-              ) : (
-                <UpstreamIdentityPendingSection
-                  id={UPSTREAM_CREDENTIALS_SECTION_ID}
-                  status={upstreamAuth}
-                />
-              )}
+              ) : null}
               {tunneledMcpServer ? (
                 <Fragment key={tunneledMcpServer.id}>
                   <ResourceIdentifierSection
@@ -560,40 +523,5 @@ function AvailabilityAnchor({
     <div id={SETTINGS_GROUPS.access.id} className="scroll-mt-8">
       {children}
     </div>
-  );
-}
-
-/**
- * Placeholder for the Identity section while the enforcement state that picks
- * its contents is loading or unavailable. It renders no controls, so no write
- * surface appears for the wrong mode.
- */
-function UpstreamIdentityPendingSection({
-  id,
-  status,
-}: {
-  id: string;
-  status: Extract<UpstreamAuthEnforcementStatus, "loading" | "error">;
-}): JSX.Element {
-  return (
-    <SettingsSection id={id}>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Identity</SettingsSection.Title>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          {status === "loading" ? (
-            <Text muted small>
-              Loading…
-            </Text>
-          ) : (
-            <FieldError>
-              The identity settings could not be loaded. Refresh the page to try
-              again.
-            </FieldError>
-          )}
-        </SettingsSection.Body>
-      </SettingsSection.Panel>
-    </SettingsSection>
   );
 }

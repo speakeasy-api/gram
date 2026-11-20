@@ -28,7 +28,6 @@ import {
   useAllRemoteSessionClients,
   useRemoteSessionIssuersByIds,
 } from "@/lib/remote-identity";
-import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 import { SetupStepBanner } from "./SetupStepBanner";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
@@ -120,18 +119,6 @@ export function AuthenticationSectionBody({
   target: AuthTarget;
   additionalSetupAction?: ReactNode;
 }): JSX.Element {
-  if (target.kind === "remote-mcp") {
-    // Keyed by server: the panel holds unsaved header and identity drafts,
-    // and navigating to another server must not carry them across for Save
-    // to write to the wrong remote. Every render site dispatches through here.
-    return (
-      <RemoteMcpIdentitySectionBody
-        key={`${target.permissionResourceId}:${target.remoteMcpServerId ?? ""}`}
-        target={target}
-      />
-    );
-  }
-
   return (
     <StandardAuthenticationSectionBody
       target={target}

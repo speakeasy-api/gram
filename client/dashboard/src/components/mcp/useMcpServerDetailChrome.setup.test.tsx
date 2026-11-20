@@ -15,7 +15,6 @@ const state = vi.hoisted(() => ({
   plugins: [] as unknown[],
   publishStatus: {} as Record<string, unknown>,
   missingEnvVars: 0,
-  upstreamAuth: "legacy" as "legacy" | "enforced",
   upstreamAuthQuery: {} as Record<string, unknown>,
   guide: null as {
     only: { title: string } | undefined;
@@ -57,9 +56,6 @@ vi.mock("@/pages/plugins/usePluginQueryScope", () => ({
 }));
 vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
   useSkillsOverMcpEnabled: () => false,
-}));
-vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
-  useUpstreamAuthEnforcement: () => state.upstreamAuth,
 }));
 vi.mock("@/hooks/usePrivateMcpServerUrls", () => ({
   usePrivateMcpServerUrls: () => ({
@@ -179,7 +175,6 @@ beforeEach(() => {
   state.plugins = [];
   state.publishStatus = {};
   state.missingEnvVars = 0;
-  state.upstreamAuth = "legacy";
   state.upstreamAuthQuery = {};
   state.guide = null;
 });
@@ -395,7 +390,6 @@ it.each([
 ])(
   "counts the turned-on credentials under enforced upstream auth",
   (enabled, label) => {
-    state.upstreamAuth = "enforced";
     state.upstreamAuthQuery = {
       data: { status: "configured", clients: enabled.map(credential) },
       isPending: false,
@@ -408,7 +402,6 @@ it.each([
 
 it("names an enforced server with no credentials by its sign-in status", () => {
   state.url = "https://other.example/mcp";
-  state.upstreamAuth = "enforced";
   state.upstreamAuthQuery = {
     data: { status: "no_auth_required", clients: [] },
     isPending: false,
@@ -418,8 +411,7 @@ it("names an enforced server with no credentials by its sign-in status", () => {
   expect(screen.getByText("No authentication")).toBeDefined();
 });
 
-it("warns when an enforced server's credentials can't be read", () => {
-  state.upstreamAuth = "enforced";
+it("warns when a server's credentials can't be read", () => {
   state.upstreamAuthQuery = { isPending: false, isError: true };
   renderIdentity();
   expect(screen.getByText("Couldn't check").getAttribute("data-warn")).toBe(
@@ -427,13 +419,9 @@ it("warns when an enforced server's credentials can't be read", () => {
   );
 });
 
-it.each([
-  ["setup_incomplete", "enforced"],
-  ["no_auth_required", "enforced"],
-] as const)(
+it.each(["setup_incomplete", "no_auth_required"])(
   "sends a guided server whose credentials are %s to Setup",
-  (status, upstreamAuth) => {
-    state.upstreamAuth = upstreamAuth;
+  (status) => {
     state.upstreamAuthQuery = {
       data: { status, clients: [] },
       isPending: false,
@@ -449,7 +437,6 @@ it.each([
 );
 
 it("keeps a guided server's configured credentials", () => {
-  state.upstreamAuth = "enforced";
   state.upstreamAuthQuery = {
     data: { status: "configured", clients: [credential(true)] },
     isPending: false,
@@ -480,7 +467,6 @@ function renderOverviewPrompt() {
 }
 
 it("prompts to finish guided setup that isn't marked done, even with working credentials", () => {
-  state.upstreamAuth = "enforced";
   state.upstreamAuthQuery = {
     data: { status: "configured", clients: [credential(true)] },
     isPending: false,
@@ -492,7 +478,6 @@ it("prompts to finish guided setup that isn't marked done, even with working cre
 
 it("stops prompting once guided setup is marked done, even without credentials", () => {
   state.server = { ...REMOTE_SERVER, setupGuideCompletedAt: new Date() };
-  state.upstreamAuth = "enforced";
   state.upstreamAuthQuery = {
     data: { status: "setup_incomplete", clients: [] },
     isPending: false,

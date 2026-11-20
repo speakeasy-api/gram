@@ -90,8 +90,7 @@ components stay free of query wiring.
 
 ## What does not live here
 
-- **Page composition.** `RemoteMcpIdentitySection` arranges these pieces into
-  a settings panel; it stays in `pages/`.
+- **Page composition.** Proxied server settings show typed offers in `UpstreamCredentialsSection` under `pages/`.
 - **Provider CRUD.** The sheets and pages under
   `pages/remote-identity-providers/` edit an issuer _as an issuer_. They
   consume `model/` but keep their own forms — AIM-230 deliberately keeps the

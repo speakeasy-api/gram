@@ -157,7 +157,9 @@ export function StepAuthentication({
                     ? "Checking connection…"
                     : connection.status === "error"
                       ? "Could not check connection"
-                      : "Requires connection";
+                      : connection.status === "setup-required"
+                        ? "Upstream setup required"
+                        : "Requires connection";
           const missingSignIns = sharedChosen
             ? null
             : missingSignInsSentence(server, connection);
@@ -294,30 +296,41 @@ export function StepAuthentication({
                         </Text>
                       )}
                     </div>
-                    {server.connectUrl && (
-                      <Button
-                        size="xs"
-                        variant={expired || !session ? "primary" : "secondary"}
-                        onClick={() => {
-                          const url = new URL(server.connectUrl!);
-                          if (session?.remoteSessionClientId) {
-                            url.searchParams.set(
-                              "reauthenticate_client_id",
-                              session.remoteSessionClientId,
-                            );
-                          }
-                          if (oauth.open(url.toString()))
-                            connecting.current = server.id;
-                        }}
-                      >
-                        {session ? "Reauthenticate" : "Connect account"}
-                      </Button>
-                    )}
-                    {!server.connectUrl && !session && (
+                    {connection?.status === "setup-required" && (
                       <Text small muted>
-                        Connection setup is unavailable for this server.
+                        Finish configuring this server’s upstream credentials in
+                        its Identity settings.
                       </Text>
                     )}
+                    {connection?.status !== "setup-required" &&
+                      server.connectUrl && (
+                        <Button
+                          size="xs"
+                          variant={
+                            expired || !session ? "primary" : "secondary"
+                          }
+                          onClick={() => {
+                            const url = new URL(server.connectUrl!);
+                            if (session?.remoteSessionClientId) {
+                              url.searchParams.set(
+                                "reauthenticate_client_id",
+                                session.remoteSessionClientId,
+                              );
+                            }
+                            if (oauth.open(url.toString()))
+                              connecting.current = server.id;
+                          }}
+                        >
+                          {session ? "Reauthenticate" : "Connect account"}
+                        </Button>
+                      )}
+                    {connection?.status !== "setup-required" &&
+                      !server.connectUrl &&
+                      !session && (
+                        <Text small muted>
+                          Connection setup is unavailable for this server.
+                        </Text>
+                      )}
                     <Button
                       variant="tertiary"
                       size="sm"

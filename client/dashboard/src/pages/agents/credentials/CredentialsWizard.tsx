@@ -93,7 +93,6 @@ import {
 import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
-import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agentpolicygrantcheck.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
@@ -951,7 +950,6 @@ export function CredentialsWizard({
     (editing
       ? (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
       : !existing);
-  const enforcement = useUpstreamAuthEnforcement();
   const authCheck = useQuery({
     queryKey: ["agent-auth-check", organization.id, user.id, agentId ?? null],
     queryFn: async ({ signal }) => {
@@ -978,29 +976,11 @@ export function CredentialsWizard({
   // whole, so it does not wait.
   const authPending = editing && writesAuthGrant && authCheck.isLoading;
   const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
-  // Which registrations a connection is assigned through depends on whether
-  // the organization enforces upstream auth, so nothing is written until that
-  // is known. An unreadable answer assigns through each server's own
-  // credentials, which never attach another server's sign-in.
-  const enforcementPending = enforcement === "loading";
-  const enforcementPendingNote =
-    "Checking how this organization's servers sign in…";
-  const typedConnections = enforcement !== "legacy";
-  // Where the organization enforces mcp:auth, an agent without it cannot sign
-  // in to any upstream, so a refused grant stops the flow before anything is
-  // written. Elsewhere sign-in does not need it yet, so the grant is left out
-  // instead of failing the save. An unknown answer keeps the grant, and the
-  // server decides.
   const authStop = !authRefused
     ? null
-    : enforcement === "loading"
-      ? "Checking whether this organization requires sign-in permission…"
-      : enforcement !== "enforced"
-        ? null
-        : authCheck.data?.limitedBy === "owner"
-          ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator to review the owner's access.`
-          : `You cannot give this agent ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator for access.`;
-  const includeAuthGrant = !(authRefused && enforcement === "legacy");
+    : authCheck.data?.limitedBy === "owner"
+      ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator to review the owner's access.`
+      : `You cannot give this agent ${AUTH_GRANT.scope}, which is required to sign in to upstream services. Ask an administrator for access.`;
   // The rows the picker offers. Under "All servers" they are the ones those
   // wildcards reach, so an organization-wide one shows every project's;
   // otherwise it is the project the agent is bound to.
@@ -1174,11 +1154,6 @@ export function CredentialsWizard({
         "Your permissions are still loading. Try again in a moment.",
       );
     }
-    if (enforcementPending) {
-      throw new Error(
-        "Checking how this organization's servers sign in. Try again in a moment.",
-      );
-    }
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -1208,7 +1183,7 @@ export function CredentialsWizard({
         // the server refuses a request that names a grant twice.
         policyGrants: uniqueGrants([
           ...agentPolicyGrantsFromDraft(draft),
-          ...(includeAuthGrant && reachesServers ? [AUTH_GRANT] : []),
+          ...(reachesServers ? [AUTH_GRANT] : []),
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
@@ -1267,7 +1242,7 @@ export function CredentialsWizard({
     if (agent === undefined || grants === undefined) return;
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
-    if (!reconciled || saving || authPending || enforcementPending) return;
+    if (!reconciled || saving || authPending) return;
     if (authStop) {
       setError(authStop);
       return;
@@ -1363,7 +1338,6 @@ export function CredentialsWizard({
         });
       }
       if (
-        includeAuthGrant &&
         reachesServers &&
         ![...appliedPolicies.current.values()].some(
           (grant) => grant.scope === AUTH_GRANT.scope,
@@ -1508,13 +1482,13 @@ export function CredentialsWizard({
       const missing = await attachOwnerConnections(
         sdk,
         agent.id,
+        user.id,
         (allServers
           ? listedServers
           : selected.map((entry) => entry.server)
         ).filter(usesOwnConnection),
         undefined,
         true,
-        typedConnections,
       );
       if (missing.length)
         toast.warning(
@@ -1546,12 +1520,12 @@ export function CredentialsWizard({
   const requestSave = () => setSavePending(true);
   useEffect(() => {
     if (!savePending || saving || !reconciled) return;
-    if (authPending || enforcementPending) return;
+    if (authPending) return;
     setSavePending(false);
     void save();
     // save is rebuilt every render; these are what decide when it may run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savePending, saving, reconciled, authPending, enforcementPending]);
+  }, [savePending, saving, reconciled, authPending]);
 
   // The picker changes a draft until Continue saves it. Back puts the saved
   // selection back, so a change abandoned there is not saved by the next one.
@@ -1605,10 +1579,10 @@ export function CredentialsWizard({
         const missing = await attachOwnerConnections(
           sdk,
           targetId,
+          user.id,
           reach.filter(usesOwnConnection),
           signal,
           allServers,
-          typedConnections,
         );
         if (missing.length)
           toast.warning(
@@ -1915,7 +1889,7 @@ export function CredentialsWizard({
                         allServers
                           ? `${CONNECT_SCOPE} on all servers in the project`
                           : `${CONNECT_SCOPE} on the selected servers`,
-                        ...(includeAuthGrant
+                        ...(true
                           ? [
                               `${AUTH_GRANT.scope} on all upstream credentials (narrow them on the agent's Permissions page)`,
                             ]
@@ -2360,7 +2334,6 @@ export function CredentialsWizard({
                 "Renaming an agent is recorded in the organization audit log.")
               : (authStop ??
                 (authPending ? authPendingNote : null) ??
-                (enforcementPending ? enforcementPendingNote : null) ??
                 refusedChoice ??
                 (reconciled
                   ? "Changing what an agent reaches is recorded in the organization audit log."
@@ -2383,8 +2356,7 @@ export function CredentialsWizard({
                   !reconciled ||
                   refusedChoice !== null ||
                   authStop !== null ||
-                  authPending ||
-                  enforcementPending
+                  authPending
                 }
                 onClick={() => void save()}
               >

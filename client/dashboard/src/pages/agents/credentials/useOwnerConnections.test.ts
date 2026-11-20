@@ -6,7 +6,12 @@ import { useOwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
 const mocks = vi.hoisted(() => {
-  const personalClient = { clientType: "remote_session", enabled: true };
+  const personalClient = {
+    clientType: "remote_session",
+    enabled: true,
+    personal: true,
+    remoteSessionClientId: "client_other",
+  };
   return {
     refetch: vi.fn(),
     personalClient,
@@ -19,14 +24,10 @@ const mocks = vi.hoisted(() => {
     // The registrations the runtime requires of each server; every issuer
     // registration when left unset.
     required: undefined as string[] | undefined,
-    enforcement: "legacy" as string,
     // The agent's attachments, read when editing.
     bindings: [] as unknown[],
   };
 });
-vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
-  useUpstreamAuthEnforcement: () => mocks.enforcement,
-}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
   useSession: () => ({ user: { id: "user_example" } }),
@@ -72,7 +73,6 @@ afterEach(() => {
   mocks.clients = [];
   mocks.sessions = [];
   mocks.required = undefined;
-  mocks.enforcement = "legacy";
   mocks.bindings = [];
 });
 
@@ -190,16 +190,7 @@ describe("a member server of a team gateway", () => {
     });
   });
 
-  it("counts the gateway-made connection when upstream auth is enforced", () => {
-    mocks.enforcement = "enforced";
-    const { result } = renderHook(() => useOwnerConnections([server], true));
-    expect(result.current.byServer.get(server.id)).toEqual({
-      status: "ready",
-      sessions: [viaGateway],
-    });
-  });
-
-  it("counts the gateway-made connection when it is not", () => {
+  it("counts the gateway-made connection without an issuer link", () => {
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
       status: "ready",
@@ -211,8 +202,7 @@ describe("a member server of a team gateway", () => {
     mocks.sessions = [
       { ...viaGateway, remoteSessionClientId: "client_elsewhere" },
     ];
-    for (const enforcement of ["enforced", "legacy"]) {
-      mocks.enforcement = enforcement;
+    {
       const { result } = renderHook(() => useOwnerConnections([server], true));
       expect(result.current.byServer.get(server.id)).toMatchObject({
         status: "missing",
@@ -248,8 +238,7 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
   });
 
-  it("asks for the server's own sign-in when upstream auth is enforced", () => {
-    mocks.enforcement = "enforced";
+  it("asks for the server's own sign-in without an issuer link", () => {
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
       status: "ready",
@@ -257,30 +246,17 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
   });
 
-  it("asks for the issuer's sign-in when it is not, as the issuer routes the call", () => {
-    const { result } = renderHook(() => useOwnerConnections([server], true));
-    expect(result.current.byServer.get(server.id)).toEqual({
-      status: "missing",
-      signIns: [otherServersSignIn],
-      connected: 0,
-    });
-  });
-
-  it("falls back to the issuer while the server's setup is incomplete", () => {
-    mocks.enforcement = "enforced";
+  it("reports repair needed while the server's setup is incomplete", () => {
     mocks.auth.set(server.id, {
       data: { status: "setup_incomplete", clients: [] },
     });
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
-      status: "missing",
-      signIns: [otherServersSignIn],
-      connected: 0,
+      status: "setup-required",
     });
   });
 
-  it("falls back to the issuer when its personal sign-in names no registration", () => {
-    mocks.enforcement = "enforced";
+  it("reports repair needed when its personal sign-in names no registration", () => {
     mocks.auth.set(server.id, {
       data: {
         status: "configured",
@@ -289,99 +265,11 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
     const { result } = renderHook(() => useOwnerConnections([server], true));
     expect(result.current.byServer.get(server.id)).toEqual({
-      status: "missing",
-      signIns: [otherServersSignIn],
-      connected: 0,
+      status: "setup-required",
     });
   });
 
-  it("names a missing sign-in after the server it belongs to", () => {
-    // The other server's own auth client is where a person's name for the
-    // registration lives, so the row can say "Stripe" rather than nothing.
-    const other = { ...server, id: "server_other" };
-    mocks.clients = [
-      otherServersSignIn,
-      { id: "client_own", credentialOwner: "subject" },
-    ];
-    mocks.auth.set(server.id, {
-      data: {
-        status: "configured",
-        clients: [{ ...ownSignIn, name: "Linear" }],
-      },
-    });
-    mocks.auth.set(other.id, {
-      data: {
-        status: "configured",
-        clients: [
-          {
-            ...ownSignIn,
-            remoteSessionClientId: "client_other",
-            name: "Stripe",
-          },
-        ],
-      },
-    });
-    const { result } = renderHook(() =>
-      useOwnerConnections([server, other], true),
-    );
-    expect(result.current.byServer.get(server.id)).toEqual({
-      status: "missing",
-      signIns: [{ ...otherServersSignIn, name: "Stripe" }],
-      connected: 1,
-      connectedNames: ["Linear"],
-    });
-  });
-
-  it("falls back to the registration's own name when its auth clients disagree", () => {
-    const other = { ...server, id: "server_other" };
-    const third = { ...server, id: "server_third" };
-    mocks.clients = [
-      { ...otherServersSignIn, displayName: "Shared registration" },
-      { id: "client_own", credentialOwner: "subject" },
-    ];
-    mocks.auth.set(server.id, {
-      data: { status: "configured", clients: [ownSignIn] },
-    });
-    for (const [id, name] of [
-      [other.id, "Stripe"],
-      [third.id, "Billing"],
-    ] as const) {
-      mocks.auth.set(id, {
-        data: {
-          status: "configured",
-          clients: [
-            { ...ownSignIn, remoteSessionClientId: "client_other", name },
-          ],
-        },
-      });
-    }
-    const { result } = renderHook(() =>
-      useOwnerConnections([server, other, third], true),
-    );
-    const connection = result.current.byServer.get(server.id);
-    expect(connection?.status).toBe("missing");
-    expect(
-      connection?.status === "missing" ? connection.signIns?.[0]?.name : null,
-    ).toBe("Shared registration");
-  });
-
-  it("needs only the registrations the runtime requires of the server, not the issuer's others", () => {
-    // The issuer also lists another server's registration; the runtime asks
-    // this server's callers for its own alone, so its own connection is enough.
-    mocks.clients = [
-      otherServersSignIn,
-      { id: "client_own", credentialOwner: "subject" },
-    ];
-    mocks.required = ["client_own"];
-    const { result } = renderHook(() => useOwnerConnections([server], true));
-    expect(result.current.byServer.get(server.id)).toEqual({
-      status: "ready",
-      sessions: [ownSession],
-    });
-  });
-
-  it("is ready with one of the server's own sign-ins when enforced", () => {
-    mocks.enforcement = "enforced";
+  it("is ready with one of the server's own sign-ins", () => {
     mocks.auth.set(server.id, {
       data: {
         status: "configured",
@@ -398,8 +286,7 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
   });
 
-  it("keeps an assignment ready when enforced and another one lost its session", () => {
-    mocks.enforcement = "enforced";
+  it("keeps an assignment ready and another one lost its session", () => {
     mocks.auth.set(server.id, {
       data: {
         status: "configured",
@@ -426,7 +313,7 @@ describe("a server sharing an org-wide issuer with another server", () => {
     });
   });
 
-  it("keeps every issuer registration for a hosted server without enforcement", () => {
+  it("keeps every issuer registration for a hosted server", () => {
     const hosted = { ...server, kind: "Hosted" } as InventoryServer;
     mocks.clients = [
       otherServersSignIn,
@@ -435,14 +322,6 @@ describe("a server sharing an org-wide issuer with another server", () => {
     mocks.required = ["client_own"];
     const { result } = renderHook(() => useOwnerConnections([hosted], true));
     expect(result.current.byServer.get(hosted.id)?.status).toBe("missing");
-  });
-
-  it("keeps the server checking until enforcement is known", () => {
-    mocks.enforcement = "loading";
-    const { result } = renderHook(() => useOwnerConnections([server], true));
-    expect(result.current.byServer.get(server.id)).toEqual({
-      status: "checking",
-    });
   });
 });
 
