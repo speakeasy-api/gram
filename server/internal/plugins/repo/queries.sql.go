@@ -724,12 +724,47 @@ const getGitHubConnectionByMarketplaceToken = `-- name: GetGitHubConnectionByMar
 SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, organization_id, marketplace_token_hash, marketplace_token_encrypted, marketplace_token_org_encrypted, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 FROM plugin_github_connections
 WHERE marketplace_token = $1
+  AND marketplace_token_hash IS NULL
 `
 
-// Resolves a marketplace proxy URL token to the upstream connection. The token
-// is the auth credential — there's no project scope to apply ahead of it.
+// DEPRECATED: resolves a marketplace proxy URL token through the plaintext
+// marketplace_token column, for connections the marketplace token backfill has
+// not moved yet. Removed with that column.
 func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, marketplaceToken pgtype.Text) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, getGitHubConnectionByMarketplaceToken, marketplaceToken)
+	var i PluginGithubConnection
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.InstallationID,
+		&i.RepoOwner,
+		&i.RepoName,
+		&i.MarketplaceToken,
+		&i.OrganizationID,
+		&i.MarketplaceTokenHash,
+		&i.MarketplaceTokenEncrypted,
+		&i.MarketplaceTokenOrgEncrypted,
+		&i.PublishedFingerprint,
+		&i.PublishedMcpFingerprints,
+		&i.PublishedHooksVersion,
+		&i.PublishedHooksConfig,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getGitHubConnectionByMarketplaceTokenHash = `-- name: GetGitHubConnectionByMarketplaceTokenHash :one
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, organization_id, marketplace_token_hash, marketplace_token_encrypted, marketplace_token_org_encrypted, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
+FROM plugin_github_connections
+WHERE marketplace_token_hash = $1
+`
+
+// Resolves a marketplace proxy URL token, by its hash, to the upstream
+// connection. The token is the auth credential, so there's no project scope to
+// apply ahead of it.
+func (q *Queries) GetGitHubConnectionByMarketplaceTokenHash(ctx context.Context, marketplaceTokenHash pgtype.Text) (PluginGithubConnection, error) {
+	row := q.db.QueryRow(ctx, getGitHubConnectionByMarketplaceTokenHash, marketplaceTokenHash)
 	var i PluginGithubConnection
 	err := row.Scan(
 		&i.ID,
@@ -4012,13 +4047,13 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 }
 
 const upsertGitHubConnection = `-- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
+INSERT INTO plugin_github_connections (project_id, organization_id, installation_id, repo_owner, repo_name, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
+      organization_id = COALESCE(plugin_github_connections.organization_id, EXCLUDED.organization_id),
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
-      marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
       published_hooks_version = EXCLUDED.published_hooks_version,
       published_hooks_config = EXCLUDED.published_hooks_config,
@@ -4028,20 +4063,20 @@ RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_to
 
 type UpsertGitHubConnectionParams struct {
 	ProjectID                uuid.UUID
+	OrganizationID           pgtype.Text
 	InstallationID           int64
 	RepoOwner                string
 	RepoName                 string
-	MarketplaceToken         pgtype.Text
 	PublishedMcpFingerprints []byte
 	PublishedHooksVersion    pgtype.Text
 	PublishedHooksConfig     []byte
 }
 
-// Inserts or refreshes a project's GitHub connection. The marketplace_token
-// argument is the candidate token to use if no token is currently set; on
-// conflict the existing token is preserved via COALESCE so callers can pass a
-// freshly-generated token on every publish without overwriting prior state.
-// Token rotation goes through a separate query. published_mcp_fingerprints,
+// Inserts or refreshes a project's GitHub connection. It never writes the
+// marketplace token: the publish path gives a connection without one its token
+// through package marketplacetokens, in the same transaction.
+// organization_id is the project's organization; an existing value is kept, so
+// a connection never moves to another organization's key. published_mcp_fingerprints,
 // published_hooks_version, and published_hooks_config record the per-plugin MCP
 // content hashes, the hooks generator version, and the hook-output-affecting
 // config just published; all are always overwritten so subsequent rollout runs
@@ -4053,10 +4088,10 @@ type UpsertGitHubConnectionParams struct {
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.InstallationID,
 		arg.RepoOwner,
 		arg.RepoName,
-		arg.MarketplaceToken,
 		arg.PublishedMcpFingerprints,
 		arg.PublishedHooksVersion,
 		arg.PublishedHooksConfig,

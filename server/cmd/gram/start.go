@@ -1212,6 +1212,7 @@ func newStartCommand() *cli.Command {
 			}
 			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
 			upstreamTokens := orgEncryption.UpstreamTokens(logger, encryptionClient)
+			marketplaceTokens := orgEncryption.MarketplaceTokens(logger, encryptionClient)
 			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, clientSecrets, callbackOrigins.Outbound)
 			if err != nil {
 				return err
@@ -1411,7 +1412,7 @@ func newStartCommand() *cli.Command {
 			)
 			if ghClient != nil {
 				marketplaceServer = marketplace.NewServer(
-					marketplace.NewDBResolver(db, ghClient),
+					marketplace.NewDBResolver(logger, db, ghClient),
 					guardianPolicy.Client(),
 					logger,
 				)
@@ -1432,7 +1433,7 @@ func newStartCommand() *cli.Command {
 					return fmt.Errorf("render local Platform MCP marketplace: %w", err)
 				}
 				localMarketplaceServer = marketplace.NewLocalServer(
-					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(db)},
+					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(logger, db)},
 					func(_ context.Context, owner, repo string) (map[string][]byte, error) {
 						if owner != localPlatformMCPMarketplaceOwner || repo != localPlatformMCPMarketplaceRepo {
 							return nil, marketplace.ErrNotFound
@@ -1595,7 +1596,7 @@ func newStartCommand() *cli.Command {
 				WithServerURL(serverURL).
 				WithFeatures(featureFlags)
 			access.Attach(mux, accessService)
-			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens).
+			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens, marketplaceTokens).
 				WithWorkloadTokenTargets(mcpService)
 			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
 			agentService.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state", agent.StateReportRate, ratelimit.WithMetrics(meterProvider)))
@@ -1758,7 +1759,7 @@ func newStartCommand() *cli.Command {
 					InstallationID: 1,
 				}
 				localMarketplaceServer = marketplace.NewLocalServer(
-					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(db)},
+					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(logger, db)},
 					func(ctx context.Context, owner, repo string) (map[string][]byte, error) {
 						if owner == localPlatformMCPMarketplaceOwner && repo == localPlatformMCPMarketplaceRepo {
 							return localPlatformMCPFiles, nil
@@ -1785,7 +1786,7 @@ func newStartCommand() *cli.Command {
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, staffOrg).
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, staffOrg, marketplaceTokens).
 					WithOrganizationHosts(orgHosts)
 				if localPublisher != nil {
 					if err := restoreLocalPluginRepositories(ctx, logger, db, localPublisher, pluginPublisher); err != nil {
@@ -1811,7 +1812,7 @@ func newStartCommand() *cli.Command {
 			if pluginPublisher != nil {
 				pluginPublisher.WithDistributionAdmission(distributionAdmission)
 			}
-			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler, staffOrg).
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler, staffOrg, marketplaceTokens).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithOrganizationHosts(orgHosts)
 			plugins.Attach(mux, pluginsSvc)
 			agentService.WithClaudeObservabilityPlugins(pluginsSvc)

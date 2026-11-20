@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
@@ -23,19 +26,20 @@ type InstallationTokenSource interface {
 // plugin_github_connections and minting a fresh GitHub App installation token
 // for use as the git fetch credential.
 type DBResolver struct {
+	logger  *slog.Logger
 	queries *pluginsrepo.Queries
 	tokens  InstallationTokenSource
 }
 
-func NewDBResolver(db *pgxpool.Pool, tokens InstallationTokenSource) *DBResolver {
-	return &DBResolver{queries: pluginsrepo.New(db), tokens: tokens}
+func NewDBResolver(logger *slog.Logger, db *pgxpool.Pool, tokens InstallationTokenSource) *DBResolver {
+	return &DBResolver{logger: logger.With(attr.SlogComponent("marketplace")), queries: pluginsrepo.New(db), tokens: tokens}
 }
 
 // NewLocalDBResolver resolves the same opaque marketplace tokens as production
 // without minting a GitHub installation token. It is used only with LocalServer,
 // which reads from the standard local in-memory publisher rather than GitHub.
-func NewLocalDBResolver(db *pgxpool.Pool) *DBResolver {
-	return &DBResolver{queries: pluginsrepo.New(db), tokens: nil}
+func NewLocalDBResolver(logger *slog.Logger, db *pgxpool.Pool) *DBResolver {
+	return &DBResolver{logger: logger.With(attr.SlogComponent("marketplace")), queries: pluginsrepo.New(db), tokens: nil}
 }
 
 func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error) {
@@ -43,12 +47,9 @@ func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error
 		return Upstream{}, ErrNotFound
 	}
 
-	conn, err := r.queries.GetGitHubConnectionByMarketplaceToken(ctx, pgtype.Text{String: token, Valid: true})
+	conn, err := r.lookup(ctx, token)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Upstream{}, ErrNotFound
-		}
-		return Upstream{}, fmt.Errorf("lookup connection by marketplace token: %w", err)
+		return Upstream{}, err
 	}
 
 	instToken := ""
@@ -65,4 +66,31 @@ func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error
 		Repo:        conn.RepoName,
 		AccessToken: instToken,
 	}, nil
+}
+
+// lookup finds the connection a token belongs to by the token's hash. Until
+// the marketplace token backfill moves every connection, a token stored in
+// the deprecated plaintext column still resolves; each such lookup is logged
+// so the backfill's progress shows in the logs.
+func (r *DBResolver) lookup(ctx context.Context, token string) (pluginsrepo.PluginGithubConnection, error) {
+	conn, err := r.queries.GetGitHubConnectionByMarketplaceTokenHash(ctx, pgtype.Text{String: marketplacetokens.Hash(token), Valid: true})
+	switch {
+	case err == nil:
+		return conn, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return pluginsrepo.PluginGithubConnection{}, fmt.Errorf("lookup connection by marketplace token hash: %w", err)
+	}
+
+	conn, err = r.queries.GetGitHubConnectionByMarketplaceToken(ctx, pgtype.Text{String: token, Valid: true})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return pluginsrepo.PluginGithubConnection{}, ErrNotFound
+	case err != nil:
+		return pluginsrepo.PluginGithubConnection{}, fmt.Errorf("lookup connection by plaintext marketplace token: %w", err)
+	}
+
+	r.logger.InfoContext(ctx, "marketplace token resolved from the plaintext column; run the marketplace token backfill",
+		attr.SlogProjectID(conn.ProjectID.String()))
+
+	return conn, nil
 }
