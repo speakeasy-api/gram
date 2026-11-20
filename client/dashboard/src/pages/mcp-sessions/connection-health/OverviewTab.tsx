@@ -41,7 +41,6 @@ import {
   formatDayMonth,
   formatLast,
   formatSessionLength,
-  SERVICE_DEFINITION,
   plural,
 } from "./format";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
@@ -141,8 +140,7 @@ export function OverviewTab({
         )}
 
         <p className="text-muted-foreground text-sm">
-          {SERVICE_DEFINITION} Problems with a service show on the page of the
-          MCP server that uses it, under{" "}
+          Problems with a service show on that server&apos;s page, under{" "}
           <Link
             to={routes.mcpSessions.provider.mcpServers.href(providerId)}
             className="text-foreground underline-offset-4 hover:underline"

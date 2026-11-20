@@ -1,9 +1,6 @@
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { useRoutes } from "@/routes";
-import { ArrowRight } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
-import { useProjectProviders } from "../providers";
+import { useSearchParams } from "react-router";
 import {
   connectionHealthNow,
   useSignInSummary,
@@ -21,15 +18,13 @@ const SHEET_PARAMS = [PROBLEM_PARAM];
 /** A server's suspected problems, then Active Sessions or its locked Connection Logs. */
 export function ServerConnectionHealth({
   providerId,
-  server,
+  serverId,
   sessions,
 }: {
   providerId: string;
-  server: { id: string; name: string };
+  serverId: string;
   sessions: ReactNode;
 }): JSX.Element {
-  const routes = useRoutes();
-  const { providers } = useProjectProviders();
   const [searchParams] = useSearchParams();
   const [now] = useState(connectionHealthNow);
   // A registration link opens its sheet, which lives in Active Sessions.
@@ -39,8 +34,8 @@ export function ServerConnectionHealth({
       ? "sessions"
       : "logs";
   const scope = useMemo(
-    () => ({ providerId, serverId: server.id }),
-    [providerId, server.id],
+    () => ({ providerId, serverId }),
+    [providerId, serverId],
   );
   const problems = useSuspectedProblems(scope);
   // Sample problems show only once logging is known to be on, and only to
@@ -50,7 +45,6 @@ export function ServerConnectionHealth({
   const showProblems =
     summary?.loggingEnabled === true && summary.viewerScope === "all";
   const shownProblems = showProblems ? (problems.data?.problems ?? []) : [];
-  const provider = providers.find((p) => p.id === providerId);
 
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
@@ -67,7 +61,7 @@ export function ServerConnectionHealth({
         ) : null}
       </div>
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex">
           <SegmentedControl
             ariaLabel="Connections view"
             variant="view"
@@ -80,18 +74,9 @@ export function ServerConnectionHealth({
               { value: "logs", label: "Connection Logs" },
             ]}
           />
-          {provider ? (
-            <Link
-              to={routes.mcpSessions.provider.overview.href(providerId)}
-              className="inline-flex items-center gap-1 text-sm hover:underline"
-            >
-              Provider: {provider.slug}
-              <ArrowRight className="size-3.5" aria-hidden />
-            </Link>
-          ) : null}
         </div>
         {view === "logs" ? (
-          <ConnectionLogsView providerId={providerId} lockedServer={server} />
+          <ConnectionLogsView providerId={providerId} serverId={serverId} />
         ) : (
           sessions
         )}

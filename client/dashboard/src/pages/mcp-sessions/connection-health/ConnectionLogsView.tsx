@@ -197,11 +197,11 @@ function rangePhrase(values: LogFilterValues, options: OptionsById): string {
 /** Connection Logs: what happened, attempt by attempt. */
 export function ConnectionLogsView({
   providerId,
-  lockedServer,
+  serverId,
 }: {
   providerId: string;
-  /** Locks the view to one server (a server's own tab). */
-  lockedServer?: { id: string; name: string };
+  /** Scopes the view to one server (a server's own tab), with no chip for it. */
+  serverId?: string;
 }): JSX.Element {
   const routes = useRoutes();
   const { providers } = useProjectProviders();
@@ -230,14 +230,14 @@ export function ConnectionLogsView({
     if (unsupportedPreset) setValue("date", presetValue(DEFAULT_LOG_RANGE));
   }, [unsupportedPreset, setValue]);
   const scope = useMemo(
-    () => ({ providerId, serverId: lockedServer?.id }),
-    [providerId, lockedServer?.id],
+    () => ({ providerId, serverId }),
+    [providerId, serverId],
   );
 
   const baseFilters = useMemo(() => {
     const parsed = toAttemptFilters(filters.values);
-    return lockedServer ? { ...parsed, serverIds: undefined } : parsed;
-  }, [filters.values, lockedServer]);
+    return serverId ? { ...parsed, serverIds: undefined } : parsed;
+  }, [filters.values, serverId]);
   const isReference = REFERENCE_PATTERN.test(search.trim());
 
   const counts = useAttemptCounts(scope, window, baseFilters, {
@@ -284,11 +284,7 @@ export function ConnectionLogsView({
     failed: referenceFailed,
     isPending: referencePending,
     retry: retryReference,
-  } = useAttemptHere(
-    isReference ? search.trim() : null,
-    providerId,
-    lockedServer?.id,
-  );
+  } = useAttemptHere(isReference ? search.trim() : null, providerId, serverId);
 
   const optionsById = useMemo(
     () => optionsFrom(withMissing(optionFacets, filteredFacets)),
@@ -345,7 +341,7 @@ export function ConnectionLogsView({
           onClick: () => showOnly("person", urn),
         });
       }
-      if (row.server && !lockedServer) {
+      if (row.server && !serverId) {
         const id = row.server.id;
         actions.push({
           icon: "server",
@@ -356,7 +352,7 @@ export function ConnectionLogsView({
       }
       return actions;
     },
-    [isReference, lockedServer, setParam, setSearchParams],
+    [isReference, serverId, setParam, setSearchParams],
   );
 
   // Counts run whenever the list may be blocked by search, so they answer first.
@@ -399,7 +395,7 @@ export function ConnectionLogsView({
         ? null
         : plural(total, "attempt");
 
-  const schema = lockedServer ? LOG_FILTERS_WITHOUT_SERVER : LOG_FILTERS;
+  const schema = serverId ? LOG_FILTERS_WITHOUT_SERVER : LOG_FILTERS;
   const setFilter = (id: string, value: FilterValue) =>
     filters.setValue(id as keyof LogFilterValues, value as never);
   const organization = useOrganization();
@@ -524,7 +520,7 @@ export function ConnectionLogsView({
         orientation="horizontal"
         heading="No attempt with this reference"
         description={
-          lockedServer
+          serverId
             ? "Reference search covers the last 30 days of this server."
             : "Reference search covers the last 30 days of this provider."
         }
@@ -534,7 +530,11 @@ export function ConnectionLogsView({
         icon="search"
         orientation="horizontal"
         heading="No attempts match these filters"
-        description={noMatchSentence(filters.values, optionsById, search)}
+        description={noMatchSentence(
+          serverId ? { ...filters.values, server: null } : filters.values,
+          optionsById,
+          search,
+        )}
         action={
           <Button variant="secondary" onClick={resetAll}>
             Reset filters
@@ -605,14 +605,14 @@ export function ConnectionLogsView({
               </Button>
             </Page.Toolbar.Leading>
           ) : null}
-          {countText || lockedServer ? (
+          {countText || serverId ? (
             <Page.Toolbar.Actions>
               <span className="text-muted-foreground flex items-center gap-2 text-sm whitespace-nowrap">
                 {countText}
-                {countText && lockedServer ? <span aria-hidden>·</span> : null}
-                {lockedServer ? (
+                {countText && serverId ? <span aria-hidden>·</span> : null}
+                {serverId ? (
                   <Link
-                    to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}?${withServer(searchParams, lockedServer.id)}`}
+                    to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}?${withServer(searchParams, serverId)}`}
                     className="text-foreground inline-flex items-center gap-1 hover:underline"
                   >
                     Open in MCP Sessions with this server
@@ -627,12 +627,7 @@ export function ConnectionLogsView({
         {loggingEnabled ? (
           <Page.Toolbar.Row>
             <Page.Toolbar.Filters
-              schema={LOG_FILTERS}
-              locked={
-                lockedServer
-                  ? { server: `Server: ${lockedServer.name}` }
-                  : undefined
-              }
+              schema={schema}
               showSheetCount={false}
               showClearAll={false}
               values={chipValues}
@@ -678,7 +673,7 @@ export function ConnectionLogsView({
       <AttemptDetailSheet
         reference={openReference}
         providerId={providerId}
-        lockedServerId={lockedServer?.id}
+        lockedServerId={serverId}
         providerName={providers.find((p) => p.id === providerId)?.slug}
         onClose={() => setParam(ATTEMPT_PARAM, null)}
       />

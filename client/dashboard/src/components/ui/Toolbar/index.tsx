@@ -294,8 +294,6 @@ interface ToolbarFiltersProps {
    */
   extraChips?: ReactNode;
   projectSlug?: string;
-  /** Dimensions the page fixes: a padlocked chip in place, nothing to edit. */
-  locked?: Partial<Record<string, string>>;
   /** Off: no count on "More filters" (the set filters already show as chips). */
   showSheetCount?: boolean;
   /** Off: the page places its own reset control. */
@@ -321,7 +319,6 @@ function ToolbarFilters({
   customBuilder,
   extraChips,
   projectSlug,
-  locked,
   showSheetCount = true,
   showClearAll = true,
   renderSheet,
@@ -331,9 +328,7 @@ function ToolbarFilters({
   // Pinned dims always pill (with an "All …" default); non-pinned pill once
   // active. hideChip dims never pill.
   const pillDims = schema.filter(
-    (d) =>
-      !d.hideChip &&
-      (d.pinned || !!locked?.[d.id] || isDimensionActive(d, values[d.id]!)),
+    (d) => !d.hideChip && (d.pinned || isDimensionActive(d, values[d.id]!)),
   );
 
   // Badge counts only filters hidden in the sheet (active non-pinned dims +
@@ -377,18 +372,6 @@ function ToolbarFilters({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {pillDims.map((dim) => {
-        const lockedLabel = locked?.[dim.id];
-        if (lockedLabel) {
-          return (
-            <FilterChip
-              key={dim.id}
-              label={lockedLabel}
-              ariaLabel="Fixed on this tab"
-              color={accents[dim.id]}
-              locked
-            />
-          );
-        }
         const label = chipLabel(dim, values[dim.id]!, optionsById[dim.id]);
         const ariaLabel =
           dim.kind === "select" ||
@@ -466,7 +449,7 @@ function ToolbarFilters({
         <FilterSheet
           open={sheetOpen}
           onOpenChange={setSheetOpen}
-          schema={locked ? schema.filter((d) => !locked[d.id]) : schema}
+          schema={schema}
           values={values}
           optionsById={optionsById}
           onChange={onChange}

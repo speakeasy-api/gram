@@ -13,6 +13,11 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { RequireScope } from "@/components/require-scope";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { useProject } from "@/contexts/Auth";
 import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
@@ -30,7 +35,7 @@ import { useRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useOrganizationUserSessionIssuer } from "@gram/client/react-query/organizationUserSessionIssuer.js";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import { useEffect } from "react";
 import {
   Link,
@@ -189,7 +194,7 @@ function ProviderPage(): JSX.Element {
           title={
             provider ? (
               <DetailHeaderTitle
-                eyebrow="MCP Authentication Provider"
+                eyebrow={healthOn ? <ProviderEyebrow /> : PROVIDER_EYEBROW}
                 name={
                   <ProviderPicker
                     current={provider}
@@ -242,6 +247,29 @@ function ProviderPage(): JSX.Element {
         )}
       </div>
     </DetailFrame>
+  );
+}
+
+const PROVIDER_EYEBROW = "MCP Authentication Provider";
+
+/** The eyebrow, with a short answer to "what is this?" beside it. */
+function ProviderEyebrow(): JSX.Element {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {PROVIDER_EYEBROW}
+      <Tooltip>
+        <TooltipTrigger
+          aria-label="What is an MCP Authentication Provider?"
+          className="text-muted-foreground hover:text-foreground inline-flex cursor-help"
+        >
+          <Info className="size-3.5" aria-hidden />
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start">
+          What AI apps sign in through to reach your MCP servers. It decides who
+          gets a session and how long it lasts.
+        </TooltipContent>
+      </Tooltip>
+    </span>
   );
 }
 
@@ -394,6 +422,7 @@ function ProviderMcpServersTab({
 
 function ProviderMcpServers({ issuerId }: { issuerId: string }): JSX.Element {
   const { issuer, isPending, missing, error } = useProviderDetail(issuerId);
+  const health = useConnectionHealthFlag();
   if (isPending) return <SkeletonTable label="Loading MCP servers" />;
   if (missing || !issuer) return <ProviderUnavailable error={error} />;
   return (
@@ -402,7 +431,11 @@ function ProviderMcpServers({ issuerId }: { issuerId: string }): JSX.Element {
         Every MCP server and gateway that signs people in through this provider.
         Changes to its settings apply to all of them.
       </Text>
-      <McpServersSection issuer={issuer} titled={false} />
+      <McpServersSection
+        issuer={issuer}
+        titled={false}
+        linkRows={health === "on"}
+      />
     </div>
   );
 }

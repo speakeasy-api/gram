@@ -47,8 +47,6 @@ type ClientsAndSessionsTabProps = {
    * the caller's to name rather than something this component can infer.
    */
   authTabPath?: string;
-  /** The server's name, for connection health's locked server filter. */
-  serverName?: string;
   /**
    * Lists the sessions authorized through a gateway instead of every session
    * `issuerId` issued, filtered and paginated on the server: a stored gateway
@@ -143,13 +141,13 @@ function IssuerClientsAndSessions(
   props: Omit<ClientsAndSessionsTabProps, "gateway">,
 ): JSX.Element {
   const health = useConnectionHealthFlag();
-  const { issuerId, originatingMcpServerId, serverName } = props;
+  const { issuerId, originatingMcpServerId } = props;
   // The sessions list mounts only when its view is shown, so its queries wait.
   return issuerId && health === "on" && originatingMcpServerId ? (
     <ServerConnectionHealth
       key={`${issuerId}:${originatingMcpServerId}`}
       providerId={issuerId}
-      server={{ id: originatingMcpServerId, name: serverName ?? "This server" }}
+      serverId={originatingMcpServerId}
       sessions={<IssuerSessionsList {...props} />}
     />
   ) : (

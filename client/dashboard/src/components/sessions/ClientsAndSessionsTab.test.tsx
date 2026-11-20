@@ -33,11 +33,11 @@ vi.mock(
     ...(await importOriginal<object>()),
     ServerConnectionHealth: ({
       providerId,
-      server,
+      serverId,
     }: {
       providerId: string;
-      server: { id: string };
-    }) => <div data-testid="server-health">{`${providerId}:${server.id}`}</div>,
+      serverId: string;
+    }) => <div data-testid="server-health">{`${providerId}:${serverId}`}</div>,
   }),
 );
 

@@ -348,7 +348,6 @@ export default function MCPServerDetails(): JSX.Element | null {
               <ClientsAndSessionsTab
                 issuerId={mcpServer.userSessionIssuerId}
                 originatingMcpServerId={mcpServer.id}
-                serverName={mcpServer.name ?? undefined}
                 attachedSessions={
                   mcpServer.userSessionIssuerId ? (
                     <AttachedUserSessions

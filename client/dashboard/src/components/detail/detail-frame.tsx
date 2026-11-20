@@ -241,7 +241,7 @@ export function DetailHeaderTitle({
   below,
   compact = false,
 }: {
-  eyebrow: string;
+  eyebrow: ReactNode;
   name: ReactNode;
   icon?: ReactNode;
   below?: ReactNode;
