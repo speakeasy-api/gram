@@ -3572,46 +3572,6 @@ func (q *Queries) EnsureEMABinding(ctx context.Context, arg EnsureEMABindingPara
 	return err
 }
 
-const ensurePrincipalAttachmentParents = `-- name: EnsurePrincipalAttachmentParents :exec
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-SELECT DISTINCT c.id, u.id
-FROM remote_session_clients AS c
-JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
-JOIN user_session_issuers AS u ON u.id = $1::uuid AND NOT u.deleted
-WHERE c.id = ANY($2::uuid[]) AND NOT c.deleted
-  AND EXISTS (
-    SELECT 1 FROM projects AS p
-    WHERE p.organization_id = $3::text AND NOT p.deleted
-      AND ($4::uuid IS NULL OR p.id = $4::uuid)
-      AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
-      AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
-      AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
-  )
-ORDER BY c.id, u.id
-ON CONFLICT (remote_session_client_id, user_session_issuer_id)
-DO UPDATE SET user_session_issuer_id = EXCLUDED.user_session_issuer_id WHERE FALSE
-`
-
-type EnsurePrincipalAttachmentParentsParams struct {
-	UserSessionIssuerID uuid.UUID
-	ClientIds           []uuid.UUID
-	OrganizationID      string
-	ProjectID           uuid.NullUUID
-}
-
-// Temporary FK compatibility only. Call inside the transaction that inserts
-// or rekeys validated attachments. Lock existing parents without updating
-// them, so a guarded legacy unlink cannot delete one before the FK check.
-func (q *Queries) EnsurePrincipalAttachmentParents(ctx context.Context, arg EnsurePrincipalAttachmentParentsParams) error {
-	_, err := q.db.Exec(ctx, ensurePrincipalAttachmentParents,
-		arg.UserSessionIssuerID,
-		arg.ClientIds,
-		arg.OrganizationID,
-		arg.ProjectID,
-	)
-	return err
-}
-
 const forceRemoteSessionClientRegistrationFixture = `-- name: ForceRemoteSessionClientRegistrationFixture :execrows
 UPDATE remote_session_clients
 SET client_secret_expires_at = $1,
@@ -13629,7 +13589,7 @@ type LockPrincipalAttachmentIssuerParams struct {
 }
 
 // Serialize creation/refresh with an issuer rekey or deletion before taking
-// any attachment-parent or grant locks.
+// any registration or grant locks.
 func (q *Queries) LockPrincipalAttachmentIssuer(ctx context.Context, arg LockPrincipalAttachmentIssuerParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockPrincipalAttachmentIssuer, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerID)
 	var id uuid.UUID

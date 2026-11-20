@@ -1078,7 +1078,7 @@ WHERE session.user_session_issuer_id = @source_issuer_id
 -- Keep the exact row even if its grant was reauthorized in place. Attachment
 -- generation records the attach event; the current session generation is
 -- locked here, as the exact session must not be revoked during the rekey.
-SELECT binding.id, binding.remote_session_client_id
+SELECT binding.id
 FROM principal_remote_session_bindings AS binding
 JOIN projects AS project ON project.id = binding.project_id AND project.organization_id = binding.organization_id AND NOT project.deleted
 JOIN agents AS a ON a.id = binding.principal_id AND a.organization_id = binding.organization_id AND NOT a.deleted

@@ -485,10 +485,10 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 	t.Parallel()
 	issuer, candidate := uuid.New(), uuid.New()
 	for name, tc := range map[string]struct {
-		row              ListSelectionMappingsRow
-		typedOnly        bool
-		typedOfferRepair bool
-		want             SelectionOutcome
+		row                       ListSelectionMappingsRow
+		typedOnly                 bool
+		registrationIssuerMatches bool
+		want                      SelectionOutcome
 	}{
 		"no-auth beside an association, not enforcing": {
 			row:  ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
@@ -505,18 +505,21 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 			want:      SelectionStaleNoAuth,
 		},
 		"unmapped client without an association, not enforcing": {
-			row:  ListSelectionMappingsRow{RegistrationLive: true, RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
-			want: SelectionUnusable,
+			row:                       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
+			registrationIssuerMatches: true,
+			want:                      SelectionUnusable,
 		},
 		"unmapped client without an association, enforcing": {
-			row:       ListSelectionMappingsRow{RegistrationLive: true, RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
-			typedOnly: true,
-			want:      SelectionMap,
+			row:                       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
+			registrationIssuerMatches: true,
+			typedOnly:                 true,
+			want:                      SelectionMap,
 		},
 		"unmapped client whose registration was deleted, enforcing": {
-			row:       ListSelectionMappingsRow{RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
-			typedOnly: true,
-			want:      SelectionUnusable,
+			row:                       ListSelectionMappingsRow{CandidateIds: []uuid.UUID{candidate}},
+			registrationIssuerMatches: true,
+			typedOnly:                 true,
+			want:                      SelectionUnusable,
 		},
 		"unmapped client the issuer does not bind, enforcing": {
 			row:       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
@@ -524,15 +527,15 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 			want:      SelectionUnusable,
 		},
 		"typed offer maps a live registration without an FK parent": {
-			row:              ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
-			typedOnly:        true,
-			typedOfferRepair: true,
-			want:             SelectionMap,
+			row:                       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
+			typedOnly:                 true,
+			registrationIssuerMatches: true,
+			want:                      SelectionMap,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly, tc.typedOfferRepair)
+			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly, tc.registrationIssuerMatches)
 			require.Equal(t, tc.want, got)
 			if got == SelectionMap {
 				require.Equal(t, candidate, mapped, "the candidate is the client recorded")
@@ -576,7 +579,7 @@ func TestListSelectionMappingsScopedLiveCredentialsRespectTenant(t *testing.T) {
 			legacy := seed(issuerID, pgtype.Text{Valid: false})
 			foreignSessionTenant := seed(issuerID, pgtype.Text{String: other.orgID, Valid: true})
 			seed(foreignIssuerID, pgtype.Text{Valid: false})
-			params := ListSelectionMappingsParams{TypedOfferRepair: false,
+			params := ListSelectionMappingsParams{
 				OrganizationID: f.orgID, PageSize: 200, OnlyUnmapped: true,
 				ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 			}
@@ -608,7 +611,7 @@ func TestListSelectionMappingsScopedLiveCredentialsPagination(t *testing.T) {
 	for range defaultPageSize + 5 {
 		f.noAuthSelection(f.interactiveCredential(), server)
 	}
-	params := ListSelectionMappingsParams{TypedOfferRepair: false,
+	params := ListSelectionMappingsParams{
 		OrganizationID: f.orgID, PageSize: defaultPageSize, OnlyUnmapped: true,
 		ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
 	}
@@ -647,7 +650,7 @@ func TestListSelectionMappingsIssuerScopeDoesNotImplyUnmapped(t *testing.T) {
 	f.oauthSelection(credential, server, registration)
 	f.run(true)
 	require.True(t, f.selection(credential, server).AuthClientID.Valid)
-	params := ListSelectionMappingsParams{TypedOfferRepair: false,
+	params := ListSelectionMappingsParams{
 		OrganizationID: f.orgID, PageSize: defaultPageSize, OnlyUnmapped: false,
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
 	}
@@ -792,7 +795,7 @@ func TestReconcileUserSessionSelectionsGroupsAcrossPages(t *testing.T) {
 
 func selectionMappingID(t *testing.T, f *fixture, credentialID, serverID uuid.UUID) uuid.UUID {
 	t.Helper()
-	rows, err := f.q.ListSelectionMappings(t.Context(), ListSelectionMappingsParams{TypedOfferRepair: false,
+	rows, err := f.q.ListSelectionMappings(t.Context(), ListSelectionMappingsParams{
 		OrganizationID: f.orgID, OnlyUnmapped: true, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true},
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageSize: defaultPageSize,
 	})
@@ -855,7 +858,7 @@ func TestReconcileUserSessionSelectionsDoesNotInferEMA(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.q.SeedAuthClientEMAFixture(ctx, SeedAuthClientEMAFixtureParams{AuthClientID: ema, Resource: "https://upstream.example.com/resource"}))
 	require.NoError(t, f.q.SeedServerAuthClientLinkFixture(ctx, SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: server, AuthClientID: ema, Source: "admin"}))
-	rows, err := f.q.ListSelectionMappings(ctx, ListSelectionMappingsParams{TypedOfferRepair: false, OrganizationID: f.orgID, Cursor: uuid.Nil, PageSize: 10, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true}, OnlyUnmapped: true})
+	rows, err := f.q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: f.orgID, Cursor: uuid.Nil, PageSize: 10, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: f.sessionIssuer(), Valid: true}, OnlyUnmapped: true})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Empty(t, rows[0].CandidateIds)

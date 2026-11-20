@@ -775,7 +775,7 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	requireMigrationAttachment(t, ctx, ti, secondBindings[sourceID], targetID, secondLogin)
 	parents, err = remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, parents)
+	require.Zero(t, parents, "rekeying must not create a legacy link")
 	loginAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: login, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, gatewayID, loginAfter.UserSessionIssuerID, "the login stays on the issuer it was made through")

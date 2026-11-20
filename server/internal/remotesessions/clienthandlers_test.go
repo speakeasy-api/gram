@@ -964,7 +964,6 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	userIssuerUUID, err := uuid.Parse(userIssuerID)
 	require.NoError(t, err)
 
-	ensureAttachmentParent(t, ctx, ti.conn, clientUUID, userIssuerUUID)
 	_, err = repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject("test-principal"),
 		UserSessionIssuerID:   userIssuerUUID,
@@ -1003,7 +1002,7 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	activeSessions, err := repo.New(ti.conn).CountActiveRemoteSessionsByClientID(ctx, clientUUID)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), activeSessions)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID), "retirement keeps the compatibility parent")
+	requireNoAttachmentParent(t, ctx, ti, clientUUID, userIssuerUUID)
 }
 
 func TestDeleteRemoteSessionClient_NotFound(t *testing.T) {

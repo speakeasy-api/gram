@@ -1766,8 +1766,7 @@ LIMIT @page_size::int;
 --
 -- What the upstream client choice reads today (GetUpstreamClientSelection):
 -- whether the server has any upstream OAuth client association, whether the
--- chosen registration is live and associated with the server, the user
--- session issuers the registration is bound to, and whether the choice names
+-- chosen registration is live and associated with the server, and whether the choice names
 -- the server's headers, which reads as no-auth.
 --
 -- The typed auth clients: an OAuth choice can name the live, enabled
@@ -1860,13 +1859,6 @@ SELECT sel.id,
            AND (rsi.project_id = project.id OR (rsi.project_id IS NULL AND (rsi.organization_id IS NULL OR rsi.organization_id = project.organization_id)))
            AND c.deleted IS FALSE
        )::boolean AS registration_live,
-       ARRAY(
-         SELECT link.user_session_issuer_id
-         FROM remote_session_client_user_session_issuers AS link
-         WHERE NOT @typed_offer_repair::boolean
-           AND link.remote_session_client_id = sel.remote_session_client_id
-         ORDER BY link.user_session_issuer_id
-       )::uuid[] AS registration_issuer_ids,
        ARRAY(
          SELECT ac.id
          FROM mcp_auth_clients AS ac
@@ -2144,6 +2136,17 @@ WHERE ac.organization_id = @organization_id::text
   AND ac.deleted IS FALSE
 ORDER BY ac.id
 FOR SHARE OF ac;
+
+-- name: HasLegacySelectionIssuerBinding :one
+-- Only the retired mapping workflow still uses issuer-client links as evidence.
+SELECT EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    JOIN projects AS project ON project.id = @project_id::uuid
+      AND project.organization_id = @organization_id::text AND NOT project.deleted
+    WHERE link.remote_session_client_id = @remote_session_client_id::uuid
+      AND link.user_session_issuer_id = @user_session_issuer_id::uuid
+)::boolean;
 
 -- name: LockSelectionIssuerBinding :exec
 -- Holds the binding of an unmapped OAuth choice's registration to its
@@ -2743,11 +2746,7 @@ UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = @id;
 UPDATE projects SET deleted_at = clock_timestamp() WHERE id = @id;
 
 -- name: SeedAgentAttachmentFixture :one
-WITH link AS (
-  INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-  VALUES (@remote_session_client_id, @user_session_issuer_id)
-  ON CONFLICT DO NOTHING
-), session AS (
+WITH session AS (
   INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted)
   VALUES (@connection_subject::text, @user_session_issuer_id, @remote_session_client_id,
     (SELECT org.id FROM remote_session_clients AS client

@@ -36,7 +36,6 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 			source := config
 			client := createRemoteClient(t, ctx, ti, issuer, config.String(), "attachment-client")
 			session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), source.String(), client)
-			ensureAttachmentParent(t, ctx, ti.conn, session.RemoteSessionClientID, config)
 			binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionID: session.ID, SubjectUrn: session.SubjectUrn.String()})
 			require.NoError(t, err)
 			// Compatibility rows no longer own attachments. Exercise both live

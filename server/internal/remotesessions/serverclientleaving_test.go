@@ -101,7 +101,6 @@ func TestCannotDetachAnUnclaimedClientFromAServer(t *testing.T) {
 	manager := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, "leaving-unclaimed-issuer")
 	client, _ := seedActiveClient(t, ctx, ti.conn, *auth.ProjectID, uuid.Nil, auth.ActiveOrganizationID, "leaving-unclaimed")
-	ensureAttachmentParent(t, ctx, ti.conn, client, issuer)
 	first := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-unclaimed-first", issuer)
 	second := createServerIdentityTargetOnIssuer(t, ctx, ti, "leaving-unclaimed-second", issuer)
 	requireServerRequires(t, ctx, ti, manager, first, issuer)
@@ -116,7 +115,7 @@ func TestCannotDetachAnUnclaimedClientFromAServer(t *testing.T) {
 
 	requireServerRequires(t, ctx, ti, manager, first, issuer)
 	requireServerRequires(t, ctx, ti, manager, second, issuer)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, client, issuer), "the rejected detach leaves the FK parent intact")
+	requireNoAttachmentParent(t, ctx, ti, client, issuer)
 }
 
 // Dropping a server's client must not hand it another server's credential.

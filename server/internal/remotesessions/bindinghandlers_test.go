@@ -207,7 +207,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, parents, "only the FK compatibility row is needed")
+	require.Zero(t, parents, "attaching must not recreate a legacy link")
 	_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: client, UserSessionIssuerID: config.String()})
 	requireOopsCode(t, err, oops.CodeConflict)
 	again, err := ti.service.AttachBinding(ctx, attach)

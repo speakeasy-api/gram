@@ -131,7 +131,6 @@ func TestDeleteClient(t *testing.T) {
 	issuerID := createRemoteIssuer(t, ctx, ti, "admin-delclient-issuer", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-delclient-usi")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-delclient-client")
-	ensureAttachmentParent(t, ctx, ti.conn, uuid.MustParse(clientID), userIssuerID)
 	insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("admin-delclient-subject"), userIssuerID.String(), clientID)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDelete)
