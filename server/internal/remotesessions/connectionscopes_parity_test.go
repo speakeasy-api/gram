@@ -69,4 +69,10 @@ func TestConnectionScopes_MatchesTheOfferedClientAndExactResource(t *testing.T) 
 	require.NoError(t, err)
 	require.NotNil(t, live)
 	require.Equal(t, []string{"files:read"}, live.Scopes)
+
+	b.Discover = false
+	withoutDiscovery, err := remotesessions.ConnectionScopes(ctx, env.db, b)
+	require.NoError(t, err)
+	require.NotNil(t, withoutDiscovery, "the offer still qualifies without discovery")
+	require.NotContains(t, withoutDiscovery.Scopes, "files:read", "the resource pin must not affect scopes when discovery is disabled")
 }
