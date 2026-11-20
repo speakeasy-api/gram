@@ -4719,8 +4719,6 @@ type OpenrouterApiKey struct {
 	// @access: confidential
 	KeyType string
 	// @access: secret-restricted
-	Key pgtype.Text
-	// @access: secret-restricted
 	KeyEncrypted pgtype.Text
 	// @access: secret-restricted
 	KeyOrgEncrypted pgtype.Text

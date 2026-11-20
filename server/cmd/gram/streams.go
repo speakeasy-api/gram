@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/storage"
 	"github.com/speakeasy-api/gram/infra/pkg/storagebindings"
 	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -482,18 +483,23 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			// Streams does not configure organization encryption: organizations
+			// still on the platform key work, and enrolled ones fail closed.
+			// TODO(DNO-1571): wire organization encryption before enrolling an
+			// organization in ai-provider-keys.
+			aiProviderKeys := aiproviderkeys.WithoutOrganizationEncryption(logger, db, encryptionClient)
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, openrouter.WithAIProviderKeys(aiProviderKeys))
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
-				modelkeys.NewResolver(db, encryptionClient, openRouter),
+				modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 				nil,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				nil,

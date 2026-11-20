@@ -173,7 +173,7 @@ FROM ai_integration_configs c
 WHERE c.provider = $5
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
 ON CONFLICT (ai_integration_config_id, schedule) DO NOTHING
 `
 
@@ -189,6 +189,7 @@ type EnsureProviderSyncSchedulesParams struct {
 // active config of a provider that is missing it, due immediately with the
 // caller's initial watermark (epoch for time-kind schedules, now for
 // cursor-kind ones). Existing rows are untouched.
+// orgencryption:unfenced writes ai_integration_syncs; it only reads whether a config holds a key.
 func (q *Queries) EnsureProviderSyncSchedules(ctx context.Context, arg EnsureProviderSyncSchedulesParams) error {
 	_, err := q.db.Exec(ctx, ensureProviderSyncSchedules,
 		arg.Schedule,
@@ -478,7 +479,7 @@ JOIN ai_integration_syncs s
 WHERE c.id = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
 LIMIT 1
 `
 
@@ -568,7 +569,7 @@ JOIN ai_integration_syncs s
 WHERE c.id = $2
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
 `
 
 type GetUsagePollConfigByIDParams struct {
@@ -658,7 +659,7 @@ JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 WHERE s.id = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
 `
 
 type GetUsagePollConfigBySyncIDRow struct {
@@ -732,7 +733,6 @@ INSERT INTO ai_integration_configs (
   , provider
   , project_id
   , external_organization_id
-  , api_key_encrypted
   , enabled
   , billing_mode
   , settings
@@ -741,11 +741,10 @@ INSERT INTO ai_integration_configs (
   , $2
   , $3
   , $4
-  , $5::text
+  , $5
   , $6
-  , $7
   -- Callers without provider settings pass nil; the column is NOT NULL.
-  , COALESCE($8::jsonb, '{}'::jsonb)
+  , COALESCE($7::jsonb, '{}'::jsonb)
 )
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted, settings
 `
@@ -755,19 +754,18 @@ type InsertConfigParams struct {
 	Provider               string
 	ProjectID              uuid.UUID
 	ExternalOrganizationID pgtype.Text
-	ApiKeyEncrypted        string
 	Enabled                bool
 	BillingMode            pgtype.Text
 	Settings               []byte
 }
 
+// The API key is stored by SetConfigAPIKey in the same transaction.
 func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiIntegrationConfig, error) {
 	row := q.db.QueryRow(ctx, insertConfig,
 		arg.OrganizationID,
 		arg.Provider,
 		arg.ProjectID,
 		arg.ExternalOrganizationID,
-		arg.ApiKeyEncrypted,
 		arg.Enabled,
 		arg.BillingMode,
 		arg.Settings,
@@ -813,7 +811,7 @@ JOIN ai_integration_syncs s
 WHERE c.provider = $1
   AND c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
 ORDER BY c.organization_id, c.provider
 `
 
@@ -965,7 +963,7 @@ JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 JOIN organization_metadata om ON om.id = c.organization_id
 WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
-  AND c.api_key_encrypted IS NOT NULL
+  AND (c.api_key_encrypted IS NOT NULL OR c.api_key_org_encrypted IS NOT NULL)
   AND s.auto_paused_at IS NULL
   AND s.disabled_at IS NULL
   AND s.next_poll_after <= $1
@@ -1208,6 +1206,60 @@ func (q *Queries) RetrySyncSchedule(ctx context.Context, arg RetrySyncSchedulePa
 	return i, err
 }
 
+const setConfigAPIKey = `-- name: SetConfigAPIKey :one
+UPDATE ai_integration_configs AS c
+SET api_key_encrypted = $1,
+    api_key_org_encrypted = $2
+WHERE c.id = $3
+  AND c.organization_id = $4
+  AND c.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+    FOR KEY SHARE
+  ), 0) = $5
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted, settings
+`
+
+type SetConfigAPIKeyParams struct {
+	PlatformCopy      pgtype.Text
+	OrgCopy           pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	DecidedGeneration int64
+}
+
+// Stores both copies of the API key sealed under the decided transition
+// generation. No rows means the config is gone or the transition moved;
+// aiproviderkeys tells the two apart.
+func (q *Queries) SetConfigAPIKey(ctx context.Context, arg SetConfigAPIKeyParams) (AiIntegrationConfig, error) {
+	row := q.db.QueryRow(ctx, setConfigAPIKey,
+		arg.PlatformCopy,
+		arg.OrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.DecidedGeneration,
+	)
+	var i AiIntegrationConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.ProjectID,
+		&i.ExternalOrganizationID,
+		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
+		&i.Enabled,
+		&i.BillingMode,
+		&i.ID,
+		&i.Deleted,
+		&i.Settings,
+	)
+	return i, err
+}
+
 const setSyncScheduleDisabled = `-- name: SetSyncScheduleDisabled :one
 UPDATE ai_integration_syncs
 SET disabled_at = CASE WHEN $1::bool THEN clock_timestamp() ELSE NULL END,
@@ -1293,31 +1345,44 @@ func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigPara
 }
 
 const updateAnthropicInferenceConfig = `-- name: UpdateAnthropicInferenceConfig :one
-UPDATE ai_integration_configs
-SET api_key_encrypted = $1::text,
-    enabled = $2,
+UPDATE ai_integration_configs AS c
+SET api_key_encrypted = $1,
+    api_key_org_encrypted = $2,
+    enabled = $3,
     updated_at = clock_timestamp()
-WHERE id = $3 AND organization_id = $4
-  AND project_id = $5 AND provider = 'anthropic_inference'
-  AND deleted IS FALSE
+WHERE c.id = $4 AND c.organization_id = $5
+  AND c.project_id = $6 AND c.provider = 'anthropic_inference'
+  AND c.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+    FOR KEY SHARE
+  ), 0) = $7
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted, settings
 `
 
 type UpdateAnthropicInferenceConfigParams struct {
-	ApiKeyEncrypted string
-	Enabled         bool
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
+	PlatformCopy      pgtype.Text
+	OrgCopy           pgtype.Text
+	Enabled           bool
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	DecidedGeneration int64
 }
 
+// Stores both copies of the signing secrets sealed under the decided
+// transition generation. No rows means the config is gone or the transition
+// moved; aiproviderkeys tells the two apart.
 func (q *Queries) UpdateAnthropicInferenceConfig(ctx context.Context, arg UpdateAnthropicInferenceConfigParams) (AiIntegrationConfig, error) {
 	row := q.db.QueryRow(ctx, updateAnthropicInferenceConfig,
-		arg.ApiKeyEncrypted,
+		arg.PlatformCopy,
+		arg.OrgCopy,
 		arg.Enabled,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
+		arg.DecidedGeneration,
 	)
 	var i AiIntegrationConfig
 	err := row.Scan(

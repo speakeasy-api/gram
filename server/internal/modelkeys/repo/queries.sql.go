@@ -47,7 +47,7 @@ func (q *Queries) GetKeyByIDForUpdate(ctx context.Context, arg GetKeyByIDForUpda
 }
 
 const getKeyForResolution = `-- name: GetKeyForResolution :one
-SELECT api_key_encrypted
+SELECT organization_id, api_key_encrypted, api_key_org_encrypted
 FROM model_provider_keys
 WHERE project_id = $1
   AND slot = ANY ($2::text[])
@@ -65,16 +65,22 @@ type GetKeyForResolutionParams struct {
 	PreferredSlot string
 }
 
-func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (pgtype.Text, error) {
+type GetKeyForResolutionRow struct {
+	OrganizationID     string
+	ApiKeyEncrypted    pgtype.Text
+	ApiKeyOrgEncrypted pgtype.Text
+}
+
+func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (GetKeyForResolutionRow, error) {
 	row := q.db.QueryRow(ctx, getKeyForResolution,
 		arg.ProjectID,
 		arg.Slots,
 		arg.Provider,
 		arg.PreferredSlot,
 	)
-	var api_key_encrypted pgtype.Text
-	err := row.Scan(&api_key_encrypted)
-	return api_key_encrypted, err
+	var i GetKeyForResolutionRow
+	err := row.Scan(&i.OrganizationID, &i.ApiKeyEncrypted, &i.ApiKeyOrgEncrypted)
+	return i, err
 }
 
 const insertKey = `-- name: InsertKey :one
@@ -83,35 +89,32 @@ INSERT INTO model_provider_keys (
   , project_id
   , slot
   , provider
-  , api_key_encrypted
   , enabled
 ) VALUES (
     $1
   , $2
   , $3
   , $4
-  , $5::text
-  , $6
+  , $5
 )
 RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertKeyParams struct {
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Slot            string
-	Provider        string
-	ApiKeyEncrypted string
-	Enabled         bool
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Slot           string
+	Provider       string
+	Enabled        bool
 }
 
+// The key is stored by SetKeyAPIKey in the same transaction.
 func (q *Queries) InsertKey(ctx context.Context, arg InsertKeyParams) (ModelProviderKey, error) {
 	row := q.db.QueryRow(ctx, insertKey,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Slot,
 		arg.Provider,
-		arg.ApiKeyEncrypted,
 		arg.Enabled,
 	)
 	var i ModelProviderKey
@@ -171,6 +174,58 @@ func (q *Queries) ListKeysByProject(ctx context.Context, projectID uuid.UUID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const setKeyAPIKey = `-- name: SetKeyAPIKey :one
+UPDATE model_provider_keys AS k
+SET api_key_encrypted = $1,
+    api_key_org_encrypted = $2
+WHERE k.id = $3
+  AND k.organization_id = $4
+  AND k.deleted IS FALSE
+  AND COALESCE((
+    SELECT t.generation FROM organization_encryption_transitions AS t
+    WHERE t.organization_id = k.organization_id AND t.use_case = 'ai-provider-keys'
+    FOR KEY SHARE
+  ), 0) = $5
+RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+`
+
+type SetKeyAPIKeyParams struct {
+	PlatformCopy      pgtype.Text
+	OrgCopy           pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	DecidedGeneration int64
+}
+
+// Stores both copies of the key sealed under the decided transition
+// generation. No rows means the key is gone or the transition moved;
+// aiproviderkeys tells the two apart.
+func (q *Queries) SetKeyAPIKey(ctx context.Context, arg SetKeyAPIKeyParams) (ModelProviderKey, error) {
+	row := q.db.QueryRow(ctx, setKeyAPIKey,
+		arg.PlatformCopy,
+		arg.OrgCopy,
+		arg.ID,
+		arg.OrganizationID,
+		arg.DecidedGeneration,
+	)
+	var i ModelProviderKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Slot,
+		&i.Provider,
+		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const setKeyEnabled = `-- name: SetKeyEnabled :one

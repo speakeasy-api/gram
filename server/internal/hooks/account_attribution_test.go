@@ -859,7 +859,6 @@ func seedCodexBillingConfig(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 		Provider:               "codex_compliance",
 		ProjectID:              projectID,
 		ExternalOrganizationID: conv.ToPGTextEmpty("org-codex-billing"),
-		ApiKeyEncrypted:        "test-encrypted-key",
 		Enabled:                true,
 		BillingMode:            conv.ToPGTextEmpty(billingMode),
 	})
