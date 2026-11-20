@@ -109,6 +109,7 @@ func Analyze(ctx context.Context, g Guardrail, engine *Engine, evaluator Evaluat
 			totals.Clarified++
 		case DecisionPermit:
 			totals.Permitted++
+		case decisionAbstain:
 		}
 		totals.CostUSD += a.Usage.CostUSD
 		totals.LatencyMs += a.Usage.LatencyMs

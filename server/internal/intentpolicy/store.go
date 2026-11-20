@@ -31,6 +31,9 @@ const (
 
 // StoreParams identifies where a parsed transcript is written.
 type StoreParams struct {
+	// ChatID is the chat to create; uuid.Nil generates one.
+	ChatID uuid.UUID
+
 	// ProjectID owns the chat.
 	ProjectID uuid.UUID
 
@@ -61,16 +64,20 @@ type storedCall struct {
 // StoreTranscript writes the transcript as a new chat through the standard
 // chat message writer and returns its id.
 func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, p StoreParams, t Transcript, now time.Time) (uuid.UUID, error) {
-	chatID, err := uuid.NewV7()
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("generate chat id: %w", err)
+	chatID := p.ChatID
+	if chatID == uuid.Nil {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("generate chat id: %w", err)
+		}
+		chatID = id
 	}
 
 	if _, err := hooksrepo.New(db).UpsertClaudeCodeSession(ctx, hooksrepo.UpsertClaudeCodeSessionParams{
 		ID:             chatID,
 		ProjectID:      p.ProjectID,
 		OrganizationID: p.OrganizationID,
-		UserID:         conv.ToPGText(p.UserID),
+		UserID:         conv.ToPGTextEmpty(p.UserID),
 		ExternalUserID: pgtype.Text{String: "", Valid: false},
 		UserAccountID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Title:          conv.ToPGText(p.Title),
@@ -97,10 +104,11 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 			for _, c := range m.ToolCalls {
 				calls = append(calls, storedCall{ID: c.ID, Type: "function", Function: storedCallFunction{Name: c.Name, Arguments: string(c.Arguments)}})
 			}
-			toolCalls, err = json.Marshal(calls)
+			encoded, err := json.Marshal(calls)
 			if err != nil {
 				return uuid.Nil, fmt.Errorf("encode tool calls: %w", err)
 			}
+			toolCalls = encoded
 		}
 
 		writes = append(writes, chat.MessageWrite{
@@ -116,7 +124,7 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 				Model:            pgtype.Text{String: "", Valid: false},
 				MessageID:        pgtype.Text{String: "", Valid: false},
 				ToolCallID:       conv.ToPGTextEmpty(m.ToolCallID),
-				UserID:           conv.ToPGText(p.UserID),
+				UserID:           conv.ToPGTextEmpty(p.UserID),
 				ExternalUserID:   pgtype.Text{String: "", Valid: false},
 				FinishReason:     pgtype.Text{String: "", Valid: false},
 				ToolCalls:        toolCalls,

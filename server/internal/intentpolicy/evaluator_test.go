@@ -16,7 +16,7 @@ import (
 func labelInput(t *testing.T) intentpolicy.LabelInput {
 	t.Helper()
 	g := intentpolicy.DefaultGuardrail()
-	return intentpolicy.LabelInput{Action: bashCall(t, "rm -rf build"), Grounding: g.Statements, Questions: g.Questions}
+	return intentpolicy.LabelInput{Action: bashCall("rm -rf build"), Grounding: g.Statements, Questions: g.Questions}
 }
 
 func noulAnswer(key string, p float64) classifier.QuestionOutcome {
@@ -39,7 +39,9 @@ func TestRenderStateIsSharedAndUntrustedShaped(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "ai_assistant_tool_call", action["produced_by"])
 	require.Equal(t, "arguments", action["body_kind"])
-	require.JSONEq(t, `{"command":"rm -rf build"}`, action["body"].(string))
+	body, ok := action["body"].(string)
+	require.True(t, ok)
+	require.JSONEq(t, `{"command":"rm -rf build"}`, body)
 
 	req, err := intentpolicy.CompileJevRequest(in)
 	require.NoError(t, err)

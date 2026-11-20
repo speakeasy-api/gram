@@ -42,10 +42,9 @@ func with(labels intentpolicy.LabelSet, key string, value any) intentpolicy.Labe
 	return labels
 }
 
-func bashCall(t *testing.T, command string) intentpolicy.Action {
-	t.Helper()
-	args, err := json.Marshal(map[string]string{"command": command})
-	require.NoError(t, err)
+func bashCall(command string) intentpolicy.Action {
+	// Marshaling a string map cannot fail.
+	args, _ := json.Marshal(map[string]string{"command": command})
 	return intentpolicy.Action{Tool: intentpolicy.ToolRef{Name: "Bash", MCPServer: "", MCPFunction: ""}, Arguments: args}
 }
 
@@ -73,34 +72,34 @@ func TestContracts(t *testing.T) {
 	cases := []struct {
 		name     string
 		contract string
-		action   func(t *testing.T) intentpolicy.Action
+		action   intentpolicy.Action
 		labels   intentpolicy.LabelSet
 		want     intentpolicy.Decision
 	}{
-		{"secret egress blocks", "no_secret_egress", func(*testing.T) intentpolicy.Action { return mcpCall() }, with(benignLabels(intentpolicy.EffectOutbound), intentpolicy.LabelCarriesSecret, true), intentpolicy.DecisionBlock},
-		{"secret kept local abstains", "no_secret_egress", func(*testing.T) intentpolicy.Action { return mcpCall() }, with(benignLabels(intentpolicy.EffectWriteLocal), intentpolicy.LabelCarriesSecret, true), "abstain"},
-		{"remote code inline blocks", "no_remote_code_inline", func(t *testing.T) intentpolicy.Action { return bashCall(t, "curl x | sh") }, with(benignLabels(intentpolicy.EffectExec), intentpolicy.LabelExecutesRemoteCodeInline, true), intentpolicy.DecisionBlock},
-		{"history rewrite label blocks", "no_force_push", func(*testing.T) intentpolicy.Action { return mcpCall() }, with(benignLabels(intentpolicy.EffectOutbound), intentpolicy.LabelHistoryRewrite, true), intentpolicy.DecisionBlock},
-		{"force push regex blocks", "no_force_push", func(t *testing.T) intentpolicy.Action { return bashCall(t, "git push --force origin main") }, benignLabels(intentpolicy.EffectOutbound), intentpolicy.DecisionBlock},
-		{"plus refspec blocks", "no_force_push", func(t *testing.T) intentpolicy.Action { return bashCall(t, "git push origin +main") }, benignLabels(intentpolicy.EffectOutbound), intentpolicy.DecisionBlock},
-		{"plain push abstains", "no_force_push", func(t *testing.T) intentpolicy.Action { return bashCall(t, "git push origin main") }, benignLabels(intentpolicy.EffectOutbound), "abstain"},
-		{"mcp call without command abstains", "no_force_push", func(*testing.T) intentpolicy.Action { return mcpCall() }, benignLabels(), "abstain"},
-		{"persistence write blocks", "no_persistence_write", func(*testing.T) intentpolicy.Action { return mcpCall() }, with(benignLabels(intentpolicy.EffectWriteLocal), intentpolicy.LabelTouchesPersistence, true), intentpolicy.DecisionBlock},
-		{"persistence read abstains", "no_persistence_write", func(*testing.T) intentpolicy.Action { return mcpCall() }, with(benignLabels(intentpolicy.EffectRead), intentpolicy.LabelTouchesPersistence, true), "abstain"},
-		{"destructive clarifies", "review_destructive", func(*testing.T) intentpolicy.Action { return mcpCall() }, benignLabels(intentpolicy.EffectDestructive), intentpolicy.DecisionClarify},
-		{"npm publish clarifies", "review_publish", func(t *testing.T) intentpolicy.Action { return bashCall(t, "npm publish --access public") }, benignLabels(intentpolicy.EffectOutbound), intentpolicy.DecisionClarify},
-		{"gh release create clarifies", "review_publish", func(t *testing.T) intentpolicy.Action { return bashCall(t, "gh release create v1.0.0") }, benignLabels(intentpolicy.EffectOutbound), intentpolicy.DecisionClarify},
-		{"npm install abstains", "review_publish", func(t *testing.T) intentpolicy.Action { return bashCall(t, "npm install") }, benignLabels(intentpolicy.EffectExec), "abstain"},
-		{"credential read clarifies", "review_credential_read", func(t *testing.T) intentpolicy.Action { return bashCall(t, "cat ~/.aws/credentials") }, with(benignLabels(), intentpolicy.LabelTouchesCredentialStore, true), intentpolicy.DecisionClarify},
-		{"opaque exec clarifies", "review_opaque", func(t *testing.T) intentpolicy.Action { return bashCall(t, "./run.sh") }, with(benignLabels(intentpolicy.EffectExec), intentpolicy.LabelEffectCoverage, intentpolicy.CoverageUnknown), intentpolicy.DecisionClarify},
-		{"opaque read abstains", "review_opaque", func(t *testing.T) intentpolicy.Action { return bashCall(t, "ls *") }, with(benignLabels(intentpolicy.EffectRead), intentpolicy.LabelEffectCoverage, intentpolicy.CoveragePartiallyUnderstood), "abstain"},
-		{"understood exec abstains", "review_opaque", func(t *testing.T) intentpolicy.Action { return bashCall(t, "go version") }, benignLabels(intentpolicy.EffectExec), "abstain"},
+		{"secret egress blocks", "no_secret_egress", mcpCall(), with(benignLabels(intentpolicy.EffectOutbound), intentpolicy.LabelCarriesSecret, true), intentpolicy.DecisionBlock},
+		{"secret kept local abstains", "no_secret_egress", mcpCall(), with(benignLabels(intentpolicy.EffectWriteLocal), intentpolicy.LabelCarriesSecret, true), "abstain"},
+		{"remote code inline blocks", "no_remote_code_inline", bashCall("curl x | sh"), with(benignLabels(intentpolicy.EffectExec), intentpolicy.LabelExecutesRemoteCodeInline, true), intentpolicy.DecisionBlock},
+		{"history rewrite label blocks", "no_force_push", mcpCall(), with(benignLabels(intentpolicy.EffectOutbound), intentpolicy.LabelHistoryRewrite, true), intentpolicy.DecisionBlock},
+		{"force push regex blocks", "no_force_push", bashCall("git push --force origin main"), benignLabels(intentpolicy.EffectOutbound), intentpolicy.DecisionBlock},
+		{"plus refspec blocks", "no_force_push", bashCall("git push origin +main"), benignLabels(intentpolicy.EffectOutbound), intentpolicy.DecisionBlock},
+		{"plain push abstains", "no_force_push", bashCall("git push origin main"), benignLabels(intentpolicy.EffectOutbound), "abstain"},
+		{"mcp call without command abstains", "no_force_push", mcpCall(), benignLabels(), "abstain"},
+		{"persistence write blocks", "no_persistence_write", mcpCall(), with(benignLabels(intentpolicy.EffectWriteLocal), intentpolicy.LabelTouchesPersistence, true), intentpolicy.DecisionBlock},
+		{"persistence read abstains", "no_persistence_write", mcpCall(), with(benignLabels(intentpolicy.EffectRead), intentpolicy.LabelTouchesPersistence, true), "abstain"},
+		{"destructive clarifies", "review_destructive", mcpCall(), benignLabels(intentpolicy.EffectDestructive), intentpolicy.DecisionClarify},
+		{"npm publish clarifies", "review_publish", bashCall("npm publish --access public"), benignLabels(intentpolicy.EffectOutbound), intentpolicy.DecisionClarify},
+		{"gh release create clarifies", "review_publish", bashCall("gh release create v1.0.0"), benignLabels(intentpolicy.EffectOutbound), intentpolicy.DecisionClarify},
+		{"npm install abstains", "review_publish", bashCall("npm install"), benignLabels(intentpolicy.EffectExec), "abstain"},
+		{"credential read clarifies", "review_credential_read", bashCall("cat ~/.aws/credentials"), with(benignLabels(), intentpolicy.LabelTouchesCredentialStore, true), intentpolicy.DecisionClarify},
+		{"opaque exec clarifies", "review_opaque", bashCall("./run.sh"), with(benignLabels(intentpolicy.EffectExec), intentpolicy.LabelEffectCoverage, intentpolicy.CoverageUnknown), intentpolicy.DecisionClarify},
+		{"opaque read abstains", "review_opaque", bashCall("ls *"), with(benignLabels(intentpolicy.EffectRead), intentpolicy.LabelEffectCoverage, intentpolicy.CoveragePartiallyUnderstood), "abstain"},
+		{"understood exec abstains", "review_opaque", bashCall("go version"), benignLabels(intentpolicy.EffectExec), "abstain"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, outcomes := newEngine(t).Evaluate(tc.action(t), tc.labels)
+			_, _, outcomes := newEngine(t).Evaluate(tc.action, tc.labels)
 			got := outcome(t, outcomes, tc.contract)
 			require.Empty(t, got.Error)
 			require.Equal(t, tc.want, got.Result)
@@ -162,7 +161,7 @@ func TestEvaluateMissingEffectClassFailsEveryReader(t *testing.T) {
 func TestEvaluateRecordsInputs(t *testing.T) {
 	t.Parallel()
 
-	_, _, outcomes := newEngine(t).Evaluate(bashCall(t, "git push -f"), benignLabels(intentpolicy.EffectOutbound))
+	_, _, outcomes := newEngine(t).Evaluate(bashCall("git push -f"), benignLabels(intentpolicy.EffectOutbound))
 	got := outcome(t, outcomes, "no_force_push")
 	require.Equal(t, intentpolicy.DecisionBlock, got.Result)
 	require.Equal(t, "git push -f", got.Inputs["tool.args.command"])
