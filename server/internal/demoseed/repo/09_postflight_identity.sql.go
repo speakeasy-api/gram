@@ -617,12 +617,19 @@ const postflightIDJamfClientOffers = `-- name: PostflightIDJamfClientOffers :one
 SELECT count(*) FROM mcp_server_auth_clients offer
 JOIN mcp_auth_clients client ON client.id = offer.auth_client_id AND client.organization_id = offer.organization_id
 WHERE client.remote_session_client_id = $1::uuid
+  AND offer.organization_id = $2::text AND offer.project_id = $3::uuid
   AND client.deleted IS FALSE AND offer.deleted IS FALSE
 `
 
+type PostflightIDJamfClientOffersParams struct {
+	JamfClient uuid.UUID
+	OrgID      string
+	ProjectID  uuid.UUID
+}
+
 // Nobody connects a self client, and no MCP server offers this one.
-func (q *Queries) PostflightIDJamfClientOffers(ctx context.Context, jamfClient uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightIDJamfClientOffers, jamfClient)
+func (q *Queries) PostflightIDJamfClientOffers(ctx context.Context, arg PostflightIDJamfClientOffersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDJamfClientOffers, arg.JamfClient, arg.OrgID, arg.ProjectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -707,41 +714,41 @@ func (q *Queries) PostflightIDJamfSelfClient(ctx context.Context, arg Postflight
 }
 
 const postflightIDLinearPersonalOffer = `-- name: PostflightIDLinearPersonalOffer :one
-SELECT count(*)
+SELECT CASE WHEN bool_and(registration.remote_session_issuer_id = $1::uuid)
+            THEN count(*) ELSE 0 END::bigint
 FROM mcp_server_auth_clients AS offer
 JOIN mcp_auth_clients AS auth_client
   ON auth_client.id = offer.auth_client_id
  AND auth_client.organization_id = offer.organization_id
 JOIN remote_session_clients AS registration ON registration.id = auth_client.remote_session_client_id
-WHERE offer.mcp_server_id = $1::uuid
-  AND offer.project_id = $2::uuid
-  AND offer.organization_id = $3::text
+WHERE offer.mcp_server_id = $2::uuid
+  AND offer.project_id = $3::uuid
+  AND offer.organization_id = $4::text
   AND offer.deleted IS FALSE
-  AND auth_client.deleted IS FALSE
+  AND auth_client.deleted IS FALSE AND auth_client.enabled
   AND auth_client.client_type = 'remote_session'
   AND registration.deleted IS FALSE
   AND registration.credential_owner = 'subject'
-  AND registration.remote_session_issuer_id = $4::uuid
 `
 
 type PostflightIDLinearPersonalOfferParams struct {
+	LinearRemoteIssuer uuid.UUID
 	LinearServer       uuid.UUID
 	ProjectID          uuid.UUID
 	OrgID              string
-	LinearRemoteIssuer uuid.UUID
 }
 
 // The Example OAuth server offers one personal registration, owned by its stamped provider.
 func (q *Queries) PostflightIDLinearPersonalOffer(ctx context.Context, arg PostflightIDLinearPersonalOfferParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDLinearPersonalOffer,
+		arg.LinearRemoteIssuer,
 		arg.LinearServer,
 		arg.ProjectID,
 		arg.OrgID,
-		arg.LinearRemoteIssuer,
 	)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const postflightIDLinearProtectedResource = `-- name: PostflightIDLinearProtectedResource :one
@@ -811,6 +818,8 @@ WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
                       JOIN mcp_auth_clients client
                         ON client.id = offer.auth_client_id
                        AND client.organization_id = offer.organization_id
+                      JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id AND registration.deleted IS FALSE
+                      JOIN remote_session_issuers issuer ON issuer.id = registration.remote_session_issuer_id AND issuer.deleted IS FALSE
                       WHERE offer.mcp_server_id = u.mcp_server_id
                         AND offer.project_id = u.project_id
                         AND offer.organization_id = u.organization_id
@@ -1428,6 +1437,8 @@ WITH live AS (
     JOIN mcp_auth_clients client
       ON client.id = offer.auth_client_id
      AND client.organization_id = offer.organization_id
+    JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id AND registration.deleted IS FALSE
+    JOIN remote_session_issuers issuer ON issuer.id = registration.remote_session_issuer_id AND issuer.deleted IS FALSE
     WHERE offer.mcp_server_id = choice.mcp_server_id
       AND offer.project_id = choice.project_id
       AND offer.organization_id = choice.organization_id

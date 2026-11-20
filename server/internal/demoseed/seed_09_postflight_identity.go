@@ -137,7 +137,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the inert Jamf Pro self client, found %d"},
 		// Nobody connects a self client, and no MCP server uses this one.
 		{func(ctx context.Context) (int64, error) {
-			return s.q.PostflightIDJamfClientOffers(ctx, jamfClient)
+			return s.q.PostflightIDJamfClientOffers(ctx, repo.PostflightIDJamfClientOffersParams{JamfClient: jamfClient, OrgID: org, ProjectID: proj})
 		}, 0, "demo seed postflight: Jamf Pro self client must not be offered on an MCP server, found %d offers"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDJamfClientSessions(ctx, jamfClient)
@@ -188,11 +188,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
 		}, 3, "demo seed postflight: expected 3 Remote MCP identity clients (Example OAuth's, Linear's and Notion's), found %d"},
-		// The stamp has to be what ResyncMCPServerRemoteSessionIssuers would
-		// derive: every live client bound to the Example OAuth server's user session issuer names
-		// one remote issuer, and it is the stamped one. The query returns no
-		// row when its HAVING fails (the SQL's IF NOT FOUND), so a row counts
-		// as 1 and no row as 0.
+		// The Example OAuth server has one live personal offer from its stamped provider.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDLinearPersonalOffer(ctx, repo.PostflightIDLinearPersonalOfferParams{
 				LinearServer:       s.det("mcpserver-linear"),

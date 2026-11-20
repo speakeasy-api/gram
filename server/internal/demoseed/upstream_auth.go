@@ -19,6 +19,9 @@ import (
 )
 
 // migrateUpstreamAuth materializes typed state, then validates typed readiness.
+// It runs after the seed commits because the remaining migration phases use
+// their own organization lock and transactions. A failed phase fails the
+// seed run and the next reseed retries it.
 func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
 	if err := recordTypedUpstreamAuth(ctx, logger, db, organizationID); err != nil {
 		return err

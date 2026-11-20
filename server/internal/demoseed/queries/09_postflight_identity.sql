@@ -112,6 +112,7 @@ WHERE project_id = @project_id::uuid
 SELECT count(*) FROM mcp_server_auth_clients offer
 JOIN mcp_auth_clients client ON client.id = offer.auth_client_id AND client.organization_id = offer.organization_id
 WHERE client.remote_session_client_id = @jamf_client::uuid
+  AND offer.organization_id = @org_id::text AND offer.project_id = @project_id::uuid
   AND client.deleted IS FALSE AND offer.deleted IS FALSE;
 
 -- name: PostflightIDJamfClientSessions :one
@@ -189,7 +190,8 @@ WHERE project_id = @project_id::uuid AND organization_id = @org_id::text
 
 -- The Example OAuth server offers one personal registration, owned by its stamped provider.
 -- name: PostflightIDLinearPersonalOffer :one
-SELECT count(*)
+SELECT CASE WHEN bool_and(registration.remote_session_issuer_id = @linear_remote_issuer::uuid)
+            THEN count(*) ELSE 0 END::bigint
 FROM mcp_server_auth_clients AS offer
 JOIN mcp_auth_clients AS auth_client
   ON auth_client.id = offer.auth_client_id
@@ -199,11 +201,10 @@ WHERE offer.mcp_server_id = @linear_server::uuid
   AND offer.project_id = @project_id::uuid
   AND offer.organization_id = @org_id::text
   AND offer.deleted IS FALSE
-  AND auth_client.deleted IS FALSE
+  AND auth_client.deleted IS FALSE AND auth_client.enabled
   AND auth_client.client_type = 'remote_session'
   AND registration.deleted IS FALSE
-  AND registration.credential_owner = 'subject'
-  AND registration.remote_session_issuer_id = @linear_remote_issuer::uuid;
+  AND registration.credential_owner = 'subject';
 
 -- name: PostflightIDLinearStampedServers :one
 SELECT count(*) FROM mcp_servers
@@ -231,6 +232,8 @@ WITH live AS (
     JOIN mcp_auth_clients client
       ON client.id = offer.auth_client_id
      AND client.organization_id = offer.organization_id
+    JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id AND registration.deleted IS FALSE
+    JOIN remote_session_issuers issuer ON issuer.id = registration.remote_session_issuer_id AND issuer.deleted IS FALSE
     WHERE offer.mcp_server_id = choice.mcp_server_id
       AND offer.project_id = choice.project_id
       AND offer.organization_id = choice.organization_id
@@ -292,6 +295,8 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
                       JOIN mcp_auth_clients client
                         ON client.id = offer.auth_client_id
                        AND client.organization_id = offer.organization_id
+                      JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id AND registration.deleted IS FALSE
+                      JOIN remote_session_issuers issuer ON issuer.id = registration.remote_session_issuer_id AND issuer.deleted IS FALSE
                       WHERE offer.mcp_server_id = u.mcp_server_id
                         AND offer.project_id = u.project_id
                         AND offer.organization_id = u.organization_id

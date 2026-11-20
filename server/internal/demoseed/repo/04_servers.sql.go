@@ -1938,7 +1938,7 @@ INSERT INTO upstream_client_selections
    auth_client_id, auth_client_attachment_scope, no_auth, source)
 SELECT $1::uuid, $2::uuid, $3::text, $4::text,
        $5::uuid, $6::uuid, c.id, c.attachment_scope,
-       $7::uuid, auth_client.attachment_scope,
+       auth_client.id, auth_client.attachment_scope,
        $7::uuid IS NULL, $8::text
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
