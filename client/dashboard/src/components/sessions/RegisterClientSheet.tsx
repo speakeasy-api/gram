@@ -251,7 +251,7 @@ function RegisteredCredentials({
       </SheetHeader>
 
       <div className="flex flex-col gap-6 px-4 pb-6">
-        <Alert variant="info" title={null}>
+        <Alert variant="warning" title={null}>
           Save the secret now. It will only be shown once.
         </Alert>
 
