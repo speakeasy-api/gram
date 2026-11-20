@@ -131,8 +131,6 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 						require.NoError(t, err)
 					}
 					mcp.ResetAuthEnforcementForTest(ti.service.Service)
-					ti.features.SetFlag(feature.FlagAuthClientResolver, ac.ActiveOrganizationID, false)
-					ti.features.SetFlag(feature.FlagAuthClientResolverShadow, ac.ActiveOrganizationID, mode == "shadow")
 					runtimeVisible := tc.visibleEnforced
 					w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, listServersBody(t))
 					require.NoError(t, err)
