@@ -348,8 +348,8 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 	return s.issuerView(ctx, row), nil
 }
 
-// Soft-deletes an issuer and cascades to its user_sessions and
-// user_session_consents.
+// DeleteUserSessionIssuer retires the issuer, its sessions and consents, and
+// its explicit attachment and orphaned grant targets.
 func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.DeleteUserSessionIssuerPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -427,12 +427,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
-	orphanCreds, err := s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	orphanCreds, err := s.revoker.RetireDeletedUserSessionIssuer(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
-			"failed to detach remote session clients from user session issuer %s",
+			"failed to retire grants for deleted user session issuer %s",
 			deleted.ID,
 		).LogError(ctx, logger)
 	}

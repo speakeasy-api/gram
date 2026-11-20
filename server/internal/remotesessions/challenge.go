@@ -2148,17 +2148,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "lock user session issuer for remote session write").LogError(ctx, logger)
 	}
 
-	// The upstream exchange has already happened, so the token pair exists
-	// either way; this transaction decides whether Speakeasy stores it. The
-	// client-row lock serializes the write against the issuer-delete orphan
-	// cascade, which locks the same row before sweeping the client's
-	// sessions: a callback that acquires the lock after that cascade
-	// committed re-reads the binding as dead and is rejected here, instead
-	// of resurrecting a grant no live issuer can reach or revoke. A rejected
-	// callback leaves the revocation armed above still standing.
-	//
-	// No row means the client itself is gone, which the binding recheck below
-	// rejects on its own — there is nothing left to serialize against.
+	// The client lock serializes publication with registration deletion and
+	// issuer retirement. A rejected exchange leaves its upstream revoke armed.
+
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)

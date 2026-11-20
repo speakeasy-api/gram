@@ -198,7 +198,7 @@ func TestRemoteSessionRecheck_ProbesAnOfferedRegistrationWithoutASignInLink(t *t
 	projectID, orgID := consentTestTenant(t, ctx)
 	shared := fx.endpoint.UserSessionIssuerID
 	q := remotesessions_repo.New(fx.ti.conn)
-	require.NoError(t, q.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, remotesessions_repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: fx.clientID, ProjectID: conv.ToNullUUID(projectID)}))
+	require.NoError(t, testrepo.New(fx.ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{RemoteSessionClientID: fx.clientID, ProjectID: conv.ToNullUUID(projectID)}))
 
 	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
 	offerRecheckRegistration(t, ctx, fx.ti, projectID, orgID, fx.endpoint.McpServerID.UUID, registration)

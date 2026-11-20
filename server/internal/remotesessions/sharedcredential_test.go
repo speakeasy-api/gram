@@ -21,11 +21,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
@@ -33,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // bindSiblingIssuer creates a second user_session_issuer in the fixture's
@@ -75,16 +79,15 @@ func TestRemoteSessionStatuses_UnboundIssuerSeesNothing(t *testing.T) {
 	require.NotContains(t, statuses, fx.clientID, "an issuer with no client binding must not see the credential")
 }
 
-func TestDisconnectRemoteSession_SiblingIssuerDestroysSharedCredentialGlobally(t *testing.T) {
+func TestDisconnectAuthClientRemoteSession_RetiresSameSubjectSharedGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	spy := &revocationSpy{}
 	upstream := newRevocationUpstream(t, spy)
 	fx := seedRevocableSession(t, ctx, ti, "shared-disconnect", upstream.URL, "s3cret", true)
-	sibling := bindSiblingIssuer(t, ctx, ti, fx.clientID, "usi-shared-disconnect-sibling")
 
-	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, sibling, fx.clientID)
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectAuthClientRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n, "a disconnect from any bound surface must destroy the shared credential")
 
@@ -118,16 +121,15 @@ func TestDisconnectRemoteSession_UnboundIssuerFailsClosed(t *testing.T) {
 	require.Zero(t, calls, "nothing was disconnected, so nothing may be revoked upstream")
 }
 
-func TestSetRemoteSessionAutoRefresh_SiblingIssuerUpdatesSharedCredential(t *testing.T) {
+func TestSetAuthClientRemoteSessionAutoRefresh_UpdatesSameSubjectSharedGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	fx := seedRevocableSession(t, ctx, ti, "shared-autorefresh", "", "s3cret", true)
-	sibling := bindSiblingIssuer(t, ctx, ti, fx.clientID, "usi-shared-autorefresh-sibling")
 
-	n, err := newDisconnectChallengeManager(t, ti).SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, sibling, fx.clientID, true)
+	n, err := newDisconnectChallengeManager(t, ti).SetAuthClientRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.clientID, true)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), n, "a preference set from any bound surface must land on the shared credential")
+	require.Equal(t, int64(1), n, "a tenant-authorized preference updates the shared credential")
 
 	session, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            fx.subject,
@@ -317,7 +319,7 @@ func TestRefreshRemoteSession_UnboundIssuerFailsClosed(t *testing.T) {
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionNotRefreshable, "an unbound issuer must not be able to spend the shared refresh grant")
 }
 
-func TestSoftDeleteSubjectSessions_SiblingIssuerRevokeDestroysSharedCredential(t *testing.T) {
+func TestSoftDeleteSubjectSessions_RequiresPersistedTypedChoiceOnSiblingIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -336,16 +338,61 @@ func TestSoftDeleteSubjectSessions_SiblingIssuerRevokeDestroysSharedCredential(t
 		nil,
 	)
 
-	creds, err := revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID)
+	server := seedRemoteMcpServerForLogin(t, ctx, ti.conn, fx.projectID, sibling, "shared-revoke-selection", "https://shared-revoke.example.com/mcp")
+	typed := offerRegistration(t, ctx, ti.conn, fx.organizationID, fx.projectID, server, fx.clientID)
+	sessionID, credentialID := uuid.New(), uuid.New()
+	require.NoError(t, selectionbackfill.New(ti.conn).SeedUserSessionFixture(ctx, selectionbackfill.SeedUserSessionFixtureParams{
+		ID: sessionID, ProjectID: conv.ToNullUUID(fx.projectID), OrganizationID: conv.ToPGText(fx.organizationID),
+		UserSessionIssuerID: sibling, SubjectUrn: fx.subject, Jti: uuid.NewString(), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, CredentialID: conv.ToNullUUID(credentialID),
+	}))
+	_, err = usersessionsrepo.New(ti.conn).RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: sessionID, ProjectID: fx.projectID, OrganizationID: fx.organizationID})
 	require.NoError(t, err)
-	require.Len(t, creds, 1, "revoking the subject's sessions under a sibling issuer must tombstone the shared credential")
+
+	creds, err := revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, creds, "a typed offer and stale parent do not prove the revoked credential chose this registration")
+
+	require.NoError(t, authclientbackfill.New(ti.conn).SeedUpstreamSelectionFixture(ctx, authclientbackfill.SeedUpstreamSelectionFixtureParams{
+		ProjectID: fx.projectID, OrganizationID: fx.organizationID, CredentialID: credentialID, McpServerID: server, AuthClientID: conv.ToNullUUID(typed),
+	}))
+	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID, sessionID)
+	require.NoError(t, err)
+	require.Len(t, creds, 1, "the exact downstream credential's current choice reaches the same subject's grant")
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
 
-	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID)
+	creds, err = revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID, sessionID)
 	require.NoError(t, err)
 	require.Empty(t, creds, "ordinary repeated revocation must not retry tombstoned upstream credentials")
 
 	requireSessionRevoked(t, ctx, ti, fx)
+}
+
+func TestRetireDeletedUserSessionIssuer_PreservesSurvivingTypedGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	fx := seedRevocableSession(t, ctx, ti, "issuer-retire-typed-choice", "", "secret", true)
+	sibling := createUserSessionIssuer(t, ctx, ti.conn, "usi-surviving-choice")
+	server := seedRemoteMcpServerForLogin(t, ctx, ti.conn, fx.projectID, sibling, "surviving-choice", "https://shared-revoke.example.com/mcp")
+	typed := offerRegistration(t, ctx, ti.conn, fx.organizationID, fx.projectID, server, fx.clientID)
+	sessionID := uuid.New()
+	require.NoError(t, selectionbackfill.New(ti.conn).SeedUserSessionFixture(ctx, selectionbackfill.SeedUserSessionFixtureParams{
+		ID: sessionID, ProjectID: conv.ToNullUUID(fx.projectID), OrganizationID: conv.ToPGText(fx.organizationID),
+		UserSessionIssuerID: sibling, SubjectUrn: fx.subject, Jti: uuid.NewString(), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	}))
+	require.NoError(t, authclientbackfill.New(ti.conn).SeedUpstreamSelectionFixture(ctx, authclientbackfill.SeedUpstreamSelectionFixtureParams{
+		ProjectID: fx.projectID, OrganizationID: fx.organizationID, CredentialID: sessionID, McpServerID: server, AuthClientID: conv.ToNullUUID(typed),
+	}))
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := usersessionsrepo.New(tx).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{ID: fx.userIssuerID, ProjectID: fx.projectID})
+	require.NoError(t, err)
+	creds, err := (&remotesessions.UpstreamRevoker{}).RetireDeletedUserSessionIssuer(ctx, tx, fx.userIssuerID, fx.projectID, fx.organizationID)
+	require.NoError(t, err)
+	require.Empty(t, creds)
+	require.NoError(t, tx.Commit(ctx))
+	_, err = repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
 }
 
 func TestSoftDeleteSubjectSessions_UnboundIssuerRevokesNothing(t *testing.T) {
@@ -367,7 +414,7 @@ func TestSoftDeleteSubjectSessions_UnboundIssuerRevokesNothing(t *testing.T) {
 		nil,
 	)
 
-	creds, err := revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, unbound, fx.projectID, fx.organizationID)
+	creds, err := revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, unbound, fx.projectID, fx.organizationID, uuid.Nil)
 	require.NoError(t, err)
 	require.Empty(t, creds)
 

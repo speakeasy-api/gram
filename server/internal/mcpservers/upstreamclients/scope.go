@@ -133,7 +133,8 @@ type ClientAssociationScope struct {
 }
 
 // LockClientAssociationScope reads the servers associated with clientID and
-// locks their projects' writer scope and registration gates. It also locks
+// locks their projects' writer scope and registration gates, including the
+// client itself even when no server offers it. It also locks
 // the writer scope of the projects in also, which the caller's change writes
 // too. Call it before the transaction's first row lock or mutation.
 func LockClientAssociationScope(ctx context.Context, tx pgx.Tx, organizationID string, clientID uuid.UUID, also []uuid.UUID) (ClientAssociationScope, error) {
@@ -144,13 +145,12 @@ func LockClientAssociationScope(ctx context.Context, tx pgx.Tx, organizationID s
 	}
 	projects = mergeProjects(projects, also)
 	scope.servers, scope.projects = servers, projects
-	if len(projects) == 0 {
-		return scope, nil
+	if len(projects) != 0 {
+		if err := authclientbackfill.LockEMAWriterScope(ctx, tx, organizationID, projects); err != nil {
+			return scope, fmt.Errorf("lock client association writer scope: %w", err)
+		}
 	}
-	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, organizationID, projects); err != nil {
-		return scope, fmt.Errorf("lock client association writer scope: %w", err)
-	}
-	if err := authclientbackfill.PreflightServerAssociations(ctx, tx, organizationID, servers...); err != nil {
+	if err := authclientbackfill.PreflightServerAssociationsWithRegistrations(ctx, tx, organizationID, servers, []uuid.UUID{clientID}); err != nil {
 		return scope, fmt.Errorf("lock client association registration gates: %w", err)
 	}
 	return scope, nil
