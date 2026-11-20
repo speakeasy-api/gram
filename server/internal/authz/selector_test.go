@@ -23,15 +23,18 @@ func TestSelector_StrictMatches_missingKeyNeverMatches(t *testing.T) {
 func TestResourceKindForScope_undeclaredScopesFallBackToTheirPrefix(t *testing.T) {
 	t.Parallel()
 
-	for scope, want := range map[Scope]string{
-		"plugin:retired":    ResourceKindProject,
-		"log:retired":       ResourceKindProject,
-		"remote-mcp:read":   ResourceKindMCP,
-		"skill:retired":     ResourceKindSkill,
-		"mcp_auth_client:x": ResourceKindWildcard,
-		"unknown:read":      ResourceKindWildcard,
+	for _, tc := range []struct {
+		scope Scope
+		want  string
+	}{
+		{"plugin:retired", ResourceKindProject},
+		{"log:retired", ResourceKindProject},
+		{"remote-mcp:read", ResourceKindMCP},
+		{"skill:retired", ResourceKindSkill},
+		{"mcp_auth_client:x", ResourceKindWildcard},
+		{"unknown:read", ResourceKindWildcard},
 	} {
-		require.Equal(t, want, ResourceKindForScope(scope), scope)
+		require.Equal(t, tc.want, ResourceKindForScope(tc.scope), tc.scope)
 	}
 }
 
