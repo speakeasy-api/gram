@@ -297,4 +297,5 @@ func TestStreamsRegistersOnlyTheEncryptionSettingsItReads(t *testing.T) {
 	}
 	require.True(t, names[orgEncryptionCredentialIDFlag], "streams opens AI provider keys with the organization's key")
 	require.False(t, names[orgEncryptionSwitchGracePeriodFlag], "key switching is the provisioner's, not streams'")
+	require.False(t, names[orgEncryptionManagedKeyRetention])
 }
