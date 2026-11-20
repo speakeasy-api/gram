@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
@@ -144,6 +145,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 			OrganizationID: organizationID,
 			ID:             target.ID,
 			Status:         string(aitargets.DecisionUnreviewed),
+			AiProductID:    pgtype.Text{String: "", Valid: false},
 			Rationale:      conv.ToPGTextEmpty(""),
 		})
 		if err != nil {

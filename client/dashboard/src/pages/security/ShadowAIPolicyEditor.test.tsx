@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   mutateCreate: vi.fn<(variables: unknown) => Promise<{ id: string }>>(),
   mutateUpdate: vi.fn<(variables: unknown) => Promise<unknown>>(),
   setDecision: vi.fn<(variables: unknown) => Promise<unknown>>(),
+  decisionOptions: undefined as
+    | { onError?: (error: Error) => void }
+    | undefined,
   step: null as string | null,
 }));
 
@@ -59,7 +62,12 @@ vi.mock("@gram/client/react-query/riskPoliciesUpdate.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/setAIToolDecision.js", () => ({
-  useSetAIToolDecisionMutation: () => ({ mutateAsync: mocks.setDecision }),
+  useSetAIToolDecisionMutation: (options?: {
+    onError?: (error: Error) => void;
+  }) => {
+    mocks.decisionOptions = options;
+    return { mutateAsync: mocks.setDecision };
+  },
 }));
 
 vi.mock("@gram/client/react-query/aiScanTargets.js", () => ({
@@ -236,9 +244,18 @@ describe("ShadowAIPolicyEditor", () => {
 
     await waitFor(() => expect(currentPath()).toBe(DETAIL_PATH));
     expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
-      expect.stringContaining("the decision for Cursor could not be saved"),
+      "Shadow AI policy created, but the decision for Cursor could not be saved. It keeps the decision it had before. Try again in a few minutes.",
     );
     expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+  });
+
+  it("replaces the generic error toast for a failed decision", () => {
+    renderEditor(null);
+
+    mocks.decisionOptions?.onError?.(new Error("boom"));
+
+    expect(mocks.decisionOptions?.onError).toBeTypeOf("function");
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
   });
 
   it("writes nothing until the policy is created", () => {

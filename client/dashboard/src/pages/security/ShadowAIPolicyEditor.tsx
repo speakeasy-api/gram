@@ -302,7 +302,8 @@ export function ShadowAIPolicyEditor({
       void invalidateAllShadowMCPInventory(queryClient);
     },
   });
-  const decisionMutation = useSetAIToolDecisionMutation();
+  // reportDecisions says which decisions failed; skip the generic error toast.
+  const decisionMutation = useSetAIToolDecisionMutation({ onError: () => {} });
   const [applying, setApplying] = useState(false);
   const saving =
     updateMutation.isPending || createMutation.isPending || applying;
@@ -317,7 +318,7 @@ export function ShadowAIPolicyEditor({
 
   // Every changed decision, one by one, after the policy write. A failure
   // leaves the rest applied and is returned so the save can say which
-  // targets are still unreviewed; the draft keeps the failed entries, so
+  // targets kept their previous decision; the draft keeps the failed entries, so
   // Save offers them again.
   const applyDecisions = async (): Promise<DecisionChange[]> => {
     const pending = changedDecisions(latest.current.rows, latest.current.draft);
@@ -353,9 +354,11 @@ export function ShadowAIPolicyEditor({
       return;
     }
     const names = failed.map((change) => change.displayName).join(", ");
-    toast.error(
-      `${written}, but the decision for ${names} could not be saved, so ${failed.length === 1 ? "it stays" : "they stay"} unreviewed. Open the policy and try again.`,
-    );
+    const outcome =
+      failed.length === 1
+        ? `the decision for ${names} could not be saved. It keeps the decision it had before.`
+        : `the decisions for ${names} could not be saved. They keep the decisions they had before.`;
+    toast.error(`${written}, but ${outcome} Try again in a few minutes.`);
   };
 
   const save = async () => {
