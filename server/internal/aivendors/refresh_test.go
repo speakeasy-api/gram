@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -27,7 +28,11 @@ type lockedBuffer struct {
 func (b *lockedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.Write(p)
+	n, err := b.buf.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write log: %w", err)
+	}
+	return n, nil
 }
 
 func (b *lockedBuffer) String() string {
@@ -120,8 +125,9 @@ func TestRefreshMetricsMove(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
 		store := NewStore(CompiledSnapshot())
+		logger := slog.New(slog.NewTextHandler(&lockedBuffer{}, nil))
 		reader := sdkmetric.NewManualReader()
-		failures, stop := store.refreshMetrics(slog.New(slog.DiscardHandler), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+		failures, stop := store.refreshMetrics(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 		defer stop()
 		read := func() (int64, float64, int64) {
 			var collected metricdata.ResourceMetrics
@@ -150,7 +156,7 @@ func TestRefreshMetricsMove(t *testing.T) {
 		next := NewSnapshot(Products())
 		go func() {
 			defer close(done)
-			store.run(ctx, slog.New(slog.DiscardHandler), failures, func(context.Context) error {
+			store.run(ctx, logger, failures, func(context.Context) error {
 				if calls.Add(1) <= 2 {
 					return errors.New("database unavailable")
 				}

@@ -181,7 +181,7 @@ func (s *Store) refreshMetrics(logger *slog.Logger, meterProvider metric.MeterPr
 		metric.WithUnit("{refresh}"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterRefreshFailures), attr.SlogError(err))
-		failures = noop.Int64Counter{}
+		failures, _ = noop.NewMeterProvider().Meter(meterScope).Int64Counter(meterRefreshFailures)
 	}
 	age, err := meter.Float64ObservableGauge(meterSnapshotAge,
 		metric.WithDescription("Seconds since the served AI client catalog snapshot last matched the database."),
