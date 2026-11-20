@@ -82,6 +82,20 @@ describe("configScript", () => {
       expect(script).toContain("managed-$configRevision.installed");
     },
   );
+
+  it("prefers the enrollment UPN before trying the interactive identity sources", () => {
+    const script = configScript(config);
+    const lookup = script.split("function Get-EnrolledUserEmail {")[1];
+    expect(lookup).toMatch(
+      /HKLM:\\SOFTWARE\\Microsoft\\Enrollments[\s\S]*?\.UPN[\s\S]*?return \(Get-ActiveEntraUserEmail\)/,
+    );
+    const fallback = script.split("function Get-ActiveEntraUserEmail {")[1];
+    expect(fallback).toMatch(
+      /AzureAD[\s\S]*?Get-AadNgcUserId -Sid \$user.Sid[\s\S]*?Get-DomainUserPrincipalName -Sid \$user.Sid/,
+    );
+    expect(script).toContain("WorkplaceJoin\\AADNGC");
+    expect(script).toContain("UserPrincipal]::FindByIdentity");
+  });
 });
 
 describe("configRevision", () => {

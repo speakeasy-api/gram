@@ -1,5 +1,6 @@
 import { buildIntuneWin } from "@/lib/intunewin";
 import { zipSync } from "fflate";
+import managedScript from "./Deploy-SpeakeasyManagedJson.ps1?raw";
 
 // The Intune bundle replaces the manual IntuneWinAppUtil step: three Win32
 // apps (identity config, agent msi, tray startup shortcut) packaged and
@@ -49,64 +50,13 @@ export function configScript(c: IntuneConfig): string {
     null,
     2,
   );
-  return `# Writes the Speakeasy device agent identity file. Runs as SYSTEM from Intune.
-$ErrorActionPreference = 'Stop'
-$configRevision = ${psQuote(c.revision)}
-$template = @'
-${template}
-'@
-
-$dir    = Join-Path $env:ProgramData 'Speakeasy'
-$file   = Join-Path $dir 'managed.json'
-$daemon = Join-Path $env:ProgramFiles 'Speakeasy\\speakeasyd.exe'
-
-function Test-UserEmail([string]$value) {
-    $value -match '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' -and
-        $value -notmatch '^(foouser|autopilot)@'
-}
-
-function Get-EnrolledUserEmail {
-    foreach ($e in Get-ChildItem 'HKLM:\\SOFTWARE\\Microsoft\\Enrollments' -ErrorAction SilentlyContinue) {
-        $upn = (Get-ItemProperty $e.PSPath -ErrorAction SilentlyContinue).UPN
-        if (Test-UserEmail $upn) { return $upn }
-    }
-    $user = (Get-CimInstance Win32_ComputerSystem).UserName
-    if ($user) {
-        try {
-            $sid = (New-Object System.Security.Principal.NTAccount($user)).Translate([System.Security.Principal.SecurityIdentifier]).Value
-            $name = (Get-ItemProperty "HKLM:\\SOFTWARE\\Microsoft\\IdentityStore\\Cache\\$sid\\IdentityCache\\$sid" -ErrorAction SilentlyContinue).UserName
-            if (Test-UserEmail $name) { return $name }
-        } catch {
-            # Fall back to CloudDomainJoin if the signed-in account cannot be resolved.
-        }
-    }
-    foreach ($j in Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\CloudDomainJoin\\JoinInfo' -ErrorAction SilentlyContinue) {
-        $mail = (Get-ItemProperty $j.PSPath -ErrorAction SilentlyContinue).UserEmail
-        if (Test-UserEmail $mail) { return $mail }
-    }
-    throw 'Could not determine the enrolled user''s email.'
-}
-
-$config = $template | ConvertFrom-Json
-if ($config.org_token -like 'REPLACE_*') { throw 'Set org_token before packaging this script.' }
-if ($config.auto_update -notin 'notify', 'automatic') { throw 'Set auto_update to "notify" or "automatic".' }
-
-# Set the JSON field rather than replacing text that can also occur in org settings.
-$config.email = Get-EnrolledUserEmail
-$json = $config | ConvertTo-Json
-New-Item -ItemType Directory -Path $dir -Force | Out-Null
-[System.IO.File]::WriteAllText($file, $json, [System.Text.UTF8Encoding]::new($false))
-icacls $dir /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "icacls failed on $dir ($LASTEXITCODE)." }
-icacls $file /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' '*S-1-5-32-545:R' | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "icacls failed on $file ($LASTEXITCODE)." }
-if (Test-Path $daemon) {
-    & $daemon -service restart
-    if ($LASTEXITCODE -ne 0) { throw "speakeasyd restart failed with exit code $LASTEXITCODE." }
-}
-Get-ChildItem -Path $dir -Filter 'managed-*.installed' | Remove-Item -Force
-New-Item -ItemType File -Path (Join-Path $dir "managed-$configRevision.installed") -Force | Out-Null
-`;
+  // Template from the manual Intune docs (marketing-site c3dd892fdb74).
+  return managedScript
+    .replace("'CONFIG_REVISION'", () => psQuote(c.revision))
+    .replace(
+      /(\$template = @'\r?\n)[\s\S]*?(\r?\n'@)/,
+      (_, start, end) => `${start}${template}${end}`,
+    );
 }
 
 const startupScript = `# Starts the Speakeasy tray app at sign-in for every user. Runs as SYSTEM from Intune.
