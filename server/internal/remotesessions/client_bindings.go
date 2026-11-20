@@ -70,8 +70,9 @@ func (s *Service) listRemoteSessionClientsByProjectID(
 
 // listRemoteSessionClientRowsForUserSessionIssuer is the runtime counterpart to
 // listRemoteSessionClientsByProjectID: it resolves the registrations a sign-in
-// issuer can reach through live server associations. Consent rendering and
-// token resolution both use this lookup.
+// issuer can reach through live server associations. This includes reachable
+// project-local, organization-level, and global catalog registrations. Consent
+// rendering and token resolution both use this lookup.
 //
 // organizationWide admits the clients of every live project in the
 // organization instead of projectID's alone, for an organization-level
