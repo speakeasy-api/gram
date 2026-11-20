@@ -13,7 +13,7 @@ import type { Column } from "@/components/ui/Table";
 import { Table } from "@/components/ui/Table";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { HostedServerRef } from "./MCPOverviewTab";
+import type { HostedServerRef, OverviewRange } from "./MCPOverviewTab";
 import { OVERVIEW_STALE_TIME_MS } from "./MCPOverviewTab";
 
 type UserRow = GetToolUsageUsersResult["users"][number] & {
@@ -57,12 +57,10 @@ const columns: Column<UserRow>[] = [
 
 export function TopUsersTable({
   server,
-  from,
-  to,
+  range,
 }: {
   server: HostedServerRef;
-  from: Date;
-  to: Date;
+  range: OverviewRange;
 }): React.JSX.Element {
   const client = useGramContext();
 
@@ -73,15 +71,13 @@ export function TopUsersTable({
         server.kind,
         server.id,
         server.slug,
-        from.toISOString(),
-        to.toISOString(),
+        ...range.key,
       ],
       queryFn: () =>
         unwrapAsync(
           telemetryGetToolUsageUsers(client, {
             getToolUsageSummaryPayload: {
-              from,
-              to,
+              ...range.resolve(),
               ...(server.kind === "mcp-server"
                 ? { mcpServerIds: [server.id] }
                 : { hostedToolsetSlugs: [server.slug] }),

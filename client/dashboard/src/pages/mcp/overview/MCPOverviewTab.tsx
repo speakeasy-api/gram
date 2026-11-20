@@ -21,6 +21,7 @@ import { overviewScope } from "./overview-scope";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import { getPresetRange } from "@/elements";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useProject } from "@/contexts/Auth";
@@ -46,6 +47,16 @@ function RankedBarListSkeleton(): React.JSX.Element {
 }
 
 export const OVERVIEW_STALE_TIME_MS = 5 * 60_000;
+
+/**
+ * A preset ("last 7 days") is keyed by its name, not its timestamps, so
+ * coming back to the tab reuses the cached result however long ago it was
+ * fetched. The window itself is resolved when the request is sent.
+ */
+export type OverviewRange = {
+  key: readonly string[];
+  resolve: () => { from: Date; to: Date };
+};
 
 function toolLabelFromUrn(urn: string): string {
   const parts = urn.split(":");
@@ -78,40 +89,57 @@ export function MCPOverviewTab({
     clearCustomRange,
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
+  const range = useMemo<OverviewRange>(
+    () =>
+      customRange
+        ? {
+            key: [customRange.from.toISOString(), customRange.to.toISOString()],
+            resolve: () => customRange,
+          }
+        : { key: [dateRange], resolve: () => getPresetRange(dateRange) },
+    [customRange, dateRange],
+  );
 
-  const { data, isLoading, isError, isLogsDisabled, refetch } =
-    useLogsEnabledErrorCheck(
-      useQuery<GetObservabilityOverviewResult>({
-        queryKey: [
-          "mcp-detail-overview",
-          server.kind,
-          server.id,
-          server.slug,
-          from.toISOString(),
-          to.toISOString(),
-        ],
-        queryFn: () =>
-          unwrapAsync(
-            telemetryGetObservabilityOverview(client, {
-              getObservabilityOverviewPayload: {
-                from,
-                to,
-                ...overviewScope(server),
-                includeTimeSeries: true,
-              },
-            }),
-          ),
-        placeholderData: keepPreviousData,
-        // Usage moves slowly; coming back within a few minutes shows the
-        // cached figures at once and refreshes them in the background.
-        staleTime: OVERVIEW_STALE_TIME_MS,
-        throwOnError: false,
-      }),
-    );
+  const {
+    data,
+    isLoading,
+    isPlaceholderData,
+    isError,
+    isLogsDisabled,
+    refetch,
+  } = useLogsEnabledErrorCheck(
+    useQuery<GetObservabilityOverviewResult>({
+      queryKey: [
+        "mcp-detail-overview",
+        server.kind,
+        server.id,
+        server.slug,
+        ...range.key,
+      ],
+      queryFn: () =>
+        unwrapAsync(
+          telemetryGetObservabilityOverview(client, {
+            getObservabilityOverviewPayload: {
+              ...range.resolve(),
+              ...overviewScope(server),
+              includeTimeSeries: true,
+            },
+          }),
+        ),
+      placeholderData: keepPreviousData,
+      // Usage moves slowly; coming back within a few minutes shows the
+      // cached figures at once and refreshes them in the background.
+      staleTime: OVERVIEW_STALE_TIME_MS,
+      throwOnError: false,
+    }),
+  );
 
   // With keepPreviousData a failed refetch still has stale data to show, so
   // only fall back to the error state when there is nothing to render at all.
   const showQueryError = isError && !data;
+  // Placeholder data is the previous range's result, so an empty list there
+  // says nothing about the range being loaded.
+  const toolsLoading = isLoading || isPlaceholderData;
 
   const summary = data?.summary;
   const comparison = data?.comparison;
@@ -228,27 +256,27 @@ export function MCPOverviewTab({
           <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by call count</h3>
-              {isLoading ? (
-                <RankedBarListSkeleton />
-              ) : topByCount.length > 0 ? (
+              {topByCount.length > 0 ? (
                 <RankedBarList items={topByCount} />
+              ) : toolsLoading ? (
+                <RankedBarListSkeleton />
               ) : (
                 <WidgetEmptyState message="No tool calls in the selected range." />
               )}
             </div>
             <div className="border p-5">
               <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
-              {isLoading ? (
-                <RankedBarListSkeleton />
-              ) : topByFailureRate.length > 0 ? (
+              {topByFailureRate.length > 0 ? (
                 <RankedBarList items={topByFailureRate} />
+              ) : toolsLoading ? (
+                <RankedBarListSkeleton />
               ) : (
                 <WidgetEmptyState message="No failed tool calls in the selected range." />
               )}
             </div>
           </div>
 
-          <TopUsersTable server={server} from={from} to={to} />
+          <TopUsersTable server={server} range={range} />
         </>
       )}
     </Stack>

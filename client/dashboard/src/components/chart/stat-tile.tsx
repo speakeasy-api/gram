@@ -180,7 +180,7 @@ export function StatTile(props: StatTileProps): JSX.Element {
       label={label}
       value={
         isLoading ? (
-          <Skeleton className="h-[34px] w-20" />
+          <Skeleton className="h-[34px] w-20" label={`Loading ${title}`} />
         ) : (
           (displayValue ?? formatValue(value))
         )

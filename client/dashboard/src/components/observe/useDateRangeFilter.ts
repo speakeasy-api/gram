@@ -133,11 +133,8 @@ export function useDateRangeFilter(
     [updateSearchParams],
   );
 
-  // A custom range is exact; a preset is widened to whole minutes so a
-  // remount (leaving the tab and coming back) reuses the cached request
-  // instead of fetching a new millisecond-anchored window.
   const { from, to } = useMemo(
-    () => customRange ?? minuteAlignedRange(getPresetRange(dateRange)),
+    () => customRange ?? getPresetRange(dateRange),
     [customRange, dateRange],
   );
 
