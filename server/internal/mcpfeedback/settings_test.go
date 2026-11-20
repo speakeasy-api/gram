@@ -175,6 +175,7 @@ func TestUpdateSettingsRefusesWhatAgentsCouldNotCall(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			_, err := updateSettings(ctx, ti, server.ID.String(), true, tc.toolName, tc.toolDescription)
 			requireOopsCode(t, err, oops.CodeInvalid)
 			require.ErrorContains(t, err, tc.message)
