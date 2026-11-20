@@ -618,8 +618,9 @@ func TestWriteDelivery_PartialCompactionCopiesKeptMessages(t *testing.T) {
 }
 
 // Live inference frames of the turn after a compaction arrive before the
-// transcript upload. The transcript then joins the rows inference stored in
-// the new tree instead of copying the kept messages again.
+// transcript upload. The frame stays in its own tree, kept tool call
+// included, and the transcript then joins the rows inference stored there
+// instead of copying the kept messages again.
 func TestWriteDelivery_PartialCompactionJoinsWhatInferenceStoredFirst(t *testing.T) {
 	t.Parallel()
 	env := newDeliveryEnv(t)
@@ -627,36 +628,61 @@ func TestWriteDelivery_PartialCompactionJoinsWhatInferenceStoredFirst(t *testing
 		claudePrompt("u1", "", "p1", "first"),
 		claudeReply("u2", "u1", "one"),
 		claudePrompt("u3", "u2", "p2", "second"),
-		claudeReply("u4", "u3", "two"),
+		claudeToolUse("u4", "u3", "toolu_kept"),
+		claudeToolResult("u5", "u4", "toolu_kept", "listing"),
+		claudeReply("u6", "u5", "two"),
 	))
 	oldTree := listTreeRows(t, env, env.chatID)
+	require.Len(t, oldTree, 6)
+	inOldTree := make(map[uuid.UUID]bool, len(oldTree))
+	for _, r := range oldTree {
+		inOldTree[r.ID] = true
+	}
 
-	frame := inferenceFrame(userText("summary of first and one"), userText("second"), assistantText("two"), userText("third"), assistantText("three"))
+	call := transcript.Block{Type: "tool_use", ID: "toolu_kept", Name: "Bash", Input: []byte(`{"command":"ls"}`)}
+	result := transcript.Block{Type: "tool_result", ToolUseID: "toolu_kept", Text: "listing"}
+	frame := inferenceFrame(
+		userText("summary of first and one"),
+		userText("second"),
+		transcript.Message{Role: transcript.RoleAssistant, Blocks: []transcript.Block{call}},
+		transcript.Message{Role: transcript.RoleUser, Blocks: []transcript.Block{result}},
+		assistantText("two"),
+		userText("third"),
+		assistantText("three"),
+	)
 	inferred := env.deliver(t, env.chatID, frame)
-	require.Len(t, inferred.Added, 5)
+	require.Len(t, inferred.Added, 7, "the frame stays in its own tree")
+	for _, r := range listTreeRows(t, env, env.chatID) {
+		if !inOldTree[r.ID] {
+			require.False(t, inOldTree[r.ParentMessageID.UUID], "nothing hangs off the old tree")
+		}
+	}
 	readings, events := len(chatReadings(t, env, env.chatID)), chatEvents(t, env, env.chatID)
+	require.Equal(t, 13, readings)
 
 	summary := transcript.Entry{Role: transcript.RoleUser, Text: "summary of first and one", Synthetic: true, IDs: []transcript.NaturalID{claudeLine("s1")}, Parent: claudeParent("b1")}
 	compaction := transcript.Delivery{
 		Source: transcript.SourceClaudeTranscript,
-		Links:  []transcript.Link{{ID: claudeLine("b1"), To: claudeParent("u4"), Compaction: true}},
+		Links:  []transcript.Link{{ID: claudeLine("b1"), To: claudeParent("u6"), Compaction: true}},
 		Entries: []transcript.Entry{
 			summary,
 			claudePrompt("u3", "s1", "p2", "second"),
-			claudeReply("u4", "u3", "two"),
-			claudePrompt("u5", "u4", "p5", "third"),
-			claudeReply("u6", "u5", "three"),
+			claudeToolUse("u4", "u3", "toolu_kept"),
+			claudeToolResult("u5", "u4", "toolu_kept", "listing"),
+			claudeReply("u6", "u5", "two"),
+			claudePrompt("u7", "u6", "p7", "third"),
+			claudeReply("u8", "u7", "three"),
 		},
 	}
 	res := env.deliver(t, env.chatID, compaction)
 	require.Empty(t, res.Added, "the transcript joins what inference stored")
-	require.Len(t, res.Seen, 5)
+	require.Len(t, res.Seen, 7)
 	for i, s := range res.Seen {
 		require.Equal(t, inferred.Added[i].MessageID, s.MessageID)
 	}
 
 	rows := listTreeRows(t, env, env.chatID)
-	require.Len(t, rows, 9)
+	require.Len(t, rows, 13)
 	byID := make(map[uuid.UUID]treeRow, len(rows))
 	for _, r := range rows {
 		byID[r.ID] = r
@@ -664,20 +690,24 @@ func TestWriteDelivery_PartialCompactionJoinsWhatInferenceStoredFirst(t *testing
 	for i, r := range oldTree {
 		require.Equal(t, r, byID[r.ID], "old tree row %d is unchanged", i)
 	}
-	require.Equal(t, []string{"claude_entry:u3", "prompt:p2"}, naturalIDsOf(t, env, env.chatID, oldTree[2].ID), "the original keeps its IDs")
+	require.Equal(t, []string{"claude_entry:u3", "prompt:p2"}, naturalIDsOf(t, env, env.chatID, oldTree[2].ID), "the originals keep their plain IDs")
+	require.Equal(t, []string{"claude_entry:u4", "tool_call:toolu_kept"}, naturalIDsOf(t, env, env.chatID, oldTree[3].ID))
+	require.Equal(t, []string{"claude_entry:u5", "tool_result:toolu_kept"}, naturalIDsOf(t, env, env.chatID, oldTree[4].ID))
 
 	summaryRow := byID[inferred.Added[0].MessageID]
 	require.Equal(t, chat.CaptureSynthetic, summaryRow.CaptureKind.String)
 	require.True(t, summaryRow.RiskAnalyzed)
-	require.Equal(t, oldTree[3].ID, summaryRow.ContinuesMessageID.UUID)
+	require.Equal(t, oldTree[5].ID, summaryRow.ContinuesMessageID.UUID)
 
 	scope := "#copy-in:" + summaryRow.ID.String()
 	want := [][]string{
 		{"claude_entry:s1"},
 		{"claude_entry:u3" + scope, "prompt:p2" + scope},
-		{"claude_entry:u4" + scope},
-		{"claude_entry:u5", "prompt:p5"},
-		{"claude_entry:u6"},
+		{"claude_entry:u4" + scope, "tool_call:toolu_kept" + scope},
+		{"claude_entry:u5" + scope, "tool_result:toolu_kept" + scope},
+		{"claude_entry:u6" + scope},
+		{"claude_entry:u7", "prompt:p7"},
+		{"claude_entry:u8"},
 	}
 	for i, added := range inferred.Added {
 		require.Equal(t, want[i], naturalIDsOf(t, env, env.chatID, added.MessageID), "natural IDs of inference row %d", i)
@@ -689,6 +719,7 @@ func TestWriteDelivery_PartialCompactionJoinsWhatInferenceStoredFirst(t *testing
 	// Either source resent adds nothing.
 	require.Empty(t, env.deliver(t, env.chatID, compaction).Added)
 	require.Empty(t, env.deliver(t, env.chatID, frame).Added)
-	require.Len(t, listTreeRows(t, env, env.chatID), 9)
+	require.Len(t, listTreeRows(t, env, env.chatID), 13)
 	require.Len(t, chatReadings(t, env, env.chatID), readings)
+	require.Equal(t, events, chatEvents(t, env, env.chatID))
 }
