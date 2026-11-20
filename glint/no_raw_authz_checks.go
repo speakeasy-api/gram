@@ -72,32 +72,59 @@ func newNoRawAuthzChecksAnalyzer(rule noRawAuthzChecksSettings) *analysis.Analyz
 				return nil, nil
 			}
 			ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
-			ins.Preorder([]ast.Node{(*ast.CompositeLit)(nil), (*ast.CallExpr)(nil)}, func(node ast.Node) {
+			ins.WithStack([]ast.Node{(*ast.CompositeLit)(nil), (*ast.CallExpr)(nil)}, func(node ast.Node, push bool, stack []ast.Node) bool {
+				if !push {
+					return true
+				}
 				// Tests may build checks to assert on them.
 				if strings.HasSuffix(pass.Fset.File(node.Pos()).Name(), "_test.go") {
-					return
+					return true
 				}
 				switch n := node.(type) {
 				case *ast.CompositeLit:
-					if isAuthzCheckType(pass.TypesInfo.TypeOf(n)) {
+					// The zero value returned beside an error names
+					// nothing and is refused if evaluated.
+					if isAuthzCheckType(pass.TypesInfo.TypeOf(n)) && !zeroCheckBesideError(n, stack) {
 						pass.ReportRangef(n, "replace the authz.Check literal: %s", noRawAuthzChecksDefaultMessage)
 					}
 				case *ast.CallExpr:
 					fn, ok := typeutil.Callee(pass.TypesInfo, n).(*types.Func)
 					if !ok || fn.Pkg() == nil || fn.Pkg().Path() != authzPkgPath {
-						return
+						return true
 					}
 					if sig, ok := fn.Type().(*types.Signature); ok && sig.Recv() != nil {
-						return
+						return true
 					}
 					if slices.Contains(noRawAuthzCheckConstructors, fn.Name()) {
 						pass.ReportRangef(n, "replace authz.%s: %s", fn.Name(), noRawAuthzChecksDefaultMessage)
 					}
 				}
+				return true
 			})
 			return nil, nil
 		},
 	}
+}
+
+// zeroCheckBesideError reports whether lit is an empty authz.Check{} returned
+// next to an error that is not the literal nil, as in
+// `return authz.Check{}, err`.
+func zeroCheckBesideError(lit *ast.CompositeLit, stack []ast.Node) bool {
+	if len(lit.Elts) > 0 || len(stack) < 2 {
+		return false
+	}
+	ret, ok := stack[len(stack)-2].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) < 2 {
+		return false
+	}
+	last := ret.Results[len(ret.Results)-1]
+	if last == ast.Expr(lit) {
+		return false
+	}
+	if id, ok := last.(*ast.Ident); ok && id.Name == "nil" {
+		return false
+	}
+	return true
 }
 
 func packageMatches(path string, prefixes []string) bool {
