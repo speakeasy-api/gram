@@ -320,6 +320,8 @@ func TestValidGatewayChoiceIsUntouched(t *testing.T) {
 	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect)
 	registration := g.attachSignIn(t, ctx, true)
 	insertQualifiedRemoteSessionToken(t, ctx, g.ti, g.issuer, registration, urn.NewUserSubject(mockidp.MockUserID), "fixture-token", g.source.url)
+	authClientID := serverAuthClientID(t, ctx, g.ti, g.org, g.serverID, authz.AuthClientTypeRemoteSession)
+	seedPrincipalGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), authz.ScopeMCPAuth, authClientID.String())
 	connection := g.approve(t, ctx)
 	requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
 	require.Equal(t, http.StatusOK, g.refresh(t, connection.refresh).Code)

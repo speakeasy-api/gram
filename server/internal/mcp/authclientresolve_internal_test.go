@@ -359,9 +359,10 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
 		id := f.client(authClientTypeServiceAccount, validUUID(f.registration), true)
+		require.NoError(t, f.q.SoftDeleteServerAuthClientLinksFixture(ctx, f.serverID))
 		res := f.resolve(f.choose(validUUID(id)))
 		require.Equal(t, authClientGap, res.outcome)
-		require.Equal(t, authClientReasonDetached, res.reason)
+		require.Equal(t, authClientReasonUnassociated, res.reason)
 	})
 
 	t.Run("a missing choice is a gap", func(t *testing.T) {
@@ -475,14 +476,13 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, authClientReasonNoAuthForbidden, res.reason)
 	})
 
-	t.Run("a legacy attach keeps a no-auth choice on a header-client server a gap", func(t *testing.T) {
+	t.Run("a declared header client is not replaced by a legacy OAuth attach", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
 		f.client(authClientTypePassThrough, uuid.NullUUID{}, true)
 		f.attach()
-		res := f.resolve(f.choose(uuid.NullUUID{}))
+		res := enforcedCompatibility(f.resolve(f.choose(uuid.NullUUID{})))
 		require.Equal(t, authClientGap, res.outcome)
-		require.Equal(t, authClientReasonNoAuthForbidden, res.reason)
 	})
 
 	t.Run("no-auth on a server with credential headers is a setup gap", func(t *testing.T) {

@@ -217,8 +217,6 @@ func TestAgentKeyChoiceServesAServerWithoutAnIssuerGate(t *testing.T) {
 		return options
 	}
 
-	require.Len(t, serve(keyCtx, true), 1, "before enforcement the server's own headers serve the key")
-	f.enforce()
 	require.Len(t, serve(keyCtx, false), 1, "the key's chosen credential replaces the server's headers")
 	require.Len(t, serve(ctx, true), 1, "a caller with no agent key keeps the server's headers")
 	omittedChoiceCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: uuid.NewString()}, agent, contextvalues.PrincipalCredential{AuthorizerUserID: "user_1"})

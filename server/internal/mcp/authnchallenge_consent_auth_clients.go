@@ -170,7 +170,7 @@ type consentAuthServer struct {
 func (s *Service) consentAuthChoicesEnforced(ctx context.Context, organizationID string) (bool, error) {
 	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
 	if err != nil {
-		return false, fmt.Errorf("read upstream auth enrollment: %w", err)
+		return false, fmt.Errorf("read upstream auth enforcement: %w", err)
 	}
 	return enforced, nil
 }
