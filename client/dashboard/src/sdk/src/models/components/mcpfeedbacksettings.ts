@@ -49,7 +49,7 @@ export type McpFeedbackSettings = {
    */
   updatedAt?: Date | undefined;
   /**
-   * The email of the person who last changed the settings. Absent when an API key did, or the person has since been removed.
+   * The email of the person who last changed the settings; for a change made with an API key, the key's creator. Absent when that person has since been removed.
    */
   updatedByEmail?: string | undefined;
 };

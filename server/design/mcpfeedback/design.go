@@ -149,7 +149,7 @@ var McpFeedbackSettings = Type("McpFeedbackSettings", func() {
 	Attribute("updated_at", String, "When the settings were last changed. Absent when the server never had any.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("updated_by_email", String, "The email of the person who last changed the settings. Absent when an API key did, or the person has since been removed.")
+	Attribute("updated_by_email", String, "The email of the person who last changed the settings; for a change made with an API key, the key's creator. Absent when that person has since been removed.")
 
 	Required("mcp_server_id", "enabled", "default_tool_name", "default_tool_description", "tool")
 })

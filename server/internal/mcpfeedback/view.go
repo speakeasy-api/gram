@@ -11,8 +11,8 @@ import (
 )
 
 // The views are built here rather than in the mv package because they need
-// the tool's defaults, which live in this package, and this package's
-// recorder already depends on mv through the telemetry pipeline.
+// the tool's defaults, which live in this package, and this package already
+// reaches mv through its middleware import, so mv could not import it back.
 
 // buildSettingsView describes a server's feedback tool settings. updatedAt
 // and updatedByEmail are nil for a server that never had settings stored.

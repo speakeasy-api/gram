@@ -2,6 +2,7 @@ package mcpfeedback_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -50,6 +51,12 @@ func TestParseReportDropsWhatAColumnCannotHold(t *testing.T) {
 	report, err := mcpfeedback.ParseReport(json.RawMessage(`{"content":"first line\r\nsecond\u0000 line\ttabbed\u0007"}`))
 	require.NoError(t, err)
 	require.Equal(t, "first line\nsecond line\ttabbed", report.Content)
+
+	// C1 controls, bidi overrides and zero-width marks go too, so stored text
+	// reads as what it says.
+	report, err = mcpfeedback.ParseReport(json.RawMessage(`{"content":"refund\u0085 failed\u202e for\u200b order"}`))
+	require.NoError(t, err)
+	require.Equal(t, "refund failed for order", report.Content)
 }
 
 func TestParseReportRefusesWhatAnAgentCanCorrect(t *testing.T) {
@@ -111,9 +118,12 @@ func TestParseSeverity(t *testing.T) {
 		{value: " DEGRADED", want: mcpfeedback.SeverityDegraded},
 		{value: "cosmetic", want: mcpfeedback.SeverityCosmetic},
 	} {
-		got, ok := mcpfeedback.ParseSeverity(tc.value)
-		require.True(t, ok, tc.value)
-		require.Equal(t, tc.want, got, tc.value)
+		t.Run(fmt.Sprintf("%q", tc.value), func(t *testing.T) {
+			t.Parallel()
+			got, ok := mcpfeedback.ParseSeverity(tc.value)
+			require.True(t, ok)
+			require.Equal(t, tc.want, got)
+		})
 	}
 
 	_, ok := mcpfeedback.ParseSeverity("critical")

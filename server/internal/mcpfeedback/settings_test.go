@@ -174,9 +174,11 @@ func TestUpdateSettingsRefusesWhatAgentsCouldNotCall(t *testing.T) {
 		"description too long": {toolName: nil, toolDescription: new(strings.Repeat("a", mcpfeedback.MaxToolDescriptionLength+1)), message: "tool description must be at most 2000 characters"},
 	}
 	for name, tc := range cases {
-		_, err := updateSettings(ctx, ti, server.ID.String(), true, tc.toolName, tc.toolDescription)
-		requireOopsCode(t, err, oops.CodeInvalid)
-		require.ErrorContains(t, err, tc.message, name)
+		t.Run(name, func(t *testing.T) {
+			_, err := updateSettings(ctx, ti, server.ID.String(), true, tc.toolName, tc.toolDescription)
+			requireOopsCode(t, err, oops.CodeInvalid)
+			require.ErrorContains(t, err, tc.message)
+		})
 	}
 
 	settings, err := getSettings(ctx, ti, server.ID.String())

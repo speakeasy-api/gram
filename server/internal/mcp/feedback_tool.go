@@ -165,8 +165,8 @@ func feedbackCaller(ctx context.Context, organizationID string, r *http.Request,
 	if !ok || authCtx == nil {
 		return caller
 	}
-	caller.ExternalUserID = authCtx.ExternalUserID
 	if authCtx.ActiveOrganizationID == organizationID {
+		caller.ExternalUserID = authCtx.ExternalUserID
 		caller.UserID = authCtx.UserID
 		if authCtx.Email != nil {
 			caller.UserEmail = *authCtx.Email

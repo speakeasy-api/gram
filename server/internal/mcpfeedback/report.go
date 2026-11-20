@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -184,7 +185,10 @@ func cleanText(value string) string {
 		switch {
 		case r == '\n' || r == '\t':
 			return r
-		case r < 0x20 || r == 0x7f:
+		// Control characters, and format characters such as bidi overrides
+		// and zero-width marks, which can make stored text read differently
+		// from what it says.
+		case unicode.IsControl(r) || unicode.Is(unicode.Cf, r):
 			return -1
 		default:
 			return r
