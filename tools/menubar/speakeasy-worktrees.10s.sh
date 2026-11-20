@@ -9,7 +9,7 @@
 
 # SwiftBar plugin: lists every worktree of this repository with its dashboard
 # URL and whether its stack is running, paused or stopped. Installed by
-# `mise run menubar:install`. The ".10s" in the file name is SwiftBar's refresh
+# `mise run goodies:menubar`. The ".10s" in the file name is SwiftBar's refresh
 # interval.
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -22,7 +22,7 @@ if [[ -z $common_dir ]]; then
   echo "| sfimage=exclamationmark.triangle"
   echo "---"
   echo "Repository not found at $(dirname "$self")"
-  echo "Re-run mise run menubar:install"
+  echo "Re-run mise run goodies:menubar"
   exit 0
 fi
 REPO=$(dirname "$common_dir")

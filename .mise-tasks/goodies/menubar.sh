@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Install a macOS menu bar item that lists each worktree's dashboard URL and stack state"
+#MISE description="Bonus: install a macOS menu bar item that lists each worktree's dashboard URL and stack state"
 #MISE dir="{{ config_root }}"
 #MISE quiet=true
 
