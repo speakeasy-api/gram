@@ -72,7 +72,9 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     })),
   });
   const statusByID = new Map(all.map((org, i) => [org.id, statuses[i]]));
-  const migrated = statuses.filter((s) => s.data?.migrated).length;
+  const typedClientsReady = statuses.filter(
+    (s) => s.data?.authClients?.complete,
+  ).length;
   async function enforce(org: AdminUpstreamOAuthMigrationOrganization) {
     const ok = await confirm({
       title: `Enforce upstream auth for ${org.name}?`,
@@ -123,7 +125,7 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
           className="max-w-sm"
         />
         <p className="text-muted-foreground text-sm">
-          {migrated} of {all.length} migrated
+          {typedClientsReady} of {all.length} have ready typed clients
           {settled < all.length
             ? `, ${all.length - settled} still checking`
             : ""}
