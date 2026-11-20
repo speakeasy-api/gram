@@ -1310,6 +1310,14 @@ WHERE t.id = @id
   AND t.status <> 'revoked'
   AND t.deleted IS FALSE
   AND p.deleted IS FALSE;
+
+-- name: GetProjectOwnedRegistrationForDelete :one
+-- An ownership precheck before discovering delete writer scope. The live row
+-- is rechecked by the project-scoped writer lock before mutation.
+SELECT c.id FROM remote_session_clients c
+JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id::text AND NOT p.deleted
+WHERE c.id = @id::uuid AND c.project_id = @project_id::uuid AND NOT c.deleted;
+
 -- Serializes the two halves of the private_key_jwt coupling, which live in
 -- different handlers and each read a column the other writes. Under READ
 -- COMMITTED both can pass against the same starting row and commit, landing
@@ -1323,13 +1331,6 @@ WHERE t.id = @id
 --
 -- Tenancy-scoped rather than by id alone, so a caller cannot lock another
 -- tenant's client for a transaction before the ownership check rejects them.
--- name: GetProjectOwnedRegistrationForDelete :one
--- An ownership precheck before discovering delete writer scope. The live row
--- is rechecked by the project-scoped writer lock before mutation.
-SELECT c.id FROM remote_session_clients c
-JOIN projects p ON p.id = c.project_id AND p.organization_id = @organization_id::text AND NOT p.deleted
-WHERE c.id = @id::uuid AND c.project_id = @project_id::uuid AND NOT c.deleted;
-
 -- name: LockRemoteSessionClientForAuthMethodWrite :one
 SELECT id
 FROM remote_session_clients

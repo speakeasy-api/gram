@@ -5118,19 +5118,6 @@ type GetProjectOwnedRegistrationForDeleteParams struct {
 	ProjectID      uuid.UUID
 }
 
-// Serializes the two halves of the private_key_jwt coupling, which live in
-// different handlers and each read a column the other writes. Under READ
-// COMMITTED both can pass against the same starting row and commit, landing
-// token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id,
-// the row both rules exist to prevent. Every handler evaluating either rule
-// takes this lock first. The key set lock does not cover it: that one guards
-// attach against set deletion, not method against link.
-//
-// Lock order is client, then set. DeleteSet takes the set lock and reads
-// clients unlocked, so there is no cycle.
-//
-// Tenancy-scoped rather than by id alone, so a caller cannot lock another
-// tenant's client for a transaction before the ownership check rejects them.
 // An ownership precheck before discovering delete writer scope. The live row
 // is rechecked by the project-scoped writer lock before mutation.
 func (q *Queries) GetProjectOwnedRegistrationForDelete(ctx context.Context, arg GetProjectOwnedRegistrationForDeleteParams) (uuid.UUID, error) {
@@ -13164,6 +13151,19 @@ type LockRemoteSessionClientForAuthMethodWriteParams struct {
 	ProjectID uuid.NullUUID
 }
 
+// Serializes the two halves of the private_key_jwt coupling, which live in
+// different handlers and each read a column the other writes. Under READ
+// COMMITTED both can pass against the same starting row and commit, landing
+// token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id,
+// the row both rules exist to prevent. Every handler evaluating either rule
+// takes this lock first. The key set lock does not cover it: that one guards
+// attach against set deletion, not method against link.
+//
+// Lock order is client, then set. DeleteSet takes the set lock and reads
+// clients unlocked, so there is no cycle.
+//
+// Tenancy-scoped rather than by id alone, so a caller cannot lock another
+// tenant's client for a transaction before the ownership check rejects them.
 func (q *Queries) LockRemoteSessionClientForAuthMethodWrite(ctx context.Context, arg LockRemoteSessionClientForAuthMethodWriteParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockRemoteSessionClientForAuthMethodWrite, arg.ID, arg.ProjectID)
 	var id uuid.UUID
