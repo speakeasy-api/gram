@@ -34,6 +34,40 @@ func (q *Queries) ServersAttachAssistantServer(ctx context.Context, arg ServersA
 	return err
 }
 
+const serversCopyStaticCredentialHeader = `-- name: ServersCopyStaticCredentialHeader :execrows
+INSERT INTO mcp_auth_client_headers
+ (id, auth_client_id, organization_id, name, description, is_required, is_secret, value, value_from_request_header)
+SELECT $1::uuid, client.id, client.organization_id,
+ source.name, source.description, source.is_required, source.is_secret, source.value, source.value_from_request_header
+FROM remote_mcp_server_headers AS source
+JOIN remote_mcp_servers AS server ON server.id = source.remote_mcp_server_id AND server.project_id = $2::uuid
+JOIN mcp_auth_clients AS client ON client.id = $3::uuid AND client.project_id = server.project_id
+ AND client.organization_id = $4::text
+WHERE source.id = $5::uuid AND NOT source.deleted AND NOT server.deleted
+`
+
+type ServersCopyStaticCredentialHeaderParams struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	AuthClientID uuid.UUID
+	OrgID        string
+	HeaderID     uuid.UUID
+}
+
+func (q *Queries) ServersCopyStaticCredentialHeader(ctx context.Context, arg ServersCopyStaticCredentialHeaderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversCopyStaticCredentialHeader,
+		arg.ID,
+		arg.ProjectID,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.HeaderID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
 INSERT INTO principal_grants
   (id, organization_id, principal_urn, scope, selectors)

@@ -224,6 +224,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				SlackSessionIds:    []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				LinearServerID:     s.det("mcpserver-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
+				SlackAuthClientID:  s.sharedSourceAuthClient(),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
 		}, 26, "demo seed postflight: expected exactly 26 matching upstream client choices, found %d"},
@@ -235,8 +236,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				LinearServerID:     s.det("mcpserver-linear"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 				SlackServerID:      s.det("mcpserver-slack"),
+				SlackAuthClientID:  s.sharedSourceAuthClient(),
 			})
-		}, 0, "demo seed postflight: %d upstream client choices are not the intended Example OAuth server client or Example Shared Credential server no-auth choice"},
+		}, 0, "demo seed postflight: %d upstream client choices are not the intended Example OAuth server client or Example Shared Credential server client"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDIssuanceProfileChoices(ctx, repo.PostflightIDIssuanceProfileChoicesParams{
 				ProjectID:      proj,

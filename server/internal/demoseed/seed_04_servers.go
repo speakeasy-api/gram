@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 )
 
 // serversUserSession is one live user session row; offsets are Postgres
@@ -390,6 +391,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		"linear": "auth-client-linear", "linear-app": "auth-client-linear-app", "notion-app": "auth-client-notion-app", "ema-wiki": "auth-client-ema-wiki",
 	}
 	typedChoice := func(server string) uuid.NullUUID {
+		if server == "slack" {
+			return uuid.NullUUID{UUID: s.sharedSourceAuthClient(), Valid: true}
+		}
 		if key, ok := personalOffers[server]; ok {
 			return uuid.NullUUID{UUID: s.det(key), Valid: true}
 		}
@@ -627,6 +631,10 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	return nil
 }
 
+func (s *seeder) sharedSourceAuthClient() uuid.UUID {
+	return authclientbackfill.HeaderClientID(s.orgID(), "remote", s.det("remotemcp-slack"), s.det("agent-identity-header-slack"), "static_credential")
+}
+
 func seedAuthClientEMA(ctx context.Context, q *repo.Queries, authClientID, bindingID uuid.UUID) error {
 	n, err := q.ServersInsertAuthClientEMA(ctx, repo.ServersInsertAuthClientEMAParams{AuthClientID: authClientID, BindingID: bindingID})
 	if err != nil {
@@ -648,6 +656,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	proj := s.projectID()
 
 	clients := []repo.ServersInsertAuthClientParams{
+		{ID: s.sharedSourceAuthClient(), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "backfill", Name: "Static credential", RemoteSessionClientID: uuid.NullUUID{}},
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Fixture OAuth sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
 		{ID: s.det("auth-client-ema-wiki"), OrgID: org, ProjectID: proj, ClientType: "ema", Source: "backfill", Name: "Acme Wiki", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("ema-client-wiki"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Shared service token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
@@ -678,6 +687,22 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		}); err != nil {
 			return fmt.Errorf("associate demo auth client %s: %w", a.key, err)
 		}
+	}
+	if err := s.q.ServersInsertServerAuthClient(ctx, repo.ServersInsertServerAuthClientParams{
+		ID: s.det("auth-client-assoc-slack"), ProjectID: proj, OrgID: org,
+		McpServerID: s.det("mcpserver-slack"), AuthClientID: s.sharedSourceAuthClient(),
+	}); err != nil {
+		return fmt.Errorf("offer demo static credential: %w", err)
+	}
+	n, err := s.q.ServersCopyStaticCredentialHeader(ctx, repo.ServersCopyStaticCredentialHeaderParams{
+		ID: s.det("auth-client-slack-header"), AuthClientID: s.sharedSourceAuthClient(),
+		OrgID: org, ProjectID: proj, HeaderID: s.det("agent-identity-header-slack"),
+	})
+	if err != nil {
+		return fmt.Errorf("copy demo static credential header: %w", err)
+	}
+	if n != 1 {
+		return fmt.Errorf("copy demo static credential header: expected 1 source row, found %d", n)
 	}
 	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
 		OrgID: org, AuthClientID: s.det("auth-client-github-token"),

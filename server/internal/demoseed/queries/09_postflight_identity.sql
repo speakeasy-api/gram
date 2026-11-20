@@ -260,8 +260,8 @@ WHERE (SELECT count(*) FROM live) = 26
     (credential_id = ANY(@slack_session_ids::uuid[])
      AND mcp_server_id = @slack_server_id::uuid
      AND remote_session_client_id IS NULL
-     AND client_attachment_scope IS NULL
-     AND no_auth IS TRUE)
+     AND auth_client_id = @slack_auth_client_id::uuid
+     AND no_auth IS FALSE)
     OR
     (credential_id = ANY(@org_session_ids::uuid[])
      AND mcp_server_id = ANY(@org_no_auth_server_ids::uuid[])
@@ -287,7 +287,7 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
     EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
     AND (
       (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
-      OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
+      OR (u.mcp_server_id = @slack_server_id::uuid AND u.auth_client_id = @slack_auth_client_id::uuid AND NOT u.no_auth)
       OR (u.credential_id = ANY(@org_session_ids::uuid[])
           AND u.mcp_server_id = ANY(@org_no_auth_server_ids::uuid[]) AND u.no_auth)
       OR (u.credential_id = ANY(@org_session_ids::uuid[]) AND NOT u.no_auth

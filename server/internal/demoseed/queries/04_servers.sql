@@ -813,6 +813,17 @@ VALUES
   (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
    @value::text);
 
+-- name: ServersCopyStaticCredentialHeader :execrows
+INSERT INTO mcp_auth_client_headers
+ (id, auth_client_id, organization_id, name, description, is_required, is_secret, value, value_from_request_header)
+SELECT @id::uuid, client.id, client.organization_id,
+ source.name, source.description, source.is_required, source.is_secret, source.value, source.value_from_request_header
+FROM remote_mcp_server_headers AS source
+JOIN remote_mcp_servers AS server ON server.id = source.remote_mcp_server_id AND server.project_id = @project_id::uuid
+JOIN mcp_auth_clients AS client ON client.id = @auth_client_id::uuid AND client.project_id = server.project_id
+ AND client.organization_id = @org_id::text
+WHERE source.id = @header_id::uuid AND NOT source.deleted AND NOT server.deleted;
+
 -- name: ServersInsertServerAuthClient :exec
 INSERT INTO mcp_server_auth_clients
   (id, project_id, organization_id, mcp_server_id, auth_client_id,

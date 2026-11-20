@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -18,41 +19,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 )
 
-// migrateUpstreamAuth materializes typed state, then validates typed readiness.
-// It runs after the seed commits because the remaining migration phases use
-// their own organization lock and transactions. A failed phase fails the
-// seed run and the next reseed retries it.
-func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
-	if err := recordTypedUpstreamAuth(ctx, logger, db, organizationID); err != nil {
-		return err
-	}
-
-	return upstreamAuthReadiness(ctx, logger, db, organizationID)
-}
-
-// recordTypedUpstreamAuth finishes header copies and grant provisioning. The
-// seed writes assistant execution profiles in the main transaction.
-func recordTypedUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) error {
+// seedUpstreamAuthGrants provisions only grants for the typed offers that the
+// fixture has already inserted in this transaction.
+func seedUpstreamAuthGrants(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	ctx = authz.WithUpstreamSelectorWriteGate(ctx, seededSelectorWrites(organizationID))
-	// The selection backfill reads the organization's enforcement state on its
-	// own; the auth client backfill is told it, as the admin migration does.
-	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
-	if err != nil {
-		return fmt.Errorf("record typed auth clients: %w", err)
-	}
-	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: enforced})
-	if err != nil {
-		return fmt.Errorf("record typed auth clients: %w", err)
-	}
-	if len(clients.PhaseErrors) > 0 {
-		return fmt.Errorf("record typed auth clients: failed phases %s", phaseErrors(clients.PhaseErrors))
-	}
-	logger.InfoContext(ctx, fmt.Sprintf(
-		"demo seed recorded typed upstream auth: %d auth clients, %d links, %d header copies, %d choices mapped, %d grants",
-		clients.ClientsWritten, clients.LinksWritten, clients.HeadersWritten, clients.SelectionsMapped, clients.GrantsWritten,
-	), attr.SlogOrganizationID(organizationID))
-
-	return nil
+	return authclientbackfill.ProvisionFromTypedOffers(ctx, tx, organizationID)
 }
 
 // upstreamAuthReadiness checks for missing or unusable typed state after seeding.

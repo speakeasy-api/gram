@@ -810,10 +810,10 @@ WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
     EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
     AND (
       (u.mcp_server_id = $2::uuid AND u.remote_session_client_id = $3::uuid)
-      OR (u.mcp_server_id = $4::uuid AND u.no_auth)
-      OR (u.credential_id = ANY($5::uuid[])
-          AND u.mcp_server_id = ANY($6::uuid[]) AND u.no_auth)
-      OR (u.credential_id = ANY($5::uuid[]) AND NOT u.no_auth
+      OR (u.mcp_server_id = $4::uuid AND u.auth_client_id = $5::uuid AND NOT u.no_auth)
+      OR (u.credential_id = ANY($6::uuid[])
+          AND u.mcp_server_id = ANY($7::uuid[]) AND u.no_auth)
+      OR (u.credential_id = ANY($6::uuid[]) AND NOT u.no_auth
           AND EXISTS (SELECT 1 FROM mcp_server_auth_clients offer
                       JOIN mcp_auth_clients client
                         ON client.id = offer.auth_client_id
@@ -837,6 +837,7 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 	LinearServerID     uuid.UUID
 	LinearClientID     uuid.UUID
 	SlackServerID      uuid.UUID
+	SlackAuthClientID  uuid.UUID
 	OrgSessionIds      []uuid.UUID
 	OrgNoAuthServerIds []uuid.UUID
 }
@@ -851,6 +852,7 @@ func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Conte
 		arg.LinearServerID,
 		arg.LinearClientID,
 		arg.SlackServerID,
+		arg.SlackAuthClientID,
 		arg.OrgSessionIds,
 		arg.OrgNoAuthServerIds,
 	)
@@ -1449,7 +1451,7 @@ WITH live AS (
       AND client.deleted IS FALSE AND client.enabled
   ) AS personal_offer
   FROM upstream_client_selections choice
-  WHERE choice.project_id = $8::uuid AND choice.deleted IS FALSE
+  WHERE choice.project_id = $9::uuid AND choice.deleted IS FALSE
     AND choice.credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
@@ -1465,16 +1467,16 @@ WHERE (SELECT count(*) FROM live) = 26
     (credential_id = ANY($4::uuid[])
      AND mcp_server_id = $5::uuid
      AND remote_session_client_id IS NULL
-     AND client_attachment_scope IS NULL
-     AND no_auth IS TRUE)
+     AND auth_client_id = $6::uuid
+     AND no_auth IS FALSE)
     OR
-    (credential_id = ANY($6::uuid[])
-     AND mcp_server_id = ANY($7::uuid[])
+    (credential_id = ANY($7::uuid[])
+     AND mcp_server_id = ANY($8::uuid[])
      AND remote_session_client_id IS NULL
      AND client_attachment_scope IS NULL
      AND no_auth IS TRUE)
     OR
-    (credential_id = ANY($6::uuid[])
+    (credential_id = ANY($7::uuid[])
      AND no_auth IS FALSE
      AND personal_offer)
   )
@@ -1486,6 +1488,7 @@ type PostflightIDUpstreamClientChoicesParams struct {
 	LinearClientID     uuid.UUID
 	SlackSessionIds    []uuid.UUID
 	SlackServerID      uuid.UUID
+	SlackAuthClientID  uuid.UUID
 	OrgSessionIds      []uuid.UUID
 	OrgNoAuthServerIds []uuid.UUID
 	ProjectID          uuid.UUID
@@ -1500,6 +1503,7 @@ func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg Pos
 		arg.LinearClientID,
 		arg.SlackSessionIds,
 		arg.SlackServerID,
+		arg.SlackAuthClientID,
 		arg.OrgSessionIds,
 		arg.OrgNoAuthServerIds,
 		arg.ProjectID,

@@ -71,7 +71,7 @@ func seedLocalPostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec
 	t.Helper()
 
 	seedNativePostgres(ctx, t, db, spec)
-	require.NoError(t, migrateUpstreamAuth(ctx, testenv.NewLogger(t), db, spec.OrgID))
+	require.NoError(t, upstreamAuthReadiness(ctx, testenv.NewLogger(t), db, spec.OrgID))
 }
 
 func seedNativePostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec Spec) {
