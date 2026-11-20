@@ -533,24 +533,12 @@ type ClaimDueRemoteSessionRefreshCandidatesRow struct {
 // Preferences are read, never rewritten, so restoring the opt-in policy
 // restores each subject's original choice.
 //
-// A live Speakeasy identity provider bound to this client, plus an unexpired user
-// session on that issuer, is what keeps the grant eligible. user_session_issuer_id
-// on the remote_sessions row is provenance from INSERT and is never rewritten
-// on reconnect, so requiring that exact issuer to still be live would skip a
-// grant whose minting provider was replaced while another bound issuer still
-// holds the subject's login.
-//
-// Where the organization the grant was consented in enforces typed auth
-// clients, a live, enabled offer of the client within that organization also
-// reaches two issuers, linked or not: the offering server's, and the sign-in the
-// grant was consented through, which is how a gateway login reaches a member's
-// organization-level registration. A project-level registration still needs
-// the tenancy rule below, which an organization-tier sign-in does not meet, so
-// the sweep does not claim that grant. The offer is judged as serving judges it: the registration and
-// its provider are in the offering project's or organization's reach. Everything
-// else about eligibility is the same for these issuers. No agent attachment can
-// name one, because an attachment requires a link, so only a live Speakeasy
-// session keeps such a grant eligible.
+// A live typed offer reaches the offering server's sign-in and the sign-in
+// recorded on the grant. Each requires a live subject session. The source
+// issuer records consent provenance, so an eligible sibling can keep the
+// grant alive after that source issuer is deleted. The registration and its
+// provider must be in the offering project's or organization's reach.
+// A live agent attachment does not require a browser session.
 // Attachments follow the current grant generation on the same pinned row;
 // never compare the attachment's recorded attach-time generation here. The
 // worker fences the current row and generation before releasing material.
@@ -6625,7 +6613,7 @@ WITH bound AS (
   LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
   WHERE s.id = $1 AND s.updated_at = $2::timestamptz
     AND s.grant_generation = $3::bigint AND s.deleted IS FALSE
-    AND s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL
+    AND (s.refresh_token_encrypted IS NULL AND s.refresh_token_org_encrypted IS NULL)
     AND s.refresh_expires_at IS NULL
     AND (s.access_expires_at IS NULL OR s.access_expires_at > $4::timestamptz)
     AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $4::timestamptz)
@@ -6679,7 +6667,7 @@ candidates AS (
   JOIN meta_mcp_servers AS mms ON mms.id = member.meta_mcp_server_id AND mms.user_session_issuer_id = target.id AND mms.deleted IS FALSE
   JOIN mcp_endpoints AS e ON e.meta_mcp_server_id = mms.id AND e.deleted IS FALSE AND e.project_id = target.reach_project_id
   UNION
-  SELECT '00000000-0000-0000-0000-000000000000'::uuid, '00000000-0000-0000-0000-000000000000'::uuid, om.slug, NULL::uuid, NULL::uuid, target.id, target.organization_id, TRUE, target.reach_project_id, target.typed_offer, target.server_id
+  SELECT '00000000-0000-0000-0000-000000000000'::uuid, '00000000-0000-0000-0000-000000000000'::uuid, om.slug, NULL::uuid, NULL::uuid, NULL::uuid, target.id, target.organization_id, TRUE, target.reach_project_id, target.typed_offer, target.server_id
   FROM target_servers AS target
   JOIN user_session_issuers AS gateway_issuer ON gateway_issuer.id = target.id AND gateway_issuer.project_id IS NULL
   JOIN organization_metadata AS om ON om.id = target.organization_id AND om.disabled_at IS NULL

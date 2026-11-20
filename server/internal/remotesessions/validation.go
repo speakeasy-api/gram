@@ -78,7 +78,7 @@ func (m *ChallengeManager) RecordRemoteSessionValidation(ctx context.Context, re
 func (m *ChallengeManager) OpenRecheckToken(ctx context.Context, sess remotesessions_repo.RemoteSession) (UpstreamToken, error) {
 	now := time.Now()
 	if !authorizationUsable(sess, now) || (sess.AccessExpiresAt.Valid && !sess.AccessExpiresAt.Time.After(now)) ||
-		sess.RefreshTokenEncrypted.Valid || sess.RefreshTokenOrgEncrypted.Valid || sess.RefreshExpiresAt.Valid {
+		hasRefreshToken(sess) || sess.RefreshExpiresAt.Valid {
 		return UpstreamToken{}, ErrNoValidToken
 	}
 	token, err := openAccessToken(ctx, m.tokens, sess)
