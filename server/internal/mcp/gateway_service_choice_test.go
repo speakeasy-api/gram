@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/require"
@@ -126,10 +125,13 @@ func approveServiceChoice(t *testing.T, ctx context.Context, fx serviceChoiceGat
 	}
 	_, err = usersessionsrepo.New(fx.ti.conn).GetUpstreamClientSelection(ctx, usersessionsrepo.GetUpstreamClientSelectionParams{UserSessionIssuerID: fx.issuerID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerID: fx.serverID, OrganizationID: fx.orgID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	choices, err := upstreamclientsrepo.New(fx.ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{OrganizationID: fx.orgID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerIds: []uuid.UUID{fx.serverID}})
+	choices, err := upstreamclientsrepo.New(fx.ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{OrganizationID: fx.orgID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: credentialID, McpServerIds: []uuid.UUID{fx.serverID}, TypedOnly: true})
 	require.NoError(t, err)
 	require.Len(t, choices, 1)
-	return choices[0].RegistrationID
+	choice := choices[0]
+	require.Equal(t, fx.offers[choice.RegistrationID.UUID], choice.AuthClientID.UUID)
+	require.True(t, choice.AuthClientID.Valid, "issuance stores the typed offer, never a legacy registration-only choice")
+	return choice.RegistrationID
 }
 
 // With sign-in enforcement off, a member with two connected services offers a

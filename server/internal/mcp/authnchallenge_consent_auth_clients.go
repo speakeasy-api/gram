@@ -466,8 +466,7 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 	}
 	serverID := endpoint.McpServerID.UUID
 	if selected.Type == authz.AuthClientTypeEMA && picked == uuid.Nil {
-		delete(upstreamPicks, serverID)
-		return nil, nil
+		return nil, errConsentNoUsableConnection
 	}
 	if selected.registrationID.Valid && upstreamPicks != nil {
 		upstreamPicks[serverID] = selected.registrationID.UUID
