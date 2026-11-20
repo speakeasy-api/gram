@@ -294,7 +294,7 @@ func (s *AgentIdentityReadService) MCPAccess(ctx context.Context, principal Prin
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return zero, err
 	}
-	agent, err := s.requireAgent(ctx, principal, input.AgentID, authz.ScopeAgentWrite)
+	agent, err := s.requireAgent(ctx, principal, input.AgentID, authz.AgentRef.Write)
 	if err != nil {
 		return zero, err
 	}
@@ -382,13 +382,13 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return zero, err
 	}
-	agent, err := s.requireAgent(ctx, principal, input.AgentID, authz.ScopeAgentRead)
+	agent, err := s.requireAgent(ctx, principal, input.AgentID, authz.AgentRef.Read)
 	if err != nil {
 		return zero, err
 	}
 	// Live organization access is settled before the input is judged, so a
 	// caller without org:read learns nothing from a window error.
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}); err != nil {
+	if err := s.engine.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Read()); err != nil {
 		if isAuthorizationRefusal(err) {
 			return zero, ErrAgentChecksForbidden
 		}
@@ -453,7 +453,7 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 // authorizer admits only a dashboard session, so this applies the same owner
 // rule through agents.OwnsUnblocked and the same scope check through the
 // caller's grants.
-func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal Principal, rawID string, scope authz.Scope) (agentsrepo.Agent, error) {
+func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal Principal, rawID string, permission func(authz.AgentRef) authz.Check) (agentsrepo.Agent, error) {
 	var zero agentsrepo.Agent
 	agentID, err := uuid.Parse(strings.TrimSpace(rawID))
 	if err != nil || agentID == uuid.Nil {
@@ -473,20 +473,21 @@ func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal P
 	if agents.OwnsUnblocked(principal.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt) {
 		return agent, nil
 	}
-	err = s.engine.Require(ctx, authz.Check{Scope: scope, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil})
+	check := permission(authz.Agent(authz.AgentIDOf(agent.ID)))
+	err = s.engine.Require(ctx, check)
 	if err == nil {
 		return agent, nil
 	}
 	if !isAuthorizationRefusal(err) {
 		return zero, fmt.Errorf("authorize agent read: %w", err)
 	}
-	if scope != authz.ScopeAgentRead {
+	if check.Scope != authz.ScopeAgentRead {
 		return zero, ErrAgentNotAvailable
 	}
 	// agent:write does not include agent:read. A caller holding it already
 	// reads the agent through get_agent_mcp_access, so hiding the agent
 	// protects nothing; name the permission they lack instead.
-	err = s.engine.Require(ctx, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil})
+	err = s.engine.Require(ctx, authz.Agent(authz.AgentIDOf(agent.ID)).Write())
 	if err == nil {
 		return zero, ErrAgentReadForbidden
 	}

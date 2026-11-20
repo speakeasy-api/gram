@@ -355,7 +355,7 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 				delete(dimensions, key)
 			}
 		}
-		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions}
+		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions} //nolint:glint // norawauthzchecks: probes a stored grant's own selector, whatever its kind
 		_, hasTool := dimensions[authz.SelectorKeyTool]
 		_, hasDisposition := dimensions[authz.SelectorKeyDisposition]
 		if hasTool || hasDisposition {
@@ -364,11 +364,7 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 			if scope != authz.ScopeMCPConnect {
 				continue
 			}
-			check = authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
-				Tool:        dimensions[authz.SelectorKeyTool],
-				Disposition: dimensions[authz.SelectorKeyDisposition],
-				ProjectID:   dimensions[authz.SelectorKeyProjectID],
-			})
+			check = authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID])).ToolCall(dimensions[authz.SelectorKeyTool], dimensions[authz.SelectorKeyDisposition])
 		}
 		allowed, err := authz.GrantsAuthorize(grants, check)
 		if err == nil && allowed {
