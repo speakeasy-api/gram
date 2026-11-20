@@ -41,15 +41,20 @@ func (s *Service) withTypedMemberRegistrations(ctx context.Context, organization
 			ids = append(ids, member.serverID)
 		}
 	}
-	offered, err := s.typedOfferedRegistrations(ctx, organizationID, ids)
-	if err != nil || offered == nil {
+	offers, err := s.configuredAuthOffers(ctx, organizationID, ids)
+	if err != nil {
 		return err
 	}
+	applyTypedMemberRegistrations(members, offers)
+	return nil
+}
+
+func applyTypedMemberRegistrations(members []metaMember, offers map[uuid.UUID]configuredAuthOffer) {
 	for i := range members {
 		if members[i].backend != metaMemberBackendProxied {
 			continue
 		}
-		registrations := offered[members[i].serverID]
+		registrations := offers[members[i].serverID].personalRegistrations()
 		clients := make(map[uuid.UUID]bool, len(registrations))
 		for _, id := range registrations {
 			clients[id] = true
@@ -57,7 +62,6 @@ func (s *Service) withTypedMemberRegistrations(ctx context.Context, organization
 		members[i].associatedClients = clients
 		members[i].typedRegistrations = true
 	}
-	return nil
 }
 
 // recheckLegacyInventoryKey keeps AIM-1149's existing unenforced keepalive

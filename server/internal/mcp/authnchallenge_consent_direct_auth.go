@@ -35,7 +35,7 @@ func (s *Service) consentDirectPreviewAuth(ctx context.Context, endpoint *Resolv
 	if err != nil {
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
 	}
-	res, err := s.resolveAuthClientChoiceForConsent(withMandatoryAdmission(ctx), endpoint.OrganizationID, endpoint.McpServerID.UUID, endpoint.ProjectID, picks[endpoint.McpServerID.UUID], *state.Subject)
+	res, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(withMandatoryAdmission(ctx)), endpoint.OrganizationID, endpoint.McpServerID.UUID, endpoint.ProjectID, picks[endpoint.McpServerID.UUID], *state.Subject)
 	if err != nil {
 		return nil, err
 	}

@@ -392,7 +392,7 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
 	}
 	serverID := endpoint.McpServerID.UUID
-	choices, err := s.consentAuthChoices(withMandatoryAdmission(subjectCtx), endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked}, false)
+	choices, err := s.consentAuthChoices(withTypedConsentAuth(withMandatoryAdmission(subjectCtx)), endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +487,7 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 			}
 		}
 	}
-	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked, false)
+	return s.consentAuthChoices(withTypedConsentAuth(ctx), endpoint.OrganizationID, subject, servers, cards, picked, false)
 }
 
 func (s *Service) resolveMemberAuthChoice(ctx context.Context, endpoint *ResolvedMcpEndpoint, member metaMember, auth *consentServerAuth, subject urn.SessionSubject) (authClientResolution, error) {
@@ -504,7 +504,7 @@ func (s *Service) resolveMemberAuthChoice(ctx context.Context, endpoint *Resolve
 		return res, nil
 	}
 	if selected := auth.Selected(); selected != nil {
-		return s.resolveAuthClientChoiceForConsent(ctx, endpoint.OrganizationID, member.serverID, member.projectID, selected.ID, subject)
+		return s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.serverID, member.projectID, selected.ID, subject)
 	}
 	return gapResolution(authClientReasonSetup), nil
 }

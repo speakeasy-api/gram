@@ -375,6 +375,17 @@ func TestConnectionRecoveryRefusesAClientTheServerNoLongerOffers(t *testing.T) {
 	require.NotContains(t, detached.Body.String(), f.asBase)
 }
 
+func TestConnectionRecoveryRefusesAChangedResource(t *testing.T) {
+	t.Parallel()
+	f := newConnectionRecoveryFixture(t)
+	f.link.UpstreamResource = "https://old-target.example.com/mcp"
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	refused := f.open(t, path, f.userID)
+	require.Equal(t, http.StatusForbidden, refused.Code)
+	require.NotContains(t, refused.Body.String(), f.asBase)
+}
+
 func TestConnectionRecoveryShowsNoAccessWithoutAWayToConnect(t *testing.T) {
 	t.Parallel()
 	f := newConnectionRecoveryFixture(t)

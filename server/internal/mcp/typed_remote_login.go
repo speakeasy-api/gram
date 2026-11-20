@@ -67,7 +67,7 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	if !decision.Allowed {
 		return fmt.Errorf("%w: typed login server access is no longer authorized", remotesessions.ErrTypedAuthorizationDenied)
 	}
-	res, err := s.resolveAuthClientChoiceForConsent(ctx, a.OrganizationID, a.ServerID, a.ProjectID, a.AuthClientID, a.Subject)
+	res, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(ctx), a.OrganizationID, a.ServerID, a.ProjectID, a.AuthClientID, a.Subject)
 	if err != nil {
 		return fmt.Errorf("authorize typed login: %w", err)
 	}

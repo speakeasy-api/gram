@@ -779,7 +779,7 @@ func (s *Service) validateCatalogMemberAuth(ctx context.Context, endpoint *Resol
 		}
 		return nil
 	}
-	resolved, err := s.resolveAuthClientChoiceForConsent(ctx, endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.ClientID, subject)
+	resolved, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(ctx), endpoint.OrganizationID, member.ServerID, member.ProjectID, member.Auth.ClientID, subject)
 	if err != nil {
 		return err
 	}

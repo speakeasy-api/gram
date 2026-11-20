@@ -392,7 +392,7 @@ func (s *Service) serveConsentProxiedMCP(
 		return oops.E(oops.CodeUnavailable, err, "store consent credential binding").LogError(ctx, logger)
 	}
 	var tokens map[uuid.UUID]remotesessions.UpstreamToken
-	backendIssuerID := serverRow.RemoteSessionIssuerID
+	var backendIssuerID uuid.NullUUID
 	var chosenClient uuid.UUID
 	switch {
 	case auth.outcome == authClientNoAuth || auth.headersOnly() || (auth.outcome == authClientLegacy && auth.choice.noAuth()):
@@ -415,7 +415,7 @@ func (s *Service) serveConsentProxiedMCP(
 	chain := errors.Is(err, remotesessions.ErrNoValidToken) &&
 		!errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) &&
 		!errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) &&
-		(auth == nil || auth.outcome == authClientLegacy) &&
+		auth.outcome == authClientLegacy &&
 		s.identityChainer != nil && s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID)
 	noToken := err
 	if chain {
@@ -438,17 +438,6 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	var upstreamToken remotesessions.UpstreamToken
 	if !chain {
-		backendIssuerID = s.directUpstreamIssuer(ctx, logger, directUpstreamIssuerInput{
-			organizationID:   endpoint.OrganizationID,
-			serverID:         serverRow.ID,
-			site:             upstreamIssuerSiteConsentPreview,
-			tokens:           tokens,
-			upstreamResource: endpoint.UpstreamResource,
-			tunneled:         serverRow.TunneledMcpServerID.Valid,
-			backendIssuerID:  backendIssuerID,
-			choiceGoverns:    chosenClient != uuid.Nil,
-			association:      nil,
-		})
 		upstreamToken, err = routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
 		var routeErr *upstreamRoutingError
 		switch {
@@ -505,7 +494,7 @@ func (s *Service) serveConsentProxiedMCP(
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
 		var options []remotemcp.BuildOption
-		if auth != nil && (auth.outcome != authClientLegacy || auth.sendsClientHeaders()) {
+		if auth.outcome != authClientLegacy || auth.sendsClientHeaders() {
 			options = append(options, remotemcp.WithAuthClientHeaders(auth.headers))
 		}
 		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil, options...)

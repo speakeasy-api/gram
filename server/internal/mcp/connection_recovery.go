@@ -311,12 +311,12 @@ func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery con
 	if err := s.ValidateRemoteLoginTypedAuthorization(ctx, state); err != nil {
 		return nil, "", err
 	}
-	if recovery.UpstreamResource != "" {
-		return authorization, recovery.UpstreamResource, nil
-	}
 	resource, err := s.typedLoginResource(ctx, authorization)
 	if err != nil {
 		return nil, "", fmt.Errorf("derive connection resource: %w", err)
+	}
+	if recovery.UpstreamResource != "" && recovery.UpstreamResource != resource {
+		return nil, "", remotesessions.ErrTypedAuthorizationChanged
 	}
 	return authorization, resource, nil
 }
@@ -507,7 +507,7 @@ func (s *Service) connectionRecoveryAccess(ctx context.Context, authed context.C
 	// The server's current offer decides, as for a consent pick: the client
 	// must still be associated, enabled and on the link's registration, and
 	// the person allowed to use it.
-	res, err := s.resolveAuthClientChoiceForConsent(authed, recovery.OrganizationID, recovery.McpServerID, recovery.ProjectID, recovery.AuthClientID, urn.NewUserSubject(recovery.UserID))
+	res, err := s.resolveAuthClientChoiceForConsent(withTypedConsentAuth(authed), recovery.OrganizationID, recovery.McpServerID, recovery.ProjectID, recovery.AuthClientID, urn.NewUserSubject(recovery.UserID))
 	if err != nil {
 		return fmt.Errorf("resolve connection client: %w", err)
 	}

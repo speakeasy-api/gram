@@ -431,9 +431,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	var clients []remotesessions.Client
 	if userSessionIssuerID != uuid.Nil {
 		if authzSurface == mandatorySurfaceConsent && usesTypedConsentInventory(ctx) {
-			if err := s.withTypedMemberRegistrations(ctx, organizationID, members); err != nil {
-				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load gateway member offers").LogError(ctx, logger)
-			}
+			applyTypedMemberRegistrations(members, offers)
 		}
 		// The agent gateway signs nobody in, so its callers never read
 		// associations and its members keep the derived match.
