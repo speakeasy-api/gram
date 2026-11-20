@@ -1,5 +1,27 @@
 # server
 
+## 2.38.0
+
+### Minor Changes
+
+- e50b65e: Manage the hooks version rollout from the admin dashboard. Staff set a platform-wide default pin and per-organization overrides naming the highest hooks plugin version an organization may receive, on the new Hooks rollout page and each organization's Features tab. The plugin publisher reads these pins instead of the `hooks-rollout` PostHog flag, which it still falls back to for organizations without an override until a default pin is set. The staff Admin MCP gains read-only `get_hooks_rollout` and `get_organization_hooks_rollout` tools.
+- 4e0ba52: Adding a credential for people's own accounts now detects the authorization server the MCP server advertises. When the project already has it, it is preselected; when it does not, it is added when the credential is saved, so there is no trip to Authorization Servers first. New MCP servers, credentials and authorization servers also get a readable name when none is typed: the name the server reports for itself when it can be reached without signing in, or one read from its address, such as "Canva" for mcp.canva.com.
+- cb66876: Operators can register an MCP client against a user session issuer for a client that cannot register itself. Speakeasy mints the client ID and secret, returns the secret once, and stores only its hash. Operators can also replace the redirect URIs of a registered client, except a CIMD client, whose metadata document sets them. Both need project:write on the issuer's project, or org:admin for an organization-owned issuer, and both are recorded in the audit log.
+- c8f8efd: Roles and agents can now be limited to particular upstream credentials. The role editor and an agent's Permissions page show every credential by kind, with a tick on all credentials, one kind, or one credential, and a block that wins over any tick. A wide tick can be split into one per kind or per credential so one can be taken away while the rest stay, and unticking a credential that comes from a wider tick splits it for you. The role editor's MCP server grid shows how many of each server's credentials the role can use and flags servers it can connect to but not sign in to, and a server's Check access shows which credentials a member can sign in with and which rule decides each one.
+
+### Patch Changes
+
+- bd82434: Tool call logs in the chat detail panel load faster. The logs for one chat are now read only from the time range the chat actually covers, instead of the project's whole log history.
+- 23347ca: Claude Cowork replies are captured again in sessions that write no transcript. Some Cowork sessions run Claude Code only as a tool server, so the Stop hook has no transcript to upload. The hooks binary now sends the reply from Stop as an event instead, and the server stores it with the session's other messages, once.
+- ee3d0aa: A sign-in made through a team gateway now counts for each member server whose own sign-in issuer binds the same OAuth client. The agent credentials wizard shows those servers as connected, and attaching the connection to an agent succeeds. A connection for a client the server does not bind still does not count.
+- f6d8ddf: Serve the hooks@0.3.58 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 617fb1d: MCP server Inspect now signs in through the server's OAuth consent page. It lets you choose an upstream credential before listing or running tools, including when no credential is bound to the authorization server.
+- f407fa2: The Overview tab of an MCP server loads its usage tiles, chart, and top tools faster. One query now reads the usage data in a single pass instead of five separate scans.
+- b040501: Plan feature lists now name MCP Inspect instead of the retired Playground.
+- e7f84d9: Revoking an MCP sign-in session now stops its access token within seconds, even when the revocation cache has lost the entry. Previously a revoked session could keep working for up to five minutes.
+- 9ca1606: The Shadow MCP server table loads every page with "Load more". The control now sits below the last row instead of floating over the rows as you scroll, and new rows append in the server's order. The list endpoint is declared as cursor-paginated, so SDK clients get page iterators.
+- fc858d4: A blocked call to a Shadow MCP server with an official version now names the route to use. When the agent's session already has the official server connected, through its own address or a gateway, the message points at that connection. Otherwise it lists the official server's own address and every gateway that serves it.
+
 ## 2.37.0
 
 ### Minor Changes
