@@ -1978,8 +1978,8 @@ func TestPluginsService_PublishPlugins_GrantsMCPKeyItsPluginServers(t *testing.T
 		return slices.ContainsFunc(policies["mcp"], func(grant authz.Grant) bool { return authz.GrantAllows(grant, check) })
 	}
 
-	require.True(t, allows(authz.MCPCheck(authz.ScopeMCPConnect, distributed.ID.String(), project)), "the key connects to the server its plugin distributes")
-	require.False(t, allows(authz.MCPCheck(authz.ScopeMCPConnect, other.ID.String(), project)), "the key reaches nothing its plugins do not distribute")
+	require.True(t, allows(authz.MCPServer(authz.MCPServerIDOf(distributed.ID), authz.ProjectIDFrom(project)).Connect()), "the key connects to the server its plugin distributes")
+	require.False(t, allows(authz.MCPServer(authz.MCPServerIDOf(other.ID), authz.ProjectIDFrom(project)).Connect()), "the key reaches nothing its plugins do not distribute")
 
 	clientID := uuid.NewString()
 	for _, clientType := range []string{authz.AuthClientTypeServiceAccount, authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough} {
@@ -2045,7 +2045,7 @@ func TestPluginsService_PublishProject_MCPKeyFollowsServerSignIn(t *testing.T) {
 		require.Len(t, minted, 1, "the republish mints one MCP key")
 		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{urn.NewAPIKeyPrincipal(minted[0].ID)})
 		require.NoError(t, err)
-		check := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), project)
+		check := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDFrom(project)).Connect()
 		connects = slices.ContainsFunc(grants, func(grant authz.Grant) bool { return authz.GrantAllows(grant, check) })
 		return connects, strings.Contains(string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), minted[0].KeyPrefix)
 	}

@@ -48,8 +48,8 @@ func TestToolCallConstructorsBuildToolCalls(t *testing.T) {
 	server := uuid.New()
 	project := uuid.New()
 	checks := []Check{
-		MCPToolCallCheck(server.String(), MCPToolCallDimensions{Tool: "search", Disposition: DispositionReadOnly, ProjectID: project.String()}),
-		MCPToolCallCheck(server.String(), MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: project.String()}),
+		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("search", DispositionReadOnly),
+		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("search", ""),
 		MCPServer(MCPServerIDOf(server), ProjectIDOf(project)).ToolCall("search", DispositionReadOnly),
 	}
 	for _, check := range checks {

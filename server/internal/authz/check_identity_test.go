@@ -57,9 +57,9 @@ func TestDeclaredDimensionsStayValid(t *testing.T) {
 	root := []Grant{NewGrant(ScopeRoot, WildcardResource)}
 	checks := []Check{
 		{Scope: ScopeProjectRead, ResourceKind: ResourceKindProject, ResourceID: "project-one"},
-		EnvironmentCheck(ScopeEnvironmentRead, "env-one", "project-one"),
-		MCPToolCallCheck("server-one", MCPToolCallDimensions{Tool: "search", Disposition: DispositionReadOnly, ProjectID: "project-one"}),
-		HooksIngestCheck("org-one", "project-one"),
+		Environment(EnvironmentIDFrom("env-one"), ProjectIDFrom("project-one")).Read(),
+		MCPServer(MCPServerIDFrom("server-one"), ProjectIDFrom("project-one")).ToolCall("search", DispositionReadOnly),
+		Org(OrgIDFrom("org-one")).HooksIngest(ProjectIDFrom("project-one")),
 	}
 	for _, check := range checks {
 		allowed, err := GrantsAuthorize(root, check)

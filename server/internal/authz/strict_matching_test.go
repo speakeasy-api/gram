@@ -33,7 +33,7 @@ func TestMatching_MissingKeyNeverMatches(t *testing.T) {
 
 	for name, check := range map[string]Check{
 		"generated connection":   ref.Connect(),
-		"constructed connection": MCPCheck(ScopeMCPConnect, server.String(), project.String()),
+		"constructed connection": mcpCheck(ScopeMCPConnect, server.String(), project.String()),
 		"probe of a tool call":   ref.ToolCall("", DispositionReadOnly).Probe(),
 	} {
 		allowed, err := GrantsAuthorize(grants, check)
@@ -60,7 +60,7 @@ func TestMatching_MissingKeyNeverMatches(t *testing.T) {
 func TestMatching_OmissionStampsBelongToTheirPermission(t *testing.T) {
 	t.Parallel()
 
-	read := MCPCheck(ScopeMCPRead, "server-1", "project-1")
+	read := MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom("project-1")).Read()
 	require.NoError(t, validateInput(read))
 	require.ErrorIs(t, validateInput(read.asConnection()), ErrInvalidCheck)
 

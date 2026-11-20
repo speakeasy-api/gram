@@ -19,7 +19,7 @@ func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, enforce, "a sessionless context skips RBAC")
 
-	valid := MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP)
+	valid := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect()
 	invalid := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "", Dimensions: nil}
 	authClient := MCPAuthClientCheck("ac_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: ""})
 
@@ -39,7 +39,7 @@ func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
 
-	call := MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "delete_all", Disposition: DispositionDestructive, ProjectID: authProjectP})
+	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("delete_all", DispositionDestructive)
 	reasons, err := engine.DenialReasons(ctx, []Check{call})
 	require.NoError(t, err)
 	require.Equal(t, []DenialReason{DenialReasonDisposition}, reasons)
@@ -56,7 +56,7 @@ func TestDenialReasons_MissingToolIsNotADispositionRefusal(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrantWithSelector(ScopeMCPConnect, selector)})
 
-	call := MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "", Disposition: DispositionDestructive, ProjectID: authProjectP})
+	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("", DispositionDestructive)
 	reasons, err := engine.DenialReasons(ctx, []Check{call})
 	require.NoError(t, err)
 	require.Equal(t, []DenialReason{DenialReasonNotGranted}, reasons)

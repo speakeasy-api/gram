@@ -19,15 +19,15 @@ func TestGrantsAuthorizeAppliesMCPExclusions(t *testing.T) {
 		{PrincipalUrn: "role:organization:role-1", Scope: ScopeMCPBlockedConnect, Selector: block},
 	}
 
-	allowed, err := GrantsAuthorize(grants, MCPCheck(ScopeMCPConnect, serverID, "project-1"))
+	allowed, err := GrantsAuthorize(grants, MCPServer(MCPServerIDFrom(serverID), ProjectIDFrom("project-1")).Connect())
 	require.NoError(t, err)
 	require.True(t, allowed)
 
-	allowed, err = GrantsAuthorize(grants, MCPToolCallCheck(serverID, MCPToolCallDimensions{Tool: tool, ProjectID: "project-1"}))
+	allowed, err = GrantsAuthorize(grants, MCPServer(MCPServerIDFrom(serverID), ProjectIDFrom("project-1")).ToolCall(tool, ""))
 	require.NoError(t, err)
 	require.False(t, allowed)
 
-	allowed, err = GrantsAuthorize(grants, MCPToolCallCheck(serverID, MCPToolCallDimensions{Tool: "list_tasks", ProjectID: "project-1"}))
+	allowed, err = GrantsAuthorize(grants, MCPServer(MCPServerIDFrom(serverID), ProjectIDFrom("project-1")).ToolCall("list_tasks", ""))
 	require.NoError(t, err)
 	require.True(t, allowed)
 }
