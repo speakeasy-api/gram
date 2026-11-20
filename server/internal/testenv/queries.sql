@@ -2793,6 +2793,11 @@ SET bundle_ids = array_append(bundle_ids, NULL),
   client_info_names = array_append(client_info_names, NULL)
 WHERE id = @id;
 
+-- Inserts even where a soft-deleted row holds the URL, unlike the seed.
+-- name: InsertDocumentFixture :exec
+INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)
+VALUES (@id, @ai_product_id, @url, @display_name, @enabled, @is_pattern);
+
 -- name: EditDocumentFixture :exec
 UPDATE ai_product_cimd_documents
 SET url = @url, display_name = @display_name, enabled = @enabled,

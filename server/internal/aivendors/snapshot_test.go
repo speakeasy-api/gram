@@ -316,7 +316,7 @@ func TestDerivedRefusesAKeyReusedForAnotherType(t *testing.T) {
 
 func TestPublishReplacesTheBuiltInCatalogWithoutCarryingDerivedValues(t *testing.T) {
 	t.Parallel()
-	store := NewStore(newCompiledSnapshot())
+	store := NewStore(builtInSnapshot(removals{products: nil, documents: nil}))
 	type key struct{}
 	computed := 0
 	count := func(*Snapshot) int { computed++; return computed }

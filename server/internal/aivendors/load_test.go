@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
@@ -21,6 +22,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/stretchr/testify/require"
 )
 
@@ -178,7 +180,8 @@ func TestRefreshRejectsEmptyCatalog(t *testing.T) {
 	require.Same(t, initial, store.Snapshot(), "an empty load never replaces a good snapshot")
 	loaded, err := aivendors.Load(t.Context(), db, logger, aitargets.ValidateCatalog)
 	require.NoError(t, err)
-	require.Same(t, aivendors.CompiledSnapshot(), loaded, "an empty catalog falls back to the built-in one")
+	require.True(t, loaded.BuiltIn())
+	require.Empty(t, loaded.Products(), "every built-in product was soft-deleted, so the fallback keeps none")
 }
 
 func TestLoadFallsBackToTheBuiltInCatalogBeforeTheSeedRuns(t *testing.T) {
@@ -488,4 +491,83 @@ func TestLoadDropsNullArrayElements(t *testing.T) {
 	want, ok := aitargets.DefaultByID(aivendors.CompiledSnapshot(), "zed")
 	require.True(t, ok)
 	require.Equal(t, want, target, "NULL elements are dropped and nothing else changes")
+}
+
+func TestBuiltInFallbackKeepsDatabaseRemovals(t *testing.T) {
+	t.Parallel()
+	const zedURL = "https://zed.dev/oauth/client-metadata.json"
+	deletedAt := pgtype.Timestamptz{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	editZedDocument := func(t *testing.T, db *pgxpool.Pool, enabled bool, deleted pgtype.Timestamptz) {
+		t.Helper()
+		docs, err := seedrepo.New(db).ListDocuments(t.Context())
+		require.NoError(t, err)
+		for _, d := range docs {
+			if d.Url == zedURL {
+				require.NoError(t, testrepo.New(db).EditDocumentFixture(t.Context(), testrepo.EditDocumentFixtureParams{ID: d.ID, Url: d.Url, DisplayName: d.DisplayName, Enabled: enabled, DeletedAt: deleted}))
+			}
+		}
+	}
+	for _, tc := range []struct {
+		name     string
+		remove   func(t *testing.T, db *pgxpool.Pool)
+		listed   bool
+		readdURL bool
+	}{
+		{name: "soft-deleted product", remove: func(t *testing.T, db *pgxpool.Pool) {
+			require.NoError(t, testrepo.New(db).EditProductFixture(t.Context(), testrepo.EditProductFixtureParams{ID: "zed", DisplayName: "Zed", DeletedAt: deletedAt}))
+		}},
+		{name: "disabled document", remove: func(t *testing.T, db *pgxpool.Pool) { editZedDocument(t, db, false, pgtype.Timestamptz{}) }, listed: true},
+		{name: "soft-deleted document", remove: func(t *testing.T, db *pgxpool.Pool) { editZedDocument(t, db, true, deletedAt) }},
+		{name: "soft-deleted then re-added document", remove: func(t *testing.T, db *pgxpool.Pool) { editZedDocument(t, db, true, deletedAt) }, readdURL: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			db, err := infra.CloneTestDatabase(t, "testdb")
+			require.NoError(t, err)
+			require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+			tc.remove(t, db)
+			if tc.readdURL {
+				require.NoError(t, testrepo.New(db).InsertDocumentFixture(t.Context(), testrepo.InsertDocumentFixtureParams{ID: uuid.New(), AiProductID: "zed", Url: zedURL, DisplayName: "Zed", Enabled: true, IsPattern: false}))
+			}
+			insertInvalidProduct(t, db)
+			loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+			require.NoError(t, err)
+			require.True(t, loaded.BuiltIn())
+			decision := admission.Evaluate(loaded, admission.ModePresets, zedURL)
+			if tc.readdURL {
+				require.Equal(t, admission.OutcomeAdmit, decision.Outcome, "a live row with the same URL is not a removal")
+				return
+			}
+			require.NotEqual(t, admission.OutcomeAdmit, decision.Outcome)
+			listed := false
+			for _, preset := range loaded.Catalog() {
+				if preset.URL == zedURL {
+					listed = true
+					require.False(t, preset.Enabled)
+				}
+			}
+			require.Equal(t, tc.listed, listed)
+		})
+	}
+}
+
+func TestBuiltInFallbackWithNothingRemovedIsTheBuiltInCatalog(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	insertInvalidProduct(t, db)
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err)
+	require.Same(t, aivendors.CompiledSnapshot(), loaded)
+}
+
+// insertInvalidProduct adds a row aitargets rejects, so the catalog falls back.
+func insertInvalidProduct(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	_, err := seedrepo.New(db).InsertProduct(t.Context(), seedrepo.InsertProductParams{
+		ID: "invalid-fixture", VendorKey: "fixture", DisplayName: "Fixture", Category: pgtype.Text{String: "unknown", Valid: true},
+		BundleIds: []string{}, Binaries: []string{"fixture"}, ConfigDirs: []string{}, ProcessNames: []string{}, ClientInfoNames: []string{},
+	})
+	require.NoError(t, err)
 }

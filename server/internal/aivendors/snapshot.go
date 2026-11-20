@@ -150,14 +150,38 @@ func (p Product) withEmptyAsNil() Product {
 // CompiledSnapshot is the built-in registry in database order: products by id, then documents by URL.
 func CompiledSnapshot() *Snapshot { return compiledSnapshot() }
 
-var compiledSnapshot = sync.OnceValue(newCompiledSnapshot)
+var compiledSnapshot = sync.OnceValue(func() *Snapshot { return builtInSnapshot(removals{products: nil, documents: nil}) })
 
-func newCompiledSnapshot() *Snapshot {
-	products := Products()
-	for i := range products {
-		products[i].Family = ""
-		products[i].Aliases = nil
-		slices.SortFunc(products[i].Documents, func(a, b Document) int { return strings.Compare(a.URL, b.URL) })
+// removals are the built-in rows the database soft-deleted or disabled.
+type removals struct {
+	products map[string]struct{}
+	// documents maps a URL to true when a disabled live row holds it, false when it is deleted.
+	documents map[string]bool
+}
+
+// builtInSnapshot is the built-in registry in database order with removals applied.
+func builtInSnapshot(removed removals) *Snapshot {
+	registry := Products()
+	products := make([]Product, 0, len(registry))
+	for _, p := range registry {
+		if _, gone := removed.products[p.ID]; gone {
+			continue
+		}
+		p.Family = ""
+		p.Aliases = nil
+		var documents []Document
+		for _, d := range p.Documents {
+			if live, ok := removed.documents[d.URL]; ok {
+				if !live {
+					continue
+				}
+				d.Enabled = false
+			}
+			documents = append(documents, d)
+		}
+		p.Documents = documents
+		slices.SortFunc(p.Documents, func(a, b Document) int { return strings.Compare(a.URL, b.URL) })
+		products = append(products, p)
 	}
 	slices.SortFunc(products, func(a, b Product) int { return strings.Compare(a.ID, b.ID) })
 	s := NewSnapshot(products)

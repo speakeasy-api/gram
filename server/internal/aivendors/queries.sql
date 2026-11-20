@@ -19,3 +19,16 @@ FROM ai_product_cimd_documents d
 JOIN ai_products p ON p.id = d.ai_product_id
 WHERE d.deleted IS FALSE AND p.deleted IS FALSE
 ORDER BY d.url COLLATE "C";
+
+-- Removals the built-in fallback honours when the live catalog is rejected.
+-- name: ListDeletedProductIDs :many
+SELECT id FROM ai_products WHERE deleted IS TRUE ORDER BY id COLLATE "C";
+
+-- A URL with no enabled live row is removed; live reports whether a disabled live row still holds it.
+-- name: ListRemovedDocumentURLs :many
+SELECT d.url, COALESCE(bool_or(d.deleted IS FALSE AND p.deleted IS FALSE), FALSE)::boolean AS live
+FROM ai_product_cimd_documents d
+JOIN ai_products p ON p.id = d.ai_product_id
+GROUP BY d.url
+HAVING NOT COALESCE(bool_or(d.deleted IS FALSE AND p.deleted IS FALSE AND d.enabled), FALSE)
+ORDER BY d.url COLLATE "C";

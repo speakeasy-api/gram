@@ -115,3 +115,63 @@ func (q *Queries) ListCatalogProducts(ctx context.Context) ([]ListCatalogProduct
 	}
 	return items, nil
 }
+
+const listDeletedProductIDs = `-- name: ListDeletedProductIDs :many
+SELECT id FROM ai_products WHERE deleted IS TRUE ORDER BY id COLLATE "C"
+`
+
+// Removals the built-in fallback honours when the live catalog is rejected.
+func (q *Queries) ListDeletedProductIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDeletedProductIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemovedDocumentURLs = `-- name: ListRemovedDocumentURLs :many
+SELECT d.url, COALESCE(bool_or(d.deleted IS FALSE AND p.deleted IS FALSE), FALSE)::boolean AS live
+FROM ai_product_cimd_documents d
+JOIN ai_products p ON p.id = d.ai_product_id
+GROUP BY d.url
+HAVING NOT COALESCE(bool_or(d.deleted IS FALSE AND p.deleted IS FALSE AND d.enabled), FALSE)
+ORDER BY d.url COLLATE "C"
+`
+
+type ListRemovedDocumentURLsRow struct {
+	Url  string
+	Live bool
+}
+
+// A URL with no enabled live row is removed; live reports whether a disabled live row still holds it.
+func (q *Queries) ListRemovedDocumentURLs(ctx context.Context) ([]ListRemovedDocumentURLsRow, error) {
+	rows, err := q.db.Query(ctx, listRemovedDocumentURLs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemovedDocumentURLsRow
+	for rows.Next() {
+		var i ListRemovedDocumentURLsRow
+		if err := rows.Scan(&i.Url, &i.Live); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

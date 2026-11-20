@@ -3601,6 +3601,33 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 	return err
 }
 
+const insertDocumentFixture = `-- name: InsertDocumentFixture :exec
+INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertDocumentFixtureParams struct {
+	ID          uuid.UUID
+	AiProductID string
+	Url         string
+	DisplayName string
+	Enabled     bool
+	IsPattern   bool
+}
+
+// Inserts even where a soft-deleted row holds the URL, unlike the seed.
+func (q *Queries) InsertDocumentFixture(ctx context.Context, arg InsertDocumentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDocumentFixture,
+		arg.ID,
+		arg.AiProductID,
+		arg.Url,
+		arg.DisplayName,
+		arg.Enabled,
+		arg.IsPattern,
+	)
+	return err
+}
+
 const insertFunctionToolDefinitionFixture = `-- name: InsertFunctionToolDefinitionFixture :exec
 INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

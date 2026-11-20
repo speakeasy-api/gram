@@ -29,7 +29,7 @@ const (
 // errRejected marks a catalog that was read but is empty or invalid.
 var errRejected = errors.New("AI catalog rejected")
 
-// Load reads the catalog, falling back to the built-in one when it is empty or invalid; only a failed read is an error.
+// Load reads the catalog, falling back to the built-in one minus database removals when it is empty or invalid; only a failed read is an error.
 func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate func(*Snapshot) error) (*Snapshot, error) {
 	snapshot, skipped, err := load(ctx, db, validate)
 	keys := make([]string, 0, len(skipped))
@@ -39,9 +39,8 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 	}
 	if errors.Is(err, errRejected) {
 		logger.ErrorContext(ctx, "AI catalog rejected; serving the built-in catalog", attr.SlogError(err))
-		snapshot = CompiledSnapshot()
-		if len(keys) > 0 {
-			snapshot = newCompiledSnapshot()
+		if len(keys) > 0 && snapshot == CompiledSnapshot() {
+			snapshot = builtInSnapshot(removals{products: nil, documents: nil})
 		}
 		err = nil
 	}
@@ -55,6 +54,7 @@ func Load(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, validate f
 }
 
 // load returns the snapshot and the rows it skipped, so callers decide how often to report them.
+// A rejected catalog comes back with errRejected and the built-in fallback as the snapshot.
 func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error) (*Snapshot, []error, error) {
 	if validate == nil {
 		return nil, nil, fmt.Errorf("AI catalog validator is required")
@@ -102,11 +102,8 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 	}
 	var skipped, malformed []error
 	for _, d := range docs {
-		i, ok := byID[d.AiProductID]
-		if !ok {
-			skipped = append(skipped, fmt.Errorf("document %s: product %s is not live", d.ID, d.AiProductID))
-			continue
-		}
+		// ListCatalogDocuments joins live products in the same transaction, so the product is present.
+		i := byID[d.AiProductID]
 		if d.IsPattern {
 			if err := validatePattern(d.Url); err != nil {
 				err = fmt.Errorf("document %s: %w", d.ID, err)
@@ -121,20 +118,49 @@ func load(ctx context.Context, db *pgxpool.Pool, validate func(*Snapshot) error)
 		}
 		products[i].Documents = append(products[i].Documents, Document{URL: d.Url, DisplayName: d.DisplayName, Enabled: d.Enabled, Pattern: d.IsPattern})
 	}
+	snapshot := NewSnapshot(products)
+	rejection := errors.Join(malformed...)
+	if rejection != nil {
+		rejection = fmt.Errorf("%w: %w", errInvalidCatalog, rejection)
+	} else if err := validateCatalog(snapshot); err != nil {
+		rejection = err
+	} else if err := validate(snapshot); err != nil {
+		rejection = err
+	}
+	if rejection != nil {
+		fallback, err := readFallback(ctx, q)
+		if err != nil {
+			return nil, nil, err
+		}
+		return fallback, skipped, fmt.Errorf("%w: %w", errRejected, rejection)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, nil, fmt.Errorf("finish AI catalog read: %w", err)
 	}
-	if len(malformed) > 0 {
-		return nil, skipped, fmt.Errorf("%w: %w: %w", errRejected, errInvalidCatalog, errors.Join(malformed...))
-	}
-	snapshot := NewSnapshot(products)
-	if err := validateCatalog(snapshot); err != nil {
-		return nil, skipped, fmt.Errorf("%w: %w", errRejected, err)
-	}
-	if err := validate(snapshot); err != nil {
-		return nil, skipped, fmt.Errorf("%w: %w", errRejected, err)
-	}
 	return snapshot, skipped, nil
+}
+
+// readFallback builds the built-in catalog minus what the database removed.
+func readFallback(ctx context.Context, q *repo.Queries) (*Snapshot, error) {
+	products, err := q.ListDeletedProductIDs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read removed AI catalog products: %w", err)
+	}
+	documents, err := q.ListRemovedDocumentURLs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read removed AI catalog documents: %w", err)
+	}
+	if len(products) == 0 && len(documents) == 0 {
+		return CompiledSnapshot(), nil
+	}
+	r := removals{products: make(map[string]struct{}, len(products)), documents: make(map[string]bool, len(documents))}
+	for _, id := range products {
+		r.products[id] = struct{}{}
+	}
+	for _, d := range documents {
+		r.documents[d.Url] = d.Live
+	}
+	return builtInSnapshot(r), nil
 }
 
 // Refresh keeps the current snapshot when a load fails, is empty or is invalid.
