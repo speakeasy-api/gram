@@ -35,6 +35,7 @@ const authzPkgPath = "github.com/speakeasy-api/gram/server/internal/authz"
 var noRawAuthzChecksPackages = []string{
 	"github.com/speakeasy-api/gram/server/internal/environments",
 	"github.com/speakeasy-api/gram/server/internal/remotesessions",
+	"github.com/speakeasy-api/gram/server/internal/access",
 }
 
 // noRawAuthzCheckConstructors are the authz constructors a typed ref
