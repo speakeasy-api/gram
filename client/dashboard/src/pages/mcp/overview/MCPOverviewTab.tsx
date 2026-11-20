@@ -11,6 +11,7 @@ import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
@@ -20,6 +21,7 @@ import { overviewScope } from "./overview-scope";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import { getPresetRange } from "@/elements";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useProject } from "@/contexts/Auth";
@@ -31,6 +33,30 @@ import type { ParsedTargetFilter } from "@/components/observe/observeTargetFilte
 export type HostedServerRef =
   | { kind: "toolset"; id: string; slug: string; name: string }
   | { kind: "mcp-server"; id: string; slug: string; name: string };
+
+// Thin rows where the top-tools bars will land, instead of an empty-state
+// message that would claim there were no calls before the data arrives.
+function RankedBarListSkeleton(): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-3" aria-hidden="true">
+      {["w-[90%]", "w-[70%]", "w-1/2", "w-[35%]"].map((width) => (
+        <Skeleton key={width} className={`h-4 ${width}`} />
+      ))}
+    </div>
+  );
+}
+
+export const OVERVIEW_STALE_TIME_MS = 5 * 60_000;
+
+/**
+ * A preset ("last 7 days") is keyed by its name, not its timestamps, so
+ * coming back to the tab reuses the cached result however long ago it was
+ * fetched. The window itself is resolved when the request is sent.
+ */
+export type OverviewRange = {
+  key: readonly string[];
+  resolve: () => { from: Date; to: Date };
+};
 
 function toolLabelFromUrn(urn: string): string {
   const parts = urn.split(":");
@@ -63,37 +89,57 @@ export function MCPOverviewTab({
     clearCustomRange,
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
+  const range = useMemo<OverviewRange>(
+    () =>
+      customRange
+        ? {
+            key: [customRange.from.toISOString(), customRange.to.toISOString()],
+            resolve: () => customRange,
+          }
+        : { key: [dateRange], resolve: () => getPresetRange(dateRange) },
+    [customRange, dateRange],
+  );
 
-  const { data, isLoading, isError, isLogsDisabled, refetch } =
-    useLogsEnabledErrorCheck(
-      useQuery<GetObservabilityOverviewResult>({
-        queryKey: [
-          "mcp-detail-overview",
-          server.kind,
-          server.id,
-          server.slug,
-          from.toISOString(),
-          to.toISOString(),
-        ],
-        queryFn: () =>
-          unwrapAsync(
-            telemetryGetObservabilityOverview(client, {
-              getObservabilityOverviewPayload: {
-                from,
-                to,
-                ...overviewScope(server),
-                includeTimeSeries: true,
-              },
-            }),
-          ),
-        placeholderData: keepPreviousData,
-        throwOnError: false,
-      }),
-    );
+  const {
+    data,
+    isLoading,
+    isPlaceholderData,
+    isError,
+    isLogsDisabled,
+    refetch,
+  } = useLogsEnabledErrorCheck(
+    useQuery<GetObservabilityOverviewResult>({
+      queryKey: [
+        "mcp-detail-overview",
+        server.kind,
+        server.id,
+        server.slug,
+        ...range.key,
+      ],
+      queryFn: () =>
+        unwrapAsync(
+          telemetryGetObservabilityOverview(client, {
+            getObservabilityOverviewPayload: {
+              ...range.resolve(),
+              ...overviewScope(server),
+              includeTimeSeries: true,
+            },
+          }),
+        ),
+      placeholderData: keepPreviousData,
+      // Usage moves slowly; coming back within a few minutes shows the
+      // cached figures at once and refreshes them in the background.
+      staleTime: OVERVIEW_STALE_TIME_MS,
+      throwOnError: false,
+    }),
+  );
 
   // With keepPreviousData a failed refetch still has stale data to show, so
   // only fall back to the error state when there is nothing to render at all.
   const showQueryError = isError && !data;
+  // Placeholder data is the previous range's result, so an empty list there
+  // says nothing about the range being loaded.
+  const toolsLoading = isLoading || isPlaceholderData;
 
   const summary = data?.summary;
   const comparison = data?.comparison;
@@ -212,6 +258,8 @@ export function MCPOverviewTab({
               <h3 className="text-eyebrow mb-3">Top tools by call count</h3>
               {topByCount.length > 0 ? (
                 <RankedBarList items={topByCount} />
+              ) : toolsLoading ? (
+                <RankedBarListSkeleton />
               ) : (
                 <WidgetEmptyState message="No tool calls in the selected range." />
               )}
@@ -220,13 +268,15 @@ export function MCPOverviewTab({
               <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
               {topByFailureRate.length > 0 ? (
                 <RankedBarList items={topByFailureRate} />
+              ) : toolsLoading ? (
+                <RankedBarListSkeleton />
               ) : (
                 <WidgetEmptyState message="No failed tool calls in the selected range." />
               )}
             </div>
           </div>
 
-          <TopUsersTable server={server} from={from} to={to} />
+          <TopUsersTable server={server} range={range} />
         </>
       )}
     </Stack>
