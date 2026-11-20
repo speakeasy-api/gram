@@ -2377,6 +2377,7 @@ SELECT
     WHERE ac.organization_id = b.organization_id
       AND ac.remote_session_client_id = b.remote_session_client_id
       AND ac.client_type = 'remote_session'
+      AND (ac.project_id IS NULL OR ac.project_id = b.project_id)
       AND ac.deleted IS FALSE
   )::boolean AS client_recorded
 FROM principal_remote_session_bindings AS b
@@ -2411,7 +2412,9 @@ type ListLiveAgentAttachmentsRow struct {
 // one: the exact attached connection row is still live with its current credentials, it
 // belongs to the user who attached it, that user still owns the agent, the
 // agent and its owner are active, and the sign-in, project, upstream client
-// and issuer are live and reach the attachment's project. binding_id, when
+// and issuer are live and reach the attachment's project. A derived connection
+// grant does not create an offer: serving still requires a live typed offer
+// independently of both the grant and the compatibility parent. binding_id, when
 // set, reads that one attachment. It takes no lock: a grant is written only
 // from a read of one attachment taken after LockAttachmentIssuers through
 // LockAttachmentAuthClients hold what it decides from.

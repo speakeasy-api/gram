@@ -113,6 +113,22 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.NoError(t, err)
 	theirs := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("another-user"), sourceConfig.String(), client)
 
+	foreignOrg := createOrganization(t, ctx, ti.conn, "binding-foreign-org")
+	foreignProvider := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, foreignOrg, "binding-foreign-provider")
+	foreignSignIn := createTrustedOrganizationTierUserSessionIssuerForOrganization(t, ctx, ti.conn, foreignOrg, "binding-foreign-config", foreignProvider)
+	foreignClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, foreignOrg, foreignProvider, "binding-foreign-client", foreignSignIn)
+	foreignSession := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), foreignSignIn.String(), foreignClient.String())
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: foreignSession.ID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	clientID := uuid.MustParse(client)
+	_, err = testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config})
+	require.NoError(t, err)
+	q := repo.New(ti.conn)
+	parent := repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config}
+	parents, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
+	require.NoError(t, err)
+	require.Zero(t, parents, "creation must work without a legacy link")
 	candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	require.NoError(t, err)
 	require.Len(t, candidates.Items, 1)
@@ -176,19 +192,11 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.EqualValues(t, 1, mine.GrantGeneration, "pre-rollout sessions start at the migration default")
 	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: theirs.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
-	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: uuid.NewString(), RemoteSessionID: mine.ID.String()})
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: foreignSignIn.String(), RemoteSessionID: mine.ID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(uuid.NewString()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	clientID := uuid.MustParse(client)
-	_, err = testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config})
-	require.NoError(t, err)
-	q := repo.New(ti.conn)
-	parent := repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: config}
-	parents, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
-	require.NoError(t, err)
-	require.Zero(t, parents, "creation must work without a legacy link")
 	attach := &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: mine.ID.String()}
 	sessionAttachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionAttach)
 	require.NoError(t, err)
@@ -199,6 +207,8 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	parents, err = q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, parents, "only the FK compatibility row is needed")
+	_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: client, UserSessionIssuerID: config.String()})
+	requireOopsCode(t, err, oops.CodeConflict)
 	again, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.Equal(t, binding.ID, again.ID)
@@ -422,12 +432,15 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, attached.ID, reattached.ID)
 
-	// The member's issuer must still bind the client itself.
+	// Registration selection is checked separately by the serving surface.
+	// An owner can pin another tenant-reachable session even when the legacy
+	// member-issuer link does not exist.
 	otherIssuer := createRemoteIssuer(t, ctx, ti, "binding-gateway-other-provider", "")
 	gatewayOnly := createRemoteClient(t, ctx, ti, otherIssuer, gateway.String(), "binding-gateway-only-client")
-	stray := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), gatewayOnly)
-	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: stray.ID.String()})
-	requireOopsCode(t, err, oops.CodeNotFound)
+	second := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), gatewayOnly)
+	attachment, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: second.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, second.ID.String(), attachment.RemoteSessionID)
 }
 
 // A detach names the account the connection signed in as, falling back to the
