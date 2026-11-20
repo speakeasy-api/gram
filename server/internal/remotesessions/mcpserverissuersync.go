@@ -133,7 +133,7 @@ func ResyncMCPServerRemoteSessionIssuersForConsolidation(ctx context.Context, tx
 // change those bindings from one project, and every project's servers share
 // them.
 func BestEffortResyncMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
-	bestEffortUpdateMCPServerRemoteSessionIssuers(ctx, logger, db, organizationID, projectID, userIssuerIDs, ResyncMCPServerRemoteSessionIssuers)
+	bestEffortUpdateMCPServerRemoteSessionIssuers(context.WithoutCancel(ctx), logger, db, organizationID, projectID, userIssuerIDs, ResyncMCPServerRemoteSessionIssuers)
 }
 
 // BestEffortRestampMCPServerRemoteSessionIssuers refreshes routing in each
@@ -142,12 +142,13 @@ func BestEffortRestampMCPServerRemoteSessionIssuers(ctx context.Context, logger 
 	if len(userIssuerIDs) == 0 {
 		return
 	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerResyncTimeout)
+	defer cancel()
 	bestEffortUpdateMCPServerRemoteSessionIssuers(ctx, logger, db, organizationID, projectID, userIssuerIDs, RestampMCPServerRemoteSessionIssuers)
 }
 
 func bestEffortUpdateMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID, update func(context.Context, mcpserversrepo.DBTX, string, uuid.UUID, []uuid.UUID) error) {
-	// The mutation already committed. Bound each project independently.
-	ctx = context.WithoutCancel(ctx)
+	// Each update is bounded by both its own and any aggregate deadline.
 	updateProject := func(id uuid.UUID) {
 		projectCtx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
 		defer cancel()
@@ -169,6 +170,9 @@ func bestEffortUpdateMCPServerRemoteSessionIssuers(ctx context.Context, logger *
 		return
 	}
 	for _, id := range sharing {
+		if ctx.Err() != nil {
+			break
+		}
 		if id != projectID {
 			updateProject(id)
 		}

@@ -89,8 +89,7 @@ func TestLeavingStopsRequiringAClientAGatewayKeepsBound(t *testing.T) {
 	requireClientBound(t, ctx, ti, client, issuer, true)
 }
 
-// Servers sharing a client nobody has an association with each fall back to it,
-// so one leaving keeps the client bound and only stops requiring it itself.
+// A fallback client is not a server association that this API can detach.
 func TestCannotDetachAnUnclaimedClientFromAServer(t *testing.T) {
 	t.Parallel()
 
@@ -110,13 +109,11 @@ func TestCannotDetachAnUnclaimedClientFromAServer(t *testing.T) {
 	require.Empty(t, preview.DetachClientIds)
 	require.Equal(t, []string{client.String()}, preview.ReleaseClientIds)
 	require.Empty(t, preview.Servers, "the other server keeps its sign-in")
-	require.NoError(t, detachServerClient(ctx, ti, first, client))
+	requireOopsCode(t, detachServerClient(ctx, ti, first, client), oops.CodeNotFound)
 
-	requireServerRequires(t, ctx, ti, manager, first, issuer)
+	requireServerRequires(t, ctx, ti, manager, first, issuer, client)
 	requireServerRequires(t, ctx, ti, manager, second, issuer, client)
 	requireClientBound(t, ctx, ti, client, issuer, true)
-
-	requireOopsCode(t, detachServerClient(ctx, ti, first, client), oops.CodeNotFound)
 }
 
 // Dropping a server's own client must not hand it the unclaimed one beside it.

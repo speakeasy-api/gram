@@ -438,8 +438,9 @@ func TestAddMetaMcpMember_DoesNotCaptureFromIssuerPair(t *testing.T) {
 	issuer := uuid.MustParse(*meta.UserSessionIssuerID)
 	require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer}))
 	server := seedMcpServer(t, ctx, ti.conn, projectID)
-	_, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(provider), ID: server, ProjectID: projectID})
+	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(provider), ID: server, ProjectID: projectID})
 	require.NoError(t, err)
+	require.EqualValues(t, 1, stamped)
 	assertNoOffer := func() {
 		rows, err := upstreamclientsrepo.New(ti.conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: server, ProjectID: projectID})
 		require.NoError(t, err)

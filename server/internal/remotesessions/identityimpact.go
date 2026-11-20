@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -318,31 +317,29 @@ func (s *Service) previewOfferReplacement(ctx context.Context, logger *slog.Logg
 	if len(moved) == 0 {
 		return result, nil
 	}
-	project, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: orgID})
+	servers, err := repo.New(s.db).ListIdentityReplacementTargets(ctx, repo.ListIdentityReplacementTargetsParams{
+		OrganizationID: orgID, ProjectID: projectID, ServerIds: moved,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get project for identity offer replacement").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list servers for identity offer replacement").LogError(ctx, logger)
 	}
-	q := mcpserversrepo.New(s.db)
-	for _, id := range moved {
-		server, err := q.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: id, ProjectID: projectID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			result.HiddenServerCount++
-			continue
-		}
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "get server for identity offer replacement").LogError(ctx, logger)
-		}
-		readable, err := s.authz.Evaluate(ctx, authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(server.ID, server.ToolsetID), projectID.String()))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
-		}
-		if !readable {
+	result.HiddenServerCount = len(moved) - len(servers)
+	checks := make([]authz.Check, 0, len(servers))
+	for _, server := range servers {
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(server.ID, server.ToolsetID), projectID.String()))
+	}
+	readable, err := s.authz.FindMatched(ctx, checks)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
+	}
+	for i, server := range servers {
+		if !readable[i] {
 			result.HiddenServerCount++
 			continue
 		}
 		result.Servers = append(result.Servers, &gen.ServerIdentityImpactServer{
 			ID: server.ID.String(), Kind: identityImpactKindServer, Name: conv.FromPGText[string](server.Name), Slug: conv.PtrEmpty(server.Slug.String),
-			ProjectID: project.ID.String(), ProjectName: project.Name, Impact: identityImpactResignin,
+			ProjectID: projectID.String(), ProjectName: server.ProjectName, Impact: identityImpactResignin,
 		})
 	}
 	return result, nil

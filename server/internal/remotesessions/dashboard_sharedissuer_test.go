@@ -167,7 +167,7 @@ func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement
 			require.NoError(t, err)
 			_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: clientID.String(), UserSessionIssuerID: userIssuerID.String()})
 			require.NoError(t, err)
-			return nil
+			return []uuid.UUID{clientID}
 		}},
 	}
 	for _, tc := range tests {

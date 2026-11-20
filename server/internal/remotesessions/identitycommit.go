@@ -524,12 +524,12 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 	if c.plan.MCPServerID == uuid.Nil {
 		return identityRefusal(ErrIdentityInvalid, nil, "an identity offer requires an MCP server")
 	}
-	if c.plan.Bound == OfferNewClient {
-		return nil
-	}
-	bound, err := c.offeredClients(ctx, q)
-	if err != nil {
-		return err
+	var bound []repo.RemoteSessionClient
+	if c.plan.Bound != OfferNewClient {
+		bound, err = c.offeredClients(ctx, q)
+		if err != nil {
+			return err
+		}
 	}
 	switch c.plan.Bound {
 	case OfferNewClient:
