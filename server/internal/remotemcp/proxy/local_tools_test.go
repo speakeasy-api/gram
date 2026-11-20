@@ -314,7 +314,8 @@ func TestLocalTool_ACallItRefusesIsAnsweredAsARejection(t *testing.T) {
 
 // A call nobody waits on has no reply to put a result in, so it is forwarded
 // like any other.
-func TestLocalTool_ACallWithoutAnIDIsForwarded(t *testing.T) {
+// A call without an id is owed no reply, and is still never the remote server's to run.
+func TestLocalTool_ACallWithoutAnIDIsAcceptedAndDropped(t *testing.T) {
 	t.Parallel()
 
 	upstream, requests := remoteServer(t, "application/json", ``)
@@ -322,9 +323,23 @@ func TestLocalTool_ACallWithoutAnIDIsForwarded(t *testing.T) {
 	p := newProxyForTest(t, upstream.URL)
 	p.LocalTools = resolveLocalTools(&resolutions, localTool(&calls, nil))
 
-	postToProxy(t, p, `{"jsonrpc":"2.0","method":"tools/call","params":{"name":"`+localToolName+`","arguments":{}}}`)
-	require.Equal(t, int32(1), requests.Load())
+	recorder := postToProxy(t, p, `{"jsonrpc":"2.0","method":"tools/call","params":{"name":"`+localToolName+`","arguments":{}}}`)
+	require.Equal(t, http.StatusAccepted, recorder.Code)
+	require.Zero(t, requests.Load())
 	require.Zero(t, calls.Load())
+}
+
+// Two local tools under one name are listed once, as the one calls reach.
+func TestLocalTool_ARepeatedNameIsListedOnce(t *testing.T) {
+	t.Parallel()
+
+	upstream, _ := remoteServer(t, "application/json", remoteToolsListResult)
+	var calls, resolutions atomic.Int32
+	p := newProxyForTest(t, upstream.URL)
+	p.LocalTools = resolveLocalTools(&resolutions, localTool(&calls, nil), localTool(&calls, nil))
+
+	names, _, _ := listedTools(t, postToProxy(t, p, localToolsListRequest("")).Body.Bytes())
+	require.Equal(t, []string{"create_task", "list_tasks", localToolName}, names)
 }
 
 // The remote server's own tools stay reachable when the local ones cannot be loaded.
@@ -373,4 +388,21 @@ func TestLocalTool_NoneOfferedListsTheRemoteToolsAsTheyAre(t *testing.T) {
 		postToProxy(t, offersNone, localToolsListRequest("")).Body.String(),
 	)
 	require.Equal(t, int32(1), resolutions.Load())
+}
+
+// A remote result with no tools array is not passed off as a server that offers only the local tools.
+func TestLocalTool_IsNotListedOnAResultWithoutATools(t *testing.T) {
+	t.Parallel()
+
+	upstream, _ := remoteServer(t, "application/json", `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	var calls, resolutions atomic.Int32
+	p := newProxyForTest(t, upstream.URL)
+	p.LocalTools = resolveLocalTools(&resolutions, localTool(&calls, nil))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/id", strings.NewReader(localToolsListRequest("")))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	var mutation *proxy.MutationError
+	require.ErrorAs(t, p.Post(rr, req), &mutation)
+	require.NotContains(t, rr.Body.String(), localToolName)
 }

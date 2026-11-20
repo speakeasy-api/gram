@@ -785,12 +785,14 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		// populates for proxied traffic without any further plumbing —
 		// matching how /mcp aggregations already work.
 		span.SetAttributes(attr.ToolName(toolsCallReq.Params.Name))
-		// A call without an id is owed no reply, so there is nothing to answer
-		// it with here.
-		if userReqID.IsValid() {
-			if local, ok := p.localToolNamed(ctx, toolsCallReq.Params.Name); ok {
-				return p.answerLocalToolCall(ctx, w, span, userReqID, toolsCallReq, local, &responseBytes)
+		if local, ok := p.localToolNamed(ctx, toolsCallReq.Params.Name); ok {
+			// A call without an id is owed no reply. It is still not the
+			// remote server's to run, so it is accepted and dropped.
+			if !userReqID.IsValid() {
+				w.WriteHeader(http.StatusAccepted)
+				return nil
 			}
+			return p.answerLocalToolCall(ctx, w, span, userReqID, toolsCallReq, local, &responseBytes)
 		}
 		if err := p.runToolsCallRequestInterceptors(ctx, toolsCallReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)

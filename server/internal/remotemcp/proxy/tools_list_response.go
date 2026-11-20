@@ -165,6 +165,11 @@ func (r *ToolsListResponse) replaceTakenTools(taken map[string]struct{}, add []*
 	if err := json.Unmarshal(rpcResp.Result, &wire); err != nil {
 		return &MutationError{Op: op, Cause: fmt.Errorf("decode wire tools array: %w", err)}
 	}
+	// A result with no tools array is malformed, not an empty list, and must
+	// not come back looking like a server that offers only the local tools.
+	if wire.Tools == nil {
+		return &MutationError{Op: op, Cause: errors.New("result has no tools array")}
+	}
 
 	kept := make([]json.RawMessage, 0, len(wire.Tools)+len(add))
 	for _, raw := range wire.Tools {
