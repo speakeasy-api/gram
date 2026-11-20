@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Runs each time an Amp orb starts or wakes. Keep it fast and idempotent:
+# Amp waits at most 10 seconds for it.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH"
+
+# Migrations use Atlas Pro features. Log in here rather than in .agents/setup,
+# so the token never lands in the shared orb snapshot. ATLAS_TOKEN comes from
+# an Amp workspace or project secret.
+if [ -n "${ATLAS_TOKEN:-}" ] && command -v atlas >/dev/null 2>&1; then
+  if ! atlas whoami >/dev/null 2>&1; then
+    atlas login --token "$ATLAS_TOKEN" >/dev/null
+    echo "✅ Logged in to Atlas"
+  fi
+fi
