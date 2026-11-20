@@ -622,14 +622,15 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		selector, profile = s.profileSelector(authenticated.Credential, endpoint), true
 	}
 	return &memberChoices{
-		selector:     selector,
-		subject:      connectionSubject(ctx, authentication.subject),
-		profile:      profile,
-		unchosen:     false,
-		metaServerID: endpoint.MetaMcpServerID,
-		onlyChosen:   false,
-		readOnly:     false,
-		chosen:       nil,
+		consentPreview: false,
+		selector:       selector,
+		subject:        connectionSubject(ctx, authentication.subject),
+		profile:        profile,
+		unchosen:       false,
+		metaServerID:   endpoint.MetaMcpServerID,
+		onlyChosen:     false,
+		readOnly:       false,
+		chosen:         nil,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return s.resolveChosenMemberTokens(ctx, authentication.refreshAttribution(ctx), endpoint, authentication.subject, member)
 		},
@@ -644,14 +645,15 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 // is decided by what it offers subject.
 func (s *Service) unchosenMemberChoices(endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) *memberChoices {
 	return &memberChoices{
-		selector:     &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, userSessionIssuerID: endpoint.UserSessionIssuerID, credentialKind: "", credentialID: uuid.Nil},
-		subject:      subject,
-		profile:      false,
-		unchosen:     true,
-		metaServerID: endpoint.MetaMcpServerID,
-		onlyChosen:   false,
-		readOnly:     false,
-		chosen:       nil,
+		consentPreview: false,
+		selector:       &upstreamSelector{service: s, organizationID: endpoint.OrganizationID, userSessionIssuerID: endpoint.UserSessionIssuerID, credentialKind: "", credentialID: uuid.Nil},
+		subject:        subject,
+		profile:        false,
+		unchosen:       true,
+		metaServerID:   endpoint.MetaMcpServerID,
+		onlyChosen:     false,
+		readOnly:       false,
+		chosen:         nil,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))), endpoint, subject, member)
 		},
@@ -1255,14 +1257,15 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 	}
 	subject := urn.NewAgentSubject(agentID)
 	return &memberChoices{
-		selector:     &upstreamSelector{service: s, organizationID: organizationID, userSessionIssuerID: gatewayIssuerID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID},
-		subject:      subject,
-		profile:      false,
-		unchosen:     false,
-		metaServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		readOnly:     false,
-		onlyChosen:   true,
-		chosen:       map[uuid.UUID]bool{},
+		consentPreview: false,
+		selector:       &upstreamSelector{service: s, organizationID: organizationID, userSessionIssuerID: gatewayIssuerID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID},
+		subject:        subject,
+		profile:        false,
+		unchosen:       false,
+		metaServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		readOnly:       false,
+		onlyChosen:     true,
+		chosen:         map[uuid.UUID]bool{},
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			issuerID, err := s.agentKeyMemberIssuer(ctx, member.serverID, member.projectID)
 			if err != nil {

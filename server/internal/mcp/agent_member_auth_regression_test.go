@@ -295,12 +295,12 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						credentials = append(credentials, request.authorization)
 					}
 				}
-				// Connection-owner policy remains connect-equivalent: only enforced
-				// mode applies typed-client enablement and mcp:blocked_auth.
+				// Typed-client enablement and mcp:blocked_auth apply
+				// independently of consent enrollment.
 				allowed := state == "sibling_issuer_client" || state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" ||
 					// Under enforcement an agent key without a usable attachment is
 					// served by its authorizer's own connection when the agent's own
-					// mcp:auth permits that owner; before enforcement it is denied.
+					// mcp:auth permits that owner.
 					(state == "missing_attachment" || state == "revoked_attachment" || state == "replaced_source_without_reattach")
 				if allowed {
 					require.NoError(t, callErr)

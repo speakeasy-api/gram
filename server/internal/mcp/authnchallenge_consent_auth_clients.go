@@ -168,7 +168,11 @@ type consentAuthServer struct {
 // upstream authentication through typed auth clients. Elsewhere the consent
 // screen keeps choosing through its service cards.
 func (s *Service) consentAuthChoicesEnforced(ctx context.Context, organizationID string) (bool, error) {
-	return s.authEnforcement.Enforced(ctx, organizationID)
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("read upstream auth enrollment: %w", err)
+	}
+	return enforced, nil
 }
 
 // consentAuthChoices decides, for each server, the clients this person may

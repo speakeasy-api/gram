@@ -23,7 +23,7 @@ import (
 )
 
 // A configured offer is discoverable before a user connects it, without the
-// legacy organization issuer binding. Rollback must restore legacy filtering.
+// legacy organization issuer binding. Consent enrollment does not affect serving.
 func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
