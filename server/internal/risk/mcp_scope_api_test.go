@@ -15,6 +15,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -240,7 +241,7 @@ func TestRiskPolicyMCPScopeAllowsOnlyFlagAndBlockActions(t *testing.T) {
 			Action:   action,
 			McpScope: scope,
 		})
-		require.ErrorContains(t, err, `action "`+action+`" cannot be used by an MCP-scoped policy`)
+		require.ErrorContains(t, err, `action "`+policycore.CanonicalAction(action)+`" cannot be used by an MCP-scoped policy`)
 	}
 
 	for _, action := range []string{"flag", "block"} {
@@ -276,14 +277,14 @@ func TestRiskPolicyMCPScopeAllowsOnlyFlagAndBlockActions(t *testing.T) {
 		Name:   scopedFlag.Name,
 		Action: new("warn"),
 	})
-	require.ErrorContains(t, err, `action "warn" cannot be used by an MCP-scoped policy`)
+	require.ErrorContains(t, err, `action "confirm" cannot be used by an MCP-scoped policy`)
 
 	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
 		ID:       unscopedWarn.ID,
 		Name:     unscopedWarn.Name,
 		McpScope: scope,
 	})
-	require.ErrorContains(t, err, `action "warn" cannot be used by an MCP-scoped policy`)
+	require.ErrorContains(t, err, `action "confirm" cannot be used by an MCP-scoped policy`)
 }
 
 func createMCPScopedPolicy(

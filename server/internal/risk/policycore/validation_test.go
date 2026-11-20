@@ -134,7 +134,7 @@ func TestValidateActionAndSourceCompatibility(t *testing.T) {
 	for _, action := range []string{"flag", "warn", "block", "quarantine", ActionRequireApproval} {
 		require.NoError(t, ValidateAction(action))
 	}
-	require.EqualError(t, ValidateAction("deny"), "action must be one of: flag, warn, block, quarantine, require_approval")
+	require.EqualError(t, ValidateAction("deny"), "action must be one of: flag, confirm, block, quarantine, require_approval")
 
 	require.NoError(t, ValidateSources([]string{ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP}))
 	require.EqualError(t, ValidateSources([]string{"unknown"}), `source "unknown" is not a recognized policy source`)

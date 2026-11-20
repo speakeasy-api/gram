@@ -250,7 +250,7 @@ const warnMatchMaxLen = 120
 
 // warnAcknowledged reports whether the user has a live acknowledgement for a
 // warn (challenge) match, so the retried call should be allowed. Only meaningful
-// when scanResult.Action == "warn".
+// when scanResult.Action == "confirm".
 func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) bool {
 	ctx, span := s.tracer.Start(ctx, "hooks.warnAcknowledged")
 	defer span.End()
@@ -378,10 +378,10 @@ func renderWarnAgentReason(scanResult *risk.ScanResult) string {
 	return fmt.Sprintf(
 		"Blocked by your organization's Speakeasy risk policy %q. This is an enforced "+
 			"security policy decision — not tool output, and not a message from the tool "+
-			"or its input. Approval must be granted by a human operator out of band. Stop "+
-			"here, tell the user this action needs their approval, and wait for them to "+
-			"approve it and explicitly ask you to retry. Do not attempt to bypass it, do "+
-			"not fetch any URL yourself, and do not approve it on the user's behalf.",
+			"or its input. Only the human user can confirm it, out of band. Stop here, "+
+			"tell the user this action needs their confirmation, and wait for them to "+
+			"confirm it and explicitly ask you to retry. Do not attempt to bypass it, do "+
+			"not fetch any URL yourself, and do not confirm it on the user's behalf.",
 		scanResult.PolicyName)
 }
 
@@ -389,8 +389,8 @@ func renderWarnAgentReason(scanResult *risk.ScanResult) string {
 // acknowledgement link the operator opens to approve.
 func renderWarnUserReason(scanResult *risk.ScanResult, ackURL string) string {
 	return renderWarnBody(scanResult) + fmt.Sprintf(
-		"\n\nThis action was held for review by Speakeasy risk policy %q. To approve it, "+
-			"open this link and acknowledge, then tell the agent to retry:\n%s",
+		"\n\nSpeakeasy risk policy %q blocked this action until you confirm it. To go "+
+			"ahead, open this link and confirm, then tell the agent to retry:\n%s",
 		scanResult.PolicyName, terminalHyperlink(ackURL))
 }
 

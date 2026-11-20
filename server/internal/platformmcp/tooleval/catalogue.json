@@ -2116,8 +2116,8 @@
         "properties": {
           "action": {
             "type": "string",
-            "description": "What happens when the policy fires; default flag. MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools. One of:\nblock: Deny the prompt or tool call that matched.\nflag: Log the finding for review without interrupting the session.\nwarn: Warn the user and require acknowledgement before the action proceeds; falls back to blocking where confirmation is not possible.",
-            "enum": ["block", "flag", "warn"]
+            "description": "What happens when the policy fires; default flag. MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools. One of:\nblock: Deny the prompt or tool call that matched.\nconfirm: Block the prompt or tool call until the user confirms they want to go ahead; they can bypass the block themselves, and every confirmation is audited. Blocks outright where the client cannot ask the user.\nflag: Log the finding for review without interrupting the session.",
+            "enum": ["block", "confirm", "flag"]
           },
           "approved_email_domains": {
             "type": "array",
@@ -2684,8 +2684,8 @@
             "properties": {
               "action": {
                 "type": "string",
-                "description": "What happens when the policy fires; default flag. MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools. One of:\nblock: Deny the prompt or tool call that matched.\nflag: Log the finding for review without interrupting the session.\nwarn: Warn the user and require acknowledgement before the action proceeds; falls back to blocking where confirmation is not possible.",
-                "enum": ["block", "flag", "warn"]
+                "description": "What happens when the policy fires; default flag. MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools. One of:\nblock: Deny the prompt or tool call that matched.\nconfirm: Block the prompt or tool call until the user confirms they want to go ahead; they can bypass the block themselves, and every confirmation is audited. Blocks outright where the client cannot ask the user.\nflag: Log the finding for review without interrupting the session.",
+                "enum": ["block", "confirm", "flag"]
               },
               "approved_email_domains": {
                 "type": "array",

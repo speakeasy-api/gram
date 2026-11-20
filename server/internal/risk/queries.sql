@@ -1139,14 +1139,15 @@ ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListEnabledEnforcingPoliciesByProject :many
--- Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
--- allowed after acknowledgement), and quarantine (hard deny + session circuit).
--- flag is non-enforcing and excluded. MCP-scoped policies run only at the MCP seams.
+-- Enforcing actions are block (hard deny), confirm (deny until the user
+-- confirms; stored as its legacy name 'warn' until the backfill), and
+-- quarantine (hard deny + session circuit). flag is non-enforcing and
+-- excluded. MCP-scoped policies run only at the MCP seams.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
-  AND action IN ('block', 'warn', 'quarantine')
+  AND action IN ('block', 'confirm', 'warn', 'quarantine')
   AND mcp_scope IS NULL
   AND deleted IS FALSE;
 

@@ -33,7 +33,7 @@ func (s *dbChallengeScanner) ScanForEnforcement(_ context.Context, req risk.Real
 	sum := sha256.Sum256([]byte(req.Text))
 	message := "%{match} looks like sensitive information."
 	return &risk.ScanResult{
-		Action:          "warn",
+		Action:          "confirm",
 		PolicyID:        s.policyID.String(),
 		PolicyName:      "Government IDs (warn)",
 		Description:     "matched US_SSN",
@@ -90,7 +90,7 @@ func newCoworkWarnTest(t *testing.T) (context.Context, *testInstance, *contextva
 		Name:           "Government IDs (warn)",
 		Sources:        []string{"presidio"},
 		Enabled:        true,
-		Action:         "warn",
+		Action:         "confirm",
 		AudienceType:   "everyone",
 		AutoName:       false,
 	})
@@ -130,7 +130,7 @@ func TestIngest_CoworkPromptWarnLeadsWithShortLink(t *testing.T) {
 	first := send(sentAt(36))
 	require.Equal(t, "deny", first.Decision, "the first send is challenged")
 	require.NotNil(t, first.Message)
-	require.Regexp(t, `^https?://\S+/ack#[0-9A-Za-z]{10} Speakeasy warning:`, *first.Message, "the short acknowledgement link leads, before Cowork cuts the text off")
+	require.Regexp(t, `^https?://\S+/ack#[0-9A-Za-z]{10} Speakeasy blocked this until you confirm it:`, *first.Message, "the short acknowledgement link leads, before Cowork cuts the text off")
 	require.Contains(t, *first.Message, "618-27-4093 looks like sensitive information.")
 	require.NotContains(t, *first.Message, "ack_token=", "Cowork gets the short link, not the long one")
 	require.NotContains(t, *first.Message, "\x1b", "no terminal escapes in a web UI")
@@ -193,7 +193,7 @@ func TestIngest_CoworkToolWarnAsksAndConfirms(t *testing.T) {
 	asked := send(toolEvent("tool.requested", "toolu_1", command))
 	require.Equal(t, "ask", asked.Decision, "Cowork asks the person instead of showing a link it would cut off")
 	require.NotNil(t, asked.Message)
-	require.Contains(t, *asked.Message, "Speakeasy warning. 618-27-4093 looks like sensitive information.")
+	require.Contains(t, *asked.Message, "Speakeasy needs you to confirm this. 618-27-4093 looks like sensitive information.")
 	require.NotContains(t, *asked.Message, "ack_token=")
 	require.Zero(t, audited(), "asking is not a confirmation")
 

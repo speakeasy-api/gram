@@ -18,7 +18,7 @@ export type AcknowledgeRiskPolicyChallengeResponseBody = {
    */
   expiresAt?: Date | undefined;
   /**
-   * The policy that issued the warning.
+   * The policy that asked for confirmation.
    */
   policyName?: string | undefined;
 };

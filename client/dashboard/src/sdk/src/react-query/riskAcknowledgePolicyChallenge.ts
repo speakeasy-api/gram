@@ -55,7 +55,7 @@ export type RiskAcknowledgePolicyChallengeMutationError =
  * acknowledgeRiskPolicyChallenge risk
  *
  * @remarks
- * Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).
+ * Confirm a blocked action for a confirm (formerly warn) risk policy from a confirmation-link token. Records the confirmation so the user's retried action proceeds; self-service (no admin approval).
  */
 export function useRiskAcknowledgePolicyChallengeMutation(
   options?: MutationHookOptions<

@@ -127,6 +127,7 @@ import { useGetHooksStatus } from "@gram/client/react-query/getHooksStatus.js";
 import {
   DETECTION_RULES,
   ruleCategoryMeta,
+  canonicalPolicyAction,
   type DetectorMode,
   type PolicyAction,
   type RuleCategory,
@@ -259,7 +260,7 @@ const STANDARD_PREFILLED_STEPS: ReadonlySet<string> = new Set([
 
 const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   flag: "Flag",
-  warn: "Warn",
+  confirm: "Confirm",
   block: "Block",
   quarantine: "Quarantine",
   require_approval: "Require approval",
@@ -306,7 +307,11 @@ export function PolicyEditorFor({
           <div>
             <dt className="text-eyebrow">Action</dt>
             <dd>
-              {enumPresentation(POLICY_ACTION_LABEL, policy.action, "Unknown")}
+              {enumPresentation(
+                POLICY_ACTION_LABEL,
+                canonicalPolicyAction(policy.action),
+                "Unknown",
+              )}
             </dd>
           </div>
           <div>
@@ -518,7 +523,7 @@ function PromptPolicyEditor({
         scopeOverridesFromPolicy(policy.detectionScopes),
       ) ||
       !sameMCPScope(mcpScopePayload, policy.mcpScope ?? null) ||
-      action !== (policy.action ?? "flag") ||
+      action !== canonicalPolicyAction(policy.action ?? "flag") ||
       userMessage !== (policy.userMessage ?? "") ||
       score !== (policy.score ?? 5) ||
       audienceType !==
@@ -3324,7 +3329,7 @@ export function StandardPolicyEditor({
     if ((policy.customRuleIds ?? []).length > 0) cats.add("custom");
     return {
       name: policy.name,
-      action: (policy.action as PolicyAction) ?? "flag",
+      action: canonicalPolicyAction(policy.action ?? "flag") as PolicyAction,
       userMessage: policy.userMessage ?? "",
       disabledRules: new Set(policy.disabledRules ?? []),
       scopeOverrides: scopeOverridesFromPolicy(policy.detectionScopes),
@@ -3403,7 +3408,12 @@ export function StandardPolicyEditor({
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
   const initialAction =
-    (policy?.action as PolicyAction) ?? draft?.action ?? seed?.action ?? "flag";
+    (policy?.action
+      ? (canonicalPolicyAction(policy.action) as PolicyAction)
+      : undefined) ??
+    draft?.action ??
+    seed?.action ??
+    "flag";
   const [action, setAction] = useState<PolicyAction>(
     mcpScope.mode === "mcp"
       ? mcpCompatibleAction(initialAction)

@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { RiskSpan, RiskSpan$inboundSchema } from "./riskspan.js";
 
 /**
- * Recorded enforcement outcome, independent of policy configuration.
+ * Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action's former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).
  */
 export const EnforcementOutcome = {
   Logged: "logged",
@@ -24,7 +24,7 @@ export const EnforcementOutcome = {
   Quarantined: "quarantined",
 } as const;
 /**
- * Recorded enforcement outcome, independent of policy configuration.
+ * Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action's former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).
  */
 export type EnforcementOutcome = OpenEnum<typeof EnforcementOutcome>;
 
@@ -79,7 +79,7 @@ export type RiskResult = {
    */
   endPos?: number | undefined;
   /**
-   * Recorded enforcement outcome, independent of policy configuration.
+   * Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action's former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).
    */
   enforcementOutcome?: EnforcementOutcome | undefined;
   /**

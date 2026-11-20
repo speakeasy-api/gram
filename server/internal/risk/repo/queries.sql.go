@@ -2923,14 +2923,15 @@ SELECT id, project_id, organization_id, enabled, name, policy_type, sources, pre
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
-  AND action IN ('block', 'warn', 'quarantine')
+  AND action IN ('block', 'confirm', 'warn', 'quarantine')
   AND mcp_scope IS NULL
   AND deleted IS FALSE
 `
 
-// Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
-// allowed after acknowledgement), and quarantine (hard deny + session circuit).
-// flag is non-enforcing and excluded. MCP-scoped policies run only at the MCP seams.
+// Enforcing actions are block (hard deny), confirm (deny until the user
+// confirms; stored as its legacy name 'warn' until the backfill), and
+// quarantine (hard deny + session circuit). flag is non-enforcing and
+// excluded. MCP-scoped policies run only at the MCP seams.
 func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledEnforcingPoliciesByProject, projectID)
 	if err != nil {

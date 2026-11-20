@@ -65,7 +65,7 @@ func (s *Service) askCoworkToolWarn(ctx context.Context, payload *gen.IngestPayl
 
 // coworkToolAskReason is the text Cowork shows in its permission prompt.
 func coworkToolAskReason(scanResult *risk.ScanResult) string {
-	return "Speakeasy warning. " + renderWarnBody(scanResult)
+	return "Speakeasy needs you to confirm this. " + renderWarnBody(scanResult)
 }
 
 // confirmCoworkToolAsk acknowledges the challenge behind an asked tool call

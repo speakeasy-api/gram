@@ -635,7 +635,7 @@ func TestCoworkRelaysGatedEvents(t *testing.T) {
 // "ask" on any other event is a deny.
 func TestCoworkAskShowsPermissionPrompt(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	ask := decision{Decision: "ask", Reason: "", Message: "Speakeasy warning. EXAMPLE-MATCH looks like sensitive information."}
+	ask := decision{Decision: "ask", Reason: "", Message: "Speakeasy needs you to confirm this. EXAMPLE-MATCH looks like sensitive information."}
 	fs := newFakeServer(t, func(p components.IngestRequestBody) (int, decision) {
 		if p.Event.Type == components.TypeToolRequested {
 			return http.StatusOK, ask

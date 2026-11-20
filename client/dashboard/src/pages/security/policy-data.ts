@@ -6,9 +6,16 @@ import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governa
 export type PolicyAction =
   | "flag"
   | "block"
-  | "warn"
+  | "confirm"
   | "quarantine"
   | "require_approval";
+
+/** "warn" is the former name of "confirm". The API now returns "confirm",
+ *  but saved drafts, old links and old audit snapshots can still carry
+ *  "warn", so read every action through this. */
+export function canonicalPolicyAction(action: string): string {
+  return action === "warn" ? "confirm" : action;
+}
 
 export type PolicyMessageType =
   | "user_message"

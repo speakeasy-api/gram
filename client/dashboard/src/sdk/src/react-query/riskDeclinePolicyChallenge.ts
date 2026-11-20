@@ -55,7 +55,7 @@ export type RiskDeclinePolicyChallengeMutationError =
  * declineRiskPolicyChallenge risk
  *
  * @remarks
- * Decline a risk policy warn/challenge from a warning-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.
+ * Decline a confirm policy challenge from a confirmation-link token: invalidate the link and mark the challenge declined. The blocked action stays blocked.
  */
 export function useRiskDeclinePolicyChallengeMutation(
   options?: MutationHookOptions<

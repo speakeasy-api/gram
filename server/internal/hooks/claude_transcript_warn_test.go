@@ -70,7 +70,7 @@ func newTranscriptWarnHandler(t *testing.T, action string) (http.Handler, *trans
 
 func TestClaudeTranscriptReturnsWarnForRecentPrompt(t *testing.T) {
 	t.Parallel()
-	h, scanner := newTranscriptWarnHandler(t, "warn")
+	h, scanner := newTranscriptWarnHandler(t, "confirm")
 	sessionID := uuid.NewString()
 	now := time.Now()
 	lines := []string{
@@ -104,7 +104,7 @@ func TestClaudeTranscriptReturnsWarnForRecentPrompt(t *testing.T) {
 
 func TestClaudeTranscriptSkipsOldPrompts(t *testing.T) {
 	t.Parallel()
-	h, scanner := newTranscriptWarnHandler(t, "warn")
+	h, scanner := newTranscriptWarnHandler(t, "confirm")
 	old := time.Now().Add(-2 * claudeTranscriptWarnWindow)
 	lines := []string{transcriptPromptLine("u-old", old, "SENSITIVE_TEST_CONTENT")}
 
@@ -160,7 +160,7 @@ func TestClaudeTranscriptSkipsPromptsAHookStored(t *testing.T) {
 	_, err := ti.service.IngestAuthenticated(ctx, authCtx, payload)
 	require.NoError(t, err)
 
-	scanner := &transcriptWarnScanner{stubResultScanner: stubResultScanner{}, action: "warn", requests: nil}
+	scanner := &transcriptWarnScanner{stubResultScanner: stubResultScanner{}, action: "confirm", requests: nil}
 	ti.service.riskScanner = scanner
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	lines := []string{

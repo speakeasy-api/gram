@@ -12,9 +12,9 @@ describe("enforcementOutcomeLabel", () => {
     ["logged", "Logged"],
     ["denied", "Denied"],
     ["withheld", "Withheld"],
-    ["warned_pending", "Warned · pending"],
-    ["warned_acknowledged", "Warned · acknowledged"],
-    ["warned_abandoned", "Warned · abandoned"],
+    ["warned_pending", "Awaiting confirmation"],
+    ["warned_acknowledged", "Confirmed by user"],
+    ["warned_abandoned", "Not confirmed"],
     ["quarantined", "Quarantined"],
   ] as const)("labels %s as %s", (outcome, label) => {
     expect(enforcementOutcomeLabel(outcome)).toBe(label);

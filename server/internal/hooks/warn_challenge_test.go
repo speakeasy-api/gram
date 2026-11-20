@@ -47,7 +47,7 @@ func (s *stubResultScanner) RecordPolicyChallenge(_ context.Context, _ string, _
 func TestRenderWarnBody_SubstitutesPlaceholders(t *testing.T) {
 	t.Parallel()
 	sr := &risk.ScanResult{
-		Action:       "warn",
+		Action:       "confirm",
 		PolicyName:   "secrets",
 		RuleID:       "stripe-key",
 		Entity:       "stripe",
@@ -61,7 +61,7 @@ func TestRenderWarnBody_SubstitutesPlaceholders(t *testing.T) {
 func TestRenderWarnBody_DefaultIncludesMatchAndEntity(t *testing.T) {
 	t.Parallel()
 	sr := &risk.ScanResult{
-		Action:       "warn",
+		Action:       "confirm",
 		PolicyName:   "danger",
 		RuleID:       "rmrf",
 		Entity:       "destructive",
@@ -78,7 +78,7 @@ func TestRenderWarnBody_EmptyMatchFallsBackToRuleID(t *testing.T) {
 	// No Entity and no MatchedValue (judge-based match): entity falls back to
 	// RuleID and the message omits the (absent) matched value.
 	sr := &risk.ScanResult{
-		Action:     "warn",
+		Action:     "confirm",
 		PolicyName: "prompt-injection",
 		RuleID:     "pi-rule",
 	}
@@ -90,16 +90,16 @@ func TestRenderWarnBody_EmptyMatchFallsBackToRuleID(t *testing.T) {
 
 func TestRenderWarnUserReason_AppendsAckLink(t *testing.T) {
 	t.Parallel()
-	sr := &risk.ScanResult{Action: "warn", PolicyName: "p", RuleID: "r", Entity: "e"}
+	sr := &risk.ScanResult{Action: "confirm", PolicyName: "p", RuleID: "r", Entity: "e"}
 	got := renderWarnUserReason(sr, "https://example.test/ack#ack_token=rpak1.xyz")
 	assert.Contains(t, got, renderWarnBody(sr))
-	assert.Contains(t, got, "open this link and acknowledge")
+	assert.Contains(t, got, "open this link and confirm")
 	assert.Contains(t, got, "https://example.test/ack#ack_token=rpak1.xyz")
 }
 
 func TestRenderWarnAgentReason_HasNoLinkAndAssertsAuthority(t *testing.T) {
 	t.Parallel()
-	sr := &risk.ScanResult{Action: "warn", PolicyName: "secrets", RuleID: "r", Entity: "e"}
+	sr := &risk.ScanResult{Action: "confirm", PolicyName: "secrets", RuleID: "r", Entity: "e"}
 	got := renderWarnAgentReason(sr)
 	assert.Contains(t, got, "secrets", "names the policy")
 	assert.Contains(t, got, "not tool output", "frames it as a policy decision, not tool output")
@@ -129,7 +129,7 @@ func TestClaude_PreToolUse_Warn_DeniesWithChallenge(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
-		Action:       "warn",
+		Action:       "confirm",
 		PolicyID:     uuid.NewString(),
 		PolicyName:   "danger",
 		RuleID:       "rmrf",
@@ -170,7 +170,7 @@ func TestClaude_PreToolUse_Warn_FallsBackToBlockWhenNoLink(t *testing.T) {
 	// Force warnDenyReason to return ok=false: no site URL means no ack link.
 	ti.service.orgHosts = nil
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
-		Action:       "warn",
+		Action:       "confirm",
 		PolicyID:     uuid.NewString(),
 		PolicyName:   "danger",
 		RuleID:       "rmrf",
@@ -211,7 +211,7 @@ func TestClaude_UserPromptSubmit_Warn_PassesThrough(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
-		Action:       "warn",
+		Action:       "confirm",
 		PolicyID:     uuid.NewString(),
 		PolicyName:   "danger",
 		RuleID:       "rmrf",
@@ -322,7 +322,7 @@ func TestIngest_CanonicalWarnChallengesEveryAdapterAndEvent(t *testing.T) {
 	for _, adapter := range adapters {
 		for _, eventKind := range eventKinds {
 			scanner := &stubResultScanner{result: &risk.ScanResult{
-				Action:          "warn",
+				Action:          "confirm",
 				PolicyID:        uuid.NewString(),
 				PolicyName:      "danger",
 				Description:     "requires review",
@@ -368,7 +368,7 @@ func TestIngest_CanonicalAcknowledgedPermissionWarn_StillRunsShadowMCPGuard(t *t
 	ti.service.riskScanner = &stubResultScanner{
 		acknowledged: true,
 		result: &risk.ScanResult{
-			Action:          "warn",
+			Action:          "confirm",
 			PolicyID:        uuid.NewString(),
 			PolicyName:      "danger",
 			Description:     "requires review",
@@ -411,7 +411,7 @@ func TestIngest_CanonicalWarnFallsBackToBlockWithoutAckLink(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	ti.service.orgHosts = nil
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
-		Action:          "warn",
+		Action:          "confirm",
 		PolicyID:        uuid.NewString(),
 		PolicyName:      "danger",
 		Description:     "requires review",

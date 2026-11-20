@@ -94,7 +94,7 @@ describe("MCPApprovalsTab", () => {
     id = `${action}-policy`,
     sources = ["shadow_mcp"],
   }: {
-    action: "block" | "flag" | "warn";
+    action: "block" | "flag" | "confirm";
     enabled?: boolean;
     id?: string;
     sources?: string[];

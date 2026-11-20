@@ -19,7 +19,7 @@ import {
  */
 export const SuggestRiskPolicyResultAction = {
   Flag: "flag",
-  Warn: "warn",
+  Confirm: "confirm",
   Block: "block",
   Quarantine: "quarantine",
 } as const;
@@ -93,7 +93,7 @@ export type SuggestRiskPolicyResult = {
    */
   sources: Array<string>;
   /**
-   * Suggested user-facing message when the policy warns or blocks; empty when none.
+   * Suggested user-facing message when the policy asks the user to confirm or blocks; empty when none.
    */
   userMessage: string;
 };

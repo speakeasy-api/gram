@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type AcknowledgeRiskPolicyChallengeRequestBody = {
   /**
-   * Acknowledgement token generated when a warn policy challenged the action.
+   * Confirmation token generated when a confirm policy blocked the action.
    */
   ackToken: string;
 };

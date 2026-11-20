@@ -51,7 +51,7 @@ func TestRenderUserBlockReason_AnalysisUnavailableIgnoresUserMessage(t *testing.
 func TestClaude_PreToolUse_WarnUnavailable_DeniesWithoutChallenge(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	scanner := &stubResultScanner{result: analysisUnavailableResult("warn")}
+	scanner := &stubResultScanner{result: analysisUnavailableResult("confirm")}
 	ti.service.riskScanner = scanner
 
 	sessionID := uuid.NewString()
@@ -84,7 +84,7 @@ func TestClaude_PreToolUse_WarnUnavailable_DeniesWithoutChallenge(t *testing.T) 
 func TestClaude_UserPromptSubmit_WarnUnavailable_Blocks(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	ti.service.riskScanner = &stubResultScanner{result: analysisUnavailableResult("warn")}
+	ti.service.riskScanner = &stubResultScanner{result: analysisUnavailableResult("confirm")}
 
 	sessionID := uuid.NewString()
 	prompt := "here is my access key"
@@ -135,7 +135,7 @@ func TestCursor_PreToolUse_BlockUnavailable_DeniesWithReason(t *testing.T) {
 func TestCursor_PreToolUse_WarnUnavailable_DeniesWithoutChallenge(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	scanner := &stubResultScanner{result: analysisUnavailableResult("warn")}
+	scanner := &stubResultScanner{result: analysisUnavailableResult("confirm")}
 	ti.service.riskScanner = scanner
 
 	toolName := "Shell"
@@ -163,7 +163,7 @@ func TestCursor_PreToolUse_WarnUnavailable_DeniesWithoutChallenge(t *testing.T) 
 func TestCodex_PreToolUse_WarnUnavailable_DeniesWithoutChallenge(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	scanner := &stubResultScanner{result: analysisUnavailableResult("warn")}
+	scanner := &stubResultScanner{result: analysisUnavailableResult("confirm")}
 	ti.service.riskScanner = scanner
 
 	sessionID := "codex-session-llm-unavailable"
@@ -213,7 +213,7 @@ func TestCodex_PreToolUse_BlockUnavailable_DeniesWithReason(t *testing.T) {
 func TestIngest_CanonicalToolWarnUnavailable_DeniesWithoutAckLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
-	scanner := &stubResultScanner{result: analysisUnavailableResult("warn")}
+	scanner := &stubResultScanner{result: analysisUnavailableResult("confirm")}
 	ti.service.riskScanner = scanner
 
 	result, err := ti.service.Ingest(ctx, canonicalToolRequest("opencode", "canonical-llm-unavailable-warn"))

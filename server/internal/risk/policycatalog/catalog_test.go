@@ -24,7 +24,7 @@ func TestCatalogV1IsDeterministicAndClosed(t *testing.T) {
 	catalog, err := Build()
 	require.NoError(t, err)
 	require.Equal(t, SchemaV1, catalog.Schema)
-	require.Equal(t, []string{"block", "flag", "warn"}, catalog.Actions)
+	require.Equal(t, []string{"block", "confirm", "flag"}, catalog.Actions)
 	require.Equal(t, []string{"assistant_message", "tool_request", "tool_response", "user_message"}, catalog.PolicyMessageTypes)
 	require.NotContains(t, catalog.PolicyMessageTypes, "prompt_attachment")
 	require.NotContains(t, catalog.DetectionScopeCategories, "account_identity")
@@ -76,7 +76,7 @@ func TestCatalogV1IsDeterministicAndClosed(t *testing.T) {
 
 	fingerprint, err := Fingerprint(catalog)
 	require.NoError(t, err)
-	require.Equal(t, "sha256:812dd2f822a6964e1195b7562fbba38a90664b8b7dcb12c78a1580c749988ae5", fingerprint)
+	require.Equal(t, "sha256:83ed1605a40ee59027c88f70c2f9131ba5332817af2687d9159be9f6e9fab617", fingerprint)
 	require.True(t, strings.HasPrefix(fingerprint, "sha256:"))
 	require.Len(t, fingerprint, len("sha256:")+64)
 

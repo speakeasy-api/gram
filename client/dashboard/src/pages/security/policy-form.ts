@@ -1,6 +1,7 @@
 import { requireKnownEnumValue } from "@/lib/enum";
 import celExamples from "./cel-examples.json";
 import {
+  canonicalPolicyAction,
   DETECTION_RULES,
   type DetectorMode,
   type PolicyAction,
@@ -364,7 +365,7 @@ export const SCOPE_EXEMPT_CEL_EXAMPLES: { label: string; expr: string }[] =
 /** The actions a detection editor offers. */
 const DETECTION_POLICY_ACTIONS = {
   Flag: "flag",
-  Warn: "warn",
+  Confirm: "confirm",
   Block: "block",
   Quarantine: "quarantine",
 } as const satisfies Record<string, PolicyAction>;
@@ -374,11 +375,14 @@ const DETECTION_POLICY_ACTIONS = {
  *  so any other action asks for a refresh instead of becoming one the user
  *  did not choose. */
 export function detectionPolicyAction(action: string): PolicyAction {
-  return requireKnownEnumValue(DETECTION_POLICY_ACTIONS, action);
+  return requireKnownEnumValue(
+    DETECTION_POLICY_ACTIONS,
+    canonicalPolicyAction(action),
+  );
 }
 
 export function mcpCompatibleAction(action: PolicyAction): PolicyAction {
-  return action === "warn" || action === "quarantine" ? "block" : action;
+  return action === "confirm" || action === "quarantine" ? "block" : action;
 }
 
 export const ACTION_OPTIONS: {
@@ -389,23 +393,25 @@ export const ACTION_OPTIONS: {
   {
     value: "flag",
     title: "Log for review",
-    description: "Log findings for review without interrupting the session",
+    description:
+      "Record a finding for review. Nothing is blocked and the user sees nothing.",
   },
   {
-    value: "warn",
-    title: "Warn & confirm",
+    value: "confirm",
+    title: "Block until confirmed",
     description:
-      "Warn the user and require them to acknowledge before the action proceeds. Falls back to blocking where confirmation isn't possible.",
+      "Block the prompt or tool call and ask the user to confirm. The user can go ahead on their own, and every confirmation is audited. Blocks outright where the user can't be asked.",
   },
   {
     value: "block",
-    title: "Deny the request",
-    description: "Deny prompts and tool calls that match detection rules",
+    title: "Block",
+    description:
+      "Block matching prompts and tool calls. The user cannot get past it.",
   },
   {
     value: "quarantine",
     title: "Quarantine session",
     description:
-      "Deny the matching event and freeze prompts and tool calls in that session until an admin releases it.",
+      "Block the matching event, then every prompt and tool call in that session until an admin releases it.",
   },
 ];

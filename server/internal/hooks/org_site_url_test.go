@@ -67,7 +67,7 @@ func requireDenyLinksOn(t *testing.T, ctx context.Context, ti *testInstance, bas
 	require.Contains(t, blockURL, baseURL+"/blocks/")
 
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
-		Action:          "warn",
+		Action:          "confirm",
 		PolicyID:        uuid.NewString(),
 		PolicyName:      "danger",
 		RuleID:          "dangerous-operation",

@@ -5,9 +5,11 @@ const OUTCOME_LABELS: Record<EnforcementOutcome, string> = {
   logged: "Logged",
   denied: "Denied",
   withheld: "Withheld",
-  warned_pending: "Warned · pending",
-  warned_acknowledged: "Warned · acknowledged",
-  warned_abandoned: "Warned · abandoned",
+  // The warned_* outcomes belong to confirm policies; the stored values keep
+  // the action's former name, warn.
+  warned_pending: "Awaiting confirmation",
+  warned_acknowledged: "Confirmed by user",
+  warned_abandoned: "Not confirmed",
   quarantined: "Quarantined",
 };
 

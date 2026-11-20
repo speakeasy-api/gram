@@ -15,7 +15,7 @@ import {
 } from "./riskspanredacted.js";
 
 /**
- * Recorded enforcement outcome, independent of policy configuration.
+ * Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action's former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).
  */
 export const RiskResultRedactedEnforcementOutcome = {
   Logged: "logged",
@@ -27,7 +27,7 @@ export const RiskResultRedactedEnforcementOutcome = {
   Quarantined: "quarantined",
 } as const;
 /**
- * Recorded enforcement outcome, independent of policy configuration.
+ * Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action's former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).
  */
 export type RiskResultRedactedEnforcementOutcome = OpenEnum<
   typeof RiskResultRedactedEnforcementOutcome
@@ -63,7 +63,7 @@ export type RiskResultRedacted = {
    */
   description?: string | undefined;
   /**
-   * Recorded enforcement outcome, independent of policy configuration.
+   * Recorded enforcement outcome, independent of policy configuration. The warned_* values are confirm policy outcomes (they keep the action's former name): warned_pending (blocked, waiting for the user to confirm), warned_acknowledged (the user confirmed) and warned_abandoned (the user never confirmed).
    */
   enforcementOutcome?: RiskResultRedactedEnforcementOutcome | undefined;
   /**

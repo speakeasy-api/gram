@@ -13,7 +13,7 @@ import {
   SuggestRiskPolicyResultAction,
   type SuggestRiskPolicyResult,
 } from "@gram/client/models/components/suggestriskpolicyresult.js";
-import type { PolicyAction } from "./policy-data";
+import { canonicalPolicyAction, type PolicyAction } from "./policy-data";
 import type { PolicyMCPScopeValue } from "./policy-mcp-scope";
 
 /** Where a draft should be enforced when it is not left to agent sessions:
@@ -58,13 +58,14 @@ export type PolicyDraft = {
 
 const ACTIONS: ReadonlySet<string> = new Set([
   "flag",
-  "warn",
+  "confirm",
   "block",
   "quarantine",
 ]);
 
 function toAction(value: string): PolicyAction {
-  return ACTIONS.has(value) ? (value as PolicyAction) : "flag";
+  const action = canonicalPolicyAction(value);
+  return ACTIONS.has(action) ? (action as PolicyAction) : "flag";
 }
 
 // Sources the editors can round-trip through policyToCategories and
@@ -100,7 +101,7 @@ export function supportsPolicyDraft(source: {
   return (
     isKnownEnumValue(RiskPolicyPolicyType, source.policyType) &&
     // A draft opens in a detection editor, so require_approval is not one.
-    ACTIONS.has(source.action) &&
+    ACTIONS.has(canonicalPolicyAction(source.action)) &&
     supportsSources(source.sources)
   );
 }
@@ -415,7 +416,7 @@ export function clearPolicyStartSession(projectSlug: string): void {
 export function actionBadgeVariant(
   action: string,
 ): "neutral" | "warning" | "destructive" {
-  if (action === "warn") return "warning";
+  if (canonicalPolicyAction(action) === "confirm") return "warning";
   if (action === "block" || action === "quarantine") return "destructive";
   return "neutral";
 }

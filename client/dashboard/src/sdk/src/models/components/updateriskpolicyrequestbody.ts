@@ -27,17 +27,18 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
+ * Policy action: flag, confirm (block until the user confirms; warn is its deprecated former name), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
+  Confirm: "confirm",
   Warn: "warn",
   Block: "block",
   Quarantine: "quarantine",
   RequireApproval: "require_approval",
 } as const;
 /**
- * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
+ * Policy action: flag, confirm (block until the user confirms; warn is its deprecated former name), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
  */
 export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
@@ -73,7 +74,7 @@ export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
 
 export type UpdateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
+   * Policy action: flag, confirm (block until the user confirms; warn is its deprecated former name), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
   approvalConfig?: RiskPolicyApprovalConfig | undefined;

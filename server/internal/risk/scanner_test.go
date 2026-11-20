@@ -1313,7 +1313,7 @@ func TestScanner_PresidioDeadLetterWarnKeepsRealFindings(t *testing.T) {
 	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "reach me at user@example.com", message.User, ""))
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, "warn", result.Action)
+	require.Equal(t, "confirm", result.Action)
 	require.Equal(t, "pii.email_address", result.RuleID)
 	require.Empty(t, result.DeadLetterReason)
 }
@@ -1349,7 +1349,8 @@ func TestScanner_PresidioDeadLetterDoesNotSkipLaterSources(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result, "gitleaks must still run when presidio dead-letters")
 	require.Equal(t, risk_analysis.SourceGitleaks, result.Source)
-	require.Equal(t, "warn", result.Action)
+	require.Equal(t, "confirm", result.Action, "a row stored with the legacy warn action enforces as confirm")
+	require.True(t, result.IsWarnChallenge())
 	require.Empty(t, result.DeadLetterReason)
 }
 

@@ -101,10 +101,10 @@ func (s *Service) acknowledgePendingChallenge(ctx context.Context, ev hookevents
 }
 
 // coworkWarnUserReason is the block text shown in Cowork. The short
-// acknowledgement link leads, because Cowork cuts the reason off after a
+// confirmation link leads, because Cowork cuts the reason off after a
 // couple of lines and shows it as plain text: the person copies the link.
 func coworkWarnUserReason(scanResult *risk.ScanResult, ackURL string) string {
-	return fmt.Sprintf("%s Speakeasy warning: to send it anyway, approve at this link, then try again. %s", ackURL, renderWarnBody(scanResult))
+	return fmt.Sprintf("%s Speakeasy blocked this until you confirm it: to send it anyway, confirm at this link, then try again. %s", ackURL, renderWarnBody(scanResult))
 }
 
 // coworkWarnAckURL mints the short acknowledgement link for a Cowork prompt

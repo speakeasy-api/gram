@@ -80,6 +80,7 @@ import {
   type DetectionRule,
   type RuleCategory,
   type PolicyAction,
+  canonicalPolicyAction,
 } from "./policy-data";
 import {
   isShadowMCPModePolicy,
@@ -859,7 +860,11 @@ function PolicyCenterContent() {
       width: "0.7fr",
       render: (row) => (
         <span className="inline-flex">
-          <ActionBadge action={(row.policy.action as PolicyAction) ?? "flag"} />
+          <ActionBadge
+            action={
+              canonicalPolicyAction(row.policy.action ?? "flag") as PolicyAction
+            }
+          />
         </span>
       ),
     },
@@ -1702,7 +1707,7 @@ const ACTION_BADGE_CONFIG: Record<
   { label: string; variant: NonNullable<BadgeProps["variant"]> }
 > = {
   flag: { label: "Flag", variant: "neutral" },
-  warn: { label: "Warn", variant: "warning" },
+  confirm: { label: "Confirm", variant: "warning" },
   block: { label: "Block", variant: "destructive" },
   quarantine: { label: "Quarantine", variant: "destructive" },
   require_approval: { label: "Require approval", variant: "information" },
@@ -1721,7 +1726,7 @@ function actionDisabledReason(
   flagOnlySelected: boolean,
   mcpScoped: boolean,
 ): string | undefined {
-  if (mcpScoped && (action === "warn" || action === "quarantine")) {
+  if (mcpScoped && (action === "confirm" || action === "quarantine")) {
     return "MCP-scoped policies support flag and block only.";
   }
   if (flagOnlySelected && action !== "flag") {

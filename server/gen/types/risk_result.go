@@ -37,7 +37,11 @@ type RiskResult struct {
 	PrincipalKind *string
 	// Whether MCP identity stamped validated principal provenance.
 	IdentityStamped *bool
-	// Recorded enforcement outcome, independent of policy configuration.
+	// Recorded enforcement outcome, independent of policy configuration. The
+	// warned_* values are confirm policy outcomes (they keep the action's former
+	// name): warned_pending (blocked, waiting for the user to confirm),
+	// warned_acknowledged (the user confirmed) and warned_abandoned (the user
+	// never confirmed).
 	EnforcementOutcome *string
 	// ID of the durable tool call block recorded for this finding's message, when
 	// one exists. Links to the block page at /blocks/:id.

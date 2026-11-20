@@ -27,7 +27,11 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
-import { ruleCategoryMeta, type DetectorMode } from "./policy-data";
+import {
+  canonicalPolicyAction,
+  ruleCategoryMeta,
+  type DetectorMode,
+} from "./policy-data";
 import {
   isShadowAIUseCase,
   presentShadowAIUseCase,
@@ -56,7 +60,7 @@ import { useDetectorMode } from "./use-detector-mode";
 
 const ACTION_LABEL: Record<string, string> = {
   flag: "Flag",
-  warn: "Warn",
+  confirm: "Confirm",
   block: "Block",
   quarantine: "Quarantine",
   require_approval: "Approval",
@@ -64,7 +68,7 @@ const ACTION_LABEL: Record<string, string> = {
 
 const ACTION_LONG_LABEL: Record<string, string> = {
   flag: "Logs it for review",
-  warn: "Warns the user and asks them to confirm",
+  confirm: "Blocks until the user confirms",
   block: "Blocks the prompt or tool call",
   quarantine: "Blocks and freezes the session for an administrator",
 };
@@ -821,7 +825,8 @@ export function DraftReview({
             <ReviewRow label="On match">
               <span className="flex flex-wrap items-center gap-2">
                 <ActionBadge action={draft.action} />
-                {ACTION_LONG_LABEL[draft.action] ?? draft.action}
+                {ACTION_LONG_LABEL[canonicalPolicyAction(draft.action)] ??
+                  draft.action}
               </span>
             </ReviewRow>
             <ReviewRow label="Severity">

@@ -3,6 +3,7 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPAccessSummary } from "@gram/client/models/components/shadowmcpaccesssummary.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { type BadgeProps } from "@/components/ui/Badge";
+import { canonicalPolicyAction } from "@/pages/security/policy-data";
 
 export type ShadowMCPPolicyState =
   | "blocking"
@@ -146,7 +147,11 @@ export function shadowMCPPolicyState(
     return "blocking";
   }
 
-  if (shadowPolicies.some((policy) => policy.action === "warn")) {
+  if (
+    shadowPolicies.some(
+      (policy) => canonicalPolicyAction(policy.action) === "confirm",
+    )
+  ) {
     return "warning";
   }
 

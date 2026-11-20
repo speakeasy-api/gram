@@ -219,7 +219,9 @@ func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 			return MutationResult{}, err
 		}
 	}
-	row, err := queries.CreateRiskPolicy(ctx, input.Params)
+	params := input.Params
+	params.Action = StoredAction(params.Action)
+	row, err := queries.CreateRiskPolicy(ctx, params)
 	if err != nil {
 		return MutationResult{}, mutationError("create risk policy", err)
 	}
@@ -386,7 +388,9 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 			return MutationResult{}, mutationError("parse risk policy audience snapshot", err)
 		}
 	}
-	row, err := queries.UpdateRiskPolicy(ctx, input.Params)
+	params := input.Params
+	params.Action = StoredAction(params.Action)
+	row, err := queries.UpdateRiskPolicy(ctx, params)
 	if err != nil {
 		return MutationResult{}, mutationError("update risk policy", err)
 	}

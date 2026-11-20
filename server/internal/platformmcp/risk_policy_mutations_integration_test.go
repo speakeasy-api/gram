@@ -358,7 +358,7 @@ func TestRiskPolicyUpdateRetiresShadowMCPPostureByDisposition(t *testing.T) {
 	require.Equal(t, []string{allowedURL}, riskPolicyURLGrants(t, ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, blockAllID))
 	retired, err := patch(blockAllID, blockAllVersion, "retire-block-all", map[string]any{"action": "warn"})
 	require.NoError(t, err)
-	require.Equal(t, "warn", retired.Policy.Action)
+	require.Equal(t, "confirm", retired.Policy.Action, "the legacy warn input is answered as confirm")
 	require.Empty(t, riskPolicyURLGrants(t, ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, blockAllID), "retiring the deny retires the allowed-server exceptions without the caller sending a URL list")
 	retiredRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: blockAllID.String()})
 	require.NoError(t, err)

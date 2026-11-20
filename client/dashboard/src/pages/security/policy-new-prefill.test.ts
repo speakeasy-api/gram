@@ -10,7 +10,7 @@ describe("policy new prefill", () => {
     const query = policyNewPrefillQuery({
       categories: new Set(["secrets", "pii"]),
       mcpServerIds: ["srv-1", "srv-2"],
-      action: "warn",
+      action: "confirm",
       score: 7,
       name: "Linear guardrail",
     });
@@ -19,9 +19,16 @@ describe("policy new prefill", () => {
     const prefill = parsePolicyNewPrefill(params);
     expect([...(prefill.categories ?? [])].sort()).toEqual(["pii", "secrets"]);
     expect(prefill.mcpServerIds).toEqual(["srv-1", "srv-2"]);
-    expect(prefill.action).toBe("warn");
+    expect(prefill.action).toBe("confirm");
     expect(prefill.score).toBe(7);
     expect(prefill.name).toBe("Linear guardrail");
+  });
+
+  it("reads the legacy warn action as confirm", () => {
+    const prefill = parsePolicyNewPrefill(
+      new URLSearchParams("kind=standard&action=warn"),
+    );
+    expect(prefill.action).toBe("confirm");
   });
 
   it("drops unknown values and keeps the single-category form", () => {
