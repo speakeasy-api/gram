@@ -12,13 +12,13 @@ import { toast } from "sonner";
 import { invalidateTemporaryAccess } from "./temporary-access-helpers";
 
 /** How often the viewer's requests are checked while one is pending. */
-export const ACCESS_REQUEST_POLL_MS = 15_000;
+const ACCESS_REQUEST_POLL_MS = 15_000;
 
 /**
  * How often they are checked otherwise, to pick up a request made in another
  * tab. Returning to this tab refetches as well.
  */
-export const ACCESS_REQUEST_IDLE_POLL_MS = 5 * 60_000;
+const ACCESS_REQUEST_IDLE_POLL_MS = 5 * 60_000;
 
 /**
  * Watches the viewer's own access requests from one place in the app, so a
