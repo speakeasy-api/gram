@@ -360,7 +360,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 
 	q := remotesessions_repo.New(s.db)
 	placementParams := remotesessions_repo.GetRemoteSessionRecheckEndpointsParams{
-		ID: sess.ID, UpdatedAt: sess.UpdatedAt, GrantGeneration: sess.GrantGeneration,
+		ID: sess.ID, UserSessionIssuerID: sess.UserSessionIssuerID, UpdatedAt: sess.UpdatedAt, GrantGeneration: sess.GrantGeneration,
 		OrganizationIds: row.OrganizationIds, NowTs: conv.ToPGTimestamptz(now),
 	}
 	placements, err := q.GetRemoteSessionRecheckEndpoints(ctx, placementParams)
@@ -404,8 +404,8 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			AutoConnectDone:          false,
 			FocusServer:              "",
 		}
-		hosted, err := s.recheckHostedRemoteSession(ctx, logger, endpoint, state, sess, row.OrganizationIds)
-		if !hosted && err == nil {
+		hosted, probeErr := s.recheckHostedRemoteSession(ctx, logger, endpoint, state, sess, row.OrganizationIds)
+		if !hosted && probeErr == nil {
 			clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, placement.ReachProjectID, placement.OrganizationID, []uuid.UUID{sess.RemoteSessionClientID})
 			if err != nil || len(clients) != 1 || clients[0].CredentialOwner != remotesessions.CredentialOwnerSubject {
 				if err != nil {
@@ -440,10 +440,10 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			if !slices.Contains(current, placement) {
 				continue
 			}
-			err = s.runRemoteSessionProbe(ctx, probeCtx, logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, client, entry, placement.ReachProjectID, target, remotesessionmetrics.ValidationTriggerKeepalive)
+			probeErr = s.runRemoteSessionProbe(ctx, probeCtx, logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, client, entry, placement.ReachProjectID, target, remotesessionmetrics.ValidationTriggerKeepalive)
 		}
 		switch {
-		case errors.Is(err, errRemoteSessionRecheckRateLimited):
+		case errors.Is(probeErr, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.
 			if _, err := remotesessions_repo.New(s.db).ClearRemoteSessionRecheckLease(ctx, remotesessions_repo.ClearRemoteSessionRecheckLeaseParams{
 				ID:              row.ID,
@@ -451,15 +451,15 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 				ClaimedAt:       row.ClaimedAt,
 				NowTs:           conv.ToPGTimestamptz(time.Now()),
 			}); err != nil {
-				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(err))
+				logger.ErrorContext(ctx, "release remote session re-check lease", attr.SlogError(probeErr))
 			}
 			return recheckRateLimited
-		case errors.Is(err, errRemoteSessionVerdictNotRecorded):
-			logger.InfoContext(ctx, "remote session re-check did not record a verdict", attr.SlogError(err))
+		case errors.Is(probeErr, errRemoteSessionVerdictNotRecorded):
+			logger.InfoContext(ctx, "remote session re-check did not record a verdict", attr.SlogError(probeErr))
 			return recheckProbed
-		case err != nil:
+		case probeErr != nil:
 			// Nothing was dialled or written: this endpoint cannot route, reach, or authorize the grant; a sibling may. The claim lease paces the retry.
-			logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(err))
+			logger.InfoContext(ctx, "remote session re-check endpoint cannot present this grant", attr.SlogError(probeErr))
 			continue
 		}
 		return recheckProbed
