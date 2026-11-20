@@ -52,7 +52,7 @@ func safe(err error) error {
 }
 func project(id uuid.UUID) uuid.NullUUID { return uuid.NullUUID{UUID: id, Valid: true} }
 func message(content string, raw, calls []byte, notes pgtype.Text, summaries []byte, storageError pgtype.Text) transcriptcrypto.Message {
-	m := transcriptcrypto.Message{Content: content, ContentRaw: raw, ToolCalls: calls, ToolOutcomeNotes: nil, ToolCallSummaries: summaries}
+	m := transcriptcrypto.Message{StorageError: nil, Content: content, ContentRaw: raw, ToolCalls: calls, ToolOutcomeNotes: nil, ToolCallSummaries: summaries}
 	if storageError.Valid {
 		m.StorageError = &storageError.String
 	}

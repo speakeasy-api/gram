@@ -84,15 +84,15 @@ rollout, migrate those writes too and establish a fenced plaintext-removal proto
 
 Encrypting a message body is not equivalent to encrypting every transcript copy:
 
-| Surface | Required integration |
-| --- | --- |
-| Message writes | Shared `chat.MessageWrite` paths, transactional inserts, upserts, hook captures, assistant updates, compaction, and direct SQL writers must seal before committing. |
-| Message reads | Chat loads, hook reconciliation, assistant history/read-modify-write, background analysis, title generation, and risk evaluation must open before consuming content. |
-| Raw content assets | Chat capture uploads JSON independently of the inline message fields. Encrypt blob contents and migrate existing objects, including obsolete copies and applicable retention policies. |
-| Attachments | `chat_content_parts` and the asset service's authenticated/signed attachment downloads need their own encrypted-storage contract. |
-| Derived text | Chat titles/summaries, resolution/analysis results, risk evidence, and memory digests can contain transcript text. Explicitly include or exclude each store. |
-| Metadata | `origin`, asset URLs, user identifiers, IP addresses, and user agents remain outside this body payload. `storage_error` is sensitive and is included in the encrypted payload, not treated as safe metadata. |
-| Hashes | `content_hash` and the shadow `source_hash` are unkeyed deterministic digests. They retain equality/guess-confirmation leakage; decide whether that is acceptable or requires a separately keyed construction before encrypted-only rollout. |
+| Surface            | Required integration                                                                                                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Message writes     | Shared `chat.MessageWrite` paths, transactional inserts, upserts, hook captures, assistant updates, compaction, and direct SQL writers must seal before committing.                                                                          |
+| Message reads      | Chat loads, hook reconciliation, assistant history/read-modify-write, background analysis, title generation, and risk evaluation must open before consuming content.                                                                         |
+| Raw content assets | Chat capture uploads JSON independently of the inline message fields. Encrypt blob contents and migrate existing objects, including obsolete copies and applicable retention policies.                                                       |
+| Attachments        | `chat_content_parts` and the asset service's authenticated/signed attachment downloads need their own encrypted-storage contract.                                                                                                            |
+| Derived text       | Chat titles/summaries, resolution/analysis results, risk evidence, and memory digests can contain transcript text. Explicitly include or exclude each store.                                                                                 |
+| Metadata           | `origin`, asset URLs, user identifiers, IP addresses, and user agents remain outside this body payload. `storage_error` is sensitive and is included in the encrypted payload, not treated as safe metadata.                                 |
+| Hashes             | `content_hash` and the shadow `source_hash` are unkeyed deterministic digests. They retain equality/guess-confirmation leakage; decide whether that is acceptable or requires a separately keyed construction before encrypted-only rollout. |
 
 Concrete integration points include:
 
@@ -136,25 +136,29 @@ Concrete integration points include:
 
 ## Current validation and release blockers
 
-The codec, shadow-store, organization-encryption, and command packages pass 614
-tests with the prerequisite sidecar schema temporarily overlaid locally; SQLc
-generation also succeeds with that schema. The prerequisite is tracked in
-[the separate schema draft](https://github.com/speakeasy-api/gram/pull/9418), whose
-Atlas-generated migration is still blocked on renewed Atlas authentication.
-The production schema in this application change is unchanged. Canonical
-SQLc generation and normal shadow-store integration tests still fail because
-`chat_message_transcripts` is absent from `server/database/schema.sql`. Land the
-separate migration-only prerequisite before treating this application change as
-reproducibly validated or enabling even the canary.
+The storage prerequisite is tracked in
+[the separate migration PR](https://github.com/speakeasy-api/gram/pull/9418).
+Atlas-generated DDL and checksums are available, with composite foreign keys
+pinning the shadow to its source message's project and that project's organization.
+The existing-table ownership target is built with a concurrent unique index;
+review its build cost before deploying to a large message table.
+
+SQLc generation and focused encryption/store/key-service tests pass with that
+prerequisite schema overlaid locally, including database rejection of mismatched
+message/project/organization ownership. The production schema in this application
+change is unchanged. Land and deploy the separate migration before enabling even
+the canary; canonical generation/integration tests on the application branch alone
+remain dependent on that prerequisite.
 
 Storage-error coverage includes null/empty/value round trips, error-only changes
 invalidating freshness, backfill refresh, and rejection of a forged public source
 fingerprint when the authenticated storage error differs from the live row.
 
-Before canary activation, strengthen startup preflight beyond relation existence:
-validate required columns/types and the unique `message_id` conflict target before
-key provisioning and writer activation. Ordinary readers, encrypted-only writes,
-cutover fencing, and verified plaintext destruction remain unimplemented. Do not
+Startup preflight checks required column types/nullability, defaults for omitted
+required columns, and a usable unique `message_id` conflict target before key
+provisioning and writer activation. Equivalent deferred conflict arbiters are
+rejected. Ordinary readers, encrypted-only writes, cutover fencing, and verified
+plaintext destruction remain unimplemented. Do not
 interpret shadow coverage or key provisioning as completion of the ticket.
 
 ## Product-surface assessment

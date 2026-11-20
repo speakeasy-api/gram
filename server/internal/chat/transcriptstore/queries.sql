@@ -19,7 +19,7 @@ WITH live AS MATERIALIZED (
 )
 INSERT INTO chat_message_transcripts (message_id, project_id, organization_id, ciphertext, source_hash)
 SELECT live.id, @project_id, @organization_id, @ciphertext, @source_hash::bytea FROM live
-ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, updated_at = now()
+ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext, source_hash = EXCLUDED.source_hash, updated_at = clock_timestamp()
 WHERE chat_message_transcripts.project_id = @project_id AND chat_message_transcripts.organization_id = @organization_id;
 
 -- name: Load :one

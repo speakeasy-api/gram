@@ -119,6 +119,19 @@ func (q *Queries) ForgeSourceHash(ctx context.Context, iD uuid.UUID, projectID u
 	return result.RowsAffected(), nil
 }
 
+const insertShadow = `-- name: InsertShadow :execrows
+INSERT INTO chat_message_transcripts(message_id,project_id,organization_id,ciphertext,source_hash)
+VALUES($1,$2,$3,'test ciphertext',decode(repeat('00',32),'hex'))
+`
+
+func (q *Queries) InsertShadow(ctx context.Context, messageID uuid.UUID, projectID uuid.UUID, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, insertShadow, messageID, projectID, organizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const lockChat = `-- name: LockChat :exec
 SELECT id FROM chats WHERE id=$1 AND project_id=$2 AND organization_id=$3 FOR UPDATE
 `

@@ -504,3 +504,34 @@ func TestStorageErrorFingerprintBackfill(t *testing.T) {
 	require.ErrorIs(t, err, ErrStale)
 	require.Equal(t, transcriptcrypto.Message{}, opened)
 }
+
+func TestShadowOwnershipForeignKeys(t *testing.T) {
+	t.Parallel()
+	f := setup(t, false)
+	id := uuid.New()
+	f.add(t, id)
+	otherProject := uuid.New()
+	q := fixturerepo.New(f.db)
+	_, err := q.CreateOtherProject(t.Context(), otherProject, f.org)
+	require.NoError(t, err)
+	otherOrg := "org_" + uuid.NewString()
+	_, err = q.CreateOrganization(t.Context(), otherOrg)
+	require.NoError(t, err)
+	for _, target := range []struct {
+		projectID      uuid.UUID
+		organizationID string
+		constraint     string
+	}{
+		{otherProject, f.org, "chat_message_transcripts_project_id_message_id_fkey"},
+		{f.project, otherOrg, "chat_message_transcripts_organization_id_project_id_fkey"},
+	} {
+		_, err := q.InsertShadow(t.Context(), id, target.projectID, target.organizationID)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, "23503", pgErr.Code)
+		require.Equal(t, target.constraint, pgErr.ConstraintName)
+	}
+	n, err := q.InsertShadow(t.Context(), id, f.project, f.org)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+}

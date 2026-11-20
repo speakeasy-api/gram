@@ -55,3 +55,7 @@ SELECT id FROM chats WHERE id=$1 AND project_id=$2 AND organization_id=$3 FOR UP
 
 -- name: SetStorageError :execrows
 UPDATE chat_messages SET storage_error=sqlc.narg(storage_error)::text WHERE id=sqlc.arg(message_id) AND project_id=sqlc.arg(project_id);
+
+-- name: InsertShadow :execrows
+INSERT INTO chat_message_transcripts(message_id,project_id,organization_id,ciphertext,source_hash)
+VALUES($1,$2,$3,'test ciphertext',decode(repeat('00',32),'hex'));
