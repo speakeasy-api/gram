@@ -222,20 +222,22 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
 		var firstConfigured *IdentityChainingReadiness
+		var firstClientID uuid.UUID
 		for _, client := range clients {
 			chained, ok := resolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url, conv.ToNullUUID(client.ID))
 			if !ok {
 				continue
 			}
 			if chained.State == ReadinessReady {
-				return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
+				return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionClientID: client.ID, RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
 			}
 			if firstConfigured == nil {
 				firstConfigured = &chained
+				firstClientID = client.ID
 			}
 		}
 		if firstConfigured != nil {
-			return p.result(principal, registrationID, firstConfigured.State, firstConfigured.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: firstConfigured.RemoteSessionIssuerID}, firstConfigured.Absence), nil
+			return p.result(principal, registrationID, firstConfigured.State, firstConfigured.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionClientID: firstClientID, RemoteSessionIssuerID: firstConfigured.RemoteSessionIssuerID}, firstConfigured.Absence), nil
 		}
 		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_session"), nil
 	}

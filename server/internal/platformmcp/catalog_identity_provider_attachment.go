@@ -306,7 +306,7 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 		return false, fmt.Errorf("list registered server identity providers: %w", err)
 	}
 	for _, registration := range registrations {
-		if registration.CredentialOwner == string(remotesessions.CredentialOwnerSubject) && sameIssuerURL(registration.IssuerUrl, issuerURL) {
+		if !registration.UpstreamRejectedAt.Valid && registration.CredentialOwner == string(remotesessions.CredentialOwnerSubject) && sameIssuerURL(registration.IssuerUrl, issuerURL) {
 			return true, nil
 		}
 	}
