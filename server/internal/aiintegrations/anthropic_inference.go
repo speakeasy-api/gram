@@ -80,7 +80,7 @@ func (r *AnthropicInferenceResolver) Resolve(ctx context.Context, id string) (an
 	if err != nil {
 		return empty, fmt.Errorf("load inference integration: %w", err)
 	}
-	secrets, err := decryptInferenceSecrets(r.enc, row.ApiKeyEncrypted)
+	secrets, err := decryptInferenceSecrets(r.enc, row.ApiKeyEncrypted.String)
 	if err != nil {
 		return empty, err
 	}
@@ -137,7 +137,7 @@ func (s *Service) GetAnthropicInferenceConfig(ctx context.Context, _ *gen.GetAnt
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load inference integration")
 	}
-	secrets, err := decryptInferenceSecrets(s.store.enc, row.ApiKeyEncrypted)
+	secrets, err := decryptInferenceSecrets(s.store.enc, row.ApiKeyEncrypted.String)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read inference credentials")
 	}
@@ -176,7 +176,7 @@ func (s *Service) UpsertAnthropicInferenceConfig(ctx context.Context, payload *g
 	projectID := before.ProjectID
 	enabled := before.Enabled
 	if exists {
-		secrets, err = decryptInferenceSecrets(s.store.enc, before.ApiKeyEncrypted)
+		secrets, err = decryptInferenceSecrets(s.store.enc, before.ApiKeyEncrypted.String)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "read inference credentials")
 		}

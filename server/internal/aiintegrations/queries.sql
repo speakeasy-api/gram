@@ -53,7 +53,7 @@ INSERT INTO ai_integration_configs (
   , @provider
   , @project_id
   , @external_organization_id
-  , @api_key_encrypted
+  , @api_key_encrypted::text
   , @enabled
   , @billing_mode
   -- Callers without provider settings pass nil; the column is NOT NULL.
@@ -444,7 +444,7 @@ SELECT pg_advisory_xact_lock(hashtextextended('anthropic_inference:' || @organiz
 
 -- name: UpdateAnthropicInferenceConfig :one
 UPDATE ai_integration_configs
-SET api_key_encrypted = @api_key_encrypted,
+SET api_key_encrypted = @api_key_encrypted::text,
     enabled = @enabled,
     updated_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id

@@ -1058,7 +1058,7 @@ func decodeRowPollCheckpoint(encoded pgtype.Text, legacy pgtype.Timestamptz) (ti
 }
 
 func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted.String)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1091,7 +1091,7 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 }
 
 func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted.String)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1124,7 +1124,7 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 }
 
 func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted.String)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1157,7 +1157,7 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 }
 
 func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfigBySyncIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted.String)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1190,7 +1190,7 @@ func (s *Store) configFromUsagePollConfigBySyncIDRow(row repo.GetUsagePollConfig
 }
 
 func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsagePollConfigByIDRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted.String)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
@@ -1223,7 +1223,7 @@ func (s *Store) configFromProviderUsagePollConfigByIDRow(row repo.GetProviderUsa
 }
 
 func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.EnsureSyncRow) (Config, error) {
-	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted)
+	apiKey, err := s.decryptAPIKey(row.ApiKeyEncrypted.String)
 	if err != nil {
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}

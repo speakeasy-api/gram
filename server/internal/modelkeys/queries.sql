@@ -37,7 +37,7 @@ INSERT INTO model_provider_keys (
   , @project_id
   , @slot
   , @provider
-  , @api_key_encrypted
+  , @api_key_encrypted::text
   , @enabled
 )
 RETURNING *;
