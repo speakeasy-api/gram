@@ -9,10 +9,10 @@ import (
 // a telemetry surface.
 type Alias struct {
 	// Name is the reported name, matched after normalization.
-	Name string
+	Name string `json:"name"`
 
 	// Client is the client the name implies, ClientUnknown when it names none.
-	Client Client
+	Client Client `json:"client"`
 }
 
 // Identity is the product a reported name identifies and the client it implies.
