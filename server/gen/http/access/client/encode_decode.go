@@ -11796,6 +11796,12 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 		RequestCount:           *v.RequestCount,
 		OfficialServerDeclined: v.OfficialServerDeclined,
 	}
+	if v.BlockedCallCount != nil {
+		res.BlockedCallCount = *v.BlockedCallCount
+	}
+	if v.BlockedCallCount == nil {
+		res.BlockedCallCount = 0
+	}
 	res.TopUsers = make([]string, len(v.TopUsers))
 	for i, val := range v.TopUsers {
 		res.TopUsers[i] = val

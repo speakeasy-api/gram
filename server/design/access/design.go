@@ -1872,6 +1872,9 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("observed_use_count", Int)
+	Attribute("blocked_call_count", Int, "Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count. Optional for one release so a dashboard deployed ahead of the server still loads the inventory; the server always sends it.", func() {
+		Default(0)
+	})
 	Attribute("user_count", Int, "Distinct users who reached this server.")
 	Attribute("top_users", ArrayOf(String), "The users who reached this server most.")
 	Attribute("access", String, func() {
