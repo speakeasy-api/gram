@@ -89,7 +89,6 @@ func recordedDisplay(c remotesessionsrepo.RemoteSessionClient) resourceDisplay {
 // populated client behind on the slashless URL where no later move finds it.
 // Returns the clients whose members discovery should fill after commit.
 func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, serverID uuid.UUID, previousURL, resourceURL string) ([]resourceClient, error) {
-	projectID := *authCtx.ProjectID
 	offered, err := catalogResourceOffers(ctx, dbtx, authCtx, serverID)
 	if err != nil {
 		return nil, err
