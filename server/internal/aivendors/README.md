@@ -18,10 +18,14 @@ keeps the current snapshot. The first refresh that validates replaces the
 built-in catalog. Each pod refreshes on its own timer, so for up to a minute
 after an edit pods can serve different snapshots.
 
-Every load rejects an empty catalog, more products, documents per product or
-client info names than the caps, and two enabled patterns of different products
-that one client ID can match unless one is strictly narrower. Then the consumer
-validator runs. Pattern hosts are not tied to the hosts a vendor already uses.
+Every load rejects an empty catalog, a malformed enabled pattern, more
+products, documents per product, client info names or enabled patterns than the
+caps, and two enabled patterns of different products that one client ID can
+match unless one is strictly narrower. Then the consumer validator runs; the
+`aitargets` one also checks every enabled document URL against the CIMD
+client_id rules. Pattern hosts are not tied to the hosts a vendor already uses.
+NULL elements in array columns are dropped when read, so no single row can fail
+the read itself.
 
 Metrics: `ai_catalog.refresh.failures` counts failed refreshes,
 `ai_catalog.snapshot.age` is the seconds since the served snapshot last matched
@@ -36,9 +40,9 @@ is content, so it is part of the fingerprint. Exact URLs win over patterns;
 among matching patterns the one with the most literal path segments wins.
 Validation keeps overlapping patterns of different products strictly nested,
 so a tie can only be between one product's own patterns, and goes to the lower
-URL. The database's `is_pattern` discriminator is authoritative. Invalid
-patterns are logged and omitted from all projections; that is a successful
-partial load, distinct from a database failure.
+URL. The database's `is_pattern` discriminator is authoritative. A malformed
+disabled pattern, or a document whose product is not live, is logged and
+omitted; that is a successful partial load, distinct from a database failure.
 
 Full fingerprints drive refresh detection. The device scan list version is
 derived from the served targets in `agent/aitargets`, not from the snapshot.
