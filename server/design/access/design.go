@@ -1066,7 +1066,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("requestAccess", func() {
-		Description("Request access to a scope by sending an email notification to organization administrators.")
+		Description("Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.")
 		Security(security.ByKey, func() {
 			Scope("consumer")
 		})
@@ -1358,6 +1358,80 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "revokeTemporaryGrant")
 		Meta("openapi:extension:x-speakeasy-name-override", "revokeTemporaryGrant")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("listAccessRequests", func() {
+		Description("List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("status", String, "Only requests with this status: pending, approved, denied, expired or withdrawn.")
+			Attribute("mine", Boolean, "Only requests made by the signed-in member, even for an administrator.", func() {
+				Default(false)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListAccessRequestsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAccessRequests")
+			Param("status")
+			Param("mine")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAccessRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAccessRequests")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AccessRequests"}`)
+	})
+
+	Method("decideAccessRequest", func() {
+		Description("Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(DecideAccessRequestForm)
+			security.SessionPayload()
+		})
+
+		Result(AccessRequestModel)
+
+		HTTP(func() {
+			POST("/rpc/access.decideAccessRequest")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "decideAccessRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "decideAccessRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DecideAccessRequest", "type": "mutation"}`)
+	})
+
+	Method("withdrawAccessRequest", func() {
+		Description("Withdraw a pending access request you made. Only the requester can withdraw it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The access request to withdraw.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(AccessRequestModel)
+
+		HTTP(func() {
+			POST("/rpc/access.withdrawAccessRequest")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "withdrawAccessRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "withdrawAccessRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WithdrawAccessRequest", "type": "mutation"}`)
 	})
 
 })
@@ -2330,7 +2404,8 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 var RequestAccessResult = Type("RequestAccessResult", func() {
 	Required("sent_to_count")
-	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
+	Attribute("sent_to_count", Int, "Number of administrators who were emailed.")
+	Attribute("request", AccessRequestModel, "The stored request administrators decide, returned when the access requests rollout is on for the organization and the caller is a signed-in member. API keys and agents get no stored request. Its id is the request id. Asking again while a request for the same access is pending returns that request without notifying anyone again.")
 })
 
 var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
@@ -2710,4 +2785,58 @@ var TemporaryGrantModel = Type("TemporaryGrant", func() {
 var ListTemporaryGrantsResult = Type("ListTemporaryGrantsResult", func() {
 	Required("grants")
 	Attribute("grants", ArrayOf(TemporaryGrantModel), "Temporary grants, soonest deadline first. At most 500 are returned.")
+})
+
+var AccessRequestModel = Type("AccessRequest", func() {
+	Description("A member's request for access they were denied, decided by an organization administrator.")
+	Required("id", "requester_user_id", "requester_name", "scope", "selector", "status", "expires_at", "created_at", "updated_at")
+
+	Attribute("id", String, "Access request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("requester_user_id", String, "The member who asked.")
+	Attribute("requester_name", String, "The requester's display name, or their email when they have none.")
+	Attribute("scope", String, "The scope asked for.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary asked for.")
+	Attribute("resource_name", String, "Name of the resource, as it was when the request was made.")
+	Attribute("message", String, "The requester's note to the administrators.")
+	Attribute("status", String, "pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.")
+	Attribute("decided_by_user_id", String, "The administrator who approved or denied the request.")
+	Attribute("decided_by_name", String, "The deciding administrator's display name, or their email.")
+	Attribute("decided_via", String, "Where the decision was made: dashboard or slack.")
+	Attribute("decided_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("temporary_grant_id", String, "The temporary grant an approval gave.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("grant_expires_at", String, "When the temporary grant an approval gave stops, or stopped, authorizing requests.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When a pending request lapses.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListAccessRequestsResult = Type("ListAccessRequestsResult", func() {
+	Required("requests")
+	Attribute("requests", ArrayOf(AccessRequestModel), "Access requests, newest first. At most 200 are returned.")
+})
+
+var DecideAccessRequestForm = Type("DecideAccessRequestForm", func() {
+	Required("id", "approve")
+
+	Attribute("id", String, "The access request to decide.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("approve", Boolean, "True gives the access as a temporary grant; false denies the request.")
+	Attribute("expires_at", String, "When the temporary grant stops authorizing new requests. Required to approve: at least five minutes and at most 24 hours from now.", func() {
+		Format(FormatDateTime)
+	})
 })

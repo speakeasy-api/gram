@@ -1575,7 +1575,8 @@ func newStartCommand() *cli.Command {
 			publicationEmit := c.Bool(pluginPublicationEmitFlagName)
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger, plugins.PublicationRequests{Enabled: publicationEmit}, distributionAdmission)
 			accessService := access.NewService(logger, tracerProvider, db, chDB, chReadDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, orgHosts, telemSvc).
-				WithServerURL(serverURL)
+				WithServerURL(serverURL).
+				WithFeatures(featureFlags)
 			access.Attach(mux, accessService)
 			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens).
 				WithWorkloadTokenTargets(mcpService)

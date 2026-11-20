@@ -11175,6 +11175,94 @@ paths:
             x-speakeasy-react-hook:
                 name: CreateTemporaryGrant
                 type: mutation
+    /rpc/access.decideAccessRequest:
+        post:
+            description: 'Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.'
+            operationId: decideAccessRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DecideAccessRequestForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccessRequest'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: decideAccessRequest access
+            tags:
+                - access
+            x-speakeasy-name-override: decideAccessRequest
+            x-speakeasy-react-hook:
+                name: DecideAccessRequest
+                type: mutation
     /rpc/access.deleteDirectoryRoleMapping:
         delete:
             description: Remove a directory role mapping.
@@ -12043,6 +12131,102 @@ paths:
             x-speakeasy-name-override: listAIDetections
             x-speakeasy-react-hook:
                 name: AIDetections
+    /rpc/access.listAccessRequests:
+        get:
+            description: List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.
+            operationId: listAccessRequests
+            parameters:
+                - allowEmptyValue: true
+                  description: 'Only requests with this status: pending, approved, denied, expired or withdrawn.'
+                  in: query
+                  name: status
+                  schema:
+                    description: 'Only requests with this status: pending, approved, denied, expired or withdrawn.'
+                    type: string
+                - allowEmptyValue: true
+                  description: Only requests made by the signed-in member, even for an administrator.
+                  in: query
+                  name: mine
+                  schema:
+                    default: false
+                    description: Only requests made by the signed-in member, even for an administrator.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListAccessRequestsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listAccessRequests access
+            tags:
+                - access
+            x-speakeasy-name-override: listAccessRequests
+            x-speakeasy-react-hook:
+                name: AccessRequests
     /rpc/access.listAgentPolicyScopes:
         get:
             description: 'List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.'
@@ -14098,7 +14282,7 @@ paths:
                 type: mutation
     /rpc/access.requestAccess:
         post:
-            description: Request access to a scope by sending an email notification to organization administrators.
+            description: Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.
             operationId: requestAccess
             parameters:
                 - allowEmptyValue: true
@@ -15481,6 +15665,94 @@ paths:
             x-speakeasy-name-override: updateShadowMCPInventoryServerName
             x-speakeasy-react-hook:
                 name: UpdateShadowMCPInventoryServerName
+                type: mutation
+    /rpc/access.withdrawAccessRequest:
+        post:
+            description: Withdraw a pending access request you made. Only the requester can withdraw it.
+            operationId: withdrawAccessRequest
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccessRequest'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: withdrawAccessRequest access
+            tags:
+                - access
+            x-speakeasy-name-override: withdrawAccessRequest
+            x-speakeasy-react-hook:
+                name: WithdrawAccessRequest
                 type: mutation
     /rpc/adminAssets.uploadImage:
         post:
@@ -99313,6 +99585,74 @@ components:
                 - role_id
                 - mapping_id
                 - source_kind
+        AccessRequest:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                decided_at:
+                    type: string
+                    format: date-time
+                decided_by_name:
+                    type: string
+                    description: The deciding administrator's display name, or their email.
+                decided_by_user_id:
+                    type: string
+                    description: The administrator who approved or denied the request.
+                decided_via:
+                    type: string
+                    description: 'Where the decision was made: dashboard or slack.'
+                expires_at:
+                    type: string
+                    description: When a pending request lapses.
+                    format: date-time
+                grant_expires_at:
+                    type: string
+                    description: When the temporary grant an approval gave stops, or stopped, authorizing requests.
+                    format: date-time
+                id:
+                    type: string
+                    description: Access request ID.
+                    format: uuid
+                message:
+                    type: string
+                    description: The requester's note to the administrators.
+                requester_name:
+                    type: string
+                    description: The requester's display name, or their email when they have none.
+                requester_user_id:
+                    type: string
+                    description: The member who asked.
+                resource_name:
+                    type: string
+                    description: Name of the resource, as it was when the request was made.
+                scope:
+                    type: string
+                    description: The scope asked for.
+                selector:
+                    $ref: '#/components/schemas/Selector'
+                status:
+                    type: string
+                    description: 'pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.'
+                temporary_grant_id:
+                    type: string
+                    description: The temporary grant an approval gave.
+                    format: uuid
+                updated_at:
+                    type: string
+                    format: date-time
+            description: A member's request for access they were denied, decided by an organization administrator.
+            required:
+                - id
+                - requester_user_id
+                - requester_name
+                - scope
+                - selector
+                - status
+                - expires_at
+                - created_at
+                - updated_at
         AccessibleMCPServer:
             type: object
             properties:
@@ -111179,6 +111519,23 @@ components:
                 - operation_id
                 - prescription_id
                 - expected_version
+        DecideAccessRequestForm:
+            type: object
+            properties:
+                approve:
+                    type: boolean
+                    description: True gives the access as a temporary grant; false denies the request.
+                expires_at:
+                    type: string
+                    description: 'When the temporary grant stops authorizing new requests. Required to approve: at least five minutes and at most 24 hours from now.'
+                    format: date-time
+                id:
+                    type: string
+                    description: The access request to decide.
+                    format: uuid
+            required:
+                - id
+                - approve
         DeclineRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -118458,6 +118815,16 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListAccessRequestsResult:
+            type: object
+            properties:
+                requests:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccessRequest'
+                    description: Access requests, newest first. At most 200 are returned.
+            required:
+                - requests
         ListActorAttributesResult:
             type: object
             properties:
@@ -127915,9 +128282,11 @@ components:
         RequestAccessResult:
             type: object
             properties:
+                request:
+                    $ref: '#/components/schemas/AccessRequest'
                 sent_to_count:
                     type: integer
-                    description: Number of administrators who were notified.
+                    description: Number of administrators who were emailed.
                     format: int64
             required:
                 - sent_to_count

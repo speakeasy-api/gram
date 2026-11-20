@@ -63,6 +63,9 @@ type Endpoints struct {
 	ListTemporaryGrants                  goa.Endpoint
 	RenewTemporaryGrant                  goa.Endpoint
 	RevokeTemporaryGrant                 goa.Endpoint
+	ListAccessRequests                   goa.Endpoint
+	DecideAccessRequest                  goa.Endpoint
+	WithdrawAccessRequest                goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "access" service with endpoints.
@@ -117,6 +120,9 @@ func NewEndpoints(s Service) *Endpoints {
 		ListTemporaryGrants:                  NewListTemporaryGrantsEndpoint(s, a.APIKeyAuth),
 		RenewTemporaryGrant:                  NewRenewTemporaryGrantEndpoint(s, a.APIKeyAuth),
 		RevokeTemporaryGrant:                 NewRevokeTemporaryGrantEndpoint(s, a.APIKeyAuth),
+		ListAccessRequests:                   NewListAccessRequestsEndpoint(s, a.APIKeyAuth),
+		DecideAccessRequest:                  NewDecideAccessRequestEndpoint(s, a.APIKeyAuth),
+		WithdrawAccessRequest:                NewWithdrawAccessRequestEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -169,6 +175,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListTemporaryGrants = m(e.ListTemporaryGrants)
 	e.RenewTemporaryGrant = m(e.RenewTemporaryGrant)
 	e.RevokeTemporaryGrant = m(e.RevokeTemporaryGrant)
+	e.ListAccessRequests = m(e.ListAccessRequests)
+	e.DecideAccessRequest = m(e.DecideAccessRequest)
+	e.WithdrawAccessRequest = m(e.WithdrawAccessRequest)
 }
 
 // NewListRolesEndpoint returns an endpoint function that calls the method
@@ -1587,5 +1596,74 @@ func NewRevokeTemporaryGrantEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.RevokeTemporaryGrant(ctx, p)
+	}
+}
+
+// NewListAccessRequestsEndpoint returns an endpoint function that calls the
+// method "listAccessRequests" of service "access".
+func NewListAccessRequestsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAccessRequestsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAccessRequests(ctx, p)
+	}
+}
+
+// NewDecideAccessRequestEndpoint returns an endpoint function that calls the
+// method "decideAccessRequest" of service "access".
+func NewDecideAccessRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DecideAccessRequestPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DecideAccessRequest(ctx, p)
+	}
+}
+
+// NewWithdrawAccessRequestEndpoint returns an endpoint function that calls the
+// method "withdrawAccessRequest" of service "access".
+func NewWithdrawAccessRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*WithdrawAccessRequestPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.WithdrawAccessRequest(ctx, p)
 	}
 }
