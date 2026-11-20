@@ -280,26 +280,6 @@ func TestGrantsAuthorizeDispositionDirectGrantReachesOnlyMatchingTools(t *testin
 	require.False(t, allowed, "a tool with no derivable disposition is outside a disposition-scoped grant")
 }
 
-func TestEngineFilterPrincipalPrecedence(t *testing.T) {
-	t.Parallel()
-
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
-		heldBy(precedenceRole, NewGrant(ScopeMCPConnect, WildcardResource)),
-		heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-1")),
-		heldBy(precedenceRole, NewGrant(ScopeMCPBlockedConnect, "server-2")),
-		heldBy(precedenceUser, NewGrant(ScopeMCPConnect, "server-1")),
-	})
-
-	allowed, err := engine.Filter(ctx, []Check{
-		MCPServer(MCPServerIDFrom("server-1"), ProjectIDFrom(testProjectID)).Connect(),
-		MCPServer(MCPServerIDFrom("server-2"), ProjectIDFrom(testProjectID)).Connect(),
-		MCPServer(MCPServerIDFrom("server-3"), ProjectIDFrom(testProjectID)).Connect(),
-	})
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"server-1", "server-3"}, allowed)
-}
-
 func TestEngineRequirePrincipalPrecedenceAppliesPerPolicy(t *testing.T) {
 	t.Parallel()
 

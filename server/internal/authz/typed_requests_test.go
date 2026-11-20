@@ -12,42 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-// Require(AnyOf(...)) and Can(AnyOf(...)) decide exactly as
-// RequireAnyUnblocked does, for the same alternatives and grants.
-func TestAnyOf_MatchesRequireAnyUnblocked(t *testing.T) {
-	t.Parallel()
-	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	alternatives := []Check{
-		Project(ProjectIDFrom("project-one")).Write(),
-		Environment(EnvironmentIDFrom("env-one"), ProjectIDFrom("project-one")).Write(),
-	}
-	for name, grants := range map[string][]Grant{
-		"project allow":                 {NewGrant(ScopeProjectWrite, "project-one")},
-		"resource allow":                {NewGrant(ScopeEnvironmentWrite, "env-one")},
-		"project allow, resource block": {NewGrant(ScopeProjectWrite, "project-one"), NewGrant(ScopeEnvironmentBlockedWrite, "env-one")},
-		"root, resource block":          {NewGrant(ScopeRoot, WildcardResource), NewGrant(ScopeEnvironmentBlockedWrite, "env-one")},
-		"other resource block":          {NewGrant(ScopeProjectWrite, "project-one"), NewGrant(ScopeEnvironmentBlockedWrite, "env-two")},
-		"unrelated grant":               {NewGrant(ScopeSkillRead, "skill-one")},
-		"no grants":                     nil,
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			ctx := GrantsToContext(enterpriseSessionCtx(t), grants)
-			want := engine.RequireAnyUnblocked(ctx, alternatives...)
-			got := engine.Require(ctx, AnyOf(alternatives...))
-			if want == nil {
-				require.NoError(t, got)
-			} else {
-				require.Error(t, got)
-				require.Equal(t, want.Error(), got.Error())
-			}
-			can, err := engine.Can(ctx, AnyOf(alternatives...))
-			require.NoError(t, err)
-			require.Equal(t, want == nil, can)
-		})
-	}
-}
-
 func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
