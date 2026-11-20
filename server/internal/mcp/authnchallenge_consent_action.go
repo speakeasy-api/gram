@@ -516,9 +516,9 @@ func (s *Service) buildRemoteConnectURL(
 		clientResource, err = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
 	if err != nil {
-		if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
-			t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
-			return "", false, oops.E(oops.CodeForbidden, err, "connection changed; reload the consent page").LogWarn(ctx, logger)
+		if errors.Is(err, remotesessions.ErrTypedAuthorizationChanged) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+			return "", false, oops.E(oops.CodeBadRequest, err, "connection changed; reload the consent page").LogWarn(ctx, logger)
 		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, err, "derive client upstream resource").LogError(ctx, logger)

@@ -150,7 +150,14 @@ func (s *Service) typedLoginResource(ctx context.Context, authorization *remotes
 	if server.ProjectID != authorization.ProjectID || (!server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid) {
 		return "", remotesessions.ErrTypedAuthorizationChanged
 	}
-	return s.resolveUpstreamResource(ctx, s.logger, authorization.ProjectID, &server)
+	resource, err := s.resolveUpstreamResource(ctx, s.logger, authorization.ProjectID, &server)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", remotesessions.ErrTypedAuthorizationChanged
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve typed login upstream resource: %w", err)
+	}
+	return resource, nil
 }
 
 func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, challenge AuthnChallengeState, client remotesessions.Client, member chosenMetaMember) (*remotesessions.TypedAuthorization, error) {
