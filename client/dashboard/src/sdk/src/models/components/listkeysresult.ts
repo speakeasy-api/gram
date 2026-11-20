@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -10,15 +11,27 @@ import { Key, Key$inboundSchema } from "./key.js";
 
 export type ListKeysResult = {
   keys: Array<Key>;
+  /**
+   * Cursor for the next page of keys.list. Absent on the last page and when no limit was sent.
+   */
+  nextCursor?: string | undefined;
 };
 
 /** @internal */
 export const ListKeysResult$inboundSchema: z.ZodMiniType<
   ListKeysResult,
   unknown
-> = z.object({
-  keys: z.array(Key$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    keys: z.array(Key$inboundSchema),
+    next_cursor: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "next_cursor": "nextCursor",
+    });
+  }),
+);
 
 export function listKeysResultFromJSON(
   jsonString: string,

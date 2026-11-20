@@ -59,7 +59,7 @@ func TestEvaluateGrantCheck_rootGrantNotSelfExcluded(t *testing.T) {
 			if slices.Contains(requiredCheckDimensions[ResourceKindForScope(tc.scope)], SelectorKeyProjectID) {
 				dimensions = map[string]string{SelectorKeyProjectID: testProjectID}
 			}
-			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil})
+			eval, err := evaluateGrantCheck(grants, Check{Scope: tc.scope, ResourceKind: "", ResourceID: tc.resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault})
 			require.NoError(t, err)
 			require.False(t, eval.Denied)
 			require.NotNil(t, eval.Grant)
@@ -74,8 +74,8 @@ func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 
 	result, err := GrantDifference{
 		Base:      GrantCheck{Check: readCheck, Instance: nil},
@@ -93,8 +93,8 @@ func TestGrantExpressionEvaluate_differenceKeepsNonMatchingSetKey(t *testing.T) 
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 
 	result, err := GrantDifference{
 		Base: GrantCheck{
@@ -118,9 +118,9 @@ func TestGrantExpressionEvaluate_nestedDifferencePreservesExclusionReason(t *tes
 		NewGrant(ScopeProjectRead, "proj_123"),
 		NewGrant(ScopeProjectWrite, "proj_123"),
 	}
-	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
-	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
-	otherCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_other", Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	writeCheck := Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	otherCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_other", Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 	instance := Selector{SelectorKeyResourceKind: ResourceKindProject, SelectorKeyResourceID: "proj_123"}
 
 	result, err := GrantDifference{
@@ -152,7 +152,7 @@ func TestGrantExpressionEvaluate_projectWriteBlocklistSubtractsProductionSelecto
 		ResourceKind:    "",
 		ResourceID:      projectID,
 		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
+		exact:           false,
 		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestGrantExpressionEvaluate_projectWriteBlocklistSubtractsProductionSelecto
 		ResourceKind:    "",
 		ResourceID:      "project_other",
 		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
+		exact:           false,
 		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestGrantExpressionEvaluate_projectReadBlocklistSubtractsProjectWrite(t *te
 		ResourceKind:    "",
 		ResourceID:      projectID,
 		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
+		exact:           false,
 		representedUser: "",
 	}).Evaluate(grants)
 	require.NoError(t, err)
@@ -207,12 +207,12 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 		}),
 	}
 
-	result, err := expressionForCheck(MCPCheck(ScopeMCPWrite, "server_in_project", projectID)).Evaluate(grants)
+	result, err := expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Write()).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
-	result, err = expressionForCheck(MCPCheck(ScopeMCPWrite, "server_other_project", "project_other")).Evaluate(grants)
+	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_other_project"), ProjectIDFrom("project_other")).Write()).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
@@ -224,7 +224,7 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 		ResourceKind:    "",
 		ResourceID:      "dimensionless_probe",
 		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
+		exact:           false,
 		representedUser: "",
 	}).Evaluate(grants)
 	require.ErrorIs(t, err, ErrInvalidCheck)
@@ -245,18 +245,18 @@ func TestGrantExpressionEvaluate_mcpReadBlocklistAlsoBlocksMCPWrite(t *testing.T
 		}),
 	}
 
-	result, err := expressionForCheck(MCPCheck(ScopeMCPWrite, "server_in_project", projectID)).Evaluate(grants)
+	result, err := expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Write()).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
-	result, err = expressionForCheck(MCPCheck(ScopeMCPRead, "server_in_project", projectID)).Evaluate(grants)
+	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Read()).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 
 	// A block bounded to the project leaves servers elsewhere alone.
-	result, err = expressionForCheck(MCPCheck(ScopeMCPWrite, "server_elsewhere", "project_456")).Evaluate(grants)
+	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_elsewhere"), ProjectIDFrom("project_456")).Write()).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
 }
@@ -273,7 +273,7 @@ func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T)
 		NewGrant(ScopeMCPBlockedConnect, serverID),
 	}
 
-	write := MCPCheck(ScopeMCPWrite, serverID, testProjectID)
+	write := MCPServer(MCPServerIDFrom(serverID), ProjectIDFrom(testProjectID)).Write()
 	result, err := expressionForCheck(write).Evaluate(grants)
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)

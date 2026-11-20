@@ -27,6 +27,7 @@ import (
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
+	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -800,8 +801,13 @@ func NewTemporalWorker(
 			temporalWorker.RegisterActivity(riskApprovalSlack.NotifyRiskApprovalApprovers)
 			temporalWorker.RegisterActivity(riskApprovalSlack.FinishRiskApprovalCards)
 		}
+		requestNotifier := slackrequests.NewNotifier(logger, slackrequests.NewCards(opts.DB, opts.OrgHosts), slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()))
+		accessRequestSlack := &accessRequestSlackActivities{logger: logger, notifier: requestNotifier}
+		temporalWorker.RegisterActivity(accessRequestSlack.NotifyAccessRequestAdmins)
+		temporalWorker.RegisterActivity(accessRequestSlack.FinishAccessRequestCards)
 	}
 	temporalWorker.RegisterWorkflow(RiskApprovalSlackWorkflow)
+	temporalWorker.RegisterWorkflow(AccessRequestSlackWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)

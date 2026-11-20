@@ -9,6 +9,7 @@ package registry
 
 import (
 	"embed"
+	"fmt"
 	"strings"
 )
 
@@ -21,14 +22,14 @@ type VocabularyFile struct {
 	Source string
 }
 
-//go:embed scopes.go selectors.go sensitivity.go grant_source.go roles.go match_mode.go
+//go:embed scopes.go selectors.go sensitivity.go grant_source.go roles.go
 var vocabularyFS embed.FS
 
 // VocabularyFiles returns the files that declare the names shared with
 // package authz, in a fixed order. Each holds one subject, so a new selector
 // key goes in selectors.go and a new action in scopes.go.
 func VocabularyFiles() []VocabularyFile {
-	names := []string{"scopes.go", "selectors.go", "sensitivity.go", "grant_source.go", "roles.go", "match_mode.go"}
+	names := []string{"scopes.go", "selectors.go", "sensitivity.go", "grant_source.go", "roles.go"}
 	files := make([]VocabularyFile, 0, len(names))
 	for _, name := range names {
 		source, err := vocabularyFS.ReadFile(name)
@@ -138,8 +139,8 @@ type Dimension struct {
 	// text. A wildcard is always accepted where the key allows one.
 	Values []string
 	// Required marks a key every check of the type must carry with a concrete
-	// value. Without it, a loosely matched check that omits the key still
-	// matches a grant constrained on it.
+	// value. A check that omits it is refused as invalid instead of matching
+	// no grant constrained on it.
 	Required bool
 }
 
@@ -151,6 +152,43 @@ type DimensionSet struct {
 	Method string
 	// Keys are dimensions declared on the resource type or the permission,
 	// in the order the method takes them.
+	Keys []string
+}
+
+// OpenOn names a kind of check that asks about a resource before some of its
+// details are known.
+type OpenOn int
+
+const (
+	// OpenOnProbe is a discovery question: could the caller act on some
+	// resource like this one. The dashboard asks it to decide what to show.
+	OpenOnProbe OpenOn = iota + 1
+	// OpenOnConnection is connecting to an MCP server before any tool is
+	// named, so a grant limited to some tools still lets the caller connect.
+	OpenOnConnection
+	// OpenOnPolicyAudience asks whether a risk policy's audience includes the
+	// caller before any server is named, so an audience grant limited to some
+	// servers still places the caller under the policy.
+	OpenOnPolicyAudience
+)
+
+// String names the kind of check, for validation errors.
+func (o OpenOn) String() string {
+	switch o {
+	case OpenOnProbe:
+		return "probe"
+	case OpenOnConnection:
+		return "connection"
+	case OpenOnPolicyAudience:
+		return "policy audience"
+	}
+	return fmt.Sprintf("OpenOn(%d)", int(o))
+}
+
+// OpenKeys lets one kind of check leave Keys out. Each key must be a
+// dimension of the permission or its resource type.
+type OpenKeys struct {
+	On   OpenOn
 	Keys []string
 }
 
@@ -186,6 +224,11 @@ type Permission struct {
 	// Dimensions the ref fills in from its constructor, such as project_id,
 	// cannot be in a set.
 	DimensionSets []DimensionSet
+	// Open lists the grant keys a check of this permission may leave out and
+	// still match a grant limited on them, and for which kind of check. Every
+	// other check must carry every key a grant names: absence is not
+	// permission. Matching a block or an exemption never opens a key.
+	Open []OpenKeys
 	// Source says where grants of this permission's scopes are set: through
 	// roles or through risk policies. Every permission sets it explicitly.
 	Source GrantSource
@@ -207,7 +250,6 @@ type ResourceType struct {
 	// the parent's id as a required argument.
 	Parent      Kind
 	Category    ScopeCategory
-	Match       MatchMode
 	Dimensions  []Dimension
 	Permissions []Permission
 }

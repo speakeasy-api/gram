@@ -409,7 +409,7 @@ func sameResourceURNs(existing, next []urn.Resource) bool {
 // canReadEnvironment reports whether the caller holds environment:read on
 // environment. Only a denial is false; any other failure is returned.
 func canReadEnvironment(ctx context.Context, engine *authz.Engine, environment environmentsRepo.Environment) (bool, error) {
-	err := engine.Require(ctx, authz.EnvironmentCheck(authz.ScopeEnvironmentRead, environment.ID.String(), environment.ProjectID.String()))
+	err := engine.Require(ctx, authz.Environment(authz.EnvironmentIDOf(environment.ID), authz.ProjectIDOf(environment.ProjectID)).Read())
 	var shareable *oops.ShareableError
 	switch {
 	case err == nil:

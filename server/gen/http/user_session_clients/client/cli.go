@@ -8,12 +8,152 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	usersessionclients "github.com/speakeasy-api/gram/server/gen/user_session_clients"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildCreateUserSessionClientPayload builds the payload for the
+// userSessionClients createUserSessionClient endpoint from CLI flags.
+func BuildCreateUserSessionClientPayload(userSessionClientsCreateUserSessionClientBody string, userSessionClientsCreateUserSessionClientSessionToken string, userSessionClientsCreateUserSessionClientApikeyToken string, userSessionClientsCreateUserSessionClientProjectSlugInput string) (*usersessionclients.CreateUserSessionClientPayload, error) {
+	var err error
+	var body CreateUserSessionClientRequestBody
+	{
+		err = json.Unmarshal([]byte(userSessionClientsCreateUserSessionClientBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_name\": \"aa\",\n      \"redirect_uris\": [\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.RedirectUris == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if utf8.RuneCountInString(body.ClientName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_name", body.ClientName, utf8.RuneCountInString(body.ClientName), 1, true))
+		}
+		if utf8.RuneCountInString(body.ClientName) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_name", body.ClientName, utf8.RuneCountInString(body.ClientName), 255, false))
+		}
+		if len(body.RedirectUris) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.redirect_uris", body.RedirectUris, len(body.RedirectUris), 1, true))
+		}
+		if len(body.RedirectUris) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.redirect_uris", body.RedirectUris, len(body.RedirectUris), 32, false))
+		}
+		if !(body.TokenEndpointAuthMethod == "client_secret_basic" || body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionClientsCreateUserSessionClientSessionToken != "" {
+			sessionToken = &userSessionClientsCreateUserSessionClientSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionClientsCreateUserSessionClientApikeyToken != "" {
+			apikeyToken = &userSessionClientsCreateUserSessionClientApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionClientsCreateUserSessionClientProjectSlugInput != "" {
+			projectSlugInput = &userSessionClientsCreateUserSessionClientProjectSlugInput
+		}
+	}
+	v := &usersessionclients.CreateUserSessionClientPayload{
+		UserSessionIssuerID:     body.UserSessionIssuerID,
+		ClientName:              body.ClientName,
+		TokenEndpointAuthMethod: body.TokenEndpointAuthMethod,
+	}
+	if body.RedirectUris != nil {
+		v.RedirectUris = make([]string, len(body.RedirectUris))
+		for i, val := range body.RedirectUris {
+			v.RedirectUris[i] = val
+		}
+	} else {
+		v.RedirectUris = []string{}
+	}
+	{
+		var zero string
+		if v.TokenEndpointAuthMethod == zero {
+			v.TokenEndpointAuthMethod = "client_secret_basic"
+		}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateUserSessionClientRedirectURIsPayload builds the payload for the
+// userSessionClients updateUserSessionClientRedirectURIs endpoint from CLI
+// flags.
+func BuildUpdateUserSessionClientRedirectURIsPayload(userSessionClientsUpdateUserSessionClientRedirectURIsBody string, userSessionClientsUpdateUserSessionClientRedirectURIsSessionToken string, userSessionClientsUpdateUserSessionClientRedirectURIsApikeyToken string, userSessionClientsUpdateUserSessionClientRedirectURIsProjectSlugInput string) (*usersessionclients.UpdateUserSessionClientRedirectURIsPayload, error) {
+	var err error
+	var body UpdateUserSessionClientRedirectURIsRequestBody
+	{
+		err = json.Unmarshal([]byte(userSessionClientsUpdateUserSessionClientRedirectURIsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"redirect_uris\": [\n         \"abc123\",\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.RedirectUris == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if len(body.RedirectUris) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.redirect_uris", body.RedirectUris, len(body.RedirectUris), 1, true))
+		}
+		if len(body.RedirectUris) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.redirect_uris", body.RedirectUris, len(body.RedirectUris), 32, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionClientsUpdateUserSessionClientRedirectURIsSessionToken != "" {
+			sessionToken = &userSessionClientsUpdateUserSessionClientRedirectURIsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionClientsUpdateUserSessionClientRedirectURIsApikeyToken != "" {
+			apikeyToken = &userSessionClientsUpdateUserSessionClientRedirectURIsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionClientsUpdateUserSessionClientRedirectURIsProjectSlugInput != "" {
+			projectSlugInput = &userSessionClientsUpdateUserSessionClientRedirectURIsProjectSlugInput
+		}
+	}
+	v := &usersessionclients.UpdateUserSessionClientRedirectURIsPayload{
+		ID: body.ID,
+	}
+	if body.RedirectUris != nil {
+		v.RedirectUris = make([]string, len(body.RedirectUris))
+		for i, val := range body.RedirectUris {
+			v.RedirectUris[i] = val
+		}
+	} else {
+		v.RedirectUris = []string{}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
 
 // BuildListUserSessionClientsPayload builds the payload for the
 // userSessionClients listUserSessionClients endpoint from CLI flags.

@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 	"maps"
+	"slices"
 )
 
 // DenialReason says why the caller is not authorized for a check.
@@ -24,7 +25,8 @@ const (
 	// DenialReasonDisposition marks a check no grant allows only because of
 	// its disposition dimension, where the caller's access is limited to other
 	// dispositions than read_only (for example idempotent or open_world): a
-	// grant would allow it if the check did not name a disposition.
+	// grant would allow the same check if it named one of those dispositions
+	// instead.
 	DenialReasonDisposition DenialReason = "disposition"
 
 	// DenialReasonNotGranted marks a check no grant allows.
@@ -99,15 +101,23 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 			}
 		}
 
-		withoutDisposition := c
-		withoutDisposition.Dimensions = maps.Clone(c.Dimensions)
-		delete(withoutDisposition.Dimensions, SelectorKeyDisposition)
-		evaluation, err = authorization.evaluate(withoutDisposition)
-		if err != nil {
-			return nil, e.mapError(ctx, err)
-		}
-		if evaluation.Grant != nil {
-			reasons[i] = DenialReasonDisposition
+		// Refused only for its disposition when some other disposition, with
+		// every other value unchanged, would be allowed.
+		for _, other := range slices.Sorted(maps.Keys(validDispositions)) {
+			if other == disposition || other == DispositionReadOnly {
+				continue
+			}
+			asOther := c
+			asOther.Dimensions = maps.Clone(c.Dimensions)
+			asOther.Dimensions[SelectorKeyDisposition] = other
+			evaluation, err = authorization.evaluate(asOther)
+			if err != nil {
+				return nil, e.mapError(ctx, err)
+			}
+			if evaluation.Grant != nil {
+				reasons[i] = DenialReasonDisposition
+				break
+			}
 		}
 	}
 

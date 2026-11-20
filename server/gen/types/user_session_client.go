@@ -8,7 +8,7 @@
 package types
 
 // UserSessionClient is the result type of the userSessionClients service
-// getUserSessionClient method.
+// updateUserSessionClientRedirectURIs method.
 type UserSessionClient struct {
 	// The user_session_client id.
 	ID string

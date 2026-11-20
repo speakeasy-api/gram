@@ -318,7 +318,7 @@ func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoin
 		}
 	}
 	connectResourceID := endpoint.connectResourceID()
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(connectResourceID), authz.ProjectIDOf(endpoint.ProjectID)).Connect()
 	if s.authz != nil && !private {
 		s.newMandatoryShadow(authzCtx, endpoint.OrganizationID).recordServer(authzCtx, mandatorySurfaceConsent, true, authz.MandatoryServerPublic, connect)
 	}

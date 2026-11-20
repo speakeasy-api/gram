@@ -78,19 +78,21 @@ func (s *TeamMemoryService) valid() bool {
 
 // authorizeRead resolves the project and requires memory:read on it.
 func (s *TeamMemoryService) authorizeRead(ctx context.Context, principal Principal, projectID, projectSlug string) (ResolvedProject, error) {
-	return s.authorize(ctx, principal, projectID, projectSlug, authz.ScopeMemoryRead)
+	return s.authorize(ctx, principal, projectID, projectSlug, authz.ProjectRef.MemoryRead)
 }
 
 // authorizeWrite resolves the project and requires memory:write on it.
 func (s *TeamMemoryService) authorizeWrite(ctx context.Context, principal Principal, projectID, projectSlug string) (ResolvedProject, error) {
-	return s.authorize(ctx, principal, projectID, projectSlug, authz.ScopeMemoryWrite)
+	return s.authorize(ctx, principal, projectID, projectSlug, authz.ProjectRef.MemoryWrite)
 }
 
 // authorize admits only an authenticated person on the external endpoint,
 // requires scope on the exact project, checks that Organizational Memory is on, and then
 // meters the call. Memory is project-scoped, so the grant check follows resolution;
 // an unknown project and a missing grant both refuse without content.
-func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, projectID, projectSlug string, scope authz.Scope) (ResolvedProject, error) {
+func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, projectID, projectSlug string, permission func(authz.ProjectRef) authz.Check) (ResolvedProject, error) {
+	// The permission's scope, named in refusals before the project resolves.
+	scope := permission(authz.ProjectRef{}).Scope
 	var zero ResolvedProject
 	if !s.valid() {
 		return zero, ErrUnavailable
@@ -118,7 +120,7 @@ func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, 
 	if err != nil {
 		return zero, err
 	}
-	if err := s.engine.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+	if err := s.engine.Require(ctx, permission(authz.Project(authz.ProjectIDOf(project.ID)))); err != nil {
 		return zero, &ExternalAuthorizationError{RequiredScope: string(scope), RequestAccessURL: "", cause: err}
 	}
 	enabled, err := s.enabled(ctx, principal.OrganizationID)

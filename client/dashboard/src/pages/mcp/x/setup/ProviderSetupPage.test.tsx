@@ -30,7 +30,9 @@ vi.mock("@gram/client/react-query/metaMcpMembers", () => ({
   invalidateAllMetaMcpMembers: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("sonner", () => ({ toast: { error: mocks.toastError } }));
 const mocks = vi.hoisted(() => ({
+  toastError: vi.fn(),
   fire: Object.assign(vi.fn<(options: Record<string, unknown>) => void>(), {
     reset: vi.fn<() => void>(),
   }),
@@ -558,8 +560,10 @@ describe("recorded setup completion", () => {
     render(<Setup />);
     validate();
     await userEvent.click(completeButton());
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "Unable to save setup status.",
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Unable to save setup status. Try again.",
+      ),
     );
     expect(screen.getByLabelText("Current location").textContent).toBe(
       "/setup",
@@ -571,7 +575,7 @@ describe("recorded setup completion", () => {
         "/overview",
       ),
     );
-    expect(screen.queryByText("Unable to save setup status.")).toBeNull();
+    expect(mocks.toastError).toHaveBeenCalledTimes(1);
     expect(mocks.markCompleted).toHaveBeenCalledTimes(2);
   });
 

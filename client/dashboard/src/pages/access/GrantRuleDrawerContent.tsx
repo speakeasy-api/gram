@@ -18,6 +18,7 @@ import { Link } from "react-router";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 import {
+  selectorsAfterAnnotationToggle,
   selectorsAfterToolBatch,
   selectorsAfterToolToggle,
 } from "./toolSelectionTransition";
@@ -1166,11 +1167,10 @@ function RoleToolSelectionPanel({
         );
         onChangeAnnotations(hints);
         onChangeSelectors(
-          hints.map((hint) => ({
-            resourceKind: "mcp" as const,
-            resourceId: "*",
-            disposition: ANNOTATION_TO_DISPOSITION[hint],
-          })),
+          selectorsAfterAnnotationToggle(
+            selectors,
+            hints.map((hint) => ANNOTATION_TO_DISPOSITION[hint]),
+          ),
         );
         return;
       }
