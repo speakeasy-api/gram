@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	seedrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,8 +52,7 @@ func TestAICatalogStartupSurvivesANullArrayElement(t *testing.T) {
 	db, err := infra.CloneTestDatabase(t, "null_ai_catalog_element")
 	require.NoError(t, err)
 	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
-	_, err = db.Exec(t.Context(), "UPDATE ai_products SET client_info_names = ARRAY[NULL]::text[], bundle_ids = array_append(bundle_ids, NULL) WHERE id = 'zed'")
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(db).AddNullArrayElementsToProductFixture(t.Context(), "zed"))
 	catalog, stop, err := startAICatalog(t.Context(), db, testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 	t.Cleanup(stop)

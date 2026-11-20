@@ -35,6 +35,22 @@ func (q *Queries) AddAttachmentReplacementOwnerMembershipFixture(ctx context.Con
 	return result.RowsAffected(), nil
 }
 
+const addNullArrayElementsToProductFixture = `-- name: AddNullArrayElementsToProductFixture :exec
+UPDATE ai_products
+SET bundle_ids = array_append(bundle_ids, NULL),
+  binaries = array_append(binaries, NULL),
+  config_dirs = array_append(config_dirs, NULL),
+  process_names = array_append(process_names, NULL),
+  client_info_names = array_append(client_info_names, NULL)
+WHERE id = $1
+`
+
+// Appends a NULL to every array column, which the schema allows.
+func (q *Queries) AddNullArrayElementsToProductFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, addNullArrayElementsToProductFixture, id)
+	return err
+}
+
 const agePreparationFixtureClaim = `-- name: AgePreparationFixtureClaim :exec
 UPDATE remote_session_ema_bindings SET state='in_progress', claimed_at=clock_timestamp()-interval '2 minutes' WHERE id = $1 AND project_id = $2
 `
