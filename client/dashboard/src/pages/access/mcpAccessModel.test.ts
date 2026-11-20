@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
   convertToolLimit,
   fuzzyMatch,
+  limitAfterToggle,
+  toolLimitReaches,
   toggleDisposition,
   dispositionCopy,
 } from "./mcpAccessModel";
@@ -46,6 +48,62 @@ describe("tool limits", () => {
       kind: "tools",
       tools: ["search", "delete", "plain"],
     });
+  });
+});
+
+describe("ticking tools on a rule limited to kinds", () => {
+  const readOnly = {
+    kind: "annotations",
+    dispositions: ["read_only"],
+  } as const;
+
+  it("keeps the kinds and names the ticked tool beside them", () => {
+    // Read-only tools stay covered, including ones added later.
+    expect(
+      limitAfterToggle(readOnly, "delete", ["search", "delete"], 3),
+    ).toEqual({
+      kind: "annotations",
+      dispositions: ["read_only"],
+      tools: ["delete"],
+    });
+  });
+
+  it("drops a named tool when it is unticked", () => {
+    expect(
+      limitAfterToggle(
+        { ...readOnly, tools: ["delete"] },
+        "delete",
+        ["search"],
+        3,
+      ),
+    ).toEqual({ kind: "annotations", dispositions: ["read_only"], tools: [] });
+  });
+
+  it("turns into a tool list when a tool a kind covers is unticked", () => {
+    // A kind cannot leave one of its tools out.
+    expect(limitAfterToggle(readOnly, "search", [], 3)).toEqual({
+      kind: "tools",
+      tools: [],
+    });
+  });
+
+  it("becomes every tool when the last tool is ticked", () => {
+    expect(
+      limitAfterToggle(readOnly, "plain", ["search", "delete", "plain"], 3),
+    ).toEqual({ kind: "all" });
+  });
+
+  it("reaches the kinds and the named tools", () => {
+    const limit = { ...readOnly, tools: ["delete"] };
+    const tool = (name: string, annotations?: ServerTool["annotations"]) =>
+      ({ id: name, name, type: "http", annotations }) as ServerTool;
+    expect(
+      toolLimitReaches(limit, tool("search", { readOnlyHint: true })),
+    ).toBe(true);
+    expect(
+      toolLimitReaches(limit, tool("delete", { destructiveHint: true })),
+    ).toBe(true);
+    expect(toolLimitReaches(limit, tool("plain"))).toBe(false);
   });
 });
 

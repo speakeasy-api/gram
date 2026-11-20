@@ -7,6 +7,7 @@ import {
   addedPermissions,
   liftedExceptions,
   permissionsAddedByRoles,
+  removedToolKindRules,
 } from "./reviewGrants";
 import { scopeCatalogue } from "./scopeCatalogue";
 
@@ -133,6 +134,31 @@ describe("addedPermissions", () => {
       sensitive: false,
       sensitiveVia: [],
     });
+  });
+});
+
+describe("removedToolKindRules", () => {
+  it("lists the tool kinds a save stops covering on MCP Connect", () => {
+    // A rule for read-only tools covers read-only tools added later; the tool
+    // list that replaces it does not, so the review names the kind.
+    const removed: SdkRoleGrant[] = [
+      {
+        scope: "mcp:connect",
+        selectors: [
+          { resourceKind: "mcp", resourceId: "gh", disposition: "read_only" },
+          { resourceKind: "mcp", resourceId: "gh", disposition: "unannotated" },
+          { resourceKind: "mcp", resourceId: "gh", tool: "update_task" },
+        ],
+      },
+      {
+        scope: "mcp:blocked_connect",
+        selectors: [
+          { resourceKind: "mcp", resourceId: "gh", disposition: "destructive" },
+        ],
+      },
+    ];
+
+    expect(removedToolKindRules(removed)).toEqual(["read_only", "unannotated"]);
   });
 });
 

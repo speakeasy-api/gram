@@ -37,6 +37,7 @@ import { ReviewGrantsStep } from "./ReviewGrantsStep";
 import {
   addedPermissions,
   liftedExceptions,
+  removedToolKindRules,
   reviewNeedsConfirmation,
   type AddedPermission,
   type NewHolders,
@@ -84,7 +85,10 @@ import type {
   RoleGrant as SdkRoleGrant,
   Scope,
 } from "@gram/client/models/components/rolegrant.js";
-import type { Selector } from "@gram/client/models/components/selector.js";
+import type {
+  Disposition,
+  Selector,
+} from "@gram/client/models/components/selector.js";
 import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
   isProjectFilteredResourceType,
@@ -316,6 +320,8 @@ export function CreateRoleDialog({
     credentials: CredentialRule[];
     credentialChanges: CredentialChangeLine[];
     added: AddedPermission[];
+    /** Tool kinds the save stops covering, such as read_only. */
+    removedKinds: Disposition[];
     newHolders: NewHolders | null;
     confirmed: boolean;
   } | null>(null);
@@ -841,6 +847,7 @@ export function CreateRoleDialog({
 
     const sdkGrants = pendingGrants;
     let addGrants = sdkGrants;
+    let removedKinds: Disposition[] = [];
     let newHolders: NewHolders | null = null;
     if (isEditing) {
       const changes = diffGrants(
@@ -853,6 +860,7 @@ export function CreateRoleDialog({
         ...changes.addGrants,
         ...liftedExceptions(changes.removeGrants, sdkGrants, catalogue),
       ];
+      removedKinds = removedToolKindRules(changes.removeGrants);
       // Whoever the save adds to the role gains everything it grants, as
       // the save leaves it. A new role's grants are all additions already.
       const members = [...selectedMembers].filter(
@@ -881,12 +889,18 @@ export function CreateRoleDialog({
       credentialRules,
       authClients.data ?? [],
     );
-    if (added.length > 0 || newHolders || credentialsGiven) {
+    if (
+      added.length > 0 ||
+      removedKinds.length > 0 ||
+      newHolders ||
+      credentialsGiven
+    ) {
       setReview({
         grants: sdkGrants,
         credentials: credentialRules,
         credentialChanges,
         added,
+        removedKinds,
         newHolders,
         confirmed: false,
       });
@@ -1503,14 +1517,17 @@ export function CreateRoleDialog({
             <Dialog.Description>
               {review && review.added.length > 0
                 ? "These permissions are added when the role is saved."
-                : review && review.credentialChanges.length > 0
-                  ? "These credential changes apply when the role is saved."
-                  : "The members and agents added to this role gain its sensitive permissions when it is saved."}
+                : review && review.removedKinds.length > 0
+                  ? "These tool kind rules are removed when the role is saved."
+                  : review && review.credentialChanges.length > 0
+                    ? "These credential changes apply when the role is saved."
+                    : "The members and agents added to this role gain its sensitive permissions when it is saved."}
             </Dialog.Description>
           </Dialog.Header>
           {review && (
             <ReviewGrantsStep
               added={review.added}
+              removedKinds={review.removedKinds}
               credentialChanges={review.credentialChanges}
               newHolders={review.newHolders}
               holdersNote={holdersNote}

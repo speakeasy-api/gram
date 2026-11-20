@@ -6,6 +6,7 @@
 
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
+import type { Disposition } from "@gram/client/models/components/selector.js";
 
 import {
   isPresentableScope,
@@ -93,6 +94,26 @@ export function reviewNeedsConfirmation(
   return (
     added.some((p) => p.sensitive) || (newHolders?.sensitive.length ?? 0) > 0
   );
+}
+
+/**
+ * The tool kinds a save stops covering on MCP Connect, once each. A rule
+ * limited to read-only tools covers read-only tools added later, and a list
+ * of tool names that replaces it does not, so the review says so.
+ */
+export function removedToolKindRules(
+  removeGrants: readonly SdkRoleGrant[],
+): Disposition[] {
+  const kinds = new Set<Disposition>();
+  for (const grant of removeGrants) {
+    if (grant.scope !== "mcp:connect") continue;
+    for (const selector of grant.selectors ?? []) {
+      if (selector.disposition && !selector.tool) {
+        kinds.add(selector.disposition);
+      }
+    }
+  }
+  return [...kinds];
 }
 
 /**
