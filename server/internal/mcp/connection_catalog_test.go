@@ -314,7 +314,7 @@ func TestConnectionCatalogDirectProgressiveRechecksTypedExecution(t *testing.T) 
 	}
 }
 
-func TestGatewayConsentDistinguishesTypedOffersOnOneRegistration(t *testing.T) {
+func TestGatewayConsentRequiresAPickForTypedOffersOnOneRegistration(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	auth, _ := contextvalues.GetAuthContext(ctx)
@@ -340,8 +340,17 @@ func TestGatewayConsentDistinguishesTypedOffersOnOneRegistration(t *testing.T) {
 	outcomes := gatewayOutcomesFromPage(page)
 	require.Len(t, outcomes, 1)
 	require.Equal(t, "source", outcomes[0].Slug)
-	require.Equal(t, "connected", outcomes[0].Status)
-	require.Positive(t, upstream.requests.Load(), "the preview uses the selected typed offer rather than inferring a choice from registration alone")
+	require.NotEqual(t, "connected", outcomes[0].Status)
+	require.Zero(t, upstream.requests.Load(), "the preview cannot infer a typed choice from the shared registration")
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	query := url.Values{"state": {stateID}, "auth_client.source": {offers[0].String()}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect?"+query.Encode(), nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(w, req, endpoint))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotEmpty(t, gatewayInventoryFromPage(t, w.Body.String()).Tools)
+	require.Positive(t, upstream.requests.Load(), "an exact typed selection can preview")
 }
 
 func approveGatewayCatalog(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, client usersessionsrepo.UserSessionClient, gatewayID uuid.UUID, slug string, mode toolfilter.CatalogMode, discovery metamcp.DiscoveryMode, tools []string, annotations ...string) catalogConnection {

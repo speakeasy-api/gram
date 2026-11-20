@@ -51,24 +51,6 @@ func (s *Service) resolveMetaMemberResource(
 	if err != nil || !claimed {
 		return "", none, false, err
 	}
-	if usesTypedConsentInventory(ctx) {
-		admission, err := s.admitMandatoryShadow(ctx)
-		if err != nil {
-			return "", none, true, fmt.Errorf("load login member permissions: %w", err)
-		}
-		allowed := candidates[:0]
-		for _, candidate := range candidates {
-			connect := authz.MCPCheck(authz.ScopeMCPConnect, candidate.McpServerID.String(), candidate.ProjectID.String())
-			decision, err := admission.DecideServerAdmission(endpoint.OrganizationID, mandatoryVisibility(candidate.McpServerVisibility == mcpservers.VisibilityPublic), connect)
-			if err != nil {
-				return "", none, true, fmt.Errorf("authorize login member: %w", err)
-			}
-			if decision.Allowed {
-				allowed = append(allowed, candidate)
-			}
-		}
-		candidates = allowed
-	}
 
 	// The resource is sent upstream verbatim: a provider may match it exactly
 	// against its RFC 9728 resource, trailing slash included. Trailing slashes
@@ -179,6 +161,28 @@ func (s *Service) authorizedMetaMembers(
 ) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, error) {
 	if len(rows) == 0 {
 		return nil, nil
+	}
+
+	if usesTypedConsentInventory(ctx) {
+		admission, err := s.admitMandatoryShadow(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load login member permissions: %w", err)
+		}
+		allowed := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, 0, len(rows))
+		for _, candidate := range rows {
+			if candidate.McpServerVisibility != mcpservers.VisibilityPublic && candidate.McpServerVisibility != mcpservers.VisibilityPrivate {
+				continue
+			}
+			connect := authz.MCPCheck(authz.ScopeMCPConnect, candidate.McpServerID.String(), candidate.ProjectID.String())
+			decision, err := admission.DecideServerAdmission(endpoint.OrganizationID, mandatoryVisibility(candidate.McpServerVisibility == mcpservers.VisibilityPublic), connect)
+			if err != nil {
+				return nil, fmt.Errorf("authorize login member: %w", err)
+			}
+			if decision.Allowed {
+				allowed = append(allowed, candidate)
+			}
+		}
+		return allowed, nil
 	}
 
 	ctx, err := s.authz.PrepareContext(ctx)

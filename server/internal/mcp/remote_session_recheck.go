@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -403,7 +404,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			FocusServer:              "",
 		}
 		recheckCtx := ctx
-		enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		enforced, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
 		if err != nil {
 			logger.ErrorContext(ctx, "read upstream auth enforcement for remote session re-check", attr.SlogError(err))
 			continue

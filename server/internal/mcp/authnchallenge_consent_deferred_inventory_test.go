@@ -295,6 +295,7 @@ func TestConsentPage_LinkedServiceDoesNotDeferToolInventory(t *testing.T) {
 	})
 	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-linked-page", "", []uuid.UUID{fx.shared})
 	seedConsentAuthOffer(t, ctx, fx.ti, fx.orgID, fx.projectID, fx.endpoint.McpServerID.UUID, fx.clientA, authz.AuthClientTypeRemoteSession)
+	seedUserMCPConnectGrant(t, ctx, fx.ti.conn, fx.orgID, fx.subject.ID, fx.endpoint.McpServerID.UUID.String())
 	grant(t, ctx, fx, fx.clientA, consentChainedUpstream)
 
 	require.Contains(t, renderToolsIsland(t, fx), inventoryNotDeferredAttr)

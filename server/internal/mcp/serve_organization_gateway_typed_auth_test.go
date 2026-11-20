@@ -167,7 +167,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					// Without a live typed offer, consent does not infer OAuth
 					// from issuer links. A source without required caller headers
 					// can be shown, but no legacy registration is offered.
-					consentVisible := tc.visibleEnforced || ((tc.pending || tc.detached) && tc.header == "")
+					consentVisible := tc.visibleEnforced || ((tc.pending || tc.detached) && !tc.required)
 					if consentVisible {
 						require.NotContains(t, page.Body.String(), "data-gateway-focus-unavailable")
 					} else {

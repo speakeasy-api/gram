@@ -95,13 +95,17 @@ func TestConsentPost_DoesNotInferChoiceFromSignInLink(t *testing.T) {
 	}
 	location, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
-	if code := location.Query().Get("code"); code != "" {
-		grant := cache.NewTypedObjectCache[mcp.UserSessionGrant](fx.ti.logger, fx.ti.cacheAdapter, cache.SuffixNone)
-		stored, err := grant.Get(ctx, "userSessionGrant:"+fx.shared.String()+":"+code)
-		require.NoError(t, err)
-		require.Empty(t, stored.AuthClientPicks)
-		require.Empty(t, stored.UpstreamClientPicks)
+	code := location.Query().Get("code")
+	if code == "" {
+		require.Equal(t, "/mcp/"+fx.endpoint.Slug+"/connect", location.Path)
+		require.Equal(t, fx.stateID, location.Query().Get("state"))
+		return
 	}
+	grant := cache.NewTypedObjectCache[mcp.UserSessionGrant](fx.ti.logger, fx.ti.cacheAdapter, cache.SuffixNone)
+	stored, err := grant.Get(ctx, "userSessionGrant:"+fx.shared.String()+":"+code)
+	require.NoError(t, err)
+	require.Empty(t, stored.AuthClientPicks)
+	require.Empty(t, stored.UpstreamClientPicks)
 }
 
 // Redeeming the authorization code records the grant's pick as the new

@@ -177,14 +177,15 @@ func TestGatewayConsentIgnoresAPickOutsideTheConnectedServices(t *testing.T) {
 	ctx, fx := seedServiceChoiceGateway(t, 2)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	unconnected := createConsentRemoteClient(t, ctx, fx.ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unconnected-"+uuid.NewString()[:8], "", []uuid.UUID{fx.issuerID})
+	offer := seedConsentAuthOffer(t, ctx, fx.ti, auth.ActiveOrganizationID, *auth.ProjectID, fx.serverID, unconnected, "remote_session")
 	stateID, csrf := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
 	fallback := selectedService(t, fx, consentPageWithPicks(t, ctx, fx, stateID, nil))
-	for _, forged := range []uuid.UUID{uuid.New(), unconnected} {
+	for _, forged := range []uuid.UUID{uuid.New(), offer} {
 		page := consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {forged.String()}})
-		require.NotContains(t, page, `value="`+forged.String()+`"`)
+		require.NotContains(t, page, `value="`+forged.String()+`" selected`)
 		require.Equal(t, fallback, selectedService(t, fx, page))
 	}
-	page := consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {unconnected.String()}})
+	page := consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {offer.String()}})
 	require.Equal(t, uuid.NullUUID{UUID: fallback, Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
 }
 
