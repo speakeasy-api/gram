@@ -95,6 +95,19 @@ func TestFeatureWriteChangesOnlyTheExactFeatureAndOrganization(t *testing.T) {
 	require.False(t, featureEnabled(t, f, f.orgB, productfeatures.FeatureLogs))
 }
 
+func TestFeatureWriteCannotDisableUpstreamAuthEnforcement(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_feature_no_upstream_auth_rollback")
+	writer, features := newFeatureWriterFixture(t, f)
+	ctx := writeContext(t, f)
+	feature := productfeatures.FeatureUpstreamAuthEnforced
+	require.NoError(t, features.SetFeatureEnabled(ctx, f.orgA, feature, true))
+
+	_, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: string(feature), Enabled: false})
+	require.ErrorContains(t, err, "available for this write")
+	require.True(t, featureEnabled(t, f, f.orgA, feature))
+}
+
 func TestFeatureWriteRefusedWhileSwitchedOff(t *testing.T) {
 	t.Parallel()
 	f := newWriteFixture(t, "admin_mcp_feature_disabled")

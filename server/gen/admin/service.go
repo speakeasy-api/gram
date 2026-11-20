@@ -368,9 +368,8 @@ type Service interface {
 	// read from telemetry and communication outside the database. Enabled
 	// enforcement does not depend on the auth-client-resolver flags.
 	EnableUpstreamAuthEnforcement(context.Context, *EnableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
-	// Disables upstream auth enforcement for one organization. This is its
-	// rollback: requests return to the upstream client choice within a minute.
-	// Safe to call when enforcement is already off.
+	// Retired. Older staff clients can still reach this endpoint, but requests are
+	// rejected. Upstream auth enforcement cannot be turned off.
 	DisableUpstreamAuthEnforcement(context.Context, *DisableUpstreamAuthEnforcementPayload) (res *AdminUpstreamOAuthMigrationStatus, err error)
 	// Grants unrestricted mcp:auth to every principal that holds any mcp:connect
 	// grant, in every organization. The connect grant's selectors are ignored.

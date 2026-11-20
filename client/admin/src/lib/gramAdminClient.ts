@@ -33,7 +33,6 @@ import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/
 import { buildAdminEnableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminEnableUpstreamAuthEnforcement";
 import { buildAdminBackfillMcpAuthGrantsMutation } from "@gram/admin-client/react-query/adminBackfillMcpAuthGrants";
 import type { AdminBackfillMCPAuthGrantsResult } from "@gram/admin-client/models/components/adminbackfillmcpauthgrantsresult";
-import { buildAdminDisableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminDisableUpstreamAuthEnforcement";
 import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
 import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
@@ -1150,21 +1149,6 @@ export function enableUpstreamAuthEnforcement(
         shadowParityConfirmed: true,
         crossOrganizationDenialCommunicated: true,
       },
-    }),
-  );
-}
-
-const generatedDisableUpstreamAuthEnforcementMutation =
-  buildAdminDisableUpstreamAuthEnforcementMutation(redirectingClient, {
-    retries: { strategy: "none" },
-  });
-
-export function disableUpstreamAuthEnforcement(
-  organizationID: string,
-): Promise<AdminUpstreamOAuthMigrationStatus> {
-  return redirecting(
-    generatedDisableUpstreamAuthEnforcementMutation.mutationFn({
-      request: { organizationId: organizationID },
     }),
   );
 }
