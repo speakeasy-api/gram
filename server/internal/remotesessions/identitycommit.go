@@ -527,9 +527,6 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 		}
 	}
 
-	if c.plan.Bound == OfferNewClient {
-		return c.checkNewOfferMirror(ctx, q)
-	}
 	bound, err := listUserSessionIssuerClients(ctx, q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
 	if err != nil {
 		return err
@@ -566,6 +563,8 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 				return err
 			}
 		}
+	case OfferNewClient:
+		return c.checkNewOfferMirrorBindings(bound)
 	case ReuseBound:
 		if c.provider.ID != uuid.Nil {
 			switch countProviderClients(bound, c.provider.ID) {
@@ -590,7 +589,11 @@ func (c *IdentityCommit) checkNewOfferMirror(ctx context.Context, q *repo.Querie
 	if err != nil {
 		return err
 	}
-	if countProviderClients(bound, c.provider.ID) != 0 {
+	return c.checkNewOfferMirrorBindings(bound)
+}
+
+func (c *IdentityCommit) checkNewOfferMirrorBindings(bound []repo.ListRemoteSessionClientsForUserSessionIssuerRow) error {
+	if c.provider.ID != uuid.Nil && countProviderClients(bound, c.provider.ID) != 0 {
 		return identityRefusal(ErrIdentityConflict, nil, "offer an existing User Identity client on this MCP server before retrying")
 	}
 	return nil

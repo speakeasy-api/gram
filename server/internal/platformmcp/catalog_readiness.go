@@ -175,11 +175,14 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		}
 	}
 
-	clients, err := p.offeredRegistrations(ctx, principal.OrganizationID, projectID, []uuid.UUID{mcpServerID}, []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeEMA})
+	clients, incomplete, err := p.offeredRegistrations(ctx, principal.OrganizationID, projectID, mcpServerID, []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeServiceAccount, authz.AuthClientTypeEMA})
 	if err != nil {
 		return ProviderReadinessProbeResult{}, err
 	}
 	if len(clients) == 0 {
+		if incomplete {
+			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{}, "no_client"), nil
+		}
 		state, evidence := p.probe(ctx, remote.Url, headers, "")
 		if state == ReadinessUnauthorized {
 			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{}, "no_client"), nil

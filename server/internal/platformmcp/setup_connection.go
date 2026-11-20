@@ -41,7 +41,7 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 	if err := validateRemoteOfferTarget(ctx, p.db, projectID, mcpServerID, remoteServerID, userSessionIssuerID); err != nil {
 		return nil, err
 	}
-	clients, err := p.offeredRegistrations(ctx, organizationID, projectID, []uuid.UUID{mcpServerID}, []string{authz.AuthClientTypeRemoteSession})
+	clients, _, err := p.offeredRegistrations(ctx, organizationID, projectID, mcpServerID, []string{authz.AuthClientTypeRemoteSession})
 	if err != nil {
 		return nil, err
 	}
@@ -125,25 +125,34 @@ func setupConnectionResult(status, code string) *gen.ServerConnectionTestResult 
 }
 
 // offeredRegistrations returns the OAuth registrations within the project's
-// reach that serverIDs offer through auth clients of clientTypes, in a stable
+// reach that one server offers through auth clients of clientTypes, in a stable
 // order, so a repeated probe judges the same registration first.
-func (p *RemoteMCPReadinessProber) offeredRegistrations(ctx context.Context, organizationID string, projectID uuid.UUID, serverIDs []uuid.UUID, clientTypes []string) ([]remotesessions.Client, error) {
-	offered, err := upstreamclientsrepo.New(p.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: serverIDs})
+func (p *RemoteMCPReadinessProber) offeredRegistrations(ctx context.Context, organizationID string, projectID uuid.UUID, serverID uuid.UUID, clientTypes []string) (clients []remotesessions.Client, incomplete bool, err error) {
+	offered, err := upstreamclientsrepo.New(p.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{serverID}})
 	if err != nil {
-		return nil, fmt.Errorf("list server auth clients: %w", err)
+		return nil, false, fmt.Errorf("list server auth clients: %w", err)
+	}
+	if len(offered) == 0 {
+		return nil, false, ErrReadinessInvalid
 	}
 	var ids []uuid.UUID
-	for _, client := range offered {
-		if slices.Contains(clientTypes, client.ClientType.String) && client.RemoteSessionClientID.Valid && !slices.Contains(ids, client.RemoteSessionClientID.UUID) {
-			ids = append(ids, client.RemoteSessionClientID.UUID)
+	for _, offer := range offered {
+		incomplete = incomplete || offer.UpstreamAuthPending
+		if !slices.Contains(clientTypes, offer.ClientType.String) {
+			continue
+		}
+		if !offer.RemoteSessionClientID.Valid {
+			incomplete = true
+		} else if !slices.Contains(ids, offer.RemoteSessionClientID.UUID) {
+			ids = append(ids, offer.RemoteSessionClientID.UUID)
 		}
 	}
-	clients, err := p.sessions.ListAuthClientRegistrations(ctx, projectID, organizationID, ids)
+	clients, err = p.sessions.ListAuthClientRegistrations(ctx, projectID, organizationID, ids)
 	if err != nil {
-		return nil, fmt.Errorf("list auth client registrations: %w", err)
+		return nil, false, fmt.Errorf("list auth client registrations: %w", err)
 	}
 	slices.SortFunc(clients, func(a, b remotesessions.Client) int { return bytes.Compare(a.ID[:], b.ID[:]) })
-	return clients, nil
+	return clients, incomplete || len(clients) != len(ids), nil
 }
 
 // validateRemoteOfferTarget prevents stale registrations from probing a source
