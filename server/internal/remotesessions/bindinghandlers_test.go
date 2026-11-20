@@ -432,12 +432,15 @@ func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, attached.ID, reattached.ID)
 
-	// The member's issuer must still bind the client itself.
+	// Registration selection is checked separately by the serving surface.
+	// An owner can pin another tenant-reachable session even when the legacy
+	// member-issuer link does not exist.
 	otherIssuer := createRemoteIssuer(t, ctx, ti, "binding-gateway-other-provider", "")
 	gatewayOnly := createRemoteClient(t, ctx, ti, otherIssuer, gateway.String(), "binding-gateway-only-client")
-	stray := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), gatewayOnly)
-	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: stray.ID.String()})
-	requireOopsCode(t, err, oops.CodeNotFound)
+	second := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), gatewayOnly)
+	attachment, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: second.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, second.ID.String(), attachment.RemoteSessionID)
 }
 
 // A detach names the account the connection signed in as, falling back to the
