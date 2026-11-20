@@ -73,24 +73,21 @@ func (r *DBResolver) Resolve(ctx context.Context, token string) (Upstream, error
 // the deprecated plaintext column still resolves; each such lookup is logged
 // so the backfill's progress shows in the logs.
 func (r *DBResolver) lookup(ctx context.Context, token string) (pluginsrepo.PluginGithubConnection, error) {
-	conn, err := r.queries.GetGitHubConnectionByMarketplaceTokenHash(ctx, pgtype.Text{String: marketplacetokens.Hash(token), Valid: true})
-	switch {
-	case err == nil:
-		return conn, nil
-	case !errors.Is(err, pgx.ErrNoRows):
-		return pluginsrepo.PluginGithubConnection{}, fmt.Errorf("lookup connection by marketplace token hash: %w", err)
-	}
-
-	conn, err = r.queries.GetGitHubConnectionByMarketplaceToken(ctx, pgtype.Text{String: token, Valid: true})
+	row, err := r.queries.ResolveGitHubConnectionByMarketplaceToken(ctx, pluginsrepo.ResolveGitHubConnectionByMarketplaceTokenParams{
+		MarketplaceTokenHash: pgtype.Text{String: marketplacetokens.Hash(token), Valid: true},
+		MarketplaceToken:     token,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return pluginsrepo.PluginGithubConnection{}, ErrNotFound
 	case err != nil:
-		return pluginsrepo.PluginGithubConnection{}, fmt.Errorf("lookup connection by plaintext marketplace token: %w", err)
+		return pluginsrepo.PluginGithubConnection{}, fmt.Errorf("lookup connection by marketplace token: %w", err)
 	}
 
-	r.logger.InfoContext(ctx, "marketplace token resolved from the plaintext column; run the marketplace token backfill",
-		attr.SlogProjectID(conn.ProjectID.String()))
+	if row.PlaintextToken {
+		r.logger.InfoContext(ctx, "marketplace token resolved from the plaintext column; run the marketplace token backfill",
+			attr.SlogProjectID(row.PluginGithubConnection.ProjectID.String()))
+	}
 
-	return conn, nil
+	return row.PluginGithubConnection, nil
 }

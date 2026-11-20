@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
@@ -227,8 +228,7 @@ func walkAgentPluginRows(rows []repo.GetAgentPluginSetRow, visit func(row repo.G
 // token: its hash, or one the marketplace token backfill has not moved out of
 // the plaintext column yet.
 func hasMarketplaceToken(row repo.GetAgentPluginSetRow) bool {
-	return (row.MarketplaceTokenHash.Valid && row.MarketplaceTokenHash.String != "") ||
-		(row.MarketplaceToken.Valid && row.MarketplaceToken.String != "")
+	return marketplacetokens.Present(row.MarketplaceTokenHash, row.MarketplaceToken)
 }
 
 // AttachAgentMCPServers sets an agent-key poll's MCP servers and folds each

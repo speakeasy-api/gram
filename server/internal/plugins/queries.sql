@@ -957,19 +957,26 @@ SELECT *
 FROM plugin_github_connections
 WHERE marketplace_token_hash = @marketplace_token_hash;
 
--- name: GetGitHubConnectionByMarketplaceToken :one
--- DEPRECATED: resolves a marketplace proxy URL token through the plaintext
--- marketplace_token column, for connections the marketplace token backfill has
--- not moved yet. Removed with that column.
-SELECT *
+-- name: ResolveGitHubConnectionByMarketplaceToken :one
+-- Resolves a marketplace proxy URL token to the upstream connection by the
+-- token's hash or, until the marketplace token backfill moves it, through the
+-- deprecated plaintext marketplace_token column. One statement reads one
+-- snapshot, so a token the backfill moves during a request still resolves.
+-- plaintext_token reports which form matched. The token is the auth
+-- credential, so there's no project scope to apply ahead of it.
+SELECT sqlc.embed(plugin_github_connections), (plugin_github_connections.marketplace_token_hash IS NULL)::boolean AS plaintext_token
 FROM plugin_github_connections
-WHERE marketplace_token = @marketplace_token
-  AND marketplace_token_hash IS NULL;
+WHERE plugin_github_connections.marketplace_token_hash = @marketplace_token_hash
+   OR (
+       plugin_github_connections.marketplace_token_hash IS NULL
+       AND plugin_github_connections.marketplace_token = @marketplace_token::text
+   )
+LIMIT 1;
 
 -- name: UpsertGitHubConnection :one
 -- Inserts or refreshes a project's GitHub connection. It never writes the
--- marketplace token: the publish path gives a connection without one its token
--- through package marketplacetokens, in the same transaction.
+-- marketplace token. When the connection has no token yet, the publish path
+-- stores one through package marketplacetokens, in the same transaction.
 -- organization_id is the project's organization; an existing value is kept, so
 -- a connection never moves to another organization's key. published_mcp_fingerprints,
 -- published_hooks_version, and published_hooks_config record the per-plugin MCP

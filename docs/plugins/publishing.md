@@ -66,7 +66,7 @@ Dev and test share one GitHub App and one org. This means plugin repos published
 
 ## Marketplace proxy
 
-The URL `https://app.getgram.ai/m/<token>/marketplace.json` is served by a dedicated marketplace proxy endpoint. The proxy hashes the token and resolves the hash to a `plugin_github_connections` row, which identifies the project whose latest-published `marketplace.json` to serve. A database read therefore never yields a working install URL.
+The URL `https://app.getgram.ai/m/<token>/marketplace.json` is served by a dedicated marketplace proxy endpoint. The proxy hashes the token and resolves the hash to a `plugin_github_connections` row, which identifies the project whose latest-published `marketplace.json` to serve. A database read alone does not yield a working install URL: the hash cannot be reversed, and opening the sealed copy needs the platform key or the organization's key. Connections published before tokens were hashed keep the token in plaintext until the marketplace token backfill moves them (see `server/cmd/tools/migrations/MARKETPLACE_TOKENS_BACKFILL.md`).
 
 Speakeasy does **not** proxy raw GitHub traffic — it serves the cached published content (or generates it on demand from DB state). The marketplace URL token is opaque: no org or project identity is embedded.
 
