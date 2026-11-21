@@ -38,7 +38,7 @@ func TestUpstreamAuthEnforcement_RefusedUntilCovered(t *testing.T) {
 	require.False(t, enforced)
 }
 
-func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRollsBack(t *testing.T) {
+func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRejectsRollback(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
@@ -68,15 +68,16 @@ func TestUpstreamAuthEnforcement_EnablesOnceCoveredAndRollsBack(t *testing.T) {
 	require.Equal(t, "staff-test", enabledLog.ActorID)
 	require.Equal(t, org.id, enabledLog.OrganizationID)
 
-	disabled, err := svc.DisableUpstreamAuthEnforcement(ctx, &gen.DisableUpstreamAuthEnforcementPayload{OrganizationID: org.id})
-	require.NoError(t, err)
-	require.False(t, disabled.Enforcement.Enabled)
+	_, err = svc.DisableUpstreamAuthEnforcement(ctx, &gen.DisableUpstreamAuthEnforcementPayload{OrganizationID: org.id})
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeInvalid, shareable.Code)
+	require.ErrorContains(t, err, "upstream auth enforcement cannot be disabled")
 	enforced, err = authenforcement.NewGate(db).Enforced(ctx, org.id)
 	require.NoError(t, err)
-	require.False(t, enforced, "disabling is the organization's rollback")
-	disabledLog, err := audittest.LatestAuditLogByActionAndSubject(ctx, db, audit.ActionOrganizationProductFeatureDisabled, org.id)
-	require.NoError(t, err, "disabling is audited")
-	require.Equal(t, "staff-test", disabledLog.ActorID)
+	require.True(t, enforced, "a retired rollback request must leave enforcement enabled")
+	status, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
+	require.NoError(t, err)
+	require.True(t, status.Enforcement.Enabled)
 }
 
 func TestUpstreamAuthEnforcement_RequiresStaff(t *testing.T) {
