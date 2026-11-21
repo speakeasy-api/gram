@@ -272,7 +272,7 @@ func TestLocalTool_CallIsAnsweredWithoutTheRemoteServer(t *testing.T) {
 	rr := postToProxy(t, p, localToolsCallRequest(localToolName))
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "application/json", rr.Header().Get("Content-Type"))
-	require.JSONEq(t, `{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"received {\"content\":\"it broke\"}"}],"structuredContent":{"status":"received"}}}`, rr.Body.String())
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"received {\"content\":\"it broke\"}"}],"structuredContent":{"status":"received"},"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Speakeasy","version":"0.0.0"}}}}`, rr.Body.String())
 
 	require.Equal(t, int32(1), calls.Load())
 	require.Zero(t, requests.Load(), "the remote server never sees a local tool's call")
@@ -340,7 +340,10 @@ func TestLocalTool_ARepeatedNameIsListedOnce(t *testing.T) {
 	require.Equal(t, []string{"create_task", "list_tasks", localToolName}, names)
 }
 
-// The remote server's own tools stay reachable when the local ones cannot be loaded.
+// The remote server's own tools stay listed and callable when the local ones
+// cannot be loaded. Local tools are extras: the proxy then serves every
+// request as if there were none, so even a call to a local tool's name goes
+// to the remote server, which answers it as a tool it does not have.
 func TestLocalTool_AFailedLookupServesTheRemoteServerAlone(t *testing.T) {
 	t.Parallel()
 
@@ -351,8 +354,34 @@ func TestLocalTool_AFailedLookupServesTheRemoteServerAlone(t *testing.T) {
 	names, _, _ := listedTools(t, postToProxy(t, p, localToolsListRequest("")).Body.Bytes())
 	require.Equal(t, []string{"create_task", "list_tasks"}, names)
 
+	postToProxy(t, p, localToolsCallRequest("create_task"))
 	postToProxy(t, p, localToolsCallRequest(localToolName))
-	require.Equal(t, int32(2), requests.Load(), "the call is forwarded, where the remote server answers for it")
+	require.Equal(t, int32(3), requests.Load(), "every call is forwarded as if there were no local tools")
+}
+
+// The policies that apply to every call run before a local tool answers, and
+// a refusal from one answers the call.
+func TestLocalTool_LocalCallInterceptorsCanRefuseTheCall(t *testing.T) {
+	t.Parallel()
+
+	upstream, requests := remoteServer(t, "application/json", `{}`)
+	var calls, resolutions atomic.Int32
+	var screened int
+	p := newProxyForTest(t, upstream.URL)
+	p.LocalTools = resolveLocalTools(&resolutions, localTool(&calls, nil))
+	p.LocalToolCallInterceptors = []proxy.ToolsCallRequestInterceptor{&mockToolsCallRequestInterceptor{
+		name:     "risk-scan",
+		called:   &screened,
+		order:    nil,
+		err:      &proxy.RejectError{Code: proxy.RejectCodeForbidden, Message: "blocked by a risk policy", Data: nil},
+		lastCall: nil,
+	}}
+
+	rr := postToProxy(t, p, localToolsCallRequest(localToolName))
+	require.Contains(t, rr.Body.String(), "blocked by a risk policy")
+	require.Equal(t, 1, screened)
+	require.Zero(t, calls.Load(), "a refused call never reaches the local tool")
+	require.Zero(t, requests.Load())
 }
 
 // Only requests that list or call tools pay for resolving the local ones.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -17,11 +18,13 @@ import (
 
 // LocalTool is a tool the proxy serves itself instead of forwarding to the
 // remote MCP server. It is added to a tools/list result after every tools/list
-// interceptor has run, and a tools/call naming it is answered before any typed
-// tools/call interceptor runs. The policies those interceptors apply to the
-// remote server's tools therefore do not apply to it: it is neither filtered
-// by per-tool access or a session's tool selection, nor billed, nor logged as
-// a call of the remote server.
+// interceptor has run, and a tools/call naming it is answered instead of the
+// typed tools/call interceptors running. The policies those interceptors apply
+// to the remote server's tools therefore do not apply to it: it is neither
+// filtered by per-tool access or a session's tool selection, nor billed, nor
+// logged as a call of the remote server. The policies that apply to every call
+// whatever answers it, such as request risk policies, run as
+// [Proxy.LocalToolCallInterceptors].
 type LocalTool struct {
 	// Definition is the tool as clients see it. Its name is taken on this
 	// proxy: a remote tool with the same name is left out of tools/list, and a
@@ -39,8 +42,8 @@ type LocalTool struct {
 type LocalToolsResolver func(ctx context.Context) ([]LocalTool, error)
 
 // resolveLocalTools loads the local tools. A failure serves the request
-// without them, because the remote server's own tools must stay reachable
-// when the local ones cannot be loaded.
+// without them: local tools are extras, and the remote server's own tools
+// must stay listed and callable when they cannot be loaded.
 func (p *Proxy) resolveLocalTools(ctx context.Context) []LocalTool {
 	if p.LocalTools == nil {
 		return nil
@@ -105,7 +108,8 @@ func (p *Proxy) listLocalTools(ctx context.Context, list *ToolsListResponse) err
 }
 
 // answerLocalToolCall answers a tools/call for a tool the proxy serves itself.
-// The remote MCP server is never contacted.
+// The remote MCP server is never contacted. The local tool call interceptors
+// run first, and a refusal from one answers the call instead.
 func (p *Proxy) answerLocalToolCall(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -115,6 +119,10 @@ func (p *Proxy) answerLocalToolCall(
 	tool LocalTool,
 	responseBytes *int64,
 ) error {
+	if err := p.runToolsCallRequestInterceptorChain(ctx, call, p.LocalToolCallInterceptors); err != nil {
+		return p.dispatchInterceptorError(ctx, w, span, id, err, responseBytes)
+	}
+
 	callCtx, callSpan := p.Tracer.Start(ctx, "remotemcp.proxy.LocalTool", trace.WithAttributes(attr.ToolName(tool.Definition.Name)))
 	result, err := tool.Call(callCtx, call)
 	if err != nil {
@@ -139,21 +147,49 @@ func (p *Proxy) answerLocalToolCall(
 			attr.SlogComponent("remotemcp.proxy"))
 	}
 	*responseBytes = int64(n)
-	observeResponse(ctx, response)
+	// The request metric counts the answer; it is not the remote server
+	// serving the request, so the connection is not marked as served.
+	observeReply(ctx, response, id, methodToolsCall, false)
 
 	return nil
 }
 
+// localToolResultType is the resultType of a local tool's result: MCP
+// 2026-07-28 requires one on every result, and a local tool answers in full.
+const localToolResultType = `"complete"`
+
+// localToolServerInfoKey is where MCP 2026-07-28 puts the identity of the
+// server that produced a result, under the result's _meta.
+const localToolServerInfoKey = "io.modelcontextprotocol/serverInfo"
+
+// localToolServerInfo names Speakeasy as the server that produced a local
+// tool's result, the way Speakeasy names itself on the results it produces
+// for hosted servers.
+var localToolServerInfo = map[string]any{"name": "Speakeasy", "version": "0.0.0"}
+
 // marshalLocalToolResult produces the tools/call response carrying result,
 // both as wire bytes and as the decoded message the request observer reads.
+// It adds the members MCP 2026-07-28 requires on every result, which earlier
+// revisions permit, so they are always sent.
 func marshalLocalToolResult(id jsonrpc.ID, result *mcp.CallToolResult) ([]byte, *jsonrpc.Response, error) {
 	if result == nil {
 		return nil, nil, fmt.Errorf("local tool returned no result")
 	}
 
-	encoded, err := json.Marshal(result)
+	stamped := *result
+	stamped.Meta = make(mcp.Meta, len(result.Meta)+1)
+	maps.Copy(stamped.Meta, result.Meta)
+	if _, ok := stamped.Meta[localToolServerInfoKey]; !ok {
+		stamped.Meta[localToolServerInfoKey] = localToolServerInfo
+	}
+
+	marshaled, err := json.Marshal(&stamped)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal local tool result: %w", err)
+	}
+	encoded, err := spliceTopLevelKey(marshaled, "resultType", json.RawMessage(localToolResultType))
+	if err != nil {
+		return nil, nil, fmt.Errorf("add local tool result type: %w", err)
 	}
 
 	response := &jsonrpc.Response{ID: id, Result: encoded, Error: nil, Extra: nil}

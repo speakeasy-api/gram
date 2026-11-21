@@ -550,6 +550,9 @@ func (f *ProxyManager) BuildTarget(
 		},
 		ToolsListResponseInterceptors: toolsListRespInterceptors,
 		LocalTools:                    options.localTools,
+		// A local tool's arguments are the agent's words like any other
+		// call's, so request risk policies screen them too.
+		LocalToolCallInterceptors: []proxy.ToolsCallRequestInterceptor{riskScanInterceptor},
 		ResourcesReadRequestInterceptors: []proxy.ResourcesReadRequestInterceptor{
 			f.resourcesReadUsageLimitsInterceptor,
 		},

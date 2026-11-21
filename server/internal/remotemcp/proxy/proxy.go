@@ -419,9 +419,16 @@ type Proxy struct {
 
 	// LocalTools resolves the tools this proxy serves itself: each is added to
 	// tools/list results once ToolsListResponseInterceptors have run, and a
-	// tools/call naming one is answered here, before ToolsCallRequestInterceptors
-	// run, and never forwarded. Nil serves none. See [LocalTool].
+	// tools/call naming one is answered here instead of
+	// ToolsCallRequestInterceptors running, and never forwarded. While they
+	// cannot be loaded, every request is served as if there were none. Nil
+	// serves none.
 	LocalTools LocalToolsResolver
+
+	// LocalToolCallInterceptors run for a tools/call a local tool answers,
+	// before it answers: the policies that apply to every call whatever
+	// answers it, such as request risk policies. A refusal answers the call.
+	LocalToolCallInterceptors []ToolsCallRequestInterceptor
 
 	// ResourcesReadRequestInterceptors run for inbound "resources/read"
 	// JSON-RPC requests only, after the generic UserRequestInterceptors
