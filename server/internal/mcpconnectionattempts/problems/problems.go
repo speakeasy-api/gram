@@ -66,7 +66,7 @@ const (
 type ScopeKind string
 
 const (
-	// ScopeServer is the inbound side: one Speakeasy MCP server. Its key is the mcp_servers id, else kind:id.
+	// ScopeServer is the inbound side: one Speakeasy MCP server, gateway or toolset. Its key is the mcp_servers id, else kind:id.
 	ScopeServer ScopeKind = "server"
 
 	// ScopeService is the outbound side: what servers connect out to. Its key is the remote session issuer or the remote URL host.
