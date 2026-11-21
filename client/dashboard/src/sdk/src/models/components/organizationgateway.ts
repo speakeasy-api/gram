@@ -43,6 +43,10 @@ export type OrganizationGateway = {
    * The gateway's MCP URL. Set only when available.
    */
   url?: string | undefined;
+  /**
+   * The organization-level user session issuer the gateway signs people in through. A server that signs in upstream is offered on the gateway only when its sign-in client is attached to this issuer. Set only when available.
+   */
+  userSessionIssuerId?: string | undefined;
 };
 
 /** @internal */
@@ -62,10 +66,12 @@ export const OrganizationGateway$inboundSchema: z.ZodMiniType<
       OrganizationGatewayUnavailableReason$inboundSchema,
     ),
     url: z.optional(z.string()),
+    user_session_issuer_id: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "unavailable_reason": "unavailableReason",
+      "user_session_issuer_id": "userSessionIssuerId",
     });
   }),
 );
