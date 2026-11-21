@@ -2,11 +2,21 @@ import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
 import { CLAUDE_ORG_INSTRUCTION } from "@/lib/claude-org-instruction";
+import { DASHBOARD_CONFIG_META_NAME } from "@/lib/dashboard-config-html";
 import {
   getAgentPlatforms,
   getCoworkTeamSteps,
   platformSteps,
 } from "./setup-data";
+
+// The first-party hosts the gram-infra chart supplies to the US production
+// deployment. Set before AGENT_PLATFORMS below is built from them.
+const dashboardConfig = document.createElement("meta");
+dashboardConfig.name = DASHBOARD_CONFIG_META_NAME;
+dashboardConfig.content = JSON.stringify({
+  firstPartyHosts: ["app.getgram.ai", "ai.speakeasy.com"],
+});
+document.head.appendChild(dashboardConfig);
 
 const AGENT_PLATFORMS = getAgentPlatforms("https://app.getgram.ai");
 
