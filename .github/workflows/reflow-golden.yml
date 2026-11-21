@@ -21,7 +21,7 @@ concurrency:
 
 env:
   # Exact Reflow CLI release; bump deliberately.
-  REFLOW_VERSION: 0.1.0-47d62bd1d591383aa9c2
+  REFLOW_VERSION: 0.1.0-c0811c5f88c6c2f2ce35
   REFLOW_API: https://app.reflow.io
 
 jobs:
