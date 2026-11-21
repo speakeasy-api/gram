@@ -1072,3 +1072,39 @@ func TestUnavailableLabelWording(t *testing.T) {
 		require.Equal(t, want, unavailableLabel(code), code.String())
 	}
 }
+
+// Only a person's own stored sign-in names its service client on a row.
+func TestOwnSignInClient(t *testing.T) {
+	t.Parallel()
+
+	client := uuid.New()
+	require.Equal(t, client, ownSignInClient(remotesessions.UpstreamToken{Token: "person", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: client}))
+	require.Equal(t, uuid.Nil, ownSignInClient(remotesessions.UpstreamToken{Token: "shared", CredentialOwner: remotesessions.CredentialOwnerSelf, RemoteSessionClientID: client}), "the server's own credential")
+	require.Equal(t, uuid.Nil, ownSignInClient(remotesessions.UpstreamToken{Token: "", CredentialOwner: remotesessions.CredentialOwnerSubject, RemoteSessionClientID: client}), "nothing sent")
+}
+
+// A hosted call is recorded only when a server fronts it, as its failures are; other requests always are.
+func TestRecordHostedServed(t *testing.T) {
+	t.Parallel()
+
+	signedIn := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{UserID: "person"})
+	serverID := uuid.New()
+	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), OrganizationID: "org", ProjectID: uuid.New(), Slug: "toolset"}
+	record := func(cfg *hostedServing, method string, answered bool) *mcpconnectionattemptstest.Recording {
+		rec := mcpconnectionattemptstest.New(t)
+		(&Service{connections: rec.Recorder}).recordHostedServed(signedIn, toolset, cfg, &mcpInputs{backendAnswered: answered}, method)
+		return rec
+	}
+
+	fronted := &hostedServing{mcpServerID: &serverID}
+	row := record(fronted, "tools/call", true).RequireServed(true)
+	require.Equal(t, serverID.String(), row.ServerID)
+	require.Equal(t, urn.NewUserSubject("person").String(), row.SubjectURN)
+	record(fronted, "tools/call", false).RequireServed(false)
+	record(fronted, "initialize", false).RequireServed(false)
+
+	bare := &hostedServing{}
+	record(bare, "tools/call", true).RequireNoneServed()
+	record(bare, "resources/read", true).RequireNoneServed()
+	require.Equal(t, toolset.ID.String(), record(bare, "tools/list", false).RequireServed(false).ServerID)
+}

@@ -27,9 +27,10 @@ type Recording struct {
 	// Recorder is what to hand to the code under test.
 	Recorder *mcpconnectionattempts.Recorder
 
-	t    *testing.T
-	mu   sync.Mutex
-	rows []mcpconnectionattempts.Row
+	t      *testing.T
+	mu     sync.Mutex
+	rows   []mcpconnectionattempts.Row
+	served []mcpconnectionattempts.Served
 }
 
 // New returns an empty recording for an organization with logs on.
@@ -48,12 +49,17 @@ func NewLogsOff(t *testing.T) *Recording {
 func newRecording(t *testing.T, logsEnabled func(context.Context, string) (bool, error)) *Recording {
 	t.Helper()
 
-	rec := &Recording{Recorder: nil, t: t, mu: sync.Mutex{}, rows: nil}
+	rec := &Recording{Recorder: nil, t: t, mu: sync.Mutex{}, rows: nil, served: nil}
 	rec.Recorder = mcpconnectionattempts.NewCapturing(func(row mcpconnectionattempts.Row) {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		rec.rows = append(rec.rows, row)
 	}, logsEnabled)
+	rec.Recorder.CaptureServed(func(served mcpconnectionattempts.Served) {
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		rec.served = append(rec.served, served)
+	})
 	t.Cleanup(rec.requireOneEndingPerAttempt)
 	return rec
 }
@@ -63,6 +69,28 @@ func (r *Recording) Rows() []mcpconnectionattempts.Row {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]mcpconnectionattempts.Row(nil), r.rows...)
+}
+
+// Served returns the served connections recorded, in order.
+func (r *Recording) Served() []mcpconnectionattempts.Served {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]mcpconnectionattempts.Served(nil), r.served...)
+}
+
+// RequireServed asserts exactly one served connection, and whether its server answered.
+func (r *Recording) RequireServed(answered bool) mcpconnectionattempts.Served {
+	r.t.Helper()
+	served := r.Served()
+	require.Len(r.t, served, 1, "want one served connection, got %+v", served)
+	require.Equal(r.t, answered, !served[0].AnsweredAt.IsZero(), "server answered")
+	return served[0]
+}
+
+// RequireNoneServed asserts no served connection was recorded.
+func (r *Recording) RequireNoneServed() {
+	r.t.Helper()
+	require.Empty(r.t, r.Served())
 }
 
 // RequireStep asserts a non-final row for this step and what happened.

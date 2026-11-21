@@ -499,6 +499,9 @@ type mcpInputs struct {
 
 	// upstreamRejection is set by tools/call when an HTTP tool's provider refused the credential sent.
 	upstreamRejection mcpconnectionattempts.Code
+
+	// backendAnswered is set by tools/call and resources/read when the tool's own backend returned a result that is not an error.
+	backendAnswered bool
 }
 
 // recordServingAnalytics adds the known serving ids to product event properties.
@@ -1558,6 +1561,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		toolSelection:            callerToolSelection,
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
+		backendAnswered:          false,
 	}
 
 	// Call handlers resolve attribution after loading their toolset. Other
@@ -1614,6 +1618,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
+	if err == nil {
+		s.recordHostedServed(ctx, toolset, cfg, mcpInputs, req.Method)
+	}
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)

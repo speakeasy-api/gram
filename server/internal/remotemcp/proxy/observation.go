@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
@@ -61,19 +60,8 @@ func observeResponse(ctx context.Context, msg jsonrpc.Message) {
 		return
 	}
 	outcome := "success"
-	if response.Error != nil {
+	if replyFailed(response, o.method) {
 		outcome = "error"
-	} else if o.method == "tools/call" {
-		var result struct {
-			IsError bool `json:"isError"`
-		}
-		if json.Unmarshal(response.Result, &result) != nil {
-			o.finish("error")
-			return
-		}
-		if result.IsError {
-			outcome = "error"
-		}
 	}
 	o.finish(outcome)
 }

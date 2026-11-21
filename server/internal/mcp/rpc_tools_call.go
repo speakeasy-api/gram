@@ -633,6 +633,7 @@ func handleToolsCall(
 		}
 		// The call's records follow the upstream's own isError verdict.
 		rw.resultIsError = dialect.MCPResultIsError(rw.body.Bytes())
+		payload.backendAnswered = !rw.resultIsError
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -684,6 +685,8 @@ func handleToolsCall(
 		return nil, failure
 	}
 
+	// A prompt is rendered and a platform tool is run by Speakeasy, not a backend.
+	payload.backendAnswered = rw.statusCode >= 200 && rw.statusCode < 300 && plan.Kind != gateway.ToolKindPrompt && plan.Kind != gateway.ToolKindPlatform
 	return bs, nil
 }
 

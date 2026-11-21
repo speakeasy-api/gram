@@ -181,12 +181,12 @@ func TestToolsCallConnections_ColdCatalogAtMissingHost(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeAddressNotFound, code)
 }
 
-// A failure that is not an address keeps the row it had.
+// A listing that never reached the server reads like a forwarded call failing the same way; one the server answered stays ours.
 func TestToolsCallConnections_ColdCatalogOtherFailuresKeepTheirRow(t *testing.T) {
 	t.Parallel()
 
 	code, _ := coldCatalogRefusal(t, resolvingPolicy(t, errors.New("resolver down")), "http://mcp.example.invalid/mcp")
-	require.Equal(t, mcpconnectionattempts.CodeInternalError, code, "a lookup that fails for now")
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code, "a lookup that fails for now")
 
 	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

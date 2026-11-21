@@ -416,6 +416,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		}
 		return nil, err
 	}
+	if inputs.backendAnswered {
+		s.recordMemberServed(ctx, gate, member, uuid.Nil)
+	}
 	return body, nil
 }
 
@@ -623,6 +626,7 @@ func (s *Service) buildMemberDispatch(
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
+		backendAnswered:          false,
 	}
 	return toolset, hosting, inputs, nil
 }

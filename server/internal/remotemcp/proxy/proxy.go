@@ -400,6 +400,10 @@ type Proxy struct {
 	// See [RequestFailureInterceptor].
 	RequestFailureInterceptors []RequestFailureInterceptor
 
+	// RequestServedInterceptors run once for a forwarded POST the remote MCP
+	// server answered without an error. See [RequestServedInterceptor].
+	RequestServedInterceptors []RequestServedInterceptor
+
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
 	// completed. Non-tools/list requests skip this loop entirely.
@@ -555,7 +559,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		defer stopAge()
 
 		streamStart := time.Now()
-		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: age}
+		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, reply: nil, age: age}
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, jsonrpc.ID{}, relay, nil, nil, nil, nil, nil, label)
 		responseBytes = relay.bytes
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
@@ -853,7 +857,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// abandon it, with shutdowndrain.ErrInterrupted as the cause, while ctx stays live
 	// for answering the client and running interceptors. A subscriptions/listen
 	// stream is not interrupted: it already ends when the drain starts.
-	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: p.streamAge(start)}
+	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, reply: nil, age: p.streamAge(start)}
 	forwardCtx, cancelForward := context.WithCancelCause(ctx)
 	defer cancelForward(nil)
 	if !listen {
@@ -961,6 +965,9 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, userReqID, relay, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, label)
 		responseBytes = relay.bytes
 		responseRelayed := relay.responseRelayed.Load()
+		if relay.reply != nil && upstreamStatus >= 200 && upstreamStatus < 300 && servedBy(relay.reply, userReqID, jsonrpcMethod) {
+			p.runRequestServedInterceptors(ctx, &RequestServed{Method: jsonrpcMethod})
+		}
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
 		if shutdowndrain.Interrupted(forwardCtx) {
 			// The interrupt only fires before the response is relayed, but the
@@ -1212,6 +1219,9 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		return err
 	}
 	observeResponse(ctx, msg)
+	if upstreamStatus >= 200 && upstreamStatus < 300 && servedBy(msg, userReqID, jsonrpcMethod) {
+		p.runRequestServedInterceptors(ctx, &RequestServed{Method: jsonrpcMethod})
+	}
 	return nil
 }
 
@@ -1656,6 +1666,7 @@ func (p *Proxy) relaySSEStream(
 		}
 		result.bytes += int64(len(emit))
 		if isResponseTo(msg, responseID) {
+			result.reply = msg
 			result.markResponseRelayed(p.Drain, upstreamResp.Body)
 		}
 		observeResponse(ctx, msg)
@@ -1736,6 +1747,9 @@ type sseRelay struct {
 
 	// resumable reports whether any upstream event carried an SSE id.
 	resumable bool
+
+	// reply is the response relayed to the request that opened the stream.
+	reply jsonrpc.Message
 
 	// age is the stream's maximum age.
 	age streamAge
@@ -1923,6 +1937,20 @@ func (p *Proxy) runRequestFailureInterceptors(ctx context.Context, failure *Requ
 		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.RequestFailureInterceptor",
 			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
 		interceptor.InterceptRequestFailure(iterCtx, failure)
+		span.End()
+	}
+}
+
+// runRequestServedInterceptors invokes each configured
+// RequestServedInterceptor in order, unless the caller went away first.
+func (p *Proxy) runRequestServedInterceptors(ctx context.Context, served *RequestServed) {
+	if ctx.Err() != nil {
+		return
+	}
+	for _, interceptor := range p.RequestServedInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.RequestServedInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		interceptor.InterceptRequestServed(iterCtx, served)
 		span.End()
 	}
 }

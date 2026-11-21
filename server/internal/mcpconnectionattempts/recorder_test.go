@@ -36,6 +36,9 @@ func testConfig() config {
 		logsCheckTimeout: 10 * time.Second,
 
 		repeatsInterval: time.Hour,
+
+		servedInterval:      5 * time.Minute,
+		servedFlushInterval: 10 * time.Millisecond,
 	}
 }
 

@@ -308,6 +308,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// admission of its caller.
 	ctx = withMandatoryAdmission(ctx)
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
+	if err == nil {
+		s.recordGatewayServed(ctx, gate)
+	}
 
 	switch {
 	case body == nil && err == nil:

@@ -418,6 +418,12 @@ type config struct {
 	insertTimeout    time.Duration
 	logsCheckTimeout time.Duration
 	repeatsInterval  time.Duration
+
+	// servedInterval is how often one connection's served requests are written.
+	servedInterval time.Duration
+
+	// servedFlushInterval is how long a served connection waits in memory.
+	servedFlushInterval time.Duration
 }
 
 // Recorder writes connection events. Its methods only queue a row. One goroutine checks the
@@ -432,7 +438,14 @@ type Recorder struct {
 	capture     func(Row)
 	cfg         config
 	steps       metric.Int64Counter
-	dropped     metric.Int64Counter
+
+	// served holds the connections served since the last flush. Nil records none.
+	served *servedConnections
+
+	// captureServed receives a capturing recorder's served connections.
+	captureServed func(Served)
+
+	dropped metric.Int64Counter
 
 	// referenceTimeouts counts references not shown because the logs check outran its wait.
 	referenceTimeouts metric.Int64Counter
@@ -509,6 +522,9 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		insertTimeout:    defaultInsertTimeout,
 		logsCheckTimeout: defaultLogsCheckTimeout,
 		repeatsInterval:  defaultRepeatsInterval,
+
+		servedInterval:      defaultServedInterval,
+		servedFlushInterval: defaultServedFlushInterval,
 	}, opts...)
 }
 
@@ -548,6 +564,9 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		steps:       steps,
 		dropped:     dropped,
 
+		served:        newServedConnections(cfg.servedInterval),
+		captureServed: nil,
+
 		referenceTimeouts: referenceTimeouts,
 		queue:             make(chan Row, cfg.queueSize),
 		stop:              make(chan struct{}),
@@ -586,9 +605,12 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		deviceKeys:  nil,
 		exporter:    nil,
 		capture:     capture,
-		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
+		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0, servedInterval: 0, servedFlushInterval: 0},
 		steps:       nil,
 		dropped:     nil,
+
+		served:        nil,
+		captureServed: nil,
 
 		referenceTimeouts: nil,
 		queue:             nil,
@@ -1009,6 +1031,8 @@ func (r *Recorder) run() {
 	defer ticker.Stop()
 	repeats := time.NewTicker(r.cfg.repeatsInterval)
 	defer repeats.Stop()
+	served := time.NewTicker(r.cfg.servedFlushInterval)
+	defer served.Stop()
 
 	// organizations holds each logs check for one flush: one lookup per organization per interval.
 	organizations := map[string]dropReason{}
@@ -1091,6 +1115,8 @@ func (r *Recorder) run() {
 			flush()
 		case <-repeats.C:
 			addPending(r.limiter.pendingRows(time.Now(), false))
+		case <-served.C:
+			r.flushServed()
 		case <-r.stop:
 			for {
 				select {
@@ -1099,6 +1125,9 @@ func (r *Recorder) run() {
 				default:
 					addPending(r.limiter.pendingRows(time.Now(), true))
 					flush()
+					if !drainFailed {
+						r.flushServed()
+					}
 					return
 				}
 			}

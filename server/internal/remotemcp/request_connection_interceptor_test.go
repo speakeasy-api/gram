@@ -79,6 +79,7 @@ func (c connectionsUnderTest) install(p *proxy.Proxy) {
 	p.ToolsCallFailureInterceptors = c.withFailures(nil)
 	p.ToolsCallRefusalInterceptors = c.refusals()
 	p.RequestFailureInterceptors = c.requestFailures()
+	p.RequestServedInterceptors = c.requestsServed()
 }
 
 func continueCheckpoint() ToolsCallKillswitchCheckpoint {
@@ -390,6 +391,9 @@ func TestRefusalHappened(t *testing.T) {
 		{name: "check failed", err: killswitchCheckError{proxy.NewKillswitchInfrastructureRejection()}, want: mcpconnectionattempts.CodeKillswitchCheckUnavailable},
 		{name: "a failed lookup is ours", err: errors.New("resolve remote MCP tool disposition: lookup failed"), want: mcpconnectionattempts.CodeInternalError},
 		{name: "a malformed call is ours", err: &proxy.RejectError{Code: proxy.RejectCodeInvalidParams, Message: "malformed", Data: nil}, want: mcpconnectionattempts.CodeInternalError},
+		{name: "an unreachable server stops a cold catalog's listing", err: &proxy.UpstreamListingRefusalError{Cause: errors.New("dial tcp: connection refused"), Response: nil}, want: mcpconnectionattempts.CodeProviderUnreachable},
+		{name: "a slow server stops a cold catalog's listing", err: &proxy.UpstreamListingRefusalError{Cause: fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut), Response: nil}, want: mcpconnectionattempts.CodeProviderUnreachable},
+		{name: "a listing that could not be built is ours", err: &proxy.UpstreamListingRefusalError{Cause: &proxy.ForwardSetupError{Err: errors.New("build"), Kind: proxy.ForwardSetupInternal}, Response: nil}, want: mcpconnectionattempts.CodeInternalError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
