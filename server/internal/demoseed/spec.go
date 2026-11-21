@@ -2,6 +2,7 @@ package demoseed
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
@@ -102,6 +103,35 @@ func LocalSpec() Spec {
 		GroupPrefix:  "locl_grp_",
 		Marker:       "local-seed",
 	}
+}
+
+// maxPreviewNumber is the largest pull request number whose fixed uuid prefix
+// fits: one reserved hex digit, then seven for the number.
+const maxPreviewNumber = 1<<28 - 1
+
+// PreviewSpec is the end-to-end test organization of one pull request's preview
+// environment. Every identifier family carries the pull request number, so
+// previews, which share a cache with each other and with their environment,
+// never share an organization or a user id. Like the demo organization it has
+// no WorkOS counterpart: its WorkOSOrgID is an inert placeholder.
+func PreviewSpec(pullRequest int) (Spec, error) {
+	if pullRequest < 1 || pullRequest > maxPreviewNumber {
+		return Spec{}, fmt.Errorf("preview seed spec: pull request number %d is out of range", pullRequest)
+	}
+	n := strconv.Itoa(pullRequest)
+	return Spec{
+		CustomDomain: "mcp.e2e-pr-" + n + ".example.com",
+		OrgID:        "org_e2e_pr_" + n,
+		WorkOSOrgID:  "workos_e2e_pr_" + n + "_unlinked",
+		OrgSlug:      "e2e-pr-" + n,
+		OrgName:      "End-to-end tests (preview " + n + ")",
+		UUIDPrefix:   fmt.Sprintf("e%07x", pullRequest),
+		UserPrefix:   "user_e2e" + n + "_",
+		EmailDomain:  "@pr-" + n + ".e2e.invalid",
+		NameSeed:     "gram-e2e-" + n + "-",
+		GroupPrefix:  "e2e" + n + "_grp_",
+		Marker:       "e2e-preview-" + n,
+	}, nil
 }
 
 // ProjectID is the seed's single project, derived from UUIDPrefix.

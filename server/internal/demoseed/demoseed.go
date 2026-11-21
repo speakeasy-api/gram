@@ -54,7 +54,9 @@ var ErrSeedLocked = errors.New("another demo seed run holds the advisory lock; r
 // materialized-view targets before its inserts incrementally repopulate the
 // summaries.
 //
-// Pass DefaultSpec() for the shared production demo org.
+// Pass DefaultSpec() for the shared production demo org. A nil ch skips the
+// ClickHouse seed entirely, deletes included: a pull request preview shares its
+// environment's ClickHouse and owns only its Postgres database.
 func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) error {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
@@ -80,6 +82,10 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		}
 		logger.InfoContext(ctx, "demo seed upstream auth migrated")
 
+		if ch == nil {
+			logger.InfoContext(ctx, "demo seed skipped clickhouse")
+			return nil
+		}
 		if err := s.runClickHouse(ctx, ch); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w", err)
 		}

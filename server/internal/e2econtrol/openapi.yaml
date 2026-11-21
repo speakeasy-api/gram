@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
   title: Speakeasy end-to-end test contract
-  version: "2"
+  version: "3"
   description: >-
     The operations an end-to-end test run calls outside the browser: the control
-    surface (server/internal/e2econtrol, local stacks only) and the two public
-    API reads the suite's root uses to check the seeded state. A test tool pins
-    this file by its SHA-256, so changing it re-plans the flows that name it. It
-    is hand-written because the control surface is deliberately absent from the
-    public API (server/gen/http/openapi3.yaml); the two public reads are the
-    subset of that file the root needs, kept here so the tool has one contract.
+    surface (server/internal/e2econtrol), which exists only on a local stack or
+    a pull request preview that opted in. A test tool pins this file by its
+    SHA-256, so changing it re-plans the flows that name it. It is hand-written
+    because the control surface is deliberately absent from the public API
+    (server/gen/http/openapi3.yaml). One credential, the control token, is all
+    a run holds: the seeded state is asserted in the dashboard, signed in
+    through e2e.signInLink.
 security:
   - control: []
 paths:
@@ -63,72 +64,12 @@ paths:
                 properties:
                   path:
                     type: string
-  /rpc/toolsets.get:
-    get:
-      operationId: getToolset
-      security:
-        - apiKey: []
-          project: []
-      parameters:
-        - name: slug
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The MCP server (toolset)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  name:
-                    type: string
-                  slug:
-                    type: string
-                  tools:
-                    type: array
-                    items:
-                      type: object
-  /rpc/access.listRoles:
-    get:
-      operationId: listRoles
-      security:
-        - apiKey: []
-      responses:
-        "200":
-          description: The organization's roles
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  roles:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                        slug:
-                          type: string
-                        is_system:
-                          type: boolean
 components:
   securitySchemes:
     control:
       type: apiKey
       in: header
       name: Gram-E2E-Token
-    apiKey:
-      type: apiKey
-      in: header
-      name: Gram-Key
-    project:
-      type: apiKey
-      in: header
-      name: Gram-Project
   schemas:
     Problem:
       type: object
