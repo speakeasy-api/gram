@@ -21,7 +21,7 @@ func newUploadCommand() *cli.Command {
 		Usage: "Upload an asset to the Speakeasy AI Control Plane",
 		Description: `
 Example:
-  speakeasy upload --type openapiv3 \
+  speakeasy-ai upload --type openapiv3 \
     --location https://raw.githubusercontent.com/my/spec.yaml \
     --name "My API" \
     --slug my-api`[1:],

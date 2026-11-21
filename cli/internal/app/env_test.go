@@ -34,7 +34,7 @@ func walkFlags(cmds []*cli.Command, fn func(cli.Flag)) {
 func TestNewApp_EveryEnvBoundFlagReadsTheNewName(t *testing.T) {
 	t.Parallel()
 
-	app := newApp()
+	app := newApp(commandName)
 	var seen []string
 	check := func(f cli.Flag) {
 		vars := envVarsOf(f)

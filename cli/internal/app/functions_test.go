@@ -324,7 +324,7 @@ func TestPushFunction_NoBuild(t *testing.T) {
 	opts.NoBuild = true
 
 	_, err := pushFunction(t.Context(), project, pusher.push, opts)
-	require.ErrorContains(t, err, "run 'speakeasy functions build' first")
+	require.ErrorContains(t, err, "run 'speakeasy-ai functions build' first")
 	require.False(t, project.built)
 	require.Empty(t, pusher.calls)
 	require.NoFileExists(t, filepath.Join(dir, "gram.deploy.json"))
@@ -398,7 +398,7 @@ func runApp(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
 	var stdout bytes.Buffer
-	app := newApp()
+	app := newApp(commandName)
 	app.Writer = &stdout
 	app.ErrWriter = &bytes.Buffer{}
 	app.ExitErrHandler = func(*cli.Context, error) {}
@@ -457,7 +457,7 @@ func TestFunctionsInit_FlagsAfterDir(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "my-tools")
 	out, err := runApp(t, "functions", "init", dir, "--template", "mcp", "--name", "@acme/tools", "--git=false", "--install=false", "-y")
 	require.NoError(t, err)
-	require.Contains(t, out, "speakeasy functions build")
+	require.Contains(t, out, "speakeasy-ai functions build")
 
 	require.FileExists(t, filepath.Join(dir, "src", "mcp.ts"))
 	raw, err := os.ReadFile(filepath.Clean(filepath.Join(dir, "package.json")))

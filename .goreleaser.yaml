@@ -3,6 +3,26 @@
 version: 2
 
 builds:
+  # The CLI installs as speakeasy-ai so it can sit next to the Speakeasy SDK
+  # generator, which owns the speakeasy name.
+  - id: speakeasy-ai
+    binary: speakeasy-ai
+    dir: ./cli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    flags:
+      - -trimpath
+    ldflags:
+      - "-s -w -X github.com/speakeasy-api/gram/cli/internal/app.GitSHA={{.Commit}} -X github.com/speakeasy-api/gram/cli/internal/app.Version={{.Version}}"
+
+  # The same program built under its previous speakeasy name. Its archives keep
+  # the speakeasy_<os>_<arch>.zip names that `speakeasy update` and the install
+  # scripts of older releases download. The binary prints a deprecation notice
+  # when run as speakeasy. Remove once older releases are retired.
   - id: speakeasy
     binary: speakeasy
     dir: ./cli
@@ -36,6 +56,13 @@ builds:
       - "-s -w -X github.com/speakeasy-api/gram/cli/internal/app.GitSHA={{.Commit}} -X github.com/speakeasy-api/gram/cli/internal/app.Version={{.Version}}"
 
 archives:
+  - id: speakeasy-ai
+    ids:
+      - speakeasy-ai
+    name_template: "speakeasy-ai_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    formats:
+      - zip
+
   - id: speakeasy
     ids:
       - speakeasy
@@ -75,23 +102,21 @@ monorepo:
   tag_prefix: "cli@"
 
 brews:
+  # Installs speakeasy-ai, so it no longer conflicts with the Speakeasy SDK
+  # generator formula (speakeasy-api/tap/speakeasy), which installs speakeasy.
   - name: cli
     ids:
-      - speakeasy
+      - speakeasy-ai
     repository:
       owner: speakeasy-api
       name: homebrew-tap
     homepage: https://ai.speakeasy.com
     description: Speakeasy AI Control Plane CLI
     license: AGPL-3.0-only
-    # The Speakeasy SDK generator formula (speakeasy-api/tap/speakeasy) also
-    # installs a binary named speakeasy.
-    conflicts:
-      - speakeasy
     install: |
-      bin.install "speakeasy"
+      bin.install "speakeasy-ai"
     test: |
-      system "#{bin}/speakeasy --version"
+      system "#{bin}/speakeasy-ai --version"
 
   # Legacy formulas: install the speakeasy binary under the gram name so
   # existing installs and scripts keep working. They are deprecated in
@@ -109,7 +134,7 @@ brews:
     description: Speakeasy AI Control Plane CLI (deprecated gram command; use the cli formula)
     license: AGPL-3.0-only
     custom_block: |
-      deprecate! date: "2026-10-06", because: "has been renamed to speakeasy (brew install speakeasy-api/tap/cli)"
+      deprecate! date: "2026-10-06", because: "has been renamed to speakeasy-ai (brew install speakeasy-api/tap/cli)"
     install: |
       bin.install "speakeasy" => "gram"
     test: |
@@ -125,7 +150,7 @@ brews:
     description: Speakeasy AI Control Plane CLI (deprecated gram command; use the cli formula)
     license: AGPL-3.0-only
     custom_block: |
-      deprecate! date: "2026-10-06", because: "has been renamed to speakeasy (brew install speakeasy-api/tap/cli)"
+      deprecate! date: "2026-10-06", because: "has been renamed to speakeasy-ai (brew install speakeasy-api/tap/cli)"
     install: |
       bin.install "speakeasy" => "gram"
     test: |
@@ -134,7 +159,7 @@ brews:
 npms:
   - name: "@speakeasy-api/cli"
     ids:
-      - speakeasy
+      - speakeasy-ai
     description: Speakeasy AI Control Plane CLI
     homepage: https://ai.speakeasy.com
     keywords:

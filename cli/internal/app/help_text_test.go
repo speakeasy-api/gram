@@ -54,7 +54,7 @@ func checkCommands(t *testing.T, path string, cmds []*cli.Command) {
 func TestHelpText_HasNoGramBranding(t *testing.T) {
 	t.Parallel()
 
-	app := newApp()
+	app := newApp(commandName)
 	requireUnbranded(t, "speakeasy", app.Usage)
 	requireUnbranded(t, "speakeasy", app.Description)
 	checkFlags(t, "speakeasy", app.Flags)
@@ -79,11 +79,11 @@ func helpInvocations(prefix []string, cmds []*cli.Command) [][]string {
 func TestHelpText_RenderedHelpHasNoGramBranding(t *testing.T) {
 	t.Parallel()
 
-	invocations := append([][]string{{"--help"}}, helpInvocations(nil, newApp().Commands)...)
+	invocations := append([][]string{{"--help"}}, helpInvocations(nil, newApp(commandName).Commands)...)
 	require.Greater(t, len(invocations), 10, "expected every command and subcommand to be rendered")
 	for _, args := range invocations {
 		var out bytes.Buffer
-		app := newApp()
+		app := newApp(commandName)
 		app.Writer = &out
 		app.ErrWriter = &out
 		require.NoError(t, app.RunContext(t.Context(), append([]string{"speakeasy", "--profile-path", t.TempDir() + "/profile.json"}, args...)))

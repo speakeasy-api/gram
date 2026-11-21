@@ -21,6 +21,8 @@ Before running this example, you'll need:
 - **Node.js v22** or later ([Download Node.js](https://nodejs.org/))
 - **npm** (comes with Node.js)
 - **OpenRouter API key** ([Sign up at OpenRouter](https://openrouter.ai/))
+- **Speakeasy AI Control Plane CLI**, installed as `speakeasy-ai`: `brew install speakeasy-api/tap/cli`,
+  `npm i -g @speakeasy-api/cli` or `curl -fsSL https://ai.speakeasy.com/cli.sh | bash`
 
 ## Setup Instructions
 

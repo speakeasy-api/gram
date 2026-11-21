@@ -72,7 +72,18 @@ test("GRAM_DEV falls through when the local build is missing", async () => {
   expect(cli).toBe("gram");
 });
 
-test("speakeasy is preferred when it is the Control Plane CLI", async () => {
+test("speakeasy-ai is preferred over an older speakeasy install", async () => {
+  const cli = await resolveCLI(
+    deps({
+      onPath: ["speakeasy-ai", "speakeasy", "gram"],
+      controlPlaneCLIs: ["speakeasy-ai", "speakeasy"],
+    }),
+  );
+
+  expect(cli).toBe("speakeasy-ai");
+});
+
+test("speakeasy is used when it is the Control Plane CLI", async () => {
   const cli = await resolveCLI(
     deps({ onPath: ["speakeasy", "gram"], controlPlaneCLIs: ["speakeasy"] }),
   );
