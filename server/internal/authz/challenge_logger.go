@@ -50,29 +50,30 @@ const challengeLogStepTimeout = 10 * time.Second
 // enqueue is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
-func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
+// It reports whether the challenge was enqueued.
+func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) bool {
 	RecordAuthorizationDecision(ctx, l.Operation, l.Outcome, l.Reason)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
-		return
+		return false
 	}
 
 	// Skip challenge logging when a Speakeasy admin is impersonating a
 	// customer org — challenges belong to the admin, not the customer.
 	if contextvalues.IsSupportSession(ctx) {
-		return
+		return false
 	}
 
 	// Likewise for sessions exploring the shared demo org: challenges there
 	// belong to the visitor, and the daily seed rerun would wipe them anyway.
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
-		return
+		return false
 	}
 
 	// A listing records nothing (see WithoutChallenges).
 	if challengesSilenced(ctx) {
-		return
+		return false
 	}
 
 	// Detached and bounded: a client cancel must not drop a completed decision.
@@ -85,15 +86,15 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 			attr.SlogError(err),
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		)
-		return
+		return false
 	}
 	if !enabled {
-		return
+		return false
 	}
 	// A request records each resource it names once (see
 	// WithOneChallengePerResource).
 	if !claimChallenge(ctx, l) {
-		return
+		return false
 	}
 
 	principalURN, principalType := authorizationChallengePrincipal(ctx, authCtx)
@@ -211,8 +212,9 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		logger.WarnContext(enqueueCtx, "failed to enqueue authz challenge",
 			attr.SlogError(err),
 		)
-		return
+		return false
 	}
+	return true
 }
 
 func authorizationChallengePrincipal(ctx context.Context, authCtx *contextvalues.AuthContext) (string, authzrepo.PrincipalType) {

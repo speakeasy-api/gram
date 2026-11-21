@@ -42,6 +42,9 @@ type challengeDenial struct {
 	resource    challengeResource
 	tool        string
 	disposition string
+	// server is the MCP server an auth client was refused on: one client
+	// serves several servers, and each refusal is its own.
+	server string
 }
 
 // WithOneChallengePerResource returns a context under which the engine records
@@ -118,6 +121,7 @@ func claimChallenge(ctx context.Context, l challengeLogger) bool {
 			resource:    key,
 			tool:        focus.Dimensions[SelectorKeyTool],
 			disposition: focus.Dimensions[SelectorKeyDisposition],
+			server:      focus.Dimensions[ChallengeKeyMCPServerID],
 		}
 		if _, seen := scope.recorded.denied[denial]; seen {
 			return false
