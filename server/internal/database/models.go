@@ -4031,6 +4031,75 @@ type McpServerAuthClient struct {
 	Deleted bool
 }
 
+type McpServerFeedback struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	McpServerID uuid.UUID
+	// The report itself, written by the agent.
+	// @access: opaque-restricted
+	Content string
+	// blocked, degraded or cosmetic; NULL when the agent gave none.
+	// @access: confidential
+	Severity pgtype.Text
+	// What the agent did instead, in its own words.
+	// @access: opaque-restricted
+	Workaround pgtype.Text
+	// What the agent was trying to do, in its own words.
+	// @access: opaque-restricted
+	Intention pgtype.Text
+	// The tool the agent says the report is about. Not checked against the server's tools.
+	// @access: opaque-confidential
+	ToolName pgtype.Text
+	// Model and host product as the agent reported them.
+	// @access: opaque-confidential
+	Model pgtype.Text
+	// Speakeasy users.id of the caller, when the caller is a member of the server's organization.
+	// @access: confidential
+	UserID pgtype.Text
+	// The caller's subject in the identity provider the server signs people in with.
+	// @access: confidential-pii
+	ExternalUserID pgtype.Text
+	// MCP client name reported at the handshake.
+	// @access: opaque-confidential
+	ClientName pgtype.Text
+	// MCP client version reported at the handshake.
+	// @access: opaque-confidential
+	ClientVersion pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type McpServerFeedbackConfig struct {
+	// @access: confidential
+	McpServerID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Enabled bool
+	// Name the feedback tool is listed under, when an admin replaced the default.
+	// @access: opaque-confidential
+	ToolName pgtype.Text
+	// Description agents read for the feedback tool, when an admin replaced the default.
+	// @access: opaque-restricted
+	ToolDescription pgtype.Text
+	// Speakeasy users.id of the person who last changed these settings; NULL when an API key did.
+	// @access: confidential
+	UpdatedByUserID pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type McpServerRemoteSessionClient struct {
 	// @access: confidential
 	ID uuid.UUID
