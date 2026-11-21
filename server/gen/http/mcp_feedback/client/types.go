@@ -25,6 +25,10 @@ type UpdateSettingsRequestBody struct {
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// The description agents read. Leave out to use the default.
 	ToolDescription *string `form:"tool_description,omitempty" json:"tool_description,omitempty" xml:"tool_description,omitempty"`
+	// The updated_at of the settings this change was made from. When set, the
+	// change is refused with a conflict if the settings were changed since, so one
+	// admin's change does not silently undo another's.
+	ExpectedUpdatedAt *string `form:"expected_updated_at,omitempty" json:"expected_updated_at,omitempty" xml:"expected_updated_at,omitempty"`
 }
 
 // GetSettingsResponseBody is the type of the "mcpFeedback" service
@@ -700,8 +704,6 @@ type McpFeedbackResponseBody struct {
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// The model and host product as the agent reported them.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
-	// The MCP session the report arrived on.
-	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	// The Speakeasy user ID of the caller, when the caller is a member of the
 	// organization.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
@@ -722,10 +724,11 @@ type McpFeedbackResponseBody struct {
 // of the "updateSettings" endpoint of the "mcpFeedback" service.
 func NewUpdateSettingsRequestBody(p *mcpfeedback.UpdateSettingsPayload) *UpdateSettingsRequestBody {
 	body := &UpdateSettingsRequestBody{
-		McpServerID:     p.McpServerID,
-		Enabled:         p.Enabled,
-		ToolName:        p.ToolName,
-		ToolDescription: p.ToolDescription,
+		McpServerID:       p.McpServerID,
+		Enabled:           p.Enabled,
+		ToolName:          p.ToolName,
+		ToolDescription:   p.ToolDescription,
+		ExpectedUpdatedAt: p.ExpectedUpdatedAt,
 	}
 	return body
 }

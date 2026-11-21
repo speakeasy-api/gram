@@ -24,6 +24,7 @@ import (
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -711,4 +712,47 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 	require.Equal(t, mcpriskscan.PhaseResponse, events[1]["gram.mcp.risk.scan.phase"])
 
 	requireHostedAttributionRow(t, telemetry.EventSourceResourceRead, server.ID, mcpEndpointIDForServer(t, ctx, ti, projectID, server.ID))
+}
+
+// A feedback report is screened like any other call's arguments, so a block
+// policy on the server stops it before it is recorded.
+func TestRiskScan_HostedBlockPolicyStopsAFeedbackReport(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	serveFeedback(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "scan-feedback-"+uuid.NewString()[:8])
+	setFeedbackTool(t, ctx, ti, toolset.ID, true, "")
+	ti.service.SetRiskScanEvaluator(mcpriskscan.NewPolicyEvaluator(
+		ti.logger,
+		ti.tracerProvider,
+		testenv.NewMeterProvider(t),
+		hostedPolicyLookup{
+			policy: policycore.Policy{
+				ID:             uuid.New(),
+				ProjectID:      *authCtx.ProjectID,
+				OrganizationID: authCtx.ActiveOrganizationID,
+				Name:           "Hosted policy",
+				Action:         "block",
+			},
+			scopedServerID: toolset.ID,
+		},
+		hostedPolicyDetector{},
+		gcp.NewNoopPublisher[*riskv1.Finding](),
+		mcpriskscan.DefaultPolicyConfig,
+	))
+
+	response, err := servePublicHTTP(t, t.Context(), ti, toolset.McpSlug.String, feedbackCallBody(t, mcpfeedback.DefaultToolName, map[string]any{"content": "my key is sk-live-123"}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code)
+	rpc := decodeRPCResponse(t, response)
+	var rejected struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(rpc["error"], &rejected), response.Body.String())
+	require.Equal(t, int(oops.MCPCodeForbidden), rejected.Code)
+	require.Contains(t, rejected.Message, "Hosted policy")
+	require.Empty(t, storedFeedback(t, ctx, ti, toolset.ID))
 }

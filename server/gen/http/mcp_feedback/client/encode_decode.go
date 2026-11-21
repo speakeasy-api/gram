@@ -809,7 +809,6 @@ func unmarshalMcpFeedbackResponseBodyToTypesMcpFeedback(v *McpFeedbackResponseBo
 		Intention:      v.Intention,
 		ToolName:       v.ToolName,
 		Model:          v.Model,
-		SessionID:      v.SessionID,
 		UserID:         v.UserID,
 		UserEmail:      v.UserEmail,
 		ExternalUserID: v.ExternalUserID,

@@ -26,7 +26,7 @@ import (
 func serveFeedback(t *testing.T, ti *testInstance) {
 	t.Helper()
 
-	ti.service.SetFeedback(mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), mcpfeedback.Limits{Caller: nil, Server: nil}))
+	ti.service.SetFeedback(mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), mcpfeedback.Limits{Caller: nil, Server: nil}, mcpfeedback.WithSettingsFreshFor(0)))
 }
 
 // setFeedbackTool stores a server's feedback tool settings. An empty name uses the default.
@@ -144,7 +144,6 @@ func TestServePublic_FeedbackTool_HostedServerListsAndRecordsIt(t *testing.T) {
 	require.Equal(t, "tool_alpha returned an empty list although there is data.", rows[0].Content)
 	require.Equal(t, "blocked", rows[0].Severity.String)
 	require.Equal(t, "tool_alpha", rows[0].ToolName.String)
-	require.Equal(t, "session-abc", rows[0].SessionID.String)
 	require.False(t, rows[0].UserID.Valid, "nobody was signed in")
 
 	outcome := decodeToolCall(t, w.Body.Bytes())
@@ -160,7 +159,6 @@ func TestServePublic_FeedbackTool_HostedServerListsAndRecordsIt(t *testing.T) {
 	rows = storedFeedback(t, ctx, ti, toolset.ID)
 	require.Len(t, rows, 2)
 	require.Equal(t, authCtx.UserID, rows[0].UserID.String)
-	require.False(t, rows[0].SessionID.Valid, "a session the client did not send is not recorded")
 
 	// Sending feedback is not one of the server's tool calls.
 	require.Empty(t, ti.toolCallRecords.all())
@@ -364,7 +362,6 @@ func TestServePublic_FeedbackTool_ProxiedServerListsAndRecordsIt(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, "cosmetic", rows[0].Severity.String)
 	require.Equal(t, "ping", rows[0].ToolName.String)
-	require.Equal(t, "session-remote", rows[0].SessionID.String)
 
 	// The server's own tools still reach it, and the default name is not taken here.
 	w, err = servePublicHTTP(t, ctx, ti, slug, feedbackCallBody(t, "ping", map[string]any{}), token, nil)

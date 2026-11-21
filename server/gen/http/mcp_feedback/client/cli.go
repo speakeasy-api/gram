@@ -65,7 +65,7 @@ func BuildUpdateSettingsPayload(mcpFeedbackUpdateSettingsBody string, mcpFeedbac
 	{
 		err = json.Unmarshal([]byte(mcpFeedbackUpdateSettingsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_description\": \"aaa\",\n      \"tool_name\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"expected_updated_at\": \"1970-01-01T00:00:01Z\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_description\": \"aaa\",\n      \"tool_name\": \"aaa\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
 		if body.ToolName != nil {
@@ -77,6 +77,9 @@ func BuildUpdateSettingsPayload(mcpFeedbackUpdateSettingsBody string, mcpFeedbac
 			if utf8.RuneCountInString(*body.ToolDescription) > 2000 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_description", *body.ToolDescription, utf8.RuneCountInString(*body.ToolDescription), 2000, false))
 			}
+		}
+		if body.ExpectedUpdatedAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_updated_at", *body.ExpectedUpdatedAt, goa.FormatDateTime))
 		}
 		if err != nil {
 			return nil, err
@@ -101,10 +104,11 @@ func BuildUpdateSettingsPayload(mcpFeedbackUpdateSettingsBody string, mcpFeedbac
 		}
 	}
 	v := &mcpfeedback.UpdateSettingsPayload{
-		McpServerID:     body.McpServerID,
-		Enabled:         body.Enabled,
-		ToolName:        body.ToolName,
-		ToolDescription: body.ToolDescription,
+		McpServerID:       body.McpServerID,
+		Enabled:           body.Enabled,
+		ToolName:          body.ToolName,
+		ToolDescription:   body.ToolDescription,
+		ExpectedUpdatedAt: body.ExpectedUpdatedAt,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

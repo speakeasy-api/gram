@@ -167,6 +167,9 @@ var UpdateMcpFeedbackSettingsForm = Type("UpdateMcpFeedbackSettingsForm", func()
 	Attribute("tool_description", String, "The description agents read. Leave out to use the default.", func() {
 		MaxLength(2000)
 	})
+	Attribute("expected_updated_at", String, "The updated_at of the settings this change was made from. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.", func() {
+		Format(FormatDateTime)
+	})
 
 	Required("mcp_server_id", "enabled")
 })
@@ -187,7 +190,6 @@ var McpFeedback = Type("McpFeedback", func() {
 	Attribute("intention", String, "What the agent was trying to do.")
 	Attribute("tool_name", String, "The tool the agent says the report is about. It is not checked against the server's tools.")
 	Attribute("model", String, "The model and host product as the agent reported them.")
-	Attribute("session_id", String, "The MCP session the report arrived on.")
 	Attribute("user_id", String, "The Speakeasy user ID of the caller, when the caller is a member of the organization.")
 	Attribute("user_email", String, "That member's email address.")
 	Attribute("external_user_id", String, "The caller's subject in the identity provider the server signs people in with.")

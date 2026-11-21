@@ -144,6 +144,32 @@ func handleToolsCall(
 	// The feedback tool's name is taken on the server, so it is matched before
 	// any of the server's own tools and before the filters that narrow them.
 	if tool, ok := hostedFeedbackTool(ctx, logger, feedback, payload); ok && params.Name == tool.Name && attributedMCPServerID != nil {
+		// A report is the agent's words like any other call's arguments, so
+		// request risk policies screen it before it is recorded.
+		decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+			Surface:         mcpriskscan.SurfaceHostedMCP,
+			Method:          mcpriskscan.MethodToolsCall,
+			OrganizationID:  toolset.OrganizationID,
+			ProjectID:       payload.projectID.String(),
+			ServerID:        attributedMCPServerID.String(),
+			MetaServerID:    payload.metaMcpServerID,
+			ToolsetID:       toolset.ID,
+			ToolName:        params.Name,
+			ResourceURI:     "",
+			PromptName:      "",
+			ChatID:          "",
+			ToolAnnotations: nil,
+		}, mcpriskscan.BorrowPayload(params.Arguments)))
+		if decision.HeldForApproval() {
+			identity := serverInfoHostedToolset
+			if payload.metaMcpServerID != "" {
+				identity = serverInfoMetaServer
+			}
+			return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
+		}
+		if decision.Denied() {
+			return nil, oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
+		}
 		return handleHostedFeedbackToolCall(ctx, logger, feedback, clientInfoStore, payload, req.ID, toolset.OrganizationID, *attributedMCPServerID, params.Arguments, reqMeta.ClientInfo)
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback/repo"
@@ -34,7 +35,6 @@ func sampleReport() mcpfeedback.Report {
 
 func sampleCaller() mcpfeedback.Caller {
 	return mcpfeedback.Caller{
-		SessionID:      "session-1",
 		UserID:         "user-1",
 		UserEmail:      "priya@acme.example",
 		ExternalUserID: "idp|priya",
@@ -132,7 +132,6 @@ func TestRecorderSubmitStoresTheReport(t *testing.T) {
 	require.Equal(t, "Find a failing request.", row.Intention.String)
 	require.Equal(t, "search_logs", row.ToolName.String)
 	require.Equal(t, "Claude in Claude Code", row.Model.String)
-	require.Equal(t, "session-1", row.SessionID.String)
 	require.Equal(t, "user-1", row.UserID.String)
 	require.Equal(t, "idp|priya", row.ExternalUserID.String)
 	require.Equal(t, "claude-code", row.ClientName.String)
@@ -147,7 +146,7 @@ func TestRecorderSubmitLeavesOutWhatIsUnknown(t *testing.T) {
 	server := seedRemoteBackedServer(t, ctx, ti)
 	recorder := newTestRecorder(t, ti, noLimits)
 
-	anonymous := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
+	anonymous := mcpfeedback.Caller{UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
 	praise := mcpfeedback.Report{Content: "The tool descriptions are clear.", Severity: mcpfeedback.SeverityUnspecified, Workaround: "", Intention: "", ToolName: "", Model: ""}
 	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), anonymous, praise)
 	require.NoError(t, err)
@@ -156,7 +155,6 @@ func TestRecorderSubmitLeavesOutWhatIsUnknown(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.False(t, rows[0].Severity.Valid)
 	require.False(t, rows[0].ToolName.Valid)
-	require.False(t, rows[0].SessionID.Valid)
 	require.False(t, rows[0].UserID.Valid)
 	require.False(t, rows[0].UserEmail.Valid)
 }
@@ -292,7 +290,7 @@ func TestRecorderLimitsAnonymousCallersByServer(t *testing.T) {
 		Server: ratelimit.New(store, mcpfeedback.ServerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(2)),
 	}
 	recorder := newTestRecorder(t, ti, limits)
-	anonymous := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
+	anonymous := mcpfeedback.Caller{UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: ""}
 
 	for range 2 {
 		_, err := recorder.Submit(ctx, targetOf(t, ctx, server), anonymous, sampleReport())
@@ -316,7 +314,7 @@ func TestRecorderLimitsACallerItDoesNotName(t *testing.T) {
 		Server: ratelimit.New(store, mcpfeedback.ServerLimitName+":"+uuid.NewString(), ratelimit.PerMinute(10)),
 	}
 	recorder := newTestRecorder(t, ti, limits)
-	outsider := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: "", LimitSubject: "user-from-another-org"}
+	outsider := mcpfeedback.Caller{UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: "", LimitSubject: "user-from-another-org"}
 
 	_, err := recorder.Submit(ctx, targetOf(t, ctx, server), outsider, sampleReport())
 	require.NoError(t, err)
@@ -375,4 +373,68 @@ func TestRecorderCallDoesNotLeakWhyStoringFailed(t *testing.T) {
 	failed := recorder.Call(ctx, targetOf(t, ctx, server), sampleCaller(), json.RawMessage(`{"content":"A problem."}`))
 	require.True(t, failed.IsError)
 	require.Equal(t, "Feedback could not be recorded right now. Try again later.", failed.Text)
+}
+
+// Settings are served from memory while fresh, so a server's tool calls do
+// not each read them.
+func TestRecorderServesSettingsFromMemoryWhileFresh(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), noLimits)
+
+	saveFeedbackConfig(t, ctx, ti, server, true)
+	_, offered, err := recorder.Tool(ctx, server.ProjectID, server.ID)
+	require.NoError(t, err)
+	require.True(t, offered)
+
+	saveFeedbackConfig(t, ctx, ti, server, false)
+	_, offered, err = recorder.Tool(ctx, server.ProjectID, server.ID)
+	require.NoError(t, err)
+	require.True(t, offered, "the settings read a moment ago are still served")
+}
+
+// Settings read earlier are served while the database cannot be reached; a
+// server whose settings were never read fails instead.
+func TestRecorderServesEarlierSettingsWhenTheyCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	unread := seedRemoteBackedServer(t, ctx, ti)
+	recorder := newTestRecorder(t, ti, noLimits)
+
+	saveFeedbackConfig(t, ctx, ti, server, true)
+	_, offered, err := recorder.Tool(ctx, server.ProjectID, server.ID)
+	require.NoError(t, err)
+	require.True(t, offered)
+
+	unreachable, cancel := context.WithCancel(ctx)
+	cancel()
+
+	_, offered, err = recorder.Tool(unreachable, server.ProjectID, server.ID)
+	require.NoError(t, err)
+	require.True(t, offered)
+
+	_, _, err = recorder.Tool(unreachable, unread.ProjectID, unread.ID)
+	require.Error(t, err)
+}
+
+func saveFeedbackConfig(t *testing.T, ctx context.Context, ti *testInstance, server mcpserversrepo.McpServer, enabled bool) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := repo.New(ti.conn).UpsertFeedbackConfig(ctx, repo.UpsertFeedbackConfigParams{
+		McpServerID:     server.ID,
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       server.ProjectID,
+		Enabled:         enabled,
+		ToolName:        pgtype.Text{String: "", Valid: false},
+		ToolDescription: pgtype.Text{String: "", Valid: false},
+		UpdatedByUserID: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
 }

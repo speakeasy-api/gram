@@ -124915,9 +124915,6 @@ components:
                 model:
                     type: string
                     description: The model and host product as the agent reported them.
-                session_id:
-                    type: string
-                    description: The MCP session the report arrived on.
                 severity:
                     type: string
                     description: 'The impact a problem had on the agent''s task: blocked means it could not complete it, degraded means it needed a slower or awkward path, cosmetic means it worked but was confusing.'
@@ -143161,6 +143158,10 @@ components:
                 enabled:
                     type: boolean
                     description: Whether the server offers the feedback tool.
+                expected_updated_at:
+                    type: string
+                    description: The updated_at of the settings this change was made from. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.
+                    format: date-time
                 mcp_server_id:
                     type: string
                     description: The ID of the MCP server.

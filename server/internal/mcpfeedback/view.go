@@ -53,7 +53,6 @@ func buildFeedbackView(row repo.ListFeedbackRow) *types.McpFeedback {
 		Intention:      conv.FromPGText[string](row.Intention),
 		ToolName:       conv.FromPGText[string](row.ToolName),
 		Model:          conv.FromPGText[string](row.Model),
-		SessionID:      conv.FromPGText[string](row.SessionID),
 		UserID:         conv.FromPGText[string](row.UserID),
 		UserEmail:      conv.FromPGText[string](row.UserEmail),
 		ExternalUserID: conv.FromPGText[string](row.ExternalUserID),

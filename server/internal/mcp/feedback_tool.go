@@ -150,12 +150,18 @@ func handleHostedFeedbackToolCall(
 // feedbackCaller names who sent a report, as far as the request says. Nobody
 // is named unless the request was authenticated, and a person is named only
 // when they belong to the server's organization, whose people that
-// organization's feedback may name. The session is the one the client sent,
-// never one the gateway made up for a request without one.
+// organization's feedback may name.
+//
+// The caller's rate limit follows the most durable identity the request has,
+// whatever its organization: its principal, else its API key, else the MCP
+// session the client sent. The session only picks the bucket and is never
+// stored, because on a public server it is the caller's only credential.
 func feedbackCaller(ctx context.Context, organizationID string, r *http.Request, authenticated bool) mcpfeedback.Caller {
-	caller := mcpfeedback.Caller{SessionID: "", UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: "", LimitSubject: ""}
+	caller := mcpfeedback.Caller{UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: "", LimitSubject: ""}
 	if r != nil {
-		caller.SessionID = r.Header.Get(proxy.McpSessionIDHeader)
+		if session := r.Header.Get(proxy.McpSessionIDHeader); session != "" {
+			caller.LimitSubject = "session:" + session
+		}
 	}
 	if !authenticated {
 		return caller
@@ -165,11 +171,13 @@ func feedbackCaller(ctx context.Context, organizationID string, r *http.Request,
 	if !ok || authCtx == nil {
 		return caller
 	}
-	// A caller from another organization is not named, but is still held to
-	// its own rate limit rather than only the server's.
-	caller.LimitSubject = authCtx.UserID
-	if caller.LimitSubject == "" {
-		caller.LimitSubject = authCtx.ExternalUserID
+	switch {
+	case authCtx.UserID != "":
+		caller.LimitSubject = "user:" + authCtx.UserID
+	case authCtx.ExternalUserID != "":
+		caller.LimitSubject = "external:" + authCtx.ExternalUserID
+	case authCtx.APIKeyID != "":
+		caller.LimitSubject = "api-key:" + authCtx.APIKeyID
 	}
 	if authCtx.ActiveOrganizationID == organizationID {
 		caller.ExternalUserID = authCtx.ExternalUserID
@@ -224,7 +232,11 @@ func (s *Service) feedbackLocalTools(logger *slog.Logger, organizationID string,
 				// A proxied request carries an auth context only when its
 				// caller presented a credential.
 				caller := feedbackCaller(ctx, organizationID, call.UserRequest.UserHTTPRequest, true)
-				caller.ClientName, caller.ClientVersion = s.proxiedFeedbackClient(ctx, logger, projectID, clientScope, caller.SessionID)
+				sessionID := ""
+				if call.UserRequest.UserHTTPRequest != nil {
+					sessionID = call.UserRequest.UserHTTPRequest.Header.Get(proxy.McpSessionIDHeader)
+				}
+				caller.ClientName, caller.ClientVersion = s.proxiedFeedbackClient(ctx, logger, projectID, clientScope, sessionID)
 
 				outcome := feedback.Call(ctx, target, caller, call.Params.Arguments)
 
