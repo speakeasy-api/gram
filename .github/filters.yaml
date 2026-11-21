@@ -15,7 +15,10 @@ server:
 client:
   - ".github/**"
   - "client/**"
-  - "e2e/**"
+  - "e2e/package.json"
+  - "e2e/registry-editor.config.ts"
+  - "e2e/tests/admin-layout.spec.ts"
+  - "e2e/tests/registry-editor.spec.ts"
   - "package.json"
   - "pnpm-lock.yaml"
   - "pnpm-workspace.yaml"
@@ -33,7 +36,6 @@ client:
 # Test jobs use app-specific paths plus these shared dependency/config inputs.
 client-test-shared:
   - ".github/**"
-  - "client/*"
   - "package.json"
   - "pnpm-lock.yaml"
   - "pnpm-workspace.yaml"
@@ -53,7 +55,10 @@ client-test-dashboard:
 
 client-test-admin:
   - "client/admin/**"
-  - "e2e/**"
+  - "e2e/package.json"
+  - "e2e/registry-editor.config.ts"
+  - "e2e/tests/admin-layout.spec.ts"
+  - "e2e/tests/registry-editor.spec.ts"
 
 # Root tsconfig includes task sources and the dashboard's source SDK.
 tooling:

@@ -2641,8 +2641,7 @@ jobs:
         needs.changes.outputs.client-test-dashboard == 'true' ||
         needs.changes.outputs.client-test-shared == 'true' ||
         github.event_name == 'merge_group' ||
-        contains(github.event.pull_request.labels.*.name, 'ci:full') ||
-        github.base_ref != 'main'
+        contains(github.event.pull_request.labels.*.name, 'ci:full')
       )
     steps:
       - name: Checkout
@@ -2698,8 +2697,7 @@ jobs:
         needs.changes.outputs.client-test-admin == 'true' ||
         needs.changes.outputs.client-test-shared == 'true' ||
         github.event_name == 'merge_group' ||
-        contains(github.event.pull_request.labels.*.name, 'ci:full') ||
-        github.base_ref != 'main'
+        contains(github.event.pull_request.labels.*.name, 'ci:full')
       )
     steps:
       - name: Checkout
