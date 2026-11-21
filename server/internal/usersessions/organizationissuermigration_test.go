@@ -497,7 +497,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		CodeChallengeMethodsSupported:     []string{"S256"},
 	})
 	require.NoError(t, err)
-	_, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	_, err = remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: targetRemoteIssuer.ID,

@@ -408,7 +408,7 @@ func TestCreate_AbandonedClientRetiresRegistrationWithoutUnlinkingParent(t *test
 		ID: uuid.New(), Name: "Abandoned binding", Slug: "abandoned-binding-" + uuid.NewString()[:8], OrganizationID: si.orgID,
 	})
 	require.NoError(t, err)
-	_, err := usersessionsrepo.New(si.conn.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+	_, err = usersessionsrepo.New(si.conn.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
 		OrganizationID:     conv.ToPGText(si.orgID),
 		Slug:               "abandoned-binding-" + uuid.NewString()[:8],

@@ -71,7 +71,7 @@ func TestHostedServerIssuerMoveDoesNotInheritOffers(t *testing.T) {
 				CodeChallengeMethodsSupported:     []string{"S256"},
 			})
 			require.NoError(t, err)
-			_, err := remote.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+			_, err = remote.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 				ProjectID:             conv.ToNullUUID(projectID),
 				OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
 				RemoteSessionIssuerID: remoteIssuer.ID,

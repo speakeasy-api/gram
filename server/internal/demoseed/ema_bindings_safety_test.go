@@ -76,7 +76,7 @@ func TestRemoteSessionFixturesRejectForeignTenants(t *testing.T) {
 		OrganizationID: conv.ToPGText(DefaultSpec().OrgID), ProjectID: DefaultSpec().ProjectID(),
 	})
 	require.NoError(t, err)
-	_, err := queries.GetVisitorEMAFixtureParents(ctx, demoseedtest.GetVisitorEMAFixtureParentsParams{
+	_, err = queries.GetVisitorEMAFixtureParents(ctx, demoseedtest.GetVisitorEMAFixtureParentsParams{
 		OrganizationID: conv.ToPGText(otherTenantSpec.OrgID), ProjectID: otherTenantSpec.ProjectID(),
 	})
 	require.NoError(t, err)

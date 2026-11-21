@@ -105,7 +105,7 @@ func seedChainedCatalogFixtureClient(t *testing.T, ctx context.Context, conn *pg
 		TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
 	})
 	require.NoError(t, err)
-	_, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	_, err = remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 		ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID), RemoteSessionIssuerID: remoteIssuer.ID,
 		ClientID: "chained-client", ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now().UTC()), TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{},
 	})
