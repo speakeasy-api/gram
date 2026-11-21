@@ -25,6 +25,10 @@ const (
 	// and related values Speakeasy stores for remote sessions, trusted issuer
 	// sessions and EMA credentials.
 	UseCaseOAuthSessionTokens UseCase = "oauth-session-tokens" //nolint:gosec // G101: a use case name, not a credential
+
+	// UseCaseMarketplaceTokens is the use case for the plugin marketplace
+	// tokens, the URL-as-secret credentials of marketplace install URLs.
+	UseCaseMarketplaceTokens UseCase = "marketplace-tokens"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -33,6 +37,7 @@ var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
 	UseCaseOAuthClientSecrets,
 	UseCaseOAuthSessionTokens,
+	UseCaseMarketplaceTokens,
 }
 
 // ParseUseCase returns the registered use case named value.

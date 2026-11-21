@@ -17,6 +17,7 @@ import (
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -463,11 +464,11 @@ func TestListPluginPublishCandidates_IncludesConnectedProjectWithoutDefaultPlugi
 		InstallationID:           12345,
 		RepoOwner:                "test-org",
 		RepoName:                 "test-project-plugins",
-		MarketplaceToken:         pgtype.Text{String: "test-token", Valid: true},
 		PublishedMcpFingerprints: []byte(`{}`),
 		PublishedHooksVersion:    pgtype.Text{String: "test-hooks-version", Valid: true},
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, ti.conn, *authCtx.ProjectID, "test-token")
 
 	candidates, err := queries.ListPluginPublishCandidates(ctx, pluginsrepo.ListPluginPublishCandidatesParams{
 		AfterProjectID: uuid.Nil,

@@ -28,7 +28,7 @@ func (s staticPins) OrganizationPins(context.Context, string) (hooksrollout.Orga
 // database: hooksRolloutEligible touches neither, so nil deps are safe here.
 func eligibilityService(t *testing.T, pins hooksrollout.PinReader, features feature.Provider) *Service {
 	t.Helper()
-	svc := NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features)
+	svc := NewPublisher(testenv.NewLogger(t), nil, nil, nil, "local", "", features, nil)
 	svc.hooksPins = pins
 	return svc
 }
