@@ -102,6 +102,10 @@ SELECT editor.email
 FROM mcp_server_feedback_configs config
 JOIN users editor
   ON editor.id = config.updated_by_user_id
+JOIN organization_user_relationships membership
+  ON membership.user_id = editor.id
+  AND membership.organization_id = config.organization_id
+  AND membership.deleted_at IS NULL
 WHERE config.mcp_server_id = $1
   AND config.project_id = $2
 `
@@ -161,7 +165,6 @@ INSERT INTO mcp_server_feedback (
   , intention
   , tool_name
   , model
-  , session_id
   , user_id
   , external_user_id
   , client_name
@@ -181,7 +184,6 @@ VALUES (
   , $11
   , $12
   , $13
-  , $14
 )
 RETURNING id, created_at
 `
@@ -196,7 +198,6 @@ type InsertFeedbackParams struct {
 	Intention      pgtype.Text
 	ToolName       pgtype.Text
 	Model          pgtype.Text
-	SessionID      pgtype.Text
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	ClientName     pgtype.Text
@@ -219,7 +220,6 @@ func (q *Queries) InsertFeedback(ctx context.Context, arg InsertFeedbackParams) 
 		arg.Intention,
 		arg.ToolName,
 		arg.Model,
-		arg.SessionID,
 		arg.UserID,
 		arg.ExternalUserID,
 		arg.ClientName,
@@ -232,11 +232,15 @@ func (q *Queries) InsertFeedback(ctx context.Context, arg InsertFeedbackParams) 
 
 const listFeedback = `-- name: ListFeedback :many
 SELECT
-    feedback.id, feedback.organization_id, feedback.project_id, feedback.mcp_server_id, feedback.content, feedback.severity, feedback.workaround, feedback.intention, feedback.tool_name, feedback.model, feedback.session_id, feedback.user_id, feedback.external_user_id, feedback.client_name, feedback.client_version, feedback.created_at, feedback.updated_at
+    feedback.id, feedback.organization_id, feedback.project_id, feedback.mcp_server_id, feedback.content, feedback.severity, feedback.workaround, feedback.intention, feedback.tool_name, feedback.model, feedback.user_id, feedback.external_user_id, feedback.client_name, feedback.client_version, feedback.created_at, feedback.updated_at
   , member.email AS user_email
 FROM mcp_server_feedback feedback
+LEFT JOIN organization_user_relationships membership
+  ON membership.user_id = feedback.user_id
+  AND membership.organization_id = feedback.organization_id
+  AND membership.deleted_at IS NULL
 LEFT JOIN users member
-  ON member.id = feedback.user_id
+  ON member.id = membership.user_id
 WHERE feedback.project_id = $1
   AND feedback.mcp_server_id = $2
   AND ($3::text IS NULL OR feedback.severity = $3::text)
@@ -273,7 +277,6 @@ type ListFeedbackRow struct {
 	Intention      pgtype.Text
 	ToolName       pgtype.Text
 	Model          pgtype.Text
-	SessionID      pgtype.Text
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	ClientName     pgtype.Text
@@ -314,7 +317,6 @@ func (q *Queries) ListFeedback(ctx context.Context, arg ListFeedbackParams) ([]L
 			&i.Intention,
 			&i.ToolName,
 			&i.Model,
-			&i.SessionID,
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.ClientName,

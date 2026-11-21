@@ -18,6 +18,10 @@ SELECT editor.email
 FROM mcp_server_feedback_configs config
 JOIN users editor
   ON editor.id = config.updated_by_user_id
+JOIN organization_user_relationships membership
+  ON membership.user_id = editor.id
+  AND membership.organization_id = config.organization_id
+  AND membership.deleted_at IS NULL
 WHERE config.mcp_server_id = @mcp_server_id
   AND config.project_id = @project_id;
 
@@ -60,7 +64,6 @@ INSERT INTO mcp_server_feedback (
   , intention
   , tool_name
   , model
-  , session_id
   , user_id
   , external_user_id
   , client_name
@@ -76,7 +79,6 @@ VALUES (
   , sqlc.narg(intention)
   , sqlc.narg(tool_name)
   , sqlc.narg(model)
-  , sqlc.narg(session_id)
   , sqlc.narg(user_id)
   , sqlc.narg(external_user_id)
   , sqlc.narg(client_name)
@@ -92,8 +94,12 @@ SELECT
     feedback.*
   , member.email AS user_email
 FROM mcp_server_feedback feedback
+LEFT JOIN organization_user_relationships membership
+  ON membership.user_id = feedback.user_id
+  AND membership.organization_id = feedback.organization_id
+  AND membership.deleted_at IS NULL
 LEFT JOIN users member
-  ON member.id = feedback.user_id
+  ON member.id = membership.user_id
 WHERE feedback.project_id = @project_id
   AND feedback.mcp_server_id = @mcp_server_id
   AND (sqlc.narg(severity)::text IS NULL OR feedback.severity = sqlc.narg(severity)::text)

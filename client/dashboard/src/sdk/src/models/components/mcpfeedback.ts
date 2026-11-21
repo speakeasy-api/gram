@@ -64,10 +64,6 @@ export type McpFeedback = {
    */
   model?: string | undefined;
   /**
-   * The MCP session the report arrived on.
-   */
-  sessionId?: string | undefined;
-  /**
    * The impact a problem had on the agent's task: blocked means it could not complete it, degraded means it needed a slower or awkward path, cosmetic means it worked but was confusing.
    */
   severity?: Severity | undefined;
@@ -109,7 +105,6 @@ export const McpFeedback$inboundSchema: z.ZodMiniType<McpFeedback, unknown> = z
       intention: z.optional(z.string()),
       mcp_server_id: z.string(),
       model: z.optional(z.string()),
-      session_id: z.optional(z.string()),
       severity: z.optional(Severity$inboundSchema),
       tool_name: z.optional(z.string()),
       user_email: z.optional(z.string()),
@@ -123,7 +118,6 @@ export const McpFeedback$inboundSchema: z.ZodMiniType<McpFeedback, unknown> = z
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
         "mcp_server_id": "mcpServerId",
-        "session_id": "sessionId",
         "tool_name": "toolName",
         "user_email": "userEmail",
         "user_id": "userId",

@@ -28,8 +28,6 @@ type McpFeedback struct {
 	ToolName *string
 	// The model and host product as the agent reported them.
 	Model *string
-	// The MCP session the report arrived on.
-	SessionID *string
 	// The Speakeasy user ID of the caller, when the caller is a member of the
 	// organization.
 	UserID *string

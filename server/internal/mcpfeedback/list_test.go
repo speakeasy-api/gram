@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_feedback"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 type listFilter struct {
@@ -268,4 +270,27 @@ func TestListFollowsAccessToTheServer(t *testing.T) {
 	otherAuth.ProjectID = &otherProject
 	_, err = listFeedback(contextvalues.SetAuthContext(ctx, &otherAuth), ti, server.ID.String(), listFilter{severity: nil, toolName: nil, cursor: nil, limit: 0})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A report keeps naming its sender by id once they leave the organization, but
+// their email is no longer resolved for it.
+func TestListOmitsTheEmailOfARemovedMember(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	submit(t, ctx, ti, server, mcpfeedback.SeverityBlocked, "search_logs", "search_logs timed out.")
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteOrganizationUserRelationship(ctx, testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         pgtype.Text{String: authCtx.UserID, Valid: true},
+	}))
+
+	result, err := listFeedback(ctx, ti, server.ID.String(), listFilter{severity: nil, toolName: nil, cursor: nil, limit: 0})
+	require.NoError(t, err)
+	require.Len(t, result.Feedback, 1)
+	require.Equal(t, authCtx.UserID, *result.Feedback[0].UserID)
+	require.Nil(t, result.Feedback[0].UserEmail)
 }

@@ -445,7 +445,11 @@ func (s *Service) serveTunneledPublicInit(
 		WWWAuthenticate:    "",
 		Selection:          nil,
 		Request:            r,
-	})
+	},
+		// A stateless server's calls arrive here without a session, so they
+		// are offered the feedback tool the way a session's calls are.
+		s.feedbackLocalTools(logger, organizationID, endpoint.ProjectID, mcpServer),
+	)
 	if err != nil {
 		tagTunnelOutage(w, err)
 		if reserved {

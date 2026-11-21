@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -32,13 +33,14 @@ func getSettings(ctx context.Context, ti *testInstance, serverID string) (*types
 
 func updateSettings(ctx context.Context, ti *testInstance, serverID string, enabled bool, toolName, toolDescription *string) (*types.McpFeedbackSettings, error) {
 	settings, err := ti.service.UpdateSettings(ctx, &gen.UpdateSettingsPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		McpServerID:      serverID,
-		Enabled:          enabled,
-		ToolName:         toolName,
-		ToolDescription:  toolDescription,
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		McpServerID:       serverID,
+		Enabled:           enabled,
+		ToolName:          toolName,
+		ToolDescription:   toolDescription,
+		ExpectedUpdatedAt: nil,
 	})
 	return settings, err //nolint:wrapcheck // returned for oops-code assertions on the chain
 }
@@ -267,4 +269,50 @@ func TestSettingsFollowAccessToTheServer(t *testing.T) {
 	require.True(t, updated.Enabled)
 	_, err = updateSettings(writer, ti, other.ID.String(), true, nil, nil)
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A change made from settings someone else has since changed is refused, so
+// it cannot silently undo theirs; one made from the latest settings is stored.
+func TestUpdateSettingsRefusesAChangeMadeFromStaleSettings(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := seedRemoteBackedServer(t, ctx, ti)
+
+	update := func(expected *string, toolName string) (*types.McpFeedbackSettings, error) {
+		settings, err := ti.service.UpdateSettings(ctx, &gen.UpdateSettingsPayload{
+			SessionToken:      nil,
+			ApikeyToken:       nil,
+			ProjectSlugInput:  nil,
+			McpServerID:       server.ID.String(),
+			Enabled:           true,
+			ToolName:          &toolName,
+			ToolDescription:   nil,
+			ExpectedUpdatedAt: expected,
+		})
+		return settings, err //nolint:wrapcheck // returned for oops-code assertions on the chain
+	}
+
+	never := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := update(&never, "acme_feedback")
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	opened, err := update(nil, "acme_feedback")
+	require.NoError(t, err)
+	require.NotNil(t, opened.UpdatedAt)
+
+	// A client that keeps the time only to the millisecond still matches.
+	openedAt, err := time.Parse(time.RFC3339Nano, *opened.UpdatedAt)
+	require.NoError(t, err)
+	asTheDashboardSendsIt := openedAt.Truncate(time.Millisecond).Format(time.RFC3339Nano)
+	changed, err := update(&asTheDashboardSendsIt, "acme_report")
+	require.NoError(t, err)
+
+	_, err = update(opened.UpdatedAt, "acme_notes")
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	current, err := getSettings(ctx, ti, server.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "acme_report", *current.ToolName, "the refused change stored nothing")
+	require.Equal(t, changed.UpdatedAt, current.UpdatedAt)
 }

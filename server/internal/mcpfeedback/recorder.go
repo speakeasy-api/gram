@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -36,6 +38,21 @@ const (
 	ServerReportsPerMinute = 60
 
 	meterReports = "mcp.feedback.reports"
+
+	// defaultSettingsFreshFor is how long a server's feedback settings are
+	// served from memory before they are read again. Every tools/list and tools/call
+	// on a server reads them, and a change an admin saves reaches agents
+	// within this long.
+	defaultSettingsFreshFor = 15 * time.Second
+
+	// settingsUsableFor is how long settings read earlier keep being served
+	// while the database cannot be reached, so a short outage does not take
+	// the feedback tool away from agents already using it.
+	settingsUsableFor = 5 * time.Minute
+
+	// maxCachedSettings bounds how many servers' settings one replica holds.
+	// An entry is a few hundred bytes, so this is about a megabyte.
+	maxCachedSettings = 5_000
 )
 
 // reportOutcome is how one feedback tool call ended, as a metric dimension.
@@ -89,9 +106,6 @@ type Target struct {
 // Caller is who sent a report and from where, as far as the gateway knows.
 // Every field is optional: a public server's callers are anonymous.
 type Caller struct {
-	// SessionID is the MCP session the call arrived on.
-	SessionID string
-
 	// UserID is the caller's Speakeasy user id. Set it only for a member of
 	// the server's organization.
 	UserID string
@@ -110,9 +124,11 @@ type Caller struct {
 	// ClientVersion is the MCP client's version, from its handshake.
 	ClientVersion string
 
-	// LimitSubject is the authenticated principal behind the call, whatever
-	// its organization. It only picks the caller's rate-limit bucket when no
-	// identity above names the caller, and is never stored or sent on.
+	// LimitSubject is the most durable identity the gateway has for the
+	// caller, whatever its organization: an authenticated principal or API
+	// key, else the MCP session the call arrived on. It only picks the
+	// caller's rate-limit bucket when no identity above names the caller, and
+	// is never stored or sent on.
 	LimitSubject string
 }
 
@@ -147,10 +163,49 @@ type Recorder struct {
 	redactor Redactor
 	limits   Limits
 	reports  metric.Int64Counter
+	now      func() time.Time
+
+	// settingsFreshFor is how long settings are served from memory before
+	// they are read again.
+	settingsFreshFor time.Duration
+
+	// settingsMu guards settings.
+	settingsMu sync.Mutex
+
+	// settings holds the feedback settings last read for each server.
+	settings map[cachedSettingsKey]cachedSettings
+}
+
+// cachedSettingsKey names one server's cached settings.
+type cachedSettingsKey struct {
+	projectID   uuid.UUID
+	mcpServerID uuid.UUID
+}
+
+// cachedSettings is one server's settings as last read.
+type cachedSettings struct {
+	// settings are the stored settings; the zero value when there are none.
+	settings Settings
+
+	// readAt is when they were read.
+	readAt time.Time
+}
+
+// RecorderOption changes how a [Recorder] works.
+type RecorderOption func(*Recorder)
+
+// WithSettingsFreshFor sets how long a server's settings are served from
+// memory before they are read again. Zero reads them on every request, which
+// suits tests that change settings and read them straight back; settings
+// read earlier are still served while the database cannot be reached.
+func WithSettingsFreshFor(d time.Duration) RecorderOption {
+	return func(r *Recorder) {
+		r.settingsFreshFor = d
+	}
 }
 
 // NewRecorder returns the recorder a gateway serves the feedback tool with.
-func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, redactor Redactor, limits Limits) *Recorder {
+func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, redactor Redactor, limits Limits, opts ...RecorderOption) *Recorder {
 	logger = logger.With(attr.SlogComponent("mcp-feedback"))
 
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpfeedback")
@@ -163,35 +218,77 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pg
 		logger.ErrorContext(context.Background(), "create metric error", attr.SlogMetricName(meterReports), attr.SlogError(err))
 	}
 
-	return &Recorder{
+	recorder := &Recorder{
 		logger:   logger,
 		db:       db,
 		redactor: redactor,
 		limits:   limits,
 		reports:  reports,
+		now:      time.Now,
+
+		settingsFreshFor: defaultSettingsFreshFor,
+		settingsMu:       sync.Mutex{},
+		settings:         map[cachedSettingsKey]cachedSettings{},
 	}
+	for _, opt := range opts {
+		opt(recorder)
+	}
+
+	return recorder
 }
 
 // Tool returns the feedback tool a server lists. ok is false when the server
 // does not offer one.
 func (r *Recorder) Tool(ctx context.Context, projectID, mcpServerID uuid.UUID) (tool Tool, ok bool, err error) {
-	config, err := repo.New(r.db).GetFeedbackConfig(ctx, repo.GetFeedbackConfigParams{
-		McpServerID: mcpServerID,
-		ProjectID:   projectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return Tool{Name: "", Title: "", Description: "", InputSchema: nil}, false, nil
-	case err != nil:
-		return Tool{Name: "", Title: "", Description: "", InputSchema: nil}, false, fmt.Errorf("load feedback config: %w", err)
+	settings, err := r.serverSettings(ctx, cachedSettingsKey{projectID: projectID, mcpServerID: mcpServerID})
+	if err != nil {
+		return Tool{Name: "", Title: "", Description: "", InputSchema: nil}, false, err
 	}
-
-	settings := SettingsFromConfig(config)
 	if !settings.Enabled {
 		return Tool{Name: "", Title: "", Description: "", InputSchema: nil}, false, nil
 	}
 
 	return settings.Tool(), true, nil
+}
+
+// serverSettings returns a server's feedback settings, from memory while they
+// are fresh. When they cannot be read, settings read within settingsUsableFor
+// are served instead.
+func (r *Recorder) serverSettings(ctx context.Context, key cachedSettingsKey) (Settings, error) {
+	now := r.now()
+
+	r.settingsMu.Lock()
+	cached, found := r.settings[key]
+	r.settingsMu.Unlock()
+	if found && now.Sub(cached.readAt) < r.settingsFreshFor {
+		return cached.settings, nil
+	}
+
+	settings := Settings{Enabled: false, ToolName: "", ToolDescription: ""}
+	config, err := repo.New(r.db).GetFeedbackConfig(ctx, repo.GetFeedbackConfigParams{
+		McpServerID: key.mcpServerID,
+		ProjectID:   key.projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		if found && now.Sub(cached.readAt) < settingsUsableFor {
+			r.logger.WarnContext(ctx, "load feedback config; serving the settings read earlier", attr.SlogError(err), attr.SlogMcpServerID(key.mcpServerID.String()))
+			return cached.settings, nil
+		}
+		return settings, fmt.Errorf("load feedback config: %w", err)
+	default:
+		settings = SettingsFromConfig(config)
+	}
+
+	r.settingsMu.Lock()
+	if len(r.settings) >= maxCachedSettings {
+		clear(r.settings)
+	}
+	r.settings[key] = cachedSettings{settings: settings, readAt: now}
+	r.settingsMu.Unlock()
+
+	return settings, nil
 }
 
 // Call answers one feedback tool call. It never fails the call at the
@@ -268,7 +365,6 @@ func (r *Recorder) Submit(ctx context.Context, target Target, caller Caller, rep
 		Intention:      conv.ToPGTextEmpty(report.Intention),
 		ToolName:       conv.ToPGTextEmpty(report.ToolName),
 		Model:          conv.ToPGTextEmpty(report.Model),
-		SessionID:      conv.ToPGTextEmpty(caller.SessionID),
 		UserID:         conv.ToPGTextEmpty(caller.UserID),
 		ExternalUserID: conv.ToPGTextEmpty(caller.ExternalUserID),
 		ClientName:     conv.ToPGTextEmpty(caller.ClientName),
@@ -326,9 +422,7 @@ func callerLimitKey(server string, caller Caller) string {
 	case caller.ExternalUserID != "":
 		return server + ":external:" + caller.ExternalUserID
 	case caller.LimitSubject != "":
-		return server + ":principal:" + caller.LimitSubject
-	case caller.SessionID != "":
-		return server + ":session:" + caller.SessionID
+		return server + ":subject:" + caller.LimitSubject
 	default:
 		return ""
 	}

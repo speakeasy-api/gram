@@ -73,12 +73,12 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	return ctx, &testInstance{service: service, conn: conn, redis: redisClient}
 }
 
-// newTestRecorder returns a recorder that masks with the real redactor and
-// enforces the given limits.
+// newTestRecorder returns a recorder that masks with the real redactor,
+// enforces the given limits, and reads settings on every call.
 func newTestRecorder(t *testing.T, ti *testInstance, limits mcpfeedback.Limits) *mcpfeedback.Recorder {
 	t.Helper()
 
-	return mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), limits)
+	return mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, chatredact.New(), limits, mcpfeedback.WithSettingsFreshFor(0))
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

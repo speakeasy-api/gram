@@ -27,6 +27,10 @@ type UpdateSettingsRequestBody struct {
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// The description agents read. Leave out to use the default.
 	ToolDescription *string `form:"tool_description,omitempty" json:"tool_description,omitempty" xml:"tool_description,omitempty"`
+	// The updated_at of the settings this change was made from. When set, the
+	// change is refused with a conflict if the settings were changed since, so one
+	// admin's change does not silently undo another's.
+	ExpectedUpdatedAt *string `form:"expected_updated_at,omitempty" json:"expected_updated_at,omitempty" xml:"expected_updated_at,omitempty"`
 }
 
 // GetSettingsResponseBody is the type of the "mcpFeedback" service
@@ -702,8 +706,6 @@ type McpFeedbackResponseBody struct {
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// The model and host product as the agent reported them.
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
-	// The MCP session the report arrived on.
-	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	// The Speakeasy user ID of the caller, when the caller is a member of the
 	// organization.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
@@ -1232,10 +1234,11 @@ func NewGetSettingsPayload(mcpServerID string, sessionToken *string, apikeyToken
 // endpoint payload.
 func NewUpdateSettingsPayload(body *UpdateSettingsRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpfeedback.UpdateSettingsPayload {
 	v := &mcpfeedback.UpdateSettingsPayload{
-		McpServerID:     *body.McpServerID,
-		Enabled:         *body.Enabled,
-		ToolName:        body.ToolName,
-		ToolDescription: body.ToolDescription,
+		McpServerID:       *body.McpServerID,
+		Enabled:           *body.Enabled,
+		ToolName:          body.ToolName,
+		ToolDescription:   body.ToolDescription,
+		ExpectedUpdatedAt: body.ExpectedUpdatedAt,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -1283,6 +1286,9 @@ func ValidateUpdateSettingsRequestBody(body *UpdateSettingsRequestBody) (err err
 		if utf8.RuneCountInString(*body.ToolDescription) > 2000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_description", *body.ToolDescription, utf8.RuneCountInString(*body.ToolDescription), 2000, false))
 		}
+	}
+	if body.ExpectedUpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_updated_at", *body.ExpectedUpdatedAt, goa.FormatDateTime))
 	}
 	return
 }
