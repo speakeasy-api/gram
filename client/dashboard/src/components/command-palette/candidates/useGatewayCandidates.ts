@@ -19,27 +19,30 @@ export function useGatewayCandidates({
   const routes = useRoutes();
   const gramProject = useProjectSlugForRequests();
   // Keyed by project so caches never cross projects; a failed list yields no candidates.
-  const { data } = useMetaMcpServers({ gramProject }, undefined, {
+  const { data, isError } = useMetaMcpServers({ gramProject }, undefined, {
     enabled,
     throwOnError: false,
+    retry: false,
   });
 
   return useMemo(
     () =>
-      (data?.metaMcpServers ?? []).map((gateway): LauncherCandidate => ({
-        id: `gateway:${gateway.id}`,
-        kind: "gateway",
-        title: gateway.name,
-        detail:
-          gateway.memberCount === undefined
-            ? "MCP gateway"
-            : `MCP gateway · ${gateway.memberCount} ${gateway.memberCount === 1 ? "server" : "servers"}`,
-        keywords: ["gateway", "mcp", gateway.id],
-        verbs: ["open"],
-        icon: "network",
-        group: GROUP,
-        run: () => routes.mcp.gateway.overview.goTo(gateway.id),
-      })),
-    [data, routes],
+      (!enabled || isError ? [] : (data?.metaMcpServers ?? [])).map(
+        (gateway): LauncherCandidate => ({
+          id: `gateway:${gateway.id}`,
+          kind: "gateway",
+          title: gateway.name,
+          detail:
+            gateway.memberCount === undefined
+              ? "MCP gateway"
+              : `MCP gateway · ${gateway.memberCount} ${gateway.memberCount === 1 ? "server" : "servers"}`,
+          keywords: ["gateway", "mcp", gateway.id],
+          verbs: ["open"],
+          icon: "network",
+          group: GROUP,
+          run: () => routes.mcp.gateway.overview.goTo(gateway.id),
+        }),
+      ),
+    [data, enabled, isError, routes],
   );
 }
