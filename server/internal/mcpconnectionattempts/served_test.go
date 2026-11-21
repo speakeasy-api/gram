@@ -647,7 +647,7 @@ func TestServed_SlowLogsChecksDoNotHoldFailureRowsBack(t *testing.T) {
 	require.Zero(t, r.counted(t, meterServedDropped, ""))
 }
 
-// A logs check started near the end of a flush's budget ends with it, and its connection waits instead of being dropped.
+// A logs check still running when a flush's budget runs out is cut short, and its connection waits instead of being dropped.
 func TestServed_ALogsCheckEndsWithTheBudget(t *testing.T) {
 	t.Parallel()
 	conn := clickhouseConn(t)
