@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * The transition state.
  */
-export const State = {
+export const AdminTailscaleOAuthMigrationOrganizationState = {
   PlatformKey: "platform_key",
   DualWrite: "dual_write",
   OrgKms: "org_kms",
@@ -20,7 +20,9 @@ export const State = {
 /**
  * The transition state.
  */
-export type State = ClosedEnum<typeof State>;
+export type AdminTailscaleOAuthMigrationOrganizationState = ClosedEnum<
+  typeof AdminTailscaleOAuthMigrationOrganizationState
+>;
 
 /**
  * Where one organization stands in moving its saved Tailscale OAuth clients from the platform key to its own organization key (the tailscale-oauth-clients use case).
@@ -69,7 +71,7 @@ export type AdminTailscaleOAuthMigrationOrganization = {
   /**
    * The transition state.
    */
-  state: State;
+  state: AdminTailscaleOAuthMigrationOrganizationState;
   /**
    * When the current state was entered. Absent before the organization is enrolled.
    */
@@ -89,7 +91,10 @@ export type AdminTailscaleOAuthMigrationOrganization = {
 };
 
 /** @internal */
-export const State$inboundSchema: z.ZodMiniEnum<typeof State> = z.enum(State);
+export const AdminTailscaleOAuthMigrationOrganizationState$inboundSchema:
+  z.ZodMiniEnum<typeof AdminTailscaleOAuthMigrationOrganizationState> = z.enum(
+    AdminTailscaleOAuthMigrationOrganizationState,
+  );
 
 /** @internal */
 export const AdminTailscaleOAuthMigrationOrganization$inboundSchema:
@@ -113,7 +118,7 @@ export const AdminTailscaleOAuthMigrationOrganization$inboundSchema:
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
       slug: z.string(),
-      state: State$inboundSchema,
+      state: AdminTailscaleOAuthMigrationOrganizationState$inboundSchema,
       state_changed_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),

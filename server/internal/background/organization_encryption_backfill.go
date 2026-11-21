@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // The organization encryption backfill moves organizations' values from the
@@ -32,15 +33,17 @@ import (
 // failed clear records no attempt.
 //
 // An operator can also start one organization's run on demand through
-// StartOrganizationEncryptionBackfill. Runs claim the transition row, so an
-// on-demand run and the hourly run never work on the same organization at
-// once.
+// StartOrganizationEncryptionBackfill: a backfill in dual_write, or finishing
+// the clear right after finalize in org_kms. Backfill runs claim the
+// transition row, so an on-demand run and the hourly run never backfill the
+// same organization at once; two clears may overlap, which is safe.
 //
 // Temporal actions/month: ~1,440 per namespace (one schedule start and one
 // activity per hour, plus at most one retry per failed run), plus activity
 // heartbeats, which the SDK throttles to at most about one a minute while the
 // activity runs: a few per run at tens of organizations, at most ~25 for a run
-// that uses its whole budget. On-demand runs add 2 to 4 each. Fixed: it
+// that uses its whole budget. On-demand runs, including the one each finalize
+// starts, add 2 to 4 each. Fixed: it
 // doesn't scale with organizations beyond those heartbeats.
 const (
 	organizationEncryptionBackfillWorkflowID    = "v1:organization-encryption-backfill"
@@ -77,9 +80,10 @@ const (
 
 	OrganizationEncryptionBackfillOrganizationActivityName = "BackfillOrganizationEncryptionForOrganization"
 
-	// organizationEncryptionBackfillOrganizationStartToClose fits one Runner
-	// run and its bookkeeping.
-	organizationEncryptionBackfillOrganizationStartToClose = orgencryption.MaxRunDuration + time.Minute
+	// organizationEncryptionBackfillOrganizationStartToClose fits one item of
+	// work, a Runner run or a clear finished after finalize, and its
+	// bookkeeping.
+	organizationEncryptionBackfillOrganizationStartToClose = organizationEncryptionBackfillItemTimeout + time.Minute
 
 	// organizationEncryptionBackfillOrganizationMaxAttempts retries an
 	// on-demand run through a short key or database outage.
@@ -104,8 +108,9 @@ const (
 
 	// OrganizationEncryptionBackfillRejectedErrorType is the application
 	// error type an on-demand run fails with when it cannot run at all: the
-	// use case is unknown or has no copy stores, the organization is not in
-	// dual_write, or this worker has no organization encryption.
+	// use case is unknown or has no copy stores, the organization is in
+	// platform_key or finished clearing in org_kms, or this worker has no
+	// organization encryption.
 	OrganizationEncryptionBackfillRejectedErrorType = "OrganizationEncryptionBackfillRejected"
 )
 
@@ -117,6 +122,7 @@ type OrganizationEncryptionMigrator interface {
 	Backfill(ctx context.Context, organizationID string, useCase orgencryption.UseCase) (orgencryption.RunResult, error)
 	ListFinalized(ctx context.Context) ([]orgencryption.Transition, error)
 	ResumeClear(ctx context.Context, organizationID string, useCase orgencryption.UseCase) error
+	RunOnDemand(ctx context.Context, organizationID string, useCase orgencryption.UseCase, actor orgencryption.Actor) (orgencryption.RunResult, error)
 	SweepStragglers(ctx context.Context, organizationID string, useCase orgencryption.UseCase) (int64, error)
 }
 
@@ -152,6 +158,14 @@ type OrganizationEncryptionBackfillOrganizationParams struct {
 
 	// UseCase is the registered use case to backfill.
 	UseCase string
+
+	// ActorPrincipal is the URN of the staff member who asked for the run,
+	// so a clear it finishes is attributed to them. Empty attributes it to
+	// the system.
+	ActorPrincipal string
+
+	// ActorDisplayName renders the actor in the audit log, when known.
+	ActorDisplayName *string
 }
 
 func OrganizationEncryptionBackfillWorkflow(ctx workflow.Context) (OrganizationEncryptionBackfillResult, error) {
@@ -348,7 +362,8 @@ backfills:
 	return result, nil
 }
 
-// BackfillOrganization runs one organization's use case on demand.
+// BackfillOrganization runs one organization's use case on demand: a backfill
+// and verification in dual_write, or finishing the clear in org_kms.
 func (a *OrganizationEncryptionBackfillActivities) BackfillOrganization(ctx context.Context, params OrganizationEncryptionBackfillOrganizationParams) (orgencryption.RunResult, error) {
 	var empty orgencryption.RunResult
 	if a.migrator == nil {
@@ -360,7 +375,19 @@ func (a *OrganizationEncryptionBackfillActivities) BackfillOrganization(ctx cont
 		return empty, temporal.NewNonRetryableApplicationError("unknown organization encryption use case", OrganizationEncryptionBackfillRejectedErrorType, err)
 	}
 
-	result, err := a.migrator.Backfill(ctx, params.OrganizationID, useCase)
+	itemCtx, cancel := context.WithTimeout(ctx, organizationEncryptionBackfillItemTimeout)
+	defer cancel()
+
+	actor := orgencryption.SystemActor()
+	if params.ActorPrincipal != "" {
+		principal, err := urn.ParsePrincipal(params.ActorPrincipal)
+		if err != nil {
+			return empty, temporal.NewNonRetryableApplicationError("invalid organization encryption run actor", OrganizationEncryptionBackfillRejectedErrorType, err)
+		}
+		actor = orgencryption.Actor{Principal: principal, DisplayName: params.ActorDisplayName}
+	}
+
+	result, err := a.migrator.RunOnDemand(itemCtx, params.OrganizationID, useCase, actor)
 	switch {
 	case errors.Is(err, orgencryption.ErrBackfillRunning):
 		return result, temporal.NewNonRetryableApplicationError("a backfill run is already in progress for this organization and use case", OrganizationEncryptionBackfillRunningErrorType, err)
@@ -381,12 +408,13 @@ func OrganizationEncryptionBackfillOrganizationWorkflowID(queue string, organiza
 	return fmt.Sprintf("%s:%s:%s:%s", organizationEncryptionBackfillWorkflowID, queue, useCase, organizationID)
 }
 
-// StartOrganizationEncryptionBackfill starts a backfill and verification run
-// for one organization's use case, or returns the on-demand run already in
+// StartOrganizationEncryptionBackfill starts an on-demand run for one
+// organization's use case, a backfill and verification in dual_write or the
+// clear after finalize in org_kms, or returns the on-demand run already in
 // progress for it. The run fails with
 // OrganizationEncryptionBackfillRunningErrorType while the hourly run is
 // working on the same organization.
-func StartOrganizationEncryptionBackfill(ctx context.Context, temporalEnv *tenv.Environment, organizationID string, useCase orgencryption.UseCase) (client.WorkflowRun, error) {
+func StartOrganizationEncryptionBackfill(ctx context.Context, temporalEnv *tenv.Environment, organizationID string, useCase orgencryption.UseCase, actor orgencryption.Actor) (client.WorkflowRun, error) {
 	if _, err := orgencryption.ParseUseCase(string(useCase)); err != nil {
 		return nil, fmt.Errorf("start organization encryption backfill: %w", err)
 	}
@@ -398,14 +426,33 @@ func StartOrganizationEncryptionBackfill(ctx context.Context, temporalEnv *tenv.
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowRunTimeout:       organizationEncryptionBackfillOrganizationRunTimeout,
 	}, OrganizationEncryptionBackfillOrganizationWorkflow, OrganizationEncryptionBackfillOrganizationParams{
-		OrganizationID: organizationID,
-		UseCase:        string(useCase),
+		OrganizationID:   organizationID,
+		UseCase:          string(useCase),
+		ActorPrincipal:   actor.Principal.String(),
+		ActorDisplayName: actor.DisplayName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start organization encryption backfill workflow: %w", err)
 	}
 
 	return run, nil
+}
+
+// TemporalOrganizationEncryptionRunStarter starts on-demand organization
+// encryption runs for the admin API.
+type TemporalOrganizationEncryptionRunStarter struct {
+	// TemporalEnv is the Temporal connection runs start on.
+	TemporalEnv *tenv.Environment
+}
+
+// StartOrganizationEncryptionRun starts an on-demand run, or joins the one in
+// progress, without waiting for it.
+func (s *TemporalOrganizationEncryptionRunStarter) StartOrganizationEncryptionRun(ctx context.Context, organizationID string, useCase orgencryption.UseCase, actor orgencryption.Actor) error {
+	if _, err := StartOrganizationEncryptionBackfill(ctx, s.TemporalEnv, organizationID, useCase, actor); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func organizationEncryptionBackfillScheduleID(queue string) string {

@@ -145,7 +145,7 @@ func (r *Runner) Run(ctx context.Context, organizationID string, useCase UseCase
 
 	runErr := r.backfill(ctx, logger, q, &d, stores, &result)
 
-	counts, countErr := countStores(ctx, organizationID, stores)
+	counts, countErr := CountStores(ctx, organizationID, stores)
 	if countErr == nil {
 		result.Counted = true
 		result.Remaining = counts.Waiting

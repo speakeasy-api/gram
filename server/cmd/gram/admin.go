@@ -586,9 +586,6 @@ func newAdminCommand() *cli.Command {
 				// service, so organization encryption is built, and required,
 				// alongside it. Building it here stops admin at startup when it
 				// is misconfigured.
-				// TODO(AIM-1007): pass it to the admin service for the OAuth use
-				// cases' counts, backfills and finalization. Tailscale OAuth
-				// clients are wired below.
 				orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
 				if err != nil {
 					return err
@@ -600,6 +597,22 @@ func newAdminCommand() *cli.Command {
 						Runner:      orgencryption.NewRunner(logger, db, orgEncryption.Cipher(logger, applicationEncryption), meterProvider),
 						Store:       ingresscredentials.NewCopyStore(db),
 					})
+				}
+				// Transitions change only where keys can be provisioned.
+				// Without Temporal, runs are unavailable and the hourly
+				// background run finishes the clear after finalize.
+				if orgEncryption.Service != nil && orgEncryption.Provisioner != nil {
+					var runs admin.OrganizationEncryptionRunStarter
+					if temporalEnv != nil {
+						runs = &background.TemporalOrganizationEncryptionRunStarter{TemporalEnv: temporalEnv}
+					}
+					adminService.SetOrganizationEncryption(admin.OrganizationEncryption{
+						Transitions: orgEncryption.Transitions,
+						UseCases:    orgEncryptionUseCaseStores(db),
+						Runs:        runs,
+					})
+				} else {
+					logger.WarnContext(ctx, "Admin organization encryption transitions unavailable; organization encryption is not configured")
 				}
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")

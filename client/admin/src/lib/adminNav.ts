@@ -16,6 +16,7 @@ import {
   BookOpenIcon,
   Grid2X2Icon,
   KeyRoundIcon,
+  LockKeyholeIcon,
   ShieldCheckIcon,
   PlugZapIcon,
   ListChecksIcon,
@@ -125,6 +126,12 @@ export const ADMIN_NAV_GROUPS = [
         keywords:
           "tailscale private network ingress oauth credentials organization encryption kms backfill finalize",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/encryption-transitions",
+        label: "Encryption transitions",
+        keywords: "kms organization keys platform key dual write enroll",
+        icon: LockKeyholeIcon,
       },
       {
         to: "/platform-credentials",
