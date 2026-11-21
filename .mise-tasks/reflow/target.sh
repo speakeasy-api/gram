@@ -14,26 +14,25 @@
 # Every target gets:
 #   site  Browser, at the dashboard URL.
 #   api   OpenAPI, pinned to server/internal/e2econtrol/openapi.yaml: the
-#         end-to-end control surface (reseed, sign-in link) and the public API
-#         reads the suite's root checks the seed with. It calls the dashboard
-#         origin, which serves /rpc in every environment (the Vite proxy
-#         locally, the ingress when deployed), so no extra origin is granted.
+#         end-to-end control surface (reseed, sign-in link). It calls the
+#         dashboard origin, which serves /rpc in every environment (the Vite
+#         proxy locally, the ingress when deployed), so no extra origin is
+#         granted. Its one credential is the control token.
 #
 # This worktree's stack (no --url) also gets:
 #   db    PostgreSQL, read-only, for the flows that still read SQL, and the
 #         extra origins the local dev-idp sign-in redirect visits.
 #
-# The control surface exists only on a local stack today, so --url cannot pass
-# the suite's root until the deployed follow-up to it lands; the option is kept
-# as the shape that follow-up will use.
+# The control surface exists on a local stack that set a token, and on a pull
+# request preview that opted in (the preview-e2e label). Nowhere else: --url
+# pointed at any other host cannot pass the suite's root.
 #
 # A deployed host (--url) gets no database binding: nothing in CI holds a DSN
 # for a deployed environment, and flows that need `db` are not selected there.
-# Its two credentials come from the environment:
-#   GRAM_E2E_CONTROL_TOKEN  the environment's control token
-#   GRAM_E2E_API_KEY        an API key of the test organization
+# Its credential comes from the environment:
+#   GRAM_E2E_CONTROL_TOKEN  the control token of the environment's previews
 #
-# The bindings hold credentials, so they live outside the checkout, owner-only.
+# The bindings hold a credential, so they live outside the checkout, owner-only.
 
 set -euo pipefail
 
@@ -73,13 +72,11 @@ if [ -n "$remote_url" ]; then
     exit 1
     ;;
   esac
-  : "${GRAM_E2E_CONTROL_TOKEN:?GRAM_E2E_CONTROL_TOKEN is not set; it is the deployed environment's end-to-end control token}"
-  : "${GRAM_E2E_API_KEY:?GRAM_E2E_API_KEY is not set; it is an API key of the deployed environment's test organization}"
+  : "${GRAM_E2E_CONTROL_TOKEN:?GRAM_E2E_CONTROL_TOKEN is not set; it is the end-to-end control token that opted-in previews are given}"
   # A run against a deployed host always says which build it is testing, so a
   # pass is never recorded against whatever happened to be serving.
   expect_build="${usage_expect_build:?--expect-build is required with --url}"
   site_url="$(origin "$remote_url")"
-  api_key="$GRAM_E2E_API_KEY"
   default_group="${site_url#*://}"
 else
   : "${GRAM_SITE_URL:?GRAM_SITE_URL is not set; run this through mise}"
@@ -95,9 +92,7 @@ else
     echo "  pitchfork restart server" >&2
     exit 1
   fi
-  : "${GRAM_API_KEY:?GRAM_API_KEY is not set; run this through mise}"
   site_url="$(origin "$GRAM_SITE_URL")"
-  api_key="$GRAM_API_KEY"
   default_group="local-$(basename "$PWD")"
 fi
 
@@ -108,8 +103,8 @@ umask 077
 mkdir -p "$dir"
 chmod 700 "$dir"
 
-# Credentials reach jq through the environment rather than its command line.
-CONTROL_TOKEN="$GRAM_E2E_CONTROL_TOKEN" API_KEY="$api_key" jq -n \
+# The credential reaches jq through the environment rather than its command line.
+CONTROL_TOKEN="$GRAM_E2E_CONTROL_TOKEN" jq -n \
   --arg site "$site_url" \
   --arg spec "$spec_file" \
   --arg sha "$spec_sha" \
@@ -117,7 +112,7 @@ CONTROL_TOKEN="$GRAM_E2E_CONTROL_TOKEN" API_KEY="$api_key" jq -n \
     site: {provider: "Browser", configuration: {targetUrl: $site, browser: "chromium", width: 1440, height: 900}},
     api: {provider: "OpenAPI", configuration: {
       specFile: $spec, specSha256: $sha, baseUrl: $site, timeoutMs: 120000,
-      credentials: {control: {value: env.CONTROL_TOKEN}, apiKey: {value: env.API_KEY}, project: {public: true}}
+      credentials: {control: {value: env.CONTROL_TOKEN}}
     }}
   }' >"$dir/bindings.json"
 

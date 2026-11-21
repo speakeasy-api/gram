@@ -4,15 +4,19 @@ name: Reflow (deployed host)
 # it, and nothing calls it automatically.
 #
 # Runs the golden flows tagged `portable` against a deployed non-production
-# host (a per-PR preview or dev) and gates on them. It boots nothing: the
-# suite's root asks the host to reseed its one test organization and waits
-# until the host serves the expected build, and the shared sign-in asks the
-# host for a one-time sign-in link (server/internal/e2econtrol). No job here
-# holds a database DSN or an identity-provider password.
+# host and gates on them. It boots nothing: the suite's root asks the host to
+# reseed its one test organization and waits until the host serves the expected
+# build, and the shared sign-in asks the host for a one-time sign-in link
+# (server/internal/e2econtrol). No job here holds a database DSN, an API key or
+# an identity-provider password: its one credential is the control token.
+#
+# The control surface exists on a pull request preview that opted in (the
+# preview-e2e label), and not on dev: a dev run cannot pass the suite's root
+# until dev is admitted there, which is a separate decision.
 #
 # Callers:
 #   reflow-preview.yml (this repository)        a pull request's preview
-#   dev-readiness.yaml (speakeasy-api/gram-infra)  dev, before a promotion
+#   dev-readiness.yaml (speakeasy-api/gram-infra)  dev, once dev is admitted
 #
 # Passes are recorded on `record_branch`, never on the code branch, so a pass
 # from a local-stack run is not carried into a deployed run or the reverse.
@@ -53,9 +57,6 @@ on:
         required: true
       E2E_CONTROL_TOKEN:
         description: "The host's end-to-end control token (GRAM_E2E_CONTROL_TOKEN on the server)"
-        required: true
-      E2E_API_KEY:
-        description: "An API key of the host's test organization"
         required: true
     outputs:
       conclusion:
@@ -161,7 +162,6 @@ jobs:
       - name: Target the host
         env:
           GRAM_E2E_CONTROL_TOKEN: ${{ secrets.E2E_CONTROL_TOKEN }}
-          GRAM_E2E_API_KEY: ${{ secrets.E2E_API_KEY }}
         run: >-
           mise run reflow:target
           --url "$TARGET_URL"
