@@ -116,7 +116,7 @@ func TestRemoteSessionFixturesRejectForeignTenants(t *testing.T) {
 	after, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "rejected fixture mutations must leave all tenants unchanged")
-	n, err = q.ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{ID: clientID, ProjectID: project, OrganizationID: organization})
+	n, err := q.ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{ID: clientID, ProjectID: project, OrganizationID: organization})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 	n, err = q.ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{ClientID: clientID, ProjectID: project, OrganizationID: organization, RegistrationEndpoint: conv.ToPGText("https://fixture.example.invalid/register")})
