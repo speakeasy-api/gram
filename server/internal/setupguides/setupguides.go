@@ -18,7 +18,7 @@ const (
 	// silently rots. A test pins this constant to go.mod, so a dependency bump
 	// that forgets it fails CI.
 	ModulePath    = "github.com/speakeasy-api/mcp-setup-docs/go"
-	PinnedVersion = "v0.3.9"
+	PinnedVersion = "v0.3.15"
 )
 
 // Guide identifies one published setup guide.
