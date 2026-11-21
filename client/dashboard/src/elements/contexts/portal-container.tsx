@@ -3,8 +3,6 @@
 import { type RefObject } from "react";
 import { PortalContainerContext } from "./portal-container-context";
 
-export { PortalContainerContext };
-
 export function PortalContainerProvider({
   containerRef,
   children,

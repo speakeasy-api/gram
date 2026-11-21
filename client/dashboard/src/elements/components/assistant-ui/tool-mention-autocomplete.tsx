@@ -252,5 +252,3 @@ export const ToolMentionAutocomplete: FC<ToolMentionAutocompleteProps> = ({
     </m.div>
   );
 };
-
-export default ToolMentionAutocomplete;

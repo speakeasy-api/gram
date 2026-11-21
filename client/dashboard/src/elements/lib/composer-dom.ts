@@ -48,11 +48,7 @@ export function readPlainText(
  * the browser already knows how to slice a tree at an arbitrary boundary, and
  * a clone can't disagree with the live DOM about what came first.
  */
-export function offsetOf(
-  root: HTMLElement,
-  node: Node,
-  nodeOffset: number,
-): number {
+function offsetOf(root: HTMLElement, node: Node, nodeOffset: number): number {
   const range = document.createRange();
   range.setStart(root, 0);
   range.setEnd(node, nodeOffset);

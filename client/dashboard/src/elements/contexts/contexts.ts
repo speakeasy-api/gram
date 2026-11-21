@@ -8,5 +8,3 @@ export const ElementsContext = createContext<ElementsContextType | undefined>(
 
 export const ToolApprovalContext =
   createContext<ToolApprovalContextType | null>(null);
-
-export { useChatId } from "./ChatIdContext";

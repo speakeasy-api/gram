@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export interface CalendarProps {
+interface CalendarProps {
   /** Selected date range */
   selected?: { start: Date | null; end: Date | null };
   /** Called when a date or range is selected */

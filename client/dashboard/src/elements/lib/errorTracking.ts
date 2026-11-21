@@ -100,10 +100,3 @@ export function trackError(error: unknown, context: ErrorContext): void {
     console.warn("[Elements] Failed to track error:", e);
   }
 }
-
-/**
- * Check if error tracking is currently enabled.
- */
-export function isErrorTrackingEnabled(): boolean {
-  return enabled && initialized;
-}
