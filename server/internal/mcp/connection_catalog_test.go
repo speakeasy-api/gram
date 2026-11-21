@@ -153,9 +153,8 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 	}{
 		{"remote_session", toolfilter.CatalogModeCached, "", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "", "backfill"},
 		{"remote_session", toolfilter.CatalogModeLive, "", "backfill"}, {"static_credential", toolfilter.CatalogModeLive, "", "backfill"},
-		{"static_credential", toolfilter.CatalogModeCached, "bound", "backfill"}, {"static_credential", toolfilter.CatalogModeCached, "unbound", "backfill"},
 		{"remote_session", toolfilter.CatalogModeCached, "", "admin"}, {"static_credential", toolfilter.CatalogModeCached, "", "admin"},
-		{"remote_session", toolfilter.CatalogModeCached, "", "admin-unlinked"},
+		{"static_credential", toolfilter.CatalogModeCached, "association-without-offer", "backfill"},
 	} {
 		t.Run(tc.kind+"/"+string(tc.mode)+"/"+tc.oauth+"/"+tc.source, func(t *testing.T) {
 			kind := tc.kind
@@ -185,7 +184,7 @@ func TestConnectionCatalogPersistsTypedAuthClientWithoutBackfill(t *testing.T) {
 				require.NoError(t, err)
 			}
 			fixtures := authclientfixtures.New(ti.conn)
-			source := strings.TrimSuffix(tc.source, "-unlinked")
+			source := tc.source
 			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, ClientType: kind, Source: source, RemoteSessionClientID: registration})
 			require.NoError(t, err)
 			if kind == "static_credential" {

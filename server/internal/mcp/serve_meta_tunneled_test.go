@@ -119,9 +119,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesOwnToken(t *te
 	t.Cleanup(gatewayServer.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
 
-	// The member's provider client is bound to the gateway's issuer (so the
-	// session can hold its credential) and to the member's own issuer (so the
-	// resync derives the mcp_servers.remote_session_issuer_id routing key).
+	// The member's scoped placement supplies its routing key. Its typed offer
+	// supplies the credential choice for the gateway session.
 	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-a", "")
 	subject := createTestUser(t, ctx, ti, "meta-tunnel-user-"+uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-tunnel", "")
