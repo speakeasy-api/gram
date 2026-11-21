@@ -149,6 +149,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		ServiceName:    serviceName,
 		ServiceVersion: shortGitSHA(),
 		GitSHA:         GitSHA,
+		Partition:      PullPartition(ctx),
 		EnableTracing:  c.Bool("with-otel-tracing"),
 		EnableMetrics:  c.Bool("with-otel-metrics"),
 	})
