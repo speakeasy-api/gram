@@ -443,8 +443,10 @@ export default defineConfig(async (env) => {
         // deployment's settings at container start. The dev server reads the
         // same variable, so a local stack runs with no PostHog, RUM or
         // configured hosts unless GRAM_DASHBOARD_CONFIG is set. Feature flags
-        // are unaffected: localhost always uses all-on dev telemetry. To send
-        // local events to the dev PostHog project, set it in mise.local.toml:
+        // are unaffected: localhost always uses all-on dev telemetry, which
+        // also drops explicit captures. To initialize PostHog locally
+        // (autocaptured pageviews and the session ID for signup attribution),
+        // set it in mise.local.toml:
         //   GRAM_DASHBOARD_CONFIG = '{"posthogKey":"<dev project key>","posthogHost":"https://metrics.speakeasy.com"}'
         // (the dev key is in gram-infra's values-dev.yaml).
         name: "dashboard-config",
