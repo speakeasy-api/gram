@@ -1,0 +1,194 @@
+openapi: 3.1.0
+info:
+  title: Speakeasy end-to-end test contract
+  version: "1"
+  description: >-
+    The operations an end-to-end test run calls outside the browser: the
+    non-production control surface (server/internal/e2econtrol) and the few
+    public API reads the suite's root uses to check the seeded state. A test
+    tool pins this file by its SHA-256, so changing it re-plans the flows that
+    name it. It is hand-written and deliberately small; the full public API is
+    server/gen/http/openapi3.yaml.
+security:
+  - control: []
+paths:
+  /rpc/e2e.reseed:
+    post:
+      operationId: e2eReseed
+      description: Replace the test organization's data with the seed. 409 while another seed run holds the lock.
+      responses:
+        "200":
+          description: The test organization was reseeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reseeded"
+        "409":
+          description: Another seed run is in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /rpc/e2e.tenant:
+    get:
+      operationId: e2eTenant
+      description: Identify the test organization. Reads only.
+      responses:
+        "200":
+          description: The test organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+  /rpc/e2e.signInLink:
+    post:
+      operationId: e2eSignInLink
+      description: Mint a link that signs a browser in as the test user, once, within a minute.
+      responses:
+        "200":
+          description: A one-time sign-in link
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, path, expires_in_seconds]
+                properties:
+                  url:
+                    type: string
+                  path:
+                    type: string
+                  expires_in_seconds:
+                    type: integer
+  /rpc/toolsets.get:
+    get:
+      operationId: getToolset
+      security:
+        - apiKey: []
+          project: []
+      parameters:
+        - name: slug
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The MCP server (toolset)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  slug:
+                    type: string
+                  tools:
+                    type: array
+                    items:
+                      type: object
+        "404":
+          description: No such toolset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /rpc/access.listRoles:
+    get:
+      operationId: listRoles
+      security:
+        - apiKey: []
+          project: []
+      responses:
+        "200":
+          description: The organization's roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        slug:
+                          type: string
+                        is_system:
+                          type: boolean
+components:
+  securitySchemes:
+    control:
+      type: apiKey
+      in: header
+      name: Gram-E2E-Token
+    apiKey:
+      type: apiKey
+      in: header
+      name: Gram-Key
+    project:
+      type: apiKey
+      in: header
+      name: Gram-Project
+  schemas:
+    Tenant:
+      type: object
+      required:
+        [
+          organization_id,
+          organization_slug,
+          project_slug,
+          seeded_user_prefix,
+          environment,
+          build,
+        ]
+      properties:
+        organization_id:
+          type: string
+        organization_slug:
+          type: string
+        project_slug:
+          type: string
+        seeded_user_prefix:
+          type: string
+        api_key_name:
+          type: string
+        environment:
+          type: string
+        build:
+          type: string
+        user_email:
+          type: string
+    Reseeded:
+      type: object
+      required: [organization_slug, project_slug, duration_ms]
+      properties:
+        organization_id:
+          type: string
+        organization_slug:
+          type: string
+        project_slug:
+          type: string
+        seeded_user_prefix:
+          type: string
+        api_key_name:
+          type: string
+        environment:
+          type: string
+        build:
+          type: string
+        user_email:
+          type: string
+        duration_ms:
+          type: integer
+    Problem:
+      type: object
+      properties:
+        error:
+          type: string
+        name:
+          type: string
+        message:
+          type: string
