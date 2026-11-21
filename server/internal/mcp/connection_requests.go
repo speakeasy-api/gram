@@ -97,7 +97,7 @@ func directConnectionOptions(ctx context.Context, r *http.Request, organizationI
 	return []remotemcp.BuildOption{remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
 		Scope:            mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx)),
 		Details:          []mcpconnectionattempts.Option{callerSubject(ctx), client, mcpconnectionattempts.RemoteSessionClient(ownSignInClient(upstream))},
-		UpstreamFailures: true,
+		UpstreamOutcomes: true,
 		SelfCredential:   upstream.CredentialOwner == remotesessions.CredentialOwnerSelf,
 		Request:          r,
 	})}
@@ -163,19 +163,20 @@ func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateCont
 	return remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
 		Scope:            gate.connectionScope(ctx),
 		Details:          s.memberConnection(ctx, gate, member, serviceClient),
-		UpstreamFailures: false,
+		UpstreamOutcomes: false,
 		SelfCredential:   false,
 		Request:          gate.request,
 	})
 }
 
-// recordMemberFailure records a member's failed tool call, refining a missing connection to its cause.
-func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
+// recordMemberFailure records a member's failed tool call, refining a missing connection to its cause. serviceClient
+// is the service client of the person's own sign-in the call sent, uuid.Nil for none.
+func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, serviceClient uuid.UUID, what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	if what == mcpconnectionattempts.CodeInvalidRemoteSession {
 		what = gate.memberNoCredentialHappened(member)
 	}
 	// Kept beside a provider_refresh row: only this row carries member_id.
-	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, append(s.memberConnection(ctx, gate, member, uuid.Nil), opts...)...)
+	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, append(s.memberConnection(ctx, gate, member, serviceClient), opts...)...)
 }
 
 // recordMemberServed records a member call its own server answered without an error, on the connection its failures name.

@@ -50,20 +50,33 @@ func observeRejection(ctx context.Context) {
 		o.finish("rejected")
 	}
 }
-func observeResponse(ctx context.Context, msg jsonrpc.Message) {
-	o, _ := ctx.Value(observationKey{}).(*requestObservation)
-	if o == nil {
-		return
+
+// observeReply settles the request metric for a reply and, when wantServed, reports whether msg
+// served the request with id without an error. A reply is decoded at most once. A request owed
+// no reply, a notification, is served by an answer with no reply message.
+func observeReply(ctx context.Context, msg jsonrpc.Message, id jsonrpc.ID, method string, wantServed bool) bool {
+	if msg == nil {
+		return wantServed && !id.IsValid()
 	}
 	response, ok := msg.(*jsonrpc.Response)
-	if !ok || !jsonrpcIDsEqual(response.ID, o.id) {
-		return
+	if !ok {
+		return false
 	}
-	outcome := "success"
-	if replyFailed(response, o.method) {
-		outcome = "error"
+	o, _ := ctx.Value(observationKey{}).(*requestObservation)
+	observed := o != nil && jsonrpcIDsEqual(response.ID, o.id)
+	replied := wantServed && id.IsValid() && jsonrpcIDsEqual(response.ID, id)
+	if !observed && !replied {
+		return false
 	}
-	o.finish(outcome)
+	failed := replyFailed(response, method)
+	if observed {
+		outcome := "success"
+		if failed {
+			outcome = "error"
+		}
+		o.finish(outcome)
+	}
+	return replied && !failed
 }
 func beginObservation(ctx context.Context, record RequestObserver, sessions SessionClients, req *UserRequest, initialize *InitializeRequest) (context.Context, *requestObservation) {
 	if record == nil || len(req.JSONRPCMessages) != 1 {

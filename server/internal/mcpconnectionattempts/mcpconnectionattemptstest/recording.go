@@ -54,12 +54,11 @@ func newRecording(t *testing.T, logsEnabled func(context.Context, string) (bool,
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		rec.rows = append(rec.rows, row)
-	}, logsEnabled)
-	rec.Recorder.CaptureServed(func(served mcpconnectionattempts.Served) {
+	}, func(served mcpconnectionattempts.Served) {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		rec.served = append(rec.served, served)
-	})
+	}, logsEnabled)
 	t.Cleanup(rec.requireOneEndingPerAttempt)
 	return rec
 }

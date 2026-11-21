@@ -143,12 +143,14 @@ func TestUpstreamFailureHappened_TimeoutWinsOverAddress(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code)
 }
 
-// coldCatalogRefusal sends a tools/call whose tool the catalog has not seen, so the server is listed first through policy.
-func coldCatalogRefusal(t *testing.T, policy *guardian.Policy, upstreamURL string) (mcpconnectionattempts.Code, error) {
+// coldCatalogRefusal sends a tools/call whose tool the catalog has not seen, so the server is listed first through
+// policy and, when set, respond.
+func coldCatalogRefusal(t *testing.T, policy *guardian.Policy, upstreamURL string, respond func(context.Context, *http.Response) error) (mcpconnectionattempts.Code, error) {
 	t.Helper()
 
 	p := newKillswitchTestProxy(t, upstreamURL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
 	p.GuardianPolicy = policy
+	p.UpstreamResponseInterceptor = respond
 	store := &fakeToolCatalogStore{catalog: map[string]string{}}
 	err := newAuthzInterceptor(t, store, newCatalogSync(store, p.ListUpstreamTools)).InterceptToolsCallRequest(blockDestructiveContext(t), newCatalogCall(t, "delete_repository"))
 	require.Error(t, err)
@@ -167,7 +169,7 @@ func TestToolsCallConnections_ColdCatalogAtBlockedAddress(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8", "::1/128"})
 	require.NoError(t, err)
 
-	code, _ := coldCatalogRefusal(t, policy, upstream.URL)
+	code, _ := coldCatalogRefusal(t, policy, upstream.URL, nil)
 	require.Equal(t, mcpconnectionattempts.CodeAddressNotAllowed, code)
 
 	tunneledCode, _ := refusalHappened(fmt.Errorf("list: %w", guardian.ErrBlockedIP), true)
@@ -177,23 +179,41 @@ func TestToolsCallConnections_ColdCatalogAtBlockedAddress(t *testing.T) {
 func TestToolsCallConnections_ColdCatalogAtMissingHost(t *testing.T) {
 	t.Parallel()
 
-	code, _ := coldCatalogRefusal(t, resolvingPolicy(t, &net.DNSError{Err: "no such host", Name: "mcp.example.invalid", IsNotFound: true}), "http://mcp.example.invalid/mcp")
+	code, _ := coldCatalogRefusal(t, resolvingPolicy(t, &net.DNSError{Err: "no such host", Name: "mcp.example.invalid", IsNotFound: true}), "http://mcp.example.invalid/mcp", nil)
 	require.Equal(t, mcpconnectionattempts.CodeAddressNotFound, code)
 }
 
-// A listing that never reached the server reads like a forwarded call failing the same way; one the server answered stays ours.
-func TestToolsCallConnections_ColdCatalogOtherFailuresKeepTheirRow(t *testing.T) {
+// A listing the server never answered reads like a forwarded call failing the same way; one it answered stays ours.
+func TestToolsCallConnections_ColdCatalogUnansweredListingIsUnreachable(t *testing.T) {
 	t.Parallel()
 
-	code, _ := coldCatalogRefusal(t, resolvingPolicy(t, errors.New("resolver down")), "http://mcp.example.invalid/mcp")
+	code, _ := coldCatalogRefusal(t, resolvingPolicy(t, errors.New("resolver down")), "http://mcp.example.invalid/mcp", nil)
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code, "a lookup that fails for now")
+
+	closed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	closedURL := closed.URL
+	closed.Close()
+	open, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	code, _ = coldCatalogRefusal(t, open, closedURL, nil)
+	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code, "a server that refused the dial")
 
 	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(refused.Close)
-	open, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
-	require.NoError(t, err)
-	code, _ = coldCatalogRefusal(t, open, refused.URL)
+	code, _ = coldCatalogRefusal(t, open, refused.URL, nil)
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, code, "a server that answered")
+
+	answered := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(answered.Close)
+	code, err = coldCatalogRefusal(t, open, answered.URL, func(context.Context, *http.Response) error {
+		return oops.E(oops.CodeUnauthorized, nil, "credential refused")
+	})
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code, "a response check that refused an answer")
+	listing, ok := errors.AsType[*proxy.UpstreamListingRefusalError](err)
+	require.True(t, ok, "listing error: %v", err)
+	require.True(t, listing.Answered)
 }

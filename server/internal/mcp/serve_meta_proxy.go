@@ -36,7 +36,6 @@ import (
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv/orgaccount"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -368,11 +367,11 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 		if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code != (mcpconnectionattempts.Code{}) {
 			code = failure.code
 		}
-		s.recordMemberFailure(ctx, gate, member, code, opts...)
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, code, opts...)
 		return
 	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok {
-		s.recordMemberFailure(ctx, gate, member, failure.code, opts...)
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, failure.code, opts...)
 	}
 }
 
@@ -714,14 +713,14 @@ func (s *Service) executeProxiedMemberTool(
 	// protocol metadata for the negotiated revision.
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
-	upstreamResult, unsent, err := s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
+	call, unsent, err := s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	if unsent {
 		// The shared session failed before this call was sent, so one retry cannot replay it.
-		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
+		call, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code, mcpconnectionattempts.Provider(memberUpstreamHost(err)), mcpconnectionattempts.RemoteSessionClient(dial.serviceClient))
+			s.recordMemberFailure(ctx, gate, member, call.dial.serviceClient, failure.code, mcpconnectionattempts.Provider(memberUpstreamHost(err)))
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.
@@ -731,7 +730,7 @@ func (s *Service) executeProxiedMemberTool(
 
 	bs, err := json.Marshal(&result[json.RawMessage]{
 		ID:     req.ID,
-		Result: upstreamResult,
+		Result: call.result,
 		// The result's _meta identity stays the member's, as on hosted.
 		serverIdentity: serverInfo{Name: member.slug, Version: "0.0.0"},
 		cacheHints:     nil,
@@ -739,19 +738,30 @@ func (s *Service) executeProxiedMemberTool(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize member tool result").LogError(ctx, logger)
 	}
-	if !dialect.MCPResultIsError(upstreamResult) {
-		s.recordMemberServed(ctx, gate, member, dial.serviceClient)
+	if !call.isError {
+		s.recordMemberServed(ctx, gate, member, call.dial.serviceClient)
 	}
 	return bs, nil
 }
 
+// memberCall is one member tools/call's result and the route it ran on.
+type memberCall struct {
+	result  json.RawMessage
+	isError bool
+
+	// dial is the route the session was opened on, which a recheck may have changed; the first route when none opened.
+	dial memberDial
+}
+
 // callOnMemberSession runs one tools/call on the member's session. unsent
 // reports a failure on a shared session before the call left the gateway.
-func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, redial memberRedial, member metaMember, toolName string, arguments json.RawMessage) (json.RawMessage, bool, error) {
+func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, redial memberRedial, member metaMember, toolName string, arguments json.RawMessage) (memberCall, bool, error) {
+	call := memberCall{result: nil, isError: false, dial: dial}
 	ctx, ms, err := s.openMemberSession(ctx, logger, dial, redial, member)
 	if err != nil {
-		return nil, false, err
+		return call, false, err
 	}
+	call.dial = ms.dial
 	defer ms.release(ctx, logger)
 	// The remotemcp interceptor writes this call's log row and never sees the
 	// gate, so carry down which auth client signs the member in. A recheck
@@ -759,24 +769,24 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 	// credential, so name the route the session was opened on; a route that
 	// recorded none clears any credential named before.
 	ctx = contextvalues.SetUpstreamCredential(ctx, ms.dial.credential)
-	upstreamResult, err := callMemberTool(ctx, ms.session, &mcp.CallToolParams{
+	call.result, call.isError, err = callMemberTool(ctx, ms.session, &mcp.CallToolParams{
 		Name: toolName, Arguments: arguments, Meta: nil, InputResponses: nil, RequestState: "",
 	})
 	if err != nil {
 		ms.fail(ctx)
 		unsent := ms.unsent()
 		if unsent && ctx.Err() == nil {
-			return nil, true, err
+			return call, true, err
 		}
 		// A call that left the gateway is logged by the upstream interceptor.
 		if !unsent {
 			markMetaToolCallProxied(ctx)
 		}
-		return nil, false, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
+		return call, false, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
 	}
 	// The upstream interceptor wrote this call's row.
 	markMetaToolCallProxied(ctx)
-	return upstreamResult, false, nil
+	return call, false, nil
 }
 
 // maxProxiedListPages bounds cursor-following on a member's tools/list.

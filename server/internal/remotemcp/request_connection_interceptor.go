@@ -17,7 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
-// ConnectionAttribution files a proxy's refused and failed tool calls.
+// ConnectionAttribution files a proxy's refused, failed and served requests.
 type ConnectionAttribution struct {
 	// Scope is what the rows are filed under.
 	Scope mcpconnectionattempts.Scope
@@ -25,10 +25,10 @@ type ConnectionAttribution struct {
 	// Details are added to every row.
 	Details []mcpconnectionattempts.Option
 
-	// UpstreamFailures also records calls the upstream failed, and requests it
-	// served. A gateway leaves this off and records from its own classification,
-	// which covers the handshake.
-	UpstreamFailures bool
+	// UpstreamOutcomes also records what the upstream did with a forwarded
+	// request: calls it failed and requests it served. A gateway leaves this off
+	// and records both from its own classification, which covers the handshake.
+	UpstreamOutcomes bool
 
 	// SelfCredential marks a credential the server holds for itself, which the
 	// person connected did not supply and cannot replace.
@@ -91,7 +91,7 @@ func (c *requestConnections) refusals() []proxy.ToolsCallRefusalInterceptor {
 }
 
 func (c *requestConnections) withFailures(interceptors []proxy.ToolsCallFailureInterceptor) []proxy.ToolsCallFailureInterceptor {
-	if c == nil || !c.UpstreamFailures {
+	if c == nil || !c.UpstreamOutcomes {
 		return interceptors
 	}
 	return append(interceptors, c)
@@ -99,7 +99,7 @@ func (c *requestConnections) withFailures(interceptors []proxy.ToolsCallFailureI
 
 // requestFailures records credential rejections on requests other than tools/call.
 func (c *requestConnections) requestFailures() []proxy.RequestFailureInterceptor {
-	if c == nil || !c.UpstreamFailures {
+	if c == nil || !c.UpstreamOutcomes {
 		return nil
 	}
 	return []proxy.RequestFailureInterceptor{c}
@@ -107,7 +107,7 @@ func (c *requestConnections) requestFailures() []proxy.RequestFailureInterceptor
 
 // requestsServed records the requests the upstream served.
 func (c *requestConnections) requestsServed() []proxy.RequestServedInterceptor {
-	if c == nil || !c.UpstreamFailures {
+	if c == nil || !c.UpstreamOutcomes {
 		return nil
 	}
 	return []proxy.RequestServedInterceptor{c}
@@ -150,7 +150,7 @@ func (c *requestConnections) InterceptRequestFailure(ctx context.Context, failur
 
 // InterceptRequestServed implements [proxy.RequestServedInterceptor]. Every
 // request here was forwarded, so the server itself answered.
-func (c *requestConnections) InterceptRequestServed(ctx context.Context, _ *proxy.RequestServed) {
+func (c *requestConnections) InterceptRequestServed(ctx context.Context) {
 	c.recorder.Served(ctx, c.Scope, true, c.options()...)
 }
 
@@ -342,8 +342,8 @@ func refusalHappened(err error, tunneled bool) (mcpconnectionattempts.Code, bool
 			return mcpconnectionattempts.CodePolicyBlocked, true
 		}
 	}
-	// A cold tool catalog lists the server first, so the server can stop the call here.
-	if listing, ok := errors.AsType[*proxy.UpstreamListingRefusalError](err); ok && listing.Response == nil && listing.Cause != nil {
+	// A cold tool catalog lists the server first, so a server that never answered can stop the call here.
+	if listing, ok := errors.AsType[*proxy.UpstreamListingRefusalError](err); ok && !listing.Answered && listing.Cause != nil {
 		_, rejected := errors.AsType[*proxy.RejectError](listing.Cause)
 		if !rejected && !errors.Is(listing.Cause, context.Canceled) {
 			return UpstreamFailureHappened(0, false, UpstreamCredentialSent{Attached: false, Self: false, Configured: false}, tunneled, "", listing.Cause)

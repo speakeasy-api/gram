@@ -60,7 +60,7 @@ func TestRequestConnections_RepeatedRejectionsFold(t *testing.T) {
 	remotemcp.InstallConnections(p, remotemcp.ConnectionAttribution{
 		Scope:            mcpconnectionattempts.ServerScope(uuid.NewString(), uuid.New(), serverID, mcpconnectionattempts.AppUnverified),
 		Details:          nil,
-		UpstreamFailures: true,
+		UpstreamOutcomes: true,
 		SelfCredential:   false,
 		Request:          nil,
 	}, recorder, "token")

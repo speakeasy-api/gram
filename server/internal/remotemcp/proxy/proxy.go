@@ -559,7 +559,7 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		defer stopAge()
 
 		streamStart := time.Now()
-		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, reply: nil, age: age}
+		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, method: "", served: false, age: age}
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, jsonrpc.ID{}, relay, nil, nil, nil, nil, nil, label)
 		responseBytes = relay.bytes
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
@@ -857,7 +857,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// abandon it, with shutdowndrain.ErrInterrupted as the cause, while ctx stays live
 	// for answering the client and running interceptors. A subscriptions/listen
 	// stream is not interrupted: it already ends when the drain starts.
-	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, reply: nil, age: p.streamAge(start)}
+	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, method: jsonrpcMethod, served: false, age: p.streamAge(start)}
 	forwardCtx, cancelForward := context.WithCancelCause(ctx)
 	defer cancelForward(nil)
 	if !listen {
@@ -965,8 +965,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, userReqID, relay, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, label)
 		responseBytes = relay.bytes
 		responseRelayed := relay.responseRelayed.Load()
-		if relay.reply != nil && upstreamStatus >= 200 && upstreamStatus < 300 && servedBy(relay.reply, userReqID, jsonrpcMethod) {
-			p.runRequestServedInterceptors(ctx, &RequestServed{Method: jsonrpcMethod})
+		if relay.served {
+			p.runRequestServedInterceptors(ctx)
 		}
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
 		if shutdowndrain.Interrupted(forwardCtx) {
@@ -1218,9 +1218,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if err != nil {
 		return err
 	}
-	observeResponse(ctx, msg)
-	if upstreamStatus >= 200 && upstreamStatus < 300 && servedBy(msg, userReqID, jsonrpcMethod) {
-		p.runRequestServedInterceptors(ctx, &RequestServed{Method: jsonrpcMethod})
+	if observeReply(ctx, msg, userReqID, jsonrpcMethod, p.wantsServed(upstreamStatus)) {
+		p.runRequestServedInterceptors(ctx)
 	}
 	return nil
 }
@@ -1665,11 +1664,13 @@ func (p *Proxy) relaySSEStream(
 			return fmt.Errorf("stream sse event: %w", writeErr)
 		}
 		result.bytes += int64(len(emit))
-		if isResponseTo(msg, responseID) {
-			result.reply = msg
+		replied := isResponseTo(msg, responseID)
+		if replied {
 			result.markResponseRelayed(p.Drain, upstreamResp.Body)
 		}
-		observeResponse(ctx, msg)
+		if served := observeReply(ctx, msg, responseID, result.method, replied && p.wantsServed(upstreamResp.StatusCode)); replied {
+			result.served = served
+		}
 		if flusher != nil {
 			flusher.Flush()
 		}
@@ -1748,8 +1749,11 @@ type sseRelay struct {
 	// resumable reports whether any upstream event carried an SSE id.
 	resumable bool
 
-	// reply is the response relayed to the request that opened the stream.
-	reply jsonrpc.Message
+	// method is the JSON-RPC method of the request that opened the stream.
+	method string
+
+	// served reports that the response relayed to that request served it without an error.
+	served bool
 
 	// age is the stream's maximum age.
 	age streamAge
@@ -1941,17 +1945,20 @@ func (p *Proxy) runRequestFailureInterceptors(ctx context.Context, failure *Requ
 	}
 }
 
+// wantsServed reports whether an upstream answer with status could be recorded as served.
+func (p *Proxy) wantsServed(status int) bool {
+	return len(p.RequestServedInterceptors) > 0 && status >= 200 && status < 300
+}
+
 // runRequestServedInterceptors invokes each configured
-// RequestServedInterceptor in order, unless the caller went away first.
-func (p *Proxy) runRequestServedInterceptors(ctx context.Context, served *RequestServed) {
+// RequestServedInterceptor in order, unless the caller went away first. It runs
+// once per served request, so it opens no span.
+func (p *Proxy) runRequestServedInterceptors(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
 	for _, interceptor := range p.RequestServedInterceptors {
-		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.RequestServedInterceptor",
-			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
-		interceptor.InterceptRequestServed(iterCtx, served)
-		span.End()
+		interceptor.InterceptRequestServed(ctx)
 	}
 }
 

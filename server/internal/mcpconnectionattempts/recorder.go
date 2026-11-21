@@ -320,27 +320,37 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 	if final {
 		storedOutcome = string(outcome)
 	}
-	appKey := attempt.scope.appKey
+	row := newRow(attempt.scope, at)
+	row.AttemptID, row.AttemptStartedAt = attempt.id, attempt.startedAt
+	row.Step, row.StepResult, row.Outcome, row.Reason = step.name, result, storedOutcome, reason
+	row.WhoFixes, row.IsFinal = string(who), final
+	row.apply(opts)
+	return row, nil
+}
+
+// newRow is a row of scope at a time, with no attempt or step.
+func newRow(scope Scope, at time.Time) Row {
+	appKey := scope.appKey
 	if appKey == "" {
 		appKey = AppUnverified.key
 	}
-	row := Row{
-		OrganizationID:        attempt.scope.organizationID,
-		ProjectID:             attempt.scope.projectID,
-		AttemptID:             attempt.id,
-		AttemptStartedAt:      attempt.startedAt,
+	return Row{
+		OrganizationID:        scope.organizationID,
+		ProjectID:             scope.projectID,
+		AttemptID:             uuid.Nil,
+		AttemptStartedAt:      time.Time{},
 		EventTime:             at.UTC(),
-		ServerKind:            attempt.scope.serverKind,
-		ServerID:              idString(attempt.scope.serverID),
+		ServerKind:            scope.serverKind,
+		ServerID:              idString(scope.serverID),
 		MemberID:              "",
-		Step:                  step.name,
-		StepResult:            result,
-		Outcome:               storedOutcome,
-		Reason:                reason,
+		Step:                  "",
+		StepResult:            "",
+		Outcome:               "",
+		Reason:                "",
 		SubReason:             "",
-		WhoFixes:              string(who),
+		WhoFixes:              "",
 		GrantType:             "",
-		IsFinal:               final,
+		IsFinal:               false,
 		Retries:               0,
 		AuthClientID:          "",
 		RemoteSessionIssuerID: "",
@@ -357,17 +367,20 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		ClientVersion:         "",
 		Repeats:               0,
 		DeviceKey:             "",
-		client:                requestClient{present: false, userAgent: "", ipAddress: "", appFamily: attempt.scope.appFamily, reported: nil},
+		client:                requestClient{present: false, userAgent: "", ipAddress: "", appFamily: scope.appFamily, reported: nil},
 		foldMethod:            "",
 		foldSubjects:          "",
 		failedElsewhere:       false,
 	}
+}
+
+// apply adds opts to the row, in order.
+func (row *Row) apply(opts []Option) {
 	for _, opt := range opts {
 		if opt.apply != nil {
-			opt.apply(&row)
+			opt.apply(row)
 		}
 	}
-	return row, nil
 }
 
 func idString(id uuid.UUID) string {
@@ -424,6 +437,12 @@ type config struct {
 
 	// servedFlushInterval is how long a served connection waits in memory.
 	servedFlushInterval time.Duration
+
+	// servedStampBudget bounds the reported-client reads of one served flush.
+	servedStampBudget time.Duration
+
+	// servedTable is where served connections are written.
+	servedTable string
 }
 
 // Recorder writes connection events. Its methods only queue a row. One goroutine checks the
@@ -444,6 +463,13 @@ type Recorder struct {
 
 	// captureServed receives a capturing recorder's served connections.
 	captureServed func(Served)
+
+	// servedWritten and servedDropped count served connections apart from connection events.
+	servedWritten metric.Int64Counter
+	servedDropped metric.Int64Counter
+
+	// lastServedDrop limits logging of served drops per reason.
+	lastServedDrop map[dropReason]*atomic.Int64
 
 	dropped metric.Int64Counter
 
@@ -508,6 +534,7 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 		dropRateLimited:  {},
 		dropQueueReserve: {},
 		dropRepeatsLost:  {},
+		dropPendingFull:  {},
 	}
 }
 
@@ -525,6 +552,8 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 
 		servedInterval:      defaultServedInterval,
 		servedFlushInterval: defaultServedFlushInterval,
+		servedStampBudget:   defaultServedStampBudget,
+		servedTable:         lastServedTable,
 	}, opts...)
 }
 
@@ -551,6 +580,19 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterReferenceTimeouts), attr.SlogError(err))
 	}
 
+	servedWritten, err := meter.Int64Counter(meterServedWritten,
+		metric.WithDescription("MCP connections stored as served. Each stands for that connection's served requests since its last write."),
+		metric.WithUnit("{connection}"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterServedWritten), attr.SlogError(err))
+	}
+	servedDropped, err := meter.Int64Counter(meterServedDropped,
+		metric.WithDescription("MCP connections served but not stored, by reason. A connection a full flush turned away counts once per flush."),
+		metric.WithUnit("{connection}"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterServedDropped), attr.SlogError(err))
+	}
+
 	writerCtx, cancelWriter := context.WithCancel(context.Background())
 	r := &Recorder{
 		logger:      logger,
@@ -564,8 +606,11 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		steps:       steps,
 		dropped:     dropped,
 
-		served:        newServedConnections(cfg.servedInterval),
-		captureServed: nil,
+		served:         newServedConnections(cfg.servedInterval, servedMaxConnections, servedMaxPending),
+		captureServed:  nil,
+		servedWritten:  servedWritten,
+		servedDropped:  servedDropped,
+		lastServedDrop: newDropCounters(),
 
 		referenceTimeouts: referenceTimeouts,
 		queue:             make(chan Row, cfg.queueSize),
@@ -594,9 +639,10 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	return r
 }
 
-// NewCapturing returns a recorder that hands each row to capture instead of
-// writing it. Use mcpconnectionattemptstest rather than calling this.
-func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (bool, error)) *Recorder {
+// NewCapturing returns a recorder that hands each row to capture and each served
+// connection to captureServed instead of writing them. Nil captureServed keeps
+// none. Use mcpconnectionattemptstest rather than calling this.
+func NewCapturing(capture func(Row), captureServed func(Served), logsEnabled func(context.Context, string) (bool, error)) *Recorder {
 	return &Recorder{
 		logger:      slog.New(slog.DiscardHandler),
 		conn:        nil,
@@ -605,12 +651,15 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		deviceKeys:  nil,
 		exporter:    nil,
 		capture:     capture,
-		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0, servedInterval: 0, servedFlushInterval: 0},
+		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0, servedInterval: 0, servedFlushInterval: 0, servedStampBudget: 0, servedTable: ""},
 		steps:       nil,
 		dropped:     nil,
 
-		served:        nil,
-		captureServed: nil,
+		served:         nil,
+		captureServed:  captureServed,
+		servedWritten:  nil,
+		servedDropped:  nil,
+		lastServedDrop: newDropCounters(),
 
 		referenceTimeouts: nil,
 		queue:             nil,
@@ -1125,7 +1174,9 @@ func (r *Recorder) run() {
 				default:
 					addPending(r.limiter.pendingRows(time.Now(), true))
 					flush()
-					if !drainFailed {
+					if drainFailed {
+						r.abandonServed()
+					} else {
 						r.flushServed()
 					}
 					return

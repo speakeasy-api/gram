@@ -51,7 +51,7 @@ func recordingConnections(rec *mcpconnectionattemptstest.Recording, upstreamAuth
 	return newConnectionsUnderTest(&ConnectionAttribution{
 		Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 		Details:          nil,
-		UpstreamFailures: true,
+		UpstreamOutcomes: true,
 		SelfCredential:   false,
 		Request:          nil,
 	}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", upstreamAuth, nil)
@@ -110,7 +110,7 @@ func TestToolsCallConnections_ToolErrorRecordsNothing(t *testing.T) {
 	rec.RequireNothing()
 }
 
-func TestToolsCallConnections_UpstreamFailures(t *testing.T) {
+func TestToolsCallConnections_UpstreamOutcomes(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -207,7 +207,7 @@ func TestToolsCallConnections_TunneledConfiguredCredential(t *testing.T) {
 	attribution := &ConnectionAttribution{
 		Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 		Details:          nil,
-		UpstreamFailures: true,
+		UpstreamOutcomes: true,
 		SelfCredential:   false,
 		Request:          nil,
 	}
@@ -310,7 +310,7 @@ func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
 		return &ConnectionAttribution{
 			Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 			Details:          nil,
-			UpstreamFailures: true,
+			UpstreamOutcomes: true,
 			SelfCredential:   false,
 			Request:          nil,
 		}
@@ -391,9 +391,10 @@ func TestRefusalHappened(t *testing.T) {
 		{name: "check failed", err: killswitchCheckError{proxy.NewKillswitchInfrastructureRejection()}, want: mcpconnectionattempts.CodeKillswitchCheckUnavailable},
 		{name: "a failed lookup is ours", err: errors.New("resolve remote MCP tool disposition: lookup failed"), want: mcpconnectionattempts.CodeInternalError},
 		{name: "a malformed call is ours", err: &proxy.RejectError{Code: proxy.RejectCodeInvalidParams, Message: "malformed", Data: nil}, want: mcpconnectionattempts.CodeInternalError},
-		{name: "an unreachable server stops a cold catalog's listing", err: &proxy.UpstreamListingRefusalError{Cause: errors.New("dial tcp: connection refused"), Response: nil}, want: mcpconnectionattempts.CodeProviderUnreachable},
-		{name: "a slow server stops a cold catalog's listing", err: &proxy.UpstreamListingRefusalError{Cause: fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut), Response: nil}, want: mcpconnectionattempts.CodeProviderUnreachable},
-		{name: "a listing that could not be built is ours", err: &proxy.UpstreamListingRefusalError{Cause: &proxy.ForwardSetupError{Err: errors.New("build"), Kind: proxy.ForwardSetupInternal}, Response: nil}, want: mcpconnectionattempts.CodeInternalError},
+		{name: "an unreachable server stops a cold catalog's listing", err: &proxy.UpstreamListingRefusalError{Cause: errors.New("dial tcp: connection refused"), Response: nil, Answered: false}, want: mcpconnectionattempts.CodeProviderUnreachable},
+		{name: "a slow server stops a cold catalog's listing", err: &proxy.UpstreamListingRefusalError{Cause: fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut), Response: nil, Answered: false}, want: mcpconnectionattempts.CodeProviderUnreachable},
+		{name: "a listing that could not be built is ours", err: &proxy.UpstreamListingRefusalError{Cause: &proxy.ForwardSetupError{Err: errors.New("build"), Kind: proxy.ForwardSetupInternal}, Response: nil, Answered: false}, want: mcpconnectionattempts.CodeInternalError},
+		{name: "a response check that refused an answered listing is ours", err: &proxy.UpstreamListingRefusalError{Cause: oops.E(oops.CodeUnauthorized, nil, "credential refused"), Response: nil, Answered: true}, want: mcpconnectionattempts.CodeInternalError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -611,7 +612,7 @@ func TestRequestConnections_CredentialRejected(t *testing.T) {
 			connections := newConnectionsUnderTest(&ConnectionAttribution{
 				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 				Details:          nil,
-				UpstreamFailures: true,
+				UpstreamOutcomes: true,
 				SelfCredential:   tc.self,
 				Request:          nil,
 			}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", tc.upstreamAuth, tc.headers)
@@ -673,7 +674,7 @@ func TestRequestConnections_Tunneled(t *testing.T) {
 			connections := newConnectionsUnderTest(&ConnectionAttribution{
 				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 				Details:          nil,
-				UpstreamFailures: true,
+				UpstreamOutcomes: true,
 				SelfCredential:   false,
 				Request:          nil,
 			}, rec.Recorder, identity, "https://gateway.internal/mcp", "", headers)
@@ -745,7 +746,7 @@ func TestRequestConnections_GatewayMemberRecordsNothing(t *testing.T) {
 
 	rec := mcpconnectionattemptstest.New(t)
 	connections := recordingConnections(rec, "token")
-	connections.UpstreamFailures = false
+	connections.UpstreamOutcomes = false
 	require.Nil(t, connections.requestFailures())
 	serveRequest(t, connections, rejectingUpstream(t, http.StatusUnauthorized), connectionInitialize)
 	rec.RequireNothing()
@@ -784,7 +785,7 @@ func TestRequestConnections_RedirectedChallengeRecordsNothing(t *testing.T) {
 			connections := newConnectionsUnderTest(&ConnectionAttribution{
 				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 				Details:          nil,
-				UpstreamFailures: true,
+				UpstreamOutcomes: true,
 				SelfCredential:   false,
 				Request:          nil,
 			}, rec.Recorder, proxy.ServerIdentity{}, origin.URL, tc.upstreamAuth, tc.headers)
@@ -819,7 +820,7 @@ func TestRequestConnections_SuppressedKeyRecordsNothing(t *testing.T) {
 		connections := newConnectionsUnderTest(&ConnectionAttribution{
 			Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 			Details:          nil,
-			UpstreamFailures: true,
+			UpstreamOutcomes: true,
 			SelfCredential:   false,
 			Request:          nil,
 		}, rec.Recorder, proxy.ServerIdentity{}, upstream.URL, "", headers)

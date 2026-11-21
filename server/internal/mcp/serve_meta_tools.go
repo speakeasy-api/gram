@@ -333,7 +333,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code)
+			s.recordMemberFailure(ctx, gate, member, uuid.Nil, failure.code)
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			attempt.fail(metaMemberErrorStatus(err), memberErr.message)
@@ -348,7 +348,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// toolset's hosting publicness.
 	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, hosting.Public, inputs)
 	if err != nil || !satisfied {
-		s.recordMemberFailure(ctx, gate, member, failureCode)
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, failureCode)
 	}
 	if err != nil {
 		return nil, err
@@ -395,7 +395,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		}
 	}
 	if code != (mcpconnectionattempts.Code{}) {
-		s.recordMemberFailure(ctx, gate, member, code)
+		s.recordMemberFailure(ctx, gate, member, uuid.Nil, code)
 	}
 	if err != nil {
 		// A member's execution failure must degrade that member, not the

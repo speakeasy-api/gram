@@ -36,7 +36,7 @@ func servedConnectionsIn(rec *mcpconnectionattemptstest.Recording, scope mcpconn
 	return newConnectionsUnderTest(&ConnectionAttribution{
 		Scope:            scope,
 		Details:          details,
-		UpstreamFailures: true,
+		UpstreamOutcomes: true,
 		SelfCredential:   false,
 		Request:          nil,
 	}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "token", nil)
@@ -131,6 +131,7 @@ func TestRequestConnections_NotServed(t *testing.T) {
 		{name: "tool error", request: connectionToolsCall, upstream: answering("application/json", `{"jsonrpc":"2.0","id":7,"result":{"isError":true,"content":[]}}`)},
 		{name: "tool error over SSE", request: connectionToolsCall, upstream: answering("text/event-stream", "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"isError\":true,\"content\":[]}}\n\n")},
 		{name: "JSON-RPC error", request: `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, upstream: answering("application/json", `{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"boom"}}`)},
+		{name: "empty answer to a request owed a reply", request: `{"jsonrpc":"2.0","id":3,"method":"ping"}`, upstream: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }},
 		{name: "SSE stream closed without a reply", request: connectionToolsCall, upstream: answering("text/event-stream", ": keepalive\n\n")},
 		{name: "server error", request: connectionToolsCall, upstream: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) }},
 		{name: "rejected credential", request: connectionInitialize, upstream: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }},
@@ -198,7 +199,7 @@ func TestRequestConnections_ServedNeedsAPersonAndADirectServer(t *testing.T) {
 		t.Parallel()
 		rec := mcpconnectionattemptstest.New(t)
 		connections := servedConnections(rec, uuid.Nil)
-		connections.UpstreamFailures = false
+		connections.UpstreamOutcomes = false
 		require.Nil(t, connections.requestsServed())
 		serveToolsCall(t.Context(), t, connections, ok, continueCheckpoint())
 		rec.RequireNoneServed()
@@ -209,7 +210,7 @@ func TestRequestConnections_ServedNeedsAPersonAndADirectServer(t *testing.T) {
 		rec := mcpconnectionattemptstest.New(t)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		servedConnections(rec, uuid.Nil).InterceptRequestServed(ctx, &proxy.RequestServed{Method: "tools/call"})
+		servedConnections(rec, uuid.Nil).InterceptRequestServed(ctx)
 		rec.RequireNoneServed()
 	})
 }
