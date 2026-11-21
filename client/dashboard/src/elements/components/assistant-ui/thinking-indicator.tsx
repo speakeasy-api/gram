@@ -4,91 +4,9 @@ import { useAuiState } from "@assistant-ui/react";
 import { type FC, useEffect, useMemo, useState } from "react";
 
 import { isToolCallAnnotation } from "@/elements/lib/toolCallAnnotation";
+import { THINKING_VERBS } from "@/elements/lib/thinkingVerbs";
 import { RainbowSpinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
-
-/**
- * Whimsical verbs cycled while the assistant is "thinking" — i.e. the message
- * is running but no answer text has streamed in yet (or it is waiting on a tool
- * call / reasoning). The word shown is cosmetic and NOT tied to the actual work
- * being done, mirroring the playful verbs Claude shows while it works. To make
- * them reflect the real action instead, map from the streamed tool name in
- * `ThinkingIndicator` below.
- */
-const THINKING_VERBS = [
-  "Thinking",
-  "Reasoning",
-  "Pondering",
-  "Synthesizing",
-  "Connecting",
-  "Analyzing",
-  "Inspecting",
-  "Correlating",
-  "Digging",
-  "Untangling",
-  "Assembling",
-  "Sketching",
-  "Reticulating",
-  "Wrangling",
-  "Distilling",
-  "Surveying",
-  "Mapping",
-  "Cross-referencing",
-  "Investigating",
-  "Considering",
-  "Formulating",
-  "Piecing",
-  "Tracing",
-  "Computing",
-  "Noodling",
-  "Percolating",
-  "Marshalling",
-  "Crunching",
-  "Orchestrating",
-  "Composing",
-  "Ruminating",
-  "Cogitating",
-  "Deliberating",
-  "Brewing",
-  "Simmering",
-  "Mulling",
-  "Parsing",
-  "Sifting",
-  "Scouring",
-  "Combing",
-  "Sleuthing",
-  "Probing",
-  "Excavating",
-  "Unraveling",
-  "Threading",
-  "Stitching",
-  "Weaving",
-  "Charting",
-  "Plotting",
-  "Calibrating",
-  "Tabulating",
-  "Aggregating",
-  "Collating",
-  "Triangulating",
-  "Reconciling",
-  "Conjuring",
-  "Divining",
-  "Indexing",
-  "Querying",
-  "Scanning",
-  "Spelunking",
-  "Tinkering",
-  "Whittling",
-  "Churning",
-  "Gathering",
-  "Decoding",
-  "Pattern-matching",
-  "Joining the dots",
-  "Connecting the dots",
-  "Following the trail",
-  "Chasing leads",
-  "Triple-checking",
-] as const;
 
 // Cadence: hold each verb, then crossfade to the next.
 const HOLD_MS = 2000;

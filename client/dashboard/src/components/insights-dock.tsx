@@ -68,6 +68,8 @@ import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
 import { useAskAiListener } from "./command-palette/askAiBridge";
+import { TERMINAL_SKIN_COMPONENTS } from "./home/terminal-skin-components";
+import { TERMINAL_SKIN_CSS } from "./home/terminal-skin-theme";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -1297,8 +1299,12 @@ export function InsightsProvider({
           CHAT_MARKDOWN_CSS +
           CHAT_FULLPAGE_COMPOSER_CSS +
           CHAT_LANDING_COMPOSER_CSS +
-          CHAT_LINK_CSS,
+          CHAT_LINK_CSS +
+          TERMINAL_SKIN_CSS,
       },
+      // Inert unless a surface wraps <Chat /> in TerminalSkinProvider (the
+      // project homepage terminal); everywhere else renders stock.
+      components: { ...mcpConfig.components, ...TERMINAL_SKIN_COMPONENTS },
     }),
     [
       mcpConfig,
