@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -44,6 +45,7 @@ type testInstance struct {
 	service        *auditapi.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	authzEngine    *authz.Engine
 }
 
 func newTestAuditService(t *testing.T) (context.Context, *testInstance) {
@@ -67,8 +69,9 @@ func newTestAuditService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return ctx, &testInstance{
-		service:        auditapi.NewService(logger, tracerProvider, conn, sessionManager, authzEngine),
+		service:        auditapi.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, staff.NewOrganization(staffOrganizationID)),
 		conn:           conn,
 		sessionManager: sessionManager,
+		authzEngine:    authzEngine,
 	}
 }

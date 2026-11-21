@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,7 @@ func TestWorkloadInference_CompletionEndToEnd(t *testing.T) {
 	billingRepo := &workloadInferenceBilling{Repository: billing.NewStubClient(f.ti.logger, f.ti.tracerProvider)}
 	svc := chat.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager,
 		f.ti.chatSessionsManager, nil, upstream, nil, posthog.New(t.Context(), f.ti.logger, "", "", ""), nil, nil, f.ti.authzEngine, assistanttokens.New("workload-inference-test-secret", f.ti.conn, f.ti.authzEngine, f.ti.principalCredentials, f.ti.cacheAdapter),
-		billingRepo, f.ti.audit).WithWorkloadInference(f.ti.service)
+		billingRepo, f.ti.audit, staff.Organization{}).WithWorkloadInference(f.ti.service)
 	complete := func(bearer string, headers map[string]string) (*httptest.ResponseRecorder, error) {
 		req := httptest.NewRequest(http.MethodPost, "/chat/completions", strings.NewReader(`{"model":"test-model","messages":[{"role":"user","content":"hello"}],"stream":false}`))
 		req.Header.Set("Authorization", "Bearer "+bearer)

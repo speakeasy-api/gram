@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -179,7 +180,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	require.Equal(t, false, internalAfter["stored_disabled"])
 	require.Equal(t, false, internalAfter["effective_disabled"])
 	require.Equal(t, true, internalAfter["key_access_changed"])
-	floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
+	floor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, orgID, "enterprise", false)
 	require.True(t, ok)
 	require.EqualValues(t, floor, chatAfter["monthly_credits"])
 	require.EqualValues(t, floor, internalAfter["monthly_credits"])

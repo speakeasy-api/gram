@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -336,7 +337,7 @@ func TestMarkEnterpriseTrialConverted_MissingKeyWaitsForProvisioningAndReReads(t
 	}
 
 	key := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
-	floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
+	floor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, orgID, "enterprise", false)
 	require.True(t, ok)
 	require.GreaterOrEqual(t, key.MonthlyCredits, int64(floor), "conversion must re-read and promote the newly provisioned key")
 }

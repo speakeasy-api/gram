@@ -354,6 +354,7 @@ func newWorkerCommand() *cli.Command {
 		},
 	)
 
+	flags = append(flags, staffFlags()...)
 	flags = append(flags, catalogPromotionFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
@@ -389,6 +390,10 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			customDomainTargetSuffix, err := customDomainTargetSuffixFromCLI(c)
+			if err != nil {
+				return err
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
 			if err != nil {
 				return err
 			}
@@ -450,6 +455,9 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
@@ -508,7 +516,7 @@ func newWorkerCommand() *cli.Command {
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, staffOrg).
 					WithDistributionAdmission(admission.NewGuard())
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
@@ -587,7 +595,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg)
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -919,6 +927,7 @@ func newWorkerCommand() *cli.Command {
 				SiteURL:                        siteURL,
 				ServerURL:                      serverURL,
 				OrgHosts:                       orgHosts,
+				StaffOrganization:              staffOrg,
 				BillingTracker:                 billingTracker,
 				BillingRepository:              billingRepo,
 				StripeClient:                   stripeClient,
