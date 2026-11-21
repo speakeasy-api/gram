@@ -697,7 +697,7 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
 		&cli.StringFlag{
 			Name:    e2eControlTokenFlag,
-			Usage:   "Secret that enables the end-to-end test control surface (/rpc/e2e.*) on a local stack. Unset leaves it off. The server refuses to start with it set in any other environment.",
+			Usage:   "Secret that enables the end-to-end test control surface (/rpc/e2e.*) on a local stack or a pull request preview. Unset leaves it off. The server refuses to start with it set anywhere else.",
 			EnvVars: []string{"GRAM_E2E_CONTROL_TOKEN"},
 		},
 		&cli.StringFlag{
@@ -1713,22 +1713,20 @@ func newStartCommand() *cli.Command {
 			authService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			auth.Attach(mux, authService)
 			if err := attachE2EControl(ctx, logger, mux, e2eControlDeps{
-				environment:      c.String("environment"),
-				identityBackend:  c.String("devidp-backend"),
-				identityEndpoint: c.String("workos-endpoint"),
-				devIDPURL:        fixtureDevIDPURL,
-				token:            c.String(e2eControlTokenFlag),
-				developerEmail:   gitUserEmail,
-				siteURL:          siteURL,
-				serverURL:        serverURL,
-				issuerURL:        c.String("authz-issuer-url"),
-				db:               db,
-				clickhouse:       chDB,
-				blob:             assetStorage,
-				encryption:       encryptionClient,
-				redis:            redisClient,
-				identity:         identityResolver,
-				sessions:         sessionManager,
+				environment:    c.String("environment"),
+				token:          c.String(e2eControlTokenFlag),
+				databaseName:   func(ctx context.Context) (string, error) { return currentDatabase(ctx, db) },
+				developerEmail: gitUserEmail,
+				siteURL:        siteURL,
+				serverURL:      serverURL,
+				issuerURL:      c.String("authz-issuer-url"),
+				db:             db,
+				clickhouse:     chDB,
+				blob:           assetStorage,
+				encryption:     encryptionClient,
+				redis:          redisClient,
+				users:          e2eUsers{db: db},
+				sessions:       sessionManager,
 			}); err != nil {
 				return err
 			}

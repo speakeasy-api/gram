@@ -40,7 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
@@ -1980,7 +1979,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}
-	if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
+	if err := s.sessions.Issue(ctx, w, session, authenticatedAt); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))
 		span.RecordError(err)
 		redirectError("failed to create session")
@@ -1996,16 +1995,6 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		s.logger.WarnContext(ctx, "invite callback: failed to invalidate user info cache", attr.SlogError(err))
 	}
 
-	//nolint:exhaustruct_v5 // only desired fields — avoid unexpected zero-value behavior
-	http.SetCookie(w, &http.Cookie{
-		Name:     constants.SessionCookie,
-		Value:    sessionID,
-		MaxAge:   constants.SessionCookieMaxAgeSeconds,
-		Path:     "/",
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
 	span.AddEvent("invite.callback.cookie_set")
 	s.logger.InfoContext(ctx, "invite callback: complete",
 		attr.SlogUserID(gramUserID),

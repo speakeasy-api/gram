@@ -3,9 +3,11 @@ package demoseed
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -53,6 +55,56 @@ func TestSpecValidateRejectsCollisions(t *testing.T) {
 	require.ErrorContains(t, collapsed.Validate(), "two identifier families")
 
 	require.NoError(t, DefaultSpec().Validate())
+}
+
+// Previews share a cache with each other and with their environment, so two
+// pull requests must never share an organization, a user or any other
+// identifier family, and none may fall in the demo or local tenant's.
+func TestPreviewSpecsShareNoIdentifierFamily(t *testing.T) {
+	t.Parallel()
+
+	// The families the seed builds ids from by prefixing must not nest either:
+	// pull request 1's must not be the start of pull request 12's.
+	prefixes := func(s Spec) []string { return []string{s.UUIDPrefix, s.UserPrefix, s.NameSeed, s.GroupPrefix} }
+	seen := map[string]string{}
+	var seenPrefixes []string
+	for _, spec := range []Spec{DefaultSpec(), LocalSpec()} {
+		for _, id := range spec.Identifiers() {
+			seen[id] = "a checked-in tenant"
+		}
+		seenPrefixes = append(seenPrefixes, prefixes(spec)...)
+	}
+	for _, pullRequest := range []int{1, 12, 123, 9441, 94410, maxPreviewNumber} {
+		spec, err := PreviewSpec(pullRequest)
+		require.NoError(t, err)
+		require.NoError(t, spec.Validate())
+		require.Len(t, spec.UUIDPrefix, 8)
+		require.NotPanics(t, func() { _ = uuid.MustParse(spec.ProjectID()) })
+
+		ids := append(spec.Identifiers(), spec.PreviewRunner().ID, spec.PreviewRunner().Email)
+		for _, id := range ids {
+			require.NotContains(t, seen, id, "pull request %d shares %q with %s", pullRequest, id, seen[id])
+		}
+		for _, prefix := range prefixes(spec) {
+			for _, other := range seenPrefixes {
+				require.False(t, strings.HasPrefix(prefix, other) || strings.HasPrefix(other, prefix),
+					"pull request %d: prefix %q nests with %q", pullRequest, prefix, other)
+			}
+		}
+		for _, id := range ids {
+			seen[id] = "pull request " + strconv.Itoa(pullRequest)
+		}
+		seenPrefixes = append(seenPrefixes, prefixes(spec)...)
+	}
+}
+
+func TestPreviewSpecRefusesNumbersItCannotName(t *testing.T) {
+	t.Parallel()
+
+	for _, pullRequest := range []int{-1, 0, maxPreviewNumber + 1} {
+		_, err := PreviewSpec(pullRequest)
+		require.Error(t, err, pullRequest)
+	}
 }
 
 // seedSourceFiles lists the seed's own code: the Go files that write rows and

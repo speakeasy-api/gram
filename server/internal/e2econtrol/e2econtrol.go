@@ -7,10 +7,11 @@
 //     identity provider's pages (e2e.signInLink, then e2e.signIn in the browser).
 //
 // No route takes an organization, a user or a destination from its caller: all
-// three are fixed when the server starts.
+// three are fixed when the server starts. No route calls an identity provider.
 //
-// It exists only on a local stack. New refuses every other environment, so a
-// control token configured anywhere else stops the server from starting.
+// Where the surface may exist, and which organization and user it is fixed to
+// there, is decided by its caller (attachE2EControl in server/cmd/gram): a
+// local stack, or a pull request preview connected to its own database.
 package e2econtrol
 
 import (
@@ -33,11 +34,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -47,9 +45,6 @@ const (
 	// TokenHeader carries the control token on every call except e2e.signIn,
 	// which a browser opens and which its one-time code authorizes.
 	TokenHeader = "Gram-E2E-Token" //nolint:gosec // G101: a header name, not a credential
-
-	// allowedEnvironment is the only environment the surface exists in.
-	allowedEnvironment = "local"
 
 	// linkTTL is how long a sign-in link stays redeemable. The test opens it in
 	// the step after it asks for it.
@@ -69,13 +64,15 @@ type Tenant struct {
 
 // Config fixes everything the surface acts on.
 type Config struct {
-	// Environment is the deployment environment (GRAM_ENVIRONMENT).
-	Environment string
 	// Token is the control secret (GRAM_E2E_CONTROL_TOKEN).
 	Token string
-	// UserEmail is the only identity e2e.signIn signs in, spelled as the
-	// reseed adopts it: the identity provider derives the user from it.
+	// UserEmail is the only user e2e.signIn signs in.
 	UserEmail string
+	// UserID, when set, is the id that user must have.
+	UserID string
+	// Confined requires the user to be no platform admin and a member of the
+	// tenant alone. Set wherever the tenant is not the developer's own.
+	Confined bool
 	// SiteURL is the dashboard origin: sign-in links are bound to it, and the
 	// browser lands on it.
 	SiteURL *url.URL
@@ -89,18 +86,17 @@ type Config struct {
 	Reseed func(ctx context.Context) error
 }
 
-// Identity is the part of identity.Resolver the sign-in needs: the
-// server-created Magic Auth code the invitation callback also uses, then the
-// user bootstrap of the login callback.
-type Identity interface {
-	AuthenticateWithMagicAuth(ctx context.Context, email string) (*identity.IDPUserInfo, error)
-	CompleteIDPLogin(ctx context.Context, idpUser *identity.IDPUserInfo, opts identity.IDPLoginOptions) (identity.IDPLoginResult, error)
+// Users reads a user as the database has them now, never from a cache: who
+// they are, whether they are a platform admin, and the enabled organizations
+// they belong to. A user that does not exist is (nil, nil).
+type Users interface {
+	UserByEmail(ctx context.Context, email string) (*sessions.CachedUserInfo, error)
 }
 
-// SessionStore stores the dashboard session. Implemented by sessions.Manager.
+// SessionStore issues the dashboard session. Implemented by sessions.Manager.
 type SessionStore interface {
 	SignInEnforced(ctx context.Context, organizationID string) bool
-	StoreSessionIssuedAt(ctx context.Context, session sessions.Session, issuedAt time.Time) error
+	Issue(ctx context.Context, w http.ResponseWriter, session sessions.Session, issuedAt time.Time) error
 }
 
 // Service serves the control surface.
@@ -108,19 +104,16 @@ type Service struct {
 	logger      *slog.Logger
 	cfg         Config
 	tokenDigest [sha256.Size]byte
-	identity    Identity
+	users       Users
 	sessions    SessionStore
 	links       cache.Cache
 	reseeding   sync.Mutex
 }
 
 // New builds the service. Its error is a refusal to start the server: the
-// surface is being enabled outside a local stack, or its token is guessable,
-// or it has no fixed target to act on.
-func New(logger *slog.Logger, cfg Config, idp Identity, sessionStore SessionStore, links cache.Cache) (*Service, error) {
+// token is guessable, or the surface has no fixed target to act on.
+func New(logger *slog.Logger, cfg Config, users Users, sessionStore SessionStore, links cache.Cache) (*Service, error) {
 	switch {
-	case cfg.Environment != allowedEnvironment:
-		return nil, fmt.Errorf("e2e control: exists only in the %q environment, refusing to enable it in %q", allowedEnvironment, cfg.Environment)
 	case len(cfg.Token) < minTokenLength:
 		return nil, fmt.Errorf("e2e control: the control token must be at least %d bytes", minTokenLength)
 	case cfg.UserEmail == "":
@@ -132,7 +125,7 @@ func New(logger *slog.Logger, cfg Config, idp Identity, sessionStore SessionStor
 		logger:      logger.With(attr.SlogComponent("e2econtrol")),
 		cfg:         cfg,
 		tokenDigest: sha256.Sum256([]byte(cfg.Token)),
-		identity:    idp,
+		users:       users,
 		sessions:    sessionStore,
 		links:       links,
 		reseeding:   sync.Mutex{},
@@ -214,62 +207,62 @@ func (s *Service) handleSignIn(w http.ResponseWriter, r *http.Request) error {
 	case err != nil:
 		return fmt.Errorf("e2e sign-in: redeem link: %w", err)
 	}
-	// This sign-in is not recorded the way the login and invitation callbacks
-	// record theirs (signins.RecordExchange), so it gives no session where an
-	// organization requires recorded sign-ins.
+	// No identity provider authenticated this sign-in, so there is nothing to
+	// record the way the login and invitation callbacks record theirs
+	// (signins.RecordExchange). It gives no session where an organization
+	// requires recorded sign-ins.
 	if s.sessions.SignInEnforced(ctx, s.cfg.Tenant.OrganizationID) {
 		return oops.E(oops.CodeForbidden, nil, "the test organization enforces recorded sign-ins, which this sign-in is not")
 	}
 
-	// Taken before authenticating so a sign-out everywhere that lands
+	// Taken before reading the user so a sign-out everywhere that lands
 	// meanwhile still ends this session.
 	authenticatedAt := time.Now()
-	idpUser, err := s.identity.AuthenticateWithMagicAuth(ctx, s.cfg.UserEmail)
+	user, err := s.users.UserByEmail(ctx, s.cfg.UserEmail)
 	if err != nil {
-		return oops.E(oops.CodeGatewayError, err, "the identity provider refused the test user").LogError(ctx, s.logger)
+		return fmt.Errorf("e2e sign-in: read test user: %w", err)
 	}
-	if idpUser == nil || conv.NormalizeEmail(idpUser.Email) != conv.NormalizeEmail(s.cfg.UserEmail) {
-		return oops.E(oops.CodeForbidden, nil, "the identity provider returned a different user").LogError(ctx, s.logger)
-	}
-	// Memberships are not synced from the identity provider: the reseed is
-	// what makes the test user a member, and the check below reads that.
-	login, err := s.identity.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: true, Attribution: nil})
-	if err != nil {
-		return fmt.Errorf("e2e sign-in: complete login: %w", err)
-	}
-	if login.UserInfo == nil || !slices.ContainsFunc(login.UserInfo.Organizations, func(o sessions.Organization) bool { return o.ID == s.cfg.Tenant.OrganizationID }) {
-		return oops.E(oops.CodeForbidden, nil, "the test user is not a member of the test organization; reseed it first")
+	if reason := s.refusal(user); reason != "" {
+		return oops.E(oops.CodeForbidden, nil, "%s", reason).LogError(ctx, s.logger)
 	}
 
 	sessionID, err := sessions.NewSessionID()
 	if err != nil {
 		return fmt.Errorf("e2e sign-in: %w", err)
 	}
-	if err := s.sessions.StoreSessionIssuedAt(ctx, sessions.Session{
+	if err := s.sessions.Issue(ctx, w, sessions.Session{
 		SessionID:             sessionID,
-		UserID:                login.UserID,
+		UserID:                user.UserID,
 		ActiveOrganizationID:  s.cfg.Tenant.OrganizationID,
-		WorkOSSessionID:       idpUser.WorkOSSessionID,
+		WorkOSSessionID:       "",
 		ImpersonatorEmail:     "",
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}, authenticatedAt); err != nil {
-		return fmt.Errorf("e2e sign-in: store session: %w", err)
+		return fmt.Errorf("e2e sign-in: issue session: %w", err)
 	}
-
-	//nolint:exhaustruct_v5 // only desired fields, as the invitation callback sets them
-	http.SetCookie(w, &http.Cookie{
-		Name:     constants.SessionCookie,
-		Value:    sessionID,
-		MaxAge:   constants.SessionCookieMaxAgeSeconds,
-		Path:     "/",
-		Secure:   true,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-	s.logger.InfoContext(ctx, "e2e sign-in complete", attr.SlogUserID(login.UserID), attr.SlogOrganizationID(s.cfg.Tenant.OrganizationID))
+	s.logger.InfoContext(ctx, "e2e sign-in complete", attr.SlogUserID(user.UserID), attr.SlogOrganizationID(s.cfg.Tenant.OrganizationID))
 	http.Redirect(w, r, s.cfg.SiteURL.JoinPath(s.cfg.Tenant.OrganizationSlug).String(), http.StatusSeeOther)
 	return nil
+}
+
+// refusal says why user gets no session, or "" when they do. The reseed is
+// what creates the test user and makes them a member, so each reason is also
+// what a reseed repairs.
+func (s *Service) refusal(user *sessions.CachedUserInfo) string {
+	switch {
+	case user == nil:
+		return "the test user does not exist; reseed first"
+	case s.cfg.UserID != "" && user.UserID != s.cfg.UserID:
+		return "the test user's address belongs to another user"
+	case !slices.ContainsFunc(user.Organizations, func(o sessions.Organization) bool { return o.ID == s.cfg.Tenant.OrganizationID }):
+		return "the test user is not a member of the test organization; reseed first"
+	case s.cfg.Confined && user.Admin:
+		return "the test user is a platform admin, which it must never be here"
+	case s.cfg.Confined && len(user.Organizations) != 1:
+		return "the test user belongs to more than the test organization"
+	}
+	return ""
 }
 
 // linkKey is where a sign-in code's marker lives. The code is hashed, so the
