@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -135,6 +136,7 @@ func TestCompletionRequestPassesClientValidation(t *testing.T) {
 	client := openrouter.NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		openrouter.EndpointsFor(partition.US),
 		openrouter.NewDevelopment("unused"),
 		keyResolverSentinel{},
 		nil, nil, nil, nil,
