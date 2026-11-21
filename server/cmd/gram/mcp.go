@@ -73,7 +73,7 @@ import (
 // worker flags are accepted but never read: this command has no Temporal
 // dependency by design.
 func mcpServerFlags() []cli.Flag {
-	flags := mcpRuntimeFlags()
+	flags := append(mcpRuntimeFlags(), transcriptShadowFlag())
 	return append(flags,
 		riskFingerprintPepperFlag(),
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
@@ -361,6 +361,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 	if err != nil {
+		return err
+	}
+	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
 		return err
 	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
