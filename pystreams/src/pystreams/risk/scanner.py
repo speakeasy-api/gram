@@ -557,6 +557,13 @@ def _scan_to_detections(
         )
     except ValueError as exc:
         raise ScanInputError(type(exc).__name__) from None
+    return results_to_detections(content, results)
+
+
+def results_to_detections(
+    content: str, results: Sequence[Recognized]
+) -> list[Detection]:
+    """Apply shared PII exclusions and convert character spans to UTF-8 bytes."""
     if not results:
         return []
     n = len(content)
