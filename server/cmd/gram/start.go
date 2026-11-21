@@ -74,7 +74,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
-	"github.com/speakeasy-api/gram/server/internal/e2econtrol"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/external"
@@ -465,16 +464,6 @@ func mcpRuntimeFlags() []cli.Flag {
 			Hidden:  true,
 		},
 		&cli.StringFlag{
-			Name:    "e2e-control-token",
-			Usage:   "Shared secret that enables the end-to-end test control surface (/rpc/e2e.*). Empty leaves it off; the server refuses to start with it set in production.",
-			EnvVars: []string{"GRAM_E2E_CONTROL_TOKEN"},
-		},
-		&cli.StringFlag{
-			Name:    "e2e-user-email",
-			Usage:   "The one identity the end-to-end test control surface signs in. Required with e2e-control-token.",
-			EnvVars: []string{"GRAM_E2E_USER_EMAIL"},
-		},
-		&cli.StringFlag{
 			Name:    "demoseed-fixture-devidp-url",
 			Usage:   "Local dev-idp URL whose tokens the demo seed MCP fixture's Enterprise Sign-In endpoint takes (empty: not served)",
 			EnvVars: []string{"GRAM_DEVIDP_EXTERNAL_URL"},
@@ -706,6 +695,11 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
+		&cli.StringFlag{
+			Name:    e2eControlTokenFlag,
+			Usage:   "Secret that enables the end-to-end test control surface (/rpc/e2e.*) on a local stack. Unset leaves it off. The server refuses to start with it set in any other environment.",
+			EnvVars: []string{"GRAM_E2E_CONTROL_TOKEN"},
+		},
 		&cli.StringFlag{
 			Name:     "loops-api-key",
 			Usage:    "Loops API key for workflows, contacts, and legacy transactional delivery.",
@@ -1718,23 +1712,25 @@ func newStartCommand() *cli.Command {
 			)
 			authService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			auth.Attach(mux, authService)
-			// End-to-end test control surface: off unless a token is configured,
-			// and New refuses production, so a stray secret fails the boot loudly
-			// instead of opening a sign-in route.
-			if e2eConfig := (e2econtrol.Config{
-				Environment: c.String("environment"),
-				Token:       c.String("e2e-control-token"),
-				UserEmail:   e2eUserEmail(ctx, c.String("environment"), c.String("e2e-user-email")),
-				SiteURL:     siteURL.String(),
-				ServerURL:   serverURL.String(),
-				Build:       GitSHA,
-			}); e2eConfig.Enabled() {
-				e2eService, err := e2econtrol.New(logger, e2eConfig, identityResolver, sessionManager, cache.NewRedisCacheAdapter(redisClient),
-					newE2EReseeder(c.String("environment"), logger, db, chDB, assetStorage, encryptionClient, redisClient, c.String("authz-issuer-url"), siteURL, serverURL, e2eConfig.UserEmail))
-				if err != nil {
-					return fmt.Errorf("end-to-end test control surface: %w", err)
-				}
-				e2econtrol.Attach(mux, e2eService)
+			if err := attachE2EControl(ctx, logger, mux, e2eControlDeps{
+				environment:      c.String("environment"),
+				identityBackend:  c.String("devidp-backend"),
+				identityEndpoint: c.String("workos-endpoint"),
+				devIDPURL:        fixtureDevIDPURL,
+				token:            c.String(e2eControlTokenFlag),
+				developerEmail:   gitUserEmail,
+				siteURL:          siteURL,
+				serverURL:        serverURL,
+				issuerURL:        c.String("authz-issuer-url"),
+				db:               db,
+				clickhouse:       chDB,
+				blob:             assetStorage,
+				encryption:       encryptionClient,
+				redis:            redisClient,
+				identity:         identityResolver,
+				sessions:         sessionManager,
+			}); err != nil {
+				return err
 			}
 			// The support matrix is seeded here as well as in the admin server, since
 			// the step mirror needs its integration methods and either process may
