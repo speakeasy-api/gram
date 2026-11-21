@@ -696,6 +696,11 @@ func serverFlags() []cli.Flag {
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
 		&cli.StringFlag{Name: "github-evidence-token", Usage: "GitHub API token for MCP evidence repository lookups", EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"}},
 		&cli.StringFlag{
+			Name:    e2eControlTokenFlag,
+			Usage:   "Secret that enables the end-to-end test control surface (/rpc/e2e.*) on a local stack. Unset leaves it off. The server refuses to start with it set in any other environment.",
+			EnvVars: []string{"GRAM_E2E_CONTROL_TOKEN"},
+		},
+		&cli.StringFlag{
 			Name:     "loops-api-key",
 			Usage:    "Loops API key for workflows, contacts, and legacy transactional delivery.",
 			EnvVars:  []string{"LOOPS_API_KEY"},
@@ -1707,6 +1712,26 @@ func newStartCommand() *cli.Command {
 			)
 			authService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			auth.Attach(mux, authService)
+			if err := attachE2EControl(ctx, logger, mux, e2eControlDeps{
+				environment:      c.String("environment"),
+				identityBackend:  c.String("devidp-backend"),
+				identityEndpoint: c.String("workos-endpoint"),
+				devIDPURL:        fixtureDevIDPURL,
+				token:            c.String(e2eControlTokenFlag),
+				developerEmail:   gitUserEmail,
+				siteURL:          siteURL,
+				serverURL:        serverURL,
+				issuerURL:        c.String("authz-issuer-url"),
+				db:               db,
+				clickhouse:       chDB,
+				blob:             assetStorage,
+				encryption:       encryptionClient,
+				redis:            redisClient,
+				identity:         identityResolver,
+				sessions:         sessionManager,
+			}); err != nil {
+				return err
+			}
 			// The support matrix is seeded here as well as in the admin server, since
 			// the step mirror needs its integration methods and either process may
 			// start first.

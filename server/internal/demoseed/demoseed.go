@@ -42,6 +42,9 @@ const (
 	demoSeedLockCleanupTimeout        = 5 * time.Second
 )
 
+// ErrSeedLocked reports that another seed run holds the shared advisory lock.
+var ErrSeedLocked = errors.New("another demo seed run holds the advisory lock; refusing to run concurrently")
+
 // Run replaces the data for spec's tenant while holding the shared advisory
 // lock. The Postgres seed runs in one transaction, so a failed run leaves the
 // previous data in place; each statement in it gets its own statement
@@ -109,7 +112,7 @@ func withSeedLock(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, fn
 	}
 	if !locked {
 		conn.Release()
-		return errors.New("another demo seed run holds the advisory lock; refusing to run concurrently")
+		return ErrSeedLocked
 	}
 	defer func() {
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
