@@ -45,9 +45,8 @@ minimumReleaseAgeExclude:
 
 overrides:
   # @ai-sdk/react depends on an exact ai version. Keep both pinned together so
-  # the dashboard, @ai-sdk/react and assistant-ui's optional ai peers share one
-  # ai. A second ai gives @assistant-ui/core a second peer set, and a second
-  # core instance splits its React contexts (AGE-2977).
+  # the dashboard, @ai-sdk/react, and the ai peers of @assistant-ui/react-ai-sdk
+  # and assistant-stream all resolve to one ai instance.
   ai: 7.0.171
   "@ai-sdk/react": 4.0.175
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.
