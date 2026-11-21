@@ -174,12 +174,6 @@ GRAM_REDIS_ENABLE_TRACING = "false"
 ## back into mise.local.toml after a seed run — a fresh clone is configured
 ## before it is ever seeded. Keep in sync with server/internal/demoseed/local.go.
 GRAM_API_KEY = "gram_local_5eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca11"
-## End-to-end test control surface (server/internal/e2econtrol): lets a test run
-## reseed the local organization and sign in as you without driving the dev-idp.
-## A fixed, well-known local-only value like GRAM_API_KEY above. Deployed
-## non-production environments inject their own from secrets; production
-## refuses to start with one set.
-GRAM_E2E_CONTROL_TOKEN = "gram_local_e2e_5eed10ca15eed10ca15eed10ca15eed10ca1"
 
 ## Local-only value; real deployments inject this via secrets.
 GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"

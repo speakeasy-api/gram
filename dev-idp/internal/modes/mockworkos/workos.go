@@ -67,9 +67,6 @@ const invitationLifetime = 30 * 24 * time.Hour
 const (
 	magicAuthGrantType = "urn:workos:oauth:grant-type:magic-auth:code"
 	magicAuthLifetime  = 10 * time.Minute
-	// defaultUserMode is the mode whose currentUser the default-user bootstrap
-	// records (oauth21.Mode; that package is not imported here).
-	defaultUserMode = "oauth2-1"
 )
 
 // defaultPageSize / maxPageSize match WorkOS's documented limits closely
@@ -147,17 +144,6 @@ func (h *Handler) handleWorkosCreateMagicAuth(w http.ResponseWriter, r *http.Req
 	if body.Email == "" {
 		writeWorkosError(w, http.StatusBadRequest, "email is required")
 		return
-	}
-
-	// The default developer is a member of the default organization only once
-	// something has bootstrapped it, which until now was the first hosted
-	// login. A Magic Auth sign-in for that developer (the end-to-end test
-	// sign-in) must see the same memberships, or the server's membership sync
-	// reads "none" and removes the developer from their own organization.
-	if committer, err := defaultuser.GitCommitter(ctx); err == nil && strings.EqualFold(committer.Email, body.Email) {
-		if _, err := defaultuser.BootstrapLocalUser(ctx, h.db, defaultUserMode); err != nil {
-			h.logger.WarnContext(ctx, "magic auth: bootstrap default user", slog.Any("error", err))
-		}
 	}
 
 	user, err := repo.New(h.db).UpsertUserByEmail(ctx, repo.UpsertUserByEmailParams{

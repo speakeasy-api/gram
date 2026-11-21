@@ -4,20 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/demoseed"
 	"github.com/speakeasy-api/gram/server/internal/e2econtrol"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -26,146 +29,161 @@ const (
 	testToken = "zz-e2e-not-a-secret-zz-e2e-not-a-secret"
 	testEmail = "e2e@example.test"
 	testOrgID = "org-e2e"
+	testSite  = "https://site.example.test"
 )
 
 type fakeIdentity struct {
-	emails        []string
+	asked         []string
+	returnedEmail string
 	organizations []sessions.Organization
+	options       []identity.IDPLoginOptions
 }
 
 func (f *fakeIdentity) AuthenticateWithMagicAuth(_ context.Context, email string) (*identity.IDPUserInfo, error) {
-	f.emails = append(f.emails, email)
+	f.asked = append(f.asked, email)
+	if f.returnedEmail != "" {
+		email = f.returnedEmail
+	}
 	return &identity.IDPUserInfo{Sub: "user_idp", Email: email, WorkOSSessionID: "session_idp"}, nil
 }
 
-func (f *fakeIdentity) CompleteIDPLogin(_ context.Context, idpUser *identity.IDPUserInfo, _ identity.IDPLoginOptions) (identity.IDPLoginResult, error) {
+func (f *fakeIdentity) CompleteIDPLogin(_ context.Context, idpUser *identity.IDPUserInfo, opts identity.IDPLoginOptions) (identity.IDPLoginResult, error) {
+	f.options = append(f.options, opts)
 	return identity.IDPLoginResult{
 		UserID:   "user-gram",
 		UserInfo: &sessions.CachedUserInfo{UserID: "user-gram", Email: idpUser.Email, Organizations: f.organizations},
 	}, nil
 }
 
-type fakeSessions struct{ stored []sessions.Session }
+type fakeSessions struct {
+	stored   []sessions.Session
+	enforced bool
+}
+
+func (f *fakeSessions) SignInEnforced(context.Context, string) bool { return f.enforced }
 
 func (f *fakeSessions) StoreSessionIssuedAt(_ context.Context, session sessions.Session, _ time.Time) error {
 	f.stored = append(f.stored, session)
 	return nil
 }
 
-type fakeTickets struct {
-	mu   sync.Mutex
-	keys map[string]bool
-}
-
-func (f *fakeTickets) Set(_ context.Context, key string, _ any, _ time.Duration) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.keys[key] = true
-	return nil
-}
-
-func (f *fakeTickets) GetAndDelete(_ context.Context, key string, value any) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if !f.keys[key] {
-		return errors.New("not found")
-	}
-	delete(f.keys, key)
-	if live, ok := value.(*bool); ok {
-		*live = true
-	}
-	return nil
-}
-
-type fakeReseeder struct {
-	err   error
-	calls int
-}
-
-func (f *fakeReseeder) Reseed(context.Context) error {
-	f.calls++
-	return f.err
-}
-
-func (f *fakeReseeder) Tenant() e2econtrol.Tenant {
-	return e2econtrol.Tenant{OrganizationID: testOrgID, OrganizationSlug: "e2e-org", ProjectSlug: "default", SeededUserPrefix: "user_e2e_", APIKeyName: "seed-key"}
-}
-
 type harness struct {
-	server   *httptest.Server
+	mux      goahttp.Muxer
+	redis    *miniredis.Miniredis
+	links    cache.Cache
 	identity *fakeIdentity
 	sessions *fakeSessions
-	reseeder *fakeReseeder
+	reseeds  int
+	reseed   func(context.Context) error
 }
 
-// reply is what a test reads from one response, after its body is closed.
-type reply struct {
-	status   int
-	location string
-	cookies  []*http.Cookie
-	body     []byte
+func validConfig(t *testing.T, h *harness, site string) e2econtrol.Config {
+	t.Helper()
+	siteURL, err := url.Parse(site)
+	require.NoError(t, err)
+	return e2econtrol.Config{
+		Environment: "local",
+		Token:       testToken,
+		UserEmail:   testEmail,
+		SiteURL:     siteURL,
+		Build:       "0123abc",
+		Tenant:      e2econtrol.Tenant{OrganizationID: testOrgID, OrganizationSlug: "e2e-org", ProjectSlug: "default", SeededUserPrefix: "user_e2e_"},
+		Reseed: func(ctx context.Context) error {
+			h.reseeds++
+			return h.reseed(ctx)
+		},
+	}
 }
 
-func validConfig(serverURL string) e2econtrol.Config {
-	return e2econtrol.Config{Environment: "dev", Token: testToken, UserEmail: testEmail, SiteURL: "https://site.example.test", ServerURL: serverURL, Build: "0123abc"}
-}
-
+// newHarness serves the surface for the dashboard origin site, with sign-in
+// links kept in a real Redis adapter so single use and expiry are the store's.
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	mux := goahttp.NewMuxer()
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
 
 	h := &harness{
-		server: server,
-		identity: &fakeIdentity{emails: nil, organizations: []sessions.Organization{
+		mux:   nil,
+		redis: mr,
+		links: cache.NewRedisCacheAdapter(client),
+		identity: &fakeIdentity{asked: nil, returnedEmail: "", options: nil, organizations: []sessions.Organization{
 			{ID: "org-other", Slug: "other"},
 			{ID: testOrgID, Slug: "e2e-org"},
 		}},
-		sessions: &fakeSessions{stored: nil},
-		reseeder: &fakeReseeder{err: nil, calls: 0},
+		sessions: &fakeSessions{stored: nil, enforced: false},
+		reseeds:  0,
+		reseed:   func(context.Context) error { return nil },
 	}
-	service, err := e2econtrol.New(testenv.NewLogger(t), validConfig(server.URL), h.identity, h.sessions, &fakeTickets{mu: sync.Mutex{}, keys: map[string]bool{}}, h.reseeder)
-	require.NoError(t, err)
-	e2econtrol.Attach(mux, service)
+	h.mux = h.serve(t, nil)
 	return h
 }
 
-func (h *harness) do(t *testing.T, method, path, token string) reply {
+// serve mounts one more server on the harness's cache, identity provider and
+// session store, configured as the default one except for what mutate changes.
+func (h *harness) serve(t *testing.T, mutate func(*e2econtrol.Config)) goahttp.Muxer {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), method, h.server.URL+path, nil)
+	cfg := validConfig(t, h, testSite)
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	service, err := e2econtrol.New(testenv.NewLogger(t), cfg, h.identity, h.sessions, h.links)
 	require.NoError(t, err)
+	mux := goahttp.NewMuxer()
+	e2econtrol.Attach(mux, service)
+	return mux
+}
+
+func do(t *testing.T, mux http.Handler, method, target, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(t.Context(), method, target, nil)
 	if token != "" {
 		req.Header.Set(e2econtrol.TokenHeader, token)
 	}
-	// Redirects are asserted, not followed.
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	res, err := client.Do(req)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, res.Body.Close()) }()
-	body, err := io.ReadAll(res.Body)
-	require.NoError(t, err)
-	return reply{status: res.StatusCode, location: res.Header.Get("Location"), cookies: res.Cookies(), body: body}
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
 }
 
-func TestNewRefusesUnsafeConfiguration(t *testing.T) {
+func signInLink(t *testing.T, mux goahttp.Muxer) string {
+	t.Helper()
+	res := do(t, mux, http.MethodPost, "/rpc/e2e.signInLink", testToken)
+	require.Equal(t, http.StatusOK, res.Code)
+	var link map[string]string
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &link))
+	require.Len(t, link, 1, "a link is a path and nothing else")
+	require.True(t, strings.HasPrefix(link["path"], "/rpc/e2e.signIn?code="), "path %q", link["path"])
+	return link["path"]
+}
+
+func TestNewRefusesEveryEnvironmentButLocal(t *testing.T) {
+	t.Parallel()
+
+	for _, environment := range []string{"prod", "production", "Prod", "dev", "preview", "staging", "test", "Local", " local", ""} {
+		cfg := validConfig(t, nil, testSite)
+		cfg.Environment = environment
+		_, err := e2econtrol.New(testenv.NewLogger(t), cfg, nil, nil, nil)
+		require.ErrorContains(t, err, "exists only in", "environment %q", environment)
+	}
+}
+
+func TestNewRefusesIncompleteConfiguration(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]func(*e2econtrol.Config){
-		"production":           func(c *e2econtrol.Config) { c.Environment = "prod" },
-		"unnamed environment":  func(c *e2econtrol.Config) { c.Environment = "" },
-		"no token":             func(c *e2econtrol.Config) { c.Token = "" },
-		"guessable token":      func(c *e2econtrol.Config) { c.Token = "short" },
-		"no test user":         func(c *e2econtrol.Config) { c.UserEmail = "" },
-		"relative site URL":    func(c *e2econtrol.Config) { c.SiteURL = "/dashboard" },
-		"server URL not a URL": func(c *e2econtrol.Config) { c.ServerURL = "localhost" },
+		"no token":           func(c *e2econtrol.Config) { c.Token = "" },
+		"guessable token":    func(c *e2econtrol.Config) { c.Token = "short" },
+		"no test user":       func(c *e2econtrol.Config) { c.UserEmail = "" },
+		"no dashboard":       func(c *e2econtrol.Config) { c.SiteURL = nil },
+		"no organization id": func(c *e2econtrol.Config) { c.Tenant.OrganizationID = "" },
+		"no reseed":          func(c *e2econtrol.Config) { c.Reseed = nil },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			cfg := validConfig("https://server.example.test")
+			cfg := validConfig(t, nil, testSite)
 			mutate(&cfg)
-			_, err := e2econtrol.New(testenv.NewLogger(t), cfg, nil, nil, nil, nil)
+			_, err := e2econtrol.New(testenv.NewLogger(t), cfg, nil, nil, nil)
 			require.Error(t, err)
 		})
 	}
@@ -180,117 +198,202 @@ func TestControlCallsNeedTheToken(t *testing.T) {
 		{http.MethodGet, "/rpc/e2e.tenant"},
 		{http.MethodPost, "/rpc/e2e.signInLink"},
 	} {
-		for _, token := range []string{"", "wrong-token-wrong-token-wrong-token-wrong"} {
-			got := h.do(t, call.method, call.path, token)
-			require.Equal(t, http.StatusUnauthorized, got.status, "%s %s with token %q", call.method, call.path, token)
+		for _, token := range []string{"", "wrong-token-wrong-token-wrong-token-wrong", testToken + "x", testToken[:len(testToken)-1]} {
+			res := do(t, h.mux, call.method, call.path, token)
+			require.Equal(t, http.StatusUnauthorized, res.Code, "%s %s with token %q", call.method, call.path, token)
 		}
 	}
-	require.Zero(t, h.reseeder.calls)
+	require.Zero(t, h.reseeds)
+	require.Empty(t, h.redis.Keys(), "no sign-in link is minted without the token")
 }
 
-func TestTenantNamesTheTestOrganization(t *testing.T) {
+func TestTenantNamesTheTestOrganizationAndTheBuild(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 
-	res := h.do(t, http.MethodGet, "/rpc/e2e.tenant", testToken)
-	require.Equal(t, http.StatusOK, res.status)
-	var got map[string]any
-	require.NoError(t, json.Unmarshal(res.body, &got))
-	require.Equal(t, "e2e-org", got["organization_slug"])
-	require.Equal(t, "default", got["project_slug"])
-	require.Equal(t, "user_e2e_", got["seeded_user_prefix"])
-	require.Equal(t, "dev", got["environment"])
-	require.Equal(t, "0123abc", got["build"])
-	require.Zero(t, h.reseeder.calls, "reading the tenant must not reseed")
+	res := do(t, h.mux, http.MethodGet, "/rpc/e2e.tenant", testToken)
+	require.Equal(t, http.StatusOK, res.Code)
+	require.JSONEq(t, `{"organization_slug":"e2e-org","project_slug":"default","seeded_user_prefix":"user_e2e_","build":"0123abc"}`, res.Body.String())
+	require.Zero(t, h.reseeds, "reading the tenant must not reseed")
 }
 
 func TestReseed(t *testing.T) {
 	t.Parallel()
 
-	t.Run("replaces the tenant's data and names it", func(t *testing.T) {
+	t.Run("runs the one configured reseed, whatever the caller sends", func(t *testing.T) {
 		t.Parallel()
 		h := newHarness(t)
-		res := h.do(t, http.MethodPost, "/rpc/e2e.reseed", testToken)
-		require.Equal(t, http.StatusOK, res.status)
-		require.Equal(t, 1, h.reseeder.calls)
-		var got map[string]any
-		require.NoError(t, json.Unmarshal(res.body, &got))
-		require.Equal(t, "e2e-org", got["organization_slug"])
+		res := do(t, h.mux, http.MethodPost, "/rpc/e2e.reseed?organization_id=org-other&slug=other", testToken)
+		require.Equal(t, http.StatusNoContent, res.Code)
+		require.Equal(t, 1, h.reseeds)
 	})
 
-	t.Run("reports a seed already in progress as a conflict", func(t *testing.T) {
+	t.Run("answers 409 while a seed run holds the seed lock", func(t *testing.T) {
 		t.Parallel()
 		h := newHarness(t)
-		h.reseeder.err = e2econtrol.ErrSeedBusy
-		res := h.do(t, http.MethodPost, "/rpc/e2e.reseed", testToken)
-		require.Equal(t, http.StatusConflict, res.status)
+		h.reseed = func(context.Context) error { return demoseed.ErrSeedLocked }
+		require.Equal(t, http.StatusConflict, do(t, h.mux, http.MethodPost, "/rpc/e2e.reseed", testToken).Code)
+	})
+
+	t.Run("answers 409 while another reseed is running in this process", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		running, release := make(chan struct{}), make(chan struct{})
+		h.reseed = func(context.Context) error {
+			close(running)
+			<-release
+			return nil
+		}
+		first := make(chan int)
+		go func() { first <- do(t, h.mux, http.MethodPost, "/rpc/e2e.reseed", testToken).Code }()
+		<-running
+		require.Equal(t, http.StatusConflict, do(t, h.mux, http.MethodPost, "/rpc/e2e.reseed", testToken).Code)
+		close(release)
+		require.Equal(t, http.StatusNoContent, <-first)
 	})
 
 	t.Run("hides the cause of a failed seed", func(t *testing.T) {
 		t.Parallel()
 		h := newHarness(t)
-		h.reseeder.err = errors.New("postgres: connection string with a password")
-		res := h.do(t, http.MethodPost, "/rpc/e2e.reseed", testToken)
-		require.Equal(t, http.StatusInternalServerError, res.status)
-		require.NotContains(t, string(res.body), "password")
+		h.reseed = func(context.Context) error { return errors.New("postgres: connection string with a password") }
+		res := do(t, h.mux, http.MethodPost, "/rpc/e2e.reseed", testToken)
+		require.Equal(t, http.StatusInternalServerError, res.Code)
+		require.NotContains(t, res.Body.String(), "password")
 	})
-}
-
-func signInLink(t *testing.T, h *harness) string {
-	t.Helper()
-	res := h.do(t, http.MethodPost, "/rpc/e2e.signInLink", testToken)
-	require.Equal(t, http.StatusOK, res.status)
-	var link struct {
-		URL  string `json:"url"`
-		Path string `json:"path"`
-	}
-	require.NoError(t, json.Unmarshal(res.body, &link))
-	require.True(t, strings.HasPrefix(link.Path, "/rpc/e2e.signIn?ticket="), "path %q", link.Path)
-	require.Equal(t, h.server.URL+link.Path, link.URL)
-	return link.Path
 }
 
 func TestSignInLinkSignsTheTestUserIntoTheTestOrganizationOnce(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	path := signInLink(t, h)
+	path := signInLink(t, h.mux)
 
-	res := h.do(t, http.MethodGet, path, "")
-	require.Equal(t, http.StatusSeeOther, res.status)
-	require.Equal(t, "https://site.example.test/e2e-org", res.location)
-	require.Equal(t, []string{testEmail}, h.identity.emails, "only the configured identity is ever signed in")
+	res := do(t, h.mux, http.MethodGet, path, "")
+	require.Equal(t, http.StatusSeeOther, res.Code)
+	require.Equal(t, testSite+"/e2e-org", res.Header().Get("Location"))
+	require.Equal(t, "no-store", res.Header().Get("Cache-Control"))
+	require.Equal(t, "no-referrer", res.Header().Get("Referrer-Policy"))
+	require.Equal(t, []string{testEmail}, h.identity.asked, "only the configured identity is ever signed in")
+	require.Equal(t, []identity.IDPLoginOptions{{SkipMembershipSync: true, Attribution: nil}}, h.identity.options)
 
 	require.Len(t, h.sessions.stored, 1)
 	session := h.sessions.stored[0]
 	require.Equal(t, "user-gram", session.UserID)
 	require.Equal(t, testOrgID, session.ActiveOrganizationID)
 	require.Equal(t, "session_idp", session.WorkOSSessionID)
+	require.Empty(t, session.ImpersonatorEmail)
+	require.Empty(t, session.SupportOrganizationID)
 
-	var cookie *http.Cookie
-	for _, c := range res.cookies {
-		if c.Name == constants.SessionCookie {
-			cookie = c
-		}
-	}
-	require.NotNil(t, cookie)
-	require.Equal(t, session.SessionID, cookie.Value)
-	require.True(t, cookie.HttpOnly)
-	require.True(t, cookie.Secure)
+	cookies := res.Result().Cookies()
+	require.Len(t, cookies, 1)
+	require.Equal(t, constants.SessionCookie, cookies[0].Name)
+	require.Equal(t, session.SessionID, cookies[0].Value)
+	require.True(t, cookies[0].HttpOnly)
+	require.True(t, cookies[0].Secure)
+	require.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
 
-	again := h.do(t, http.MethodGet, path, "")
-	require.Equal(t, http.StatusForbidden, again.status, "a link is spent on first use")
+	again := do(t, h.mux, http.MethodGet, path, "")
+	require.Equal(t, http.StatusForbidden, again.Code, "a link is spent on first use")
 	require.Len(t, h.sessions.stored, 1)
 }
 
-func TestSignInRefusesUnknownTickets(t *testing.T) {
+func TestSignInLinkExpiresAfterAMinute(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 
-	for _, path := range []string{"/rpc/e2e.signIn", "/rpc/e2e.signIn?ticket=", "/rpc/e2e.signIn?ticket=made-up"} {
-		res := h.do(t, http.MethodGet, path, testToken)
-		require.Equal(t, http.StatusForbidden, res.status, path)
+	path := signInLink(t, h.mux)
+	h.redis.FastForward(59 * time.Second)
+	require.Equal(t, http.StatusSeeOther, do(t, h.mux, http.MethodGet, path, "").Code)
+
+	path = signInLink(t, h.mux)
+	h.redis.FastForward(61 * time.Second)
+	require.Equal(t, http.StatusForbidden, do(t, h.mux, http.MethodGet, path, "").Code)
+	require.Len(t, h.sessions.stored, 1)
+}
+
+func TestSignInLinkStoresNoRedeemableValue(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	code := strings.TrimPrefix(signInLink(t, h.mux), "/rpc/e2e.signIn?code=")
+	keys := h.redis.Keys()
+	require.Len(t, keys, 1)
+	require.NotContains(t, keys[0], code)
+	stored, err := h.redis.Get(keys[0])
+	require.NoError(t, err)
+	require.NotContains(t, stored, code)
+}
+
+// A second server sharing the first one's cache does not know a code minted
+// for a different dashboard origin, organization or user.
+func TestSignInLinkIsBoundToWhatItWasMintedFor(t *testing.T) {
+	t.Parallel()
+
+	otherSite, err := url.Parse("https://other.example.test")
+	require.NoError(t, err)
+	cases := map[string]func(*e2econtrol.Config){
+		"another dashboard origin": func(c *e2econtrol.Config) { c.SiteURL = otherSite },
+		"another organization":     func(c *e2econtrol.Config) { c.Tenant.OrganizationID = "org-other" },
+		"another user":             func(c *e2econtrol.Config) { c.UserEmail = "someone-else@example.test" },
 	}
-	require.Empty(t, h.identity.emails)
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			other := h.serve(t, mutate)
+
+			path := signInLink(t, h.mux)
+			require.Equal(t, http.StatusForbidden, do(t, other, http.MethodGet, path, "").Code)
+			require.Empty(t, h.identity.asked)
+			require.Equal(t, http.StatusSeeOther, do(t, h.mux, http.MethodGet, path, "").Code, "the refusal elsewhere did not spend it")
+		})
+	}
+}
+
+func TestSignInRefusesUnknownCodes(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	for _, path := range []string{"/rpc/e2e.signIn", "/rpc/e2e.signIn?code=", "/rpc/e2e.signIn?code=made-up"} {
+		// The control token is no substitute for a code.
+		require.Equal(t, http.StatusForbidden, do(t, h.mux, http.MethodGet, path, testToken).Code, path)
+	}
+	require.Empty(t, h.identity.asked)
+	require.Empty(t, h.sessions.stored)
+}
+
+func TestSignInGivesNoSessionToAnotherIdentity(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.identity.returnedEmail = "someone-else@example.test"
+
+	res := do(t, h.mux, http.MethodGet, signInLink(t, h.mux), "")
+	require.Equal(t, http.StatusForbidden, res.Code)
+	require.Empty(t, h.identity.options, "the login bootstrap never ran for the other identity")
+	require.Empty(t, h.sessions.stored)
+	require.Empty(t, res.Result().Cookies())
+}
+
+// The identity provider derives the user from the address as spelled, so the
+// spelling the reseed adopted is the one asked for; only the comparison of
+// what comes back ignores case.
+func TestSignInAsksForTheTestUserAsSpelled(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	mixed := h.serve(t, func(c *e2econtrol.Config) { c.UserEmail = "Dev.Eloper@Example.test" })
+	h.identity.returnedEmail = "dev.eloper@example.test"
+
+	require.Equal(t, http.StatusSeeOther, do(t, mixed, http.MethodGet, signInLink(t, mixed), "").Code)
+	require.Equal(t, []string{"Dev.Eloper@Example.test"}, h.identity.asked)
+}
+
+func TestSignInGivesNoSessionWhereSignInsMustBeRecorded(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.sessions.enforced = true
+
+	res := do(t, h.mux, http.MethodGet, signInLink(t, h.mux), "")
+	require.Equal(t, http.StatusForbidden, res.Code)
+	require.Empty(t, h.identity.asked)
 	require.Empty(t, h.sessions.stored)
 }
 
@@ -299,8 +402,8 @@ func TestSignInGivesNoSessionOutsideTheTestOrganization(t *testing.T) {
 	h := newHarness(t)
 	h.identity.organizations = []sessions.Organization{{ID: "org-other", Slug: "other"}}
 
-	res := h.do(t, http.MethodGet, signInLink(t, h), "")
-	require.Equal(t, http.StatusConflict, res.status)
+	res := do(t, h.mux, http.MethodGet, signInLink(t, h.mux), "")
+	require.Equal(t, http.StatusForbidden, res.Code)
 	require.Empty(t, h.sessions.stored)
-	require.Empty(t, res.cookies)
+	require.Empty(t, res.Result().Cookies())
 }
