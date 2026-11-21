@@ -32,6 +32,9 @@ type RankedRowSegment = {
   opacity: number;
 };
 
+/** A row's height before one is drawn to measure: `py-1.5` around `text-sm`. */
+const FALLBACK_ROW_HEIGHT = 32;
+
 /**
  * A ranked breakdown: label, proportional bar, count.
  *
@@ -47,6 +50,7 @@ export function RankedList({
   emptyMessage = "No data in this period",
   maxRows = 5,
   step = 10,
+  fill = false,
   className,
 }: {
   rows: RankedRow[];
@@ -65,13 +69,24 @@ export function RankedList({
   maxRows?: number;
   /** How many more each "Show more" reveals. */
   step?: number;
+  /**
+   * Take the container's height and show as many rows as it holds before
+   * "Show more", in place of `maxRows`: for a card the reader sized, such as
+   * a dashboard's, where five rows would leave the rest of it blank. The
+   * container must give the list a definite height.
+   */
+  fill?: boolean;
   className?: string;
 }): JSX.Element {
-  // A card answers its question in five rows; the long tail is a second
-  // question ("who else?") and is revealed a page at a time rather than
-  // dumped, so the board keeps its shape until the reader asks otherwise.
-  const [shown, setShown] = useState(maxRows);
-  const listRef = useRef<HTMLUListElement>(null);
+  // A card answers its question in five rows, or in as many as its height
+  // holds; the long tail is a second question ("who else?") and is revealed
+  // a page at a time rather than dumped, so the board keeps its shape until
+  // the reader asks otherwise.
+  const [revealed, setRevealed] = useState(0);
+  const [fitRows, setFitRows] = useState<number | null>(null);
+  const [list, setList] = useState<HTMLUListElement | null>(null);
+  const baseRows = fill ? (fitRows ?? maxRows) : maxRows;
+  const shown = baseRows + revealed;
 
   // A new filter or range answers a different question, so the expansion the
   // reader asked of the old answer does not carry over — otherwise a card
@@ -80,18 +95,34 @@ export function RankedList({
   const lastRowsKey = useRef(rowsKey);
   if (lastRowsKey.current !== rowsKey) {
     lastRowsKey.current = rowsKey;
-    if (shown !== maxRows) setShown(maxRows);
+    if (revealed !== 0) setRevealed(0);
   }
+
+  // The list's height is the space its card leaves it, whatever rows it
+  // holds, so measuring it again on every resize settles: the "Show more"
+  // row taking or giving back its line cannot flip how many rows fit.
+  useEffect(() => {
+    if (!fill || !list || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const rowHeight =
+        list.firstElementChild?.getBoundingClientRect().height ||
+        FALLBACK_ROW_HEIGHT;
+      setFitRows(Math.max(1, Math.floor(list.clientHeight / rowHeight)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [fill, list]);
 
   // The revealed rows scroll inside the card rather than growing it: these
   // cards sit in a grid row, so one card growing would stretch its neighbours
   // into tall empty boxes. Follow the new rows down so "show more" visibly
   // does something.
   useEffect(() => {
-    const list = listRef.current;
-    if (!list || shown <= maxRows) return;
+    if (!list || revealed === 0) return;
     list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
-  }, [shown, maxRows]);
+  }, [list, revealed]);
 
   if (loading) {
     return (
@@ -118,12 +149,16 @@ export function RankedList({
   const max = Math.max(...visible.map((row) => row.value), 1);
 
   return (
-    <div className={cn("flex flex-col", className)}>
+    <div className={cn("flex flex-col", fill && "min-h-0 flex-1", className)}>
       <ul
-        ref={listRef}
-        // Roughly the five rows a card shows before it is asked for more, so
-        // expanding one card never changes the height of the row it sits in.
-        className="flex max-h-[10.5rem] flex-col overflow-y-auto"
+        ref={setList}
+        // Roughly the five rows a card shows before it is asked for more, or
+        // the card's own height when it fills one, so expanding one card
+        // never changes the height of the row it sits in.
+        className={cn(
+          "flex flex-col overflow-y-auto",
+          fill ? "min-h-0 flex-1" : "max-h-[10.5rem]",
+        )}
       >
         {visible.map((row, index) => {
           // Rank is graded into the fill — strongest at the top, faintest at the
@@ -216,7 +251,7 @@ export function RankedList({
           );
         })}
       </ul>
-      {(remaining > 0 || shown > maxRows) && (
+      {(remaining > 0 || revealed > 0) && (
         // No collapse control: the rows scroll inside a fixed-height card, so
         // an expanded list costs the board nothing and re-collapsing it only
         // takes away what the reader just asked for.
@@ -224,7 +259,7 @@ export function RankedList({
           {remaining > 0 && (
             <button
               type="button"
-              onClick={() => setShown(shown + step)}
+              onClick={() => setRevealed(revealed + step)}
               className="hover:text-foreground transition-colors"
             >
               Show {Math.min(step, remaining)} more

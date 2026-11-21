@@ -126,7 +126,10 @@ export function ResultDrawing({
   dataset: AnalyticsDataset | undefined;
   spec: ExploreSpec;
   rows: AnalyticsQueryResult["rows"];
-  /** A timeseries chart's height; without one it fills its container. */
+  /**
+   * A timeseries chart's height; without one it, and a ranked list, fills
+   * its container.
+   */
   chartHeight?: number;
   /** Dragging across a timeseries selects that range. */
   onRangeSelect?: ((from: Date, to: Date) => void) | undefined;
@@ -151,7 +154,9 @@ export function ResultDrawing({
     return <ResultNumbers dataset={dataset} spec={spec} row={rows[0]} />;
   }
   if (spec.chartType === "ranked" && !isRowsMode(spec)) {
-    return <ResultRanked spec={spec} rows={rows} />;
+    return (
+      <ResultRanked spec={spec} rows={rows} fill={chartHeight === undefined} />
+    );
   }
   return <ResultTable dataset={dataset} spec={spec} rows={rows} />;
 }
