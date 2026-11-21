@@ -74,16 +74,16 @@ func (q *Queries) ServerFeedbackInsertConfig(ctx context.Context, arg ServerFeed
 const serverFeedbackInsertReport = `-- name: ServerFeedbackInsertReport :exec
 INSERT INTO mcp_server_feedback (id, organization_id, project_id, mcp_server_id,
                                  content, severity, workaround, intention,
-                                 tool_name, model, session_id, user_id,
+                                 tool_name, model, user_id,
                                  external_user_id, client_name, client_version,
                                  created_at, updated_at)
 VALUES ($1::uuid, $2::text, $3::uuid, $4::uuid,
         $5::text, $6::text, $7::text,
         $8::text, $9::text, $10::text,
-        $11::text, $12::text, $13::text,
-        $14::text, $15::text,
-        now() - make_interval(mins => $16::integer),
-        now() - make_interval(mins => $16::integer))
+        $11::text, $12::text,
+        $13::text, $14::text,
+        now() - make_interval(mins => $15::integer),
+        now() - make_interval(mins => $15::integer))
 `
 
 type ServerFeedbackInsertReportParams struct {
@@ -97,7 +97,6 @@ type ServerFeedbackInsertReportParams struct {
 	Intention      pgtype.Text
 	ToolName       pgtype.Text
 	Model          pgtype.Text
-	SessionID      string
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
 	ClientName     pgtype.Text
@@ -117,7 +116,6 @@ func (q *Queries) ServerFeedbackInsertReport(ctx context.Context, arg ServerFeed
 		arg.Intention,
 		arg.ToolName,
 		arg.Model,
-		arg.SessionID,
 		arg.UserID,
 		arg.ExternalUserID,
 		arg.ClientName,

@@ -14,13 +14,13 @@ VALUES (@mcp_server_id::uuid, @org_id::text, @project_id::uuid,
 -- name: ServerFeedbackInsertReport :exec
 INSERT INTO mcp_server_feedback (id, organization_id, project_id, mcp_server_id,
                                  content, severity, workaround, intention,
-                                 tool_name, model, session_id, user_id,
+                                 tool_name, model, user_id,
                                  external_user_id, client_name, client_version,
                                  created_at, updated_at)
 VALUES (@id::uuid, @org_id::text, @project_id::uuid, @mcp_server_id::uuid,
         @content::text, sqlc.narg(severity)::text, sqlc.narg(workaround)::text,
         sqlc.narg(intention)::text, sqlc.narg(tool_name)::text, sqlc.narg(model)::text,
-        @session_id::text, sqlc.narg(user_id)::text, sqlc.narg(external_user_id)::text,
+        sqlc.narg(user_id)::text, sqlc.narg(external_user_id)::text,
         sqlc.narg(client_name)::text, sqlc.narg(client_version)::text,
         now() - make_interval(mins => @minutes_ago::integer),
         now() - make_interval(mins => @minutes_ago::integer));

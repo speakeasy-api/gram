@@ -32,6 +32,15 @@ const MAX_TOOL_NAME_LENGTH = 64;
 const MAX_INSTRUCTIONS_LENGTH = 2000;
 const TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+// Names the gateway answers itself on a server in dynamic mode, which the
+// API refuses for the feedback tool (mcpfeedback.ReservedToolNames).
+const RESERVED_TOOL_NAMES: readonly string[] = [
+  "search_tools",
+  "list_tools",
+  "describe_tools",
+  "execute_tool",
+];
+
 /** What the sheet saves: a value left at its default is sent as unset. */
 export type FeedbackToolCustomization = {
   toolName: string | undefined;
@@ -251,6 +260,9 @@ function toolNameError(name: string): string | undefined {
   }
   if (!TOOL_NAME_PATTERN.test(name)) {
     return "Use only letters, numbers, underscores, and hyphens.";
+  }
+  if (RESERVED_TOOL_NAMES.includes(name)) {
+    return "Speakeasy already uses this name on every server. Pick another.";
   }
   return undefined;
 }

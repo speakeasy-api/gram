@@ -2,6 +2,8 @@ import type { ListMcpFeedbackResult } from "@gram/client/models/components/listm
 import type { McpFeedback } from "@gram/client/models/components/mcpfeedback.js";
 import type { McpFeedbackSettings } from "@gram/client/models/components/mcpfeedbacksettings.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { invalidateAllMcpFeedbackSettings } from "@gram/client/react-query/mcpFeedbackSettings.js";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
   cleanup,
@@ -13,6 +15,7 @@ import {
 } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { MemoryRouter } from "react-router";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FeedbackTab } from "./FeedbackTab";
 
@@ -152,7 +155,7 @@ function result(
         userEmail: "hana@example.com",
         clientName: "claude-code",
         clientVersion: "2.1.34",
-        sessionId: "session-abc",
+        externalUserId: "idp|hana",
       }),
       report({
         id: "report-2",
@@ -240,6 +243,7 @@ describe("a server feedback was never set up on", () => {
           enabled: true,
           toolName: undefined,
           toolDescription: undefined,
+          expectedUpdatedAt: undefined,
         },
       },
     });
@@ -294,6 +298,7 @@ describe("a server with feedback on", () => {
           enabled: false,
           toolName: "report_a_problem",
           toolDescription: "Tell the platform team what went wrong.",
+          expectedUpdatedAt: new Date("2026-11-16T09:00:00Z"),
         },
       },
     });
@@ -327,13 +332,13 @@ describe("a server with feedback on", () => {
       screen.getByText("hana@example.com, through claude-code 2.1.34"),
     ).toBeTruthy();
     // Identifiers stay folded away until asked for.
-    expect(screen.queryByText("session-abc")).toBeNull();
+    expect(screen.queryByText("idp|hana")).toBeNull();
     const [technicalDetails] = screen.getAllByRole("button", {
       name: "Technical details",
     });
     if (!technicalDetails) throw new Error("no technical details to open");
     fireEvent.click(technicalDetails);
-    expect(screen.getByText("session-abc")).toBeTruthy();
+    expect(screen.getByText("idp|hana")).toBeTruthy();
     // A report with no severity carries no badge of one.
     expect(screen.getAllByText("Blocked")).toHaveLength(2);
   });
@@ -550,6 +555,46 @@ describe("customizing the feedback tool", () => {
     expect(save).toHaveProperty("disabled", true);
   });
 
+  it("refuses a name Speakeasy already uses on every server", () => {
+    const { name, save } = openSheet();
+
+    fireEvent.change(name, { target: { value: "search_tools" } });
+
+    expect(
+      screen.getByText(
+        "Speakeasy already uses this name on every server. Pick another.",
+      ),
+    ).toBeTruthy();
+    expect(save).toHaveProperty("disabled", true);
+  });
+
+  it("says so and closes when someone else changed the settings first", async () => {
+    state.update.mockRejectedValueOnce(
+      new GramError("conflict", {
+        response: new Response(null, { status: 409 }),
+        request: new Request(
+          "https://app.getgram.ai/rpc/mcpFeedback.updateSettings",
+        ),
+        body: "",
+      }),
+    );
+    const { name, save } = openSheet();
+
+    fireEvent.change(name, { target: { value: "report_a_problem" } });
+    fireEvent.click(save);
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledOnce());
+    expect(vi.mocked(toast.error).mock.calls[0]?.[1]).toMatchObject({
+      description: expect.stringContaining(
+        "Someone else changed these settings",
+      ),
+    });
+    expect(invalidateAllMcpFeedbackSettings).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Save" })).toBeNull(),
+    );
+  });
+
   it("saves a new name and leaves the instructions at their default", async () => {
     const { name, save } = openSheet();
 
@@ -564,6 +609,7 @@ describe("customizing the feedback tool", () => {
           enabled: true,
           toolName: "report_a_problem",
           toolDescription: undefined,
+          expectedUpdatedAt: new Date("2026-11-16T09:00:00Z"),
         },
       },
     });

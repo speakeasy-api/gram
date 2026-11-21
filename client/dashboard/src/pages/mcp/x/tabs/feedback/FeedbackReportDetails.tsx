@@ -12,7 +12,8 @@ import { reporterName, reportingAgent } from "./feedbackReporter";
 
 /**
  * One report in full: everything the agent wrote, then the identifiers that
- * tie it to a session, an export record, or a webhook delivery.
+ * tie it to an export record, a webhook delivery, or a person in your
+ * identity provider.
  */
 export function FeedbackReportDetails({
   report,
@@ -57,9 +58,6 @@ export function FeedbackReportDetails({
         <CollapsibleContent>
           <dl className="mt-3 grid max-w-4xl grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
             <Identifier label="Report ID" value={report.id} />
-            {report.sessionId && (
-              <Identifier label="MCP session" value={report.sessionId} />
-            )}
             {report.externalUserId && (
               <Identifier
                 label="User in your identity provider"

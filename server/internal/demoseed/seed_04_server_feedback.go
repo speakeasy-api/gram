@@ -190,7 +190,6 @@ func (s *seeder) seedServerFeedback(ctx context.Context) error {
 			Intention:      conv.ToPGTextEmpty(report.intention),
 			ToolName:       conv.ToPGTextEmpty(report.tool),
 			Model:          conv.ToPGTextEmpty(report.model),
-			SessionID:      s.det(fmt.Sprintf("mcpfeedback-session-%d", i+1)).String(),
 			UserID:         conv.ToPGTextEmpty(userID),
 			ExternalUserID: conv.ToPGTextEmpty(report.externalID),
 			ClientName:     conv.ToPGTextEmpty(report.client),

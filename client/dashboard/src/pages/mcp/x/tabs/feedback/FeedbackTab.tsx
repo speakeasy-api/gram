@@ -7,6 +7,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { handleError } from "@/lib/errors";
 import { useOrgRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllMcpFeedbackSettings,
   setMcpFeedbackSettingsData,
@@ -55,15 +56,21 @@ export function FeedbackTab({
   const update = useUpdateMcpFeedbackSettingsMutation();
   const [customizing, setCustomizing] = useState(false);
 
-  // The API replaces the stored settings whole, so each change resends the rest.
+  // The API replaces the stored settings whole, so each change resends the
+  // rest, along with the version it was made from: a change someone else made
+  // in the meantime is refused rather than silently undone.
   const save = async (
     next: FeedbackToolCustomization & { enabled: boolean },
     messages: { saved: string; failed: string },
-  ): Promise<boolean> => {
+  ): Promise<"saved" | "failed" | "conflict"> => {
     try {
       const saved = await update.mutateAsync({
         request: {
-          updateMcpFeedbackSettingsForm: { mcpServerId: mcpServer.id, ...next },
+          updateMcpFeedbackSettingsForm: {
+            mcpServerId: mcpServer.id,
+            ...next,
+            expectedUpdatedAt: settings?.updatedAt,
+          },
         },
       });
       setMcpFeedbackSettingsData(
@@ -73,10 +80,18 @@ export function FeedbackTab({
       );
       await invalidateAllMcpFeedbackSettings(queryClient);
       toast.success(messages.saved);
-      return true;
+      return "saved";
     } catch (error) {
+      if (error instanceof GramError && error.statusCode === 409) {
+        await invalidateAllMcpFeedbackSettings(queryClient);
+        toast.error(messages.failed, {
+          description:
+            "Someone else changed these settings since you opened them. Their change is shown now; make yours again if it is still needed.",
+        });
+        return "conflict";
+      }
       handleError(error, { title: messages.failed });
-      return false;
+      return "failed";
     }
   };
 
@@ -174,8 +189,9 @@ export function FeedbackTab({
                 saved: "Feedback tool updated",
                 failed: "Couldn't save the feedback tool",
               },
-            ).then((saved) => {
-              if (saved) setCustomizing(false);
+            ).then((outcome) => {
+              // After a conflict the sheet would still show the old settings.
+              if (outcome !== "failed") setCustomizing(false);
             })
           }
         />
