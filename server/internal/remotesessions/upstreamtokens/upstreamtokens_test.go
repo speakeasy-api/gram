@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -331,18 +332,29 @@ func TestCopyStoresTreatAnEmptyPlatformCopyAsNoValue(t *testing.T) {
 	ti := newTestInstance(t)
 	session := ti.createSession(t)
 	unattributed := ti.createUnattributedSession(t)
+	sealed := ti.createSession(t)
 
 	// Rows written before access_token_encrypted became nullable store ''
-	// for a session without an access token.
-	for _, row := range []repo.RemoteSession{session, unattributed} {
+	// for a session without an access token. The sealed session also holds
+	// an organization-key copy, so only the '' filter keeps verification
+	// from comparing the two: the copy is not a ciphertext and would count
+	// as unopenable if it were listed.
+	for _, row := range []struct {
+		session repo.RemoteSession
+		orgCopy pgtype.Text
+	}{
+		{session: session, orgCopy: nullText()},
+		{session: unattributed, orgCopy: nullText()},
+		{session: sealed, orgCopy: conv.ToPGText("organization-key copy")},
+	} {
 		_, err := repo.New(ti.conn).SetRemoteSessionTokens(t.Context(), repo.SetRemoteSessionTokensParams{
 			AccessPlatformCopy:  conv.ToPGText(""),
-			AccessOrgCopy:       nullText(),
+			AccessOrgCopy:       row.orgCopy,
 			ReplaceRefreshToken: false,
 			RefreshPlatformCopy: nullText(),
 			RefreshOrgCopy:      nullText(),
-			ID:                  row.ID,
-			OrganizationID:      row.OrganizationID,
+			ID:                  row.session.ID,
+			OrganizationID:      row.session.OrganizationID,
 			DecidedGeneration:   0,
 		})
 		require.NoError(t, err)
@@ -360,15 +372,22 @@ func TestCopyStoresTreatAnEmptyPlatformCopyAsNoValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, waiting)
 
+	listed, err := access.ListSealed(t.Context(), ti.orgID, "", 10)
+	require.NoError(t, err)
+	require.Empty(t, listed, "'' beside an organization-key copy is not a pair to verify")
+
 	ti.enroll(t)
 	result, err := ti.runner(t).Run(t.Context(), ti.orgID, orgencryption.UseCaseOAuthSessionTokens, stores)
 	require.NoError(t, err)
 	require.Zero(t, result.Converted)
 	require.Zero(t, result.Unreadable)
+	require.Zero(t, result.Mismatched)
+	require.Zero(t, result.Unopenable)
 	require.True(t, result.VerificationPassed)
 
 	ti.finalize(t)
 	require.False(t, ti.stored(t, session.ID).AccessTokenEncrypted.Valid, "clearing still removes ''")
+	require.False(t, ti.stored(t, sealed.ID).AccessTokenEncrypted.Valid, "clearing still removes '' beside an organization-key copy")
 }
 
 // remoteSessionStores are the CopyStores of the remote session columns.
