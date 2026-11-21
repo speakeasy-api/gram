@@ -9,6 +9,44 @@ type OriginalPolicy = Pick<RiskPolicy, "action" | "enabled" | "sources">;
  * create. */
 export type ShadowMCPDisposition = "block_all" | "allow_all";
 
+/** The enabled blocking Shadow MCP policy that would stop this editor's
+ *  policy from blocking Shadow MCP servers, if any. The server allows one per
+ *  project. The policy being edited never conflicts with itself, and a
+ *  disabled policy is not checked until it is enabled. */
+export function conflictingShadowMCPBlockingPolicy<T extends { id: string }>(
+  existing: T | undefined,
+  editing: { id: string; enabled: boolean } | null,
+): T | undefined {
+  if (!existing) return undefined;
+  if (editing && (editing.id === existing.id || !editing.enabled)) {
+    return undefined;
+  }
+  return existing;
+}
+
+/** Whether the editor cannot yet tell if this project's one Shadow MCP
+ *  blocking slot is free: the policy list is still loading or failed to load,
+ *  and the slot matters for this policy. A disabled policy is not checked
+ *  until it is enabled, and an enabled blocking policy already holds the slot,
+ *  so neither waits on the list. */
+export function shadowMCPBlockingSlotUnknown(
+  slot: { pending: boolean; failed: boolean },
+  editing: {
+    enabled: boolean;
+    sources: readonly string[];
+    action: string;
+  } | null,
+): boolean {
+  if (!slot.pending && !slot.failed) return false;
+  if (!editing) return true;
+  if (!editing.enabled) return false;
+  return !isBlockingShadowMCPPolicy(
+    editing.enabled,
+    editing.sources,
+    editing.action,
+  );
+}
+
 export function isShadowMCPBlockConfiguration(
   sources: readonly string[],
   action: string,

@@ -60,6 +60,16 @@ const BOOLEAN_ENABLED: FeatureFlagVariantResult = {
   enabled: true,
 };
 
+// No project in these tests holds the Shadow MCP blocking slot.
+vi.mock("./use-shadow-ai-policy-slot", () => ({
+  useShadowAIPolicySlot: () => ({
+    pending: false,
+    failed: false,
+    existing: undefined,
+    href: undefined,
+  }),
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));

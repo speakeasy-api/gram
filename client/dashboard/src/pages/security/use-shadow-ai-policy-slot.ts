@@ -15,10 +15,15 @@ export interface ShadowAIPolicySlot {
   href: string | undefined;
 }
 
-export function useShadowAIPolicySlot(): ShadowAIPolicySlot {
+/** `enabled: false` skips the policy list read for a caller that only needs
+ *  the slot once a Shadow MCP detector is on. */
+export function useShadowAIPolicySlot({
+  enabled = true,
+}: { enabled?: boolean } = {}): ShadowAIPolicySlot {
   const routes = useRoutes();
   const policiesQuery = useRiskListPolicies(undefined, undefined, {
     throwOnError: false,
+    enabled,
   });
   const existing = findBlockingShadowMCPPolicy(
     policiesQuery.data?.policies ?? [],
