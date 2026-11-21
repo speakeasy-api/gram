@@ -99,9 +99,6 @@ func (f *fixture) client(userIssuerIDs ...uuid.UUID) uuid.UUID {
 		RemoteSessionIssuerID: issuerID,
 		ClientID:              "cid-" + clientID.String()[:8],
 	}))
-	for _, userIssuerID := range userIssuerIDs {
-		require.NoError(f.t, f.q.SeedClientBindingFixture(ctx, SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
-	}
 	return clientID
 }
 
@@ -330,7 +327,6 @@ func TestRecordUpstreamClientSelections(t *testing.T) {
 
 		// The compatibility row does not govern a choice backed by a live
 		// server association.
-		require.NoError(t, f.q.UnbindClientFixture(t.Context(), UnbindClientFixtureParams{RemoteSessionClientID: second, UserSessionIssuerID: issuer}))
 		require.True(t, f.selection(issuer, later, server).Usable)
 	})
 

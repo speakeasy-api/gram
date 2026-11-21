@@ -101,6 +101,8 @@ type Options struct {
 
 	// PageSize overrides defaultPageSize when positive.
 	PageSize int
+	// TypedOnly limits maintenance to typed offers, regardless of feature state.
+	TypedOnly bool
 }
 
 // Gap is one credential and server pair left without a choice.
@@ -194,9 +196,12 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 			// so a run that outlives an enforcement change writes the rest under
 			// the new state, and a run with no organization decides every
 			// credential by its own organization.
-			typedOnly, err := authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
-			if err != nil {
-				return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
+			typedOnly := opts.TypedOnly
+			if !typedOnly {
+				typedOnly, err = authenforcement.ReadEnforced(ctx, db, credential.OrganizationID)
+				if err != nil {
+					return report, fmt.Errorf("read enforcement for credential %s: %w", credential.CredentialID, err)
+				}
 			}
 			coverageParams := ListUpstreamClientSelectionCoverageParams{
 				UserSessionIssuerID: credential.UserSessionIssuerID,

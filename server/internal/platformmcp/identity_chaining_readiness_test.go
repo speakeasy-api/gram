@@ -78,13 +78,13 @@ type chainedCatalogFixture struct {
 
 func seedChainedCatalogFixture(t *testing.T, ctx context.Context, conn *pgxpool.Pool) chainedCatalogFixture {
 	t.Helper()
-	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
+	f := seedChainedCatalogFixtureClient(t, ctx, conn)
 	f.serverID = typedCatalogServer(t, ctx, conn, f, 1)
 	return f
 }
 
-// seedChainedCatalogFixtureClient attaches the interactive client only when attach is set.
-func seedChainedCatalogFixtureClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, attach bool) chainedCatalogFixture {
+// seedChainedCatalogFixtureClient creates the interactive registration without offering it.
+func seedChainedCatalogFixtureClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool) chainedCatalogFixture {
 	t.Helper()
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
@@ -105,14 +105,11 @@ func seedChainedCatalogFixtureClient(t *testing.T, ctx context.Context, conn *pg
 		TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
 	})
 	require.NoError(t, err)
-	client, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	_, err = remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 		ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID), RemoteSessionIssuerID: remoteIssuer.ID,
 		ClientID: "chained-client", ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now().UTC()), TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{},
 	})
 	require.NoError(t, err)
-	if attach {
-		require.NoError(t, remotesessionsrepo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: userIssuer.ID}))
-	}
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)

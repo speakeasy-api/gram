@@ -377,8 +377,7 @@ open their effective assignments; the dropdown always offers compact member sear
     `ResyncMCPServerRemoteSessionIssuers` would derive. Example OAuth offers one
     OAuth client, "Fixture OAuth sign-in", plus the "Shared service token"
     typed client. The legacy callback client
-    (`attachment-client`) has no row in
-    `remote_session_client_user_session_issuers` and no server association;
+    (`attachment-client`) has neither a typed offer nor a server association;
     it shows only on the provider's pages. Every org points the fixture
     servers at the MCP fixture the Speakeasy server hosts,
     `GRAM_SERVER_URL/rpc/demoseed`; none keeps the placeholder

@@ -162,20 +162,16 @@ type liveCredential struct {
 // the gateways' issuer issued. A choice already
 // naming an auth client is usable while that client is, as the typed
 // resolver reads it, whatever the legacy issuer binding. An unmapped OAuth
-// choice holds while its registration is associated with the server and
-// bound to issuer, which is what the upstream client choice serves it on.
+// choice is never mapped in legacy mode: server association alone does not
+// authorize the credential issuer.
 // For an organization enforcing upstream auth (typedOnly), a server's upstream
 // OAuth client associations make no choice stale or rejected, as issuance reads
 // them there, but an unmapped OAuth choice still needs its registration and
 // that registration's issuer to be live.
-func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID, typedOnly, registrationIssuerMatches bool) (SelectionOutcome, uuid.UUID) {
+func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID, typedOnly bool) (SelectionOutcome, uuid.UUID) {
 	readsNoAuth := row.NoAuth || row.NamesHeaders
 	staleNoAuth := readsNoAuth && ((row.ServerHasAssociations && !typedOnly) || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
-	registrationServes := row.RegistrationLive
-	if !typedOnly {
-		registrationServes = row.RegistrationAssociated
-	}
-	oauthRejected := !readsNoAuth && (!registrationServes || !registrationIssuerMatches)
+	oauthRejected := !readsNoAuth && (!typedOnly || !row.RegistrationLive)
 	switch {
 	case staleNoAuth:
 		return SelectionStaleNoAuth, uuid.Nil
@@ -194,41 +190,6 @@ func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID, typedOnly, 
 	default:
 		return SelectionNoClient, uuid.Nil
 	}
-}
-
-// Typed repair and diagnostics must not even prepare a query naming the retired
-// junction. Legacy mapping loads the binding evidence once per page, then
-// rechecks the representative after taking the existing write locks.
-func legacySelectionIssuerEvidence(ctx context.Context, q *Queries, organizationID string, rows []ListSelectionMappingsRow, typedOfferRepair bool, issuerFor func(ListSelectionMappingsRow) uuid.UUID) (map[uuid.UUID]bool, error) {
-	if typedOfferRepair {
-		return nil, nil
-	}
-	var selectionIDs, clientIDs, issuerIDs []uuid.UUID
-	for _, row := range rows {
-		if row.AuthClientID.Valid || row.NoAuth || row.NamesHeaders || !row.RemoteSessionClientID.Valid {
-			continue
-		}
-		issuerID := issuerFor(row)
-		if issuerID != uuid.Nil {
-			selectionIDs = append(selectionIDs, row.ID)
-			clientIDs = append(clientIDs, row.RemoteSessionClientID.UUID)
-			issuerIDs = append(issuerIDs, issuerID)
-		}
-	}
-	if len(selectionIDs) == 0 {
-		return nil, nil
-	}
-	ids, err := q.ListLegacySelectionIssuerEvidence(ctx, ListLegacySelectionIssuerEvidenceParams{
-		SelectionIds: selectionIDs, ClientIds: clientIDs, IssuerIds: issuerIDs, OrganizationID: organizationID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list legacy issuer evidence for selections: %w", err)
-	}
-	matches := make(map[uuid.UUID]bool, len(ids))
-	for _, id := range ids {
-		matches[id] = true
-	}
-	return matches, nil
 }
 
 // liveCredentials reads every live user session credential in the
@@ -264,18 +225,12 @@ func runSelections(ctx context.Context, q *Queries, opts Options, size int32, wr
 		OrganizationID: opts.OrganizationID, PageSize: size, OnlyUnmapped: false, ScopeMcpServerIds: nil,
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}, func(rows []ListSelectionMappingsRow) error {
-		matches, err := legacySelectionIssuerEvidence(ctx, q, opts.OrganizationID, rows, opts.TypedOnly, func(row ListSelectionMappingsRow) uuid.UUID {
-			return credentials[row.CredentialID].issuer
-		})
-		if err != nil {
-			return err
-		}
 		for _, row := range rows {
 			credential, live := credentials[row.CredentialID]
 			if !live {
 				continue
 			}
-			if err := decideSelectionRow(ctx, q, opts, write, credential, row, report, opts.TypedOnly || matches[row.ID]); err != nil {
+			if err := decideSelectionRow(ctx, q, opts, write, credential, row, report); err != nil {
 				return err
 			}
 		}
@@ -304,14 +259,14 @@ func visitSelectionMappings(ctx context.Context, q *Queries, params ListSelectio
 	}
 }
 
-func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write bool, credential liveCredential, row ListSelectionMappingsRow, report *Report, registrationIssuerMatches bool) error {
-	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly, registrationIssuerMatches)
+func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write bool, credential liveCredential, row ListSelectionMappingsRow, report *Report) error {
+	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly)
 	counts := report.selectionClass(credential.class)
 	counts.Selections++
 	if outcome == SelectionMap {
 		report.PendingSelectionMappings++
 		if write {
-			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, opts.TypedOnly, opts.TypedOnly, row, clientID)
+			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, opts.TypedOnly, row, clientID)
 			if err != nil {
 				return err
 			}
@@ -343,7 +298,7 @@ func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write boo
 // header changed concurrently either commits before the read or waits for
 // this phase to commit. It returns whether it wrote and the choice's outcome.
 // The locks are held until the phase commits.
-func mapSelection(ctx context.Context, q *Queries, organizationID string, issuerID uuid.UUID, typedOnly, typedOfferRepair bool, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
+func mapSelection(ctx context.Context, q *Queries, organizationID string, issuerID uuid.UUID, typedOnly bool, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
 	if err := q.LockSelectionRemoteSource(ctx, row.McpServerID); err != nil {
 		return false, "", fmt.Errorf("lock source of selection %s: %w", row.ID, err)
 	}
@@ -356,11 +311,6 @@ func mapSelection(ctx context.Context, q *Queries, organizationID string, issuer
 	if err := q.LockSelectionServerAuthClients(ctx, LockSelectionServerAuthClientsParams{McpServerID: row.McpServerID, OrganizationID: organizationID}); err != nil {
 		return false, "", fmt.Errorf("lock auth clients of selection %s: %w", row.ID, err)
 	}
-	if row.RemoteSessionClientID.Valid && !typedOfferRepair {
-		if err := q.LockSelectionIssuerBinding(ctx, LockSelectionIssuerBindingParams{RemoteSessionClientID: row.RemoteSessionClientID.UUID, UserSessionIssuerID: issuerID}); err != nil {
-			return false, "", fmt.Errorf("lock issuer binding of selection %s: %w", row.ID, err)
-		}
-	}
 	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: organizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1, OnlyUnmapped: false, ScopeMcpServerIds: nil, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	if err != nil {
 		return false, "", fmt.Errorf("reread selection %s: %w", row.ID, err)
@@ -368,11 +318,7 @@ func mapSelection(ctx context.Context, q *Queries, organizationID string, issuer
 	if len(fresh) == 0 {
 		return false, SelectionSkippedRace, nil
 	}
-	matches, err := legacySelectionIssuerEvidence(ctx, q, organizationID, fresh, typedOfferRepair, func(ListSelectionMappingsRow) uuid.UUID { return issuerID })
-	if err != nil {
-		return false, "", err
-	}
-	outcome, decided := decideSelection(fresh[0], issuerID, typedOnly, typedOfferRepair || matches[fresh[0].ID])
+	outcome, decided := decideSelection(fresh[0], issuerID, typedOnly)
 	switch {
 	case outcome != SelectionMap:
 		return false, outcome, nil
@@ -422,7 +368,7 @@ func ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx context.Con
 	if err != nil {
 		return 0, fmt.Errorf("read enforcement for selection reconciliation: %w", err)
 	}
-	return reconcileUserSessionSelectionsForServers(ctx, tx, organizationID, issuerID, serverIDs, typedOnly, false)
+	return reconcileUserSessionSelectionsForServers(ctx, tx, organizationID, issuerID, serverIDs, typedOnly)
 }
 
 // ReconcileTypedUserSessionSelectionsForServersInLockedTransaction maps existing
@@ -434,10 +380,10 @@ func ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx contex
 	if serverIDs != nil && len(serverIDs) == 0 {
 		return 0, nil
 	}
-	return reconcileUserSessionSelectionsForServers(ctx, tx, organizationID, issuerID, serverIDs, true, true)
+	return reconcileUserSessionSelectionsForServers(ctx, tx, organizationID, issuerID, serverIDs, true)
 }
 
-func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID, typedOnly, typedOfferRepair bool) (int64, error) {
+func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID, typedOnly bool) (int64, error) {
 	q := New(tx)
 	confirmed := make(map[selectionMappingGroup]bool)
 	var skipped int64
@@ -445,14 +391,10 @@ func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, or
 		OrganizationID: organizationID, PageSize: defaultPageSize, OnlyUnmapped: true, ScopeMcpServerIds: serverIDs,
 		Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 	}, func(rows []ListSelectionMappingsRow) error {
-		matches, err := legacySelectionIssuerEvidence(ctx, q, organizationID, rows, typedOfferRepair, func(ListSelectionMappingsRow) uuid.UUID { return issuerID })
-		if err != nil {
-			return err
-		}
 		groups := make(map[selectionMappingGroup][]ListSelectionMappingsRow)
 		var ordered []selectionMappingGroup
 		for _, row := range rows {
-			outcome, clientID := decideSelection(row, issuerID, typedOnly, typedOfferRepair || matches[row.ID])
+			outcome, clientID := decideSelection(row, issuerID, typedOnly)
 			if outcome != SelectionMap {
 				continue
 			}
@@ -471,7 +413,7 @@ func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, or
 				for len(group) > 0 {
 					representative := group[0]
 					group = group[1:]
-					written, outcome, err := mapSelection(ctx, q, organizationID, issuerID, typedOnly, typedOfferRepair, representative, key.clientID)
+					written, outcome, err := mapSelection(ctx, q, organizationID, issuerID, typedOnly, representative, key.clientID)
 					if err != nil {
 						return err
 					}
@@ -504,10 +446,10 @@ func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, or
 
 // For one issuer, the mapping policy for unmapped choices depends only on the
 // server, legacy registration and no-auth state. Source headers, offered clients,
-// gateway ownership and issuer bindings are configuration of that server and
+// gateway ownership are configuration of that server and
 // registration, not of an individual credential. Include the decided client in
 // the key too: a changed candidate must establish its own locked decision.
-// Successful mapSelection retains source/server/client/binding locks until the
+// Successful mapSelection retains source/server/client locks until the
 // transaction commits, so later pages can reuse that policy. Bulk writes still
 // guard every row against concurrent explicit choices or changed legacy state.
 type selectionMappingGroup struct {

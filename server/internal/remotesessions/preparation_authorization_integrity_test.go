@@ -72,8 +72,6 @@ func TestPreparationOrganizationDetachRevalidatesScopeAfterWait(t *testing.T) {
 			server, err := servers.GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: serverID, OrganizationID: auth.ActiveOrganizationID})
 			require.NoError(t, err)
 			client := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, server.ProjectID, in.RemoteSessionIssuerID, "detach-scope-client")
-			q := repo.New(ti.conn)
-			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client, UserSessionIssuerID: server.UserSessionIssuerID.UUID}))
 			foreignOrg := createOrganization(t, ctx, ti.conn, "detach-foreign-org")
 			foreignID := seedMCPServerInOrg(t, ctx, ti.conn, foreignOrg, "detach-foreign-server")
 			foreign, err := servers.GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: foreignID, OrganizationID: foreignOrg})
@@ -106,7 +104,6 @@ func TestPreparationOrganizationDetachRevalidatesScopeAfterWait(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("detach did not finish")
 			}
-			require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, client, server.UserSessionIssuerID.UUID))
 		})
 	}
 }

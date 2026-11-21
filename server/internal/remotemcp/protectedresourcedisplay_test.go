@@ -149,10 +149,6 @@ func seedScopedIssuerClient(t *testing.T, ctx context.Context, ti *testInstance,
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
 	if resourceIdentifier == "" {
 		return client
 	}

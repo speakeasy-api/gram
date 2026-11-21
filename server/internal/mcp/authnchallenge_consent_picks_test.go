@@ -37,8 +37,8 @@ func seedTwoClientConsentEndpoint(t *testing.T, tag string) (context.Context, co
 	ctx, fx := standaloneConsent(t, tag, consentChainedUpstream, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		return attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
 	})
-	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-a", "", []uuid.UUID{fx.shared})
-	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-b", "", []uuid.UUID{fx.shared})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-a", "")
+	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-b", "")
 	return ctx, fx
 }
 
@@ -179,7 +179,7 @@ func TestHandleToken_RecordsTypedChoiceAndPreservesItOnRotation(t *testing.T) {
 		Slug:            fx.endpoint.Slug,
 	})
 	require.NoError(t, err)
-	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-redeem-unlinked", "", nil)
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-redeem-unlinked", "")
 	fixtures := authclientfixtures.New(fx.ti.conn)
 	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestConsentPost_ChoosesAnAdministratorOfferedPersonalClient(t *testing.T) {
 	fx.ti.service.manual = true
 	fx.ti.service.SetAuthClientPermitted(true)
 	serverID := fx.endpoint.McpServerID.UUID
-	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-offered", "", nil)
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-offered", "")
 	fixtures := authclientfixtures.New(fx.ti.conn)
 	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 	require.NoError(t, err)

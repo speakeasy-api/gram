@@ -46,7 +46,7 @@ func seedDirectScopeConsent(t *testing.T, enforced bool) (context.Context, conse
 
 func addDirectScopePersonal(t *testing.T, ctx context.Context, fx consentActionFixture, tag string, sessionIssuer uuid.UUID) (uuid.UUID, uuid.UUID) {
 	t.Helper()
-	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "", nil)
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag, "")
 	fixtures := authclientfixtures.New(fx.ti.conn)
 	id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 		w.WriteHeader(http.StatusBadRequest)
 	}))
 	t.Cleanup(legacyAS.Close)
-	legacy := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "unrelated-legacy", legacyAS.URL, []uuid.UUID{fx.shared})
+	legacy := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "unrelated-legacy", legacyAS.URL)
 	access, err := fx.ti.enc.Encrypt([]byte("expired-legacy-token"))
 	require.NoError(t, err)
 	refresh, err := fx.ti.enc.Encrypt([]byte("legacy-refresh-token"))
@@ -185,7 +185,7 @@ func TestConsentDirectScope_OffAndShadowUseTypedPreview(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			ctx, fx, member := seedDirectScopeConsent(t, false)
-			legacy := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "legacy-connected", "", []uuid.UUID{fx.shared})
+			legacy := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "legacy-connected", "")
 			issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, legacy)
 			err := authclientfixtures.New(fx.ti.conn).SetServerRemoteSessionIssuerFixture(ctx, authclientfixtures.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(issuer), ID: fx.endpoint.McpServerID.UUID})
 			require.NoError(t, err)

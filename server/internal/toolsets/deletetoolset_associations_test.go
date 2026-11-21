@@ -51,10 +51,6 @@ func TestToolsetsService_DeleteToolset_PrunesHostedServerAssociations(t *testing
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now()),
 	})
 	require.NoError(t, err)
-	require.NoError(t, rq.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   issuerID,
-	}))
 	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
 		ProjectID: projectID, OrganizationID: orgID, McpServerID: serverID, RemoteSessionClientID: client.ID,
 	}))

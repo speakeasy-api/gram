@@ -270,14 +270,14 @@ func TestServeConsentAction_MetaMCPConnectResolvesMemberByTypedOffer(t *testing.
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-lookup-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	const matched = "https://matched.example.com/mcp"
 	match := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-match", matched, conv.ToNullUUID(issuerID), 0)
 	seedAuthorizedMetaConsentOffer(t, ctx, fx, match, clientID)
 	// A sibling that offers a different registration must not be chosen.
-	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup-other", "", []uuid.UUID{fx.shared})
+	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup-other", "")
 	otherIssuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, other)
 	sibling := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-sibling", "https://sibling.example.com/mcp", conv.ToNullUUID(otherIssuerID), 1)
 	seedAuthorizedMetaConsentOffer(t, ctx, fx, sibling, other)
@@ -294,7 +294,7 @@ func TestServeConsentAction_MetaMCPConnectRefusesAClientNoMemberIsAssociatedWith
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-null-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-null", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-null", "")
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-null-member", "https://unstamped.example.com/mcp", uuid.NullUUID{}, 0)
 
 	requireConnectRefused(t, fx, clientID, "a member with no derived authorization server is associated with no client, rather than with every one")
@@ -306,7 +306,7 @@ func TestServeConsentAction_MetaMCPConnectAllowsAClientOnlyAHostedMemberUses(t *
 	t.Parallel()
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-hosted-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-hosted", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-hosted", "")
 	hosted := seedHostedMetaMember(t, ctx, fx.ti, metaServerID, "Hosted", 0, "public")
 	requireConnectRefused(t, fx, clientID, "an issuer link alone cannot authorize a hosted login")
 	_, err := authclientbackfill.New(fx.ti.conn).SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{
@@ -324,7 +324,7 @@ func TestServeConsentAction_MetaMCPConnectRejectsSharedRegistrationAcrossResourc
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-shared-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-shared", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-shared", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	memberA := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-shared-a", "https://shared-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
@@ -346,7 +346,7 @@ func TestServeConsentAction_MetaMCPConnectAmbiguityDoesNotFallBack(t *testing.T)
 	memberIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
 	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-ambig-fb-srv", consentUpstreamA)
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-ambig-fb", "", []uuid.UUID{fx.shared, memberIssuer})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-ambig-fb", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	requireConnectRefused(t, fx, clientID, "a server outside the gateway never qualifies a gateway credential")
@@ -371,7 +371,7 @@ func TestServeConsentAction_MetaMCPConnectInvisibleMemberQualifiesNothing(t *tes
 	memberIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
 	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-invis-srv", consentUpstreamA)
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-invis", "", []uuid.UUID{fx.shared, memberIssuer})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-invis", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	requireConnectRefused(t, fx, clientID, "a server outside the gateway never qualifies a gateway credential")
@@ -389,7 +389,7 @@ func TestServeConsentAction_MetaMCPConnectMembersSharingOneURLCollapse(t *testin
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-dupe-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dupe", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dupe", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	const upstream = "https://dupe.example.com/mcp"
@@ -410,7 +410,7 @@ func TestServeConsentAction_MetaMCPConnectExcludesMembersTheSubjectCannotConnect
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-rbac-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-rbac", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-rbac", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	// Private, and the consent subject holds no mcp:connect on it. A denial, not a
@@ -438,7 +438,7 @@ func TestServeConsentAction_MetaMCPConnectResolvesAPrivateMemberTheSubjectCanCon
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-grant-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-grant", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-grant", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	const granted = "https://granted.example.com/mcp"
@@ -467,9 +467,10 @@ func TestServeConsentAction_MetaMCPConnectAssociatedMemberDecidesTheResource(t *
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-precedence-gw")
 
 	memberIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
-	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-precedence-srv", consentUpstreamA)
+	fallback := attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-precedence-srv", consentUpstreamA)
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-precedence", "", []uuid.UUID{fx.shared, memberIssuer})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-precedence", "")
+	associateServerRegistration(t, ctx, fx.ti.conn, fx.orgID, fx.projectID, fallback, clientID)
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	// Without a member associated with the client the gateway refuses it,
@@ -493,7 +494,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresDisabledMembers(t *testing.T) {
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-disabled-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-disabled", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-disabled", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	member := createMetaMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-disabled-member", "https://disabled.example.com/mcp", conv.ToNullUUID(issuerID), 0, "disabled")
@@ -510,7 +511,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresUnknownVisibility(t *testing.T)
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-unknown-vis-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-unknown-vis", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-unknown-vis", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	// mcp_servers.visibility is only constrained to be non-empty, so a value
@@ -531,7 +532,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresAnotherProjectsUpstream(t *test
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-tenancy-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-tenancy", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-tenancy", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	sibling := createSiblingProject(t, ctx, fx.ti.conn, fx.orgID)
@@ -555,7 +556,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresTombstonedRows(t *testing.T) {
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-dead-rows-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dead-rows", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dead-rows", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	const upstreamA = "https://dead-srv.example.com/mcp"
@@ -662,7 +663,7 @@ func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
 		}, mcp.MetaRuntimeConfig{})
 	ctx, fx, metaServerID := seedMetaConsentEndpointWithService(t, ctx, ti, "aim87-lookup-fault-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup-fault", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup-fault", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-fault-member", "https://lookup-fault.example.com/mcp", conv.ToNullUUID(issuerID), 0)
 	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
@@ -679,7 +680,7 @@ func TestServeConsentAction_MetaMCPConnectTunneledMemberWithoutIdentifierSendsNo
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-tunnel-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-tunnel", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-tunnel", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	member := createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tunnel-member", "", conv.ToNullUUID(issuerID), 0)
@@ -687,7 +688,9 @@ func TestServeConsentAction_MetaMCPConnectTunneledMemberWithoutIdentifierSendsNo
 	// A derivable per-client resource exists, so an omitted one proves the
 	// claim happened and suppressed it — without this the assertion would
 	// hold even if the tunneled member stopped claiming altogether.
-	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, fx.shared, "aim87-tunnel-fallback", "https://fallback.example.com/mcp")
+	fallback := attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, fx.shared, "aim87-tunnel-fallback", "https://fallback.example.com/mcp")
+
+	associateServerRegistration(t, ctx, fx.ti.conn, fx.orgID, fx.projectID, fallback, clientID)
 
 	loc := postConnectAction(t, fx, clientID)
 	_, hasResource := loc.Query()["resource"]
@@ -702,7 +705,7 @@ func TestServeConsentAction_MetaMCPConnectResolvesTunneledMemberIdentifier(t *te
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim151-tunnel-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim151-tunnel", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim151-tunnel", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	member := createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim151-tunnel-member", "https://tunneled.internal/mcp", conv.ToNullUUID(issuerID), 0)
@@ -719,7 +722,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresAnotherMetasMembers(t *testing.
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-scope-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-scope", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-scope", "")
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	otherMeta := createMetaServer(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-scope-other", createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID))
@@ -761,7 +764,7 @@ func TestServeConsentAction_NonMetaEndpointKeepsPerClientDerivation(t *testing.T
 		clientD:   uuid.Nil,
 	}
 
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim87-plain", "", nil)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim87-plain", "")
 	seedConsentSignInPlacement(t, ctx, ti, shared, clientID)
 	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, server, clientID)
 	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"))
@@ -779,7 +782,7 @@ func TestServeConsentAction_MetaMCPConnectRequiresATypedOfferAfterResync(t *test
 	member := createMetaMember(t, ctx, fx.ti.conn, projectID, metaServerID, "aim87-composed-member", "https://aim87-composed.example.com/mcp", uuid.NullUUID{}, 0)
 
 	// The gateway's connecting registration shares the member's upstream provider.
-	gatewayClientID := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim87-composed", "", nil)
+	gatewayClientID := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim87-composed", "")
 	rsiID := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, gatewayClientID)
 
 	// The member's own identity-provider config: a client on the same

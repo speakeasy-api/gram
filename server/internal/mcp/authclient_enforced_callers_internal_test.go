@@ -680,11 +680,10 @@ func TestEnforcedAgentKeyWithoutAChoiceReadsTheServersAuthClients(t *testing.T) 
 		require.Equal(t, validUUID(f.registration), choice.clientID)
 	})
 
-	t.Run("a registration the sign-in links but no auth client offers does not", func(t *testing.T) {
+	t.Run("a server association without a typed offer does not", func(t *testing.T) {
 		t.Parallel()
 		f := newEnforcedCallerFixture(t, pool)
 		f.attach()
-		require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: f.signIn}))
 		target := agentServerTarget{organizationID: f.orgID, agentID: uuid.New(), serverID: f.serverID, projectID: f.projectID, slug: "server"}
 
 		clients, err := f.service.agentServerClients(t.Context(), target)

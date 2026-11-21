@@ -13,22 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const bindClientIssuerFixture = `-- name: BindClientIssuerFixture :exec
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-VALUES ($1, $2)
-ON CONFLICT DO NOTHING
-`
-
-type BindClientIssuerFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) BindClientIssuerFixture(ctx context.Context, arg BindClientIssuerFixtureParams) error {
-	_, err := q.db.Exec(ctx, bindClientIssuerFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
-}
-
 const clearEMABindingClientFixture = `-- name: ClearEMABindingClientFixture :exec
 UPDATE remote_session_ema_bindings SET state = 'manual_setup_required', remote_session_client_id = NULL
 WHERE id = $1 AND project_id = $2
@@ -2335,59 +2319,6 @@ func (q *Queries) ListEMASameOriginServers(ctx context.Context, arg ListEMASameO
 	return items, nil
 }
 
-const listLegacySelectionIssuerEvidence = `-- name: ListLegacySelectionIssuerEvidence :many
-SELECT sel.id
-FROM (
-    SELECT unnest($1::uuid[]) AS selection_id,
-           unnest($2::uuid[]) AS client_id,
-           unnest($3::uuid[]) AS issuer_id
-) AS input
-JOIN upstream_client_selections AS sel ON sel.id = input.selection_id
-  AND sel.remote_session_client_id = input.client_id
-  AND sel.organization_id = $4::text AND NOT sel.deleted
-JOIN projects AS project ON project.id = sel.project_id
-  AND project.organization_id = sel.organization_id AND NOT project.deleted
-JOIN remote_session_clients AS client ON client.id = sel.remote_session_client_id AND NOT client.deleted
-  AND (client.project_id = project.id OR (client.project_id IS NULL AND (client.organization_id IS NULL OR client.organization_id = project.organization_id)))
-JOIN user_session_issuers AS issuer ON issuer.id = input.issuer_id AND NOT issuer.deleted
-  AND (issuer.project_id = project.id OR (issuer.project_id IS NULL AND issuer.organization_id = project.organization_id))
-JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = client.id
-  AND link.user_session_issuer_id = issuer.id
-`
-
-type ListLegacySelectionIssuerEvidenceParams struct {
-	SelectionIds   []uuid.UUID
-	ClientIds      []uuid.UUID
-	IssuerIds      []uuid.UUID
-	OrganizationID string
-}
-
-// Only the retired workflow reads this evidence, once per mapping page.
-func (q *Queries) ListLegacySelectionIssuerEvidence(ctx context.Context, arg ListLegacySelectionIssuerEvidenceParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listLegacySelectionIssuerEvidence,
-		arg.SelectionIds,
-		arg.ClientIds,
-		arg.IssuerIds,
-		arg.OrganizationID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listLiveAgentAttachments = `-- name: ListLiveAgentAttachments :many
 SELECT
   b.id AS binding_id,
@@ -4235,30 +4166,6 @@ func (q *Queries) LockRemoteCredentialSource(ctx context.Context, arg LockRemote
 	return id, err
 }
 
-const lockSelectionIssuerBinding = `-- name: LockSelectionIssuerBinding :exec
-SELECT link.remote_session_client_id
-FROM remote_session_client_user_session_issuers AS link
-WHERE link.remote_session_client_id = $1::uuid
-  AND link.user_session_issuer_id = $2::uuid
-FOR SHARE OF link
-`
-
-type LockSelectionIssuerBindingParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-// Holds the binding of an unmapped OAuth choice's registration to its
-// credential's user session issuer, which is what makes the upstream client
-// choice usable, against unbinding until the transaction ends, so a choice is
-// never named after the binding it was decided from is gone. Taken after
-// LockSelectionServerAuthClients. A binding that is already gone locks
-// nothing, and the fresh decision then rejects the choice.
-func (q *Queries) LockSelectionIssuerBinding(ctx context.Context, arg LockSelectionIssuerBindingParams) error {
-	_, err := q.db.Exec(ctx, lockSelectionIssuerBinding, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
-}
-
 const lockSelectionRemoteSource = `-- name: LockSelectionRemoteSource :exec
 SELECT r.id
 FROM remote_mcp_servers AS r
@@ -5932,21 +5839,6 @@ func (q *Queries) TryLockOrganizationBackfill(ctx context.Context, organizationI
 	var i TryLockOrganizationBackfillRow
 	err := row.Scan(&i.Locked, &i.StartedAt)
 	return i, err
-}
-
-const unbindClientIssuerFixture = `-- name: UnbindClientIssuerFixture :exec
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
-`
-
-type UnbindClientIssuerFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) UnbindClientIssuerFixture(ctx context.Context, arg UnbindClientIssuerFixtureParams) error {
-	_, err := q.db.Exec(ctx, unbindClientIssuerFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
 }
 
 const unlockOrganizationBackfill = `-- name: UnlockOrganizationBackfill :exec

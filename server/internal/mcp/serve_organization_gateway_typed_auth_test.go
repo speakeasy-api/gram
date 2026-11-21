@@ -29,16 +29,14 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 	for _, tc := range []struct {
 		name, clientType, header, source, value string
 		required                                bool
-		pending, bound, detached                bool
+		pending, detached                       bool
 		noLegacyAssociation                     bool
 		clientHeader                            string // empty, static, or fromRequest
 		visibleLegacy, visibleEnforced          bool
 	}{
-		{name: "detached_required_caller_header", detached: true, bound: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true, clientHeader: "fromRequest", visibleLegacy: false, visibleEnforced: false},
-		{name: "detached_unbound_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
-		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: true, visibleEnforced: false},
-		{name: "legacy_pending_bound", pending: true, bound: true, clientHeader: "", visibleLegacy: true, visibleEnforced: false},
-		{name: "legacy_pending_unbound", pending: true, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
+		{name: "detached_required_caller_header", detached: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true, clientHeader: "fromRequest", visibleLegacy: false, visibleEnforced: false},
+		{name: "detached_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
+		{name: "association_without_typed_offer", pending: true, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
 		{name: "personal_pending", clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
 		{name: "shared_pending", clientType: authz.AuthClientTypeServiceAccount, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
 		{name: "static_offer", clientType: authz.AuthClientTypeStaticCredential, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
@@ -58,13 +56,8 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 			projectID := *ac.ProjectID
 			server, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{ProjectID: projectID, Slug: conv.ToPGText(fx.granted)})
 			require.NoError(t, err)
-			// Typed offers have no issuer binding or saved connection. Pending
-			// legacy setup exercises both bound and unbound registrations.
-			var bindings []uuid.UUID
-			if tc.bound {
-				bindings = []uuid.UUID{fx.issuerID}
-			}
-			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-registration", "", bindings)
+			// A server placement is not a typed offer.
+			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-registration", "")
 			if !tc.noLegacyAssociation {
 				require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: server.ID, RemoteSessionClientID: registration}))
 			}
