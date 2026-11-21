@@ -36,7 +36,6 @@ func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 		resourceDisplay bool
 		typed           bool
 		associated      bool
-		signInLink      bool
 		hosted          bool
 		wantTyped       bool
 		wantErr         string
@@ -44,11 +43,10 @@ func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 		{name: "typed offer with legacy runtime", legacyRuntime: true, typed: true, wantTyped: true},
 		{name: "typed offer alone", typed: true, resourceDisplay: true, wantTyped: true},
 		{name: "organization gateway typed offer", orgGateway: true, typed: true, resourceDisplay: true, wantTyped: true},
-		{name: "organization gateway organization client", orgGateway: true, orgClient: true, typed: true, signInLink: true, wantTyped: true},
-		{name: "organization gateway older association only", orgGateway: true, associated: true, signInLink: true, wantErr: "unknown remote session client"},
-		{name: "typed offer linked to the sign-in", typed: true, signInLink: true, wantTyped: true},
-		{name: "typed offer with an older association", typed: true, associated: true, signInLink: true, wantTyped: true},
-		{name: "older association without a typed offer", associated: true, signInLink: true, wantErr: "unknown remote session client"},
+		{name: "organization gateway organization client", orgGateway: true, orgClient: true, typed: true, wantTyped: true},
+		{name: "organization gateway older association only", orgGateway: true, associated: true, wantErr: "unknown remote session client"},
+		{name: "typed offer with an older association", typed: true, associated: true, wantTyped: true},
+		{name: "older association without a typed offer", associated: true, wantErr: "unknown remote session client"},
 		{name: "hosted member's placed registration", hosted: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -69,11 +67,7 @@ func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 				require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 			}
 
-			var signIns []uuid.UUID
-			if tc.signInLink && !tc.orgClient {
-				signIns = []uuid.UUID{fx.shared}
-			}
-			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-gw-"+uuid.NewString()[:8], "", signIns)
+			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-gw-"+uuid.NewString()[:8], "", nil)
 			if tc.orgClient {
 				q := remotesessionsrepo.New(fx.ti.conn)
 				client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{

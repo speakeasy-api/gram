@@ -569,8 +569,7 @@ func attachHostedRemoteSessionClient(t *testing.T, ctx context.Context, ti *test
 	return client
 }
 
-// attachTestRemoteSessionClient creates a registration and retains the
-// compatibility row required by the principal attachment foreign key.
+// attachTestRemoteSessionClient creates an unplaced upstream registration.
 // The caller sets up any runtime association or typed offer separately.
 func attachTestRemoteSessionClient(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, userSessionIssuerID uuid.UUID) remotesessions_repo.RemoteSessionClient {
 	t.Helper()
