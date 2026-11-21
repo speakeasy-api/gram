@@ -22,8 +22,7 @@ import (
 
 // Where typed auth client resolution is enforced, a gateway connects the
 // registrations its proxied members offer through typed auth clients, with or
-// without an older association or a link to the gateway's sign-in, and
-// nothing an older association alone names. A hosted member keeps signing in
+// without an older association, and nothing an older association alone names. A hosted member keeps signing in
 // through its authorization server's client.
 func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 	t.Parallel()

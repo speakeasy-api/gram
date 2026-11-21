@@ -182,6 +182,7 @@ func TestConsentAgentApproval_AttachedConnectionIsNotJudgedByCards(t *testing.T)
 	agent := createConsentAgent(t, ctx, ti, fx, "Attached agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
 	client := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "agent-attached", "")
+	assignHostedOAuth(t, ctx, ti.conn, fx.orgID, fx.target.ProjectID, fx.toolset.ID, client)
 	owner := urn.NewUserSubject(fx.userID)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, fx.target.UserSessionIssuerID, client, owner, "owner-token", "")
 

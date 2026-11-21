@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
@@ -402,7 +403,9 @@ func TestCodeCallNeedingSignInNamesConnect(t *testing.T) {
 			t.Cleanup(deny.Close)
 			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "code-sign-in", "")
 			remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
-			createMetaMember(t, ctx, ti.conn, projectID, gateway.ID, "member", deny.URL, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, 0)
+			member := createMetaMember(t, ctx, ti.conn, projectID, gateway.ID, "member", deny.URL, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, 0)
+			associateServerRegistration(t, ctx, ti.conn, orgID, projectID, member.mcpServerID, clientID)
+			seedTypedSessionClient(t, ctx, ti, orgID, projectID, member.mcpServerID, clientID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(auth.UserID))
 			token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
 			ran := false
 			mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {

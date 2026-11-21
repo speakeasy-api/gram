@@ -157,13 +157,16 @@ func connectAmbiguousClient(t *testing.T, slug string, withSelfClient bool) stri
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	other := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, slug+"-srv-a", consentUpstreamA)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, other, slug+"-srv-b", consentUpstreamB)
+	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, slug+"-srv-a", consentUpstreamA)
+	serverB := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, other, slug+"-srv-b", consentUpstreamB)
 
 	subjectClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug+"-subject", "")
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, serverA, subjectClient)
+	associateServerRegistration(t, ctx, ti.conn, orgID, projectID, serverB, subjectClient)
 	if withSelfClient {
 		selfClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug+"-self", "")
 		markConsentClientSelf(t, ctx, ti.conn, projectID, orgID, selfClient)
+		associateServerRegistration(t, ctx, ti.conn, orgID, projectID, serverA, selfClient)
 	}
 
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug+"-consent")

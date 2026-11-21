@@ -15,7 +15,8 @@ func TestConsentAgentRequiresConnectionsBeforeConsumingChallenge(t *testing.T) {
 	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
 	agent := createConsentAgent(t, ctx, ti, fx, "Connection agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
-	createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "consent-required", "")
+	client := createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "consent-required", "")
+	assignHostedOAuth(t, ctx, ti.conn, fx.orgID, fx.target.ProjectID, fx.toolset.ID, client)
 	_, err := serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
 	require.Error(t, err)
 	var shareable *oops.ShareableError

@@ -215,9 +215,11 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
 			slug := "chained-refresh-" + uuid.NewString()[:8]
 			serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstream)
+			associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, remoteClient.ID)
 			offer := seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, remoteClient.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
 			if tc.sibling {
 				sibling := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+				associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, sibling.ID)
 				seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, sibling.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
 			} else {
 				seedTypedSessionChoice(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID, oldJTI, serverID, offer)
@@ -280,6 +282,8 @@ func TestHandleToken_RefreshIgnoresSiblingClientsOfTheIssuer(t *testing.T) {
 	slug := "sibling-refresh-" + uuid.NewString()[:8]
 	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstreamA)
 	serverB := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug+"-b", upstreamB)
+	associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverA, clientA.ID)
+	associateServerRegistration(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverB, clientB.ID)
 	offer := seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverA, clientA.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
 	seedTypedSessionClient(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverB, clientB.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject("refresh-replay-user"))
 	seedTypedSessionChoice(t, ctx, ti, authCtx.ActiveOrganizationID, issuer.ID, jti, serverA, offer)

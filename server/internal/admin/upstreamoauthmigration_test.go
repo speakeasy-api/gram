@@ -139,9 +139,8 @@ func TestUpstreamOAuthMigration_EnforcedOrganizationReportsUnusedProfilesApart(t
 	require.NotContains(t, enforced.Enforcement.Blockers, "Assistant profiles are not all recorded.")
 }
 
-// Under enforcement a client an issuer binds is not inferred onto the issuer's
-// only server, so it must not keep the organization reported as unmigrated.
-func TestUpstreamOAuthMigration_EnforcedOrganizationHasNoPendingInferredAssociations(t *testing.T) {
+// A project registration not offered by any server is not a readiness gap.
+func TestUpstreamOAuthMigration_UnplacedRegistrationIsNotAReadinessGap(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
@@ -153,7 +152,7 @@ func TestUpstreamOAuthMigration_EnforcedOrganizationHasNoPendingInferredAssociat
 
 	before, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
 	require.NoError(t, err)
-	require.Zero(t, before.PendingAssociations, "junction rows are not configuration")
+	require.Zero(t, before.PendingAssociations, "an unplaced registration is not server configuration")
 
 	_, err = productfeaturesrepo.New(db).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: org.id, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)

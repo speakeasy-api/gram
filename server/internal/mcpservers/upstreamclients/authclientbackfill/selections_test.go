@@ -317,14 +317,13 @@ func TestRun_ChoiceForADeletedServerIsNotLiveCoverage(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	live, deleted, registration := f.server(), f.server(), f.client("subject")
-	f.associate(live, registration)
 	credential := f.interactiveCredential()
 	f.unboundOAuthSelection(credential, live, registration)
 	f.unboundOAuthSelection(credential, deleted, registration)
 	require.NoError(t, f.q.SoftDeleteMCPServerFixture(t.Context(), deleted))
 
 	report := f.runTypedSelections(true)
-	gaps := selectionGaps(report, SelectionUnusable)
+	gaps := selectionGaps(report, SelectionNoClient)
 	require.Len(t, gaps, 1)
 	require.Equal(t, live, gaps[0].MCPServerID)
 	require.Equal(t, 1, report.Selections[ClassInteractive].Selections)
@@ -869,7 +868,7 @@ func TestReconcileUserSessionSelectionsReportsGuardedBulkSkips(t *testing.T) {
 	}
 }
 
-// Both representative and grouped writes use typed-only decisions after enforcement.
+// Typed issuer repair maps only live offers, regardless of rollout state.
 func TestReconcileUserSessionSelectionsTypedOnlyWithoutAssociation(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {
@@ -900,10 +899,8 @@ func TestReconcileUserSessionSelectionsTypedOnlyWithoutAssociation(t *testing.T)
 			require.NoError(t, tx.Commit(ctx))
 			for _, credential := range credentials {
 				choice := f.selection(credential, server)
-				require.Equal(t, enforced, choice.AuthClientID.Valid)
-				if enforced {
-					require.Equal(t, OAuthClientID(f.orgID, registration, TypeRemoteSession), choice.AuthClientID.UUID)
-				}
+				require.True(t, choice.AuthClientID.Valid)
+				require.Equal(t, OAuthClientID(f.orgID, registration, TypeRemoteSession), choice.AuthClientID.UUID)
 			}
 		})
 	}

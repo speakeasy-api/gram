@@ -116,6 +116,7 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 
 	slug := "chained-refresh-" + uuid.NewString()[:8]
 	serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, project, userIssuer.ID, slug, upstream)
+	associateServerRegistration(t, ctx, ti.conn, org, project, serverID, resourceClient.ID)
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: project, CustomDomainID: uuid.NullUUID{}, McpServerID: conv.ToNullUUID(serverID), MetaMcpServerID: uuid.NullUUID{}, Slug: slug,
 	})
@@ -129,14 +130,18 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 	require.NoError(t, err)
 	refreshToken := "refresh-" + uuid.NewString()
 	refreshHash := sha256.Sum256([]byte(refreshToken))
+	jti := uuid.NewString()
 	_, err = us.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID: userIssuer.ID, UserSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true},
-		SubjectUrn: urn.NewUserSubject(human), Jti: uuid.NewString(),
+		SubjectUrn: urn.NewUserSubject(human), Jti: jti,
 		RefreshTokenHash: conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
 		RefreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)),
 		SignInID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
+
+	offer := seedTypedSessionClient(t, ctx, ti, org, project, serverID, resourceClient.ID, authz.AuthClientTypeRemoteSession, urn.NewUserSubject(human))
+	seedTypedSessionChoice(t, ctx, ti, org, userIssuer.ID, jti, serverID, offer)
 
 	trusted, err := rs.GetTrustedRemoteSessionClientForOrganization(ctx, remotesessions_repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: org, IssuerID: idpIssuer, ClientID: idpClient})
 	require.NoError(t, err)

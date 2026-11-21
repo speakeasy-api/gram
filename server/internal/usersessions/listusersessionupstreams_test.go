@@ -252,9 +252,8 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	return client.ID
 }
 
-// Inventory attributes the shared upstream grant to its minting issuer,
-// never to a sibling issuer merely linked to the same client.
-func TestListUserSessionsDoesNotAttributeUpstreamsThroughStaleSiblingLinks(t *testing.T) {
+// Inventory attributes upstream grants to the sign-in that minted them.
+func TestListUserSessionsDoesNotAttributeUpstreamsToAnotherIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -306,12 +305,9 @@ func TestListUserSessionsDoesNotAttributeUpstreamsThroughStaleSiblingLinks(t *te
 	})
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
-	require.Empty(t, res.Items[0].Upstreams, "a stale sibling link is not session provenance")
+	require.Empty(t, res.Items[0].Upstreams, "the sibling sign-in did not mint this grant")
 }
 
-// A client detached from the issuer that minted the grant keeps live upstream
-// tokens, and revoking the Speakeasy session still destroys them. The page has to
-// keep listing them or an admin reads an empty page as "nothing to revoke".
 // An agent's upstream is the exact, still-authorized owner attachment, not
 // an independently owned token or an implicit inheritance from its owner.
 func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
