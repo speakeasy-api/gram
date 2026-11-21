@@ -35,14 +35,14 @@ func TestTransitions_FinalizeRefusesWhenTheUnreadableCountDiffersFromTheAcknowle
 	ti := newTransitionInstance(t)
 	ti.readyToFinalize(t)
 
-	_, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: new(int64(0))}, orgencryption.SystemActor())
+	_, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 0}, orgencryption.SystemActor())
 	require.ErrorIs(t, err, orgencryption.ErrUnreadableCountChanged)
 
 	transition, err := ti.transitions.GetFresh(t.Context(), ti.orgID, useCase)
 	require.NoError(t, err)
 	require.Equal(t, orgencryption.TransitionStateDualWrite, transition.State, "a refused finalize changes nothing")
 
-	finalized, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: new(int64(1))}, orgencryption.SystemActor())
+	finalized, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 1}, orgencryption.SystemActor())
 	require.NoError(t, err)
 	require.Equal(t, orgencryption.TransitionStateOrgKMS, finalized.State)
 }
@@ -102,7 +102,12 @@ func TestMigrator_RunOnDemandFinishesTheClearAfterFinalize(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, transition.PlatformCopiesClearedAt)
 	require.False(t, ti.store.get("a").Platform.Valid)
-	require.True(t, ti.store.get("a").Org.Valid)
+
+	survivor := ti.store.get("a").Org
+	require.True(t, survivor.Valid)
+	plaintext, err := ti.encryptor(t).Decrypt(t.Context(), fakeColumns.OrgColumn, survivor.String)
+	require.NoError(t, err, "the organization-key copy still opens once the platform-key copy is gone")
+	require.Equal(t, "alpha", string(plaintext))
 
 	_, err = migrator.RunOnDemand(t.Context(), ti.orgID, useCase, orgencryption.SystemActor())
 	require.ErrorIs(t, err, orgencryption.ErrTransitionNotAllowed, "nothing is left to do once clearing finished")
@@ -137,16 +142,23 @@ func TestFinalizeBlockers_ReportsEveryReasonFinalizeWouldRefuse(t *testing.T) {
 	enrolled := orgencryption.Transition{State: orgencryption.TransitionStateDualWrite, StateChangedAt: now.Add(-time.Hour)}
 
 	blockers := orgencryption.FinalizeBlockers(enrolled, orgencryption.CopyCounts{Waiting: 2, Unreadable: 5, Unattributed: 1, PlatformCopies: 8}, now, 24*time.Hour)
-	require.Len(t, blockers, 3, "the soak time, waiting values and unattributed values each block; unreadable values do not")
+	require.Equal(t, []string{
+		"in dual_write for 1h0m0s, needs 24h0m0s",
+		"2 values still wait for an organization-key copy",
+		"1 values are stored without an organization",
+	}, blockers, "the soak time, waiting values and unattributed values each block; unreadable values do not")
 
 	verified := now.Add(-30 * time.Minute)
 	ready := orgencryption.Transition{State: orgencryption.TransitionStateDualWrite, StateChangedAt: now.Add(-48 * time.Hour), LastVerifiedAt: &verified}
 	require.Empty(t, orgencryption.FinalizeBlockers(ready, orgencryption.CopyCounts{Waiting: 0, Unreadable: 5, Unattributed: 0, PlatformCopies: 5}, now, 24*time.Hour))
 
+	unverified := orgencryption.Transition{State: orgencryption.TransitionStateDualWrite, StateChangedAt: now.Add(-48 * time.Hour)}
+	require.Equal(t, []string{"no clean verification pass since entering dual_write"}, orgencryption.FinalizeBlockers(unverified, orgencryption.CopyCounts{}, now, 24*time.Hour))
+
 	running := ready
 	running.LastBackfill = orgencryption.BackfillRecord{StartedAt: new(now.Add(-time.Minute))}
-	require.Len(t, orgencryption.FinalizeBlockers(running, orgencryption.CopyCounts{}, now, 24*time.Hour), 1, "a backfill still running blocks")
+	require.Equal(t, []string{"a backfill is running or did not complete"}, orgencryption.FinalizeBlockers(running, orgencryption.CopyCounts{}, now, 24*time.Hour))
 
 	finalized := orgencryption.Transition{State: orgencryption.TransitionStateOrgKMS}
-	require.Len(t, orgencryption.FinalizeBlockers(finalized, orgencryption.CopyCounts{}, now, 24*time.Hour), 1, "only dual_write can be finalized")
+	require.Equal(t, []string{"finalize needs dual_write, not org_kms"}, orgencryption.FinalizeBlockers(finalized, orgencryption.CopyCounts{}, now, 24*time.Hour))
 }

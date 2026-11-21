@@ -5,8 +5,36 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Who controls the organization's key.
+ */
+export const Mode = {
+  SpeakeasyManaged: "speakeasy_managed",
+  CustomerManaged: "customer_managed",
+} as const;
+/**
+ * Who controls the organization's key.
+ */
+export type Mode = ClosedEnum<typeof Mode>;
+
+/**
+ * Whether the key is usable: active and switching are, suspended is not.
+ */
+export const AdminOrganizationEncryptionConfigState = {
+  Active: "active",
+  Switching: "switching",
+  Suspended: "suspended",
+} as const;
+/**
+ * Whether the key is usable: active and switching are, suspended is not.
+ */
+export type AdminOrganizationEncryptionConfigState = ClosedEnum<
+  typeof AdminOrganizationEncryptionConfigState
+>;
 
 /**
  * An organization's encryption configuration: who controls its key, and whether the key is usable.
@@ -21,13 +49,13 @@ export type AdminOrganizationEncryptionConfig = {
    */
   lastCheckError?: string | undefined;
   /**
-   * speakeasy_managed or customer_managed.
+   * Who controls the organization's key.
    */
-  mode: string;
+  mode: Mode;
   /**
-   * active, switching or suspended.
+   * Whether the key is usable: active and switching are, suspended is not.
    */
-  state: string;
+  state: AdminOrganizationEncryptionConfigState;
   /**
    * When the configuration was suspended because its key became unusable.
    */
@@ -43,6 +71,15 @@ export type AdminOrganizationEncryptionConfig = {
 };
 
 /** @internal */
+export const Mode$inboundSchema: z.ZodMiniEnum<typeof Mode> = z.enum(Mode);
+
+/** @internal */
+export const AdminOrganizationEncryptionConfigState$inboundSchema:
+  z.ZodMiniEnum<typeof AdminOrganizationEncryptionConfigState> = z.enum(
+    AdminOrganizationEncryptionConfigState,
+  );
+
+/** @internal */
 export const AdminOrganizationEncryptionConfig$inboundSchema: z.ZodMiniType<
   AdminOrganizationEncryptionConfig,
   unknown
@@ -52,8 +89,8 @@ export const AdminOrganizationEncryptionConfig$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     last_check_error: z.optional(z.string()),
-    mode: z.string(),
-    state: z.string(),
+    mode: Mode$inboundSchema,
+    state: AdminOrganizationEncryptionConfigState$inboundSchema,
     suspended_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),

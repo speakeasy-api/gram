@@ -1808,9 +1808,9 @@ type AdminOrganizationEncryption struct {
 // An organization's encryption configuration: who controls its key, and
 // whether the key is usable.
 type AdminOrganizationEncryptionConfig struct {
-	// speakeasy_managed or customer_managed.
+	// Who controls the organization's key.
 	Mode string
-	// active, switching or suspended.
+	// Whether the key is usable: active and switching are, suspended is not.
 	State string
 	// When the switch to another key started. Absent unless one is in flight.
 	SwitchStartedAt *string

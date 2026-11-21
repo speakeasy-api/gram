@@ -57,7 +57,7 @@ func (ti *transitionInstance) finalize(t *testing.T) {
 	require.True(t, result.VerificationPassed)
 	ti.backdate(t, time.Hour)
 
-	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}}, orgencryption.SystemActor())
+	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 0}, orgencryption.SystemActor())
 	require.NoError(t, err)
 }
 

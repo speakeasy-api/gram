@@ -13558,10 +13558,17 @@ components:
           description: A short provider error summary from the last failed health check.
         mode:
           type: string
-          description: speakeasy_managed or customer_managed.
+          description: Who controls the organization's key.
+          enum:
+            - speakeasy_managed
+            - customer_managed
         state:
           type: string
-          description: active, switching or suspended.
+          description: 'Whether the key is usable: active and switching are, suspended is not.'
+          enum:
+            - active
+            - switching
+            - suspended
         suspended_at:
           type: string
           description: When the configuration was suspended because its key became unusable.

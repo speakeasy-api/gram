@@ -31845,9 +31845,9 @@ type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
 // AdminOrganizationEncryptionConfigResponseBody is used to define fields on
 // response body types.
 type AdminOrganizationEncryptionConfigResponseBody struct {
-	// speakeasy_managed or customer_managed.
+	// Who controls the organization's key.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
-	// active, switching or suspended.
+	// Whether the key is usable: active and switching are, suspended is not.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// When the switch to another key started. Absent unless one is in flight.
 	SwitchStartedAt *string `form:"switch_started_at,omitempty" json:"switch_started_at,omitempty" xml:"switch_started_at,omitempty"`
@@ -98480,6 +98480,16 @@ func ValidateAdminOrganizationEncryptionConfigResponseBody(body *AdminOrganizati
 	}
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Mode != nil {
+		if !(*body.Mode == "speakeasy_managed" || *body.Mode == "customer_managed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"speakeasy_managed", "customer_managed"}))
+		}
+	}
+	if body.State != nil {
+		if !(*body.State == "active" || *body.State == "switching" || *body.State == "suspended") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"active", "switching", "suspended"}))
+		}
 	}
 	if body.SwitchStartedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.switch_started_at", *body.SwitchStartedAt, goa.FormatDateTime))

@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminOrganizationEncryptionTransitionList } from "@gram/admin-client/models/components/adminorganizationencryptiontransitionlist";
 import type { AdminOrganizationEncryptionTransitionRow } from "@gram/admin-client/models/components/adminorganizationencryptiontransitionrow";
 
-import { EncryptionTransitions } from "@/pages/encryption-transitions/EncryptionTransitions";
+import {
+  ENROLL_INTERVAL_MS,
+  EncryptionTransitions,
+} from "@/pages/encryption-transitions/EncryptionTransitions";
 import { encryptionTransitionsSearch } from "@/pages/encryption-transitions/encryptionTransitionsSearch";
 import { renderRouteTree } from "@/test/harness";
 
@@ -81,10 +84,14 @@ describe("EncryptionTransitions", () => {
     mocks.list.mockResolvedValue(
       aList([aRow("a"), aRow("b"), aRow("off", { disabled: true })]),
     );
-    mocks.enroll.mockImplementation(async (organizationID: string) => {
-      if (organizationID === "a") throw new Error("kms quota exceeded");
-      return {};
-    });
+    let failFirst: (error: Error) => void = () => {};
+    mocks.enroll.mockImplementation((organizationID: string) =>
+      organizationID === "a"
+        ? new Promise((_, reject) => {
+            failFirst = reject;
+          })
+        : Promise.resolve({}),
+    );
     await mount();
 
     expect(await screen.findByText("Org a")).toBeTruthy();
@@ -106,13 +113,21 @@ describe("EncryptionTransitions", () => {
         .find((button) => dialog.contains(button))!,
     );
 
+    await waitFor(() => expect(mocks.enroll).toHaveBeenCalledTimes(1));
+    // The second enrollment waits for the first, however long it takes.
+    await new Promise((resolve) => {
+      setTimeout(resolve, ENROLL_INTERVAL_MS + 200);
+    });
+    expect(mocks.enroll).toHaveBeenCalledTimes(1);
+
+    failFirst(new Error("kms quota exceeded"));
     await waitFor(() => expect(mocks.enroll).toHaveBeenCalledTimes(2), {
-      timeout: 5000,
+      timeout: ENROLL_INTERVAL_MS + 3000,
     });
     expect(mocks.enroll.mock.calls.map((call) => call[0])).toEqual(["a", "b"]);
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("1 organization could not be enrolled");
-    expect(alert.textContent).toContain("kms quota exceeded");
+    expect(alert.textContent).toContain("Org a: kms quota exceeded");
   });
 
   it("selects the next organizations in platform key", async () => {

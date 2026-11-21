@@ -31809,9 +31809,9 @@ type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
 // AdminOrganizationEncryptionConfigResponseBody is used to define fields on
 // response body types.
 type AdminOrganizationEncryptionConfigResponseBody struct {
-	// speakeasy_managed or customer_managed.
+	// Who controls the organization's key.
 	Mode string `form:"mode" json:"mode" xml:"mode"`
-	// active, switching or suspended.
+	// Whether the key is usable: active and switching are, suspended is not.
 	State string `form:"state" json:"state" xml:"state"`
 	// When the switch to another key started. Absent unless one is in flight.
 	SwitchStartedAt *string `form:"switch_started_at,omitempty" json:"switch_started_at,omitempty" xml:"switch_started_at,omitempty"`

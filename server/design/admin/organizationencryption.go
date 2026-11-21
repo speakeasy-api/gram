@@ -17,8 +17,8 @@ var AdminOrganizationEncryptionConfig = Type("AdminOrganizationEncryptionConfig"
 	Description("An organization's encryption configuration: who controls its key, and whether the key is usable.")
 	Required("mode", "state")
 
-	Attribute("mode", String, "speakeasy_managed or customer_managed.")
-	Attribute("state", String, "active, switching or suspended.")
+	Attribute("mode", String, "Who controls the organization's key.", func() { Enum("speakeasy_managed", "customer_managed") })
+	Attribute("state", String, "Whether the key is usable: active and switching are, suspended is not.", func() { Enum("active", "switching", "suspended") })
 	Attribute("switch_started_at", String, "When the switch to another key started. Absent unless one is in flight.", func() { Format(FormatDateTime) })
 	Attribute("suspended_at", String, "When the configuration was suspended because its key became unusable.", func() { Format(FormatDateTime) })
 	Attribute("suspended_reason", String, "A short provider error summary for the suspension.")

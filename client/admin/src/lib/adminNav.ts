@@ -130,7 +130,8 @@ export const ADMIN_NAV_GROUPS = [
       {
         to: "/encryption-transitions",
         label: "Encryption transitions",
-        keywords: "kms organization keys platform key dual write enroll",
+        keywords:
+          "kms organization keys platform key dual write enroll rollback roll back finalize backfill",
         icon: LockKeyholeIcon,
       },
       {

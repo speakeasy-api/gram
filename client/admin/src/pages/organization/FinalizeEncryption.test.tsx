@@ -122,3 +122,40 @@ describe("FinalizeEncryption acknowledgement", () => {
     expect(dialog.textContent).toContain("7 unreadable values");
   });
 });
+
+describe("FinalizeEncryption blockers", () => {
+  it("refuses to submit when blockers appear while the dialog is open", async () => {
+    let setDisabled: (disabled: boolean) => void = () => {};
+    function Harness() {
+      const [disabled, set] = useState(false);
+      setDisabled = set;
+      return (
+        <FinalizeEncryption
+          organizationName="Fixture Org"
+          useCase="oauth-client-secrets"
+          unreadableValues={0}
+          platformCopies={1}
+          confirmation={PHRASE}
+          disabled={disabled}
+          onSubmit={vi.fn().mockResolvedValue(undefined)}
+        />
+      );
+    }
+    await renderWithApp(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Finalize" }));
+    const dialog = await screen.findByRole("dialog");
+    const submit = () =>
+      screen
+        .getAllByRole<HTMLButtonElement>("button", { name: "Finalize" })
+        .find((button) => dialog.contains(button))!;
+
+    fireEvent.change(screen.getByLabelText(/Type/), {
+      target: { value: PHRASE },
+    });
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(submit().disabled).toBe(false);
+
+    act(() => setDisabled(true));
+    expect(submit().disabled).toBe(true);
+  });
+});

@@ -54,8 +54,8 @@ const ALL = "all";
 const PAGE_SIZE = 50;
 
 /**
- * The most organizations one "select next" pass considers: the server's page
- * limit, which is far more than one rollout batch.
+ * How many organizations one "select next" request reads: the server's page
+ * limit. It pages on while disabled organizations leave the batch short.
  */
 const NEXT_CANDIDATE_LIMIT = 200;
 
@@ -108,7 +108,9 @@ export function EncryptionTransitions(): JSX.Element {
     }),
     placeholderData: keepPreviousData,
   });
-  const useCase = query.data?.useCase ?? search.useCase ?? "";
+  // The URL names the use case the admin chose; a list still loading for it
+  // must not leave a bulk action on the previous use case's placeholder data.
+  const useCase = search.useCase ?? query.data?.useCase ?? "";
   const rows = query.data?.organizations ?? [];
   const counts = new Map(
     (query.data?.stateCounts ?? []).map((count) => [
@@ -138,15 +140,22 @@ export function EncryptionTransitions(): JSX.Element {
       return;
     }
     try {
-      const candidates = await client.fetchQuery(
-        organizationEncryptionTransitionsQuery({
-          useCase,
-          state: "platform_key",
-          limit: NEXT_CANDIDATE_LIMIT,
-          offset: 0,
-        }),
-      );
-      const next = candidates.organizations.filter(enrollable).slice(0, size);
+      // Disabled organizations are skipped, so page until enough are found.
+      const next: AdminOrganizationEncryptionTransitionRow[] = [];
+      for (let offset = 0; next.length < size; offset += NEXT_CANDIDATE_LIMIT) {
+        const page = await client.fetchQuery(
+          organizationEncryptionTransitionsQuery({
+            useCase,
+            state: "platform_key",
+            limit: NEXT_CANDIDATE_LIMIT,
+            offset,
+          }),
+        );
+        next.push(
+          ...page.organizations.filter(enrollable).slice(0, size - next.length),
+        );
+        if (!page.hasMore) break;
+      }
       setSelected(new Map(next.map((row) => [row.organizationId, row])));
       if (next.length < size) {
         toast.info(

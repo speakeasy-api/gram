@@ -244,7 +244,7 @@ func (s *Service) FinalizeOrganizationEncryption(ctx context.Context, payload *g
 	finalized, err := s.orgEncryption.Transitions.Finalize(ctx, organizationID, move.UseCase, orgencryption.FinalizeRequest{
 		MinimumDualWrite:   organizationEncryptionMinimumDualWrite,
 		Stores:             move.Stores,
-		ExpectedUnreadable: new(payload.AcknowledgedUnreadableValues),
+		ExpectedUnreadable: payload.AcknowledgedUnreadableValues,
 	}, actor)
 	if err != nil {
 		return nil, mapOrganizationEncryptionError(ctx, logger, err, "finalize")

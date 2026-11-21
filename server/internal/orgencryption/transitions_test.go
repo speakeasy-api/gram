@@ -150,7 +150,7 @@ func TestTransitions_FinalizeRequiresTheMinimumTimeInDualWrite(t *testing.T) {
 	_, err := ti.runner.Run(t.Context(), ti.orgID, useCase, []orgencryption.CopyStore{ti.store})
 	require.NoError(t, err)
 
-	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: 0, Stores: []orgencryption.CopyStore{ti.store}}, orgencryption.SystemActor())
+	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: 0, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 0}, orgencryption.SystemActor())
 	require.ErrorIs(t, err, orgencryption.ErrFinalizeBlocked, "the floor applies even when the caller asks for no minimum")
 }
 
@@ -161,7 +161,7 @@ func TestTransitions_FinalizeRequiresAVerificationPass(t *testing.T) {
 	ti.enroll(t)
 	ti.backdate(t, time.Hour)
 
-	_, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: 0, Stores: []orgencryption.CopyStore{ti.store}}, orgencryption.SystemActor())
+	_, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: 0, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 0}, orgencryption.SystemActor())
 	require.ErrorIs(t, err, orgencryption.ErrFinalizeBlocked)
 }
 
@@ -177,7 +177,7 @@ func TestTransitions_FinalizeRefusesWhileValuesWait(t *testing.T) {
 	// Written by a stale platform_key writer after the run.
 	ti.store.put(ti.orgID, "late", orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "late")), Org: orgencryption.ErasedCopies().Org})
 
-	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: 0, Stores: []orgencryption.CopyStore{ti.store}}, orgencryption.SystemActor())
+	_, err = ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: 0, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 0}, orgencryption.SystemActor())
 	require.ErrorIs(t, err, orgencryption.ErrFinalizeBlocked)
 }
 
@@ -194,7 +194,7 @@ func TestTransitions_FinalizeThenClearDestroysPlatformCopies(t *testing.T) {
 	require.True(t, result.VerificationPassed)
 	ti.backdate(t, time.Hour)
 
-	finalized, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}}, orgencryption.SystemActor())
+	finalized, err := ti.transitions.Finalize(t.Context(), ti.orgID, useCase, orgencryption.FinalizeRequest{MinimumDualWrite: time.Minute, Stores: []orgencryption.CopyStore{ti.store}, ExpectedUnreadable: 1}, orgencryption.SystemActor())
 	require.NoError(t, err)
 	require.Equal(t, orgencryption.TransitionStateOrgKMS, finalized.State)
 	require.Nil(t, finalized.PlatformCopiesClearedAt, "finalize clears nothing itself")

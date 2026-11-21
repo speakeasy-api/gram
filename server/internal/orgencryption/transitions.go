@@ -393,11 +393,11 @@ type FinalizeRequest struct {
 	// the use case.
 	Stores []CopyStore
 
-	// ExpectedUnreadable, when set, is the number of unreadable values the
-	// caller acknowledged would be destroyed. Finalize refuses when the count
-	// under the state row lock differs, so the count acknowledged is the
-	// count destroyed.
-	ExpectedUnreadable *int64
+	// ExpectedUnreadable is the number of unreadable values the caller
+	// acknowledged would be destroyed. Finalize refuses when the count under
+	// the state row lock differs, so the count acknowledged is the count
+	// destroyed.
+	ExpectedUnreadable int64
 }
 
 // Finalize moves a use case from dual_write to org_kms. Under the state row
@@ -451,8 +451,8 @@ func (t *Transitions) Finalize(ctx context.Context, organizationID string, useCa
 				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values still wait for an organization-key copy", ErrFinalizeBlocked, counts.Waiting)
 			case counts.Unattributed > 0:
 				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values are stored without an organization", ErrFinalizeBlocked, counts.Unattributed)
-			case req.ExpectedUnreadable != nil && *req.ExpectedUnreadable != counts.Unreadable:
-				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values are unreadable, not the %d acknowledged", ErrUnreadableCountChanged, counts.Unreadable, *req.ExpectedUnreadable)
+			case req.ExpectedUnreadable != counts.Unreadable:
+				return repo.OrganizationEncryptionTransition{}, nil, fmt.Errorf("%w: %d values are unreadable, not the %d acknowledged", ErrUnreadableCountChanged, counts.Unreadable, req.ExpectedUnreadable)
 			}
 
 			row, err := updateTransitionState(ctx, q, *before, TransitionStateOrgKMS)

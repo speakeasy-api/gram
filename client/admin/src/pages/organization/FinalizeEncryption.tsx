@@ -57,7 +57,9 @@ export function FinalizeEncryption({
   const [error, setError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const label = labelForUseCase(useCase);
-  const valid = typed === confirmation && acknowledged;
+  // Blockers or a busy page can appear while the dialog is open, so the
+  // dialog's own Finalize button follows `disabled` too.
+  const valid = !disabled && typed === confirmation && acknowledged;
 
   function changeOpen(next: boolean) {
     if (submitting.current) return;
@@ -96,7 +98,7 @@ export function FinalizeEncryption({
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="sm:max-w-xl"
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl"
         showCloseButton={!pending}
         onOpenAutoFocus={(event) => {
           event.preventDefault();

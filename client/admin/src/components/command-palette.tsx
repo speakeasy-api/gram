@@ -115,7 +115,8 @@ const RECORD_PAGES = [
     to: "/organizations/$idOrSlug/encryption",
     label: "Encryption",
     icon: LockKeyholeIcon,
-    keywords: "kms keys platform key dual write finalize enroll backfill",
+    keywords:
+      "kms keys platform key dual write finalize enroll backfill rollback roll back",
   },
 ] as const;
 
