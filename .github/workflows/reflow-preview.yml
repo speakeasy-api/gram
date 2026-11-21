@@ -1,0 +1,79 @@
+name: Reflow (preview)
+
+# PROPOSAL, manual dispatch only. Runs the portable golden flows against one
+# pull request's preview environment (https://pr-<N>.dev.getgram.ai), the build
+# the pull request actually deploys, instead of a stack booted in the job.
+#
+# It is deliberately not triggered by pull request events yet: only labelled
+# pull requests have a preview, so this cannot be a required check, and the
+# two secrets it needs do not exist until the test organization does.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request whose preview to test (it must carry the preview label)"
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run at a time per preview: the run reseeds the preview's test organization.
+  group: reflow-preview-${{ inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: resolve the preview
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # reads the pull request's head commit and labels
+    outputs:
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      short_sha: ${{ steps.pr.outputs.short_sha }}
+    steps:
+      - name: Read the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          pr="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid,isCrossRepository,labels,state)"
+          if [ "$(jq -r .state <<<"$pr")" != "OPEN" ]; then
+            echo "::error::pull request $PR_NUMBER is not open"
+            exit 1
+          fi
+          # The job runs the pull request's own Reflow tasks with secrets.
+          if [ "$(jq -r .isCrossRepository <<<"$pr")" != "false" ]; then
+            echo "::error::pull request $PR_NUMBER comes from a fork"
+            exit 1
+          fi
+          if ! jq -e '.labels | map(.name) | index("preview")' <<<"$pr" >/dev/null; then
+            echo "::error::pull request $PR_NUMBER has no preview label, so it has no preview environment"
+            exit 1
+          fi
+          head_sha="$(jq -r .headRefOid <<<"$pr")"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${head_sha:0:7}" >> "$GITHUB_OUTPUT"
+
+  golden:
+    name: preview
+    needs: resolve
+    uses: ./.github/workflows/reflow-deployed.yml # zizmor: ignore[self-repository]
+    permissions:
+      contents: read
+    with:
+      url: https://pr-${{ inputs.pr_number }}.dev.getgram.ai
+      expect_build: ${{ needs.resolve.outputs.short_sha }}
+      source_ref: ${{ needs.resolve.outputs.head_sha }}
+      record_branch: preview/pr-${{ inputs.pr_number }}
+      reflow_collection: ${{ vars.REFLOW_COLLECTION_ID }}
+      reflow_team: ${{ vars.REFLOW_TEAM_ID }}
+      reflow_installer_sha256: ${{ vars.REFLOW_INSTALLER_SHA256 }}
+    secrets:
+      REFLOW_TOKEN: ${{ secrets.REFLOW_TOKEN }}
+      E2E_CONTROL_TOKEN: ${{ secrets.DEV_E2E_CONTROL_TOKEN }}
+      E2E_API_KEY: ${{ secrets.DEV_E2E_API_KEY }}
