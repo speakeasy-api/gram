@@ -44,7 +44,8 @@ type UpstreamListingRefusalError struct {
 	// is nil when Cause is set. Its body is not retained.
 	Response *http.Response
 
-	// Answered is true when the upstream answered before Cause stopped the listing.
+	// Answered is true when the MCP server answered before Cause stopped the listing.
+	// A tunnel gateway's 502 that a retryer could not route around is not its answer.
 	Answered bool
 }
 

@@ -406,7 +406,12 @@ func (r *Recorder) flushServed(now time.Time, final bool) {
 			var cached bool
 			if reason, cached = r.cachedLogs(organizationID); !cached {
 				var err error
-				reason, err = r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+				reason, err = r.organizationAllowed(organizationID, min(r.cfg.logsCheckTimeout, time.Until(until)))
+				if err != nil && time.Now().After(until) {
+					// Cut short by the budget, not failed: it waits for the next flush.
+					pending[key] = waiting
+					break
+				}
 				if err != nil {
 					organizations[organizationID] = reason
 					skipped = append(skipped, key)

@@ -647,6 +647,37 @@ func TestServed_SlowLogsChecksDoNotHoldFailureRowsBack(t *testing.T) {
 	require.Zero(t, r.counted(t, meterServedDropped, ""))
 }
 
+// A logs check started near the end of a flush's budget ends with it, and its connection waits instead of being dropped.
+func TestServed_ALogsCheckEndsWithTheBudget(t *testing.T) {
+	t.Parallel()
+	conn := clickhouseConn(t)
+	var slow atomic.Bool
+	slow.Store(true)
+	check := func(ctx context.Context, _ string) (bool, error) {
+		if slow.Load() {
+			<-ctx.Done()
+			return false, ctx.Err()
+		}
+		return true, nil
+	}
+	cfg := testConfig()
+	cfg.servedFlushInterval = time.Hour
+	cfg.servedFlushBudget = 100 * time.Millisecond
+	r := newTestRecorderWithLogs(t, conn, check, cfg)
+	scope, org, _ := servedScope()
+	person := urn.NewUserSubject("user-" + uuid.NewString())
+
+	r.Served(t.Context(), scope, true, Subject(&person))
+	started := time.Now()
+	r.flushServed(time.Now(), false)
+	require.Less(t, time.Since(started), 2*time.Second, "the check's own timeout is 10s")
+	require.Zero(t, r.counted(t, meterServedDropped, ""))
+
+	slow.Store(false)
+	r.flushServed(time.Now(), false)
+	require.Len(t, storedServed(t, conn, org), 1)
+}
+
 // A served request after the final flush is counted as lost to shutdown, not held where nothing writes it.
 func TestServed_AfterShutdownIsCounted(t *testing.T) {
 	t.Parallel()
