@@ -37,9 +37,6 @@ const config: KnipConfig = {
     // re-export). No import sites by design.
     "src/lib.d.ts",
     "src/sdk/**/*",
-    // Inlined Speakeasy Elements library (formerly @gram-ai/elements). Its public
-    // surface is wider than what the dashboard consumes today.
-    "src/elements/**/*",
     // Internalised design system. Same reasoning: a component library exposes
     // its full API (Badge.Text, DropdownMenuSub, …) whether or not the app
     // happens to use every part of it today.

@@ -71,7 +71,7 @@ async function waitForMappedId(
  * Transforms or drops a persisted chat message before it is rendered from
  * history. Return the (possibly rewritten) message, or `null` to omit it.
  */
-export type ChatMessageTransform = (
+type ChatMessageTransform = (
   message: GramChatMessage,
 ) => GramChatMessage | null;
 

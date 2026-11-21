@@ -11,7 +11,7 @@ interface ExecutableTool {
 
 type ExecutableToolSet = Record<string, ExecutableTool | undefined>;
 
-export interface ToolExecutionResult {
+interface ToolExecutionResult {
   success: boolean;
   result?: unknown;
   error?: string;
