@@ -7,6 +7,7 @@
     "lib": ["dom", "es2022"],
     "module": "NodeNext",
     "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
     "types": ["node"],
     "noEmit": true,
     "skipLibCheck": true
