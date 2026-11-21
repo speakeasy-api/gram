@@ -139,7 +139,7 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 		principalID:     "",
 		source:          MandatoryPolicySourceNone,
 		decided:         nil,
-		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false},
+		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil},
 		key:             nil,
 		narrowedProject: nil,
 	}
@@ -184,6 +184,21 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 	}
 	m.authorization = authorization
 	return m, nil
+}
+
+// WithAttachedConnection applies consent to a connection its owner attached
+// to the agent (Engine.AttachedConnectionConsent), replacing any applied
+// before, so an admission shared by several decisions carries only the
+// current one's. A zero consent applies none. It applies only to an admitted
+// agent that acts for a represented user, in the consent's organization; any
+// other caller, including a workload with no represented user, gets none.
+func (m MandatoryAuthorization) WithAttachedConnection(consent AttachedConnectionConsent) MandatoryAuthorization {
+	m.authorization.attached = nil
+	if consent.ownerUserID == "" || m.caller != MandatoryCallerAgent || m.authorization.representedUser == "" || consent.organizationID != m.organizationID {
+		return m
+	}
+	m.authorization.attached = &attachedConnection{owner: consent.ownerUserID, policy: append([]Grant{}, consent.ownerPolicy...)}
+	return m
 }
 
 func (e *Engine) prepareAPIKey(ctx context.Context, m MandatoryAuthorization, authCtx *contextvalues.AuthContext) (MandatoryAuthorization, error) {
