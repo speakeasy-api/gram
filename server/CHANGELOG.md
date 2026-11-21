@@ -1,5 +1,25 @@
 # server
 
+## 2.39.0
+
+### Minor Changes
+
+- 87acb73: Organization administrators now get a Slack DM for each access request, with a menu to pick how long the access lasts (1, 2 or 4 hours or until the end of the requester's day), an Allow button and a Deny button. Every card is updated with the outcome, and the requester is told by DM when their request is approved, denied or expires.
+- a6fc982: `keys.list` can now return one page at a time. Send `limit` (1 to 100) to get a page, then pass the returned `next_cursor` as `cursor` to get the next one. Keys come newest first. Send `search` to only return keys whose name contains that text, ignoring case. Callers that send no `limit` still get every key in one response, as before. The dashboard's API Keys page now loads 50 keys at a time with a "Load more" button and searches on the server, so it stays fast for organizations with thousands of keys.
+- 8e5b454: Access requests can now be stored and decided. With the access requests rollout on, requesting access records a pending request that an organization administrator can approve as a temporary grant or deny, through the new listAccessRequests, decideAccessRequest and withdrawAccessRequest endpoints. Scopes that cannot be given temporarily can no longer be requested while the rollout is on. Administrators are still emailed.
+
+### Patch Changes
+
+- b1c1e0c: An agent's MCP sign-in tab no longer marks every personal server "Could not check connection" for an admin previewing roles: reading an agent's attached connections now follows the same permission check as the rest of the agent's pages. A viewer who may not see the agent's attached connection is told so plainly, and that server is no longer counted on the tab.
+- 161c16c: Acknowledge deliveries to deleted webhook triggers without processing them, preventing Slack retries and noisy error logs.
+- 265e38b: An Enterprise Managed Auth sign-in to a gateway no longer fails when one of the gateway's servers isn't connected yet. The session is issued for the servers that are ready, and calling a server that isn't connected returns a link to its connect page. After connecting, the app picks the server up the next time it signs in to the gateway. Sign-ins to a single MCP server still fail until it is connected.
+- 118268a: A permission check on an organization other than the one the caller is acting in is now always refused.
+- 2bacdc5: A risk policy now applies when the caller's permissions cannot be read or the policy cannot be evaluated. Before, such a failure left the request unchecked. A policy is skipped only when the caller is outside its audience or holds an exemption.
+- 33f26df: A permission grant limited to a value the request does not carry no longer matches it. Connecting to a server still matches a grant limited to some tools, and a refusal caused by a missing value is logged.
+- 56828b2: Tool and annotation limits now apply to using an MCP server only. A view or manage rule, or a block on either, that names tools or annotations is refused when saved.
+- 8429f32: Tool Logs filtered by user email, user id or external user id load much faster. These filters are now answered from the per-trace summaries instead of a scan of every raw log row, which could time out.
+- b93dd41: A tool with no annotations is now classified as unannotated. A rule with no annotation limit still covers it, a rule limited to read-only tools no longer does, and a tool that says it is both read-only and destructive is treated as destructive. The access, agents and Platform MCP APIs accept `unannotated` as a rule's annotation, and the role editor classifies tools the same way the server does and keeps a rule's unannotated selectors when another annotation is edited.
+
 ## 2.38.0
 
 ### Minor Changes
