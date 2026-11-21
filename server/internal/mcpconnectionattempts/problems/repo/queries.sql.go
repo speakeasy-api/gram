@@ -12,6 +12,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createTunneledMCPServerFixture = `-- name: CreateTunneledMCPServerFixture :one
+WITH tunnel AS (
+    INSERT INTO tunneled_mcp_servers (project_id, name, key_hash, key_prefix)
+    VALUES ($2, $1::text, $1::text, $1::text)
+    RETURNING id, project_id
+)
+INSERT INTO mcp_servers (project_id, slug, tunneled_mcp_server_id, visibility)
+SELECT tunnel.project_id, $1::text, tunnel.id, 'private'
+FROM tunnel
+RETURNING id
+`
+
+type CreateTunneledMCPServerFixtureParams struct {
+	Name      string
+	ProjectID uuid.UUID
+}
+
+// Test fixture: an MCP server backed by a tunnel in a project.
+func (q *Queries) CreateTunneledMCPServerFixture(ctx context.Context, arg CreateTunneledMCPServerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createTunneledMCPServerFixture, arg.Name, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const listServerUpstreams = `-- name: ListServerUpstreams :many
 SELECT
     m.id,
@@ -22,7 +47,7 @@ JOIN projects AS p
     ON p.id = m.project_id
     AND p.organization_id = $1
     AND p.deleted IS FALSE
-JOIN remote_mcp_servers AS rms
+LEFT JOIN remote_mcp_servers AS rms
     ON rms.id = m.remote_mcp_server_id
     AND rms.project_id = m.project_id
     AND rms.deleted IS FALSE
@@ -35,6 +60,7 @@ LEFT JOIN remote_session_issuers AS rsi
     )
 WHERE m.id = ANY($2::uuid[])
     AND m.deleted IS FALSE
+    AND (rms.id IS NOT NULL OR rsi.id IS NOT NULL)
 `
 
 type ListServerUpstreamsParams struct {
@@ -44,11 +70,11 @@ type ListServerUpstreamsParams struct {
 
 type ListServerUpstreamsRow struct {
 	ID     uuid.UUID
-	Url    string
+	Url    pgtype.Text
 	Issuer pgtype.Text
 }
 
-// URL and, when set, issuer of the live remote-backed MCP servers among the ids in the organization.
+// Remote URL and issuer, each when set, of the live MCP servers among the ids in the organization.
 func (q *Queries) ListServerUpstreams(ctx context.Context, arg ListServerUpstreamsParams) ([]ListServerUpstreamsRow, error) {
 	rows, err := q.db.Query(ctx, listServerUpstreams, arg.OrganizationID, arg.ServerIds)
 	if err != nil {

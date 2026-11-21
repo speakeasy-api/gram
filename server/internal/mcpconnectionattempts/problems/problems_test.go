@@ -21,6 +21,8 @@ const (
 	s3 = "00000000-0000-0000-0000-000000000003"
 	s4 = "00000000-0000-0000-0000-000000000004"
 	s5 = "00000000-0000-0000-0000-000000000005"
+	sa = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	sb = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
 )
 
 type episodeOption func(*mcpconnectionattempts.FailingPerson)
@@ -81,8 +83,22 @@ func signedOut(person, server string, ago time.Duration, opts ...episodeOption) 
 	return episode(person, server, mcpconnectionattempts.PartAppSignIn, mcpconnectionattempts.CodeInvalidBearerToken, ago, opts...)
 }
 
+// served is a request of family the server answered ago before now.
 func served(kind, server, memberID, family string, ago time.Duration) mcpconnectionattempts.ServedByFamily {
-	return mcpconnectionattempts.ServedByFamily{ServerKind: kind, ServerID: server, MemberID: memberID, ClientFamily: family, LastServedAt: now.Add(-ago)}
+	return mcpconnectionattempts.ServedByFamily{ServerKind: kind, ServerID: server, MemberID: memberID, ClientFamily: family, LastServedAt: now.Add(-ago), LastAnsweredAt: now.Add(-ago)}
+}
+
+// servedNotAnswered is a request of family that Speakeasy served without the server answering.
+func servedNotAnswered(kind, server, family string, ago time.Duration) mcpconnectionattempts.ServedByFamily {
+	return mcpconnectionattempts.ServedByFamily{ServerKind: kind, ServerID: server, MemberID: "", ClientFamily: family, LastServedAt: now.Add(-ago), LastAnsweredAt: time.Time{}}
+}
+
+func apiKey(e *mcpconnectionattempts.FailingPerson) {
+	e.SubjectURN = "apikey:" + e.SubjectURN[len("user:"):]
+}
+
+func authorizationServer(e *mcpconnectionattempts.FailingPerson) {
+	e.ServerKind, e.ServerID = "authorization_server", "https://auth.example.com"
 }
 
 type summary struct {
@@ -200,21 +216,51 @@ func TestGroup(t *testing.T) {
 		},
 		{
 			name:      "upper-case ids match their upstream",
-			episodes:  []mcpconnectionattempts.FailingPerson{down("a", strings.ToUpper(s1), time.Hour), down("b", s1, time.Hour), down("c", strings.ToUpper(s2), time.Hour)},
-			upstreams: linear,
+			episodes:  []mcpconnectionattempts.FailingPerson{down("a", strings.ToUpper(sa), time.Hour), down("b", sa, time.Hour), down("c", strings.ToUpper(sb), time.Hour)},
+			upstreams: map[string]problems.Upstream{sa: linear[s1], sb: linear[s2]},
 			want:      []summary{{problems.RuleSameService, serviceScope("api.linear.app"), part, 3, 3, noApp, false}},
 		},
 		{
 			name:      "service sign-ins with one issuer are one service",
+			episodes:  []mcpconnectionattempts.FailingPerson{serviceDown("a", s1, time.Hour), serviceDown("b", s1, time.Hour), serviceDown("c", s2, time.Hour)},
+			upstreams: sharedIssuer,
+			want:      []summary{{problems.RuleSameService, serviceScope("https://auth.example.com"), signIn, 3, 3, noApp, false}},
+		},
+		{
+			name:      "failures an administrator fixes are not a service",
 			episodes:  []mcpconnectionattempts.FailingPerson{badKey("a", s1, time.Hour), badKey("b", s1, time.Hour), badKey("c", s2, time.Hour)},
 			upstreams: sharedIssuer,
-			want:      []summary{{problems.RuleSameService, serviceScope("auth.example.com"), signIn, 3, 3, noApp, false}},
+			want:      []summary{},
+		},
+		{
+			name:      "app sign-ins are not a service",
+			episodes:  []mcpconnectionattempts.FailingPerson{signedOut("a", s1, time.Hour), signedOut("b", s1, time.Hour), signedOut("c", s2, time.Hour)},
+			upstreams: linear,
+			want:      []summary{},
 		},
 		{
 			name:      "issuers on one host with different paths are different services",
-			episodes:  []mcpconnectionattempts.FailingPerson{badKey("a", s1, time.Hour), badKey("b", s1, time.Hour), badKey("c", s2, time.Hour)},
+			episodes:  []mcpconnectionattempts.FailingPerson{serviceDown("a", s1, time.Hour), serviceDown("b", s1, time.Hour), serviceDown("c", s2, time.Hour)},
 			upstreams: tenantIssuers,
 			want:      []summary{},
+		},
+		{
+			name:      "issuers on one host with different ports are different services",
+			episodes:  []mcpconnectionattempts.FailingPerson{serviceDown("a", s1, time.Hour), serviceDown("b", s1, time.Hour), serviceDown("c", s2, time.Hour)},
+			upstreams: map[string]problems.Upstream{s1: {URL: "https://a.example.com/mcp", Issuer: "https://idp.example.com:8443/a/b"}, s2: {URL: "https://b.example.com/mcp", Issuer: "https://idp.example.com/a/b"}},
+			want:      []summary{},
+		},
+		{
+			name:      "an escaped path is not the decoded path",
+			episodes:  []mcpconnectionattempts.FailingPerson{serviceDown("a", s1, time.Hour), serviceDown("b", s1, time.Hour), serviceDown("c", s2, time.Hour)},
+			upstreams: map[string]problems.Upstream{s1: {URL: "https://a.example.com/mcp", Issuer: "https://idp.example.com/a%2Fb"}, s2: {URL: "https://b.example.com/mcp", Issuer: "https://idp.example.com/a/b"}},
+			want:      []summary{},
+		},
+		{
+			name:      "a malformed issuer falls back to the URL host",
+			episodes:  []mcpconnectionattempts.FailingPerson{serviceDown("a", s1, time.Hour), serviceDown("b", s1, time.Hour), serviceDown("c", s2, time.Hour)},
+			upstreams: map[string]problems.Upstream{s1: {URL: "https://mcp.example.com/a", Issuer: "//idp.example.com/a"}, s2: {URL: "https://MCP.example.com/b", Issuer: "//idp.example.com/a"}},
+			want:      []summary{{problems.RuleSameService, serviceScope("mcp.example.com"), signIn, 3, 3, noApp, false}},
 		},
 		{
 			name:      "server failures do not group by issuer",
@@ -227,6 +273,53 @@ func TestGroup(t *testing.T) {
 			episodes: []mcpconnectionattempts.FailingPerson{signedOut("a", s1, time.Hour, cursor), signedOut("b", s1, time.Hour, cursor), signedOut("c", s1, time.Hour, cursor)},
 			served:   []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", claude, 10*time.Minute)},
 			want:     []summary{{problems.RuleSameAppVersion, cursorKey, appSignIn, 3, 3, cursorApp, true}},
+		},
+		{
+			name:     "another app served but not answered proves nothing about a server failure",
+			episodes: []mcpconnectionattempts.FailingPerson{down("a", s1, time.Hour, cursor), down("b", s1, time.Hour, cursor), down("c", s1, time.Hour, cursor)},
+			served:   []mcpconnectionattempts.ServedByFamily{servedNotAnswered("mcp", s1, claude, 10*time.Minute)},
+			want:     []summary{{problems.RuleSameServer, serverScope(s1), part, 3, 3, cursorApp, false}},
+		},
+		{
+			name: "another app working on a server before its first failure there does not count",
+			episodes: []mcpconnectionattempts.FailingPerson{
+				signedOut("a", s1, 3*time.Hour, cursor), signedOut("b", s2, time.Hour, cursor), signedOut("c", s2, time.Hour, cursor),
+			},
+			served: []mcpconnectionattempts.ServedByFamily{served("mcp", s2, "", claude, 2*time.Hour)},
+			want:   []summary{},
+		},
+		{
+			name: "an app version loses its only evidence when its earliest member is picked elsewhere",
+			episodes: []mcpconnectionattempts.FailingPerson{
+				signedOut("x", s1, 3*time.Hour, cursor), signedOut("p", s1, time.Hour), signedOut("q", s1, time.Hour), signedOut("r", s1, time.Hour), signedOut("t", s1, time.Hour),
+				signedOut("d", s2, time.Hour, cursor), signedOut("e", s2, time.Hour, cursor), signedOut("f", s2, time.Hour, cursor),
+			},
+			served: []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", mcpconnectionattempts.FamilyCodexCLI, 2*time.Hour), served("mcp", s2, "", mcpconnectionattempts.FamilyCodexCLI, 2*time.Hour)},
+			want: []summary{
+				{problems.RuleSameServer, serverScope(s1), appSignIn, 5, 5, noApp, true},
+				{problems.RuleSameServer, serverScope(s2), appSignIn, 3, 3, cursorApp, false},
+			},
+		},
+		{
+			name:     "an app version takes people who reached no server",
+			episodes: []mcpconnectionattempts.FailingPerson{signedOut("a", s1, time.Hour, cursor), signedOut("b", s1, time.Hour, cursor), signedOut("c", "", time.Hour, cursor, noServer)},
+			served:   []mcpconnectionattempts.ServedByFamily{served("mcp", s1, "", claude, 10*time.Minute)},
+			want:     []summary{{problems.RuleSameAppVersion, cursorKey, appSignIn, 3, 3, cursorApp, true}},
+		},
+		{
+			name:     "an authorization server is not a server",
+			episodes: []mcpconnectionattempts.FailingPerson{down("a", s1, time.Hour, authorizationServer), down("b", s1, time.Hour, authorizationServer), down("c", s1, time.Hour, authorizationServer)},
+			want:     []summary{},
+		},
+		{
+			name:     "API keys are not people",
+			episodes: []mcpconnectionattempts.FailingPerson{down("a", s1, time.Hour, apiKey), down("b", s1, time.Hour, apiKey), down("c", s1, 30*time.Hour, apiKey)},
+			want:     []summary{},
+		},
+		{
+			name:     "two people and an API key are not three people",
+			episodes: []mcpconnectionattempts.FailingPerson{down("a", s1, time.Hour), down("b", s1, time.Hour), down("c", s1, time.Hour, apiKey)},
+			want:     []summary{},
 		},
 		{
 			name:     "an app version with nothing else served is a server problem",
@@ -275,12 +368,12 @@ func TestGroup(t *testing.T) {
 			want:     []summary{{problems.RuleSameServer, serverScope(s1), part, 3, 3, noApp, false}},
 		},
 		{
-			name: "the more episodes win a tie on people",
+			name: "the narrower scope wins a tie on people",
 			episodes: []mcpconnectionattempts.FailingPerson{
 				down("a", s1, time.Hour), down("b", s1, time.Hour), down("c", s1, time.Hour), down("a", s2, time.Hour),
 			},
 			upstreams: linear,
-			want:      []summary{{problems.RuleSameService, serviceScope("api.linear.app"), part, 3, 4, noApp, false}},
+			want:      []summary{{problems.RuleSameServer, serverScope(s1), part, 3, 3, noApp, false}},
 		},
 		{
 			name: "two ways on one server stay two problems",
@@ -325,9 +418,12 @@ func TestGroup(t *testing.T) {
 			want:     []summary{{problems.RuleSameServer, serverScope(s1), part, 3, 3, noApp, false}},
 		},
 		{
-			name:     "a person in a group problem is not a person problem on another server",
+			name:     "a person in a group problem can be a person problem on another server",
 			episodes: []mcpconnectionattempts.FailingPerson{badKey("a", s1, time.Hour), badKey("b", s1, time.Hour), badKey("c", s1, time.Hour), badKey("a", s2, 30*time.Hour)},
-			want:     []summary{{problems.RuleSameServer, serverScope(s1), signIn, 3, 3, noApp, false}},
+			want: []summary{
+				{problems.RuleSameServer, serverScope(s1), signIn, 3, 3, noApp, false},
+				{problems.RuleOnePerson, personScope("a"), signIn, 1, 1, noApp, false},
+			},
 		},
 		{
 			name:     "one person failing the same way on two servers",
@@ -414,5 +510,23 @@ func TestGroup_OrderIsDeterministic(t *testing.T) {
 		shuffled := slices.Clone(eps)
 		r.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
 		require.Equal(t, want, problems.Group("org-a", shuffled, nil, nil, now))
+	}
+}
+
+// Episodes that tie on every field but one keep a fixed order.
+func TestGroup_EpisodeOrderIsTotal(t *testing.T) {
+	t.Parallel()
+	one := down("a", s1, time.Hour)
+	two := one
+	two.Failures, two.ProviderHost, two.ClientVersion = 7, "auth.example.com", "1.0"
+	eps := []mcpconnectionattempts.FailingPerson{one, two, down("b", s1, time.Hour), down("c", s1, time.Hour)}
+	want := problems.Group("org-a", eps, nil, nil, now)
+	require.Len(t, want, 1)
+
+	r := rand.New(rand.NewPCG(4, 4))
+	for range 20 {
+		shuffled := slices.Clone(eps)
+		r.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+		require.Equal(t, want[0].Episodes, problems.Group("org-a", shuffled, nil, nil, now)[0].Episodes)
 	}
 }

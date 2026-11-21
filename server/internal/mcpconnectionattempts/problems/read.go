@@ -35,13 +35,9 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 	if err != nil {
 		return nil, fmt.Errorf("read failing now: %w", err)
 	}
+	episodes = sinceRecording(episodes, triedSince, recordedSince, now)
 	if len(episodes) == 0 {
 		return nil, nil
-	}
-	for i := range episodes {
-		if episodes[i].OpenedAt.Before(recordedSince) {
-			episodes[i].OpenedAt = recordedSince
-		}
 	}
 
 	var upstreams map[string]Upstream
@@ -66,6 +62,25 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 	return Group(organizationID, episodes, upstreams, served, now), nil
 }
 
+// sinceRecording keeps episodes whose latest failure is at or after triedSince, counts an
+// earlier opening from recordedSince, and drops those still within their reason's grace.
+func sinceRecording(episodes []mcpconnectionattempts.FailingPerson, triedSince, recordedSince, now time.Time) []mcpconnectionattempts.FailingPerson {
+	out := episodes[:0]
+	for _, e := range episodes {
+		if e.LastFailureAt.Before(triedSince) {
+			continue
+		}
+		if e.OpenedAt.Before(recordedSince) {
+			e.OpenedAt = recordedSince
+			if now.Sub(e.OpenedAt) < mcpconnectionattempts.GraceOf(e.Reason) {
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 // readUpstreams reads the configured upstream of each episode's mcp_servers row.
 func readUpstreams(ctx context.Context, db repo.DBTX, organizationID string, episodes []mcpconnectionattempts.FailingPerson) (map[string]Upstream, error) {
 	set := map[uuid.UUID]bool{}
@@ -84,7 +99,7 @@ func readUpstreams(ctx context.Context, db repo.DBTX, organizationID string, epi
 	}
 	out := make(map[string]Upstream, len(rows))
 	for _, r := range rows {
-		out[r.ID.String()] = Upstream{URL: r.Url, Issuer: r.Issuer.String}
+		out[r.ID.String()] = Upstream{URL: r.Url.String, Issuer: r.Issuer.String}
 	}
 	return out, nil
 }

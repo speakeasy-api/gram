@@ -41,14 +41,15 @@ func newReadFixture(t *testing.T) *readFixture {
 func (f *readFixture) fail(scope mcpconnectionattempts.Scope, ago time.Duration, opts ...mcpconnectionattempts.Option) urn.SessionSubject {
 	f.t.Helper()
 	p := urn.NewUserSubject("user-" + uuid.NewString())
-	f.failAs(p, scope, ago, opts...)
+	f.failAs(p, scope, ago, mcpconnectionattempts.CodeStaticKeyRejected, opts...)
 	return p
 }
 
-func (f *readFixture) failAs(p urn.SessionSubject, scope mcpconnectionattempts.Scope, ago time.Duration, opts ...mcpconnectionattempts.Option) {
+// failAs writes a request that failed with code for p on scope, ago before now.
+func (f *readFixture) failAs(p urn.SessionSubject, scope mcpconnectionattempts.Scope, ago time.Duration, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 	f.t.Helper()
 	at := f.now.Add(-ago)
-	row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), at, scope), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected, true, at, append(opts, mcpconnectionattempts.Subject(&p))...)
+	row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), at, scope), mcpconnectionattempts.StepMCPRequest, code, true, at, append(opts, mcpconnectionattempts.Subject(&p))...)
 	require.NoError(f.t, err)
 	require.NoError(f.t, mcpconnectionattempts.AppendRows(f.t.Context(), f.ch, []mcpconnectionattempts.Row{row}))
 }
@@ -110,7 +111,7 @@ func TestRead_CountsAnEarlierRunFromWhenRecordingStarted(t *testing.T) {
 	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
 	scope := mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)
 	p := f.fail(scope, 30*time.Hour)
-	f.failAs(p, scope, 30*time.Minute)
+	f.failAs(p, scope, 30*time.Minute, mcpconnectionattempts.CodeStaticKeyRejected)
 
 	got := f.read(org, time.Time{})
 	require.Len(t, got, 1)
@@ -118,6 +119,39 @@ func TestRead_CountsAnEarlierRunFromWhenRecordingStarted(t *testing.T) {
 
 	recorded := f.now.Add(-2 * time.Hour)
 	require.Empty(t, f.read(org, recorded), "the run counts from when recording started, two hours ago")
+}
+
+// A failure last seen before recording started is not counted, even when it became known as failed later.
+func TestRead_DropsAFailureLastSeenBeforeRecordingStarted(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
+	for range 3 {
+		p := urn.NewUserSubject("user-" + uuid.NewString())
+		started := f.now.Add(-100 * time.Minute)
+		row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), started, mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)),
+			mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected, false, started.Add(time.Minute), mcpconnectionattempts.Subject(&p))
+		require.NoError(t, err)
+		require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), f.ch, []mcpconnectionattempts.Row{row}))
+	}
+	require.Len(t, f.read(org, time.Time{}), 1)
+	require.Empty(t, f.read(org, f.now.Add(-time.Hour)), "known as failed 40 minutes ago, last seen failing 99 minutes ago")
+}
+
+// Old outages retried just after recording started count from then, so their grace has not passed.
+func TestRead_AppliesGraceFromWhenRecordingStarted(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
+	scope := mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)
+	for range 3 {
+		p := urn.NewUserSubject("user-" + uuid.NewString())
+		f.failAs(p, scope, 3*time.Hour, mcpconnectionattempts.CodeProviderServerError)
+		f.failAs(p, scope, 9*time.Minute, mcpconnectionattempts.CodeProviderServerError)
+	}
+	require.Len(t, f.read(org, time.Time{}), 1)
+	got := f.read(org, f.now.Add(-10*time.Minute))
+	require.Empty(t, got, "recording started 10 minutes ago, inside the 30 minute grace")
 }
 
 type orgFixture struct {
@@ -168,9 +202,10 @@ func TestRead_GroupsAServiceAcrossADirectServerAndAGatewayMember(t *testing.T) {
 	direct := seedServer(t, f.db, o, "https://mcp.example.com/a")
 	memberServer := seedServer(t, f.db, o, "https://MCP.example.com:8443/b")
 
-	f.fail(mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour)
-	f.fail(mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour)
-	f.fail(mcpconnectionattempts.GatewayScope(o.organizationID, o.project, uuid.New(), mcpconnectionattempts.AppDCR), time.Hour, mcpconnectionattempts.Member(memberServer))
+	down := mcpconnectionattempts.CodeProviderServerError
+	f.failAs(urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour, down)
+	f.failAs(urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour, down)
+	f.failAs(urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.GatewayScope(o.organizationID, o.project, uuid.New(), mcpconnectionattempts.AppDCR), time.Hour, down, mcpconnectionattempts.Member(memberServer))
 
 	got := f.read(o.organizationID, time.Time{})
 	require.Len(t, got, 1)
@@ -195,19 +230,25 @@ func TestListServerUpstreams(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 	other := seedServer(t, db, theirs, "https://other.example.com/mcp")
+	tunnel, err := repo.New(db).CreateTunneledMCPServerFixture(t.Context(), repo.CreateTunneledMCPServerFixtureParams{ProjectID: mine.project, Name: "tunnel-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	attachIssuer(t, db, mine, tunnel, mine.organizationID, "https://tunnel-auth.example.com")
+	bareTunnel, err := repo.New(db).CreateTunneledMCPServerFixture(t.Context(), repo.CreateTunneledMCPServerFixtureParams{ProjectID: mine.project, Name: "tunnel-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
 
 	rows, err := repo.New(db).ListServerUpstreams(t.Context(), repo.ListServerUpstreamsParams{
 		OrganizationID: mine.organizationID,
-		ServerIds:      []uuid.UUID{withIssuer, noIssuer, foreignIssuer, deleted, other},
+		ServerIds:      []uuid.UUID{withIssuer, noIssuer, foreignIssuer, deleted, other, tunnel, bareTunnel},
 	})
 	require.NoError(t, err)
 	got := map[uuid.UUID]Upstream{}
 	for _, r := range rows {
-		got[r.ID] = Upstream{URL: r.Url, Issuer: r.Issuer.String}
+		got[r.ID] = Upstream{URL: r.Url.String, Issuer: r.Issuer.String}
 	}
 	require.Equal(t, map[uuid.UUID]Upstream{
 		withIssuer:    {URL: "https://mcp.example.com/mcp", Issuer: "https://auth.example.com"},
 		noIssuer:      {URL: "https://plain.example.com/mcp", Issuer: ""},
 		foreignIssuer: {URL: "https://foreign.example.com/mcp", Issuer: ""},
-	}, got, "no deleted server, no other organization's server, no other organization's issuer")
+		tunnel:        {URL: "", Issuer: "https://tunnel-auth.example.com"},
+	}, got, "no deleted server, no other organization's server or issuer, no tunnel without an issuer")
 }

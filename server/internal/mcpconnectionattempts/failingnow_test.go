@@ -84,6 +84,9 @@ func (f *failingFixture) failing() []FailingPerson { return f.read(FailingNowFil
 // client sets the client a row's User-Agent named.
 func client(family string) Option { return Option{apply: func(r *Row) { r.ClientFamily = family }} }
 
+// version sets the client version a row's User-Agent named.
+func version(v string) Option { return Option{apply: func(r *Row) { r.ClientVersion = v }} }
+
 func person() urn.SessionSubject { return urn.NewUserSubject("user-" + uuid.NewString()) }
 
 func TestFailingNow_ARetryLoopIsOneEpisode(t *testing.T) {
@@ -945,9 +948,8 @@ func TestFailingNow_AnEpisodeNamesItsLatestFailure(t *testing.T) {
 	t.Parallel()
 	f := newFailingFixture(t)
 	p := person()
-	version := func(v string) Option { return Option{apply: func(r *Row) { r.ClientVersion = v }} }
-	f.attempt(f.direct(AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p), Provider("https://old.example.com"), version("1.0.0"))
-	f.attempt(f.direct(AppDCR), 30*time.Minute, StepMCPRequest, CodeProviderRejected, Subject(&p), Provider("https://auth.example.com"), version("1.2.0"))
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p), Provider("https://old.example.com"), client(FamilyCursor), version("1.0.0"))
+	f.attempt(f.direct(AppDCR), 30*time.Minute, StepMCPRequest, CodeProviderRejected, Subject(&p), Provider("https://auth.example.com"), client(FamilyCursor), version("1.2.0"))
 	got := f.failing()
 	require.Len(t, got, 1)
 	require.Equal(t, StepMCPRequest.String(), got[0].Step)
@@ -957,16 +959,28 @@ func TestFailingNow_AnEpisodeNamesItsLatestFailure(t *testing.T) {
 	require.Equal(t, CodeProviderRejected.String(), got[0].Reason)
 }
 
-func TestServedByFamilyQuery_KeepsTheWholeOrganizationOverTheServerLimit(t *testing.T) {
+// More server ids than one batch are read in batches, every row kept and none from other servers.
+func TestReadServedByFamily_ReadsInBatches(t *testing.T) {
 	t.Parallel()
-	query, args := servedByFamilyQuery("org", []string{serverKindMCP}, make([]string, maxServedByFamilyServerIDs))
-	require.Contains(t, query, "server_id IN ?")
-	require.Len(t, args, 3)
+	f := newFailingFixture(t)
+	failing := make([]FailingPerson, 0, servedByFamilyBatch+1)
+	for range servedByFamilyBatch + 1 {
+		failing = append(failing, FailingPerson{Episode: Episode{ServerKind: serverKindMCP, ServerID: uuid.NewString()}})
+	}
+	first, last := f.conn(person(), serverKindMCP, uuid.MustParse(failing[0].ServerID), AppDCR), f.conn(person(), serverKindMCP, uuid.MustParse(failing[servedByFamilyBatch].ServerID), AppDCR)
+	f.served(first, time.Minute)
+	f.answered(last, 2*time.Minute)
+	f.served(f.conn(person(), serverKindMCP, uuid.New(), AppDCR), time.Minute)
 
-	query, args = servedByFamilyQuery("org", []string{serverKindMCP}, make([]string, maxServedByFamilyServerIDs+1))
-	require.NotContains(t, query, "server_id IN")
-	require.Contains(t, query, "organization_id = ?")
-	require.Equal(t, []any{"org", []string{serverKindMCP}}, args)
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, failing)
+	require.NoError(t, err)
+	byServer := map[string]ServedByFamily{}
+	for _, s := range got {
+		byServer[s.ServerID] = s
+	}
+	require.Len(t, byServer, 2)
+	require.True(t, byServer[first.ServerID].LastAnsweredAt.IsZero(), "served by Speakeasy only")
+	require.Equal(t, f.at(2*time.Minute), byServer[last.ServerID].LastAnsweredAt.UTC())
 }
 
 func TestReadServedByFamily_NeverReturnsAnotherOrganizationsRows(t *testing.T) {
@@ -986,4 +1000,23 @@ func TestReadServedByFamily_NeverReturnsAnotherOrganizationsRows(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Equal(t, FamilyCursor, got[0].ClientFamily)
 	require.Equal(t, f.at(time.Minute), got[0].LastServedAt.UTC())
+}
+
+// The version comes from the row that named the client, never from another row of the attempt.
+func TestFailingNow_TheVersionComesFromTheRowThatNamedTheClient(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	started := f.at(time.Hour)
+	attempt := AttemptAt(uuid.New(), started, f.direct(AppDCR))
+	named, err := RowAt(attempt, StepMCPRequest, CodeStaticKeyRejected, false, started, Subject(&p), client(FamilyCursor))
+	require.NoError(t, err)
+	generic, err := RowAt(attempt, StepMCPRequest, CodeStaticKeyRejected, true, started.Add(time.Second), Subject(&p), client(FamilyScript), version("8.7"))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{named, generic}))
+
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCursor, got[0].ClientFamily)
+	require.Empty(t, got[0].ClientVersion)
 }

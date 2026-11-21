@@ -213,10 +213,10 @@ func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any)
 	return out, nil
 }
 
-// maxServedByFamilyServerIDs bounds the ids in one query; past it the read keeps the whole organization.
-const maxServedByFamilyServerIDs = 1000
+// servedByFamilyBatch bounds the server ids in one served-by-family query, keeping its text small.
+const servedByFamilyBatch = 1000
 
-// ServedByFamily is the latest request served on one server, gateway member or toolset for one client family.
+// ServedByFamily is when one client family was last served and last answered on one server, gateway member or toolset.
 type ServedByFamily struct {
 	// ServerKind is the kind of server.
 	ServerKind string `ch:"server_kind"`
@@ -230,26 +230,24 @@ type ServedByFamily struct {
 	// ClientFamily is the client family served.
 	ClientFamily string `ch:"client_family"`
 
-	// LastServedAt is when a request was last served.
+	// LastServedAt is when a request was last served, whoever answered it.
 	LastServedAt time.Time `ch:"served_at"`
+
+	// LastAnsweredAt is when the server itself last answered, zero for never.
+	LastAnsweredAt time.Time `ch:"answered_at"`
 }
 
-// servedByFamilyQuery reads the latest served request per server, member and client family.
-func servedByFamilyQuery(organizationID string, kinds, ids []string) (string, []any) {
-	query := `
-SELECT server_kind, server_id, member_id, client_family, max(last_served_at) AS served_at
+// servedByFamilyQuery reads the latest served and answered request per server, member and
+// client family. Arguments: organization, server kinds, server ids.
+const servedByFamilyQuery = `
+SELECT server_kind, server_id, member_id, client_family,
+	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
 FROM ` + lastServedTable + `
-WHERE organization_id = ? AND server_kind IN ?`
-	args := []any{organizationID, kinds}
-	if len(ids) <= maxServedByFamilyServerIDs {
-		query += ` AND server_id IN ?`
-		args = append(args, ids)
-	}
-	return query + `
-GROUP BY server_kind, server_id, member_id, client_family`, args
-}
+WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
+GROUP BY server_kind, server_id, member_id, client_family`
 
-// ReadServedByFamily reads when each client family was last served on the failing people's servers.
+// ReadServedByFamily reads when each client family was last served and answered on the
+// failing people's servers, servedByFamilyBatch server ids per query.
 func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, failing []FailingPerson) ([]ServedByFamily, error) {
 	kindSet, idSet := map[string]bool{}, map[string]bool{}
 	for _, f := range failing {
@@ -259,13 +257,21 @@ func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID stri
 		kindSet[f.ServerKind] = true
 		idSet[f.ServerID] = true
 	}
-	if len(idSet) == 0 {
-		return nil, nil
-	}
 	kinds, ids := slices.Sorted(maps.Keys(kindSet)), slices.Sorted(maps.Keys(idSet))
 
-	query, args := servedByFamilyQuery(organizationID, kinds, ids)
-	rows, err := ch.Query(failingReadContext(ctx), query, args...)
+	var out []ServedByFamily
+	for batch := range slices.Chunk(ids, servedByFamilyBatch) {
+		rows, err := queryServedByFamily(ctx, ch, organizationID, kinds, batch)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+	}
+	return out, nil
+}
+
+func queryServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, kinds, ids []string) ([]ServedByFamily, error) {
+	rows, err := ch.Query(failingReadContext(ctx), servedByFamilyQuery, organizationID, kinds, ids)
 	if err != nil {
 		return nil, fmt.Errorf("query served by family: %w", err)
 	}
@@ -276,6 +282,10 @@ func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID stri
 		var s ServedByFamily
 		if err := rows.ScanStruct(&s); err != nil {
 			return nil, fmt.Errorf("scan served by family: %w", err)
+		}
+		// The epoch is the column's "never".
+		if s.LastAnsweredAt.Unix() <= 0 {
+			s.LastAnsweredAt = time.Time{}
 		}
 		out = append(out, s)
 	}
