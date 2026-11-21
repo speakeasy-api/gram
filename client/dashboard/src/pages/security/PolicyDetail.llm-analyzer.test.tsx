@@ -206,6 +206,15 @@ function chooseClientSessions(rerender: () => void) {
   rerender();
 }
 
+// Create also waits until every step has been opened, so the action and
+// audience defaults are never applied unseen.
+function openRemainingSteps(rerender: () => void) {
+  for (const step of ["action", "review"]) {
+    mocks.step = step;
+    rerender();
+  }
+}
+
 function updateBody() {
   expect(mocks.mutateUpdate).toHaveBeenCalledTimes(1);
   return mocks.mutateUpdate.mock.calls[0]?.[0]?.request
@@ -292,6 +301,10 @@ describe("StandardPolicyEditor under the LLM analyzer", () => {
     // A new policy also needs a scope before it can be created.
     expect(createButton().disabled).toBe(true);
     chooseClientSessions(rerender);
+    // Scope is chosen, but Action and Review have not been opened yet.
+    expect(createButton().disabled).toBe(true);
+    expect(screen.getByText("Check Action and Review to create")).toBeTruthy();
+    openRemainingSteps(rerender);
     expect(createButton().disabled).toBe(false);
 
     fireEvent.click(createButton());
@@ -466,6 +479,7 @@ describe("StandardPolicyEditor with the LLM analyzer flag off", () => {
     const { rerender } = renderEditor(null, new Set<RuleCategory>(["pii"]));
 
     chooseClientSessions(rerender);
+    openRemainingSteps(rerender);
     fireEvent.click(createButton());
 
     const body =
