@@ -736,6 +736,7 @@ func newStartCommand() *cli.Command {
 	clickhouseShutdown := noopShutdown
 	clickhouseReadShutdown := noopShutdown
 	flags := append(serverFlags(), clickHouseReadFlags()...)
+	flags = append(flags, transcriptShadowFlag())
 
 	return &cli.Command{
 		Name:  "start",
@@ -1192,6 +1193,9 @@ func newStartCommand() *cli.Command {
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
+				return err
+			}
+			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
 				return err
 			}
 			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
