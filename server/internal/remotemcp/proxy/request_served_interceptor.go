@@ -15,10 +15,6 @@ import (
 type RequestServedInterceptor interface {
 	// InterceptRequestServed is called for the served request.
 	InterceptRequestServed(ctx context.Context)
-
-	// Name returns a stable identifier for this interceptor, used for log
-	// correlation.
-	Name() string
 }
 
 // replyFailed reports whether a reply is a JSON-RPC error, or a tools/call
