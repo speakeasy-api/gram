@@ -105,6 +105,9 @@ actions:
   - target: $.components.schemas.RepairInferenceKeyRequestBody.properties.remove_causes
     update:
       uniqueItems: true
+  - target: $.paths.*[?@.operationId=='adminGetHooksReleaseProgress']
+    update:
+      x-speakeasy-name-override: getHooksReleaseProgress
   - target: $.paths.*[?@.operationId=='adminGetHooksRollout']
     update:
       x-speakeasy-name-override: getHooksRollout

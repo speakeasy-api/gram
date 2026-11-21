@@ -1284,6 +1284,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getHooksRollout
+  /admin/hooksRollout.progress:
+    get:
+      tags:
+        - admin
+      summary: getHooksReleaseProgress admin
+      description: 'Returns how far the current hooks release has reached: organizations the rollout pins clear for it, marketplace repositories republished with it, and installs reporting its binary version.'
+      operationId: adminGetHooksReleaseProgress
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHooksReleaseProgress'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getHooksReleaseProgress
   /admin/hooksRollout.setDefault:
     post:
       tags:
@@ -11246,6 +11315,115 @@ components:
         - version
         - status
         - installs
+    AdminHooksReleaseFleet:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs seen in the window.
+          format: int64
+        installs_on_current:
+          type: integer
+          description: Installs reporting exactly the binary version this build ships, on any endpoint.
+          format: int64
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksReleaseInstallVersion'
+          description: Installs per binary version and status, newest first. A version can appear once per status, for example current and unsupported when some installs still send to a legacy endpoint.
+        window_days:
+          type: integer
+          description: Installs count when they sent a hook in this many full UTC days.
+          format: int64
+      description: Hooks installs across every organization, by binary version.
+      required:
+        - window_days
+        - installs
+        - installs_on_current
+        - versions
+    AdminHooksReleaseInstallVersion:
+      type: object
+      properties:
+        installs:
+          type: integer
+          description: Installs whose latest version is this one.
+          format: int64
+        status:
+          type: string
+          description: 'How the version compares to the release Speakeasy ships: current, behind, unsupported or unknown.'
+        version:
+          type: string
+          description: The hooks binary version, or empty for installs that sent no version.
+      description: Hooks installs reporting one binary version.
+      required:
+        - version
+        - status
+        - installs
+    AdminHooksReleaseProgress:
+      type: object
+      properties:
+        current_binary_version:
+          type: string
+          description: The hooks binary version this server build ships. Absent when unknown.
+        current_version:
+          type: integer
+          description: The hooks generator version this server build publishes.
+          format: int64
+        fleet:
+          $ref: '#/components/schemas/AdminHooksReleaseFleet'
+        organizations:
+          type: integer
+          description: Organizations with at least one marketplace repository.
+          format: int64
+        organizations_cleared:
+          type: integer
+          description: 'Of those, organizations whose next publish moves to current_version: canaries and organizations pinned at or above it.'
+          format: int64
+        organizations_held:
+          type: integer
+          description: Organizations pinned below current_version.
+          format: int64
+        organizations_on_legacy_flag:
+          type: integer
+          description: Organizations with no pin, which follow the legacy hooks-rollout PostHog flag the admin server cannot read.
+          format: int64
+        repo_versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksReleaseRepoVersion'
+          description: Repositories per published hooks generator version, newest first.
+        repos:
+          type: integer
+          description: Marketplace repositories.
+          format: int64
+        repos_on_current:
+          type: integer
+          description: Repositories whose last published hooks plugin carries current_version.
+          format: int64
+      description: 'How far the current hooks release has reached: organizations cleared by the rollout pins, marketplace repositories republished with it, and installs running it.'
+      required:
+        - current_version
+        - organizations
+        - organizations_cleared
+        - organizations_held
+        - organizations_on_legacy_flag
+        - repos
+        - repos_on_current
+        - repo_versions
+    AdminHooksReleaseRepoVersion:
+      type: object
+      properties:
+        repos:
+          type: integer
+          description: Repositories on this version.
+          format: int64
+        version:
+          type: string
+          description: The hooks generator version last published, or empty for repositories that have never published the hooks plugin.
+      description: Marketplace repositories whose last published hooks plugin carries one hooks generator version.
+      required:
+        - version
+        - repos
     AdminHooksRollout:
       type: object
       properties:

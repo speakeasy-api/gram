@@ -70,6 +70,7 @@ func TestHooksRolloutRequiresAdminSession(t *testing.T) {
 		body   string
 	}{
 		{method: http.MethodGet, path: "/admin/hooksRollout.get", body: ""},
+		{method: http.MethodGet, path: "/admin/hooksRollout.progress", body: ""},
 		{method: http.MethodPost, path: "/admin/hooksRollout.setDefault", body: `{"version":1}`},
 		{method: http.MethodGet, path: "/admin/organization.hooksRollout?organization_id=org", body: ""},
 		{method: http.MethodPost, path: "/admin/organization.setHooksRollout", body: `{"organization_id":"org","version":1}`},

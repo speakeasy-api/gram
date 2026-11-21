@@ -4145,6 +4145,21 @@ func BuildGetHooksRolloutPayload(adminGetHooksRolloutAdminSessionToken string) (
 	return v, nil
 }
 
+// BuildGetHooksReleaseProgressPayload builds the payload for the admin
+// getHooksReleaseProgress endpoint from CLI flags.
+func BuildGetHooksReleaseProgressPayload(adminGetHooksReleaseProgressAdminSessionToken string) (*admin.GetHooksReleaseProgressPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetHooksReleaseProgressAdminSessionToken != "" {
+			adminSessionToken = &adminGetHooksReleaseProgressAdminSessionToken
+		}
+	}
+	v := &admin.GetHooksReleaseProgressPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildSetHooksRolloutDefaultPayload builds the payload for the admin
 // setHooksRolloutDefault endpoint from CLI flags.
 func BuildSetHooksRolloutDefaultPayload(adminSetHooksRolloutDefaultBody string, adminSetHooksRolloutDefaultAdminSessionToken string) (*admin.SetHooksRolloutDefaultPayload, error) {

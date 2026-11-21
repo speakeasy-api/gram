@@ -512,6 +512,10 @@ type Client struct {
 	// getHooksRollout endpoint.
 	GetHooksRolloutDoer goahttp.Doer
 
+	// GetHooksReleaseProgress Doer is the HTTP client used to make requests to the
+	// getHooksReleaseProgress endpoint.
+	GetHooksReleaseProgressDoer goahttp.Doer
+
 	// SetHooksRolloutDefault Doer is the HTTP client used to make requests to the
 	// setHooksRolloutDefault endpoint.
 	SetHooksRolloutDefaultDoer goahttp.Doer
@@ -672,6 +676,7 @@ func NewClient(
 		MigrateOrganizationAssistantIdentitiesDoer:  doer,
 		MigrateOrganizationAssistantsToKitDoer:      doer,
 		GetHooksRolloutDoer:                         doer,
+		GetHooksReleaseProgressDoer:                 doer,
 		SetHooksRolloutDefaultDoer:                  doer,
 		GetOrganizationHooksRolloutDoer:             doer,
 		SetOrganizationHooksRolloutDoer:             doer,
@@ -3660,6 +3665,30 @@ func (c *Client) GetHooksRollout() goa.Endpoint {
 		resp, err := c.GetHooksRolloutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getHooksRollout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetHooksReleaseProgress returns an endpoint that makes HTTP requests to the
+// admin service getHooksReleaseProgress server.
+func (c *Client) GetHooksReleaseProgress() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetHooksReleaseProgressRequest(c.encoder)
+		decodeResponse = DecodeGetHooksReleaseProgressResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetHooksReleaseProgressRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetHooksReleaseProgressDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getHooksReleaseProgress", err)
 		}
 		return decodeResponse(resp)
 	}

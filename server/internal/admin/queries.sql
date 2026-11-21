@@ -1486,3 +1486,14 @@ WHERE h.id = ANY(@tool_ids::uuid[]) AND h.project_id = @project_id
     AND a.project_id = @project_id AND a.deleted IS FALSE
     AND h.deleted IS FALSE
 ORDER BY a.name, a.id;
+
+-- name: AdminListHooksPublishState :many
+-- One row per marketplace repository: its organization and the hooks generator
+-- version it last published. Feeds the hooks release progress counts.
+SELECT
+    p.organization_id,
+    o.slug AS organization_slug,
+    COALESCE(c.published_hooks_version, '')::text AS published_hooks_version
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+JOIN organization_metadata o ON o.id = p.organization_id;
