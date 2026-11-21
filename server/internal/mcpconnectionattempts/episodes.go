@@ -91,15 +91,15 @@ type attemptFacts struct {
 	SignInTimes   []time.Time `ch:"sign_in_times"`
 }
 
-// serviceSignedIn selects the rows where a person's sign-in to a service worked: they
+// serviceSignInRows selects the rows where a person's sign-in to a service worked: they
 // signed in, the service renewed it, or their company issued one.
-const serviceSignedIn = `(
-	(step IN ('provider_sign_in', 'provider_token') AND step_result = 'signed_in')
-	OR (step = 'provider_refresh' AND step_result IN ('refreshed', 'adopted_concurrent_winner'))
-	OR (step = 'upstream_ema' AND step_result = 'assertion_issued'))`
+var serviceSignInRows = `(
+	(step IN ('` + StepProviderSignIn.name + `', '` + StepProviderToken.name + `') AND step_result = '` + ResultSignedIn.name + `')
+	OR (step = '` + StepProviderRefresh.name + `' AND step_result IN ('` + ResultRefreshed.name + `', '` + ResultAdoptedConcurrentWinner.name + `'))
+	OR (step = '` + StepUpstreamEMA.name + `' AND step_result = '` + ResultAssertionIssued.name + `'))`
 
 // episodeColumns adds what episodes need to an attempt's summary.
-const episodeColumns = attemptColumns + `,
+var episodeColumns = attemptColumns + `,
 	if(countIf(is_final) > 0,
 		argMinIf(member_id, (event_time, step, outcome, reason, member_id), is_final),
 		argMax(member_id, (event_time, step, reason, member_id))) AS member,
@@ -107,24 +107,23 @@ const episodeColumns = attemptColumns + `,
 		argMinIf(remote_session_client_id, (event_time, step, outcome, reason, remote_session_client_id), is_final),
 		argMax(remote_session_client_id, (event_time, step, reason, remote_session_client_id))) AS ending_client,
 	argMaxIf(client_version, (event_time, client_version), client_version != '') AS version,
-	groupArrayIf((member_id, remote_session_client_id, event_time), ` + serviceSignedIn + `) AS sign_ins,
+	groupArrayIf((member_id, remote_session_client_id, event_time), ` + serviceSignInRows + `) AS sign_ins,
 	arrayMap(x -> toString(x.1), sign_ins) AS sign_in_members,
 	arrayMap(x -> toString(x.2), sign_ins) AS sign_in_clients,
 	arrayMap(x -> x.3, sign_ins) AS sign_in_times`
 
 // episodeHaving keeps the attempts that can be a failure or show a part working: ones
 // that connected, carry a reason, or hold a service sign-in.
-const episodeHaving = ` AND ((has_final AND (final_outcome = 'connected' OR final_reason != ''))
-	OR (NOT has_final AND last_reason != '') OR length(sign_ins) > 0)`
+const episodeHaving = ` AND ((` + fixCandidates + `) OR length(sign_ins) > 0)`
 
 // readEpisodeAttempts reads the attempts episodes are derived from, as recorded by now:
 // every attempt started from from by a person with an attempt that can read as failed
 // since since. An unfinished one does once its live window has passed.
 func readEpisodeAttempts(ctx context.Context, ch driver.Conn, organizationID string, from, since, now time.Time) ([]attemptFacts, error) {
 	until := now.Add(time.Nanosecond)
-	where, args, err := AttemptFilter{ //nolint:exhaustruct_v5 // one organization, every project and server
-		StartedFrom: from, StartedBefore: until, OrganizationID: organizationID,
-		PeopleFailingFrom: later(from, since.Add(-AttemptLiveWindow)), PeopleFailingBefore: until,
+	where, args, err := AttemptFilter{
+		StartedFrom: from, StartedBefore: until, OrganizationID: organizationID, ExcludeOrganizationIDs: nil, ProjectID: uuid.Nil, ServerID: "",
+		PeopleFailingFrom: later(from, since.Add(-AttemptLiveWindow)), PeopleFailingBefore: until, FixCandidatesOnly: false,
 	}.where()
 	if err != nil {
 		return nil, err
@@ -222,34 +221,28 @@ type signIn struct {
 	at                                time.Time
 }
 
-// lastServed is one connection's latest served times in lastServedTable, with max()
-// taken over its unmerged rows. AnsweredAt is zero when the server never answered.
-type lastServed struct {
-	ServerKind            string    `ch:"server_kind"`
-	ServerID              string    `ch:"server_id"`
-	MemberID              string    `ch:"member_id"`
-	SubjectURN            string    `ch:"subject_urn"`
-	AppKey                string    `ch:"app_key"`
-	ClientFamily          string    `ch:"client_family"`
-	RemoteSessionClientID string    `ch:"remote_session_client_id"`
-	ServedAt              time.Time `ch:"served_at"`
-	AnsweredAt            time.Time `ch:"answered_at"`
-}
-
 // serverRef is a server, gateway or toolset by kind and id.
 type serverRef struct{ kind, id string }
 
 // evidence is everything recorded that shows part of a connection working.
 type evidence struct {
 	signIns map[string][]signIn
+
+	// served are the failing people's own connections, and answers anyone's latest
+	// answer per member, on the failing servers.
 	served  map[serverRef][]lastServed
+	answers map[serverRef][]lastServed
 }
 
-func indexEvidence(attempts []attemptFacts, served []lastServed, now time.Time) evidence {
-	ev := evidence{signIns: map[string][]signIn{}, served: map[serverRef][]lastServed{}}
+func indexEvidence(attempts []attemptFacts, served, answers []lastServed, now time.Time) evidence {
+	ev := evidence{signIns: map[string][]signIn{}, served: map[serverRef][]lastServed{}, answers: map[serverRef][]lastServed{}}
 	for _, s := range served {
 		ref := serverRef{kind: s.ServerKind, id: s.ServerID}
 		ev.served[ref] = append(ev.served[ref], s)
+	}
+	for _, s := range answers {
+		ref := serverRef{kind: s.ServerKind, id: s.ServerID}
+		ev.answers[ref] = append(ev.answers[ref], s)
 	}
 	for _, a := range attempts {
 		s := signIn{
@@ -274,35 +267,59 @@ func indexEvidence(attempts []attemptFacts, served []lastServed, now time.Time) 
 // lastWorked is the latest time the part f broke is known to have worked for f's
 // connection, zero for never. Later than the failure, it means the failure is over.
 func (ev evidence) lastWorked(f failure) time.Time {
-	a := f.a
-	if f.part == PartServer {
-		return ev.answered(a.ServerKind, a.ServerID, a.MemberID)
+	switch f.part {
+	case PartAppSignIn:
+		return ev.appSignedIn(f)
+	case PartServiceSignIn:
+		return ev.serviceSignedIn(f)
+	case PartServer:
+		return ev.answered(f.a.ServerKind, f.a.ServerID, f.a.MemberID)
+	default:
+		return time.Time{}
 	}
+}
+
+// appSignedIn is when the person's app last signed in on f's server, or last had a
+// request there served, whoever answered it. A service sign-in does not count: one made
+// while signing in comes before the app has its own.
+func (ev evidence) appSignedIn(f failure) time.Time {
+	a := f.a
 	var at time.Time
 	for _, s := range ev.signIns[a.SubjectURN] {
-		if f.proves(s) {
+		if s.part == PartAppSignIn && f.sameServer(s) && f.sameApp(s.app, s.clientFamily) {
 			at = later(at, s.at)
 		}
 	}
-	if a.ServerID == "" {
-		return at
+	for _, s := range ev.served[serverRef{kind: a.ServerKind, id: a.ServerID}] {
+		if s.SubjectURN == a.SubjectURN && f.sameApp(s.AppKey, s.ClientFamily) {
+			at = later(at, s.ServedAt)
+		}
 	}
+	return at
+}
+
+// serviceSignedIn is when the person last signed in to f's service, or the server last
+// answered them over it. Speakeasy serving a request does not count, except for a
+// failure at a gateway's own gate.
+func (ev evidence) serviceSignedIn(f failure) time.Time {
+	a := f.a
+	var at time.Time
+	for _, s := range ev.signIns[a.SubjectURN] {
+		if s.part == PartServiceSignIn && f.sameService(s) {
+			at = later(at, s.at)
+		}
+	}
+	atGate := a.ServerKind == serverKindMeta && a.MemberID == "" && a.RemoteSessionClientID == ""
 	for _, s := range ev.served[serverRef{kind: a.ServerKind, id: a.ServerID}] {
 		if s.SubjectURN != a.SubjectURN {
 			continue
 		}
-		switch f.part {
-		case PartAppSignIn:
-			// Any request served got past the app's sign-in, whoever answered it.
-			if f.sameApp(s.AppKey, s.ClientFamily) {
-				at = later(at, s.ServedAt)
-			}
-		case PartServiceSignIn:
-			// Only the server answering shows the service accepted the sign-in.
-			if f.servedBySameService(s) {
-				at = later(at, s.AnsweredAt)
-			}
-		case PartServer:
+		switch {
+		case atGate && s.MemberID == "":
+			// The gateway serving the person again shows its gate let them through.
+			at = later(at, s.ServedAt)
+		case f.servedBySameService(s):
+			at = later(at, s.AnsweredAt)
 		}
 	}
 	return at
@@ -315,27 +332,12 @@ func (ev evidence) answered(kind, server, member string) time.Time {
 	if server == "" {
 		return at
 	}
-	for _, s := range ev.served[serverRef{kind: kind, id: server}] {
+	for _, s := range ev.answers[serverRef{kind: kind, id: server}] {
 		if s.MemberID == member || (kind == serverKindMeta && member == "") {
 			at = later(at, s.AnsweredAt)
 		}
 	}
 	return at
-}
-
-// proves reports whether the same person's sign-in s shows the part f broke working.
-func (f failure) proves(s signIn) bool {
-	switch f.part {
-	case PartAppSignIn:
-		// A service sign-in does not count: one made while signing in comes before the app has its own.
-		return s.part == PartAppSignIn && f.sameServer(s) && f.sameApp(s.app, s.clientFamily)
-	case PartServiceSignIn:
-		return s.part == PartServiceSignIn && f.sameService(s)
-	case PartServer:
-		return false
-	default:
-		return false
-	}
 }
 
 func (f failure) sameServer(s signIn) bool {
@@ -349,10 +351,7 @@ func (f failure) sameServer(s signIn) bool {
 // sameApp treats a failure filed under no verified app as any app's, and compares the
 // client only when both rows name a real one: one registration kind covers many apps.
 func (f failure) sameApp(app, clientFamily string) bool {
-	if f.a.AppKey == AppUnverified.key {
-		return true
-	}
-	if app != f.a.AppKey {
+	if f.a.AppKey != AppUnverified.key && app != f.a.AppKey {
 		return false
 	}
 	return !namedClient(f.a.ClientFamily) || !namedClient(clientFamily) || f.a.ClientFamily == clientFamily
@@ -366,8 +365,8 @@ func (f failure) servedBySameService(s lastServed) bool {
 		// A failure on the gateway alone can be any member's service, so only the same service connection ties a member to it.
 		return f.a.MemberID == "" && failed != "" && failed == used
 	}
-	// No service connection on the row is unknown, not another one: hosted paths never name one.
-	return failed == "" || used == "" || failed == used
+	// A failure naming a service connection ends only over that one. Hosted failures name none.
+	return failed == "" || failed == used
 }
 
 // sameService compares the service connection when both rows name one. Otherwise the
@@ -394,15 +393,15 @@ func serviceEndpoint(kind, server, member string) string {
 	}
 }
 
-// openEpisodes returns, by connection key, the run of failures since the broken part
-// last worked, for each part of a connection whose latest failure is not over.
-func openEpisodes(failures []failure, ev evidence) map[string]Episode {
+// openEpisodes returns the run of failures since the broken part last worked, for each
+// part of a connection whose latest failure is not over.
+func openEpisodes(failures []failure, ev evidence) []Episode {
 	byKey := map[string][]failure{}
 	for _, f := range failures {
 		byKey[f.connectionKey()] = append(byKey[f.connectionKey()], f)
 	}
-	episodes := map[string]Episode{}
-	for key, fs := range byKey {
+	var episodes []Episode
+	for _, fs := range byKey {
 		latest := slices.MaxFunc(fs, func(x, y failure) int {
 			return cmp.Or(x.end.At.Compare(y.end.At), slices.Compare(x.a.AttemptID[:], y.a.AttemptID[:]))
 		})
@@ -428,7 +427,7 @@ func openEpisodes(failures []failure, ev evidence) map[string]Episode {
 			}
 		}
 		e.OpenedAt, e.OpeningReason = opening.end.At, opening.end.Reason
-		episodes[key] = e
+		episodes = append(episodes, e)
 	}
 	return episodes
 }

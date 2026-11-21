@@ -10,16 +10,26 @@ import (
 
 func TestParts_AStepNamesThePartItBroke(t *testing.T) {
 	t.Parallel()
-	for _, step := range allSteps {
-		want := PartAppSignIn
-		switch step {
-		case StepProviderSignIn, StepProviderToken, StepProviderRefresh, StepUpstreamEMA, StepMCPRequest, StepDiscoveryListing, StepDiscoveryMember:
-			want = PartServiceSignIn
-		case StepInboundAuthorize, StepInboundSignIn, StepInboundConsent, StepInboundToken, StepSignInRenewal:
-		}
-		require.Equal(t, want, PartOf(step.String(), CodeInternalError.String()), step.String())
-		require.Contains(t, allParts, PartOf(step.String(), "a_reason_added_later"))
+	for _, c := range []struct {
+		step Step
+		code Code
+		want Part
+	}{
+		{StepInboundAuthorize, CodeRedirectURIMismatch, PartAppSignIn},
+		{StepInboundToken, CodeRefreshTokenExpired, PartAppSignIn},
+		{StepSignInRenewal, CodeRenewalRefused, PartAppSignIn},
+		{StepProviderSignIn, CodeProviderOAuthInvalidClient, PartServiceSignIn},
+		{StepProviderRefresh, CodeInvalidGrant, PartServiceSignIn},
+		{StepProviderRefresh, CodeProviderUnavailable, PartServiceSignIn},
+		{StepUpstreamEMA, CodeUpstreamEMARefused, PartServiceSignIn},
+		{StepMCPRequest, CodeProviderRejected, PartServiceSignIn},
+		{StepMCPRequest, CodeProviderUnreachable, PartServer},
+		{StepDiscoveryMember, CodeTunnelUnavailable, PartServer},
+		{StepMCPRequest, CodeInvalidBearerToken, PartAppSignIn},
+	} {
+		require.Equal(t, c.want, PartOf(c.step.String(), c.code.String()), c.step.String()+" "+c.code.String())
 	}
+	require.Equal(t, PartAppSignIn, PartOf("a_step_added_later", CodeInternalError.String()))
 }
 
 func TestParts_ARequestReasonNamesThePartItBroke(t *testing.T) {
@@ -30,7 +40,7 @@ func TestParts_ARequestReasonNamesThePartItBroke(t *testing.T) {
 			require.Equal(t, PartServer, PartOf(step.String(), code.String()), code.String())
 		}
 		// Reasons that can be one caller's own, which another caller's success says nothing about.
-		for _, code := range []Code{CodeInvalidRemoteSession, CodeProviderRejected, CodeStoredSignInUnreadable, CodeCredentialMisconfigured, CodeCallerCredentialMissing, CodeProviderRateLimited, CodeInternalError, CodeStaticKeyRejected, CodeSharedCredentialRejected, CodeAddressNotFound, CodeAuthCheckUnavailable, CodeMemberToolsMissing} {
+		for _, code := range []Code{CodeInvalidRemoteSession, CodeProviderRejected, CodeStoredSignInUnreadable, CodeCredentialMisconfigured, CodeCallerCredentialMissing, CodeProviderRateLimited, CodeInternalError, CodeStaticKeyRejected, CodeSharedCredentialRejected, CodeAddressNotFound, CodeMemberToolsMissing} {
 			require.Equal(t, PartServiceSignIn, PartOf(step.String(), code.String()), code.String())
 		}
 		require.Equal(t, PartServiceSignIn, PartOf(step.String(), "a_reason_added_later"), "an unknown reason is ended only by the person's own success")
@@ -63,12 +73,59 @@ func sharedReasons(a, b []string) []string {
 
 func TestParts_OnlyABrokenConnectionCountsAsFailing(t *testing.T) {
 	t.Parallel()
-	for name, meaning := range catalog {
-		e := Ending{Step: StepMCPRequest.String(), Outcome: meaning.Outcome, Reason: name, At: time.Time{}}
-		want := meaning.Outcome == OutcomeFailed && name != CodeExpired.String() && name != CodeLoginExpired.String()
-		require.Equal(t, want, e.CountsAsFailing(), name)
+	ending := func(outcome Outcome, code Code) Ending {
+		return Ending{Step: StepMCPRequest.String(), Outcome: outcome, Reason: code.String(), At: time.Time{}}
 	}
+	require.True(t, ending(OutcomeFailed, CodeRefreshTokenExpired).CountsAsFailing())
+	require.True(t, ending(OutcomeFailed, CodeProviderUnreachable).CountsAsFailing())
+	require.False(t, ending(OutcomeFailed, CodeExpired).CountsAsFailing(), "the person did not finish signing in")
+	require.False(t, ending(OutcomeFailed, CodeLoginExpired).CountsAsFailing(), "the person did not finish signing in")
+	require.False(t, ending(OutcomeBlocked, CodePolicyBlocked).CountsAsFailing())
+	require.False(t, ending(OutcomeDeclined, CodeProviderDenied).CountsAsFailing())
 	require.False(t, Ending{Step: StepInboundSignIn.String(), Outcome: OutcomeAbandoned, Reason: "", At: time.Time{}}.CountsAsFailing())
+}
+
+// callerOwnOnRequest are the failed reasons a request or listing can carry for one
+// caller alone, so only that caller's own success ends them.
+var callerOwnOnRequest = []Code{
+	CodeCustomDomainNotReady, CodeIDPUnavailable, CodeAIToolCheckUnavailable, CodeCIMDFetchFailed, CodeCIMDMetadataInvalid,
+	CodeRegistrationInvalid, CodeUnknownClientID, CodeRedirectURIMismatch, CodeResourceMismatch, CodePKCEMismatch,
+	CodeCodeNotFoundOrExpired, CodeServerNotFound, CodeSessionChanged, CodeClientAuthFailed, CodeSignInProviderError,
+	CodeConnectionCatalogExpired, CodeInvalidRequest, CodeResourceNotAvailable, CodeAssertionInvalid, CodeAssertionOther,
+	CodeUpstreamCredentialChoice, CodeUpstreamSignInNotSetUp, CodeIssuerNotTrusted, CodeAssertionVerifierMisconfigured,
+	CodeAssertionCheckUnavailable, CodeProviderOAuthInvalidClient, CodeProviderOAuthInvalidScope, CodeProviderOAuthInvalidGrant,
+	CodeIssuerMismatch, CodeConnectionChanged, CodeUnrenewableToken, CodeRejectedByMember, CodeProviderRateLimited,
+	CodeSharedCredentialRejected, CodeStaticKeyRejected, CodeConfigurationRequired, CodeInvalidTarget, CodeMalformedAssertion,
+	CodeInsufficientScope, CodeMalformedResponse, CodeEMAProviderRejected, CodeTransientFailure, CodeIDPTransientFailure,
+	CodeProviderTransientFailure, CodeReauthenticationRequired, CodeInvalidRemoteSession, CodeCredentialMisconfigured,
+	CodeRemoteSessionUnavailable, CodeProviderRejected, CodeCallerCredentialMissing, CodeMemberToolsMissing,
+	CodeRefreshTokenExpired, CodeSignInRevoked, CodeRefreshTokenRevoked, CodeRefreshTokenUnknownOrAlreadyUsed,
+	CodeUpstreamReconnectRequired, CodeUpstreamEMARefused, CodeInvalidGrant, CodeRefreshInvalidClient, CodeNoGrant,
+	CodeRefreshRejected, CodeInternalError, CodeOfflineNotRequested, CodeOfflineUnsupported, CodeRenewalRefused,
+	CodeRenewalMisconfigured, CodeInvalidIdentity, CodeRenewalRetryable, CodeRenewalAmbiguous, CodeCatalogTooLarge,
+	CodeApprovalNeedsAdmin, CodeRefreshTokenClientMismatch, CodeRefreshTokenUsedByOtherApp, CodeStoredSessionInvalid,
+	CodeStoredSignInUnreadable, CodeUpstreamCredentialNotChosen, CodeSignInMethodNotAccepted, CodeCredentialChoiceInvalid,
+	CodeAddressNotAllowed, CodeAddressNotFound,
+}
+
+// A new failed reason must be placed: the server not answering anyone, or one caller's own.
+func TestParts_EveryFailedReasonIsClassifiedForRequests(t *testing.T) {
+	t.Parallel()
+	classified := slices.Concat(serverDidNotAnswer, didNotFinish, []string{CodeInvalidBearerToken.String()})
+	for _, code := range callerOwnOnRequest {
+		require.NotContains(t, classified, code.String(), "classified twice")
+		classified = append(classified, code.String())
+	}
+	for name, meaning := range catalog {
+		if meaning.Outcome == OutcomeFailed {
+			require.Contains(t, classified, name, "add it to serverDidNotAnswer, or to callerOwnOnRequest")
+		}
+	}
+	for _, name := range classified {
+		meaning, ok := MeaningOf(name)
+		require.True(t, ok, name)
+		require.Equal(t, OutcomeFailed, meaning.Outcome, name)
+	}
 }
 
 func TestParts_GraceFollowsWhoFixesTheReason(t *testing.T) {

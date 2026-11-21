@@ -5,14 +5,15 @@ import (
 	"time"
 )
 
-// Part is the part of a connection a failure broke. A connection is a chain: the app
-// signs in to Speakeasy, the person signs in to the service, the server answers. A
-// later success ends a failure only when it got at least as far along the chain.
+// Part is the part of a connection a failure broke: the app's sign-in to Speakeasy, the
+// person's sign-in to the service, or the server answering. Each part's failure ends
+// only on evidence of that part working, for the same person unless it is the server.
 type Part string
 
 const (
 	// PartAppSignIn is the app's sign-in to Speakeasy, held by one person's app on one
-	// server. Only that app's next sign-in, refresh or served request ends it.
+	// server. That app's next sign-in, refresh or served request ends it; a failure filed
+	// under no verified app is ended by any app's of the same client.
 	PartAppSignIn Part = "app_sign_in"
 
 	// PartServiceSignIn is the person's sign-in to the outside service. Their next
@@ -24,14 +25,12 @@ const (
 	PartServer Part = "server"
 )
 
-// allParts are every Part.
-var allParts = []Part{PartAppSignIn, PartServiceSignIn, PartServer}
-
 // serverDidNotAnswer are the request and listing reasons where the server, or a check
 // every request goes through, did not answer whoever asked. Every other reason there
 // can be one caller's own, so another caller's success proves nothing about it.
 var serverDidNotAnswer = []string{
 	CodeKillswitchCheckUnavailable.name,
+	CodeAuthCheckUnavailable.name,
 	CodeProviderUnreachable.name,
 	CodeProviderUnavailable.name,
 	CodeProviderServerError.name,

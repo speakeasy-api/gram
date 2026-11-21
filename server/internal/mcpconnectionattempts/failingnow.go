@@ -54,17 +54,20 @@ type FailingNowFilter struct {
 type FailingPerson struct {
 	Episode
 
-	// TargetLastWorkedAt is when the server, member or toolset last answered anyone, zero
-	// for never. Later than LastFailureAt, it serves others while this person fails.
-	TargetLastWorkedAt time.Time
+	// ServerLastAnsweredAt is when the server, member or toolset last answered anyone,
+	// zero for never. Later than LastFailureAt, it serves others while this person fails.
+	ServerLastAnsweredAt time.Time
 }
 
 // ReadFailingNow returns the people failing at now: the part their latest failure on a
 // connection broke has not worked since, and the grace of its reason has passed since
 // the run opened. Rows naming no person are never counted. Served requests keep only
 // their latest times, so ones later than now are read too: the read is exact only for
-// now. The recorder can write a repeated row minutes late, so a person can still be
-// listed on the read after they recovered.
+// now. Served writes are throttled per connection, about five minutes, so a person can
+// still be listed for a while after they recovered. Failures from before served
+// requests were recorded (before that deploy, or while the organization's logs were
+// off) cannot be ended by them, so the caller must pass a TriedSince no earlier than
+// that. The ServerID and ProviderHost filters apply after the read.
 func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(context.Context, string) (bool, error), filter FailingNowFilter, now time.Time) ([]FailingPerson, error) {
 	if filter.OrganizationID == "" {
 		return nil, errors.New("failing now needs an organization")
@@ -87,11 +90,11 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 	if len(failures) == 0 {
 		return nil, nil
 	}
-	served, err := readServed(ctx, ch, filter.OrganizationID, failures)
+	served, answers, err := readServed(ctx, ch, filter.OrganizationID, failures)
 	if err != nil {
 		return nil, err
 	}
-	ev := indexEvidence(attempts, served, now)
+	ev := indexEvidence(attempts, served, answers, now)
 
 	var out []FailingPerson
 	for _, e := range openEpisodes(failures, ev) {
@@ -101,7 +104,7 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 			filter.ProviderHost != "" && e.ProviderHost != filter.ProviderHost:
 			continue
 		}
-		out = append(out, FailingPerson{Episode: e, TargetLastWorkedAt: ev.answered(e.ServerKind, e.ServerID, e.MemberID)})
+		out = append(out, FailingPerson{Episode: e, ServerLastAnsweredAt: ev.answered(e.ServerKind, e.ServerID, e.MemberID)})
 	}
 	slices.SortFunc(out, func(a, b FailingPerson) int {
 		return cmp.Or(a.OpenedAt.Compare(b.OpenedAt), cmp.Compare(a.SubjectURN, b.SubjectURN), cmp.Compare(a.ServerID, b.ServerID), cmp.Compare(a.MemberID, b.MemberID), cmp.Compare(a.AppKey, b.AppKey), cmp.Compare(a.Part, b.Part), cmp.Compare(a.ClientFamily, b.ClientFamily), cmp.Compare(a.Reason, b.Reason))
@@ -119,20 +122,45 @@ func triedSince(failures []failure, since time.Time) []failure {
 	return slices.DeleteFunc(failures, func(f failure) bool { return known[f.connectionKey()].Before(since) })
 }
 
-// servedQuery reads the latest served times of every connection on the failing servers
-// and gateways, for anyone: a server failure ends on anyone's answer. Arguments:
-// organization, server kinds, server ids.
+// lastServed is one connection's latest served times in lastServedTable, with max()
+// taken over its unmerged rows. AnsweredAt is zero when the server never answered.
+type lastServed struct {
+	ServerKind            string    `ch:"server_kind"`
+	ServerID              string    `ch:"server_id"`
+	MemberID              string    `ch:"member_id"`
+	SubjectURN            string    `ch:"subject_urn"`
+	AppKey                string    `ch:"app_key"`
+	ClientFamily          string    `ch:"client_family"`
+	RemoteSessionClientID string    `ch:"remote_session_client_id"`
+	ServedAt              time.Time `ch:"served_at"`
+	AnsweredAt            time.Time `ch:"answered_at"`
+}
+
+// servedQuery reads the failing people's own connections on the failing servers and
+// gateways. Arguments: organization, server kinds, server ids, subjects.
 const servedQuery = `
 SELECT
 	server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
 FROM ` + lastServedTable + `
-WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
+WHERE organization_id = ? AND server_kind IN ? AND server_id IN ? AND subject_urn IN ?
 GROUP BY server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id`
 
-// readServed reads the served connections on the servers the failures reached.
-func readServed(ctx context.Context, ch driver.Conn, organizationID string, failures []failure) ([]lastServed, error) {
-	var kinds, ids []string
+// answersQuery reads anyone's latest answer per member on the failing servers and
+// gateways: a server failure ends on anyone's answer. Arguments: organization, server
+// kinds, server ids.
+const answersQuery = `
+SELECT
+	server_kind, server_id, member_id, '' AS subject_urn, '' AS app_key, '' AS client_family, '' AS remote_session_client_id,
+	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
+FROM ` + lastServedTable + `
+WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
+GROUP BY server_kind, server_id, member_id`
+
+// readServed reads the failing people's served connections, and anyone's latest
+// answers, on the servers the failures reached.
+func readServed(ctx context.Context, ch driver.Conn, organizationID string, failures []failure) (served, answers []lastServed, err error) {
+	var kinds, ids, subjects []string
 	for _, f := range failures {
 		if f.a.ServerID == "" {
 			continue
@@ -143,11 +171,24 @@ func readServed(ctx context.Context, ch driver.Conn, organizationID string, fail
 		if !slices.Contains(ids, f.a.ServerID) {
 			ids = append(ids, f.a.ServerID)
 		}
+		if !slices.Contains(subjects, f.a.SubjectURN) {
+			subjects = append(subjects, f.a.SubjectURN)
+		}
 	}
 	if len(ids) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	rows, err := ch.Query(failingReadContext(ctx), servedQuery, organizationID, kinds, ids)
+	if served, err = queryServed(ctx, ch, servedQuery, organizationID, kinds, ids, subjects); err != nil {
+		return nil, nil, err
+	}
+	if answers, err = queryServed(ctx, ch, answersQuery, organizationID, kinds, ids); err != nil {
+		return nil, nil, err
+	}
+	return served, answers, nil
+}
+
+func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any) ([]lastServed, error) {
+	rows, err := ch.Query(failingReadContext(ctx), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query served connections: %w", err)
 	}
