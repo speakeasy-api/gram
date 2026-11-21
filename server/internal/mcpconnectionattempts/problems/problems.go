@@ -1,8 +1,10 @@
 // Package problems groups the people who cannot connect right now into suspected problems.
 //
-// The rule, over the open episodes of people (users) from mcpconnectionattempts.ReadFailingNow:
-//  1. Each episode failed one way: its part and who fixes its latest reason.
-//  2. Per way, these are candidates when MinPeople distinct people are in them:
+// An episode is one person's ongoing failure on one connection, from
+// mcpconnectionattempts.ReadFailingNow. Only people (users) count. The rule:
+//  1. Sort the failures by kind: which part of the connection broke, and who has to fix
+//     the latest error. Only failures of the same kind are grouped.
+//  2. Within each kind, a group is MinPeople or more people whose failures share one of:
 //     - a server (inbound): the Speakeasy MCP server, gateway or toolset the app connects
 //     to, as its mcp_servers row however reached;
 //     - a service (outbound), only for service sign-in or server failures the provider
@@ -12,9 +14,11 @@
 //     - an app version: a named client family and version, when another named family
 //     worked on one of its servers after its first failure there (served for an app
 //     sign-in, answered by the server otherwise).
-//  3. The candidate with the most people is picked, ties by app version, server, service,
-//     then key. Its episodes leave the pool and the rest are regrouped until none qualifies.
-//  4. Episodes left that opened OnePersonFor or more before now are one problem per person and way.
+//  3. Every group becomes a problem. A failure that fits several is counted in one: the
+//     group with the most people is taken first (ties: app version, server, service, then
+//     key), its failures are set aside, and the rest are grouped again until none is left.
+//  4. A failure in no group that opened OnePersonFor or more before now is a problem for
+//     that person, one per person and kind.
 package problems
 
 import (
