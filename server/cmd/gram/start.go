@@ -912,7 +912,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
 				return err
 			}
 

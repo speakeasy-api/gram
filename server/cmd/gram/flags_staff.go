@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/urfave/cli/v2"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 )
@@ -52,19 +54,25 @@ func staffOrganizationFromCLI(c *cli.Context) (staff.Organization, error) {
 // row in this deployment's database. A slug or another partition's ID passes
 // staffOrganizationFromCLI but matches no organization, which would silently
 // turn off staff masking, so the process refuses to start instead. It does
-// nothing when no staff organization is configured.
-func verifyStaffOrganization(ctx context.Context, db orgrepo.DBTX, staffOrg staff.Organization) error {
+// nothing when no staff organization is configured. It logs the resolved
+// organization's slug so a configured ID that names the wrong organization is
+// easy to spot.
+func verifyStaffOrganization(ctx context.Context, logger *slog.Logger, db orgrepo.DBTX, staffOrg staff.Organization) error {
 	if !staffOrg.Configured() {
 		return nil
 	}
 
-	_, err := orgrepo.New(db).GetOrganizationMetadata(ctx, staffOrg.ID())
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(ctx, staffOrg.ID())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("--%s %q matches no organization in this deployment's database", staffOrganizationIDFlag, staffOrg.ID())
 	case err != nil:
 		return fmt.Errorf("read staff organization: %w", err)
-	default:
-		return nil
 	}
+
+	logger.InfoContext(ctx, "staff organization configured",
+		attr.SlogOrganizationID(organization.ID),
+		attr.SlogOrganizationSlug(organization.Slug),
+	)
+	return nil
 }

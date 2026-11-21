@@ -435,7 +435,7 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
-			if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
 				return err
 			}
 

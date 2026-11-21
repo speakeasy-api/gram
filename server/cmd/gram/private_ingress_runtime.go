@@ -139,7 +139,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
-	if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+	if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
 		return nil, err
 	}
 	serverURL, err := url.Parse(c.String("server-url"))

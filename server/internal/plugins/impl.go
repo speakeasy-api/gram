@@ -2188,7 +2188,7 @@ type PublishProjectInput struct {
 	// version gating: every publish path is gated unconditionally inside
 	// publishProject, so no caller can force a hooks upgrade onto an org the
 	// rollout hasn't cleared. The only lever to advance hooks is the org's
-	// rollout pin in the admin dashboard (plus the hardcoded canary, and the
+	// rollout pin in the admin dashboard (plus the staff organization canary, and the
 	// legacy hooks-rollout flag for orgs no pin covers yet).
 	SkipIfUnchanged bool
 	// IncludePausedPlugins makes this a manual sync, like the dashboard's
@@ -2513,7 +2513,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// automated rollout, a dashboard publish, a marketplace rename, an
 	// browser-login toggle) can force a hooks change onto an org that the
 	// rollout hasn't cleared. The single lever to advance an org is its rollout
-	// pin in the admin dashboard (plus the hardcoded canary, and the legacy
+	// pin in the admin dashboard (plus the staff organization canary, and the legacy
 	// hooks-rollout flag for orgs no pin covers yet); see
 	// hooksRolloutEligible. When an org isn't eligible we carry its already-
 	// published hooks verbatim (both version AND config), because regenerating

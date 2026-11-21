@@ -251,7 +251,7 @@ func newDemoSeedCommand() *cli.Command {
 			// fills it, by running the daily job over the seeded days. Production
 			// never writes the demo organization's made-up attempts into it.
 			// Only the dev organization counts locally, so every provider, app and client name folds to other.
-			if err := verifyStaffOrganization(ctx, db, staffOrg); err != nil {
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
 				return err
 			}
 			outcomes := dailyoutcomes.NewBuilder(logger, otel.GetMeterProvider(), db, ch, staffOrg)

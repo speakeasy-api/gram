@@ -493,3 +493,16 @@ func TestEvidenceSinkFactoryUsesDeploymentServerURL(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "https://ai.example.test", s.externalURL)
 }
+
+func TestPushCoverageWithHTTPServerURLFailsBeforeSending(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeVanta(t)
+	serverURL, err := url.Parse("http://localhost:8080")
+	require.NoError(t, err)
+	s := newSink(fake.server.Client(), fake.server.URL, serverOrigin(serverURL))
+
+	err = s.PushCoverage(t.Context(), fake.creds(), fake.settings(), snapshotOf(1))
+	require.ErrorContains(t, err, "must be an HTTPS URL")
+	require.Zero(t, fake.putRequests, "Vanta rejects a non-HTTPS externalUrl, so nothing is sent")
+}

@@ -2,7 +2,6 @@ package gram
 
 import (
 	"flag"
-	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -77,11 +76,14 @@ func TestStaffFlagsDeclaredByStaffAwareCommands(t *testing.T) {
 		newNetworkIngressServerCommand(),
 		newDemoSeedCommand(),
 	} {
-		names := make([]string, 0, len(command.Flags))
+		var declared *cli.StringFlag
 		for _, f := range command.Flags {
-			names = append(names, f.Names()...)
+			if stringFlag, ok := f.(*cli.StringFlag); ok && stringFlag.Name == staffOrganizationIDFlag {
+				declared = stringFlag
+			}
 		}
-		require.True(t, slices.Contains(names, staffOrganizationIDFlag), "%s must declare --%s", command.Name, staffOrganizationIDFlag)
+		require.NotNil(t, declared, "%s must declare --%s", command.Name, staffOrganizationIDFlag)
+		require.Contains(t, declared.EnvVars, "GRAM_STAFF_ORGANIZATION_ID", "%s must read --%s from the environment", command.Name, staffOrganizationIDFlag)
 	}
 }
 
@@ -99,9 +101,9 @@ func TestVerifyStaffOrganizationRequiresExistingOrganization(t *testing.T) {
 	_, err = organizationsrepo.New(pool).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{ID: organizationID, Name: "Staff", Slug: "staff-" + uuid.NewString()})
 	require.NoError(t, err)
 
-	require.NoError(t, verifyStaffOrganization(ctx, pool, staff.NewOrganization(organizationID)))
-	require.NoError(t, verifyStaffOrganization(ctx, pool, staff.Organization{}))
+	require.NoError(t, verifyStaffOrganization(ctx, testenv.NewLogger(t), pool, staff.NewOrganization(organizationID)))
+	require.NoError(t, verifyStaffOrganization(ctx, testenv.NewLogger(t), pool, staff.Organization{}))
 
-	err = verifyStaffOrganization(ctx, pool, staff.NewOrganization("speakeasy-team"))
+	err = verifyStaffOrganization(ctx, testenv.NewLogger(t), pool, staff.NewOrganization("speakeasy-team"))
 	require.ErrorContains(t, err, "matches no organization")
 }

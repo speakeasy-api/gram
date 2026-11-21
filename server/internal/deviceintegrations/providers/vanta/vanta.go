@@ -293,6 +293,9 @@ func buildResources(snapshot providers.CoverageSnapshot, externalURL string) ([]
 	if externalURL == "" {
 		return nil, errors.New("no server URL configured for the resources' externalUrl")
 	}
+	if !strings.HasPrefix(externalURL, "https://") {
+		return nil, fmt.Errorf("resources' externalUrl %q must be an HTTPS URL", externalURL)
+	}
 	resources := make([]coverageResource, 0, len(snapshot.Devices))
 	seen := make(map[string]bool, len(snapshot.Devices))
 	for _, d := range snapshot.Devices {
