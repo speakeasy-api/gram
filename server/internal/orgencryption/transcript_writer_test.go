@@ -255,7 +255,7 @@ func TestTranscriptWriterProjection(t *testing.T) {
 			before := f.counts(t)
 			changed, err := f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
 			if !provision {
-				require.Error(t, err)
+				require.ErrorIs(t, err, orgencryption.ErrNotProvisioned)
 				require.False(t, changed)
 				require.Equal(t, before, f.counts(t))
 				return
