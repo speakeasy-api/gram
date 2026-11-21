@@ -455,6 +455,19 @@ func TestGroup(t *testing.T) {
 	}
 }
 
+func TestGroup_OnePartWithTwoWhoFixesKeepsEach(t *testing.T) {
+	t.Parallel()
+	got := problems.Group("org-a", []mcpconnectionattempts.FailingPerson{
+		serviceDown("a", s1, time.Hour), serviceDown("b", s1, time.Hour), serviceDown("c", s1, time.Hour),
+		badKey("d", s1, 2*time.Hour), badKey("e", s1, 2*time.Hour), badKey("f", s1, 2*time.Hour),
+	}, nil, nil, now)
+	who := []mcpconnectionattempts.WhoFixes{}
+	for _, p := range got {
+		who = append(who, p.WhoFixes)
+	}
+	require.ElementsMatch(t, []mcpconnectionattempts.WhoFixes{mcpconnectionattempts.WhoProvider, mcpconnectionattempts.WhoAdmin}, who)
+}
+
 func TestGroup_ProblemTimes(t *testing.T) {
 	t.Parallel()
 	got := problems.Group("org-a", []mcpconnectionattempts.FailingPerson{down("a", s1, time.Hour), down("b", s1, 3*time.Hour), down("c", s1, 2*time.Hour)}, nil, nil, now)
