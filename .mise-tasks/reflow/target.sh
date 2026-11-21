@@ -23,6 +23,10 @@
 #   db    PostgreSQL, read-only, for the flows that still read SQL, and the
 #         extra origins the local dev-idp sign-in redirect visits.
 #
+# The control surface exists only on a local stack today, so --url cannot pass
+# the suite's root until the deployed follow-up to it lands; the option is kept
+# as the shape that follow-up will use.
+#
 # A deployed host (--url) gets no database binding: nothing in CI holds a DSN
 # for a deployed environment, and flows that need `db` are not selected there.
 # Its two credentials come from the environment:
@@ -82,7 +86,15 @@ else
   : "${GRAM_SERVER_URL:?GRAM_SERVER_URL is not set; run this through mise}"
   : "${GRAM_DEVIDP_EXTERNAL_URL:?GRAM_DEVIDP_EXTERNAL_URL is not set; run this through mise}"
   : "${GRAM_DATABASE_URL:?GRAM_DATABASE_URL is not set; run this through mise}"
-  : "${GRAM_E2E_CONTROL_TOKEN:?GRAM_E2E_CONTROL_TOKEN is not set; run this through mise}"
+  # The control surface is opt-in: nothing sets its token by default, and the
+  # server reads it only at startup.
+  if [ -z "${GRAM_E2E_CONTROL_TOKEN:-}" ]; then
+    echo "GRAM_E2E_CONTROL_TOKEN is not set. The end-to-end control surface is opt-in:" >&2
+    echo "generate a private token for this stack, then restart the server so it reads it:" >&2
+    echo "  mise set --file mise.local.toml GRAM_E2E_CONTROL_TOKEN=\"\$(openssl rand -hex 24)\"" >&2
+    echo "  pitchfork restart server" >&2
+    exit 1
+  fi
   : "${GRAM_API_KEY:?GRAM_API_KEY is not set; run this through mise}"
   site_url="$(origin "$GRAM_SITE_URL")"
   api_key="$GRAM_API_KEY"
