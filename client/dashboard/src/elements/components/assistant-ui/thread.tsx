@@ -77,7 +77,6 @@ import {
 } from "@/elements/components/ui/avatar";
 import { Button } from "@/elements/components/ui/button";
 import { useChatId } from "@/elements/contexts/ChatIdContext";
-import { useReplayContext } from "@/elements/contexts/ReplayContext";
 import { useThreadMeta } from "@/elements/contexts/ThreadMetaContext";
 import { useAuth } from "@/elements/hooks/useAuth";
 import { useComposerMenuOpen } from "@/elements/hooks/useComposerMenuOpen";
@@ -181,7 +180,6 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   // caller can view (e.g. via an admin-level read grant) but didn't create,
   // so there's no valid action to leave available.
   const composerHidden = useThreadMeta(chatId ?? undefined)?.readOnly ?? false;
-  const isReplay = useReplayContext()?.isReplay ?? false;
 
   const apiUrl = getApiUrl(config);
   const auth = useAuth({
@@ -244,9 +242,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
           <AttachmentDropZone
             // Every state that takes the composer away also refuses drops,
             // or files queue into a composer the user cannot reach.
-            disabled={
-              composerHidden || (showFeedback && isResolved) || isReplay
-            }
+            disabled={composerHidden || (showFeedback && isResolved)}
             className="flex h-full min-h-0 flex-1 flex-col"
           >
             <ThreadPrimitive.Root
@@ -643,9 +639,6 @@ export const Composer: FC<ComposerProps> = ({
   const { isResolved, setUnresolved } = useChatResolution();
   const r = useRadius();
   const d = useDensity();
-  const replayCtx = useReplayContext();
-
-  const isReplay = replayCtx?.isReplay ?? false;
   const isDictating = useAuiState(({ composer }) => composer.dictation != null);
   // A dropped file is a draft even with no text yet — the landing's cycling
   // example prompts would otherwise keep running above the attachment chip.
@@ -883,7 +876,6 @@ export const Composer: FC<ComposerProps> = ({
           className={cn(
             "aui-composer-root group/input-group relative flex min-h-[118px] w-full flex-col border border-black/8 bg-background px-1.5 pt-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_10px_28px_-16px_rgba(0,0,0,0.18)] transition-[color,border-color,box-shadow] outline-none has-[textarea:focus-visible]:border-black/15 dark:border-white/10 dark:bg-background dark:has-[textarea:focus-visible]:border-white/20",
             r("xl"),
-            isReplay && "pointer-events-none opacity-50",
           )}
         >
           {(composerConfig.attachments ?? true) !== false && (
@@ -920,8 +912,7 @@ export const Composer: FC<ComposerProps> = ({
             placeholder={composerConfig.placeholder}
             tools={toolMentionsEnabled ? mcpTools : undefined}
             skillNames={skillNames}
-            autoFocus={autoFocus && !isReplay}
-            disabled={isReplay}
+            autoFocus={autoFocus}
             onSubmit={() => composerRootRef.current?.requestSubmit()}
             // Bubble phase, on the input itself: the slash menu (form, capture)
             // and the @-mention menu (input, capture + stopPropagation) both get
@@ -942,7 +933,7 @@ export const Composer: FC<ComposerProps> = ({
               // The slash menu owns the arrows while it is open. It runs in
               // capture on the form and calls preventDefault, but the event
               // still reaches this handler.
-              if (slashOpen || isDictating || isReplay) return;
+              if (slashOpen || isDictating) return;
               // The element answers `value` / `selectionStart` / `selectionEnd`
               // like a textarea — see ComposerRichInput's facade.
               const input =

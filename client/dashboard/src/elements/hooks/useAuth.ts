@@ -1,4 +1,3 @@
-import { useReplayContext } from "@/elements/contexts/ReplayContext";
 import {
   hasExplicitSessionAuth,
   isAnyStaticSession,
@@ -77,8 +76,6 @@ export const useAuth = ({
   auth?: ApiConfig;
   projectSlug: string;
 }): Auth => {
-  const replayCtx = useReplayContext();
-  const isReplay = replayCtx?.isReplay ?? false;
   const queryClient = useQueryClient();
 
   const apiUrl = useMemo(() => {
@@ -89,10 +86,6 @@ export const useAuth = ({
   }, [auth?.url]);
 
   const getSession = useMemo(() => {
-    // In replay mode, skip session fetching entirely
-    if (isReplay) {
-      return null;
-    }
     // dangerousApiKey — exchange key for session via API
     if (isDangerousApiKeyAuth(auth)) {
       return createDangerousApiKeySessionFn(auth.dangerousApiKey, apiUrl);
@@ -114,7 +107,7 @@ export const useAuth = ({
       return auth.sessionFn;
     }
     return defaultGetSession;
-  }, [auth, isReplay, apiUrl]);
+  }, [auth, apiUrl]);
 
   // The session request is only necessary if we are not using static session auth
   // configuration. If a custom session fetcher is provided, we use it,
@@ -124,7 +117,7 @@ export const useAuth = ({
     projectSlug,
   });
 
-  const shouldRefresh = !isAnyStaticSession(auth) && !isReplay;
+  const shouldRefresh = !isAnyStaticSession(auth);
 
   // `api.headers` from ElementsConfig flows here untouched and is merged into
   // every header set the hook returns, so it reaches both /chat/completions
@@ -174,15 +167,6 @@ export const useAuth = ({
       };
     }
   }, [shouldRefresh, getSession, projectSlug, queryClient, extraHeaders]);
-
-  // In replay mode, return immediately without waiting for session
-  if (isReplay) {
-    return {
-      headers: {},
-      isLoading: false,
-      ensureValidHeaders: async () => ({}),
-    };
-  }
 
   return !session
     ? {

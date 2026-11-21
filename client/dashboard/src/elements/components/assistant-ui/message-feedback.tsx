@@ -11,7 +11,7 @@ import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
 import { useState, type FC } from "react";
 
-export type FeedbackType = "dislike" | "like";
+type FeedbackType = "dislike" | "like";
 
 interface MessageFeedbackProps {
   onFeedback?: (type: FeedbackType) => void;

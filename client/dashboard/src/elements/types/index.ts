@@ -47,8 +47,8 @@ export interface MCPServerEntry {
   environment?: string;
 }
 
-export const VARIANTS = ["widget", "sidecar", "standalone"] as const;
-export type Variant = (typeof VARIANTS)[number];
+const VARIANTS = ["widget", "sidecar", "standalone"] as const;
+type Variant = (typeof VARIANTS)[number];
 
 /**
  * Live chat context handed to a {@link ElementsTransportFactory}.
@@ -586,7 +586,7 @@ export type Model = (typeof MODELS)[number];
  * ModelConfig is used to configure model support in the Elements library.
  *
  */
-export interface ModelConfig {
+interface ModelConfig {
   /**
    * Whether to show the model picker in the composer.
    */
@@ -598,12 +598,12 @@ export interface ModelConfig {
   defaultModel?: Model;
 }
 
-export const DENSITIES = ["compact", "normal", "spacious"] as const;
-export type Density = (typeof DENSITIES)[number];
-export const COLOR_SCHEMES = ["light", "dark", "system"] as const;
-export type ColorScheme = (typeof COLOR_SCHEMES)[number];
+const DENSITIES = ["compact", "normal", "spacious"] as const;
+type Density = (typeof DENSITIES)[number];
+const COLOR_SCHEMES = ["light", "dark", "system"] as const;
+type ColorScheme = (typeof COLOR_SCHEMES)[number];
 
-export const RADII = ["round", "soft", "sharp"] as const;
+const RADII = ["round", "soft", "sharp"] as const;
 export type Radius = (typeof RADII)[number];
 
 /**
@@ -619,7 +619,7 @@ export type Radius = (typeof RADII)[number];
  *   },
  * }
  */
-export interface ThemeConfig {
+interface ThemeConfig {
   /**
    * The color scheme to use for the UI.
    * @default 'light'
@@ -654,7 +654,7 @@ export interface ThemeConfig {
   customCss?: string;
 }
 
-export interface ComponentOverrides {
+interface ComponentOverrides {
   /**
    * The component to use for the composer (the input area where users type messages)
    */
@@ -736,7 +736,7 @@ export type FrontendTools = Record<string, AssistantTool>;
  *   },
  * }
  */
-export interface ToolsConfig {
+interface ToolsConfig {
   /**
    * Whether individual tool calls within a group should be expanded by default.
    * @default false
@@ -898,7 +898,7 @@ export interface ContextCompactionConfig {
   disabled?: boolean;
 }
 
-export interface WelcomeConfig {
+interface WelcomeConfig {
   /**
    * Optional logo image URL shown above the title on the empty-thread welcome
    * screen.
@@ -921,7 +921,7 @@ export interface WelcomeConfig {
   suggestions?: Suggestion[];
 }
 
-export interface Suggestion {
+interface Suggestion {
   /** Suggestion heading */
   title: string;
   /** Suggestion subheading */
@@ -930,7 +930,7 @@ export interface Suggestion {
   prompt: string;
 }
 
-export interface Dimensions {
+interface Dimensions {
   default: Dimension;
   expanded?: {
     width: number | string;
@@ -938,7 +938,7 @@ export interface Dimensions {
   };
 }
 
-export interface Dimension {
+interface Dimension {
   width: number | string;
   height: number | string;
   maxHeight?: number | string;
@@ -962,13 +962,13 @@ interface ExpandableConfig {
   dimensions?: Dimensions;
 }
 
-export type ModalTriggerPosition =
+type ModalTriggerPosition =
   | "bottom-right"
   | "bottom-left"
   | "top-right"
   | "top-left";
 
-export interface ModalConfig extends ExpandableConfig {
+interface ModalConfig extends ExpandableConfig {
   /**
    * Whether to open the modal window by default.
    */
@@ -1010,7 +1010,7 @@ export interface ModalConfig extends ExpandableConfig {
   icon?: (state: "open" | "closed" | undefined) => ReactNode;
 }
 
-export interface ComposerConfig {
+interface ComposerConfig {
   /**
    * The placeholder text for the composer input.
    * @default 'Send a message...'
@@ -1068,7 +1068,7 @@ export interface ComposerSlashCommand {
  * Files upload to Speakeasy as soon as they are attached; the transport sends the
  * resulting asset ids with the turn. `maxCount` is not enforced yet.
  */
-export interface AttachmentsConfig {
+interface AttachmentsConfig {
   /**
    * Accepted file types. Can be MIME types or file extensions.
    * @example ['image/*', '.pdf', '.docx']
@@ -1088,7 +1088,7 @@ export interface AttachmentsConfig {
   maxSize?: number;
 }
 
-export interface ToolMentionsConfig {
+interface ToolMentionsConfig {
   /** @default true */
   enabled?: boolean;
   /** @default 10 */
@@ -1112,7 +1112,7 @@ export interface SkillContextConfig {
   maxSelected?: number;
 }
 
-export interface SidecarConfig extends ExpandableConfig {
+interface SidecarConfig extends ExpandableConfig {
   /**
    * The title displayed in the sidecar header.
    * @default 'Chat'
@@ -1131,7 +1131,7 @@ export interface SidecarConfig extends ExpandableConfig {
  *   },
  * }
  */
-export interface ThreadConfig {
+interface ThreadConfig {
   /**
    * Whether to show feedback buttons (like/dislike) after assistant messages.
    * When enabled, users can mark conversations as resolved or provide feedback.
@@ -1159,7 +1159,7 @@ export interface ThreadConfig {
  *   },
  * }
  */
-export interface HistoryConfig {
+interface HistoryConfig {
   /**
    * Whether to enable chat history persistence.
    * When true, threads will be saved and can be loaded from the thread list.

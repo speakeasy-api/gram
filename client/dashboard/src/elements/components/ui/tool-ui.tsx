@@ -1337,21 +1337,5 @@ ToolUI.displayName = "ToolUI";
 ToolUISection.displayName = "ToolUISection";
 SyntaxHighlightedCode.displayName = "SyntaxHighlightedCode";
 
-export {
-  ToolUI,
-  ToolUISection,
-  ToolUIGroup,
-  SyntaxHighlightedCode,
-  StatusIndicator,
-  CopyButton,
-};
-export type {
-  ToolUIProps,
-  ToolUIMetaRow,
-  ToolUISectionProps,
-  ToolUIGroupProps,
-  ToolStatus,
-  ContentItem,
-  SectionHighlight,
-  SectionMatch,
-};
+export { ToolUI, ToolUISection, ToolUIGroup };
+export type { ToolUIMetaRow, ToolStatus, ContentItem, SectionMatch };

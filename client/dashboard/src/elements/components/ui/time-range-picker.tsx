@@ -31,7 +31,7 @@ export type DateRangePreset =
   | "30d"
   | "90d";
 
-export interface TimeRangePreset {
+interface TimeRangePreset {
   label: string;
   shortLabel: string;
   value: DateRangePreset;
@@ -57,7 +57,7 @@ function formatDate(date: Date, pattern: "short" | "medium" = "short"): string {
 // Presets Configuration
 // ---------------------------------------------------------------------------
 
-export const PRESETS: TimeRangePreset[] = [
+const PRESETS: TimeRangePreset[] = [
   {
     label: "Past 15 Minutes",
     shortLabel: "15m",

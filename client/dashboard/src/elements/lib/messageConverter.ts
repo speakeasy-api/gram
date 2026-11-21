@@ -29,7 +29,7 @@ import {
 /**
  * A single text part of a multi-modal chat message.
  */
-export interface GramChatTextPart {
+interface GramChatTextPart {
   type: "text";
   text: string;
 }
@@ -39,7 +39,7 @@ export interface GramChatTextPart {
  * upstream OpenAI/OpenRouter chat schema (`image_url.url`) so the converter can
  * read it without normalisation.
  */
-export interface GramChatImagePart {
+interface GramChatImagePart {
   type: "image_url";
   image_url?: { url?: string };
 }
@@ -48,7 +48,7 @@ export interface GramChatImagePart {
  * A single audio part of a multi-modal chat message. Mirrors the OpenAI/OpenRouter
  * `input_audio.{data, format}` shape on the wire.
  */
-export interface GramChatAudioPart {
+interface GramChatAudioPart {
   type: "input_audio";
   input_audio?: { data?: string; format?: string };
 }
@@ -56,7 +56,7 @@ export interface GramChatAudioPart {
 /**
  * Content part of a multi-modal chat message.
  */
-export type GramChatContentPart =
+type GramChatContentPart =
   | GramChatTextPart
   | GramChatImagePart
   | GramChatAudioPart;
@@ -65,7 +65,7 @@ export type GramChatContentPart =
  * Content of a chat message — either a plain string or an array of parts for
  * multi-modal messages.
  */
-export type GramChatContent = string | GramChatContentPart[];
+type GramChatContent = string | GramChatContentPart[];
 
 /**
  * Represents a chat message from the Speakeasy API. Only fields actually surfaced

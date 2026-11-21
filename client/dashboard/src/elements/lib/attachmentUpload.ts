@@ -39,7 +39,7 @@ export function chatAttachmentContentType(file: File): string {
 /** Server-side cap on a single chat attachment (assets.MaxFileSizeChatAttachment). */
 export const CHAT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
-export interface UploadedChatAttachment {
+interface UploadedChatAttachment {
   assetId: string;
   /** Absolute URL that serves the attachment back to an authenticated caller. */
   url: string;
@@ -58,7 +58,7 @@ interface UploadChatAttachmentInit {
  * involved. `Content-Length` is a forbidden header name in browsers — it is
  * stripped and recomputed from the body, so it is not set here.
  */
-export async function uploadChatAttachment({
+async function uploadChatAttachment({
   apiUrl,
   headers,
   file,
