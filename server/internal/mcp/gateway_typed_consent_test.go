@@ -67,7 +67,7 @@ func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 				require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 			}
 
-			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-gw-"+uuid.NewString()[:8], "", nil)
+			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-gw-"+uuid.NewString()[:8], "")
 			if tc.orgClient {
 				q := remotesessionsrepo.New(fx.ti.conn)
 				client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{

@@ -60,11 +60,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 			require.NoError(t, err)
 			// Typed offers have no issuer binding or saved connection. Pending
 			// legacy setup exercises both bound and unbound registrations.
-			var bindings []uuid.UUID
-			if tc.bound {
-				bindings = []uuid.UUID{fx.issuerID}
-			}
-			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-registration", "", bindings)
+			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-registration", "")
 			if !tc.noLegacyAssociation {
 				require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: server.ID, RemoteSessionClientID: registration}))
 			}

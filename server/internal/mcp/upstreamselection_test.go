@@ -143,8 +143,8 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	linear, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, linearUpstream.url, linearSlug, "public", sharedIssuerID)
 	notion, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, notionUpstream.url, notionSlug, "public", sharedIssuerID)
 
-	linearClient := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-linear", "", []uuid.UUID{sharedIssuerID})
-	notionClient := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-notion", "", []uuid.UUID{sharedIssuerID})
+	linearClient := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-linear", "")
+	notionClient := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-notion", "")
 	f.associate(t, ctx, linear.ID, linearClient)
 	f.associate(t, ctx, notion.ID, notionClient)
 
@@ -231,8 +231,7 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	requireReconnect(t, resp, err, notionSlug)
 	require.Equal(t, before, notionUpstream.requestCount())
 
-	// Unbinding the chosen client from the issuer, though it stays associated
-	// with the server, does not revoke the typed offer.
+	// Changing a sibling server does not revoke the selected typed offer.
 	beforeLinear := linearUpstream.requestCount()
 	resp, err = callTool(t, f.ti, linearSlug, linearBearer, "ping")
 	require.NoError(t, err)
@@ -258,7 +257,7 @@ func TestUpstreamClientSelection_AnonymousSessionFollowsItsChoices(t *testing.T)
 	upstream := newRecordingUpstream(t, "ping")
 	slug := "sel-anon-chosen-" + uuid.NewString()[:8]
 	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
-	client := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-anon", "", []uuid.UUID{issuerID})
+	client := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-anon", "")
 	f.associate(t, ctx, server.ID, client)
 
 	subject := urn.NewAnonymousSubject("sel-anon-" + uuid.NewString())
@@ -297,8 +296,8 @@ func TestUpstreamClientSelection_GatewayMembers(t *testing.T) {
 	memberA := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Member A", "member-a", 0, upstreamA.url)
 	memberB := seedMetaMemberWithUpstream(t, ctx, f.ti.conn, f.projectID, meta.ID, "Member B", "member-b", 1, upstreamB.url)
 
-	clientA := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-meta-a", "", []uuid.UUID{sharedIssuerID})
-	clientB := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-meta-b", "", []uuid.UUID{sharedIssuerID})
+	clientA := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-meta-a", "")
+	clientB := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-meta-b", "")
 	f.associate(t, ctx, memberA, clientA)
 	f.associate(t, ctx, memberB, clientB)
 
@@ -341,8 +340,8 @@ func TestUpstreamClientSelection_ConsentOffersOnlyTheServersOwnClients(t *testin
 		return server.ID
 	})
 	fx.ti.service.manual = true
-	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-own", "", []uuid.UUID{fx.shared})
-	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "", []uuid.UUID{fx.shared})
+	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-own", "")
+	createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "sel-sibling", "")
 
 	n, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		OrganizationID:        fx.orgID,
@@ -373,8 +372,8 @@ func TestUpstreamClientSelection_ServerOfferingSeveralClientsServesThePickedOne(
 	upstream := newRecordingUpstream(t, "ping")
 	slug := "sel-choice-" + uuid.NewString()[:8]
 	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", issuerID)
-	first := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-first", "", []uuid.UUID{issuerID})
-	second := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-second", "", []uuid.UUID{issuerID})
+	first := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-first", "")
+	second := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "sel-second", "")
 	f.associate(t, ctx, server.ID, first)
 	f.associate(t, ctx, server.ID, second)
 
@@ -407,7 +406,7 @@ func TestUpstreamClientSelection_RecordsTypedConsentPicks(t *testing.T) {
 	oauthServer, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, newRecordingUpstream(t, "ping").url, "typed-oauth-"+uuid.NewString()[:8], "public", issuerID)
 	headerServer, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, newRecordingUpstream(t, "ping").url, "typed-header-"+uuid.NewString()[:8], "public", issuerID)
 	// Registered for the project, but bound to no sign-in.
-	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "typed-unbound", "", nil)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "typed-unbound", "")
 
 	fixtures := authclientbackfill.New(f.ti.conn)
 	seed := func(serverID uuid.UUID, clientType string, registration uuid.NullUUID) uuid.UUID {

@@ -64,7 +64,7 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 	var selectedClient uuid.UUID
 	for i, token := range []string{"unselected-personal-token", "selected-personal-token"} {
 		// No registration is attached to the organization issuer.
-		registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-"+uuid.NewString(), "", nil)
+		registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-"+uuid.NewString(), "")
 		require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: registration}))
 		client, err := clients.CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), Name: "Personal choice", ClientType: clientType, RemoteSessionClientID: conv.ToNullUUID(registration), ClientAttachmentScope: conv.ToPGText("project:" + projectID.String())})
 		require.NoError(t, err)

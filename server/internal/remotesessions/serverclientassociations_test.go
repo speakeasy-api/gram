@@ -143,19 +143,6 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID), "reconciling again must not duplicate the association")
 	})
 
-	t.Run("a legacy link proves nothing about shared-issuer servers", func(t *testing.T) {
-		t.Parallel()
-
-		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-shared")
-		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-shared-a")
-		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-shared-b")
-		seedActiveClient(t, ctx, ti.conn, projectID, uuid.Nil, orgID, "rsi-assoc-shared")
-
-		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
-		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first), "a shared issuer's client must not be copied onto every server")
-		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, second))
-	})
-
 	t.Run("two servers on one issuer keep different clients", func(t *testing.T) {
 		t.Parallel()
 

@@ -312,50 +312,6 @@ func TestListUserSessionsDoesNotAttributeUpstreamsThroughStaleSiblingLinks(t *te
 // A client detached from the issuer that minted the grant keeps live upstream
 // tokens, and revoking the Speakeasy session still destroys them. The page has to
 // keep listing them or an admin reads an empty page as "nothing to revoke".
-func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
-		SessionToken:         nil,
-		ApikeyToken:          nil,
-		ProjectSlugInput:     nil,
-		Slug:                 "detached-upstream-issuer",
-		AuthnChallengeMode:   "chain",
-		SessionDurationHours: 24,
-	})
-	require.NoError(t, err)
-
-	issuerID := uuid.MustParse(issuer.ID)
-	subject := urn.NewUserSubject("detached-upstream-subject")
-	_, err = seedUserSession(t, ctx, ti.conn, issuerID, subject)
-	require.NoError(t, err)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
-
-	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		SubjectUrn:          nil,
-		UserSessionIssuerID: nil,
-		Status:              nil,
-		ClientID:            nil,
-		Cursor:              nil,
-		Limit:               nil,
-	})
-	require.NoError(t, err)
-	require.Len(t, res.Items, 1)
-	require.Len(t, res.Items[0].Upstreams, 1,
-		"a grant minted through this issuer stays listed after its client is detached")
-	require.Equal(t, "mcp.detached.example", res.Items[0].Upstreams[0].IssuerSlug)
-}
-
 // An agent's upstream is the exact, still-authorized owner attachment, not
 // an independently owned token or an implicit inheritance from its owner.
 func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {

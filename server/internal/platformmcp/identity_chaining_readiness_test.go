@@ -78,13 +78,13 @@ type chainedCatalogFixture struct {
 
 func seedChainedCatalogFixture(t *testing.T, ctx context.Context, conn *pgxpool.Pool) chainedCatalogFixture {
 	t.Helper()
-	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
+	f := seedChainedCatalogFixtureClient(t, ctx, conn)
 	f.serverID = typedCatalogServer(t, ctx, conn, f, 1)
 	return f
 }
 
-// seedChainedCatalogFixtureClient attaches the interactive client only when attach is set.
-func seedChainedCatalogFixtureClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, attach bool) chainedCatalogFixture {
+// seedChainedCatalogFixtureClient creates the interactive registration without offering it.
+func seedChainedCatalogFixtureClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool) chainedCatalogFixture {
 	t.Helper()
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)

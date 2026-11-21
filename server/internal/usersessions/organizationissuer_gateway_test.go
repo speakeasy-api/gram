@@ -25,8 +25,8 @@ import (
 )
 
 // organizationGatewayAssociation is a server in a sibling project associated
-// with a client bound to the organization's only organization-level issuer:
-// the organization gateway fronts the server, so the binding serves it.
+// with its own upstream registration. The organization gateway fronts the
+// server through the organization's only organization-level sign-in issuer.
 type organizationGatewayAssociation struct {
 	organizationIssuer uuid.UUID
 	projectID          uuid.UUID

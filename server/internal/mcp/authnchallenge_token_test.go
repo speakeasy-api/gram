@@ -384,7 +384,7 @@ func TestHandleTokenCode_AgentRequiresConnectionsAtExchange(t *testing.T) {
 		CreatedAt:                   time.Now(),
 	}))
 
-	createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "exchange-required", "", []uuid.UUID{fx.target.UserSessionIssuerID})
+	createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "exchange-required", "")
 
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")

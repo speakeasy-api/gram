@@ -77,11 +77,7 @@ func newIDJAGGatewayFixture(t *testing.T) (context.Context, idJAGGatewayFixture)
 // server nobody picked.
 func (f idJAGGatewayFixture) personalClient(t *testing.T, ctx context.Context, serverID uuid.UUID, bound bool) (uuid.UUID, uuid.UUID) {
 	t.Helper()
-	var issuers []uuid.UUID
-	if bound {
-		issuers = []uuid.UUID{f.issuerID}
-	}
-	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "personal-"+uuid.NewString()[:8], "", issuers)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "personal-"+uuid.NewString()[:8], "")
 	require.NoError(t, testrepo.New(f.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: serverID, RemoteSessionClientID: registration}))
 	clients := authclientsrepo.New(f.ti.conn)
 	client, err := clients.CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{OrganizationID: f.orgID, ProjectID: conv.ToNullUUID(f.projectID), Name: "Personal sign-in", ClientType: authz.AuthClientTypeRemoteSession, RemoteSessionClientID: conv.ToNullUUID(registration), ClientAttachmentScope: conv.ToPGText("project:" + f.projectID.String())})
@@ -225,7 +221,7 @@ func TestIDJAGGatewayNamedChoiceForIncompleteMemberIsRefused(t *testing.T) {
 	connected, _ := f.personalClient(t, ctx, connectedID, false)
 	f.connect(t, ctx, connected, "token-connected", connectedUpstream.url)
 	// An upstream OAuth client that no auth client offers yet.
-	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "incomplete-"+uuid.NewString()[:8], "", nil)
+	registration := createConsentRemoteClient(t, ctx, f.ti.conn, f.projectID, f.orgID, "incomplete-"+uuid.NewString()[:8], "")
 	require.NoError(t, testrepo.New(f.ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: incompleteID, RemoteSessionClientID: registration}))
 	seedUserMCPConnectGrant(t, ctx, f.ti.conn, f.orgID, mockidp.MockUserID, incompleteID.String())
 

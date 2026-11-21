@@ -199,7 +199,7 @@ func TestRemoteSessionRecheck_ProbesAnOfferedRegistrationWithoutASignInLink(t *t
 	shared := fx.endpoint.UserSessionIssuerID
 	q := remotesessions_repo.New(fx.ti.conn)
 
-	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "")
 	offerRecheckRegistration(t, ctx, fx.ti, projectID, orgID, fx.endpoint.McpServerID.UUID, registration)
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, registration, fx.subject, "typed-token", fx.member.url)
 	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, registration, fx.subject, recheckTestInterval+time.Hour, "jti-"+prefix)
@@ -321,7 +321,7 @@ func TestRemoteSessionRecheck_RateLimitedHostDoesNotStopThePass(t *testing.T) {
 	subjectB := urn.NewUserSubject(uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, fx.clientID, subjectB, "token-"+prefix+"-b", fx.member.url)
 	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, fx.clientID, subjectB, 29*time.Hour, "jti-"+prefix+"-b")
-	otherClient := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "", []uuid.UUID{shared})
+	otherClient := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "")
 	offerRecheckRegistration(t, ctx, fx.ti, projectID, orgID, fx.endpoint.McpServerID.UUID, fx.clientID)
 	offerRecheckRegistration(t, ctx, fx.ti, projectID, orgID, fx.endpoint.McpServerID.UUID, otherClient)
 	subjectC := urn.NewUserSubject(uuid.NewString())
@@ -537,7 +537,7 @@ func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string, callerI
 		Slug:            endpoint.Slug,
 	})
 	require.NoError(t, err)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "", []uuid.UUID{shared})
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, prefix, "")
 	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)))
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, identifier)
 	// The sweep probes as the subject, who must hold mcp:connect on a private server just as they did to connect.

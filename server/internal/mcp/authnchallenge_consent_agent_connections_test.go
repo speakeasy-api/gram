@@ -3,7 +3,6 @@ package mcp_test
 import (
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -16,7 +15,7 @@ func TestConsentAgentRequiresConnectionsBeforeConsumingChallenge(t *testing.T) {
 	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
 	agent := createConsentAgent(t, ctx, ti, fx, "Connection agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
-	createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "consent-required", "", []uuid.UUID{fx.target.UserSessionIssuerID})
+	createConsentRemoteClient(t, ctx, ti.conn, fx.target.ProjectID, fx.orgID, "consent-required", "")
 	_, err := serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
 	require.Error(t, err)
 	var shareable *oops.ShareableError
