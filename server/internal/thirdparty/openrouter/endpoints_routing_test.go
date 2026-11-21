@@ -98,11 +98,15 @@ func TestChatClientRoutesInferenceRequests(t *testing.T) {
 	client := NewUnifiedClient(testenv.NewLogger(t), policy, endpoints, provisioner, &PlatformKeyResolver{Provisioner: provisioner}, nil, nil, nil, nil)
 
 	ctx := t.Context()
+	resp, err := client.makeHTTPRequest(ctx, "test-api-key", OpenAIChatRequest{Model: DefaultChatModel})
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	_, err = client.CreateEmbeddings(ctx, "org-1", openAITextEmbedding3Small, []string{"hello"})
 	require.Error(t, err)
 	_, err = client.ListModels(ctx)
 	require.Error(t, err)
 
+	require.True(t, inference.has("POST /v1/chat/completions"), "chat completions use the inference host")
 	require.True(t, inference.has("POST /v1/embeddings"), "embeddings use the inference host")
 	require.True(t, inference.has("GET /v1/models"), "model discovery uses the inference host")
 	require.Empty(t, management.requests)
