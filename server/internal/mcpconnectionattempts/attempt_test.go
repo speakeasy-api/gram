@@ -133,7 +133,7 @@ func TestScope_OrganizationGatewayHasNoProject(t *testing.T) {
 	row, err := RowAt(Begin(OrganizationGatewayScope("org-test", uuid.New(), AppDCR)), StepInboundToken, ResultCodeIssued, true, time.Now())
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, row.ProjectID)
-	require.Equal(t, serverKindMeta, row.ServerKind)
+	require.Equal(t, ServerKindMeta, row.ServerKind)
 }
 
 // A scheduled refresh reaches a provider and no server, and is still recorded.

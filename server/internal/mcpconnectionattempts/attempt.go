@@ -26,8 +26,12 @@ import (
 )
 
 const (
-	serverKindMCP              = "mcp"
-	serverKindMeta             = "meta"
+	// ServerKindMCP is an MCP server; its server_id is an mcp_servers id.
+	ServerKindMCP = "mcp"
+
+	// ServerKindMeta is a gateway; its member_id, when set, is the member's mcp_servers id.
+	ServerKindMeta = "meta"
+
 	serverKindToolset          = "toolset"
 	serverKindProviderSession  = "provider_session"
 	serverKindIdentityProvider = "identity_provider"
@@ -127,18 +131,18 @@ type Scope struct {
 
 // ServerScope is an attempt on a project's MCP server.
 func ServerScope(organizationID string, projectID, serverID uuid.UUID, app App) Scope {
-	return projectScope(organizationID, projectID, serverKindMCP, serverID, app)
+	return projectScope(organizationID, projectID, ServerKindMCP, serverID, app)
 }
 
 // GatewayScope is an attempt on a project's gateway.
 func GatewayScope(organizationID string, projectID, gatewayID uuid.UUID, app App) Scope {
-	return projectScope(organizationID, projectID, serverKindMeta, gatewayID, app)
+	return projectScope(organizationID, projectID, ServerKindMeta, gatewayID, app)
 }
 
 // OrganizationGatewayScope is an attempt on an organization gateway, which
 // belongs to no project.
 func OrganizationGatewayScope(organizationID string, gatewayID uuid.UUID, app App) Scope {
-	return Scope{organizationID, uuid.Nil, serverKindMeta, gatewayID, app.key, app.family}
+	return Scope{organizationID, uuid.Nil, ServerKindMeta, gatewayID, app.key, app.family}
 }
 
 // ToolsetScope is an attempt on a toolset endpoint with no server row.

@@ -24,7 +24,8 @@ const (
 	failingReadMemoryBytes = 2 << 30
 )
 
-func failingReadContext(ctx context.Context) context.Context {
+// FailingReadContext caps a ClickHouse read of failing connections at failingReadTimeout and failingReadMemoryBytes.
+func FailingReadContext(ctx context.Context) context.Context {
 	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"max_execution_time": int(failingReadTimeout / time.Second),
 		"max_memory_usage":   failingReadMemoryBytes,
@@ -122,7 +123,7 @@ func triedSince(failures []failure, since time.Time) []failure {
 	return slices.DeleteFunc(failures, func(f failure) bool { return known[f.connectionKey()].Before(since) })
 }
 
-// lastServed is one connection's latest served times in lastServedTable, with max()
+// lastServed is one connection's latest served times in LastServedTable, with max()
 // taken over its unmerged rows. AnsweredAt is zero when the server never answered.
 type lastServed struct {
 	ServerKind            string    `ch:"server_kind"`
@@ -142,7 +143,7 @@ const servedQuery = `
 SELECT
 	server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + lastServedTable + `
+FROM ` + LastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ? AND subject_urn IN ?
 GROUP BY server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id`
 
@@ -153,7 +154,7 @@ const answersQuery = `
 SELECT
 	server_kind, server_id, member_id, '' AS subject_urn, '' AS app_key, '' AS client_family, '' AS remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + lastServedTable + `
+FROM ` + LastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id`
 
@@ -188,7 +189,7 @@ func readServed(ctx context.Context, ch driver.Conn, organizationID string, fail
 }
 
 func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any) ([]lastServed, error) {
-	rows, err := ch.Query(failingReadContext(ctx), query, args...)
+	rows, err := ch.Query(FailingReadContext(ctx), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query served connections: %w", err)
 	}

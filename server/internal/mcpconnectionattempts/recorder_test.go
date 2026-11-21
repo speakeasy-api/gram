@@ -40,7 +40,7 @@ func testConfig() config {
 		servedInterval:      5 * time.Minute,
 		servedFlushInterval: 10 * time.Millisecond,
 		servedFlushBudget:   10 * time.Second,
-		servedTable:         lastServedTable,
+		servedTable:         LastServedTable,
 	}
 }
 
@@ -193,7 +193,7 @@ func TestRecord_StepsLandWithTenantFieldsAndFeedTheRollup(t *testing.T) {
 	for _, row := range rows {
 		require.Equal(t, attempt.scope.organizationID, row.OrganizationID)
 		require.Equal(t, attempt.scope.projectID, row.ProjectID)
-		require.Equal(t, serverKindMCP, row.ServerKind)
+		require.Equal(t, ServerKindMCP, row.ServerKind)
 		require.Equal(t, attempt.scope.serverID.String(), row.ServerID)
 		require.WithinDuration(t, attempt.StartedAt(), row.AttemptStartedAt, time.Microsecond)
 		require.Equal(t, AppDCR.key, row.AppKey)

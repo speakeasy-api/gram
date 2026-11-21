@@ -128,7 +128,7 @@ func readEpisodeAttempts(ctx context.Context, ch driver.Conn, organizationID str
 	if err != nil {
 		return nil, err
 	}
-	rows, err := ch.Query(failingReadContext(ctx), `SELECT * EXCEPT (sign_ins) FROM (SELECT`+episodeColumns+` FROM `+eventsTable+
+	rows, err := ch.Query(FailingReadContext(ctx), `SELECT * EXCEPT (sign_ins) FROM (SELECT`+episodeColumns+` FROM `+eventsTable+
 		` WHERE organization_id = ? AND `+where+` AND event_time <= fromUnixTimestamp64Nano(?) GROUP BY organization_id, attempt_id HAVING subject != ''`+episodeHaving+`)`,
 		append(append([]any{organizationID}, args...), now.UnixNano())...)
 	if err != nil {
@@ -193,7 +193,7 @@ func (f failure) connectionKey() string {
 	a := f.a
 	key := string(f.part) + "|" + a.SubjectURN + "|" + a.ServerKind + "|" + a.ServerID + "|" + a.MemberID + "|" + a.AppKey
 	switch {
-	case f.part == PartAppSignIn && namedClient(a.ClientFamily):
+	case f.part == PartAppSignIn && NamedClient(a.ClientFamily):
 		key += "|" + a.ClientFamily
 	case f.part == PartServiceSignIn:
 		key += "|" + a.RemoteSessionClientID
@@ -312,7 +312,7 @@ func (ev evidence) serviceSignedIn(f failure) time.Time {
 			at = later(at, s.at)
 		}
 	}
-	atGate := a.ServerKind == serverKindMeta && a.MemberID == "" && a.RemoteSessionClientID == ""
+	atGate := a.ServerKind == ServerKindMeta && a.MemberID == "" && a.RemoteSessionClientID == ""
 	for _, s := range ev.served[serverRef{kind: a.ServerKind, id: a.ServerID}] {
 		if s.SubjectURN != a.SubjectURN {
 			continue
@@ -336,7 +336,7 @@ func (ev evidence) answered(kind, server, member string) time.Time {
 		return at
 	}
 	for _, s := range ev.answers[serverRef{kind: kind, id: server}] {
-		if s.MemberID == member || (kind == serverKindMeta && member == "") {
+		if s.MemberID == member || (kind == ServerKindMeta && member == "") {
 			at = later(at, s.AnsweredAt)
 		}
 	}
@@ -357,7 +357,7 @@ func (f failure) sameApp(app, clientFamily string) bool {
 	if f.a.AppKey != AppUnverified.key && app != f.a.AppKey {
 		return false
 	}
-	return !namedClient(f.a.ClientFamily) || !namedClient(clientFamily) || f.a.ClientFamily == clientFamily
+	return !NamedClient(f.a.ClientFamily) || !NamedClient(clientFamily) || f.a.ClientFamily == clientFamily
 }
 
 // servedBySameService reports whether the person's served connection s, on f's server,
@@ -389,7 +389,7 @@ func serviceEndpoint(kind, server, member string) string {
 	switch {
 	case member != "":
 		return member
-	case kind == serverKindMCP || kind == serverKindToolset:
+	case kind == ServerKindMCP || kind == serverKindToolset:
 		return server
 	default:
 		return ""
