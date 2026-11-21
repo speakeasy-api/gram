@@ -1,5 +1,15 @@
 package authz
 
+import (
+	"maps"
+	"slices"
+)
+
+// Dispositions lists every disposition a tool call can carry, sorted.
+func Dispositions() []string {
+	return slices.Sorted(maps.Keys(validDispositions))
+}
+
 // DispositionFromHints classifies a tool by its annotation hints into the one
 // disposition a tool call carries. Every caller that authorizes calling or
 // listing a tool uses it, so both see the same value.
