@@ -80,17 +80,15 @@ func TestRead_GroupsOneOrganizationsFailures(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
 	orgA, orgB, project, server := "org-"+uuid.NewString(), "org-"+uuid.NewString(), uuid.New(), uuid.New()
-	for range 2 {
-		f.fail(mcpconnectionattempts.ServerScope(orgA, project, server, mcpconnectionattempts.AppDCR), time.Hour)
-		f.fail(mcpconnectionattempts.ServerScope(orgB, project, server, mcpconnectionattempts.AppDCR), time.Hour)
-	}
-	require.Empty(t, f.read(orgA, time.Time{}), "two people in each organization make no problem")
+	f.fail(mcpconnectionattempts.ServerScope(orgA, project, server, mcpconnectionattempts.AppDCR), time.Hour)
+	f.fail(mcpconnectionattempts.ServerScope(orgB, project, server, mcpconnectionattempts.AppDCR), time.Hour)
+	require.Empty(t, f.read(orgA, time.Time{}), "one person in each organization makes no problem")
 
 	f.fail(mcpconnectionattempts.ServerScope(orgA, project, server, mcpconnectionattempts.AppDCR), time.Hour)
 	got := f.read(orgA, time.Time{})
 	require.Len(t, got, 1)
 	require.Equal(t, RuleSameServer, got[0].Rule)
-	require.Equal(t, 3, got[0].People)
+	require.Equal(t, 2, got[0].People)
 	require.Equal(t, orgA, got[0].OrganizationID)
 }
 
@@ -98,7 +96,7 @@ func TestRead_StartsWhereRecordingStarted(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
 	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
-	for range 3 {
+	for range MinPeople {
 		f.fail(mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR), 3*time.Hour)
 	}
 	require.Len(t, f.read(org, time.Time{}), 1)
@@ -126,7 +124,7 @@ func TestRead_DropsAFailureLastSeenBeforeRecordingStarted(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
 	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
-	for range 3 {
+	for range MinPeople {
 		p := urn.NewUserSubject("user-" + uuid.NewString())
 		started := f.now.Add(-100 * time.Minute)
 		row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), started, mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)),
@@ -144,14 +142,13 @@ func TestRead_AppliesGraceFromWhenRecordingStarted(t *testing.T) {
 	f := newReadFixture(t)
 	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
 	scope := mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)
-	for range 3 {
+	for range MinPeople {
 		p := urn.NewUserSubject("user-" + uuid.NewString())
 		f.failAs(p, scope, 3*time.Hour, mcpconnectionattempts.CodeProviderServerError)
 		f.failAs(p, scope, 9*time.Minute, mcpconnectionattempts.CodeProviderServerError)
 	}
 	require.Len(t, f.read(org, time.Time{}), 1)
-	got := f.read(org, f.now.Add(-10*time.Minute))
-	require.Empty(t, got, "recording started 10 minutes ago, inside the 30 minute grace")
+	require.Empty(t, f.read(org, f.now.Add(-10*time.Minute)), "recording started 10 minutes ago, inside the 30 minute grace")
 }
 
 type orgFixture struct {
@@ -204,14 +201,13 @@ func TestRead_GroupsAServiceAcrossADirectServerAndAGatewayMember(t *testing.T) {
 
 	down := mcpconnectionattempts.CodeProviderServerError
 	f.failAs(urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour, down)
-	f.failAs(urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour, down)
 	f.failAs(urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.GatewayScope(o.organizationID, o.project, uuid.New(), mcpconnectionattempts.AppDCR), time.Hour, down, mcpconnectionattempts.Member(memberServer))
 
 	got := f.read(o.organizationID, time.Time{})
 	require.Len(t, got, 1)
 	require.Equal(t, RuleSameService, got[0].Rule)
 	require.Equal(t, Scope{Kind: ScopeService, Key: "mcp.example.com"}, got[0].Scope)
-	require.Equal(t, 3, got[0].People)
+	require.Equal(t, 2, got[0].People)
 }
 
 func TestListServerUpstreams(t *testing.T) {

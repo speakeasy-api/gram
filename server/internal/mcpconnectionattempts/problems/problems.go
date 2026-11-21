@@ -31,7 +31,7 @@ import (
 
 const (
 	// MinPeople is how many distinct people make a server, service or app version a problem.
-	MinPeople = 3
+	MinPeople = 2
 
 	// MinServersPerService is how many servers must share an upstream for it to be a service problem.
 	MinServersPerService = 2
