@@ -1115,6 +1115,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 					RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
 					ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					SessionID:      conv.PtrValOr(payload.SessionID, ""),
 				})
 			}()
 		}
@@ -1179,6 +1180,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 						RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 						ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
 						ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+						SessionID:      conv.PtrValOr(payload.SessionID, ""),
 					})
 				}()
 			}
@@ -1488,6 +1490,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				RiskResultID:   conv.NilableToNullUUID(resultID),
 				ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
 				ChatMessageID:  conv.NilableToNullUUID(msgID),
+				SessionID:      conv.PtrValOr(payload.SessionID, ""),
 			})
 		}()
 	}

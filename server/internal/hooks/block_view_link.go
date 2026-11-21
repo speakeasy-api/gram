@@ -39,6 +39,10 @@ type toolCallBlockParams struct {
 	RiskResultID  uuid.NullUUID
 	ChatID        uuid.NullUUID
 	ChatMessageID uuid.NullUUID
+	// SessionID is the agent session the call belongs to. A Claude adapter
+	// slug is resolved against it to the product surface (Claude Code, Claude
+	// Code Desktop, Cowork) before the block is stored. Empty when unknown.
+	SessionID string
 }
 
 // blockViewURL builds the durable block-page URL for a pre-minted block id. The
@@ -69,7 +73,7 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 		ID:             blockID,
 		OrganizationID: p.OrganizationID,
 		ProjectID:      p.ProjectID,
-		Provider:       p.Provider,
+		Provider:       s.blockProviderSurface(ctx, p),
 		Reason:         strings.TrimSpace(p.Reason),
 		ToolName:       conv.ToPGTextEmpty(p.ToolName),
 		UserID:         strings.TrimSpace(p.UserID),
@@ -114,6 +118,27 @@ func (s *Service) insertToolCallBlock(ctx context.Context, blockID uuid.UUID, p 
 		attr.SlogProjectID(p.ProjectID.String()),
 		attr.SlogValueAny(map[string]any{"block_id": blockID.String()}),
 	)
+}
+
+// blockProviderSurface resolves the provider stored on a block. Claude hook
+// senders report a bare "claude" (or desktop) adapter slug, which reads back as
+// Claude Chat Desktop, so a Claude-family slug is resolved to the session's
+// product surface the same way chat rows are. Runs on the detached insert, so
+// the session cache lookups stay off the deny path. Other providers pass
+// through unchanged.
+func (s *Service) blockProviderSurface(ctx context.Context, p toolCallBlockParams) string {
+	provider := strings.TrimSpace(p.Provider)
+	if claudeServiceNameSpecificity(provider) == 0 {
+		return provider
+	}
+	var metadata SessionMetadata
+	if cached, err := s.getSessionMetadata(ctx, p.SessionID); err == nil &&
+		cached.GramOrgID == p.OrganizationID && cached.ProjectID == p.ProjectID.String() {
+		metadata = cached
+	}
+	metadata.SessionID = p.SessionID
+	metadata.ServiceName = preferClaudeServiceName(provider, metadata.ServiceName)
+	return conv.Default(s.claudeSessionSurface(ctx, &metadata), provider)
 }
 
 // blockLink names one optional foreign key on tool_call_blocks and points at
