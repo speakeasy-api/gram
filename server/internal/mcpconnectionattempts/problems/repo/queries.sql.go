@@ -48,9 +48,7 @@ type ListServerUpstreamsRow struct {
 	Issuer pgtype.Text
 }
 
-// The configured upstream of each live remote-backed MCP server among the ids
-// whose project belongs to the organization: its URL, and the issuer it signs
-// in to when one is set. Ids from other organizations return nothing.
+// URL and, when set, issuer of the live remote-backed MCP servers among the ids in the organization.
 func (q *Queries) ListServerUpstreams(ctx context.Context, arg ListServerUpstreamsParams) ([]ListServerUpstreamsRow, error) {
 	rows, err := q.db.Query(ctx, listServerUpstreams, arg.OrganizationID, arg.ServerIds)
 	if err != nil {
@@ -69,4 +67,25 @@ func (q *Queries) ListServerUpstreams(ctx context.Context, arg ListServerUpstrea
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeleteMCPServerFixture = `-- name: SoftDeleteMCPServerFixture :execrows
+UPDATE mcp_servers
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+    AND project_id = $2
+`
+
+type SoftDeleteMCPServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: soft-deletes an MCP server in a project.
+func (q *Queries) SoftDeleteMCPServerFixture(ctx context.Context, arg SoftDeleteMCPServerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteMCPServerFixture, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

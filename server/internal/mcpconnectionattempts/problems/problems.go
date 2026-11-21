@@ -1,6 +1,18 @@
-// Package problems groups the people who cannot connect right now into suspected
-// problems: several people failing the same way on one server, service or app version,
-// or one person failing the same way for a day.
+// Package problems groups the people who cannot connect right now into suspected problems.
+//
+// The rule, over the open episodes from mcpconnectionattempts.ReadFailingNow:
+//  1. Each episode failed one way: its part and who fixes its latest reason.
+//  2. Per way, these are candidates when MinPeople distinct people are in them:
+//     - a server: its mcp_servers row however it was reached, else its kind and id;
+//     - a service: the configured upstream (the issuer for a service sign-in when the
+//     server has one, else the URL host), on MinServersPerService or more servers;
+//     - an app version: a named client family and version, when another named family
+//     was served on one of its servers after its earliest episode opened.
+//  3. The candidate with the most people is picked, ties by most episodes, then app
+//     version, server, service, then key. Its episodes leave the pool and the rest are
+//     regrouped until no candidate qualifies.
+//  4. Episodes left that opened OnePersonFor or more before now are one problem per
+//     person and way, unless that person and way are already in a group problem.
 package problems
 
 import (
@@ -16,16 +28,16 @@ import (
 )
 
 const (
-	// MinPeople is how many distinct people a server, service or app version needs
-	// failing the same way before it is a problem. Fewer can be a coincidence.
+	// MinPeople is how many distinct people make a server, service or app version a problem.
 	MinPeople = 3
 
-	// OnePersonFor is how long one person must fail the same way, counted from the
-	// first failure of the run, before that alone is a problem.
+	// MinServersPerService is how many servers must share an upstream for it to be a service problem.
+	MinServersPerService = 2
+
+	// OnePersonFor is how long one person must fail the same way to be a problem alone.
 	OnePersonFor = 24 * time.Hour
 
-	// TriedWithin is how recently someone must have tried to count: a person who has
-	// not tried for a day is no longer waiting on a fix.
+	// TriedWithin is how recently a person must have tried to count.
 	TriedWithin = 24 * time.Hour
 )
 
@@ -33,30 +45,27 @@ const (
 type Rule string
 
 const (
-	// RuleThreePeopleSameServer is MinPeople people failing the same way on one server.
-	RuleThreePeopleSameServer Rule = "three_people_same_server"
+	// RuleSameServer is people failing the same way on one server.
+	RuleSameServer Rule = "same_server"
 
-	// RuleThreePeopleSameService is MinPeople people failing the same way on servers
-	// that share one configured upstream.
-	RuleThreePeopleSameService Rule = "three_people_same_service"
+	// RuleSameService is people failing the same way on servers sharing one upstream.
+	RuleSameService Rule = "same_service"
 
-	// RuleThreePeopleSameAppVersion is MinPeople people failing the same way on one app
-	// version while other apps were served.
-	RuleThreePeopleSameAppVersion Rule = "three_people_same_app_version"
+	// RuleSameAppVersion is people failing the same way on one app version.
+	RuleSameAppVersion Rule = "same_app_version"
 
-	// RuleOnePerson24Hours is one person failing the same way for OnePersonFor.
-	RuleOnePerson24Hours Rule = "one_person_24_hours"
+	// RuleOnePerson is one person failing the same way for OnePersonFor.
+	RuleOnePerson Rule = "one_person"
 )
 
 // ScopeKind is what a problem is about. The values are a contract with the dashboard.
 type ScopeKind string
 
 const (
-	// ScopeServer is one server, gateway member or toolset. Its key is kind:id, plus
-	// :member for a gateway member.
+	// ScopeServer is one server. Its key is the mcp_servers id, else kind:id.
 	ScopeServer ScopeKind = "server"
 
-	// ScopeService is a configured upstream. Its key is the lowercase host.
+	// ScopeService is a configured upstream. Its key is the issuer or the URL host.
 	ScopeService ScopeKind = "service"
 
 	// ScopeAppVersion is one client family and version. Its key is family@version.
@@ -93,28 +102,9 @@ type Upstream struct {
 	Issuer string
 }
 
-// ServedByFamily is the latest request served on one server for one client family.
-type ServedByFamily struct {
-	// ServerKind is the kind of server.
-	ServerKind string `ch:"server_kind"`
-
-	// ServerID is the server, gateway or toolset.
-	ServerID string `ch:"server_id"`
-
-	// MemberID is the gateway member, empty for none.
-	MemberID string `ch:"member_id"`
-
-	// ClientFamily is the client family served.
-	ClientFamily string `ch:"client_family"`
-
-	// LastServedAt is when a request was last served.
-	LastServedAt time.Time `ch:"last_served_at"`
-}
-
 // Problem is a suspected problem: people failing the same way that a rule groups.
 type Problem struct {
-	// ID is derived from the organization, scope and way, so it stays the same while
-	// the problem exists.
+	// ID is derived from the organization, scope and way.
 	ID string
 
 	// OrganizationID is the organization.
@@ -144,13 +134,10 @@ type Problem struct {
 	// Episodes are the open episodes it groups.
 	Episodes []mcpconnectionattempts.FailingPerson
 
-	// SharedApp is the family and version when every episode has the same named family
-	// and non-empty version, zero otherwise.
+	// SharedApp is the named family and version every episode has, zero otherwise.
 	SharedApp App
 
-	// OtherAppsServed is whether a named client family none of its episodes failed with
-	// was served on one of its servers after Since. Servers match on kind, id and member
-	// exactly; a gateway-level served row has an empty member.
+	// OtherAppsServed is whether another named family was served on its servers after Since.
 	OtherAppsServed bool
 }
 
@@ -161,39 +148,32 @@ type way struct {
 }
 
 func wayOf(e mcpconnectionattempts.FailingPerson) way {
+	// Reasons missing from the catalog all share WhoNobody, so they are one way per part.
 	meaning, _ := mcpconnectionattempts.MeaningOf(e.Reason)
 	return way{part: e.Part, who: meaning.WhoFixes}
 }
 
-type serverKey struct{ kind, id, member string }
+type servedKey struct{ kind, id, member string }
 
-func serverOf(e mcpconnectionattempts.FailingPerson) serverKey {
-	return serverKey{kind: e.ServerKind, id: e.ServerID, member: e.MemberID}
-}
-
-func (k serverKey) String() string {
-	if k.member == "" {
-		return k.kind + ":" + k.id
+// serverOf is the episode's server: its mcp_servers row, else its own kind, id and member.
+func serverOf(e mcpconnectionattempts.FailingPerson) string {
+	if id := e.BackingServerID(); id != "" {
+		return id
 	}
-	return k.kind + ":" + k.id + ":" + k.member
+	if e.MemberID == "" {
+		return e.ServerKind + ":" + e.ServerID
+	}
+	return e.ServerKind + ":" + e.ServerID + ":" + e.MemberID
 }
 
-// candidate is a scope with enough people failing one way to be picked.
-type candidate struct {
-	scope    Scope
-	way      way
-	episodes []int
-	people   int
-}
-
-// kindRank breaks ties between candidates of equal size: the narrowest explanation first.
+// kindRank breaks ties, narrowest first; the exhaustive linter requires ScopePerson.
 var kindRank = map[ScopeKind]int{ScopeAppVersion: 0, ScopeServer: 1, ScopeService: 2, ScopePerson: 3}
 
 var ruleOf = map[ScopeKind]Rule{
-	ScopeServer:     RuleThreePeopleSameServer,
-	ScopeService:    RuleThreePeopleSameService,
-	ScopeAppVersion: RuleThreePeopleSameAppVersion,
-	ScopePerson:     RuleOnePerson24Hours,
+	ScopeServer:     RuleSameServer,
+	ScopeService:    RuleSameService,
+	ScopeAppVersion: RuleSameAppVersion,
+	ScopePerson:     RuleOnePerson,
 }
 
 // grouper holds one Group call's inputs, indexed.
@@ -201,34 +181,36 @@ type grouper struct {
 	organizationID string
 	episodes       []mcpconnectionattempts.FailingPerson
 	ways           []way
-	upstreams      map[string]Upstream
-	served         map[serverKey]map[string]time.Time
+	servers        []string
+	scopes         [][]Scope
+	served         map[servedKey]map[string]time.Time
 }
 
-// Group turns open episodes into suspected problems, each episode in at most one:
-//  1. Each episode failed one way: its part and who fixes its latest reason.
-//  2. Per way, a server, a service (an upstream shared by two or more servers) or an app
-//     version (when another family was served on its servers since) with MinPeople
-//     distinct people is a candidate.
-//  3. The candidate with the most people is picked, ties by most episodes, then app
-//     version, server, service, then key. Its episodes leave the pool and candidates are
-//     rebuilt until none qualifies.
-//  4. Episodes left that opened OnePersonFor before now are one problem per person and way.
-//
-// upstreams is keyed by mcp_servers id. Output is ordered by most people, then Since, then ID.
-func Group(organizationID string, episodes []mcpconnectionattempts.FailingPerson, upstreams map[string]Upstream, served []ServedByFamily, now time.Time) []Problem {
+func newGrouper(organizationID string, episodes []mcpconnectionattempts.FailingPerson, upstreams map[string]Upstream, served []mcpconnectionattempts.ServedByFamily) grouper {
 	g := grouper{
 		organizationID: organizationID,
 		episodes:       episodes,
 		ways:           make([]way, len(episodes)),
-		upstreams:      upstreams,
-		served:         map[serverKey]map[string]time.Time{},
+		servers:        make([]string, len(episodes)),
+		scopes:         make([][]Scope, len(episodes)),
+		served:         map[servedKey]map[string]time.Time{},
 	}
 	for i, e := range episodes {
 		g.ways[i] = wayOf(e)
+		g.servers[i] = serverOf(e)
+		if e.ServerID == "" {
+			continue
+		}
+		g.scopes[i] = append(g.scopes[i], Scope{Kind: ScopeServer, Key: g.servers[i]})
+		if key := serviceOf(e, upstreams); key != "" {
+			g.scopes[i] = append(g.scopes[i], Scope{Kind: ScopeService, Key: key})
+		}
+		if mcpconnectionattempts.NamedClient(e.ClientFamily) && e.ClientVersion != "" {
+			g.scopes[i] = append(g.scopes[i], Scope{Kind: ScopeAppVersion, Key: e.ClientFamily + "@" + e.ClientVersion})
+		}
 	}
 	for _, s := range served {
-		k := serverKey{kind: s.ServerKind, id: s.ServerID, member: s.MemberID}
+		k := servedKey{kind: s.ServerKind, id: s.ServerID, member: s.MemberID}
 		if g.served[k] == nil {
 			g.served[k] = map[string]time.Time{}
 		}
@@ -236,24 +218,44 @@ func Group(organizationID string, episodes []mcpconnectionattempts.FailingPerson
 			g.served[k][s.ClientFamily] = s.LastServedAt
 		}
 	}
+	return g
+}
 
-	pool := make([]bool, len(episodes))
-	for i := range pool {
-		pool[i] = true
+// candidate is a scope in one way, with counts kept as its episodes leave the pool.
+type candidate struct {
+	scope     Scope
+	members   []int
+	alive     int
+	subjects  map[string]int
+	servers   map[string]int
+	dirty     bool
+	qualifies bool
+	otherApps bool
+}
+
+// Group applies the package rule; upstreams is keyed by mcp_servers id.
+func Group(organizationID string, episodes []mcpconnectionattempts.FailingPerson, upstreams map[string]Upstream, served []mcpconnectionattempts.ServedByFamily, now time.Time) []Problem {
+	g := newGrouper(organizationID, episodes, upstreams, served)
+	taken := make([]bool, len(episodes))
+	grouped := map[personWay]bool{}
+
+	byWay := map[way][]int{}
+	for i := range episodes {
+		if len(g.scopes[i]) > 0 {
+			byWay[g.ways[i]] = append(byWay[g.ways[i]], i)
+		}
 	}
 
 	var out []Problem
-	for {
-		best, ok := g.best(pool)
-		if !ok {
-			break
+	for w, idx := range byWay {
+		for _, p := range g.groupWay(w, idx, taken) {
+			for _, e := range p.Episodes {
+				grouped[personWay{subject: e.SubjectURN, way: w}] = true
+			}
+			out = append(out, p)
 		}
-		for _, i := range best.episodes {
-			pool[i] = false
-		}
-		out = append(out, g.problem(best))
 	}
-	out = append(out, g.longFailures(pool, now)...)
+	out = append(out, g.longFailures(taken, grouped, now)...)
 
 	slices.SortFunc(out, func(a, b Problem) int {
 		return cmp.Or(cmp.Compare(b.People, a.People), a.Since.Compare(b.Since), cmp.Compare(a.ID, b.ID))
@@ -261,123 +263,150 @@ func Group(organizationID string, episodes []mcpconnectionattempts.FailingPerson
 	return out
 }
 
-// best returns the qualifying candidate to pick from the episodes still in the pool.
-func (g grouper) best(pool []bool) (candidate, bool) {
-	groups := map[way]map[Scope][]int{}
-	add := func(i int, s Scope) {
-		w := g.ways[i]
-		if groups[w] == nil {
-			groups[w] = map[Scope][]int{}
+// groupWay picks the candidates of one way. Picks in one way never change another.
+func (g grouper) groupWay(w way, idx []int, taken []bool) []Problem {
+	cands := map[Scope]*candidate{}
+	for _, i := range idx {
+		for _, s := range g.scopes[i] {
+			c := cands[s]
+			if c == nil {
+				c = &candidate{scope: s, members: nil, alive: 0, subjects: map[string]int{}, servers: map[string]int{}, dirty: true, qualifies: false, otherApps: false}
+				cands[s] = c
+			}
+			c.members = append(c.members, i)
+			c.alive++
+			c.subjects[g.episodes[i].SubjectURN]++
+			c.servers[g.servers[i]]++
 		}
-		groups[w][s] = append(groups[w][s], i)
 	}
-	for i, e := range g.episodes {
-		if !pool[i] || e.ServerID == "" {
-			continue
-		}
-		add(i, Scope{Kind: ScopeServer, Key: serverOf(e).String()})
-		if host := g.serviceOf(e); host != "" {
-			add(i, Scope{Kind: ScopeService, Key: host})
-		}
-		if mcpconnectionattempts.NamedClient(e.ClientFamily) && e.ClientVersion != "" {
-			add(i, Scope{Kind: ScopeAppVersion, Key: e.ClientFamily + "@" + e.ClientVersion})
+	for s, c := range cands {
+		if len(c.subjects) < MinPeople {
+			delete(cands, s)
 		}
 	}
 
-	var best candidate
-	found := false
-	for w, scopes := range groups {
-		for s, idx := range scopes {
-			c := candidate{scope: s, way: w, episodes: idx, people: g.people(idx)}
-			if !g.qualifies(c) {
-				continue
+	var out []Problem
+	for {
+		var best *candidate
+		for _, c := range cands {
+			if c.dirty {
+				g.evaluate(c, taken)
 			}
-			if !found || better(c, best) {
-				best, found = c, true
+			if c.qualifies && (best == nil || rank(c.scope, len(c.subjects), c.alive, best.scope, len(best.subjects), best.alive) < 0) {
+				best = c
 			}
 		}
+		if best == nil {
+			return out
+		}
+
+		delete(cands, best.scope)
+		picked := g.aliveMembers(best, taken)
+		for _, i := range picked {
+			taken[i] = true
+			for _, s := range g.scopes[i] {
+				c := cands[s]
+				if c == nil {
+					continue
+				}
+				c.alive--
+				c.dirty = true
+				if c.subjects[g.episodes[i].SubjectURN]--; c.subjects[g.episodes[i].SubjectURN] == 0 {
+					delete(c.subjects, g.episodes[i].SubjectURN)
+				}
+				if c.servers[g.servers[i]]--; c.servers[g.servers[i]] == 0 {
+					delete(c.servers, g.servers[i])
+				}
+				if len(c.subjects) < MinPeople {
+					delete(cands, s)
+				}
+			}
+		}
+		otherApps := best.otherApps
+		if best.scope.Kind != ScopeAppVersion {
+			otherApps = g.otherAppsServed(picked)
+		}
+		out = append(out, g.problem(best.scope, w, picked, len(best.subjects), otherApps))
 	}
-	return best, found
 }
 
-func (g grouper) qualifies(c candidate) bool {
-	if c.people < MinPeople {
-		return false
-	}
-	switch c.scope.Kind {
-	case ScopeService:
-		servers := map[serverKey]bool{}
-		for _, i := range c.episodes {
-			servers[serverOf(g.episodes[i])] = true
+func (g grouper) aliveMembers(c *candidate, taken []bool) []int {
+	out := make([]int, 0, c.alive)
+	for _, i := range c.members {
+		if !taken[i] {
+			out = append(out, i)
 		}
-		return len(servers) >= 2
-	case ScopeAppVersion:
-		return g.otherAppsServed(c.episodes)
-	case ScopeServer, ScopePerson:
-		return true
-	}
-	return false
-}
-
-func better(a, b candidate) bool {
-	return cmp.Or(
-		cmp.Compare(b.people, a.people),
-		cmp.Compare(len(b.episodes), len(a.episodes)),
-		cmp.Compare(kindRank[a.scope.Kind], kindRank[b.scope.Kind]),
-		cmp.Compare(a.scope.Key, b.scope.Key),
-		cmp.Compare(a.way.part, b.way.part),
-		cmp.Compare(a.way.who, b.way.who),
-	) < 0
-}
-
-// longFailures makes one problem per person and way from the pool's episodes that
-// opened OnePersonFor or more before now.
-func (g grouper) longFailures(pool []bool, now time.Time) []Problem {
-	type personWay struct {
-		subject string
-		way     way
-	}
-	groups := map[personWay][]int{}
-	var order []personWay
-	for i, e := range g.episodes {
-		if !pool[i] || now.Sub(e.OpenedAt) < OnePersonFor {
-			continue
-		}
-		k := personWay{subject: e.SubjectURN, way: g.ways[i]}
-		if groups[k] == nil {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], i)
-	}
-	out := make([]Problem, 0, len(order))
-	for _, k := range order {
-		idx := groups[k]
-		out = append(out, g.problem(candidate{scope: Scope{Kind: ScopePerson, Key: k.subject}, way: k.way, episodes: idx, people: 1}))
 	}
 	return out
 }
 
-func (g grouper) problem(c candidate) Problem {
-	eps := make([]mcpconnectionattempts.FailingPerson, 0, len(c.episodes))
-	for _, i := range c.episodes {
+// evaluate refreshes whether c qualifies from its episodes still in the pool.
+func (g grouper) evaluate(c *candidate, taken []bool) {
+	c.dirty = false
+	c.qualifies = len(c.subjects) >= MinPeople
+	switch c.scope.Kind {
+	case ScopeService:
+		c.qualifies = c.qualifies && len(c.servers) >= MinServersPerService
+	case ScopeAppVersion:
+		c.otherApps = c.qualifies && g.otherAppsServed(g.aliveMembers(c, taken))
+		c.qualifies = c.otherApps
+	case ScopeServer, ScopePerson:
+	}
+}
+
+// rank orders candidates: most people, most episodes, narrowest kind, then key.
+func rank(a Scope, aPeople, aEpisodes int, b Scope, bPeople, bEpisodes int) int {
+	return cmp.Or(
+		cmp.Compare(bPeople, aPeople),
+		cmp.Compare(bEpisodes, aEpisodes),
+		cmp.Compare(kindRank[a.Kind], kindRank[b.Kind]),
+		cmp.Compare(a.Key, b.Key),
+	)
+}
+
+type personWay struct {
+	subject string
+	way     way
+}
+
+// longFailures makes the one-person problems from the episodes left.
+func (g grouper) longFailures(taken []bool, grouped map[personWay]bool, now time.Time) []Problem {
+	groups := map[personWay][]int{}
+	for i, e := range g.episodes {
+		k := personWay{subject: e.SubjectURN, way: g.ways[i]}
+		if taken[i] || grouped[k] || now.Sub(e.OpenedAt) < OnePersonFor {
+			continue
+		}
+		groups[k] = append(groups[k], i)
+	}
+	out := make([]Problem, 0, len(groups))
+	for k, idx := range groups {
+		out = append(out, g.problem(Scope{Kind: ScopePerson, Key: k.subject}, k.way, idx, 1, g.otherAppsServed(idx)))
+	}
+	return out
+}
+
+func (g grouper) problem(scope Scope, w way, idx []int, people int, otherApps bool) Problem {
+	eps := make([]mcpconnectionattempts.FailingPerson, 0, len(idx))
+	for _, i := range idx {
 		eps = append(eps, g.episodes[i])
 	}
 	slices.SortFunc(eps, compareEpisodes)
 
 	// Sorted by OpenedAt, so the first opened earliest.
 	p := Problem{
-		ID:              problemID(g.organizationID, c.scope, c.way),
+		ID:              problemID(g.organizationID, scope, w),
 		OrganizationID:  g.organizationID,
-		Rule:            ruleOf[c.scope.Kind],
-		Scope:           c.scope,
-		Part:            c.way.part,
-		WhoFixes:        c.way.who,
+		Rule:            ruleOf[scope.Kind],
+		Scope:           scope,
+		Part:            w.part,
+		WhoFixes:        w.who,
 		Since:           eps[0].OpenedAt,
 		LastFailedAt:    eps[0].LastFailureAt,
-		People:          g.people(c.episodes),
+		People:          people,
 		Episodes:        eps,
 		SharedApp:       sharedApp(eps),
-		OtherAppsServed: g.otherAppsServed(c.episodes),
+		OtherAppsServed: otherApps,
 	}
 	for _, e := range eps[1:] {
 		if e.LastFailureAt.After(p.LastFailedAt) {
@@ -387,17 +416,7 @@ func (g grouper) problem(c candidate) Problem {
 	return p
 }
 
-func (g grouper) people(idx []int) int {
-	subjects := map[string]bool{}
-	for _, i := range idx {
-		subjects[g.episodes[i].SubjectURN] = true
-	}
-	return len(subjects)
-}
-
-// otherAppsServed is whether a named family none of the episodes failed with was served
-// on one of their servers after the earliest of them opened. An unknown or generic family
-// proves nothing about which app was served.
+// otherAppsServed matches servers exactly on kind, id and member; a gateway-level row has no member.
 func (g grouper) otherAppsServed(idx []int) bool {
 	families := map[string]bool{}
 	var since time.Time
@@ -409,7 +428,8 @@ func (g grouper) otherAppsServed(idx []int) bool {
 		}
 	}
 	for _, i := range idx {
-		for family, at := range g.served[serverOf(g.episodes[i])] {
+		e := g.episodes[i]
+		for family, at := range g.served[servedKey{kind: e.ServerKind, id: e.ServerID, member: e.MemberID}] {
 			if mcpconnectionattempts.NamedClient(family) && !families[family] && at.After(since) {
 				return true
 			}
@@ -418,39 +438,40 @@ func (g grouper) otherAppsServed(idx []int) bool {
 	return false
 }
 
-// serviceOf is the episode's configured upstream host, empty when its server has none.
-// A service sign-in is with the issuer when the server has one; everything else is with
-// the URL.
-func (g grouper) serviceOf(e mcpconnectionattempts.FailingPerson) string {
-	var id string
-	switch e.ServerKind {
-	case mcpconnectionattempts.ServerKindMCP:
-		id = e.ServerID
-	case mcpconnectionattempts.ServerKindMeta:
-		id = e.MemberID
-	}
-	u, ok := g.upstreams[id]
+// serviceOf is the episode's configured upstream, empty when its server has none.
+func serviceOf(e mcpconnectionattempts.FailingPerson, upstreams map[string]Upstream) string {
+	id := e.BackingServerID()
+	u, ok := upstreams[id]
 	if id == "" || !ok {
 		return ""
 	}
 	if e.Part == mcpconnectionattempts.PartServiceSignIn {
-		if issuer := hostOf(u.Issuer); issuer != "" {
+		if issuer := issuerKey(u.Issuer); issuer != "" {
 			return issuer
 		}
 	}
-	return hostOf(u.URL)
+	host, _ := hostAndPath(u.URL)
+	return host
 }
 
-// hostOf is the lowercase host of a URL, without port, empty when it has none.
-func hostOf(raw string) string {
-	if raw == "" {
+// issuerKey is lowercase host plus path: tenants of one identity provider share its host.
+func issuerKey(raw string) string {
+	host, path := hostAndPath(raw)
+	if host == "" {
 		return ""
+	}
+	return host + strings.TrimRight(path, "/")
+}
+
+func hostAndPath(raw string) (string, string) {
+	if raw == "" {
+		return "", ""
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	return strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	return strings.TrimSuffix(strings.ToLower(parsed.Hostname()), "."), parsed.Path
 }
 
 func sharedApp(eps []mcpconnectionattempts.FailingPerson) App {
@@ -482,5 +503,8 @@ func compareEpisodes(a, b mcpconnectionattempts.FailingPerson) int {
 		cmp.Compare(a.Part, b.Part),
 		cmp.Compare(a.ClientFamily, b.ClientFamily),
 		cmp.Compare(a.Reason, b.Reason),
+		a.LastFailureAt.Compare(b.LastFailureAt),
+		cmp.Compare(a.ProjectID.String(), b.ProjectID.String()),
+		cmp.Compare(a.Step, b.Step),
 	)
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,129 +21,193 @@ import (
 
 func logsOff(context.Context, string) (bool, error) { return false, nil }
 
-func TestRead_LogsOffReturnsTheError(t *testing.T) {
-	t.Parallel()
+type readFixture struct {
+	t   *testing.T
+	ch  driver.Conn
+	db  *pgxpool.Pool
+	now time.Time
+}
+
+func newReadFixture(t *testing.T) *readFixture {
+	t.Helper()
 	ch, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
+	return &readFixture{t: t, ch: ch, db: db, now: time.Now().UTC()}
+}
 
-	_, err = Read(t.Context(), ch, db, logsOff, "org-"+uuid.NewString(), time.Now())
+// fail writes a rejected saved key for a new person on scope, ago before now.
+func (f *readFixture) fail(scope mcpconnectionattempts.Scope, ago time.Duration, opts ...mcpconnectionattempts.Option) urn.SessionSubject {
+	f.t.Helper()
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	f.failAs(p, scope, ago, opts...)
+	return p
+}
+
+func (f *readFixture) failAs(p urn.SessionSubject, scope mcpconnectionattempts.Scope, ago time.Duration, opts ...mcpconnectionattempts.Option) {
+	f.t.Helper()
+	at := f.now.Add(-ago)
+	row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), at, scope), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected, true, at, append(opts, mcpconnectionattempts.Subject(&p))...)
+	require.NoError(f.t, err)
+	require.NoError(f.t, mcpconnectionattempts.AppendRows(f.t.Context(), f.ch, []mcpconnectionattempts.Row{row}))
+}
+
+func (f *readFixture) read(org string, recordedSince time.Time) []Problem {
+	f.t.Helper()
+	got, err := Read(f.t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, org, recordedSince, f.now)
+	require.NoError(f.t, err)
+	return got
+}
+
+func TestRead_LogsOffReturnsTheError(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	_, err := Read(t.Context(), f.ch, f.db, logsOff, "org-"+uuid.NewString(), time.Time{}, f.now)
 	require.ErrorIs(t, err, mcpconnectionattempts.ErrLogsOff)
 }
 
 func TestRead_RejectsAnEmptyOrganization(t *testing.T) {
 	t.Parallel()
-	ch, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	db, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
-
-	_, err = Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, "", time.Now())
+	f := newReadFixture(t)
+	_, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, "", time.Time{}, f.now)
 	require.Error(t, err)
 }
 
 // Another organization failing on the same server id is not counted.
 func TestRead_GroupsOneOrganizationsFailures(t *testing.T) {
 	t.Parallel()
-	ch, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	db, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
-
-	now := time.Now().UTC()
-	orgA, orgB, server := "org-"+uuid.NewString(), "org-"+uuid.NewString(), uuid.New()
-	fail := func(org string, people int) {
-		project := uuid.New()
-		for range people {
-			p := urn.NewUserSubject("user-" + uuid.NewString())
-			at := now.Add(-time.Hour)
-			row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), at, mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)),
-				mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected, true, at, mcpconnectionattempts.Subject(&p))
-			require.NoError(t, err)
-			require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), ch, []mcpconnectionattempts.Row{row}))
-		}
+	f := newReadFixture(t)
+	orgA, orgB, project, server := "org-"+uuid.NewString(), "org-"+uuid.NewString(), uuid.New(), uuid.New()
+	for range 2 {
+		f.fail(mcpconnectionattempts.ServerScope(orgA, project, server, mcpconnectionattempts.AppDCR), time.Hour)
+		f.fail(mcpconnectionattempts.ServerScope(orgB, project, server, mcpconnectionattempts.AppDCR), time.Hour)
 	}
-	fail(orgA, 2)
-	fail(orgB, 2)
+	require.Empty(t, f.read(orgA, time.Time{}), "two people in each organization make no problem")
 
-	got, err := Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, orgA, now)
-	require.NoError(t, err)
-	require.Empty(t, got, "two people in each organization make no problem")
-
-	fail(orgA, 1)
-	got, err = Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, orgA, now)
-	require.NoError(t, err)
+	f.fail(mcpconnectionattempts.ServerScope(orgA, project, server, mcpconnectionattempts.AppDCR), time.Hour)
+	got := f.read(orgA, time.Time{})
 	require.Len(t, got, 1)
-	require.Equal(t, RuleThreePeopleSameServer, got[0].Rule)
+	require.Equal(t, RuleSameServer, got[0].Rule)
 	require.Equal(t, 3, got[0].People)
 	require.Equal(t, orgA, got[0].OrganizationID)
 }
 
-type upstreamFixture struct {
-	organizationID string
-	server         uuid.UUID
+func TestRead_StartsWhereRecordingStarted(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
+	for range 3 {
+		f.fail(mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR), 3*time.Hour)
+	}
+	require.Len(t, f.read(org, time.Time{}), 1)
+	require.Empty(t, f.read(org, f.now.Add(-time.Hour)), "failures from before recording started are not read")
 }
 
-// seedUpstream creates an organization with an MCP server proxying url that signs in to issuer.
-func seedUpstream(t *testing.T, db *pgxpool.Pool, url, issuer string) upstreamFixture {
+func TestRead_CountsAnEarlierRunFromWhenRecordingStarted(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
+	scope := mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)
+	p := f.fail(scope, 30*time.Hour)
+	f.failAs(p, scope, 30*time.Minute)
+
+	got := f.read(org, time.Time{})
+	require.Len(t, got, 1)
+	require.Equal(t, RuleOnePerson, got[0].Rule)
+
+	recorded := f.now.Add(-2 * time.Hour)
+	require.Empty(t, f.read(org, recorded), "the run counts from when recording started, two hours ago")
+}
+
+type orgFixture struct {
+	organizationID string
+	project        uuid.UUID
+}
+
+func seedOrg(t *testing.T, db *pgxpool.Pool) orgFixture {
 	t.Helper()
-	ctx := t.Context()
 	q := testrepo.New(db)
 	org := "org-" + uuid.NewString()
-	require.NoError(t, q.SeedDelegationLoaderOrganizationFixture(ctx, testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: org, Name: org, Slug: org}))
-	project, err := q.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: uuid.New(), Name: "p", Slug: "p-" + uuid.NewString()[:8], OrganizationID: org})
+	require.NoError(t, q.SeedDelegationLoaderOrganizationFixture(t.Context(), testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: org, Name: org, Slug: org}))
+	project, err := q.CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{ID: uuid.New(), Name: "p", Slug: "p-" + uuid.NewString()[:8], OrganizationID: org})
 	require.NoError(t, err)
-
-	remote, server, issuerID := uuid.New(), uuid.New(), uuid.New()
-	require.NoError(t, q.CreateRemoteMCPBackendFixture(ctx, testrepo.CreateRemoteMCPBackendFixtureParams{ID: remote, ProjectID: project, Url: url}))
-	require.NoError(t, q.CreateRemoteBackedMCPServerFixture(ctx, testrepo.CreateRemoteBackedMCPServerFixtureParams{
-		ID: server, ProjectID: project, Slug: conv.ToPGText("srv-" + server.String()[:8]), RemoteMcpServerID: uuid.NullUUID{UUID: remote, Valid: true}, Visibility: "private",
-	}))
-	require.NoError(t, q.SeedDelegationLoaderIssuerFixture(ctx, testrepo.SeedDelegationLoaderIssuerFixtureParams{
-		ID: issuerID, OrganizationID: conv.ToPGText(org), Slug: "issuer-" + issuerID.String()[:8], Issuer: issuer,
-		AuthorizationEndpoint: pgtype.Text{}, TokenEndpoint: pgtype.Text{}, JwksUri: pgtype.Text{},
-	}))
-	n, err := q.SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}, ID: server, ProjectID: project})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), n)
-	return upstreamFixture{organizationID: org, server: server}
+	return orgFixture{organizationID: org, project: project}
 }
 
-func TestListServerUpstreams_NeverReturnsAnotherOrganizationsServer(t *testing.T) {
+// seedServer creates an MCP server proxying url.
+func seedServer(t *testing.T, db *pgxpool.Pool, o orgFixture, url string) uuid.UUID {
+	t.Helper()
+	q := testrepo.New(db)
+	remote, server := uuid.New(), uuid.New()
+	require.NoError(t, q.CreateRemoteMCPBackendFixture(t.Context(), testrepo.CreateRemoteMCPBackendFixtureParams{ID: remote, ProjectID: o.project, Url: url}))
+	require.NoError(t, q.CreateRemoteBackedMCPServerFixture(t.Context(), testrepo.CreateRemoteBackedMCPServerFixtureParams{
+		ID: server, ProjectID: o.project, Slug: conv.ToPGText("srv-" + server.String()[:8]), RemoteMcpServerID: uuid.NullUUID{UUID: remote, Valid: true}, Visibility: "private",
+	}))
+	return server
+}
+
+// attachIssuer creates an issuer owned by owner and stamps it on the server.
+func attachIssuer(t *testing.T, db *pgxpool.Pool, o orgFixture, server uuid.UUID, owner, issuer string) {
+	t.Helper()
+	q := testrepo.New(db)
+	id := uuid.New()
+	require.NoError(t, q.SeedDelegationLoaderIssuerFixture(t.Context(), testrepo.SeedDelegationLoaderIssuerFixtureParams{
+		ID: id, OrganizationID: conv.ToPGText(owner), Slug: "issuer-" + id.String()[:8], Issuer: issuer,
+		AuthorizationEndpoint: pgtype.Text{}, TokenEndpoint: pgtype.Text{}, JwksUri: pgtype.Text{},
+	}))
+	n, err := q.SetMCPServerRemoteSessionIssuerFixture(t.Context(), testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: uuid.NullUUID{UUID: id, Valid: true}, ID: server, ProjectID: o.project})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+}
+
+func TestRead_GroupsAServiceAcrossADirectServerAndAGatewayMember(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	o := seedOrg(t, f.db)
+	direct := seedServer(t, f.db, o, "https://mcp.example.com/a")
+	memberServer := seedServer(t, f.db, o, "https://MCP.example.com:8443/b")
+
+	f.fail(mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour)
+	f.fail(mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour)
+	f.fail(mcpconnectionattempts.GatewayScope(o.organizationID, o.project, uuid.New(), mcpconnectionattempts.AppDCR), time.Hour, mcpconnectionattempts.Member(memberServer))
+
+	got := f.read(o.organizationID, time.Time{})
+	require.Len(t, got, 1)
+	require.Equal(t, RuleSameService, got[0].Rule)
+	require.Equal(t, Scope{Kind: ScopeService, Key: "mcp.example.com"}, got[0].Scope)
+	require.Equal(t, 3, got[0].People)
+}
+
+func TestListServerUpstreams(t *testing.T) {
 	t.Parallel()
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
-	mine := seedUpstream(t, db, "https://mcp.example.com/mcp", "https://auth.example.com")
-	theirs := seedUpstream(t, db, "https://other.example.com/mcp", "https://auth.other.example.com")
+	mine, theirs := seedOrg(t, db), seedOrg(t, db)
 
-	rows, err := repo.New(db).ListServerUpstreams(t.Context(), repo.ListServerUpstreamsParams{OrganizationID: mine.organizationID, ServerIds: []uuid.UUID{mine.server, theirs.server}})
+	withIssuer := seedServer(t, db, mine, "https://mcp.example.com/mcp")
+	attachIssuer(t, db, mine, withIssuer, mine.organizationID, "https://auth.example.com")
+	noIssuer := seedServer(t, db, mine, "https://plain.example.com/mcp")
+	foreignIssuer := seedServer(t, db, mine, "https://foreign.example.com/mcp")
+	attachIssuer(t, db, mine, foreignIssuer, theirs.organizationID, "https://auth.other.example.com")
+	deleted := seedServer(t, db, mine, "https://deleted.example.com/mcp")
+	n, err := repo.New(db).SoftDeleteMCPServerFixture(t.Context(), repo.SoftDeleteMCPServerFixtureParams{ID: deleted, ProjectID: mine.project})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	require.Equal(t, mine.server, rows[0].ID)
-	require.Equal(t, "https://mcp.example.com/mcp", rows[0].Url)
-	require.Equal(t, "https://auth.example.com", rows[0].Issuer.String)
-}
+	require.Equal(t, int64(1), n)
+	other := seedServer(t, db, theirs, "https://other.example.com/mcp")
 
-func TestReadServedByFamily_NeverReturnsAnotherOrganizationsRows(t *testing.T) {
-	t.Parallel()
-	ch, err := infra.NewClickhouseClient(t)
+	rows, err := repo.New(db).ListServerUpstreams(t.Context(), repo.ListServerUpstreamsParams{
+		OrganizationID: mine.organizationID,
+		ServerIds:      []uuid.UUID{withIssuer, noIssuer, foreignIssuer, deleted, other},
+	})
 	require.NoError(t, err)
-
-	now := time.Now().UTC()
-	orgA, orgB, server := "org-"+uuid.NewString(), "org-"+uuid.NewString(), uuid.NewString()
-	insert := func(org, family string) {
-		require.NoError(t, ch.Exec(t.Context(), `INSERT INTO `+mcpconnectionattempts.LastServedTable+`
-			(organization_id, project_id, server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id, last_served_at, last_answered_at)
-			VALUES (?, ?, ?, ?, '', ?, 'dcr', ?, '', ?, ?)`,
-			org, uuid.New(), mcpconnectionattempts.ServerKindMCP, server, "user:"+uuid.NewString(), family, now, now))
+	got := map[uuid.UUID]Upstream{}
+	for _, r := range rows {
+		got[r.ID] = Upstream{URL: r.Url, Issuer: r.Issuer.String}
 	}
-	insert(orgA, mcpconnectionattempts.FamilyCursor)
-	insert(orgB, mcpconnectionattempts.FamilyClaudeCode)
-
-	episodes := []mcpconnectionattempts.FailingPerson{{Episode: mcpconnectionattempts.Episode{ServerKind: mcpconnectionattempts.ServerKindMCP, ServerID: server}}}
-	got, err := readServedByFamily(t.Context(), ch, orgA, episodes)
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	require.Equal(t, mcpconnectionattempts.FamilyCursor, got[0].ClientFamily)
+	require.Equal(t, map[uuid.UUID]Upstream{
+		withIssuer:    {URL: "https://mcp.example.com/mcp", Issuer: "https://auth.example.com"},
+		noIssuer:      {URL: "https://plain.example.com/mcp", Issuer: ""},
+		foreignIssuer: {URL: "https://foreign.example.com/mcp", Issuer: ""},
+	}, got, "no deleted server, no other organization's server, no other organization's issuer")
 }

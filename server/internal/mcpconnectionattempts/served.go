@@ -20,8 +20,7 @@ import (
 )
 
 const (
-	// LastServedTable holds when each connection last had a request served.
-	LastServedTable = "mcp_connection_last_served"
+	lastServedTable = "mcp_connection_last_served"
 
 	lastServedInsert = `INSERT INTO %s (
 		organization_id, project_id, server_kind, server_id, member_id, subject_urn,

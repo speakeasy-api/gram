@@ -1,7 +1,5 @@
 -- name: ListServerUpstreams :many
--- The configured upstream of each live remote-backed MCP server among the ids
--- whose project belongs to the organization: its URL, and the issuer it signs
--- in to when one is set. Ids from other organizations return nothing.
+-- URL and, when set, issuer of the live remote-backed MCP servers among the ids in the organization.
 SELECT
     m.id,
     rms.url,
@@ -24,3 +22,10 @@ LEFT JOIN remote_session_issuers AS rsi
     )
 WHERE m.id = ANY(@server_ids::uuid[])
     AND m.deleted IS FALSE;
+
+-- name: SoftDeleteMCPServerFixture :execrows
+-- Test fixture: soft-deletes an MCP server in a project.
+UPDATE mcp_servers
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+    AND project_id = @project_id;

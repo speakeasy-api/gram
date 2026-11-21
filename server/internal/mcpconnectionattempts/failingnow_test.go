@@ -52,21 +52,21 @@ func (f *failingFixture) conn(p urn.SessionSubject, kind string, server uuid.UUI
 
 // onServer is p's connection to the direct server.
 func (f *failingFixture) onServer(p urn.SessionSubject, app App) Served {
-	return f.conn(p, ServerKindMCP, f.server, app)
+	return f.conn(p, serverKindMCP, f.server, app)
 }
 
 // served writes a request on s served ago before now that Speakeasy answered.
 func (f *failingFixture) served(s Served, ago time.Duration) {
 	f.t.Helper()
 	s.ServedAt = f.at(ago)
-	require.NoError(f.t, appendServedInto(f.t.Context(), f.ch, LastServedTable, []Served{s}))
+	require.NoError(f.t, appendServedInto(f.t.Context(), f.ch, lastServedTable, []Served{s}))
 }
 
 // answered writes a request on s served ago before now that the server answered.
 func (f *failingFixture) answered(s Served, ago time.Duration) {
 	f.t.Helper()
 	s.ServedAt, s.AnsweredAt = f.at(ago), f.at(ago)
-	require.NoError(f.t, appendServedInto(f.t.Context(), f.ch, LastServedTable, []Served{s}))
+	require.NoError(f.t, appendServedInto(f.t.Context(), f.ch, lastServedTable, []Served{s}))
 }
 
 func (f *failingFixture) read(filter FailingNowFilter) []FailingPerson {
@@ -221,7 +221,7 @@ func TestFailingNow_AnAppSignInFailureEndsOnThatAppsOwnServedRequest(t *testing.
 	p, other := person(), person()
 	f.attempt(f.direct(AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p), client(FamilyCodexCLI))
 	f.answered(f.onServer(other, AppDCR), 30*time.Minute)
-	f.answered(f.conn(p, ServerKindMCP, uuid.New(), AppDCR), 30*time.Minute)
+	f.answered(f.conn(p, serverKindMCP, uuid.New(), AppDCR), 30*time.Minute)
 	f.answered(f.onServer(p, AppOtherMetadataURL), 30*time.Minute)
 	otherClient := f.onServer(p, AppDCR)
 	otherClient.ClientFamily = FamilyClaudeCode
@@ -255,10 +255,10 @@ func TestFailingNow_AGatewayAppSignInFailureEndsOnAnyOwnRequestThroughIt(t *test
 		p := person()
 		gateway := uuid.New()
 		f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p))
-		f.served(f.conn(p, ServerKindMeta, uuid.New(), AppDCR), 30*time.Minute)
+		f.served(f.conn(p, serverKindMeta, uuid.New(), AppDCR), 30*time.Minute)
 		require.Len(t, f.failing(), 1, "another gateway")
 
-		s := f.conn(p, ServerKindMeta, gateway, AppDCR)
+		s := f.conn(p, serverKindMeta, gateway, AppDCR)
 		s.MemberID = member
 		f.served(s, 20*time.Minute)
 		require.Empty(t, f.failing(), "member %q", member)
@@ -382,7 +382,7 @@ func TestFailingNow_ARejectedBearerEndsOnThePersonsOwnRequestByAnyApp(t *testing
 	p := person()
 	f.attempt(f.direct(AppUnverified), 40*time.Minute, StepMCPRequest, CodeInvalidBearerToken, Subject(&p))
 	f.answered(f.onServer(person(), AppDCR), 30*time.Minute)
-	f.answered(f.conn(p, ServerKindMCP, uuid.New(), AppDCR), 30*time.Minute)
+	f.answered(f.conn(p, serverKindMCP, uuid.New(), AppDCR), 30*time.Minute)
 	require.Len(t, f.failing(), 1, "another person's request, and this person's on another server, do not show this person signed in")
 
 	f.served(f.onServer(p, AppDCR), 20*time.Minute)
@@ -396,7 +396,7 @@ func TestFailingNow_AServiceSignInFailureEndsOnThePersonsOwnAnswerFromThatMember
 	gateway, member, otherMember := uuid.New(), uuid.New(), uuid.New()
 	scope := GatewayScope(f.org, f.project, gateway, AppDCR)
 	on := func(who urn.SessionSubject, m string) Served {
-		s := f.conn(who, ServerKindMeta, gateway, AppDCR)
+		s := f.conn(who, serverKindMeta, gateway, AppDCR)
 		s.MemberID = m
 		return s
 	}
@@ -546,7 +546,7 @@ func TestFailingNow_AServiceSignInFailureOnAGatewayAloneNeedsTheSameServiceConne
 	gateway, connection := uuid.New(), uuid.New()
 	scope := GatewayScope(f.org, f.project, gateway, AppDCR)
 	member := func(id string) Served {
-		s := f.conn(p, ServerKindMeta, gateway, AppDCR)
+		s := f.conn(p, serverKindMeta, gateway, AppDCR)
 		s.MemberID, s.RemoteSessionClientID = uuid.NewString(), id
 		return s
 	}
@@ -573,7 +573,7 @@ func TestFailingNow_AGatewayServiceFailureNamingNoConnectionIsNotEndedByAMember(
 	p := person()
 	gateway := uuid.New()
 	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, CodeProviderRejected, Subject(&p))
-	s := f.conn(p, ServerKindMeta, gateway, AppDCR)
+	s := f.conn(p, serverKindMeta, gateway, AppDCR)
 	s.MemberID, s.RemoteSessionClientID = uuid.NewString(), uuid.NewString()
 	f.answered(s, 20*time.Minute)
 	require.Len(t, f.failing(), 1)
@@ -587,21 +587,21 @@ func TestFailingNow_AGatewayGateFailureEndsWhenTheGatewayServesThePersonAgain(t 
 		p, other := person(), person()
 		gateway := uuid.New()
 		f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, code, Subject(&p), client(FamilyClaudeCode))
-		f.served(f.conn(p, ServerKindMeta, gateway, AppDCR), 45*time.Minute)
-		f.served(f.conn(other, ServerKindMeta, gateway, AppDCR), 30*time.Minute)
-		f.served(f.conn(p, ServerKindMeta, uuid.New(), AppDCR), 30*time.Minute)
+		f.served(f.conn(p, serverKindMeta, gateway, AppDCR), 45*time.Minute)
+		f.served(f.conn(other, serverKindMeta, gateway, AppDCR), 30*time.Minute)
+		f.served(f.conn(p, serverKindMeta, uuid.New(), AppDCR), 30*time.Minute)
 		got := f.read(FailingNowFilter{OrganizationID: "", ProviderHost: "", ServerID: gateway.String(), TriedSince: time.Time{}})
 		require.Len(t, got, 1, "%s: an earlier request, another person's, and another gateway's do not show the gate lets this person through", code)
 		require.Equal(t, PartServiceSignIn, got[0].Part, code.String())
 
-		f.served(f.conn(p, ServerKindMeta, gateway, AppOtherMetadataURL), 20*time.Minute)
+		f.served(f.conn(p, serverKindMeta, gateway, AppOtherMetadataURL), 20*time.Minute)
 		require.Empty(t, f.read(FailingNowFilter{OrganizationID: "", ProviderHost: "", ServerID: gateway.String(), TriedSince: time.Time{}}), code.String())
 	}
 
 	// A gateway failure naming a service connection was not recorded at the gate.
 	p, gateway := person(), uuid.New()
 	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepProviderRefresh, CodeInvalidGrant, Subject(&p), RemoteSessionClient(uuid.New()))
-	f.served(f.conn(p, ServerKindMeta, gateway, AppDCR), 20*time.Minute)
+	f.served(f.conn(p, serverKindMeta, gateway, AppDCR), 20*time.Minute)
 	require.Len(t, f.read(FailingNowFilter{OrganizationID: "", ProviderHost: "", ServerID: gateway.String(), TriedSince: time.Time{}}), 1)
 }
 
@@ -617,7 +617,7 @@ func TestFailingNow_AGateCheckOutageEndsWhenAnyMemberAnswers(t *testing.T) {
 	require.Equal(t, PartServer, got[0].Part)
 	require.True(t, got[0].ServerLastAnsweredAt.IsZero())
 
-	s := f.conn(someone, ServerKindMeta, gateway, AppDCR)
+	s := f.conn(someone, serverKindMeta, gateway, AppDCR)
 	s.MemberID = uuid.NewString()
 	f.answered(s, 39*time.Minute)
 	require.Empty(t, f.failing())
@@ -642,9 +642,9 @@ func TestFailingNow_AServerFailureEndsWhenItAnswersAnyone(t *testing.T) {
 	p, someone := person(), person()
 	f.answered(f.onServer(someone, AppDCR), 2*time.Hour)
 	f.attempt(f.direct(AppDCR), 40*time.Minute, StepMCPRequest, CodeProviderUnreachable, Subject(&p))
-	f.answered(f.conn(someone, ServerKindMCP, uuid.New(), AppDCR), 35*time.Minute)
+	f.answered(f.conn(someone, serverKindMCP, uuid.New(), AppDCR), 35*time.Minute)
 	f.served(f.onServer(someone, AppDCR), 33*time.Minute)
-	throughGateway := f.conn(someone, ServerKindMeta, uuid.New(), AppDCR)
+	throughGateway := f.conn(someone, serverKindMeta, uuid.New(), AppDCR)
 	throughGateway.MemberID = f.server.String()
 	f.answered(throughGateway, 32*time.Minute)
 	f.attempt(f.direct(AppDCR), 31*time.Minute, StepInboundToken, ResultRefreshed, Subject(&p))
@@ -731,7 +731,7 @@ func TestFailingNow_AnUnfinishedAttemptNamesTheMemberOfItsLastRow(t *testing.T) 
 	b, err := RowAt(attempt, StepMCPRequest, CodeProviderUnreachable, false, started.Add(2*time.Minute), Subject(&p), Member(last))
 	require.NoError(t, err)
 	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{a, b}))
-	answer := f.conn(person(), ServerKindMeta, gateway, AppDCR)
+	answer := f.conn(person(), serverKindMeta, gateway, AppDCR)
 	answer.MemberID = first.String()
 	f.answered(answer, 20*time.Minute)
 
@@ -747,7 +747,7 @@ func TestFailingNow_AMembersFailureEndsOnlyWhenThatMemberAnswersThroughTheGatewa
 	p, someone := person(), person()
 	gateway, member, otherMember := uuid.New(), uuid.New(), uuid.New()
 	through := func(g, m uuid.UUID) Served {
-		s := f.conn(someone, ServerKindMeta, g, AppDCR)
+		s := f.conn(someone, serverKindMeta, g, AppDCR)
 		s.MemberID = m.String()
 		return s
 	}
@@ -755,7 +755,7 @@ func TestFailingNow_AMembersFailureEndsOnlyWhenThatMemberAnswersThroughTheGatewa
 	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, CodeProviderUnreachable, Subject(&p), Member(otherMember))
 	f.answered(through(gateway, otherMember), 30*time.Minute)
 	f.answered(through(uuid.New(), member), 30*time.Minute)
-	f.served(f.conn(someone, ServerKindMeta, gateway, AppDCR), 30*time.Minute)
+	f.served(f.conn(someone, serverKindMeta, gateway, AppDCR), 30*time.Minute)
 
 	got := f.failing()
 	require.Len(t, got, 1, "the other member answered, this one did not answer through this gateway")
@@ -774,13 +774,13 @@ func TestFailingNow_AGatewaysFailureEndsWhenAnyMemberAnswersThroughIt(t *testing
 	p, someone := person(), person()
 	gateway := uuid.New()
 	through := func(g uuid.UUID) Served {
-		s := f.conn(someone, ServerKindMeta, g, AppDCR)
+		s := f.conn(someone, serverKindMeta, g, AppDCR)
 		s.MemberID = uuid.NewString()
 		return s
 	}
 	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, CodeAuthCheckUnavailable, Subject(&p))
 	f.answered(through(uuid.New()), 35*time.Minute)
-	f.served(f.conn(someone, ServerKindMeta, gateway, AppDCR), 35*time.Minute)
+	f.served(f.conn(someone, serverKindMeta, gateway, AppDCR), 35*time.Minute)
 	require.Len(t, f.failing(), 1, "another gateway's member, and the gateway serving its own request")
 
 	f.answered(through(gateway), 30*time.Minute)
@@ -799,7 +799,7 @@ func TestFailingNow_AListingFailureEndsWhenTheMemberAnswers(t *testing.T) {
 	require.Equal(t, member.String(), got[0].MemberID)
 	require.Equal(t, PartServer, got[0].Part)
 
-	s := f.conn(person(), ServerKindMeta, gateway, AppDCR)
+	s := f.conn(person(), serverKindMeta, gateway, AppDCR)
 	s.MemberID = member.String()
 	f.answered(s, 10*time.Minute)
 	require.Empty(t, f.failing())
@@ -812,7 +812,7 @@ func TestFailingNow_AToolsetFailureEndsWhenItsBackendAnswers(t *testing.T) {
 	toolset := uuid.New()
 	f.attempt(ToolsetScope(f.org, f.project, toolset, AppDCR), 40*time.Minute, StepMCPRequest, CodeProviderServerError, Subject(&p))
 	f.answered(f.conn(someone, serverKindToolset, uuid.New(), AppDCR), 30*time.Minute)
-	f.answered(f.conn(someone, ServerKindMCP, toolset, AppDCR), 30*time.Minute)
+	f.answered(f.conn(someone, serverKindMCP, toolset, AppDCR), 30*time.Minute)
 	f.served(f.conn(someone, serverKindToolset, toolset, AppDCR), 30*time.Minute)
 	got := f.failing()
 	require.Len(t, got, 1, "another toolset, another kind, and a listing Speakeasy served did not answer")
@@ -931,11 +931,11 @@ func TestFailingNow_AGatewayFailureWithNoMemberReportsWhenAnyMemberLastAnswered(
 	gateway := uuid.New()
 	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, CodeAuthCheckUnavailable, Subject(&p))
 	for _, ago := range []time.Duration{3 * time.Hour, 2 * time.Hour} {
-		s := f.conn(someone, ServerKindMeta, gateway, AppDCR)
+		s := f.conn(someone, serverKindMeta, gateway, AppDCR)
 		s.MemberID = uuid.NewString()
 		f.answered(s, ago)
 	}
-	f.served(f.conn(someone, ServerKindMeta, gateway, AppDCR), 30*time.Minute)
+	f.served(f.conn(someone, serverKindMeta, gateway, AppDCR), 30*time.Minute)
 	got := f.failing()
 	require.Len(t, got, 1)
 	require.Equal(t, f.at(2*time.Hour), got[0].ServerLastAnsweredAt.UTC(), "the latest member answer; the gateway serving its own request is not an answer")
@@ -955,4 +955,35 @@ func TestFailingNow_AnEpisodeNamesItsLatestFailure(t *testing.T) {
 	require.Equal(t, "auth.example.com", got[0].ProviderHost)
 	require.Equal(t, CodeInvalidGrant.String(), got[0].OpeningReason)
 	require.Equal(t, CodeProviderRejected.String(), got[0].Reason)
+}
+
+func TestServedByFamilyQuery_KeepsTheWholeOrganizationOverTheServerLimit(t *testing.T) {
+	t.Parallel()
+	query, args := servedByFamilyQuery("org", []string{serverKindMCP}, make([]string, maxServedByFamilyServerIDs))
+	require.Contains(t, query, "server_id IN ?")
+	require.Len(t, args, 3)
+
+	query, args = servedByFamilyQuery("org", []string{serverKindMCP}, make([]string, maxServedByFamilyServerIDs+1))
+	require.NotContains(t, query, "server_id IN")
+	require.Contains(t, query, "organization_id = ?")
+	require.Equal(t, []any{"org", []string{serverKindMCP}}, args)
+}
+
+func TestReadServedByFamily_NeverReturnsAnotherOrganizationsRows(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	other := newFailingFixture(t)
+	other.server = f.server
+	mine := f.onServer(person(), AppDCR)
+	mine.ClientFamily = FamilyCursor
+	theirs := other.onServer(person(), AppDCR)
+	theirs.ClientFamily = FamilyClaudeCode
+	f.served(mine, time.Minute)
+	other.served(theirs, time.Minute)
+
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, []FailingPerson{{Episode: Episode{ServerKind: serverKindMCP, ServerID: f.server.String()}}})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCursor, got[0].ClientFamily)
+	require.Equal(t, f.at(time.Minute), got[0].LastServedAt.UTC())
 }

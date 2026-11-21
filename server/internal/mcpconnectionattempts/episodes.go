@@ -72,6 +72,22 @@ type Episode struct {
 	LastWorkedAt time.Time
 }
 
+// BackingServerID is the mcp_servers id reached (server or gateway member), else empty.
+func (e Episode) BackingServerID() string {
+	var raw string
+	switch e.ServerKind {
+	case serverKindMCP:
+		raw = e.ServerID
+	case serverKindMeta:
+		raw = e.MemberID
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return id.String()
+}
+
 // attemptFacts is one attempt reduced for episodes.
 type attemptFacts struct {
 	AttemptSummary
@@ -128,7 +144,7 @@ func readEpisodeAttempts(ctx context.Context, ch driver.Conn, organizationID str
 	if err != nil {
 		return nil, err
 	}
-	rows, err := ch.Query(FailingReadContext(ctx), `SELECT * EXCEPT (sign_ins) FROM (SELECT`+episodeColumns+` FROM `+eventsTable+
+	rows, err := ch.Query(failingReadContext(ctx), `SELECT * EXCEPT (sign_ins) FROM (SELECT`+episodeColumns+` FROM `+eventsTable+
 		` WHERE organization_id = ? AND `+where+` AND event_time <= fromUnixTimestamp64Nano(?) GROUP BY organization_id, attempt_id HAVING subject != ''`+episodeHaving+`)`,
 		append(append([]any{organizationID}, args...), now.UnixNano())...)
 	if err != nil {
@@ -312,7 +328,7 @@ func (ev evidence) serviceSignedIn(f failure) time.Time {
 			at = later(at, s.at)
 		}
 	}
-	atGate := a.ServerKind == ServerKindMeta && a.MemberID == "" && a.RemoteSessionClientID == ""
+	atGate := a.ServerKind == serverKindMeta && a.MemberID == "" && a.RemoteSessionClientID == ""
 	for _, s := range ev.served[serverRef{kind: a.ServerKind, id: a.ServerID}] {
 		if s.SubjectURN != a.SubjectURN {
 			continue
@@ -336,7 +352,7 @@ func (ev evidence) answered(kind, server, member string) time.Time {
 		return at
 	}
 	for _, s := range ev.answers[serverRef{kind: kind, id: server}] {
-		if s.MemberID == member || (kind == ServerKindMeta && member == "") {
+		if s.MemberID == member || (kind == serverKindMeta && member == "") {
 			at = later(at, s.AnsweredAt)
 		}
 	}
@@ -389,7 +405,7 @@ func serviceEndpoint(kind, server, member string) string {
 	switch {
 	case member != "":
 		return member
-	case kind == ServerKindMCP || kind == serverKindToolset:
+	case kind == serverKindMCP || kind == serverKindToolset:
 		return server
 	default:
 		return ""

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -24,8 +25,7 @@ const (
 	failingReadMemoryBytes = 2 << 30
 )
 
-// FailingReadContext caps a ClickHouse read of failing connections at failingReadTimeout and failingReadMemoryBytes.
-func FailingReadContext(ctx context.Context) context.Context {
+func failingReadContext(ctx context.Context) context.Context {
 	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"max_execution_time": int(failingReadTimeout / time.Second),
 		"max_memory_usage":   failingReadMemoryBytes,
@@ -123,7 +123,7 @@ func triedSince(failures []failure, since time.Time) []failure {
 	return slices.DeleteFunc(failures, func(f failure) bool { return known[f.connectionKey()].Before(since) })
 }
 
-// lastServed is one connection's latest served times in LastServedTable, with max()
+// lastServed is one connection's latest served times in lastServedTable, with max()
 // taken over its unmerged rows. AnsweredAt is zero when the server never answered.
 type lastServed struct {
 	ServerKind            string    `ch:"server_kind"`
@@ -143,7 +143,7 @@ const servedQuery = `
 SELECT
 	server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + LastServedTable + `
+FROM ` + lastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ? AND subject_urn IN ?
 GROUP BY server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id`
 
@@ -154,7 +154,7 @@ const answersQuery = `
 SELECT
 	server_kind, server_id, member_id, '' AS subject_urn, '' AS app_key, '' AS client_family, '' AS remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + LastServedTable + `
+FROM ` + lastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id`
 
@@ -189,7 +189,7 @@ func readServed(ctx context.Context, ch driver.Conn, organizationID string, fail
 }
 
 func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any) ([]lastServed, error) {
-	rows, err := ch.Query(FailingReadContext(ctx), query, args...)
+	rows, err := ch.Query(failingReadContext(ctx), query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query served connections: %w", err)
 	}
@@ -209,6 +209,78 @@ func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read served connection rows: %w", err)
+	}
+	return out, nil
+}
+
+// maxServedByFamilyServerIDs bounds the ids in one query; past it the read keeps the whole organization.
+const maxServedByFamilyServerIDs = 1000
+
+// ServedByFamily is the latest request served on one server, gateway member or toolset for one client family.
+type ServedByFamily struct {
+	// ServerKind is the kind of server.
+	ServerKind string `ch:"server_kind"`
+
+	// ServerID is the server, gateway or toolset.
+	ServerID string `ch:"server_id"`
+
+	// MemberID is the gateway member, empty for none.
+	MemberID string `ch:"member_id"`
+
+	// ClientFamily is the client family served.
+	ClientFamily string `ch:"client_family"`
+
+	// LastServedAt is when a request was last served.
+	LastServedAt time.Time `ch:"served_at"`
+}
+
+// servedByFamilyQuery reads the latest served request per server, member and client family.
+func servedByFamilyQuery(organizationID string, kinds, ids []string) (string, []any) {
+	query := `
+SELECT server_kind, server_id, member_id, client_family, max(last_served_at) AS served_at
+FROM ` + lastServedTable + `
+WHERE organization_id = ? AND server_kind IN ?`
+	args := []any{organizationID, kinds}
+	if len(ids) <= maxServedByFamilyServerIDs {
+		query += ` AND server_id IN ?`
+		args = append(args, ids)
+	}
+	return query + `
+GROUP BY server_kind, server_id, member_id, client_family`, args
+}
+
+// ReadServedByFamily reads when each client family was last served on the failing people's servers.
+func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, failing []FailingPerson) ([]ServedByFamily, error) {
+	kindSet, idSet := map[string]bool{}, map[string]bool{}
+	for _, f := range failing {
+		if f.ServerID == "" {
+			continue
+		}
+		kindSet[f.ServerKind] = true
+		idSet[f.ServerID] = true
+	}
+	if len(idSet) == 0 {
+		return nil, nil
+	}
+	kinds, ids := slices.Sorted(maps.Keys(kindSet)), slices.Sorted(maps.Keys(idSet))
+
+	query, args := servedByFamilyQuery(organizationID, kinds, ids)
+	rows, err := ch.Query(failingReadContext(ctx), query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query served by family: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+
+	var out []ServedByFamily
+	for rows.Next() {
+		var s ServedByFamily
+		if err := rows.ScanStruct(&s); err != nil {
+			return nil, fmt.Errorf("scan served by family: %w", err)
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read served by family rows: %w", err)
 	}
 	return out, nil
 }
