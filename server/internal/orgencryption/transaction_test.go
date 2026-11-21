@@ -106,15 +106,30 @@ func TestTransactionIgnoresWarmSharedCaches(t *testing.T) {
 func TestTransactionForInValidation(t *testing.T) {
 	t.Parallel()
 	ti := newTestInstance(t)
-	_, err := ti.fixture.Service.ForIn(nil, ti.orgID, useCase)
-	require.Error(t, err)
 	var pool *pgxpool.Pool
-	_, err = ti.fixture.Service.ForIn(pool, ti.orgID, useCase)
-	require.Error(t, err)
-	_, err = ti.fixture.Service.ForIn(ti.conn, "", useCase)
-	require.Error(t, err)
-	_, err = ti.fixture.Service.ForIn(ti.conn, ti.orgID, "unknown")
-	require.ErrorIs(t, err, orgencryption.ErrUnknownUseCase)
+	for _, tc := range []struct {
+		name        string
+		db          repo.DBTX
+		orgID       string
+		useCase     orgencryption.UseCase
+		wantMessage string
+		wantErr     error
+	}{
+		{name: "nil database", orgID: ti.orgID, useCase: useCase, wantMessage: "orgencryption: database is required"},
+		{name: "typed nil database", db: pool, orgID: ti.orgID, useCase: useCase, wantMessage: "orgencryption: database is required"},
+		{name: "missing organization", db: ti.conn, useCase: useCase, wantMessage: "orgencryption: organization id is required"},
+		{name: "unknown use case", db: ti.conn, orgID: ti.orgID, useCase: "unknown", wantErr: orgencryption.ErrUnknownUseCase},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ti.fixture.Service.ForIn(tc.db, tc.orgID, tc.useCase)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+			} else {
+				require.ErrorContains(t, err, tc.wantMessage)
+			}
+		})
+	}
 }
 
 // canceledUnwrap waits for the caller's cancellation, rather than the service's

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -239,4 +240,34 @@ func TestTranscriptWriterOptOutWithoutStorageOrKeys(t *testing.T) {
 	n, err = f.writer.Write(t.Context(), f.projectID, []chat.MessageWrite{f.message("EXAMPLE excluded project")})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
+}
+
+func TestTranscriptWriterProjection(t *testing.T) {
+	t.Parallel()
+	for _, provision := range []bool{true, false} {
+		t.Run(map[bool]string{true: "capture-insert-and-update", false: "rollback-missing-key"}[provision], func(t *testing.T) {
+			t.Parallel()
+			f := newTranscriptWriterFixture(t, provision, true)
+			m := f.message("EXAMPLE projected body")
+			m.Params.Source = conv.ToPGText("kit")
+			guard := func(context.Context, pgx.Tx) error { return nil }
+			build := func(*chatrepo.ChatMessage) (chat.MessageWrite, bool, error) { return m, true, nil }
+			before := f.counts(t)
+			changed, err := f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
+			if !provision {
+				require.Error(t, err)
+				require.False(t, changed)
+				require.Equal(t, before, f.counts(t))
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, changed)
+			f.assertShadow(t, m.Params.ID)
+			m.Params.Content = "EXAMPLE updated projection"
+			changed, err = f.writer.ProjectMessage(t.Context(), f.projectID, m.Params.ID, guard, build)
+			require.NoError(t, err)
+			require.True(t, changed)
+			f.assertShadow(t, m.Params.ID)
+		})
+	}
 }

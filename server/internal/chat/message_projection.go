@@ -91,6 +91,15 @@ func (w *ChatMessageWriter) ProjectMessage(ctx context.Context, projectID, messa
 	if err != nil {
 		return false, fmt.Errorf("persist projected message: %w", err)
 	}
+	if changed > 0 {
+		org, err := q.GetProjectOrganizationID(ctx, projectID)
+		if err != nil {
+			return false, fmt.Errorf("look up projection shadow organization: %w", err)
+		}
+		if err := w.captureTranscriptShadow(ctx, tx, org, projectID, []uuid.UUID{messageID}); err != nil {
+			return false, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit message projection: %w", err)
 	}

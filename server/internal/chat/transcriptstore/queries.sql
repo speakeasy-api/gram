@@ -36,9 +36,7 @@ WHERE m.id = @message_id AND m.project_id = @project_id AND p.organization_id = 
 SELECT m.id FROM chat_messages m
 JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = c.project_id
-LEFT JOIN chat_message_transcripts t ON t.message_id = m.id AND t.project_id = m.project_id AND t.organization_id = p.organization_id
 WHERE m.project_id = @project_id AND p.organization_id = @organization_id AND m.id > @after_id
-AND (t.message_id IS NULL OR t.source_hash <> sha256(convert_to(jsonb_build_array('chat-transcript-source/v2'::text,m.content,m.content_raw IS NULL,m.content_raw,m.tool_calls IS NULL,m.tool_calls,m.tool_outcome_notes,m.tool_call_summaries IS NULL,m.tool_call_summaries,m.storage_error)::text,'UTF8')))
 ORDER BY m.id LIMIT @page_limit;
 
 -- name: Progress :one

@@ -143,8 +143,9 @@ type Page struct {
 }
 
 // Backfill commits a whole bounded page or returns no progress. Retry ErrChanged
-// with the same cursor; reset the cursor to zero on the next sweep to catch
-// messages inserted below the preceding sweep's cursor.
+// with the same cursor. Every source row is recaptured, even when its public
+// fingerprint matches: hashes cannot authenticate a shadow. Reset the cursor
+// to zero on the next sweep to catch messages inserted below the preceding sweep's cursor.
 func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, after uuid.UUID, limit int32) (Page, error) {
 	if organizationID == "" || projectID == uuid.Nil || limit < 1 || limit > 500 {
 		return Page{}, ErrInvalid
@@ -175,7 +176,8 @@ func (s *Store) Backfill(ctx context.Context, organizationID string, projectID, 
 	return page, nil
 }
 
-// Progress describes shadow coverage, not plaintext removal. Unattributed rows
+// Progress describes fingerprint-matching coverage, not authenticated ciphertext
+// or plaintext removal. Only Load authenticates shadows. Unattributed rows
 // belong to a scoped chat but cannot safely be captured without ownership repair.
 type Progress struct{ Current, Waiting, Unattributed int64 }
 

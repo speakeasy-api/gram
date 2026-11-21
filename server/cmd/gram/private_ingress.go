@@ -125,7 +125,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 }
 
 func privateIngressServerFlags() []cli.Flag {
-	flags := mcpRuntimeFlags()
+	flags := append(mcpRuntimeFlags(), transcriptShadowFlag())
 	return append(flags,
 		riskFingerprintPepperFlag(),
 		&cli.StringFlag{

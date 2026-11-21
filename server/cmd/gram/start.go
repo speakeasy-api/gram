@@ -736,6 +736,7 @@ func newStartCommand() *cli.Command {
 	clickhouseShutdown := noopShutdown
 	clickhouseReadShutdown := noopShutdown
 	flags := append(serverFlags(), clickHouseReadFlags()...)
+	flags = append(flags, transcriptShadowFlag())
 
 	return &cli.Command{
 		Name:  "start",

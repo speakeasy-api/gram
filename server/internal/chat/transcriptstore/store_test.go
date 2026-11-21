@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -185,7 +186,9 @@ func TestCASRejectsChangedSnapshotAndLocksLiveSource(t *testing.T) {
 	_, err = edit.Exec(t.Context(), `SET LOCAL lock_timeout='100ms'`) //nolint:glint // notestingrawsql: transaction-local lock timeout is part of the locking protocol under test.
 	require.NoError(t, err)
 	_, err = fixturerepo.New(edit).RaceContent(t.Context(), id, project(f.project))
-	require.Error(t, err)
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "55P03", pgErr.Code)
 	require.NoError(t, edit.Rollback(t.Context()))
 	require.NoError(t, tx.Commit(t.Context()))
 	_, err = f.store.Load(t.Context(), f.org, f.project, id)
@@ -221,7 +224,7 @@ func TestBoundedResumableBackfillAndProgress(t *testing.T) {
 	require.Zero(t, empty.Count)
 	sweep, err := f.store.Backfill(t.Context(), f.org, f.project, uuid.Nil, 500)
 	require.NoError(t, err)
-	require.Equal(t, 1, sweep.Count)
+	require.Equal(t, 4, sweep.Count)
 	for _, limit := range []int32{0, -1, 501} {
 		_, err = f.store.Backfill(t.Context(), f.org, f.project, uuid.Nil, limit)
 		require.ErrorIs(t, err, ErrInvalid)
@@ -246,6 +249,7 @@ func TestKeyFailureAndCallerRollback(t *testing.T) {
 	f.add(t, low)
 	tx, err := f.db.Begin(t.Context()) //nolint:glint // notestingrawsql: caller-owned transaction boundary exercises atomicity and lock lifetime; fixture data uses generated queries.
 	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
 	require.ErrorIs(t, f.store.Capture(t.Context(), tx, f.org, f.project, []uuid.UUID{low, uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff")}), ErrNotFound)
 	require.NoError(t, tx.Rollback(t.Context()))
 	_, err = f.store.Load(t.Context(), f.org, f.project, low)
@@ -503,6 +507,13 @@ func TestStorageErrorFingerprintBackfill(t *testing.T) {
 	opened, err := f.store.Load(t.Context(), f.org, f.project, id)
 	require.ErrorIs(t, err, ErrStale)
 	require.Equal(t, transcriptcrypto.Message{}, opened)
+	page, err := f.store.Backfill(t.Context(), f.org, f.project, uuid.Nil, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, page.Count)
+	opened, err = f.store.Load(t.Context(), f.org, f.project, id)
+	require.NoError(t, err)
+	require.NotNil(t, opened.StorageError)
+	require.Equal(t, "sensitive forged error", *opened.StorageError)
 }
 
 func TestShadowOwnershipForeignKeys(t *testing.T) {
@@ -534,4 +545,24 @@ func TestShadowOwnershipForeignKeys(t *testing.T) {
 	n, err := q.InsertShadow(t.Context(), id, f.project, f.org)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
+}
+
+// Keep every production and fixture fingerprint expression identical. A source
+// field/version change must not silently diverge between capture and coverage.
+func TestSourceFingerprintExpressionsAgree(t *testing.T) {
+	t.Parallel()
+	expression := regexp.MustCompile(`sha256\(convert_to\(jsonb_build_array\([^\n]*?\)::text,'UTF8'\)\)`)
+	var canonical string
+	for path, count := range map[string]int{"queries.sql": 5, "fixtures/queries.sql": 1} {
+		source, err := os.ReadFile(path)
+		require.NoError(t, err)
+		matches := expression.FindAllString(string(source), -1)
+		require.Len(t, matches, count, path)
+		for _, match := range matches {
+			if canonical == "" {
+				canonical = match
+			}
+			require.Equal(t, canonical, match, path)
+		}
+	}
 }

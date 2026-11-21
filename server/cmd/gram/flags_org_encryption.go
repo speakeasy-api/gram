@@ -21,11 +21,6 @@ const (
 // provision keys as well as use them.
 func orgEncryptionFlags() []cli.Flag {
 	return append(orgEncryptionServiceFlags(),
-		&cli.StringSliceFlag{
-			Name:    chatTranscriptShadowProjectIDsFlag,
-			Usage:   "Explicit project UUIDs to write encrypted chat transcript shadow copies for; retains plaintext and does not backfill existing messages. Disabled by default.",
-			EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"},
-		},
 		&cli.DurationFlag{
 			Name:    orgEncryptionSwitchGracePeriodFlag,
 			Usage:   "How long a switch to another organization encryption key keeps the previous key readable before it completes.",
@@ -65,5 +60,14 @@ func orgEncryptionServiceFlags() []cli.Flag {
 			Usage:   "Service account the organization encryption credential must impersonate; managed keys grant it and customers grant it on their own keys.",
 			EnvVars: []string{"GRAM_ORG_ENCRYPTION_SERVICE_ACCOUNT"},
 		},
+	}
+}
+
+// transcriptShadowFlag enables shadow writes only on commands that configure them.
+func transcriptShadowFlag() cli.Flag {
+	return &cli.StringSliceFlag{
+		Name:    chatTranscriptShadowProjectIDsFlag,
+		Usage:   "Explicit project UUIDs to write encrypted chat transcript shadow copies for; retains plaintext and does not backfill existing messages. Disabled by default.",
+		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"},
 	}
 }

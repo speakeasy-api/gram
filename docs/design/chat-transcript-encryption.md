@@ -43,7 +43,7 @@ aborts startup instead of silently disabling encryption. No existing-data backfi
 runs automatically at startup.
 
 The shared writer captures a database snapshot in the same transaction as a
-message write. This covers native writes, caller-owned transactions, correlated
+message write. This covers Kit projection inserts/patches, native writes, caller-owned transactions, correlated
 promotions, imported messages, and complete turns. Shadow failure rolls back the
 message and its outbox events. Ordinary observer notifications remain after commit.
 Asset uploads can precede the transaction and remain outside this guarantee.
@@ -55,7 +55,19 @@ second pooled connection. Use a writable READ COMMITTED transaction. Its private
 TTL cache reuses one DEK within a batch without publishing uncommitted state to
 the process cache or starting detached work. This currently costs a fresh KMS
 unwrap per Capture batch, even when the process cache is warm; account for that
-latency/cost when choosing a shadow allowlist.
+latency/cost when choosing a shadow allowlist. Keep this opt-in experiment
+limited to low-volume projects; broad/high-volume activation is deferred until
+a committed-state-safe cross-transaction unwrap cache or an explicit unwrap
+rate/concurrency bound is implemented. Reusing transaction-loaded keys globally
+is unsafe because those keys or configuration may later roll back.
+
+The unkeyed `source_hash` is not a confidentiality boundary: a reader with access
+only to shadow rows can confirm guessed complete payloads and correlate equal
+payloads without a DEK. Retaining plaintext elsewhere and default-off capture do
+not remove that leakage. Shadow rows must therefore be treated as sensitive
+plaintext-equivalent data, not exposed as a ciphertext-only dataset. Replacing or
+removing deterministic digests (including existing rows) is a prerequisite for
+any encrypted-only rollout, not an optional hardening improvement.
 
 Each copy has a versioned SHA-256 fingerprint of the current sensitive fields,
 including JSONB SQL-null flags and nullable `storage_error`. The source fingerprint
@@ -76,6 +88,11 @@ inserts below a prior cursor. `Progress` distinguishes current copies, waiting/s
 copies, and unattributed legacy rows. **Current shadow counts do not prove plaintext
 has been removed or that encrypted-only storage can be finalized.**
 
+Backfill recaptures every scoped source row on each sweep, including hash-current
+rows, so forged matching fingerprints or corrupt ciphertext do not prevent repair.
+Page counts report rows recaptured, not only missing/stale rows. Progress counts
+are fingerprint hints, not ciphertext-authentication or cutover evidence.
+
 Direct SQL updates outside the shared writer can make a shadow stale. Verified
 reads reject it, and a subsequent backfill refreshes it. Before encrypted-only
 rollout, migrate those writes too and establish a fenced plaintext-removal protocol.
@@ -92,7 +109,7 @@ Encrypting a message body is not equivalent to encrypting every transcript copy:
 | Attachments        | `chat_content_parts` and the asset service's authenticated/signed attachment downloads need their own encrypted-storage contract.                                                                                                            |
 | Derived text       | Chat titles/summaries, resolution/analysis results, risk evidence, and memory digests can contain transcript text. Explicitly include or exclude each store.                                                                                 |
 | Metadata           | `origin`, asset URLs, user identifiers, IP addresses, and user agents remain outside this body payload. `storage_error` is sensitive and is included in the encrypted payload, not treated as safe metadata.                                 |
-| Hashes             | `content_hash` and the shadow `source_hash` are unkeyed deterministic digests. They retain equality/guess-confirmation leakage; decide whether that is acceptable or requires a separately keyed construction before encrypted-only rollout. |
+| Hashes             | `content_hash` and the shadow `source_hash` are unkeyed deterministic digests. They retain equality/guess-confirmation leakage; This is accepted only for disabled-by-default shadow experiments while the same plaintext remains stored. Before any encrypted-only rollout, remove these digests or replace them with organization-keyed fingerprints, and migrate existing rows; clearing plaintext alone is not sufficient. |
 
 Concrete integration points include:
 

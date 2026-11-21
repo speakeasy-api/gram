@@ -1,6 +1,7 @@
 package gram
 
 import (
+	"flag"
 	"os"
 	"strings"
 	"testing"
@@ -15,10 +16,21 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+func newTranscriptShadowCLIContext(t *testing.T, values map[string]string) *cli.Context {
+	t.Helper()
+	c := newOrgEncryptionCLIContext(t, nil)
+	set := flag.NewFlagSet("transcript-shadow", flag.ContinueOnError)
+	require.NoError(t, transcriptShadowFlag().Apply(set))
+	for key, value := range values {
+		require.NoError(t, set.Set(key, value))
+	}
+	return cli.NewContext(c.App, set, c)
+}
+
 func TestTranscriptShadowDisabled(t *testing.T) {
 	t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
-	c := newOrgEncryptionCLIContext(t, nil)
+	c := newTranscriptShadowCLIContext(t, nil)
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
 	require.NoError(t, configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}))
 }
@@ -30,6 +42,9 @@ func TestTranscriptShadowProjectIDs(t *testing.T) {
 	ids, err := parseTranscriptShadowProjectIDs([]string{first.String(), " " + second.String() + " ", first.String()})
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{first, second}, ids)
+	ids, err = parseTranscriptShadowProjectIDs([]string{first.String()})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{first}, ids)
 	for _, value := range []string{"", " ", "not-a-uuid", uuid.Nil.String()} {
 		t.Run(value, func(t *testing.T) {
 			t.Parallel()
@@ -41,11 +56,11 @@ func TestTranscriptShadowProjectIDs(t *testing.T) {
 }
 
 func TestTranscriptShadowRejectsInvalidConfiguration(t *testing.T) {
-	for _, value := range []string{"", " ", "not-a-uuid", uuid.Nil.String(), "10000000-0000-4000-8000-000000000001,", "10000000-0000-4000-8000-000000000001"} {
+	for _, value := range []string{"", " ", "not-a-uuid", uuid.Nil.String(), "10000000-0000-4000-8000-000000000001,"} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 			require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
-			c := newOrgEncryptionCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: value})
+			c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: value})
 			require.Error(t, configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}))
 		})
 	}
@@ -53,8 +68,13 @@ func TestTranscriptShadowRejectsInvalidConfiguration(t *testing.T) {
 
 func TestTranscriptShadowFlags(t *testing.T) {
 	t.Parallel()
-	for _, item := range orgEncryptionServiceFlags() {
+	for _, item := range append(orgEncryptionFlags(), orgEncryptionServiceFlags()...) {
 		require.NotContains(t, item.Names(), chatTranscriptShadowProjectIDsFlag)
+	}
+	for _, command := range []*cli.Command{newAdminCommand(), newNetworkIngressWorkerCommand()} {
+		for _, item := range command.Flags {
+			require.NotContains(t, item.Names(), chatTranscriptShadowProjectIDsFlag, command.Name)
+		}
 	}
 	for _, command := range []*cli.Command{newStartCommand(), newWorkerCommand(), newMCPCommand(), newNetworkIngressServerCommand()} {
 		requireFlag(t, command.Flags, chatTranscriptShadowProjectIDsFlag)
@@ -144,7 +164,7 @@ ON CONFLICT (message_id) DO UPDATE SET ciphertext = EXCLUDED.ciphertext`)
 				require.EqualError(t, err, "chat transcript shadow schema is unavailable or incompatible")
 				// Empty dependencies would panic if provisioning or activation were
 				// attempted. A nonexistent project also proves schema runs first.
-				c := newOrgEncryptionCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "10000000-0000-4000-8000-000000000001"})
+				c := newTranscriptShadowCLIContext(t, map[string]string{chatTranscriptShadowProjectIDsFlag: "10000000-0000-4000-8000-000000000001"})
 				require.EqualError(t, configureTranscriptShadow(t.Context(), c, db, &chat.ChatMessageWriter{}, orgEncryptionDeps{
 					Service: &orgencryption.Service{}, Provisioner: &orgencryption.Provisioner{},
 				}), "chat transcript shadow schema is unavailable or incompatible")

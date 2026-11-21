@@ -73,7 +73,7 @@ import (
 // worker flags are accepted but never read: this command has no Temporal
 // dependency by design.
 func mcpServerFlags() []cli.Flag {
-	flags := mcpRuntimeFlags()
+	flags := append(mcpRuntimeFlags(), transcriptShadowFlag())
 	return append(flags,
 		riskFingerprintPepperFlag(),
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},

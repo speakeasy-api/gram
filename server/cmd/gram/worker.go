@@ -364,6 +364,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, transcriptShadowFlag())
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
