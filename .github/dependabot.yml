@@ -57,13 +57,15 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      ai-sdk:
+      # One group for the chat stack: @assistant-ui/ai-sdk depends on
+      # @ai-sdk/*, so separate groups edit the same lockfile entries and
+      # conflict when both PRs land in the same week.
+      ai-chat:
         patterns:
           - "@ai-sdk/*"
           - "ai"
-      assistant-ui:
-        patterns:
           - "@assistant-ui/*"
+          - "assistant-stream"
       chartjs:
         patterns:
           - "chart.js"
@@ -90,7 +92,7 @@ updates:
         patterns:
           - "oxfmt"
           - "oxlint"
-          - "oxlint-tsgolint"
+          - "tsrs"
       stripe:
         patterns:
           - "@stripe/*"

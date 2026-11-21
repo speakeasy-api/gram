@@ -21,6 +21,18 @@ func (q *Queries) RolesDeleteAIScanTargets(ctx context.Context, organizationID s
 	return err
 }
 
+const rolesDeleteAccessRequests = `-- name: RolesDeleteAccessRequests :exec
+DELETE FROM access_requests WHERE organization_id = $1
+`
+
+// Access requests: one pending, one denied, so the Access Requests tab and
+// the grant dialog's approval choices have something to show. Messages
+// cascade with their request.
+func (q *Queries) RolesDeleteAccessRequests(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, rolesDeleteAccessRequests, organizationID)
+	return err
+}
+
 const rolesDeleteAgentRoleAssignments = `-- name: RolesDeleteAgentRoleAssignments :exec
 DELETE FROM agent_role_assignments WHERE organization_id = $1
 `
@@ -239,6 +251,51 @@ VALUES
 // authoritative, so a later registry revision still reaches this org.
 func (q *Queries) RolesInsertAIScanTargets(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesInsertAIScanTargets, organizationID)
+	return err
+}
+
+const rolesInsertAccessRequest = `-- name: RolesInsertAccessRequest :exec
+INSERT INTO access_requests
+  (id, organization_id, requester_user_id, scope, selector, resource_name, message,
+   status, decided_by_user_id, decided_via, decided_at, expires_at, created_at, updated_at)
+VALUES
+  ($1, $2, $3, $4, $5, $6, $7,
+   $8, $9, $10, $11,
+   $12, $13, $13)
+`
+
+type RolesInsertAccessRequestParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	RequesterUserID string
+	Scope           string
+	Selector        []byte
+	ResourceName    pgtype.Text
+	Message         pgtype.Text
+	Status          string
+	DecidedByUserID pgtype.Text
+	DecidedVia      pgtype.Text
+	DecidedAt       pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) RolesInsertAccessRequest(ctx context.Context, arg RolesInsertAccessRequestParams) error {
+	_, err := q.db.Exec(ctx, rolesInsertAccessRequest,
+		arg.ID,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Scope,
+		arg.Selector,
+		arg.ResourceName,
+		arg.Message,
+		arg.Status,
+		arg.DecidedByUserID,
+		arg.DecidedVia,
+		arg.DecidedAt,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
 	return err
 }
 
@@ -792,8 +849,8 @@ func (q *Queries) RolesInsertRoleAssignment(ctx context.Context, arg RolesInsert
 }
 
 const rolesInsertRolePlugin = `-- name: RolesInsertRolePlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug, auto_created)
-VALUES ($1, $2, $3, $4, true)
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_created, auto_add_servers_enabled)
+VALUES ($1, $2, $3, $4, true, true)
 RETURNING id
 `
 
@@ -804,6 +861,9 @@ type RolesInsertRolePluginParams struct {
 	Slug           string
 }
 
+// Role plugins opt in to automatic server adding, so the seeded role server
+// contents match what role delivery would keep in them. Engineering Essentials
+// and Default stay off to show a hand-managed server list.
 func (q *Queries) RolesInsertRolePlugin(ctx context.Context, arg RolesInsertRolePluginParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, rolesInsertRolePlugin,
 		arg.OrganizationID,

@@ -19,7 +19,7 @@ func TestSelection_PreservesExactResourceIdentity(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			f := newChainStoreFixture(t)
-			g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+			g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
 			req := f.req
 			resource := f.sel.resource
 			if mode == "tunneled" {

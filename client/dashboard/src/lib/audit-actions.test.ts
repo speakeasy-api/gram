@@ -56,6 +56,27 @@ describe("AUDIT_ACTIONS", () => {
     expect(isAuditAction(action)).toBe(true);
     expect(staticActionPhrase(action)).toBe(phrase);
   });
+  it.each([
+    [
+      "shadow_mcp_official_server:create",
+      "set the official server choice of Shadow MCP server",
+    ],
+    [
+      "shadow_mcp_official_server:update",
+      "changed the official server choice of Shadow MCP server",
+    ],
+    [
+      "shadow_mcp_official_server:delete",
+      "removed the official server choice of Shadow MCP server",
+    ],
+    [
+      "shadow_mcp_official_server:set",
+      "changed the official server link of Shadow MCP server",
+    ],
+  ] as const)("describes official server link action %s", (action, phrase) => {
+    expect(isAuditAction(action)).toBe(true);
+    expect(staticActionPhrase(action)).toBe(phrase);
+  });
   it("describes catalogue publication and setup documentation retries", () => {
     expect(isAuditAction("mcp-server:promote-catalogue")).toBe(true);
     expect(isAuditAction("catalog-promotion:retry-docs")).toBe(true);
@@ -131,6 +152,7 @@ describe("AUDIT_ACTIONS", () => {
           "data_export_route:delete",
           "data_export_route:pause",
           "data_export_route:resume",
+          "data_export_route:test",
           "otel_destination:create",
           "otel_destination:update",
           "otel_destination:delete",
@@ -142,6 +164,7 @@ describe("AUDIT_ACTIONS", () => {
       "deleted data export route",
       "paused data export route",
       "resumed data export route",
+      "sent a test event for data export route",
       "created OpenTelemetry destination",
       "updated OpenTelemetry destination",
       "deleted OpenTelemetry destination",

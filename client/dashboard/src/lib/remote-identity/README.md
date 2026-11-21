@@ -79,7 +79,7 @@ lib/remote-identity/
     IdentityModeCards.tsx   User Identity / Shared credential / Manual
     ProviderRow.tsx         the provider and registration choice
     CredentialFields.tsx    format, fields, live Authorization preview
-    IdentityExplainer.tsx   content, dialog, and inline callout
+    IdentityExplainer.tsx   content and inline callout
     ProviderLink.tsx        deep link to the CRUD surface
     ScopeBadge.tsx          tier as a badge
 ```
@@ -158,11 +158,6 @@ Done. The table records where each piece came from.
 | `pages/remote-identity-providers/IssuerLink.tsx`      | `components/ProviderLink.tsx`             |
 | `pages/remote-identity-providers/ScopeBadge.tsx`      | `components/ScopeBadge.tsx`               |
 | `remoteSessionScopeTier` in `lib/sources.ts`          | `model/provider.ts`                       |
-
-`RemoteIdentitySummary` stayed in `components/mcp-server-x-sidebar-nav.tsx`.
-It is a rail-shaped composition of this module's parts rather than a part of
-its own, and it now reads the derivation from here instead of reaching five
-directories deep into a settings tab for it.
 
 ## How it landed
 

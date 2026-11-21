@@ -2,6 +2,7 @@ package runtimepolicy
 
 import (
 	"encoding/json"
+	"maps"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -16,7 +17,6 @@ func TestNewDelegatedPolicyV1CanonicalizesAndClosesImplications(t *testing.T) {
 		{Scope: authz.ScopeMCPWrite, Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
 			authz.SelectorKeyResourceID:   "server-one",
-			authz.SelectorKeyTool:         "tool-one",
 		}},
 	})
 	require.NoError(t, err)
@@ -26,7 +26,7 @@ func TestNewDelegatedPolicyV1CanonicalizesAndClosesImplications(t *testing.T) {
 
 	runtime := policy.RuntimeGrants()
 	require.Len(t, runtime, 4)
-	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPToolCallCheck("server-one", authz.MCPToolCallDimensions{Tool: "tool-one", ProjectID: "project-one"})))
+	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPServer(authz.MCPServerIDFrom("server-one"), authz.ProjectIDFrom("project-one")).ToolCall("tool-one", "")))
 	require.True(t, authz.GrantsSatisfy(runtime, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "project-one"}))
 
 	encoded, err := EncodeDelegatedPolicy(DelegatedPolicyVersion1, policy)
@@ -163,9 +163,43 @@ func TestDelegatedPolicyV3AdmitsAssistantScopes(t *testing.T) {
 	require.NoError(t, err)
 	decoded, err := DecodeDelegatedPolicy(DelegatedPolicyVersion3, encoded)
 	require.NoError(t, err)
-	for _, scope := range []authz.Scope{authz.ScopeAssistantWrite, authz.ScopeAssistantRead} {
-		allowed, err := authz.GrantsAuthorize(decoded.RuntimeGrants(), authz.Check{Scope: scope, ResourceKind: "", ResourceID: assistant.Selector.ResourceID(), Dimensions: nil})
+	ref := authz.Assistant(authz.AssistantIDFrom(assistant.Selector.ResourceID()), authz.ProjectIDFrom("22222222-2222-4222-8222-222222222222"))
+	for _, check := range []authz.Check{ref.Write(), ref.Read()} {
+		allowed, err := authz.GrantsAuthorize(decoded.RuntimeGrants(), check)
 		require.NoError(t, err)
-		require.True(t, allowed, scope)
+		require.True(t, allowed, check.Scope)
 	}
+}
+
+// A new policy may not limit viewing or managing a server to some tools or
+// dispositions, but a stored one from before that rule still decodes.
+func TestDelegatedPolicyLimitsOnViewAreStoredOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, limit := range []authz.Selector{
+		{authz.SelectorKeyTool: "tool-one"},
+		{authz.SelectorKeyDisposition: authz.DispositionReadOnly},
+	} {
+		selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
+		maps.Copy(selector, limit)
+		_, err := NewDelegatedPolicyV1([]authz.Grant{{Scope: authz.ScopeMCPRead, Selector: selector}})
+		require.ErrorContains(t, err, "is not allowed for scope")
+
+		_, err = DecodeDelegatedPolicy(DelegatedPolicyVersion1, storedPolicyJSON(t, selector))
+		require.NoError(t, err)
+	}
+
+	selector := authz.NewSelector(authz.ScopeMCPRead, "server-one")
+	selector[authz.SelectorKeyDisposition] = "not-a-disposition"
+	_, err := DecodeDelegatedPolicy(DelegatedPolicyVersion1, storedPolicyJSON(t, selector))
+	require.Error(t, err)
+}
+
+// storedPolicyJSON is a v1 policy as stored, viewing one server under selector.
+func storedPolicyJSON(t *testing.T, selector authz.Selector) []byte {
+	t.Helper()
+	requested := []DelegatedPolicyGrant{{Scope: authz.ScopeMCPRead, Selector: selector}}
+	effective, err := delegatedPolicyClosure(DelegatedPolicyVersion1, requested)
+	require.NoError(t, err)
+	return mustPolicyJSON(t, DelegatedPolicy{Requested: requested, Effective: effective})
 }

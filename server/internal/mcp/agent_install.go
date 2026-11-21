@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -32,6 +33,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 // AgentInstallCodeRoute mints a code; AgentInstallScriptRoute redeems it.
@@ -114,6 +116,30 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 		return oops.E(oops.CodeUnexpected, err, "prepare install command").LogError(ctx, s.logger)
 	}
 
+	// The installed runtime dials the gateway where the organization's
+	// lockdown lets it: its custom domain when that domain has an IP allowlist
+	// and is serving, since the platform host refuses it there.
+	gatewayBaseURL := serverURL
+	lockdown, err := s.organizationLockdown(ctx, s.logger, organizationID)
+	if err != nil {
+		return err
+	}
+	if lockdown.ServingHost != "" {
+		gatewayBaseURL = "https://" + lockdown.ServingHost
+	}
+
+	// Hooks report to /rpc/hooks.*, which only the platform hosts serve, so a
+	// code minted on a custom domain still points them at the platform.
+	hooksServerURL := serverURL
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfaceCustomDomain {
+		hooksServerURL = strings.TrimSuffix(s.serverURL.String(), "/")
+	}
+	// The hooks report with the agent key, so their origin needs the same
+	// transport guarantee as the one the script is fetched from.
+	if base, err := url.Parse(hooksServerURL); err != nil || base.Scheme != "https" {
+		return oops.E(oops.CodeBadRequest, nil, "install commands require an HTTPS server URL")
+	}
+
 	code, err := newInstallCode()
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "prepare install command").LogError(ctx, s.logger)
@@ -122,8 +148,8 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 		Code:            code,
 		AgentID:         agentID.String(),
 		Key:             httpheaders.AuthorizationBearerToken(r),
-		URL:             serverURL + "/agent-mcp/" + agentID.String(),
-		ServerURL:       serverURL,
+		URL:             gatewayBaseURL + "/agent-mcp/" + agentID.String(),
+		ServerURL:       hooksServerURL,
 		OrganizationID:  organizationID,
 		ProjectSlug:     projectSlug,
 		InstallFailOpen: s.hooksInstallFailOpen(ctx, organizationID),

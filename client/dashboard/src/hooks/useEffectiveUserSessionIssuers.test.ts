@@ -1,6 +1,7 @@
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUserSessionIssuersInfinite } from "@gram/client/react-query/userSessionIssuers.js";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffectiveUserSessionIssuers } from "./useEffectiveUserSessionIssuers";
 

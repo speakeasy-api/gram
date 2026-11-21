@@ -8,10 +8,100 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	usersessionclients "github.com/speakeasy-api/gram/server/gen/user_session_clients"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// CreateUserSessionClientRequestBody is the type of the "userSessionClients"
+// service "createUserSessionClient" endpoint HTTP request body.
+type CreateUserSessionClientRequestBody struct {
+	// The issuer the client signs in through.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Display name shown in client listings and on the consent screen.
+	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// Redirect URIs validated on every /authorize. At least one is required.
+	RedirectUris []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
+	// How the client presents its secret at the token endpoint (RFC 7591).
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+}
+
+// UpdateUserSessionClientRedirectURIsRequestBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP request body.
+type UpdateUserSessionClientRedirectURIsRequestBody struct {
+	// The user_session_client id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The complete new list of redirect URIs. At least one is required.
+	RedirectUris []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
+}
+
+// CreateUserSessionClientResponseBody is the type of the "userSessionClients"
+// service "createUserSessionClient" endpoint HTTP response body.
+type CreateUserSessionClientResponseBody struct {
+	Client *UserSessionClientResponseBody `form:"client" json:"client" xml:"client"`
+	// The minted client secret. Not retrievable again.
+	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
+}
+
+// UpdateUserSessionClientRedirectURIsResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body.
+type UpdateUserSessionClientRedirectURIsResponseBody struct {
+	// The user_session_client id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning user_session_issuer id.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The client_id. Minted by Speakeasy for a DCR registration; for a CIMD client
+	// it is the metadata document URL and equals client_id_metadata_uri.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// When set, the client was resolved from a Client ID Metadata Document (CIMD)
+	// hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR
+	// clients. The URL is the client's identity, so its origin -- not client_name,
+	// which the client chooses -- is the trustworthy label.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// When the metadata document was last successfully read. A 304 revalidation
+	// counts as a read, so this is not necessarily when the body was last fetched.
+	// Null for DCR clients.
+	ClientIDMetadataFetchedAt *string `form:"client_id_metadata_fetched_at,omitempty" json:"client_id_metadata_fetched_at,omitempty" xml:"client_id_metadata_fetched_at,omitempty"`
+	// When the cached metadata document lapses and the next /authorize revalidates
+	// it against the host. Null for DCR clients, and null after a refresh purge
+	// until the re-read lands.
+	ClientIDMetadataCacheExpiresAt *string `form:"client_id_metadata_cache_expires_at,omitempty" json:"client_id_metadata_cache_expires_at,omitempty" xml:"client_id_metadata_cache_expires_at,omitempty"`
+	// ETag the document host returned on the last full read; sent as If-None-Match
+	// when revalidating. Null when the host offers no validator, and null for DCR
+	// clients.
+	ClientIDMetadataEtag *string `form:"client_id_metadata_etag,omitempty" json:"client_id_metadata_etag,omitempty" xml:"client_id_metadata_etag,omitempty"`
+	// Display name the client supplied at registration, or the client_name
+	// extracted from its metadata document. Client-controlled and unverified; do
+	// not present it as an identity.
+	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind string `form:"credential_kind" json:"credential_kind" xml:"credential_kind"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
+	// Validated on every /authorize.
+	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
+	ClientIDIssuedAt string   `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
+	// Null when the secret does not expire.
+	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
+	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
+}
 
 // ListUserSessionClientsResponseBody is the type of the "userSessionClients"
 // service "listUserSessionClients" endpoint HTTP response body.
@@ -132,6 +222,387 @@ type RefreshUserSessionClientCIMDResponseBody struct {
 	// way the sessions listing's active filter counts: not revoked, and the
 	// refresh token has not expired.
 	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
+}
+
+// CreateUserSessionClientUnauthorizedResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateUserSessionClientUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientForbiddenResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateUserSessionClientForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientBadRequestResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateUserSessionClientBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientNotFoundResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "not_found" error.
+type CreateUserSessionClientNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientConflictResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "conflict" error.
+type CreateUserSessionClientConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientUnsupportedMediaResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateUserSessionClientUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientInvalidResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "invalid" error.
+type CreateUserSessionClientInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientInvariantViolationResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateUserSessionClientInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientUnexpectedResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateUserSessionClientUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateUserSessionClientGatewayErrorResponseBody is the type of the
+// "userSessionClients" service "createUserSessionClient" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateUserSessionClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody is the type of
+// the "userSessionClients" service "updateUserSessionClientRedirectURIs"
+// endpoint HTTP response body for the "unauthorized" error.
+type UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsForbiddenResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "forbidden" error.
+type UpdateUserSessionClientRedirectURIsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsBadRequestResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "bad_request" error.
+type UpdateUserSessionClientRedirectURIsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsNotFoundResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "not_found" error.
+type UpdateUserSessionClientRedirectURIsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsConflictResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "conflict" error.
+type UpdateUserSessionClientRedirectURIsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody is the type
+// of the "userSessionClients" service "updateUserSessionClientRedirectURIs"
+// endpoint HTTP response body for the "unsupported_media" error.
+type UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsInvalidResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "invalid" error.
+type UpdateUserSessionClientRedirectURIsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody is the
+// type of the "userSessionClients" service
+// "updateUserSessionClientRedirectURIs" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsUnexpectedResponseBody is the type of the
+// "userSessionClients" service "updateUserSessionClientRedirectURIs" endpoint
+// HTTP response body for the "unexpected" error.
+type UpdateUserSessionClientRedirectURIsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody is the type of
+// the "userSessionClients" service "updateUserSessionClientRedirectURIs"
+// endpoint HTTP response body for the "gateway_error" error.
+type UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // ListUserSessionClientsUnauthorizedResponseBody is the type of the
@@ -950,6 +1421,51 @@ type UserSessionClientResponseBody struct {
 	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
 }
 
+// NewCreateUserSessionClientResponseBody builds the HTTP response body from
+// the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientResponseBody(res *usersessionclients.CreateUserSessionClientResult) *CreateUserSessionClientResponseBody {
+	body := &CreateUserSessionClientResponseBody{
+		ClientSecret: res.ClientSecret,
+	}
+	if res.Client != nil {
+		body.Client = marshalTypesUserSessionClientToUserSessionClientResponseBody(res.Client)
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsResponseBody builds the HTTP response
+// body from the result of the "updateUserSessionClientRedirectURIs" endpoint
+// of the "userSessionClients" service.
+func NewUpdateUserSessionClientRedirectURIsResponseBody(res *types.UserSessionClient) *UpdateUserSessionClientRedirectURIsResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsResponseBody{
+		ID:                             res.ID,
+		UserSessionIssuerID:            res.UserSessionIssuerID,
+		ClientID:                       res.ClientID,
+		ClientIDMetadataURI:            res.ClientIDMetadataURI,
+		ClientIDMetadataFetchedAt:      res.ClientIDMetadataFetchedAt,
+		ClientIDMetadataCacheExpiresAt: res.ClientIDMetadataCacheExpiresAt,
+		ClientIDMetadataEtag:           res.ClientIDMetadataEtag,
+		ClientName:                     res.ClientName,
+		CredentialKind:                 res.CredentialKind,
+		TokenEndpointAuthMethod:        res.TokenEndpointAuthMethod,
+		ClientIDIssuedAt:               res.ClientIDIssuedAt,
+		ClientSecretExpiresAt:          res.ClientSecretExpiresAt,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
+		ActiveSessionCount:             res.ActiveSessionCount,
+	}
+	if res.RedirectUris != nil {
+		body.RedirectUris = make([]string, len(res.RedirectUris))
+		for i, val := range res.RedirectUris {
+			body.RedirectUris[i] = val
+		}
+	} else {
+		body.RedirectUris = []string{}
+	}
+	return body
+}
+
 // NewListUserSessionClientsResponseBody builds the HTTP response body from the
 // result of the "listUserSessionClients" endpoint of the "userSessionClients"
 // service.
@@ -1032,6 +1548,310 @@ func NewRefreshUserSessionClientCIMDResponseBody(res *types.UserSessionClient) *
 		}
 	} else {
 		body.RedirectUris = []string{}
+	}
+	return body
+}
+
+// NewCreateUserSessionClientUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientUnauthorizedResponseBody(res *goa.ServiceError) *CreateUserSessionClientUnauthorizedResponseBody {
+	body := &CreateUserSessionClientUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientForbiddenResponseBody builds the HTTP response
+// body from the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientForbiddenResponseBody(res *goa.ServiceError) *CreateUserSessionClientForbiddenResponseBody {
+	body := &CreateUserSessionClientForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientBadRequestResponseBody builds the HTTP response
+// body from the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientBadRequestResponseBody(res *goa.ServiceError) *CreateUserSessionClientBadRequestResponseBody {
+	body := &CreateUserSessionClientBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientNotFoundResponseBody builds the HTTP response body
+// from the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientNotFoundResponseBody(res *goa.ServiceError) *CreateUserSessionClientNotFoundResponseBody {
+	body := &CreateUserSessionClientNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientConflictResponseBody builds the HTTP response body
+// from the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientConflictResponseBody(res *goa.ServiceError) *CreateUserSessionClientConflictResponseBody {
+	body := &CreateUserSessionClientConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createUserSessionClient" endpoint of
+// the "userSessionClients" service.
+func NewCreateUserSessionClientUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateUserSessionClientUnsupportedMediaResponseBody {
+	body := &CreateUserSessionClientUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientInvalidResponseBody builds the HTTP response body
+// from the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientInvalidResponseBody(res *goa.ServiceError) *CreateUserSessionClientInvalidResponseBody {
+	body := &CreateUserSessionClientInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createUserSessionClient" endpoint of
+// the "userSessionClients" service.
+func NewCreateUserSessionClientInvariantViolationResponseBody(res *goa.ServiceError) *CreateUserSessionClientInvariantViolationResponseBody {
+	body := &CreateUserSessionClientInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientUnexpectedResponseBody builds the HTTP response
+// body from the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientUnexpectedResponseBody(res *goa.ServiceError) *CreateUserSessionClientUnexpectedResponseBody {
+	body := &CreateUserSessionClientUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateUserSessionClientGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+func NewCreateUserSessionClientGatewayErrorResponseBody(res *goa.ServiceError) *CreateUserSessionClientGatewayErrorResponseBody {
+	body := &CreateUserSessionClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "updateUserSessionClientRedirectURIs" endpoint of the "userSessionClients"
+// service.
+func NewUpdateUserSessionClientRedirectURIsUnauthorizedResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsForbiddenResponseBody builds the HTTP
+// response body from the result of the "updateUserSessionClientRedirectURIs"
+// endpoint of the "userSessionClients" service.
+func NewUpdateUserSessionClientRedirectURIsForbiddenResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsForbiddenResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsBadRequestResponseBody builds the HTTP
+// response body from the result of the "updateUserSessionClientRedirectURIs"
+// endpoint of the "userSessionClients" service.
+func NewUpdateUserSessionClientRedirectURIsBadRequestResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsBadRequestResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsNotFoundResponseBody builds the HTTP
+// response body from the result of the "updateUserSessionClientRedirectURIs"
+// endpoint of the "userSessionClients" service.
+func NewUpdateUserSessionClientRedirectURIsNotFoundResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsNotFoundResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsConflictResponseBody builds the HTTP
+// response body from the result of the "updateUserSessionClientRedirectURIs"
+// endpoint of the "userSessionClients" service.
+func NewUpdateUserSessionClientRedirectURIsConflictResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsConflictResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "updateUserSessionClientRedirectURIs" endpoint of the "userSessionClients"
+// service.
+func NewUpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsInvalidResponseBody builds the HTTP
+// response body from the result of the "updateUserSessionClientRedirectURIs"
+// endpoint of the "userSessionClients" service.
+func NewUpdateUserSessionClientRedirectURIsInvalidResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsInvalidResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "updateUserSessionClientRedirectURIs" endpoint of the "userSessionClients"
+// service.
+func NewUpdateUserSessionClientRedirectURIsInvariantViolationResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsUnexpectedResponseBody builds the HTTP
+// response body from the result of the "updateUserSessionClientRedirectURIs"
+// endpoint of the "userSessionClients" service.
+func NewUpdateUserSessionClientRedirectURIsUnexpectedResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsUnexpectedResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateUserSessionClientRedirectURIsGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "updateUserSessionClientRedirectURIs" endpoint of the "userSessionClients"
+// service.
+func NewUpdateUserSessionClientRedirectURIsGatewayErrorResponseBody(res *goa.ServiceError) *UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody {
+	body := &UpdateUserSessionClientRedirectURIsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -1636,6 +2456,47 @@ func NewRevokeUserSessionClientGatewayErrorResponseBody(res *goa.ServiceError) *
 	return body
 }
 
+// NewCreateUserSessionClientPayload builds a userSessionClients service
+// createUserSessionClient endpoint payload.
+func NewCreateUserSessionClientPayload(body *CreateUserSessionClientRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionclients.CreateUserSessionClientPayload {
+	v := &usersessionclients.CreateUserSessionClientPayload{
+		UserSessionIssuerID: *body.UserSessionIssuerID,
+		ClientName:          *body.ClientName,
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		v.TokenEndpointAuthMethod = *body.TokenEndpointAuthMethod
+	}
+	v.RedirectUris = make([]string, len(body.RedirectUris))
+	for i, val := range body.RedirectUris {
+		v.RedirectUris[i] = val
+	}
+	if body.TokenEndpointAuthMethod == nil {
+		v.TokenEndpointAuthMethod = "client_secret_basic"
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewUpdateUserSessionClientRedirectURIsPayload builds a userSessionClients
+// service updateUserSessionClientRedirectURIs endpoint payload.
+func NewUpdateUserSessionClientRedirectURIsPayload(body *UpdateUserSessionClientRedirectURIsRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionclients.UpdateUserSessionClientRedirectURIsPayload {
+	v := &usersessionclients.UpdateUserSessionClientRedirectURIsPayload{
+		ID: *body.ID,
+	}
+	v.RedirectUris = make([]string, len(body.RedirectUris))
+	for i, val := range body.RedirectUris {
+		v.RedirectUris[i] = val
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListUserSessionClientsPayload builds a userSessionClients service
 // listUserSessionClients endpoint payload.
 func NewListUserSessionClientsPayload(userSessionIssuerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionclients.ListUserSessionClientsPayload {
@@ -1684,4 +2545,64 @@ func NewRevokeUserSessionClientPayload(id string, sessionToken *string, apikeyTo
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateCreateUserSessionClientRequestBody runs the validations defined on
+// CreateUserSessionClientRequestBody
+func ValidateCreateUserSessionClientRequestBody(body *CreateUserSessionClientRequestBody) (err error) {
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.ClientName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
+	}
+	if body.RedirectUris == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.ClientName != nil {
+		if utf8.RuneCountInString(*body.ClientName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_name", *body.ClientName, utf8.RuneCountInString(*body.ClientName), 1, true))
+		}
+	}
+	if body.ClientName != nil {
+		if utf8.RuneCountInString(*body.ClientName) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.client_name", *body.ClientName, utf8.RuneCountInString(*body.ClientName), 255, false))
+		}
+	}
+	if len(body.RedirectUris) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.redirect_uris", body.RedirectUris, len(body.RedirectUris), 1, true))
+	}
+	if len(body.RedirectUris) > 32 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.redirect_uris", body.RedirectUris, len(body.RedirectUris), 32, false))
+	}
+	if body.TokenEndpointAuthMethod != nil {
+		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post"}))
+		}
+	}
+	return
+}
+
+// ValidateUpdateUserSessionClientRedirectURIsRequestBody runs the validations
+// defined on UpdateUserSessionClientRedirectURIsRequestBody
+func ValidateUpdateUserSessionClientRedirectURIsRequestBody(body *UpdateUserSessionClientRedirectURIsRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.RedirectUris == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if len(body.RedirectUris) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.redirect_uris", body.RedirectUris, len(body.RedirectUris), 1, true))
+	}
+	if len(body.RedirectUris) > 32 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.redirect_uris", body.RedirectUris, len(body.RedirectUris), 32, false))
+	}
+	return
 }

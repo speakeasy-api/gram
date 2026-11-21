@@ -242,3 +242,34 @@ it.each([false, true])(
     );
   },
 );
+
+describe("filterAndSortServers team usage sort", () => {
+  const servers: CatalogServer[] = [
+    server("a/alpha", true),
+    server("b/bravo", true),
+    server("c/charlie", true),
+    server("d/delta", true),
+  ];
+  const sort = { sort: "team-usage", filters: NO_FILTERS } as const;
+
+  it("puts the most called servers first, then A to Z", () => {
+    const usage = new Map([
+      ["c/charlie", { userCount: 2, callCount: 40 }],
+      ["b/bravo", { userCount: 5, callCount: 40 }],
+      ["d/delta", { userCount: 1, callCount: 3 }],
+    ]);
+    expect(
+      filterAndSortServers(servers, sort, undefined, usage).map(
+        (s) => s.registrySpecifier,
+      ),
+    ).toEqual(["b/bravo", "c/charlie", "d/delta", "a/alpha"]);
+  });
+
+  it("keeps A to Z order while usage is still loading", () => {
+    expect(
+      filterAndSortServers([...servers].reverse(), sort).map(
+        (s) => s.registrySpecifier,
+      ),
+    ).toEqual(["a/alpha", "b/bravo", "c/charlie", "d/delta"]);
+  });
+});

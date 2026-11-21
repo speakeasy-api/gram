@@ -240,7 +240,7 @@ var errKitMCPIneligible = errors.New("assistant has no supported persisted machi
 // All connections share the projected assertion audience. Other issuer domains
 // require a separate projected assertion and are deliberately not configured.
 func (s *ServiceCore) kitPersistedMCPConnections(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord) ([]kitMCPConnection, uuid.UUID, error) {
-	rows, err := loadAssistantMcpServers(ctx, db, assistantrepo.LoadAssistantMcpServersParams{ProjectID: assistant.ProjectID, AssistantIds: []uuid.UUID{assistant.ID}})
+	rows, err := assistantrepo.New(db).LoadAssistantMcpServers(ctx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: assistant.ProjectID, AssistantIds: []uuid.UUID{assistant.ID}})
 	if err != nil {
 		return nil, uuid.Nil, fmt.Errorf("load persisted assistant MCP servers: %w", err)
 	}
@@ -273,7 +273,7 @@ func (s *ServiceCore) kitPersistedMCPConnections(ctx context.Context, db assista
 			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an unsupported issuer", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
 			continue
 		}
-		selected := assistantMCPServerRow{ServerSlug: row.ServerSlug, EnvironmentID: row.EnvironmentID, ToolsetSlug: row.ToolsetSlug, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, Visibility: row.Visibility, DefaultEnvironmentSlug: row.DefaultEnvironmentSlug, EnvironmentSlug: row.EnvironmentSlug}
+		selected := assistantMCPServerRow{ServerSlug: row.ServerSlug, EnvironmentID: row.EnvironmentID, ToolsetSlug: row.ToolsetSlug, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, EndpointIsDomainRoot: row.EndpointIsDomainRoot, Visibility: row.Visibility, DefaultEnvironmentSlug: row.DefaultEnvironmentSlug, EnvironmentSlug: row.EnvironmentSlug}
 		if s.serverURL == nil {
 			return nil, uuid.Nil, errKitMCPIneligible
 		}

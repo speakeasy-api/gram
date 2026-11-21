@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -166,7 +165,7 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -199,7 +198,7 @@ func (s *Service) ListDomains(ctx context.Context, _ *gen.ListDomainsPayload) (*
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -243,7 +242,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -369,7 +368,7 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -466,7 +465,7 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -558,23 +557,15 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 				return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, s.logger)
 			}
 			available, err := mcpendpointsrepo.New(dbtx).CheckEndpointSlugAvailability(ctx, mcpendpointsrepo.CheckEndpointSlugAvailabilityParams{
-				Slug:             server.Slug.String,
-				CustomDomainID:   uuid.NullUUID{UUID: domain.ID, Valid: true},
-				OrganizationID:   authCtx.ActiveOrganizationID,
-				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				SkipDomainCheck:  false,
+				Slug:            server.Slug.String,
+				CustomDomainID:  uuid.NullUUID{UUID: domain.ID, Valid: true},
+				OrganizationID:  authCtx.ActiveOrganizationID,
+				SkipDomainCheck: false,
 			})
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)
 			}
-			aliasTaken, err := legacyalias.Taken(ctx, dbtx, legacyalias.TakenCheck{
-				Slug: server.Slug.String, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-				ExcludeToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ExcludeMcpServerID: uuid.NullUUID{UUID: rootServerID, Valid: true},
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, s.logger)
-			}
-			if !available.Bool || aliasTaken {
+			if !available.Bool {
 				return nil, oops.E(oops.CodeConflict, nil, "an endpoint named %s already exists on this domain", server.Slug.String).LogError(ctx, s.logger)
 			}
 			// Deliberately narrower than the mcpendpoints creation flow: no
@@ -718,7 +709,7 @@ func (s *Service) ReconcileDomain(ctx context.Context, _ *gen.ReconcileDomainPay
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -766,7 +757,7 @@ func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -810,7 +801,7 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -966,7 +957,7 @@ func (s *Service) ListRootMcpServers(ctx context.Context, _ *gen.ListRootMcpServ
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -1010,7 +1001,7 @@ func (s *Service) ListMcpEndpoints(ctx context.Context, _ *gen.ListMcpEndpointsP
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 

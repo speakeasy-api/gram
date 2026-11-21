@@ -160,6 +160,7 @@ type Service struct {
 	orgRepo              *orgRepo.Queries
 	authzProvisioner     *authz.Provisioner
 	organizationSeeder   OrganizationFeatureSeeder
+	newOrgSeeder         OrganizationFeatureSeeder
 	trialBundleSeeder    EnterpriseTrialBundleSeeder
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
@@ -190,6 +191,7 @@ func NewService(
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
 	organizationSeeder OrganizationFeatureSeeder,
+	newOrgSeeder OrganizationFeatureSeeder,
 	trialBundleSeeder EnterpriseTrialBundleSeeder,
 	auditLogger *audit.Logger,
 	trialNotifier trialemails.Notifier,
@@ -223,6 +225,7 @@ func NewService(
 		orgRepo:              orgRepo.New(db),
 		authzProvisioner:     authzProvisioner,
 		organizationSeeder:   organizationSeeder,
+		newOrgSeeder:         newOrgSeeder,
 		trialBundleSeeder:    trialBundleSeeder,
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
@@ -276,7 +279,7 @@ func loginNonceBindingMiddleware(env string) func(http.Handler) http.Handler {
 				return
 			}
 
-			//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+			//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 			http.SetCookie(w, &http.Cookie{
 				Name:     nonceBindingCookie,
 				Value:    binding,
@@ -303,7 +306,7 @@ func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Clear the cookie regardless of outcome — it's single-use.
-		//nolint:exhaustruct // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
+		//nolint:exhaustruct_v5 // we only desire these fields and dont want to accidentally change behavior with some unexpected zero value
 		http.SetCookie(w, &http.Cookie{
 			Name:     nonceBindingCookie,
 			Value:    "",
@@ -471,10 +474,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
 		Evidence: signins.Evidence{
-			HostedDomain:       idpUser.Evidence.HostedDomain,
-			TenantID:           idpUser.Evidence.TenantID,
-			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
-			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+			HostedDomain:        idpUser.Evidence.HostedDomain,
+			HostedDomainChecked: idpUser.Evidence.HostedDomainChecked,
+			TenantID:            idpUser.Evidence.TenantID,
+			VerifiedEmail:       idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt:  idpUser.Evidence.AuthenticatedAt,
 		},
 		Impersonated:    idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt: authenticatedAt,
@@ -973,6 +977,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		LoginHint:       email,
 		ScreenHint:      screenHint,
 		Prompt:          "",
+		OrganizationID:  "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").LogError(ctx, s.logger)
@@ -1273,7 +1278,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
 			checks := make([]authz.Check, len(projectIDs))
 			for i, id := range projectIDs {
-				checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
+				checks[i] = authz.Project(authz.ProjectIDFrom(id)).Read()
 			}
 			allowedIDs, err = s.authz.Filter(ctx, checks)
 			if err != nil {
@@ -1675,10 +1680,10 @@ func (s *Service) persistProvisionedOrganization(
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
 	}
 
-	if s.organizationSeeder == nil {
-		return orgRepo.OrganizationMetadatum{}, errors.New("organization feature seeder is not configured")
+	if s.newOrgSeeder == nil {
+		return orgRepo.OrganizationMetadatum{}, errors.New("new organization feature seeder is not configured")
 	}
-	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
+	if err := s.newOrgSeeder(ctx, tx, org.ID); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
 	}
 

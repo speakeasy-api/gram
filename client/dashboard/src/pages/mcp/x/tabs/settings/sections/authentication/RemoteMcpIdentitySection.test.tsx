@@ -1,3 +1,4 @@
+import { waitForHookState } from "@/test/waitForHookState";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useUserIdentityDraft } from "@/lib/remote-identity/drafts/useIdentityDraft";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -342,7 +343,7 @@ function renderIdentityDraft() {
 }
 
 function addCustomHeader(name: string, value: string): void {
-  fireEvent.click(screen.getByText("Custom Headers"));
+  fireEvent.click(screen.getByText("Custom headers"));
   fireEvent.click(screen.getByRole("button", { name: "Add header" }));
   const names = screen.getAllByLabelText("Header name");
   fireEvent.change(names.at(-1)!, { target: { value: name } });
@@ -679,7 +680,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.queryByText(/audience/i)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     expect(mocks.commit).toHaveBeenCalledWith(
       expect.objectContaining({
         commitServerIdentityConfigurationForm: expect.objectContaining({
@@ -727,7 +728,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     const form = mocks.commit.mock.calls[0]![0]
       .commitServerIdentityConfigurationForm as CommitServerIdentityConfigurationForm;
     expect(form.clientMode).toBe("auto");
@@ -854,7 +855,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen.getByPlaceholderText("Search authorization servers…"),
       { target: { value: "own" } },
     );
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.tierSearch).toHaveBeenCalledWith("platform", "own"),
     );
     expect(mocks.tierSearch).toHaveBeenCalledWith("project", "own");
@@ -906,7 +907,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(screen.queryByText("Will be created")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     expect(mocks.commit).toHaveBeenCalledWith(
       expect.objectContaining({
         commitServerIdentityConfigurationForm: expect.objectContaining({
@@ -1499,7 +1500,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       );
       await recoverCorrectionForm();
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
-      await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+      await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
       for (const label of ["Authorization server", "Issuer URL"]) {
         expect(
           (screen.getByLabelText(label) as HTMLInputElement).disabled,
@@ -1564,7 +1565,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         queryClient.getQueryData(["remote-session-issuer-metadata", issuer]),
       ).toEqual(correctedMetadata);
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
-      await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+      await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
       expect(mocks.commit).toHaveBeenCalledWith({
         commitServerIdentityConfigurationForm: expect.objectContaining({
           providerId: undefined,
@@ -1638,7 +1639,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
         isLoading: false,
       }));
       const { result } = renderIdentityDraft();
-      await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
+      await waitForHookState(() =>
+        expect(result.current.discoveryStatus).toBe("ready"),
+      );
       act(() => result.current.selectProvider("__discovered__"));
       act(() =>
         result.current.setIssuerEditorText(
@@ -1658,7 +1661,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
         isLoading: false,
       });
       act(() => result.current.discoverIssuer());
-      await waitFor(() => expect(result.current.selected?.id).toBe(saved.id));
+      await waitForHookState(() =>
+        expect(result.current.selected?.id).toBe(saved.id),
+      );
       expect(result.current.selected?.isNew).toBe(false);
       expect(result.current.choice).toBe("existing");
       // A stored client is a starting point the operator picks, never a
@@ -1736,7 +1741,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
         metadata: { authorizationServers: [`  ${discoveryIssuer}  `] },
       });
       const { result, queryClient } = renderIdentityDraft();
-      await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
+      await waitForHookState(() =>
+        expect(result.current.discoveryStatus).toBe("ready"),
+      );
       expect(mocks.fetchMetadata).toHaveBeenCalledWith({
         fetchIssuerMetadataRequestBody: { issuer: discoveryIssuer },
       });
@@ -1847,7 +1854,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       );
       expect(mocks.fetchMetadata).toHaveBeenCalledTimes(2);
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
-      await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+      await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
       expect(mocks.commit).toHaveBeenCalledWith({
         commitServerIdentityConfigurationForm: expect.objectContaining({
           clientMode: "auto",
@@ -1887,7 +1894,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         discoverUnsavedProvider();
         mocks.fetchMetadata.mockResolvedValue(metadata);
         const { result } = renderIdentityDraft();
-        await waitFor(() =>
+        await waitForHookState(() =>
           expect(result.current.discoveryStatus).toBe("error"),
         );
         expect(result.current.choice).toBeNull();
@@ -2006,7 +2013,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ).toBe("true");
       expect(mocks.fetchMetadata).toHaveBeenCalledTimes(3);
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
-      await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+      await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
       expect(
         mocks.commit.mock.calls[0]?.[0].commitServerIdentityConfigurationForm
           .clientMode,
@@ -2028,7 +2035,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       async (change) => {
         discoverUnsavedProvider();
         const { result, queryClient } = renderIdentityDraft();
-        await waitFor(() => expect(result.current.canSave).toBe(true));
+        await waitForHookState(() => expect(result.current.canSave).toBe(true));
         let saving!: Promise<boolean>;
         act(() => {
           saving = result.current.save();
@@ -2058,13 +2065,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
 
     // The warning lives on the choice it is about, not in a banner below it,
-    // and the detail waits for a hover rather than taking a row.
-    const card = screen
-      .getByLabelText("This server requires authentication")
-      .closest("[data-slot=radio-card]");
-    expect(card).not.toBeNull();
-    expect(card?.className).toContain("border-warning-default");
-    expect(screen.queryByText(/keep failing/i)).toBeNull();
+    // and says in words what goes wrong and what to choose instead.
+    expect(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /keep failing — choose User Identity/,
+      }),
+    ).toBeDefined();
     expect(mocks.authenticationProbe).toHaveBeenCalledWith(
       "remote-source-1",
       true,
@@ -2137,7 +2144,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
     confirmSave();
 
-    await waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.remove).toHaveBeenCalledOnce());
     expect(mocks.commit).toHaveBeenCalledOnce();
     expect(mocks.remove).toHaveBeenCalledWith({ request: { id: "header-1" } });
     expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
@@ -2161,8 +2168,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
     addCustomHeader("X-Team", "eng");
     confirmSave();
 
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
-    await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.toastError).toHaveBeenCalled());
     await new Promise((resolve) => {
       setTimeout(resolve, 0);
     });
@@ -2324,7 +2331,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.detach).toHaveBeenCalledWith({
         request: {
           attachUserSessionIssuerForm: {
@@ -2398,7 +2405,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.detachAssociation).toHaveBeenCalledWith({
         request: {
           serverClientAssociationForm: {
@@ -2452,7 +2459,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.detachAssociation).toHaveBeenCalledWith({
         request: {
           serverClientAssociationForm: {
@@ -2498,7 +2505,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.toastError).toHaveBeenCalledWith(
         expect.stringContaining("nothing was removed"),
       ),
@@ -2544,7 +2551,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.toastError).toHaveBeenCalledWith(
         expect.stringContaining("Couldn't check which clients"),
       ),
@@ -2757,7 +2764,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     expect(mocks.commit).toHaveBeenCalledWith(
       expect.objectContaining({
         commitServerIdentityConfigurationForm: expect.objectContaining({
@@ -2947,7 +2954,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ),
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.create).toHaveBeenCalledOnce());
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
@@ -3055,7 +3062,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "DCR" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     expect(mocks.commit).toHaveBeenCalledWith(
       expect.objectContaining({
         commitServerIdentityConfigurationForm: expect.objectContaining({
@@ -3131,7 +3138,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     expect(mocks.commit).toHaveBeenCalledWith(
       expect.objectContaining({
         commitServerIdentityConfigurationForm: expect.objectContaining({
@@ -3186,7 +3193,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     const form = mocks.commit.mock.calls[0]![0]
       .commitServerIdentityConfigurationForm as CommitServerIdentityConfigurationForm;
     expect(form.clientMode).toBe("manual");
@@ -3229,7 +3236,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Auto-Configure/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     const form = mocks.commit.mock.calls[0]![0]
       .commitServerIdentityConfigurationForm as CommitServerIdentityConfigurationForm;
     expect(form.clientMode).toBe("auto");
@@ -3252,7 +3259,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(container.textContent).not.toContain("bearer-secret-value");
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.create).toHaveBeenCalledOnce());
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         request: expect.objectContaining({
@@ -3602,7 +3609,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByRole("dialog")).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.remove).toHaveBeenCalledWith({
         request: { id: "header-1" },
       }),
@@ -3669,7 +3676,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(dialog.textContent).not.toContain("new credential");
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.detach).toHaveBeenCalledWith({
         request: {
           attachUserSessionIssuerForm: {
@@ -3699,7 +3706,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(dialog.textContent).not.toContain("sign in again");
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.commit).toHaveBeenCalledOnce());
     // The commit replaces the bound client, so it is not detached first.
     expect(mocks.detach).not.toHaveBeenCalled();
     expect(mocks.remove).not.toHaveBeenCalled();
@@ -3729,7 +3736,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.remove).toHaveBeenCalledWith({
         request: { id: "header-1" },
       }),
@@ -3810,7 +3817,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    await waitForHookState(() => expect(mocks.create).toHaveBeenCalled());
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 
@@ -3838,7 +3845,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(dialog.textContent).not.toContain("no longer authenticate");
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.remove).toHaveBeenCalledWith({
         request: { id: "header-1" },
       }),
@@ -3861,7 +3868,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         description: /static headers/,
       }),
     );
-    fireEvent.click(screen.getByText("Custom Headers"));
+    fireEvent.click(screen.getByText("Custom headers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Remove header Authorization" }),
     );
@@ -3870,7 +3877,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     // One delete, from the header save: a second one from the identity side
     // would fail on a row that is already gone.
-    await waitFor(() =>
+    await waitForHookState(() =>
       expect(mocks.remove).toHaveBeenCalledWith({
         request: { id: "header-1" },
       }),
@@ -3895,7 +3902,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         description: /static headers/,
       }),
     );
-    fireEvent.click(screen.getByText("Custom Headers"));
+    fireEvent.click(screen.getByText("Custom headers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Remove header Authorization" }),
     );
@@ -3904,7 +3911,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     // The header save owns this delete; until it lands the credential is
     // still live upstream, so success must not be claimed.
-    await waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce());
+    await waitForHookState(() => expect(mocks.remove).toHaveBeenCalledOnce());
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith("Identity removed");
   });
 

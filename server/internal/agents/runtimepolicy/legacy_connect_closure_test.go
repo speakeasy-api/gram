@@ -24,7 +24,7 @@ func TestStoredPoliciesKeepReadWriteConnect(t *testing.T) {
 			policy, err := DecodeDelegatedPolicy(version, raw)
 			require.NoError(t, err, "version %d, %s", version, scope)
 
-			allowed, err := authz.GrantsAuthorize(policy.RuntimeGrants(), authz.MCPCheck(authz.ScopeMCPConnect, "server-1", "project-1"))
+			allowed, err := authz.GrantsAuthorize(policy.RuntimeGrants(), authz.MCPServer(authz.MCPServerIDFrom("server-1"), authz.ProjectIDFrom("project-1")).Connect())
 			require.NoError(t, err)
 			require.True(t, allowed, "version %d, %s", version, scope)
 
@@ -47,7 +47,7 @@ func TestVersion8PoliciesRecordNoImpliedConnect(t *testing.T) {
 		for _, grant := range policy.Effective {
 			require.NotEqual(t, authz.ScopeMCPConnect, grant.Scope, scope)
 		}
-		allowed, err := authz.GrantsAuthorize(policy.RuntimeGrants(), authz.MCPCheck(authz.ScopeMCPConnect, "server-1", "project-1"))
+		allowed, err := authz.GrantsAuthorize(policy.RuntimeGrants(), authz.MCPServer(authz.MCPServerIDFrom("server-1"), authz.ProjectIDFrom("project-1")).Connect())
 		require.NoError(t, err)
 		require.False(t, allowed, scope)
 	}

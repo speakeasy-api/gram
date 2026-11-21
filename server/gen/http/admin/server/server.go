@@ -26,7 +26,6 @@ type Server struct {
 	Logout                                  http.Handler
 	GetSession                              http.Handler
 	GetOrganizationFeatures                 http.Handler
-	SetOrganizationProviderSetup            http.Handler
 	SetOrganizationFeature                  http.Handler
 	GetOrganizationChatAnalysisSettings     http.Handler
 	SetOrganizationChatAnalysisSettings     http.Handler
@@ -140,9 +139,16 @@ type Server struct {
 	ListMemoryEvalRuns                      http.Handler
 	GetMemoryEvalRun                        http.Handler
 	StartMemoryEvalRun                      http.Handler
+	ListAssistantOrganizations              http.Handler
+	RepairOrganizationAssistantAgentNames   http.Handler
 	ListOrganizationAssistants              http.Handler
 	MigrateOrganizationAssistantIdentities  http.Handler
 	MigrateOrganizationAssistantsToKit      http.Handler
+	GetHooksRollout                         http.Handler
+	SetHooksRolloutDefault                  http.Handler
+	GetOrganizationHooksRollout             http.Handler
+	SetOrganizationHooksRollout             http.Handler
+	ClearOrganizationHooksRollout           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -177,7 +183,6 @@ func New(
 			{"Logout", "POST", "/admin/auth.logout"},
 			{"GetSession", "GET", "/admin/session.get"},
 			{"GetOrganizationFeatures", "GET", "/admin/organization.features"},
-			{"SetOrganizationProviderSetup", "POST", "/admin/organization.providerSetup"},
 			{"SetOrganizationFeature", "POST", "/admin/organization.features"},
 			{"GetOrganizationChatAnalysisSettings", "GET", "/admin/organization.chatAnalysisSettings"},
 			{"SetOrganizationChatAnalysisSettings", "POST", "/admin/organization.chatAnalysisSettings"},
@@ -291,16 +296,22 @@ func New(
 			{"ListMemoryEvalRuns", "GET", "/admin/memoryEval.runs"},
 			{"GetMemoryEvalRun", "GET", "/admin/memoryEval.run"},
 			{"StartMemoryEvalRun", "POST", "/admin/memoryEval.start"},
+			{"ListAssistantOrganizations", "GET", "/admin/assistants.organizations"},
+			{"RepairOrganizationAssistantAgentNames", "POST", "/admin/organization.repairAssistantAgentNames"},
 			{"ListOrganizationAssistants", "GET", "/admin/organization.assistants"},
 			{"MigrateOrganizationAssistantIdentities", "POST", "/admin/organization.migrateAssistantIdentities"},
 			{"MigrateOrganizationAssistantsToKit", "POST", "/admin/organization.migrateAssistantsToKit"},
+			{"GetHooksRollout", "GET", "/admin/hooksRollout.get"},
+			{"SetHooksRolloutDefault", "POST", "/admin/hooksRollout.setDefault"},
+			{"GetOrganizationHooksRollout", "GET", "/admin/organization.hooksRollout"},
+			{"SetOrganizationHooksRollout", "POST", "/admin/organization.setHooksRollout"},
+			{"ClearOrganizationHooksRollout", "POST", "/admin/organization.clearHooksRollout"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
 		Logout:                                  NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
 		GetSession:                              NewGetSessionHandler(e.GetSession, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationFeatures:                 NewGetOrganizationFeaturesHandler(e.GetOrganizationFeatures, mux, decoder, encoder, errhandler, formatter),
-		SetOrganizationProviderSetup:            NewSetOrganizationProviderSetupHandler(e.SetOrganizationProviderSetup, mux, decoder, encoder, errhandler, formatter),
 		SetOrganizationFeature:                  NewSetOrganizationFeatureHandler(e.SetOrganizationFeature, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationChatAnalysisSettings:     NewGetOrganizationChatAnalysisSettingsHandler(e.GetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
 		SetOrganizationChatAnalysisSettings:     NewSetOrganizationChatAnalysisSettingsHandler(e.SetOrganizationChatAnalysisSettings, mux, decoder, encoder, errhandler, formatter),
@@ -414,9 +425,16 @@ func New(
 		ListMemoryEvalRuns:                      NewListMemoryEvalRunsHandler(e.ListMemoryEvalRuns, mux, decoder, encoder, errhandler, formatter),
 		GetMemoryEvalRun:                        NewGetMemoryEvalRunHandler(e.GetMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
 		StartMemoryEvalRun:                      NewStartMemoryEvalRunHandler(e.StartMemoryEvalRun, mux, decoder, encoder, errhandler, formatter),
+		ListAssistantOrganizations:              NewListAssistantOrganizationsHandler(e.ListAssistantOrganizations, mux, decoder, encoder, errhandler, formatter),
+		RepairOrganizationAssistantAgentNames:   NewRepairOrganizationAssistantAgentNamesHandler(e.RepairOrganizationAssistantAgentNames, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationAssistants:              NewListOrganizationAssistantsHandler(e.ListOrganizationAssistants, mux, decoder, encoder, errhandler, formatter),
 		MigrateOrganizationAssistantIdentities:  NewMigrateOrganizationAssistantIdentitiesHandler(e.MigrateOrganizationAssistantIdentities, mux, decoder, encoder, errhandler, formatter),
 		MigrateOrganizationAssistantsToKit:      NewMigrateOrganizationAssistantsToKitHandler(e.MigrateOrganizationAssistantsToKit, mux, decoder, encoder, errhandler, formatter),
+		GetHooksRollout:                         NewGetHooksRolloutHandler(e.GetHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		SetHooksRolloutDefault:                  NewSetHooksRolloutDefaultHandler(e.SetHooksRolloutDefault, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutHandler(e.GetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutHandler(e.SetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		ClearOrganizationHooksRollout:           NewClearOrganizationHooksRolloutHandler(e.ClearOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -430,7 +448,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Logout = m(s.Logout)
 	s.GetSession = m(s.GetSession)
 	s.GetOrganizationFeatures = m(s.GetOrganizationFeatures)
-	s.SetOrganizationProviderSetup = m(s.SetOrganizationProviderSetup)
 	s.SetOrganizationFeature = m(s.SetOrganizationFeature)
 	s.GetOrganizationChatAnalysisSettings = m(s.GetOrganizationChatAnalysisSettings)
 	s.SetOrganizationChatAnalysisSettings = m(s.SetOrganizationChatAnalysisSettings)
@@ -544,9 +561,16 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListMemoryEvalRuns = m(s.ListMemoryEvalRuns)
 	s.GetMemoryEvalRun = m(s.GetMemoryEvalRun)
 	s.StartMemoryEvalRun = m(s.StartMemoryEvalRun)
+	s.ListAssistantOrganizations = m(s.ListAssistantOrganizations)
+	s.RepairOrganizationAssistantAgentNames = m(s.RepairOrganizationAssistantAgentNames)
 	s.ListOrganizationAssistants = m(s.ListOrganizationAssistants)
 	s.MigrateOrganizationAssistantIdentities = m(s.MigrateOrganizationAssistantIdentities)
 	s.MigrateOrganizationAssistantsToKit = m(s.MigrateOrganizationAssistantsToKit)
+	s.GetHooksRollout = m(s.GetHooksRollout)
+	s.SetHooksRolloutDefault = m(s.SetHooksRolloutDefault)
+	s.GetOrganizationHooksRollout = m(s.GetOrganizationHooksRollout)
+	s.SetOrganizationHooksRollout = m(s.SetOrganizationHooksRollout)
+	s.ClearOrganizationHooksRollout = m(s.ClearOrganizationHooksRollout)
 }
 
 // MethodNames returns the methods served.
@@ -559,7 +583,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountLogoutHandler(mux, h.Logout)
 	MountGetSessionHandler(mux, h.GetSession)
 	MountGetOrganizationFeaturesHandler(mux, h.GetOrganizationFeatures)
-	MountSetOrganizationProviderSetupHandler(mux, h.SetOrganizationProviderSetup)
 	MountSetOrganizationFeatureHandler(mux, h.SetOrganizationFeature)
 	MountGetOrganizationChatAnalysisSettingsHandler(mux, h.GetOrganizationChatAnalysisSettings)
 	MountSetOrganizationChatAnalysisSettingsHandler(mux, h.SetOrganizationChatAnalysisSettings)
@@ -673,9 +696,16 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListMemoryEvalRunsHandler(mux, h.ListMemoryEvalRuns)
 	MountGetMemoryEvalRunHandler(mux, h.GetMemoryEvalRun)
 	MountStartMemoryEvalRunHandler(mux, h.StartMemoryEvalRun)
+	MountListAssistantOrganizationsHandler(mux, h.ListAssistantOrganizations)
+	MountRepairOrganizationAssistantAgentNamesHandler(mux, h.RepairOrganizationAssistantAgentNames)
 	MountListOrganizationAssistantsHandler(mux, h.ListOrganizationAssistants)
 	MountMigrateOrganizationAssistantIdentitiesHandler(mux, h.MigrateOrganizationAssistantIdentities)
 	MountMigrateOrganizationAssistantsToKitHandler(mux, h.MigrateOrganizationAssistantsToKit)
+	MountGetHooksRolloutHandler(mux, h.GetHooksRollout)
+	MountSetHooksRolloutDefaultHandler(mux, h.SetHooksRolloutDefault)
+	MountGetOrganizationHooksRolloutHandler(mux, h.GetOrganizationHooksRollout)
+	MountSetOrganizationHooksRolloutHandler(mux, h.SetOrganizationHooksRollout)
+	MountClearOrganizationHooksRolloutHandler(mux, h.ClearOrganizationHooksRollout)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -926,60 +956,6 @@ func NewGetOrganizationFeaturesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationFeatures")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountSetOrganizationProviderSetupHandler configures the mux to serve the
-// "admin" service "setOrganizationProviderSetup" endpoint.
-func MountSetOrganizationProviderSetupHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/admin/organization.providerSetup", f)
-}
-
-// NewSetOrganizationProviderSetupHandler creates a HTTP handler which loads
-// the HTTP request and calls the "admin" service
-// "setOrganizationProviderSetup" endpoint.
-func NewSetOrganizationProviderSetupHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeSetOrganizationProviderSetupRequest(mux, decoder)
-		encodeResponse = EncodeSetOrganizationProviderSetupResponse(encoder)
-		encodeError    = EncodeSetOrganizationProviderSetupError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "setOrganizationProviderSetup")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -7084,6 +7060,114 @@ func NewStartMemoryEvalRunHandler(
 	})
 }
 
+// MountListAssistantOrganizationsHandler configures the mux to serve the
+// "admin" service "listAssistantOrganizations" endpoint.
+func MountListAssistantOrganizationsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/assistants.organizations", f)
+}
+
+// NewListAssistantOrganizationsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "listAssistantOrganizations"
+// endpoint.
+func NewListAssistantOrganizationsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAssistantOrganizationsRequest(mux, decoder)
+		encodeResponse = EncodeListAssistantOrganizationsResponse(encoder)
+		encodeError    = EncodeListAssistantOrganizationsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAssistantOrganizations")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRepairOrganizationAssistantAgentNamesHandler configures the mux to
+// serve the "admin" service "repairOrganizationAssistantAgentNames" endpoint.
+func MountRepairOrganizationAssistantAgentNamesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.repairAssistantAgentNames", f)
+}
+
+// NewRepairOrganizationAssistantAgentNamesHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "repairOrganizationAssistantAgentNames" endpoint.
+func NewRepairOrganizationAssistantAgentNamesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRepairOrganizationAssistantAgentNamesRequest(mux, decoder)
+		encodeResponse = EncodeRepairOrganizationAssistantAgentNamesResponse(encoder)
+		encodeError    = EncodeRepairOrganizationAssistantAgentNamesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "repairOrganizationAssistantAgentNames")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountListOrganizationAssistantsHandler configures the mux to serve the
 // "admin" service "listOrganizationAssistants" endpoint.
 func MountListOrganizationAssistantsHandler(mux goahttp.Muxer, h http.Handler) {
@@ -7223,6 +7307,274 @@ func NewMigrateOrganizationAssistantsToKitHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "migrateOrganizationAssistantsToKit")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetHooksRolloutHandler configures the mux to serve the "admin" service
+// "getHooksRollout" endpoint.
+func MountGetHooksRolloutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/hooksRollout.get", f)
+}
+
+// NewGetHooksRolloutHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getHooksRollout" endpoint.
+func NewGetHooksRolloutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetHooksRolloutRequest(mux, decoder)
+		encodeResponse = EncodeGetHooksRolloutResponse(encoder)
+		encodeError    = EncodeGetHooksRolloutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getHooksRollout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetHooksRolloutDefaultHandler configures the mux to serve the "admin"
+// service "setHooksRolloutDefault" endpoint.
+func MountSetHooksRolloutDefaultHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/hooksRollout.setDefault", f)
+}
+
+// NewSetHooksRolloutDefaultHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "setHooksRolloutDefault" endpoint.
+func NewSetHooksRolloutDefaultHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetHooksRolloutDefaultRequest(mux, decoder)
+		encodeResponse = EncodeSetHooksRolloutDefaultResponse(encoder)
+		encodeError    = EncodeSetHooksRolloutDefaultError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setHooksRolloutDefault")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationHooksRolloutHandler configures the mux to serve the
+// "admin" service "getOrganizationHooksRollout" endpoint.
+func MountGetOrganizationHooksRolloutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.hooksRollout", f)
+}
+
+// NewGetOrganizationHooksRolloutHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getOrganizationHooksRollout"
+// endpoint.
+func NewGetOrganizationHooksRolloutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationHooksRolloutRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationHooksRolloutResponse(encoder)
+		encodeError    = EncodeGetOrganizationHooksRolloutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationHooksRollout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetOrganizationHooksRolloutHandler configures the mux to serve the
+// "admin" service "setOrganizationHooksRollout" endpoint.
+func MountSetOrganizationHooksRolloutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.setHooksRollout", f)
+}
+
+// NewSetOrganizationHooksRolloutHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "setOrganizationHooksRollout"
+// endpoint.
+func NewSetOrganizationHooksRolloutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetOrganizationHooksRolloutRequest(mux, decoder)
+		encodeResponse = EncodeSetOrganizationHooksRolloutResponse(encoder)
+		encodeError    = EncodeSetOrganizationHooksRolloutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setOrganizationHooksRollout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountClearOrganizationHooksRolloutHandler configures the mux to serve the
+// "admin" service "clearOrganizationHooksRollout" endpoint.
+func MountClearOrganizationHooksRolloutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.clearHooksRollout", f)
+}
+
+// NewClearOrganizationHooksRolloutHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "clearOrganizationHooksRollout" endpoint.
+func NewClearOrganizationHooksRolloutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeClearOrganizationHooksRolloutRequest(mux, decoder)
+		encodeResponse = EncodeClearOrganizationHooksRolloutResponse(encoder)
+		encodeError    = EncodeClearOrganizationHooksRolloutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "clearOrganizationHooksRollout")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

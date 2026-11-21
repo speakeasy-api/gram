@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
@@ -186,10 +185,4 @@ func renewalCheckInterval(retryAfter string, now time.Time) time.Duration {
 // thirds through its lifetime, as Let's Encrypt recommends.
 func fallbackRenewAt(leaf *x509.Certificate) time.Time {
 	return leaf.NotBefore.Add(leaf.NotAfter.Sub(leaf.NotBefore) * 2 / 3)
-}
-
-// jittered spreads d by up to a tenth either way, so the nodes a pod started
-// together do not refresh in the same poll every hour.
-func jittered(d time.Duration) time.Duration {
-	return d - d/10 + rand.N(d/5+1) //nolint:gosec // spreading load, not security
 }

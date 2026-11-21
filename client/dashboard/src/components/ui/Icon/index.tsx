@@ -1,22 +1,12 @@
 "use client";
 
-import { lazy, Suspense } from "react";
-import type { LucideProps } from "lucide-react";
-import dynamicIconImports from "lucide-react/dynamicIconImports";
+import * as lucide from "lucide-react";
+import type { LucideIcon, LucideProps } from "lucide-react";
 import type { ResponsiveValue, Size } from "@/components/ui/lib/types";
 import useTailwindBreakpoint from "@/components/ui/hooks/useTailwindBreakpoint";
 import { resolveSizeForBreakpoint } from "@/components/ui/lib/responsiveUtils";
 
 import type { IconName } from "./names";
-
-// TODO: Use skeleton
-// A span, not a div: icons render inside inline parents such as Link's span.
-function Skeleton() {
-  return <span />;
-}
-
-// Skeleton fallback
-const fallback = <Skeleton />;
 
 type SvgProps = Pick<
   LucideProps,
@@ -43,26 +33,25 @@ export interface IconProps extends Omit<SvgProps, "size"> {
   size?: ResponsiveValue<Size>;
 }
 
-const iconCache = new Map<
-  string,
-  React.LazyExoticComponent<React.ComponentType<LucideProps>>
->();
+// Icons are looked up on the lucide-react namespace, not through
+// lucide-react/dynamicIconImports. The production build already puts every
+// lucide module in one chunk, so lazy per-icon imports saved nothing there,
+// while in dev they made Vite pre-bundle each icon as its own file: about
+// 1,900 extra requests on every page load, each one a module the dev server
+// keeps in memory.
+const icons: Readonly<Record<string, unknown>> = lucide;
 
-function tryGetIcon(
-  name: string,
-): React.LazyExoticComponent<React.ComponentType<LucideProps>> {
-  if (iconCache.has(name)) {
-    return iconCache.get(name) as React.LazyExoticComponent<
-      React.ComponentType<LucideProps>
-    >;
-  }
-
-  const LucideIcon = lazy(
-    dynamicIconImports[name as keyof typeof dynamicIconImports],
+// "arrow-down-0-1" -> "ArrowDown01", the name lucide-react exports it under.
+function exportName(name: string): string {
+  return name.replace(/(?:^|-)([a-z0-9])/g, (_match, char: string) =>
+    char.toUpperCase(),
   );
+}
 
-  iconCache.set(name, LucideIcon);
-  return LucideIcon;
+function getIcon(name: string): LucideIcon | undefined {
+  // Safe: every key of dynamicIconImports, which IconName is derived from, is
+  // exported from lucide-react as an icon component (see index.test.ts).
+  return icons[exportName(name)] as LucideIcon | undefined;
 }
 
 export function Icon({
@@ -70,14 +59,12 @@ export function Icon({
   size = "small",
   ...props
 }: IconProps): React.JSX.Element | null {
-  const LucideIcon = tryGetIcon(name);
+  const LucideIcon = getIcon(name);
   const breakpoint = useTailwindBreakpoint();
   const resolvedSize = resolveSizeForBreakpoint(breakpoint, size, "small");
   const sizeNumber = sizeMap[resolvedSize];
 
-  return (
-    <Suspense fallback={fallback}>
-      <LucideIcon {...props} size={sizeNumber} />
-    </Suspense>
-  );
+  if (!LucideIcon) return null;
+
+  return <LucideIcon {...props} size={sizeNumber} />;
 }

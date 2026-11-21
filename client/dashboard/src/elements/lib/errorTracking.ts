@@ -53,7 +53,8 @@ export function initErrorTracking(config: ErrorTrackingConfig = {}): void {
       service: DATADOG_CONFIG.service,
       env: DATADOG_CONFIG.env,
       sessionSampleRate: 100,
-      sessionReplaySampleRate: 100,
+      // No session replay: recordings would show customer data on screen.
+      sessionReplaySampleRate: 0,
       trackUserInteractions: true,
       trackResources: true,
       trackLongTasks: true,

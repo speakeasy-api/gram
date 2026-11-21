@@ -210,9 +210,7 @@ func (a *LiveOrgAdminAuthorizer) HasLiveOrgAdmin(ctx context.Context, principal 
 	if err != nil {
 		return false, fmt.Errorf("load live admin grants: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	})
+	allowed, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	if err != nil {
 		return false, fmt.Errorf("authorize live admin grants: %w", err)
 	}
@@ -235,12 +233,7 @@ func (a *LiveOrgAdminAuthorizer) RequireLiveOrgAdmin(ctx context.Context, princi
 	if err != nil {
 		return fmt.Errorf("load live admin grants: %w", err)
 	}
-	if err := a.engine.EvaluateLoadedGrants(ctx, grants, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   principal.OrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := a.engine.EvaluateLoadedGrants(ctx, grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()); err != nil {
 		return fmt.Errorf("require live org admin: %w", err)
 	}
 	return nil
@@ -381,6 +374,7 @@ type PostgresReader struct {
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
+	dataExportTestEvent       *DataExportTestEventService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
@@ -405,6 +399,10 @@ type PostgresReader struct {
 	widgets                   *WidgetService
 	dashboards                *DashboardsService
 	codeModeAvailable         CodeModeAvailability
+
+	// functionsDisabled is true when the deployment runs with the disabled
+	// Functions provider, so tools that work with function tools refuse.
+	functionsDisabled bool
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -432,6 +430,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
+		dataExportTestEvent:       nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
@@ -458,12 +457,22 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		widgets:                   nil,
 		dashboards:                nil,
 		codeModeAvailable:         nil,
+		functionsDisabled:         false,
 	}
 }
 
 // WithCustomDomainTargetSuffix supplies the deployment's normalized CNAME suffix.
 func (r *PostgresReader) WithCustomDomainTargetSuffix(suffix string) *PostgresReader {
 	r.customDomainTargetSuffix = suffix
+	return r
+}
+
+// WithFunctionsDisabled marks a deployment that runs with the disabled
+// Functions provider, so creating an MCP server from functions refuses.
+func (r *PostgresReader) WithFunctionsDisabled(disabled bool) *PostgresReader {
+	if r != nil {
+		r.functionsDisabled = disabled
+	}
 	return r
 }
 
@@ -544,9 +553,7 @@ func (r *PostgresReader) pluginNamesVisible(ctx context.Context, principal Princ
 	// FindMatched asks which checks pass; Require asserts that they must. Asking
 	// records the org:admin check as a filter, where Require would record every
 	// ordinary member read as a denied requirement.
-	matched, err := r.authz.FindMatched(ctx, []authz.Check{{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	}})
+	matched, err := r.authz.FindMatched(ctx, []authz.Check{authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()})
 	if err != nil || len(matched) == 0 {
 		return false
 	}
@@ -580,7 +587,7 @@ func (r *PostgresReader) ResolveReviewProject(ctx context.Context, principal Pri
 	if err != nil {
 		return ResolvedProject{}, fmt.Errorf("resolve platform MCP review project: %w", err)
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, authz.Project(authz.ProjectIDOf(projectID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, oops.E(oops.CodeNotFound, err, "project not found")
 		}
@@ -775,7 +782,7 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 
 		checks := make([]authz.Check, 0, len(rows))
 		for _, row := range rows {
-			checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: row.ID.String(), Dimensions: nil})
+			checks = append(checks, authz.Project(authz.ProjectIDOf(row.ID)).Read())
 		}
 		allowed, err := r.authz.FindMatched(ctx, checks)
 		if err != nil {
@@ -919,7 +926,7 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
-	if err := r.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String())); err != nil {
+	if err := r.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpID), authz.ProjectIDOf(projectID)).Read()); err != nil {
 		if isAuthorizationDenied(err) {
 			return MCP{}, ErrForbidden
 		}
@@ -1058,7 +1065,7 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 	}
 	checks := make([]authz.Check, 0, len(servers))
 	for _, server := range servers {
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, server.ID.String(), server.ProjectID.String()))
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(server.ID), authz.ProjectIDOf(server.ProjectID)).Read())
 	}
 	matched, err := r.authz.FindMatched(ctx, checks)
 	if err != nil {
@@ -1077,14 +1084,14 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 // organization and enforces the existing project:read scope before callers read
 // project-operational data.
 func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
-	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeProjectRead)
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ProjectRef.Read)
 }
 
 // ResolveProjectLogRead resolves one exact project under the principal's
 // organization and enforces log:read before callers list that project's
 // individual tool calls. project:read alone does not satisfy it.
 func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
-	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ProjectRef.LogRead)
 }
 
 // ResolveProjectLogScope resolves one exact project and decides how much of its
@@ -1124,7 +1131,7 @@ func (r *PostgresReader) canonicalIdentityOrg(ctx context.Context, organizationI
 	return r.identityGate.CanonicalOrgFor(ctx, organizationID)
 }
 
-func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {
+func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, permission func(authz.ProjectRef) authz.Check) (ResolvedProject, error) {
 	if r == nil || r.reader == nil || r.authz == nil {
 		return ResolvedProject{}, ErrUnavailable
 	}
@@ -1132,7 +1139,7 @@ func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal 
 	if err != nil {
 		return ResolvedProject{}, err
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, permission(authz.Project(authz.ProjectIDOf(project.ID)))); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, ErrForbidden
 		}

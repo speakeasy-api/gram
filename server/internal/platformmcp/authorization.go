@@ -38,8 +38,8 @@ func externalAuthorizationToolResult(err error) (*mcp.CallToolResult, bool) {
 	if marshalErr != nil {
 		return nil, false
 	}
-	return &mcp.CallToolResult{ //nolint:exhaustruct // An authorization refusal has no MCP metadata, requests, or task state.
-		Content: []mcp.Content{&mcp.TextContent{ //nolint:exhaustruct // Plain refusal text needs no annotations or metadata.
+	return &mcp.CallToolResult{ //nolint:exhaustruct_v5 // An authorization refusal has no MCP metadata, requests, or task state.
+		Content: []mcp.Content{&mcp.TextContent{ //nolint:exhaustruct_v5 // Plain refusal text needs no annotations or metadata.
 			Text: string(payload),
 		}},
 		IsError: true,
@@ -153,7 +153,7 @@ func (a *LiveOrgAdminAuthorizer) AuthorizeExternalCall(ctx context.Context, prin
 		}
 		return nil
 	case ExternalAuthorizationOrgAdmin:
-		check = authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}
+		check = authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()
 	default:
 		return fmt.Errorf("%w: unsupported external authorization policy %q", ErrUnavailable, policy)
 	}

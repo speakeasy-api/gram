@@ -564,12 +564,7 @@ func (s *Service) GetAssistantSessionSummary(ctx context.Context, payload *gen.G
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -686,7 +681,7 @@ func (s *Service) GetWorkUnitsTrend(ctx context.Context, payload *gen.GetWorkUni
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(projectID))
+		allowed, err := s.authz.Evaluate(ctx, authz.Chats(authz.ProjectIDFrom(projectID)).Read())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to authorize work units trend").LogError(ctx, s.logger)
 		}
@@ -1088,7 +1083,7 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
 		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
-		allowed, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
+		allowed, err := s.authz.Evaluate(ctx, authz.Chats(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 		if err != nil {
 			// An unsatisfied grant yields (false, nil); a non-nil error is
 			// unexpected. Log it but still serve own sessions rather than
@@ -1176,12 +1171,7 @@ func (s *Service) editableAgentIDs(ctx context.Context, authCtx *contextvalues.A
 }
 
 func agentWriteCheck(agentID uuid.UUID) authz.Check {
-	return authz.Check{
-		Scope:        authz.ScopeAgentWrite,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agentID.String(),
-		Dimensions:   nil,
-	}
+	return authz.Agent(authz.AgentIDOf(agentID)).Write()
 }
 
 // unionAgentIDs merges agent id lists without repeating an id.

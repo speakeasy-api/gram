@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -221,6 +222,144 @@ func TestCoworkShipsNewLinesOnEachStop(t *testing.T) {
 	invokeClaude(t, cfg, claudeStop(transcript))
 	uploads, _ = ts.recorded()
 	require.Len(t, uploads, 2)
+}
+
+// TestCoworkReportsInvalidTranscriptPath: a Stop whose transcript path the
+// binary refuses ships no lines, so it tells the server why instead of
+// skipping silently.
+func TestCoworkReportsInvalidTranscriptPath(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := coworkConfig(t, ts.URL)
+	claudeTranscriptFile(t) // sets the Claude config root
+	outside := filepath.Join(t.TempDir(), "sess-cowork-1.jsonl")
+	appendTranscript(t, outside, transcriptUser)
+
+	res := invokeClaude(t, cfg, claudeStop(outside))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+
+	uploads, headers := ts.recorded()
+	require.Len(t, uploads, 1)
+	require.NotNil(t, uploads[0].Diagnostic)
+	require.Equal(t, transcriptSkipPathInvalid, uploads[0].Diagnostic.Reason)
+	require.Contains(t, uploads[0].Diagnostic.Detail, "outside claude transcript root")
+	require.Equal(t, "sess-cowork-1", uploads[0].SessionID)
+	require.Empty(t, uploads[0].Entries)
+	require.Equal(t, "test-hooks-key", headers[0].Get("Gram-Key"))
+}
+
+// replyEvents returns the assistant.responded envelopes the server received.
+func (fs *fakeServer) replyEvents() []components.IngestRequestBody {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	var out []components.IngestRequestBody
+	for _, req := range fs.requests {
+		if req.Event.Type == components.TypeAssistantResponded {
+			out = append(out, req)
+		}
+	}
+	return out
+}
+
+// TestCoworkStopWithoutTranscriptSendsReply: a Cowork session that runs
+// Claude Code only as a tool server (`claude mcp serve`) writes no
+// transcript, so Stop arrives with an empty transcript_path and no projects
+// folder exists. The reply then reaches the server only as an event carrying
+// last_assistant_message, marked as Cowork so the server stores it with the
+// session's other rows. A SubagentStop still sends nothing.
+func TestCoworkStopWithoutTranscriptSendsReply(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	fs := newFakeServer(t, nil)
+	cfg := coworkConfig(t, fs.URL)
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir()) // no projects folder
+
+	stop := claudeStop("")
+	stop["prompt_id"] = "prompt-1"
+	stop["last_assistant_message"] = "Two files."
+	res := invokeClaude(t, cfg, stop)
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+
+	subagent := claudeStop("")
+	subagent["hook_event_name"] = "SubagentStop"
+	subagent["last_assistant_message"] = "subagent text"
+	res = invokeClaude(t, cfg, subagent)
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+
+	replies := fs.replyEvents()
+	require.Len(t, replies, 1)
+	reply := replies[0]
+	require.NotNil(t, reply.Data)
+	require.NotNil(t, reply.Data.Message)
+	require.Equal(t, "Two files.", *reply.Data.Message.Text)
+	require.NotNil(t, reply.Session)
+	require.Equal(t, "sess-cowork-1", *reply.Session.ID)
+	require.Equal(t, "prompt-1", *reply.Session.TurnID)
+	require.NotNil(t, reply.Session.Surface)
+	require.Equal(t, coworkSurface, *reply.Session.Surface)
+	require.NotNil(t, reply.Event.OccurredAt, "the server keys the reply by it")
+}
+
+// TestCoworkStopWithTranscriptSendsNoReply: when the transcript ships, it
+// carries the reply, so Stop sends no reply event that could store it twice.
+func TestCoworkStopWithTranscriptSendsNoReply(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	fs := newFakeServer(t, nil)
+	cfg := coworkConfig(t, fs.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser+transcriptAssistant)
+
+	stop := claudeStop(transcript)
+	stop["last_assistant_message"] = "Two files."
+	res := invokeClaude(t, cfg, stop)
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+	require.Empty(t, fs.replyEvents())
+	fs.mu.Lock()
+	paths := slices.Clone(fs.paths)
+	fs.mu.Unlock()
+	require.Contains(t, paths, transcriptUploadPath, "the reply goes up with the transcript")
+}
+
+// TestCoworkReportsEmptyTranscript: a Stop follows a reply, so a transcript
+// with no complete line is reported once rather than skipped silently.
+func TestCoworkReportsEmptyTranscript(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := coworkConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, "")
+
+	res := invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 1)
+	require.NotNil(t, uploads[0].Diagnostic)
+	require.Equal(t, transcriptSkipEmpty, uploads[0].Diagnostic.Reason)
+	require.Empty(t, uploads[0].Entries)
+
+	// A later Stop on the same empty file does not report it again.
+	invokeClaude(t, cfg, claudeStop(transcript))
+	uploads, _ = ts.recorded()
+	require.Len(t, uploads, 1)
+}
+
+// TestCoworkRetriesEmptyReportAfterFailure: a skip report the server did not
+// acknowledge is sent again on the next Stop.
+func TestCoworkRetriesEmptyReportAfterFailure(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	ts.respond(http.StatusServiceUnavailable)
+	cfg := coworkConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, "")
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	ts.respond(http.StatusOK)
+	invokeClaude(t, cfg, claudeStop(transcript))
+	invokeClaude(t, cfg, claudeStop(transcript))
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 2, "the failed report is retried once, then not again")
 }
 
 func TestCoworkRetriesUnsettledUpload(t *testing.T) {

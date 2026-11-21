@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -750,6 +751,15 @@ func EncodeListKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		values := req.URL.Query()
 		if p.AgentID != nil {
 			values.Add("agent_id", *p.AgentID)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		if p.Search != nil {
+			values.Add("search", *p.Search)
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil

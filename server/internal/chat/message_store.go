@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -113,6 +114,9 @@ type ChatMessageWriter struct {
 	assetStorage assets.BlobStore
 	stokenCodec  *stokens.Codec
 	observers    []MessageObserver
+	// transcriptShadow is opt-in shadow storage, not an encrypted-only rollout.
+	transcriptShadow         *transcriptstore.Store
+	transcriptShadowProjects map[uuid.UUID]struct{}
 	// turnStream, when set, receives a frame per persisted row so dashboard
 	// subscribers can render a turn without polling. Nil disables publishing.
 	turnStream  *TurnStream
@@ -123,20 +127,58 @@ type ChatMessageWriter struct {
 func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // shutdown context must outlive any single request
 	w = &ChatMessageWriter{
-		db:           db,
-		logger:       logger.With(attr.SlogComponent("chat-message-writer")),
-		assetStorage: assetStorage,
-		stokenCodec:  stokens.NewCodec(),
-		observers:    nil,
-		shutdownCtx:  ctx,
-		cancel:       cancel,
-		turnStream:   nil,
+		db:                       db,
+		logger:                   logger.With(attr.SlogComponent("chat-message-writer")),
+		assetStorage:             assetStorage,
+		stokenCodec:              stokens.NewCodec(),
+		observers:                nil,
+		transcriptShadow:         nil,
+		transcriptShadowProjects: nil,
+		shutdownCtx:              ctx,
+		cancel:                   cancel,
+		turnStream:               nil,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()
 		return nil
 	}
 	return w, shutdown
+}
+
+// WithTranscriptShadow enables atomic encrypted shadow copies for shared writer
+// operations. Configure it before serving requests, after the separate schema
+// migration and organization key provisioning. It does not encrypt assets or
+// remove plaintext; direct SQL updates still need backfill to refresh shadows.
+// An empty project allowlist disables capture; there is no implicit all-project
+// mode, including when the option is called from another service.
+func (w *ChatMessageWriter) WithTranscriptShadow(store *transcriptstore.Store, projectIDs ...uuid.UUID) *ChatMessageWriter {
+	w.transcriptShadow = store
+	w.transcriptShadowProjects = make(map[uuid.UUID]struct{}, len(projectIDs))
+	for _, projectID := range projectIDs {
+		w.transcriptShadowProjects[projectID] = struct{}{}
+	}
+	return w
+}
+
+func (w *ChatMessageWriter) captureTranscriptShadow(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, messageIDs []uuid.UUID) error {
+	if w.transcriptShadow == nil {
+		return nil
+	}
+	if _, enabled := w.transcriptShadowProjects[projectID]; !enabled {
+		return nil
+	}
+	if err := w.transcriptShadow.Capture(ctx, db, organizationID, projectID, messageIDs); err != nil {
+		return fmt.Errorf("capture encrypted transcript shadow: %w", err)
+	}
+	return nil
+}
+
+func messageWriteIDs(writes []MessageWrite) []uuid.UUID {
+	ids := make([]uuid.UUID, len(writes))
+	for i := range writes {
+		ids[i] = writes[i].Params.ID
+	}
+	return ids
 }
 
 // WithTurnStream enables per-row turn frame publishing.
@@ -509,6 +551,9 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	if err != nil {
 		return 0, nil, err
 	}
+	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
+		return 0, nil, err
+	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
 		return 0, nil, fmt.Errorf("enqueue chat message readings: %w", err)
 	}
@@ -628,6 +673,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 			return 0, err
 		}
 	}
+	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{stored.ID}); err != nil {
+		return 0, err
+	}
 	// A correlated promotion only updates attribution/source metadata on an
 	// existing message; its content is unchanged and its insertion already
 	// published a creation event. Do not publish again and trigger duplicate evaluation
@@ -745,6 +793,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 					return false, fmt.Errorf("create external message content parts: %w", err)
 				}
 			}
+			if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, []uuid.UUID{param.ID}); err != nil {
+				return false, err
+			}
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
 				return false, fmt.Errorf("enqueue external chat message readings: %w", err)
 			}
@@ -806,6 +857,9 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, writes 
 
 	n, err := insertChatMessages(ctx, tx, messageWriteParams(writes))
 	if err != nil {
+		return 0, err
+	}
+	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
 		return 0, err
 	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
@@ -882,6 +936,9 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	assistantCount, err := insertChatMessages(ctx, tx, assistantParams)
 	if err != nil {
 		return fmt.Errorf("store assistant chat messages: %w", err)
+	}
+	if err := w.captureTranscriptShadow(ctx, tx, organizationID, projectID, messageWriteIDs(writes)); err != nil {
+		return err
 	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
 		return fmt.Errorf("enqueue chat turn readings: %w", err)

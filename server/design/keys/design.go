@@ -76,10 +76,16 @@ var _ = Service("keys", func() {
 	})
 
 	Method("listKeys", func() {
-		Description("List all api keys for an organization")
+		Description("List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.")
 
 		Payload(func() {
-			Attribute("agent_id", String, "When set, list keys for this first-class agent", func() { Format(FormatUUID) })
+			Attribute("agent_id", String, "When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.", func() { Format(FormatUUID) })
+			Attribute("cursor", String, "Opaque cursor from a previous response's next_cursor. Returns the keys after that page.", func() { MaxLength(512) })
+			Attribute("limit", Int, "Page size. When omitted, every matching key is returned and next_cursor is never set.", func() {
+				Minimum(1)
+				Maximum(100)
+			})
+			Attribute("search", String, "Only return keys whose name contains this text, ignoring case.", func() { MaxLength(255) })
 			security.SessionPayload()
 		})
 
@@ -88,6 +94,9 @@ var _ = Service("keys", func() {
 		HTTP(func() {
 			GET("/rpc/keys.list")
 			Param("agent_id")
+			Param("cursor")
+			Param("limit")
+			Param("search")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -247,6 +256,7 @@ var AgentDelegatedPolicy = Type("AgentDelegatedPolicy", func() {
 
 var ListKeysResult = Type("ListKeysResult", func() {
 	Attribute("keys", ArrayOf(KeyModel))
+	Attribute("next_cursor", String, "Cursor for the next page of keys.list. Absent on the last page and when no limit was sent.")
 	Required("keys")
 })
 

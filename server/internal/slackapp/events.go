@@ -44,6 +44,10 @@ const (
 	// DisabledReply is posted when the workspace's project has no active
 	// project assistant.
 	DisabledReply = "The project assistant isn't turned on for the Speakeasy project this workspace is connected to."
+
+	// UnavailableReply is posted when the Speakeasy deployment runs without
+	// assistants.
+	UnavailableReply = "Assistants aren't available on this Speakeasy deployment."
 )
 
 // Router finds the connected workspaces that route a Slack team's events.
@@ -80,12 +84,16 @@ type Events struct {
 
 	// resolveSender finds the Speakeasy user a Slack sender is linked to.
 	resolveSender func(context.Context, slackrepo.ResolveSlackMappingUserParams) (string, error)
+
+	// assistantsDisabled is set when the deployment runs without assistants,
+	// so a linked sender is told so instead of getting no answer.
+	assistantsDisabled bool
 }
 
 // NewEvents returns the Events API handler. secret is the app's signing
 // secret.
 func NewEvents(logger *slog.Logger, db *pgxpool.Pool, router Router, dispatcher Dispatcher, poster Poster, secret string, identities *assistantidentity.Service) *Events {
-	return &Events{logger: logger.With(attr.SlogComponent("slack_app_events")), db: db, router: router, dispatcher: dispatcher, poster: poster, secret: secret, identities: identities, dashboardURL: "", home: nil, resolveSender: slackrepo.New(db).ResolveSlackMappingUser}
+	return &Events{logger: logger.With(attr.SlogComponent("slack_app_events")), db: db, router: router, dispatcher: dispatcher, poster: poster, secret: secret, identities: identities, dashboardURL: "", home: nil, resolveSender: slackrepo.New(db).ResolveSlackMappingUser, assistantsDisabled: false}
 }
 
 func (e *Events) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -156,6 +164,11 @@ func (e *Events) route(ctx context.Context, summary triggers.SlackEventSummary, 
 	}
 	if !linked {
 		e.reply(ctx, workspace.Token, summary, UnlinkedReply)
+		return nil
+	}
+
+	if e.assistantsDisabled {
+		e.reply(ctx, workspace.Token, summary, UnavailableReply)
 		return nil
 	}
 

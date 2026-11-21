@@ -194,7 +194,7 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source, host st
 		reason = ReasonRateLimited
 		return Ingress{}, errors.New("token review rate limit exceeded")
 	}
-	//nolint:exhaustruct // request populates only TokenReview spec; API server owns response metadata/status
+	//nolint:exhaustruct_v5 // request populates only TokenReview spec; API server owns response metadata/status
 	review, err := v.reviewer.Create(ctx, &authenticationv1.TokenReview{
 		Spec: authenticationv1.TokenReviewSpec{
 			Token:     token,
@@ -493,7 +493,7 @@ func parseServiceAccountSubject(subject string) (string, string, error) {
 }
 
 func tokenExpiry(token string) (time.Time, error) {
-	claims := jwt.RegisteredClaims{} //nolint:exhaustruct // ParseUnverified populates all relevant claims
+	claims := jwt.RegisteredClaims{} //nolint:exhaustruct_v5 // ParseUnverified populates all relevant claims
 	_, _, err := jwt.NewParser().ParseUnverified(token, &claims)
 	if err != nil || claims.ExpiresAt == nil {
 		return time.Time{}, fmt.Errorf("parse token expiry")

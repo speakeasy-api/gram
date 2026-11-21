@@ -17,7 +17,6 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -40,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -59,14 +57,22 @@ import (
 )
 
 type Service struct {
-	auth                  *auth.Auth
-	db                    *pgxpool.Pool
-	chatRepo              *chatRepo.Queries
-	hooksRepo             *hooksRepo.Queries
-	orgsRepo              *orgsRepo.Queries
-	projectsRepo          *projectsRepo.Queries
-	chConn                clickhouse.Conn
-	chRepo                *repo.Queries
+	auth         *auth.Auth
+	db           *pgxpool.Pool
+	chatRepo     *chatRepo.Queries
+	hooksRepo    *hooksRepo.Queries
+	orgsRepo     *orgsRepo.Queries
+	projectsRepo *projectsRepo.Queries
+
+	// chConn is the read-write ClickHouse connection. Only mutations run on
+	// it; every query goes through chRepo.
+	chConn clickhouse.Conn
+
+	// chRepo runs on the read replica, so a write surge on the primary cannot
+	// starve the dashboards this service serves. Reads are eventually
+	// consistent with chConn and nothing here reads its own write.
+	chRepo *repo.Queries
+
 	logger                *slog.Logger
 	tracer                trace.Tracer
 	posthog               PosthogClient
@@ -86,6 +92,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	chConn clickhouse.Conn,
+	chReadConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	chatSessions *chatsessions.Manager,
 	logsEnabled FeatureChecker,
@@ -94,7 +101,7 @@ func NewService(
 	authzEngine *authz.Engine,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("telemetry"))
-	chRepo := repo.New(chConn)
+	chRepo := repo.New(chReadConn)
 
 	// The sessions and chatSessions parameters may be nil for callers that only need
 	// telemetry emission (e.g., Temporal workers using CreateLog). When nil, the HTTP
@@ -1341,7 +1348,7 @@ func (s *Service) GetProjectMetricsSummary(ctx context.Context, payload *telem_g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -1434,7 +1441,7 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -1503,7 +1510,7 @@ func (s *Service) GetEmployeeDataFlowGraph(ctx context.Context, payload *telem_g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2007,7 +2014,7 @@ func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
@@ -2096,7 +2103,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2180,91 +2187,28 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 }
 
 // observabilityOverview reads the overview for one scope: its summary, the
-// same summary for the period immediately before, and the tool breakdowns.
+// same summary for the period immediately before, the time series, and the
+// tool breakdowns. One grouped ClickHouse query serves all of them, so a page
+// load costs one scan and one connection.
 func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverviewSummaryParams, includeTimeSeries bool) (*telem_gen.GetObservabilityOverviewResult, error) {
-	timeStart, timeEnd := scope.TimeStart, scope.TimeEnd
-	intervalSeconds := calculateInterval(timeStart, timeEnd)
+	intervalSeconds := calculateInterval(scope.TimeStart, scope.TimeEnd)
 
-	// Fetch all data sequentially to avoid ClickHouse concurrent query limits
-	summary, err := s.chRepo.GetOverviewSummary(ctx, scope)
+	overview, err := s.chRepo.GetObservabilityOverview(ctx, repo.GetObservabilityOverviewParams{
+		Scope:             scope,
+		IntervalSeconds:   intervalSeconds,
+		IncludeTimeSeries: includeTimeSeries,
+		ToolLimit:         10,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving overview summary")
-	}
-
-	// Same duration, immediately before.
-	comparisonScope := scope
-	comparisonScope.TimeStart = timeStart - (timeEnd - timeStart)
-	comparisonScope.TimeEnd = timeStart
-	comparison, err := s.chRepo.GetOverviewSummary(ctx, comparisonScope)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving comparison summary")
-	}
-
-	var timeSeries []repo.TimeSeriesBucket
-	if includeTimeSeries {
-		timeSeries, err = s.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
-			ExcludedHookSources: scope.ExcludedHookSources,
-			GramProjectIDs:      scope.GramProjectIDs,
-			TimeStart:           timeStart,
-			TimeEnd:             timeEnd,
-			IntervalSeconds:     intervalSeconds,
-			User:                scope.User,
-			CanonicalUser:       scope.CanonicalUser,
-			ExternalUserID:      scope.ExternalUserID,
-			APIKeyID:            scope.APIKeyID,
-			ToolsetSlug:         scope.ToolsetSlug,
-			ToolsetSlugServerID: scope.ToolsetSlugServerID,
-			RemoteMCPServerID:   scope.RemoteMCPServerID,
-			MCPServerID:         scope.MCPServerID,
-			MetaMCPServerID:     scope.MetaMCPServerID,
-			EventSource:         scope.EventSource,
-			HookSource:          scope.HookSource,
-			AccountType:         scope.AccountType,
-			ExternalOrgID:       scope.ExternalOrgID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error retrieving time series")
-		}
-	}
-
-	breakdown := func(sortBy string) ([]repo.ToolMetric, error) {
-		return s.chRepo.GetToolMetricsBreakdown(ctx, repo.GetToolMetricsBreakdownParams{
-			ExcludedHookSources: scope.ExcludedHookSources,
-			GramProjectIDs:      scope.GramProjectIDs,
-			TimeStart:           timeStart,
-			TimeEnd:             timeEnd,
-			User:                scope.User,
-			CanonicalUser:       scope.CanonicalUser,
-			ExternalUserID:      scope.ExternalUserID,
-			APIKeyID:            scope.APIKeyID,
-			ToolsetSlug:         scope.ToolsetSlug,
-			ToolsetSlugServerID: scope.ToolsetSlugServerID,
-			RemoteMCPServerID:   scope.RemoteMCPServerID,
-			MCPServerID:         scope.MCPServerID,
-			MetaMCPServerID:     scope.MetaMCPServerID,
-			EventSource:         scope.EventSource,
-			HookSource:          scope.HookSource,
-			AccountType:         scope.AccountType,
-			ExternalOrgID:       scope.ExternalOrgID,
-			Limit:               10,
-			SortBy:              sortBy,
-		})
-	}
-	toolsByCount, err := breakdown("count")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by count")
-	}
-	toolsByFailure, err := breakdown("failure_rate")
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving tools by failure rate")
+		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving observability overview")
 	}
 
 	return &telem_gen.GetObservabilityOverviewResult{
-		Summary:               toObservabilitySummary(summary),
-		Comparison:            toObservabilitySummary(comparison),
-		TimeSeries:            toTimeSeriesBuckets(timeSeries),
-		TopToolsByCount:       toToolMetrics(toolsByCount),
-		TopToolsByFailureRate: toToolMetrics(toolsByFailure),
+		Summary:               toObservabilitySummary(overview.Summary),
+		Comparison:            toObservabilitySummary(overview.Comparison),
+		TimeSeries:            toTimeSeriesBuckets(overview.TimeSeries),
+		TopToolsByCount:       toToolMetrics(overview.TopToolsByCount),
+		TopToolsByFailureRate: toToolMetrics(overview.TopToolsByFailureRate),
 		IntervalSeconds:       intervalSeconds,
 	}, nil
 }
@@ -2281,7 +2225,7 @@ func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2331,7 +2275,7 @@ func (s *Service) GetUnproxiedMcpServerToolUsage(ctx context.Context, payload *t
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2394,7 +2338,7 @@ func (s *Service) GetUnproxiedMcpServerUserUsage(ctx context.Context, payload *t
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2459,7 +2403,7 @@ func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2524,7 +2468,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2580,15 +2524,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	})
 
 	eg.Go(func() error {
-		var fetchErr error
-		chatMetrics, fetchErr = s.chatRepo.GetChatMetricsSummary(egCtx, chatRepo.GetChatMetricsSummaryParams{
-			ProjectID: *authCtx.ProjectID,
-			TimeStart: conv.ToPGTimestamptz(time.Unix(0, timeStart)),
-			TimeEnd:   conv.ToPGTimestamptz(time.Unix(0, timeEnd)),
+		chatMetrics = s.fetchOverviewChatMetrics(egCtx, chatMetricsTimeout, func(ctx context.Context) (chatRepo.GetChatMetricsSummaryRow, error) {
+			return s.chatRepo.GetChatMetricsSummary(ctx, chatRepo.GetChatMetricsSummaryParams{
+				ProjectID: *authCtx.ProjectID,
+				TimeStart: conv.ToPGTimestamptz(time.Unix(0, timeStart)),
+				TimeEnd:   conv.ToPGTimestamptz(time.Unix(0, timeEnd)),
+			})
 		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving chat metrics summary")
-		}
 		return nil
 	})
 
@@ -2642,6 +2584,41 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		UsageByAgent: usage.byAgent,
 		McpUsage:     usage.mcpUsage,
 	}, nil
+}
+
+// chatMetricsTimeout bounds the PostgreSQL chat metrics read in the project
+// overview. Nothing else in the overview depends on it, so a slow read costs
+// only the chat count rather than holding the whole request until the 60s
+// statement timeout.
+const chatMetricsTimeout = 10 * time.Second
+
+// fetchOverviewChatMetrics runs fetch with the given timeout. On failure it
+// logs the error, records it on the request span, and returns zero metrics so
+// the rest of the project overview still renders. When ctx itself is done,
+// because another overview lane failed or the client went away, the failure
+// is not the chat read's own and is not reported.
+func (s *Service) fetchOverviewChatMetrics(
+	ctx context.Context,
+	timeout time.Duration,
+	fetch func(context.Context) (chatRepo.GetChatMetricsSummaryRow, error),
+) chatRepo.GetChatMetricsSummaryRow {
+	var unavailable chatRepo.GetChatMetricsSummaryRow
+
+	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	metrics, err := fetch(fetchCtx)
+	if err == nil {
+		return metrics
+	}
+	if ctx.Err() != nil {
+		return unavailable
+	}
+
+	trace.SpanFromContext(ctx).RecordError(err)
+	s.logger.ErrorContext(ctx, "chat metrics unavailable for project overview", attr.SlogError(err))
+
+	return unavailable
 }
 
 // calculateInterval determines the appropriate time bucket interval based on the time range.
@@ -2838,7 +2815,7 @@ func (s *Service) ListFilterOptions(ctx context.Context, payload *telem_gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2891,7 +2868,7 @@ func (s *Service) ListAttributeKeys(ctx context.Context, payload *telem_gen.List
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -2943,7 +2920,7 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -3298,7 +3275,7 @@ func (s *Service) resolveToolUsageParamsWithOwners(ctx context.Context, f toolUs
 		return repo.GetToolUsageSummaryParams{}, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return repo.GetToolUsageSummaryParams{}, err
 	}
 
@@ -3856,7 +3833,7 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -3929,7 +3906,7 @@ func (s *Service) GetOrgMcpServerActivity(ctx context.Context, payload *telem_ge
 	}
 	checks := make([]authz.Check, len(projects))
 	for i, project := range projects {
-		checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}
+		checks[i] = authz.Project(authz.ProjectIDOf(project.ID)).Read()
 	}
 	allowed, err := s.authz.Filter(ctx, checks)
 	if err != nil {
@@ -4072,10 +4049,6 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	if err != nil {
 		return nil, nil, fmt.Errorf("load hosted MCP state: %w", err)
 	}
-	aliases, err := legacyalias.List(ctx, db, projectID, toolsetIDs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list toolset aliases: %w", err)
-	}
 
 	// Include soft-deleted servers: tool_source on telemetry rows is the
 	// backend remote/tunneled server id, which outlives the mcp_servers row.
@@ -4094,11 +4067,8 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 	}
 	hostedMatchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
 	for _, toolset := range toolsets {
-		// Traffic can arrive through the frozen alias or any of the canonical server's endpoints.
+		// Traffic can arrive through any of the canonical server's endpoints.
 		var slugs []string
-		if alias := aliases[toolset.ID].Slug; alias.Valid && alias.String != "" {
-			slugs = append(slugs, alias.String)
-		}
 		if row := hostingstate.For(hosting, toolset.ID); row != nil && row.Canonical {
 			for _, slug := range row.EndpointSlugs {
 				if !slices.Contains(slugs, slug) {
@@ -4287,23 +4257,9 @@ func loadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, engine *authz.En
 	if err != nil {
 		return nil, fmt.Errorf("list project gateway endpoints: %w", err)
 	}
-	// A deleted endpoint stops matching once a legacy toolset alias holds its address.
-	var deleted []legacyalias.Alias
-	for _, endpoint := range endpoints {
-		if endpoint.Deleted {
-			deleted = append(deleted, legacyalias.Alias{Slug: pgtype.Text{String: endpoint.Slug, Valid: true}, CustomDomainID: endpoint.CustomDomainID})
-		}
-	}
-	taken, err := legacyalias.TakenAddresses(ctx, db, deleted)
-	if err != nil {
-		return nil, fmt.Errorf("check gateway endpoint addresses: %w", err)
-	}
 	anchoredMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	platformMatchers := make([]repo.MetaMCPMatcher, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if endpoint.Deleted && taken[legacyalias.Alias{Slug: pgtype.Text{String: endpoint.Slug, Valid: true}, CustomDomainID: endpoint.CustomDomainID}] {
-			continue
-		}
 		matcher := repo.MetaMCPMatcher{
 			URLSuffix:    "/mcp/" + endpoint.Slug,
 			TargetID:     endpoint.MetaMcpServerID.String(),
@@ -4627,11 +4583,11 @@ func readableGatewayOwners(ctx context.Context, engine *authz.Engine, candidates
 	for _, candidate := range candidates {
 		if candidate.projectID != uuid.Nil && !seen[candidate.projectID] {
 			seen[candidate.projectID] = true
-			projectChecks = append(projectChecks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: candidate.projectID.String(), Dimensions: nil})
+			projectChecks = append(projectChecks, authz.Project(authz.ProjectIDOf(candidate.projectID)).Read())
 		}
 		if candidate.agentID != uuid.Nil && !candidate.ownedAgent && !seen[candidate.agentID] {
 			seen[candidate.agentID] = true
-			agentChecks = append(agentChecks, authz.Check{Scope: authz.ScopeAgentRead, ResourceKind: authz.ResourceKindAgent, ResourceID: candidate.agentID.String(), Dimensions: nil})
+			agentChecks = append(agentChecks, authz.Agent(authz.AgentIDOf(candidate.agentID)).Read())
 		}
 	}
 
@@ -5052,7 +5008,7 @@ func toToolUsageClientToolBreakdownRows(rows []repo.ToolUsageClientToolBreakdown
 func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
 	if summary == nil {
 		summary = &repo.ToolUsageSummary{
-			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct // zero totals for the empty result
+			Totals:              repo.ToolUsageTotalsRow{}, //nolint:exhaustruct_v5 // zero totals for the empty result
 			Targets:             nil,
 			Users:               nil,
 			TargetTimeSeries:    nil,

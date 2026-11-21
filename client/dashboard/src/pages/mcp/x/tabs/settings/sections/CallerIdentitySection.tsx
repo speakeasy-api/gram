@@ -11,7 +11,7 @@ export function CallerIdentitySection(): JSX.Element {
   return (
     <SettingsSection id={MCP_CALLER_IDENTITY_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Caller Identity</SettingsSection.Title>
+        <SettingsSection.Title>Caller identity</SettingsSection.Title>
         <SettingsSection.Description>
           Requests forwarded through the tunnel carry a signed
           X-Speakeasy-Identity assertion. If this server is reachable other than

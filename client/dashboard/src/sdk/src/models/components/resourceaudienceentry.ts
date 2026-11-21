@@ -29,6 +29,7 @@ export const ResourceAudienceEntryDispositions = {
   Destructive: "destructive",
   Idempotent: "idempotent",
   OpenWorld: "open_world",
+  Unannotated: "unannotated",
 } as const;
 export type ResourceAudienceEntryDispositions = OpenEnum<
   typeof ResourceAudienceEntryDispositions

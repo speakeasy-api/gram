@@ -154,7 +154,7 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			staffBrowserError(w, r, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization", oauthui.ReasonDefault)
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: staffBrowserProofCookie + "-" + challenge.ID, Value: proof, Path: "/", MaxAge: int(staffCodeLifetime.Seconds()), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:exhaustruct // Host-only session proof; Domain and Expires intentionally omitted.
+		http.SetCookie(w, &http.Cookie{Name: staffBrowserProofCookie + "-" + challenge.ID, Value: proof, Path: "/", MaxAge: int(staffCodeLifetime.Seconds()), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:exhaustruct_v5 // Host-only session proof; Domain and Expires intentionally omitted.
 		http.Redirect(w, r, Path+"/connect?state="+url.QueryEscape(challenge.ID), http.StatusFound)
 	})
 }
@@ -204,7 +204,7 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 		// A logged-out session can leave a path-scoped browser cookie behind.
 		// Clear it before returning to normal staff login, without touching /admin.
 		if !errors.Is(err, errMissingStaffCookie) {
-			http.SetCookie(w, &http.Cookie{Name: constants.AdminSessionCookie, Path: Path, MaxAge: -1, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:exhaustruct // Only the scoped cookie is expired.
+			http.SetCookie(w, &http.Cookie{Name: constants.AdminSessionCookie, Path: Path, MaxAge: -1, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:exhaustruct_v5 // Only the scoped cookie is expired.
 		}
 		// The relative return target is server-owned and contains only the opaque
 		// challenge ID, never an untrusted redirect URI or client-supplied URL.
@@ -378,7 +378,7 @@ func (s *StaffOAuthAuthorization) staffSession(r *http.Request) (*contextvalues.
 	if err != nil || cookie.Value == "" {
 		return nil, "", errMissingStaffCookie
 	}
-	ctx, err := s.verifier.Authorize(r.Context(), cookie.Value, &security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}) //nolint:exhaustruct // Only name is used.
+	ctx, err := s.verifier.Authorize(r.Context(), cookie.Value, &security.APIKeyScheme{Name: constants.AdminAuthSecurityScheme}) //nolint:exhaustruct_v5 // Only name is used.
 	if err != nil {
 		return nil, "", fmt.Errorf("verify staff browser session: %w", err)
 	}
@@ -432,6 +432,7 @@ func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client 
 		ClientIDOrigin: "",
 		ServerName:     "Speakeasy Admin",
 		ProviderName:   "",
+		AdminDetail:    "",
 	}
 	_ = oauthui.WriteAuthorizationError(r.Context(), w, page)
 }
@@ -497,6 +498,7 @@ func staffBrowserError(w http.ResponseWriter, r *http.Request, status int, code,
 		ClientIDOrigin: "",
 		ServerName:     "Speakeasy Admin",
 		ProviderName:   "",
+		AdminDetail:    "",
 	})
 }
 

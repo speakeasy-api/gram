@@ -5,6 +5,9 @@ import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMod
 
 export type DurationUnit = "hour" | "day" | "week";
 
+/** A session length draft: a number and a unit, saved as hours. */
+export type SessionDurationDraft = { number: number; unit: DurationUnit };
+
 export const DURATION_UNIT_HOURS: Record<DurationUnit, number> = {
   hour: 1,
   day: 24,
@@ -20,10 +23,7 @@ export const DURATION_UNIT_OPTIONS: ReadonlyArray<{
   { value: "week", label: "Weeks" },
 ];
 
-export function splitIntoUnit(hours: number): {
-  number: number;
-  unit: DurationUnit;
-} {
+export function splitIntoUnit(hours: number): SessionDurationDraft {
   if (hours > 0 && hours % DURATION_UNIT_HOURS.week === 0) {
     return { number: hours / DURATION_UNIT_HOURS.week, unit: "week" };
   }

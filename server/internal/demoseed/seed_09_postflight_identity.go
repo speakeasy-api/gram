@@ -151,10 +151,12 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
 		// Example OAuth's and Example Shared Credential's issuers, three
-		// independent gateway issuers, one Connections issuer, Linear's and
-		// Notion's.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 8, "demo seed postflight: expected 8 project user session issuers, found %d"},
+		// independent gateway issuers, one Connections issuer, Linear's,
+		// Notion's and Support Tools' (the Shadow MCP official server).
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 9, "demo seed postflight: expected 9 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 3, "demo seed postflight: expected 3 distinct gateway issuers, found %d"},
+		// The workforce issuer. The local fixtures add the Enterprise Sign-In
+		// (ID-JAG) Server's own federated sign-in after this check.
 		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 1, "demo seed postflight: expected 1 organization user session issuer, found %d"},
 		// The workforce issuer shows a shared authorization server.
 		{func(ctx context.Context) (int64, error) {
@@ -164,8 +166,8 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			})
 		}, 1, "demo seed postflight: expected the workforce user session issuer in shared mode, found %d"},
 		{byProj(s.q.PostflightIDUserSessionClients), 9, "demo seed postflight: expected 9 registered agents, found %d"},
-		// EMA: two ready bindings, no cached credentials, and one saved
-		// provider order. The workforce issuer accepts ID-JAGs from the
+		// EMA: Acme Wiki's ready binding, no cached credentials, and its
+		// saved provider order. The workforce issuer accepts ID-JAGs from the
 		// fictional provider, but interactive sign-in does not go through it.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDWorkforceInboundEMATrust(ctx, repo.PostflightIDWorkforceInboundEMATrustParams{
@@ -176,14 +178,14 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		}, 1, "demo seed postflight: expected the workforce issuer to trust Acme Identity for inbound EMA only, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDReadyEMABindings(ctx, repo.PostflightIDReadyEMABindingsParams{OrgID: org, ProjectID: proj})
-		}, 2, "demo seed postflight: expected 2 ready EMA bindings, found %d"},
+		}, 1, "demo seed postflight: expected 1 ready EMA binding, found %d"},
 		{byOrg(s.q.PostflightIDEMACredentials), 0, "demo seed postflight: expected no EMA credentials, found %d"},
 		{byOrg(s.q.PostflightIDTrustedIssuerSessions), 0, "demo seed postflight: expected no trusted issuer sessions, found %d"},
 		{byOrg(s.q.PostflightIDSavedEMAProviders), 1, "demo seed postflight: expected 1 saved EMA provider, found %d"},
 		// Example OAuth's remote identity provider, the identity chaining
-		// example, Jamf Pro, the two EMA services' authorization servers,
-		// Linear and Notion.
-		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 7, "demo seed postflight: expected 7 project remote session issuers, found %d"},
+		// example, Jamf Pro, Acme Wiki's authorization server, Linear and
+		// Notion.
+		{byProj(s.q.PostflightIDProjectRemoteSessionIssuers), 6, "demo seed postflight: expected 6 project remote session issuers, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDRemoteIdentityClients(ctx, repo.PostflightIDRemoteIdentityClientsParams{ProjectID: proj, OrgID: org})
 		}, 3, "demo seed postflight: expected 3 Remote MCP identity clients (Example OAuth's, Linear's and Notion's), found %d"},
@@ -217,16 +219,17 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				ProjectID: proj, Resource: fixtureauth.OAuthResource(fixtureauth.BaseURL(s.serverURL)),
 			})
 		}, 1, "demo seed postflight: expected the Example OAuth server's protected resource on the hosted fixture with both scopes pinned, found %d matching rows"},
-		// Example OAuth's one OAuth client, each EMA service's own client, and
+		// Example OAuth's one OAuth client, Acme Wiki's own client, and
 		// Linear's and Notion's.
-		{byProj(s.q.PostflightIDServerClientAssociations), 5, "demo seed postflight: expected 5 MCP server upstream client associations, found %d"},
+		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Example OAuth server
 		// and Example Shared Credential server sign-ins on their own server, the gateway
-		// sign-ins on both members.
+		// sign-ins on both members, and the organization sign-ins' no-auth
+		// choice on Support Tools.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{},
+				OrgNoAuthServerIds: []uuid.UUID{s.det("mcpserver-shadow-official")},
 				ProjectID:          proj,
 				LinearSessionIds:   []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				SlackSessionIds:    []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
@@ -238,7 +241,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{},
+				OrgNoAuthServerIds: []uuid.UUID{s.det("mcpserver-shadow-official")},
 				ProjectID:          proj,
 				LinearServerID:     s.det("mcpserver-linear"),
 				LinearClientID:     s.det("remote-identity-client-linear"),

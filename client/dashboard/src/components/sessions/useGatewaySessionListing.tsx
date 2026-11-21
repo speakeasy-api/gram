@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { useGatewaySessionsInfinite } from "@gram/client/react-query/gatewaySessions.js";
 import { useGatewaySessionFacets } from "@gram/client/react-query/gatewaySessionFacets.js";
@@ -72,7 +72,7 @@ export function useGatewaySessionListing(
   query: ReturnType<typeof useGatewaySessionsInfinite>;
   isFiltered: boolean;
   sessionsTileTitle: string;
-  toolbar: JSX.Element;
+  renderToolbar: (actions?: ReactNode) => JSX.Element;
 } {
   const [params, setParams] = useSearchParams();
   const { values, setValue, clearValue, clearAll } = useFilterState(
@@ -117,7 +117,9 @@ export function useGatewaySessionListing(
     values.date.customRange,
   );
 
-  const toolbar = (
+  // Callers add their own controls (the grouping toggle) to the same row, so
+  // search, filters and view controls read as one bar.
+  const renderToolbar = (actions?: ReactNode) => (
     <div className="space-y-3">
       <Page.Toolbar>
         <Page.Toolbar.Search
@@ -134,7 +136,9 @@ export function useGatewaySessionListing(
             )
           }
           debounceMs={300}
-          placeholder="Search identities…"
+          placeholder="Search names…"
+          // Narrower than the default so the grouping control fits the row.
+          className="w-48"
         />
         <Page.Toolbar.Filters
           schema={GATEWAY_SESSION_FILTERS}
@@ -148,6 +152,9 @@ export function useGatewaySessionListing(
             status: STATUS_OPTIONS,
           }}
         />
+        {actions != null && (
+          <Page.Toolbar.Actions>{actions}</Page.Toolbar.Actions>
+        )}
         <Page.Toolbar.Refresh
           onRefresh={() => {
             if (!refreshDates()) void query.refetch();
@@ -175,6 +182,6 @@ export function useGatewaySessionListing(
     query,
     isFiltered,
     sessionsTileTitle: STATUS_TILE_TITLES[status],
-    toolbar,
+    renderToolbar,
   };
 }

@@ -199,7 +199,7 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if err != nil {
 		return nil, err
 	}
-	return detailed.Result, nil
+	return s.withVersionStatus(ctx, detailed.Result), nil
 }
 
 func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *AuthenticatedIngestResult, err error) {
@@ -305,6 +305,16 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		// cached copy refreshes on this exchange like any other.
 		if !s.isHookDuplicate(ctx) {
 			s.recordDeliveryFailure(context.WithoutCancel(ctx), payload, authCtx, actor, replayed)
+		}
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
+
+	if isInstallFailureReport(payload) {
+		if !s.isHookDuplicate(ctx) {
+			s.recordInstallFailure(context.WithoutCancel(ctx), payload, authCtx, actor)
 		}
 		return &AuthenticatedIngestResult{
 			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
@@ -651,7 +661,10 @@ func validateCanonicalIngestPayload(payload *gen.IngestPayload) error {
 	if strings.TrimSpace(payload.SchemaVersion) != hookIngestSchemaV1 {
 		return oops.E(oops.CodeInvalid, nil, "unsupported hook schema_version")
 	}
-	return validateDeliveryFailurePayload(payload)
+	if err := validateDeliveryFailurePayload(payload); err != nil {
+		return err
+	}
+	return validateInstallFailurePayload(payload)
 }
 
 func isReservedServerAdapter(adapter string) bool {
@@ -964,16 +977,17 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-			OrganizationID:  authCtx.ActiveOrganizationID,
-			ProjectID:       authCtx.ProjectID.String(),
-			RequesterUserID: actor.UserID,
-			UserMessage:     policy.UserMessage,
-			AuditReason:     auditReason,
-			Evidence:        evidence,
-			ToolName:        toolName,
-			ToolInput:       toolInput,
-			RiskPolicyID:    policy.ID,
-			PolicyName:      policy.Name,
+			OrganizationID:    authCtx.ActiveOrganizationID,
+			ProjectID:         authCtx.ProjectID.String(),
+			RequesterUserID:   actor.UserID,
+			UserMessage:       policy.UserMessage,
+			AuditReason:       auditReason,
+			Evidence:          evidence,
+			ToolName:          toolName,
+			ToolInput:         toolInput,
+			RiskPolicyID:      policy.ID,
+			SessionMCPServers: s.sessionMCPServers(ctx, canonicalSessionID(payload)),
+			PolicyName:        policy.Name,
 		})
 		// Retried deliveries still get the deny decision, but must not mint
 		// another block row (and a second block URL) for the same call.
@@ -2703,8 +2717,9 @@ func fromCowork(payload *gen.IngestPayload) bool {
 }
 
 // persistCoworkEventRow stores a Cowork event under the
-// key its transcript entry shares. Events without a shared id are left to the
-// transcript.
+// key its transcript entry shares, or a reply sent from a session without a
+// transcript under its own key (claudeReplyKey). Other events without a
+// shared id are left to the transcript.
 func (s *Service) persistCoworkEventRow(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, occurredAt time.Time) {
 	sessionID := canonicalSessionID(payload)
 	if sessionID == "" || authCtx.ProjectID == nil {

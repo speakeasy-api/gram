@@ -99,10 +99,19 @@ export function MetricCard({
       {...rest}
     >
       <div className="text-eyebrow">{label}</div>
-      <div className="flex flex-1 items-baseline gap-2">
+      {/* The delta keeps to one line and drops below the figure as a whole
+          when the tile is too narrow, instead of breaking mid-phrase. */}
+      <div className="flex flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className={valueTone({ tone, size })}>{value}</span>
         {delta != null && (
-          <span className={deltaTone({ tone: deltaToneProp })}>{delta}</span>
+          <span
+            className={cn(
+              deltaTone({ tone: deltaToneProp }),
+              "whitespace-nowrap",
+            )}
+          >
+            {delta}
+          </span>
         )}
       </div>
       {description != null && (

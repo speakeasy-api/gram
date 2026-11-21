@@ -86,7 +86,7 @@ func (p *recordingPoster) form(t *testing.T) url.Values {
 func testChainer(t *testing.T) (*Chainer, time.Time) {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Second)
-	return &Chainer{Governor: Governor{logger: testenv.NewLogger(t), db: nil, enc: nil, delegation: nil, now: func() time.Time { return now }}, challenges: nil, keys: nil, locks: nil}, now
+	return &Chainer{Governor: Governor{logger: testenv.NewLogger(t), db: nil, tokens: nil, delegation: nil, now: func() time.Time { return now }}, challenges: nil, keys: nil, locks: nil}, now
 }
 
 func TestExchange_RequestsIDJAGForTheResource(t *testing.T) {

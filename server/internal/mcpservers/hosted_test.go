@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -30,6 +29,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -54,7 +54,7 @@ func newHostedFixture(t *testing.T) (context.Context, *hostedFixture) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, ti.conn, testenv.NewEncryptionClient(t)), nil, guardianPolicy, nil)
 	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, ti.conn, ti.sessionManager, nil, authzEngine, audit.NewLogger(), nil, false, revoker)
 	ti.service.WithHostedServerWriter(toolsetsSvc)
 
@@ -78,15 +78,12 @@ func (f *hostedFixture) payload(visibility types.McpServerVisibility, mutate fun
 }
 
 // requireProjected asserts the wrapper shares the toolset's name and tool variations group, keeps its single
-// platform endpoint, and that the toolset has no legacy alias.
+// platform endpoint.
 func (f *hostedFixture) requireProjected(t *testing.T, ctx context.Context) (toolsetsrepo.Toolset, mcpserversrepo.McpServer) {
 	t.Helper()
 
 	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	alias, err := legacyalias.Get(ctx, f.ti.conn, f.projectID, f.toolset.ID)
-	require.NoError(t, err)
-	require.Equal(t, legacyalias.None(), alias, "hosting writes never give the toolset a legacy alias")
 	server, err := mcpserversrepo.New(f.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.toolset.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, toolset.Name, server.Name.String)

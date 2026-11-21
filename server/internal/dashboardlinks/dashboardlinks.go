@@ -176,13 +176,15 @@ func AccessRoles(organizationSlug string) Link {
 }
 
 // AccessGrant is the roles page with the grant dialog open, filled in for a
-// user who asked for a scope. The resource and its project are optional.
-func AccessGrant(organizationSlug, userID, scope, resourceID, projectID string) Link {
+// user who asked for a scope. The resource, its project and the stored access
+// request are optional.
+func AccessGrant(organizationSlug, userID, scope, resourceID, projectID, requestID string) Link {
 	return AccessRoles(organizationSlug).
 		with("grant_user", userID).
 		with("scope", scope).
 		with("resource_id", resourceID).
-		with("project_id", projectID)
+		with("project_id", projectID).
+		with("request", requestID)
 }
 
 // AccessChallenges is where an admin resolves denied access challenges.

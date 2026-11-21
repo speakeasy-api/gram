@@ -142,6 +142,9 @@ type CreatePluginPayload struct {
 	// Defaults to true. When false, the plugin stays out of the marketplace until
 	// someone syncs it by hand.
 	AutoSyncEnabled *bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Defaults to false.
+	AutoAddServersEnabled *bool
 }
 
 // DeletePluginPayload is the payload type of the plugins service deletePlugin
@@ -318,6 +321,10 @@ type Plugin struct {
 	// Whether changes to this plugin publish to the marketplace automatically.
 	// When false, they wait until someone syncs the marketplace by hand.
 	AutoSyncEnabled bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically, based on the MCP servers those roles can use. When false,
+	// only manual changes alter the plugin's server list.
+	AutoAddServersEnabled bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
 	// Number of active skills in this plugin.
@@ -439,6 +446,18 @@ type PublishStatusResult struct {
 	// marketplace — the value to mark required in Cursor's team marketplace.
 	// Present when connected.
 	CursorObservabilityPlugin *string
+	// Whether the Mistral Vibe observability plugin ZIP can be downloaded right
+	// now: the pinned hooks release's relay carries the vibe provider and the org
+	// name satisfies the Agent Plugins 1.0 name schema. Present (true or false)
+	// when connected and observability is enabled for the project.
+	VibeObservabilityAvailable *bool
+	// Slug of the generated Mistral Vibe observability plugin's install directory
+	// (`~/.vibe/plugins/<slug>`) — present only when connected, observability is
+	// enabled, the vibe package is available, and the stored published hooks
+	// version equals the current generator version, i.e. the published marketplace
+	// repo actually carries the package. The marketplace repo directory is
+	// `<slug>-vibe`.
+	VibeObservabilityPlugin *string
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -593,6 +612,10 @@ type UpdatePluginPayload struct {
 	// has changes that haven't been synced, and the slug can't change while it is
 	// off.
 	AutoSyncEnabled *bool
+	// Whether the plugin's role audiences add and remove its MCP servers
+	// automatically. Omit to keep the current setting. Turning it on adds the MCP
+	// servers its assigned roles can use now, except ones an admin removed before.
+	AutoAddServersEnabled *bool
 }
 
 // UpdatePluginServerPayload is the payload type of the plugins service

@@ -1099,6 +1099,73 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.NoError(t, body.Close())
 }
 
+func TestPluginsService_DownloadObservabilityPluginVibe(t *testing.T) { //nolint:paralleltest // Writes the pinnedHooksBinaryVersion package var.
+	plugins.SetReleasedHooksProvidersForTest(t, []string{"pi", plugins.VibeProviderSlugForTest})
+
+	ctx, ti := newTestPluginsService(t)
+
+	result, body, err := ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "vibe"})
+	require.NoError(t, err)
+	require.Equal(t, "application/zip", result.ContentType)
+	require.Contains(t, result.ContentDisposition, `filename="observability-vibe.zip"`)
+
+	files := readZipFiles(t, body)
+	hooksTOML, ok := files["ai.mistral.vibe/hooks.toml"]
+	require.True(t, ok, "vibe download must ship ai.mistral.vibe/hooks.toml at the ZIP root")
+	require.Contains(t, string(hooksTOML), "--provider=vibe")
+	for _, name := range []string{"plugin.json", "speakeasy.json", "hooks/bootstrap.sh"} {
+		require.Contains(t, files, name, "vibe download must ship %s", name)
+	}
+}
+
+// platform=vibe download is a failed precondition — not a 500 — when the
+// pinned release lacks the vibe provider or the org name breaks the AP1.0
+// name schema, and neither shape may store a hooks key row. Not parallel:
+// the provider shape reads the releasedHooksProviders package var.
+func TestPluginsService_DownloadObservabilityPluginVibeGateFailures(t *testing.T) { //nolint:paralleltest // Reads releasedHooksProviders, which sibling tests write.
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	countKeys := func() int {
+		t.Helper()
+		keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+		require.NoError(t, err)
+		return len(keys)
+	}
+	requireOopsCode := func(err error, code oops.Code, msgPart string) {
+		t.Helper()
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, err, &shareable)
+		require.Equal(t, code, shareable.Code)
+		require.Contains(t, err.Error(), msgPart)
+	}
+
+	// Shape 1: the pinned release does not carry the vibe provider. The test
+	// closes the gate itself, so it holds whatever the checked-in pin carries.
+	plugins.SetReleasedHooksProvidersForTest(t, []string{"pi"})
+	before := countKeys()
+	_, _, err := ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "vibe"})
+	requireOopsCode(err, oops.CodeFailedPrecondition, "does not carry the vibe provider")
+	require.Equal(t, before, countKeys(), "a gated download must not store a hooks key")
+
+	// Shapes 2 and 3: the provider is released, but the org name produces an
+	// invalid manifest name (80 chars, or no ASCII letters/digits at all).
+	plugins.SetReleasedHooksProvidersForTest(t, []string{"pi", plugins.VibeProviderSlugForTest})
+	for _, name := range []string{strings.Repeat("a", 80), "*** ***"} {
+		renameOrganization(t, ctx, ti.conn, authCtx.ActiveOrganizationID, name)
+		before = countKeys()
+		_, _, err = ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "vibe"})
+		requireOopsCode(err, oops.CodeFailedPrecondition, "name schema")
+		require.Equal(t, before, countKeys(), "a name-gated download must not store a hooks key")
+	}
+
+	// platform=claude is unaffected by the vibe gate.
+	renameOrganization(t, ctx, ti.conn, authCtx.ActiveOrganizationID, strings.Repeat("a", 80))
+	_, _, err = ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "claude"})
+	require.NoError(t, err)
+}
+
 func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 	t.Parallel()
 
@@ -1911,8 +1978,8 @@ func TestPluginsService_PublishPlugins_GrantsMCPKeyItsPluginServers(t *testing.T
 		return slices.ContainsFunc(policies["mcp"], func(grant authz.Grant) bool { return authz.GrantAllows(grant, check) })
 	}
 
-	require.True(t, allows(authz.MCPCheck(authz.ScopeMCPConnect, distributed.ID.String(), project)), "the key connects to the server its plugin distributes")
-	require.False(t, allows(authz.MCPCheck(authz.ScopeMCPConnect, other.ID.String(), project)), "the key reaches nothing its plugins do not distribute")
+	require.True(t, allows(authz.MCPServer(authz.MCPServerIDOf(distributed.ID), authz.ProjectIDFrom(project)).Connect()), "the key connects to the server its plugin distributes")
+	require.False(t, allows(authz.MCPServer(authz.MCPServerIDOf(other.ID), authz.ProjectIDFrom(project)).Connect()), "the key reaches nothing its plugins do not distribute")
 
 	clientID := uuid.NewString()
 	for _, clientType := range []string{authz.AuthClientTypeServiceAccount, authz.AuthClientTypeStaticCredential, authz.AuthClientTypePassThrough} {
@@ -1978,7 +2045,7 @@ func TestPluginsService_PublishProject_MCPKeyFollowsServerSignIn(t *testing.T) {
 		require.Len(t, minted, 1, "the republish mints one MCP key")
 		grants, err := authz.LoadGrants(ctx, ti.conn, authCtx.ActiveOrganizationID, []urn.Principal{urn.NewAPIKeyPrincipal(minted[0].ID)})
 		require.NoError(t, err)
-		check := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), project)
+		check := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDFrom(project)).Connect()
 		connects = slices.ContainsFunc(grants, func(grant authz.Grant) bool { return authz.GrantAllows(grant, check) })
 		return connects, strings.Contains(string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), minted[0].KeyPrefix)
 	}

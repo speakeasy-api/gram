@@ -83,8 +83,12 @@ func (t AgentAuthorizationTarget) matches(endpoint *ResolvedMcpEndpoint) bool {
 	return ok && t == *current
 }
 
+// connectCheck is the connection the target authorizes. Targets are only
+// created for mcp:connect (agentAuthorizationTarget), and matches refuses a
+// stored target whose scope differs from the endpoint's, so the stored scope
+// is not consulted here.
 func (t AgentAuthorizationTarget) connectCheck() authz.Check {
-	return authz.MCPCheck(t.Scope, t.MCPResourceID.String(), t.ProjectID.String())
+	return authz.MCPServer(authz.MCPServerIDOf(t.MCPResourceID), authz.ProjectIDOf(t.ProjectID)).Connect()
 }
 
 // agentSetupURL is the dashboard page where the organization's humans
@@ -302,12 +306,7 @@ func consentAgentCandidateEligible(human consentHumanAuthorization, agent agents
 	if agent.OrganizationID != target.OrganizationID || agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
 		return false
 	}
-	return agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Check{
-		Scope:        authz.ScopeAgentAuthorize,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agent.ID.String(),
-		Dimensions:   nil,
-	})
+	return agent.OwnerUserID == human.userID || authz.GrantsSatisfy(human.grants, authz.Agent(authz.AgentIDOf(agent.ID)).Authorize())
 }
 
 // consentPolicyConnect checks effective access, including exclusion scopes, for

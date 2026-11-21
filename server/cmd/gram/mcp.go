@@ -73,7 +73,7 @@ import (
 // worker flags are accepted but never read: this command has no Temporal
 // dependency by design.
 func mcpServerFlags() []cli.Flag {
-	flags := mcpRuntimeFlags()
+	flags := append(mcpRuntimeFlags(), transcriptShadowFlag())
 	return append(flags,
 		riskFingerprintPepperFlag(),
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
@@ -319,7 +319,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled, toolIOLogsEnabled,
 		tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	shutdown.funcs = append(shutdown.funcs, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	// Platform memory tools and dynamic tool search need a completions client.
 	// The chat writer captures any transcript they produce but carries none of
@@ -330,7 +330,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
-	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL).WithFeatureFlags(featureFlags)
 	approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
@@ -361,6 +361,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 	if err != nil {
+		return err
+	}
+	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
 		return err
 	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
@@ -407,7 +410,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Consent runs on this tier in production. Compose the same attachment
 	// service and transactional owner authorizer as gram start, without mounting
 	// its dashboard RPC routes or introducing a Temporal client.
-	identityCommitter := remotesessions.NewIdentityCommitter(logger, db, enc, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
+	clientSecrets := orgEncryption.ClientSecrets(logger, enc)
+	upstreamTokens := orgEncryption.UpstreamTokens(logger, enc)
+	identityCommitter := remotesessions.NewIdentityCommitter(logger, db, enc, clientSecrets, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
 	identityCommitter.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsRefresher := remotesessions.NewRefreshService(logger, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, cacheImpl,
 		remotesessions.WithRefreshIDTokenVerifier(remoteSessionDeps.Verifier),
@@ -415,8 +420,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
 		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner),
 		remotesessions.WithRefreshConnectionRecorder(connectionRecorder),
-		remotesessions.WithRefreshFeatureFlags(featureFlags))
-	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
+		remotesessions.WithRefreshFeatureFlags(featureFlags),
+		remotesessions.WithRefreshClientSecrets(clientSecrets),
+		remotesessions.WithRefreshUpstreamTokens(upstreamTokens))
+	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, clientSecrets, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
 	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsService.SetFeatureFlags(featureFlags)
 	remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())

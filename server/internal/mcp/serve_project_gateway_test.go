@@ -20,15 +20,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func mintProjectGatewayBearer(t *testing.T, ti *testInstance, fx organizationGatewayFixture, projectSlug string) string {
 	t.Helper()
+	return mintProjectGatewayBearerForSubject(t, ti, fx, projectSlug, fx.subject)
+}
+
+func mintProjectGatewayBearerForSubject(t *testing.T, ti *testInstance, fx organizationGatewayFixture, projectSlug string, subject urn.SessionSubject) string {
+	t.Helper()
 	root := ti.serverURL.String() + "/mcp/gateway/" + fx.organizationSlug + "/projects/" + projectSlug
-	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: fx.subject, Audience: root, Issuer: root, Lifetime: time.Hour})
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: root, Issuer: root, Lifetime: time.Hour})
 	require.NoError(t, err)
-	persistTestUserSession(t, ti, fx.issuerID, fx.subject, jti)
+	persistTestUserSession(t, ti, fx.issuerID, subject, jti)
 	return token
 }
 

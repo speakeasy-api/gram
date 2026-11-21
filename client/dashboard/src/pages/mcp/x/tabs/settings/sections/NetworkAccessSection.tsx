@@ -685,8 +685,8 @@ function networkAccessHint({
   if (!hasEligibleEndpoint) {
     const address =
       endpointNamespaceKind === "custom_domain"
-        ? "Custom Address on the domain configured for your private network"
-        : "Hosted Address";
+        ? "custom address on the domain configured for your private network"
+        : "hosted address";
     const section = isGateway ? "Gateway URL" : "Server URL";
     return currentMode === McpServerNetworkAccessMode.PublicOnly
       ? `In ${section}, add a ${address} so clients can reach this ${isGateway ? "gateway" : "server"} through your private network.`

@@ -79,10 +79,11 @@ func (s *Service) DecideInTransaction(ctx context.Context, tx pgx.Tx, input Deci
 		return nil, oops.E(oops.CodeBadRequest, nil, "a rationale is required")
 	}
 
+	// An approval with no principals is for everyone. A denial keeps the
+	// people or roles it was narrowed to; with none it covers everyone, stored
+	// as an empty list so denials from before narrowing mean the same thing.
 	granted := append([]string{}, input.GrantedPrincipalURNs...)
-	if input.Decision == decisionDenied {
-		granted = []string{}
-	} else if len(granted) == 0 {
+	if input.Decision == decisionApproved && len(granted) == 0 {
 		granted = []string{authz.AllUsersPrincipal().String()}
 	}
 	for i, principalURN := range granted {

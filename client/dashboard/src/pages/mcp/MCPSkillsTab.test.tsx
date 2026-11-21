@@ -20,6 +20,14 @@ const state = vi.hoisted(() => ({
   picker: vi.fn(),
 }));
 
+// The request button looks up the viewer's pending access requests when the
+// rollout is on.
+vi.mock("@gram/client/react-query/accessRequests.js", () => ({
+  useAccessRequests: () => ({
+    data: { requests: [] },
+    refetch: () => Promise.resolve(),
+  }),
+}));
 vi.mock("@/components/page-layout", () => {
   const Section = ({ children }: { children: ReactNode }) => (
     <section>{children}</section>
@@ -261,7 +269,7 @@ describe("MCPSkillsTab", () => {
     state.grants = [readSkills, writeServer];
     state.links.mockReturnValue(infinite([{ result: { links: [] } }]));
     renderTab();
-    expect(screen.getByText("No skills served yet")).toBeDefined();
+    expect(screen.getByText("Give connected agents skills")).toBeDefined();
     expect(screen.getByText("Add skill")).toBeDefined();
   });
 

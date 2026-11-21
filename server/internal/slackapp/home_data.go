@@ -74,7 +74,7 @@ func (s *HomeSource) WithServerURL(serverURL *url.URL) *HomeSource {
 // organizationID the caller has already resolved from a linked Slack user.
 func (s *HomeSource) Load(ctx context.Context, organizationID, userID, dashboardURL string) HomeData {
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogUserID(userID))
-	data := HomeData{DashboardURL: dashboardURL, Linked: true} //nolint:exhaustruct // sections are filled below
+	data := HomeData{DashboardURL: dashboardURL, Linked: true} //nolint:exhaustruct_v5 // sections are filled below
 	queries := repo.New(s.db)
 
 	org, err := queries.GetHomeOrganization(ctx, organizationID)
@@ -95,7 +95,7 @@ func (s *HomeSource) Load(ctx context.Context, organizationID, userID, dashboard
 		logger.ErrorContext(ctx, "load grants for Slack app home", attr.SlogError(err))
 		return failedHome(data)
 	}
-	isAdmin, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
+	isAdmin, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		logger.ErrorContext(ctx, "authorize Slack app home", attr.SlogError(err))
 		isAdmin = false
@@ -329,7 +329,7 @@ func servers(ctx context.Context, queries *repo.Queries, organizationID string, 
 		if row.ToolsetID.Valid {
 			resourceID = row.ToolsetID.UUID.String()
 		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, resourceID, row.ProjectID.String()))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDOf(row.ProjectID)).Read())
 		if err != nil {
 			return nil, fmt.Errorf("authorize server: %w", err)
 		}

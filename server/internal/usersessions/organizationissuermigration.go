@@ -152,7 +152,7 @@ func userSessionIssuerSlugConflict(err error) bool {
 // whose tenancy is owned by the issuer is normalized in the same transaction;
 // project-scoped consumers remain in their own projects.
 func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayload) (*types.UserSessionIssuer, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +404,7 @@ func userSessionMigrationPreflightView(run issuerMigrationRun) *orggen.Organizat
 // reconciling the affected projects writes. It takes the consolidation's
 // locks, bounded by a lock timeout, which is why it needs org:admin.
 func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orggen.GetIssuerMigratePreflightPayload) (*orggen.OrganizationUserSessionIssuerMigratePreflight, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -851,6 +851,9 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 	if err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "migrate remote-session provenance").LogError(ctx, logger)
 	}
+	if _, err := q.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx, repo.UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams{TargetIssuerID: target.ID, SourceIssuerID: source.ID, OrganizationID: organizationID}); err != nil {
+		return run, oops.E(oops.CodeUnexpected, err, "migrate agent connection attachments").LogError(ctx, logger)
+	}
 	if _, err := q.DeleteSourceRemoteSessionClientIssuerLinks(ctx, repo.DeleteSourceRemoteSessionClientIssuerLinksParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: organizationID}); err != nil {
 		return run, oops.E(oops.CodeUnexpected, err, "remove source remote-session client links").LogError(ctx, logger)
 	}
@@ -941,7 +944,7 @@ func (s *Service) runIssuerMigration(ctx context.Context, dbtx pgx.Tx, authCtx *
 }
 
 func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssuerPayload) (*orggen.MigrateOrganizationUserSessionIssuerResult, error) {
-	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.requireOrganizationIssuerScope(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}

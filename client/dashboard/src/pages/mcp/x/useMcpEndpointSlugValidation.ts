@@ -6,9 +6,8 @@ import { useEffect, useState } from "react";
 // (a) the slug format constraints (lowercase, alnum + dash/underscore, length)
 // and (b) availability in the relevant uniqueness namespace.
 //
-// Availability is checked with `mcpEndpoints.checkSlugAvailability`, which
-// spans both tables that can hold a live MCP address (mcp_endpoints.slug and
-// the legacy toolsets.mcp_slug) in one unified namespace per address scope.
+// Availability is checked with `mcpEndpoints.checkSlugAvailability` against
+// the live mcp_endpoints slugs in the address scope.
 //
 // Returns the latest validation error, or null when the draft is valid.
 
@@ -21,8 +20,6 @@ export function useMcpEndpointSlugValidation(
   customDomainId: string | null,
   currentSlug?: string,
   hosted = false,
-  // The server the slug is for; its own addresses (such as its legacy alias) read as available.
-  mcpServerId?: string,
 ): string | null {
   const client = useSdkClient();
 
@@ -53,14 +50,12 @@ export function useMcpEndpointSlugValidation(
       "mcpEndpointSlugAvailability",
       debouncedSlug,
       customDomainId,
-      mcpServerId ?? null,
     ] as const,
     enabled: shouldCheck,
     queryFn: () =>
       client.mcpEndpoints.checkSlugAvailability({
         slug: debouncedSlug,
         customDomainId: customDomainId ?? undefined,
-        mcpServerId,
       }),
   });
 

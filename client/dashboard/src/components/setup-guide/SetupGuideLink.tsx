@@ -4,7 +4,7 @@ import { useSetupGuide, type SetupGuideMatch } from "./useSetupGuide";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
-export function SetupGuideAction({
+function SetupGuideAction({
   guide,
   className,
   variant = "link",

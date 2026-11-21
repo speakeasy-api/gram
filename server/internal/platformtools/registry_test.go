@@ -1,4 +1,4 @@
-package platformtools
+package platformtools_test
 
 import (
 	"context"
@@ -9,16 +9,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type fixedDescriptorExecutor struct {
-	descriptor ToolDescriptor
+	descriptor platformtools.ToolDescriptor
 }
 
-func (e *fixedDescriptorExecutor) Descriptor() ToolDescriptor {
+func (e *fixedDescriptorExecutor) Descriptor() platformtools.ToolDescriptor {
 	return e.descriptor
 }
 
@@ -32,7 +33,7 @@ func TestFindToolEntries(t *testing.T) {
 	searchLogsURN := urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs").String()
 	httpToolURN := urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets").String()
 
-	entries := FindToolEntries([]string{
+	entries := platformtools.FindToolEntries([]string{
 		httpToolURN,
 		"not-a-tool-urn",
 		searchLogsURN,
@@ -49,14 +50,14 @@ func TestCountTools(t *testing.T) {
 
 	searchLogsURN := urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs").String()
 
-	require.Equal(t, 1, CountTools([]string{
+	require.Equal(t, 1, platformtools.CountTools([]string{
 		urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets").String(),
 		urn.NewTool(urn.ToolKindPlatform, "nowhere", "missing").String(),
 		"not-a-tool-urn",
 		searchLogsURN,
 		searchLogsURN,
 	}))
-	require.Zero(t, CountTools(nil))
+	require.Zero(t, platformtools.CountTools(nil))
 }
 
 func TestFindTypedTools(t *testing.T) {
@@ -66,7 +67,7 @@ func TestFindTypedTools(t *testing.T) {
 	searchLogsURN := urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs").String()
 	httpToolURN := urn.NewTool(urn.ToolKindHTTP, "petstore", "list_pets").String()
 
-	tools := FindTypedTools(projectID, []string{
+	tools := platformtools.FindTypedTools(projectID, []string{
 		httpToolURN,
 		"not-a-tool-urn",
 		searchLogsURN,
@@ -86,9 +87,9 @@ func TestFindToolEntries_PreservesBuiltInPrecedence(t *testing.T) {
 	override := builtIn
 	override.Name = "external_override"
 
-	entries := FindToolEntries(
+	entries := platformtools.FindToolEntries(
 		[]string{builtIn.ToolURN().String()},
-		ExternalTool{
+		platformtools.ExternalTool{
 			Executor:        &fixedDescriptorExecutor{descriptor: override},
 			RequiredFeature: "",
 			RequiredScope:   "",
@@ -108,7 +109,7 @@ func BenchmarkFindToolEntriesWithHTTPTools(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for b.Loop() {
-		entries := FindToolEntries(toolURNs)
+		entries := platformtools.FindToolEntries(toolURNs)
 		if len(entries) != 0 {
 			b.Fatalf("expected no platform tools, got %d", len(entries))
 		}
@@ -120,35 +121,35 @@ func BenchmarkFindToolEntriesWithHTTPTools(b *testing.B) {
 func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
 	t.Parallel()
 
-	tool := ExternalTool{
-		Executor: &fixedDescriptorExecutor{descriptor: ToolDescriptor{
-			SourceSlug:  SourcePlatform,
+	tool := platformtools.ExternalTool{
+		Executor: &fixedDescriptorExecutor{descriptor: platformtools.ToolDescriptor{
+			SourceSlug:  platformtools.SourcePlatform,
 			HandlerName: "list_projects",
-			Name:        ToolNameListProjects,
+			Name:        platformtools.ToolNameListProjects,
 		}},
 		RequiredFeature: "",
 		RequiredScope:   "",
 	}
 
-	toolsets := BuildToolsets(ToolsetDependencies{
+	toolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 		AssistantMemoryTools:          nil,
 		AssistantSkillTools:           nil,
 		AssistantTriggerTools:         nil,
 		ManagedAssistantInsightsTools: nil,
-		PlatformMCPReadTools:          []ExternalTool{tool},
+		PlatformMCPReadTools:          []platformtools.ExternalTool{tool},
 	})
 
-	ts, ok := toolsets[PlatformMCPReadToolsetSlug]
+	ts, ok := toolsets[platformtools.PlatformMCPReadToolsetSlug]
 	require.True(t, ok, "platform toolset must be registered")
 	require.Len(t, ts.Tools, 1)
-	require.Equal(t, ToolNameListProjects, ts.Tools[0].Executor.Descriptor().Name)
+	require.Equal(t, platformtools.ToolNameListProjects, ts.Tools[0].Executor.Descriptor().Name)
 }
 
 func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
 	t.Parallel()
 
-	assistantsID := PlatformToolsetID(AssistantsPlatformToolsetSlug)
-	require.Equal(t, assistantsID, PlatformToolsetID(AssistantsPlatformToolsetSlug))
-	require.NotEqual(t, assistantsID, PlatformToolsetID(ManagedAssistantPlatformToolsetSlug))
-	require.Equal(t, "Speakeasy assistant tools", PlatformToolsetName(AssistantsPlatformToolsetSlug))
+	assistantsID := platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug)
+	require.Equal(t, assistantsID, platformtools.PlatformToolsetID(platformtools.AssistantsPlatformToolsetSlug))
+	require.NotEqual(t, assistantsID, platformtools.PlatformToolsetID(platformtools.ManagedAssistantPlatformToolsetSlug))
+	require.Equal(t, "Speakeasy assistant tools", platformtools.PlatformToolsetName(platformtools.AssistantsPlatformToolsetSlug))
 }

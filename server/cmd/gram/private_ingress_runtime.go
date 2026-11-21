@@ -221,17 +221,18 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled,
 		toolIOLogsEnabled, tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	r.cleanup = append(r.cleanup, stop)
-	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine)
+	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine)
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
 	r.cleanup = append(r.cleanup, stop)
-	chatWriter = chatWriter.WithTurnStream(chat.NewTurnStream(redisClient))
+	turnStream := chat.NewTurnStream(redisClient)
+	chatWriter = chatWriter.WithTurnStream(turnStream)
 	efficacySignaler := background.NewThrottledSignaler(&background.TemporalSkillEfficacySignaler{TemporalEnv: r.Temporal, Logger: logger}, background.SkillEfficacySignalCooldown, logger)
 	analysisSignaler := background.NewThrottledSignaler(&background.TemporalChatAnalysisSignaler{TemporalEnv: r.Temporal, Logger: logger}, background.ChatAnalysisSignalCooldown, logger)
 	r.cleanup = append(r.cleanup, efficacySignaler.Shutdown, analysisSignaler.Shutdown)
 	chatWriter.AddObserver(efficacy.NewObserver(logger, efficacySignaler))
 	chatWriter.AddObserver(analysis.NewObserver(logger, analysisSignaler))
 	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
-	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL).WithFeatureFlags(featureFlags)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
 		// The approval routes are not served behind private ingress, so
@@ -276,7 +277,8 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	assistantsCore.SetWakeCanceller(triggerApp)
 	assistantsCore.SetDashboardIngestor(triggerApp)
 	assistantsCore.SetChatMessageWriter(chatWriter)
-	if err := installKitLocalRuntimeFromCLI(c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+	assistantsCore.SetTurnStream(turnStream)
+	if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
 		return nil, err
 	}
 	assistantsCore.SetAssetStorage(assetStorage)
@@ -297,6 +299,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 	orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 	if err != nil {
+		return nil, err
+	}
+	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
 		return nil, err
 	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)

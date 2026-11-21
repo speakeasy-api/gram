@@ -855,6 +855,8 @@ github.com/speakeasy-api/mcp-setup-docs/go v0.3.9 h1:NTwh5LwZnbmiHCCJZFoMtUmFU68
 github.com/speakeasy-api/mcp-setup-docs/go v0.3.9/go.mod h1:AwRshgM3gDjtRKcGHiasariP+pcP78LEf4CVITWa7YY=
 github.com/speakeasy-api/openapi v1.24.0 h1:opoD27rupX7zBVPq1HkIGLeMOzNNA7JalhYP8q34i04=
 github.com/speakeasy-api/openapi v1.24.0/go.mod h1:g3+dIMe0AYgbbGvnlQZqesmjAVWSm9BmsjLevnefQrg=
+github.com/speakeasy-api/sc v0.1.1 h1:m5BTLVBtGEny4fj5pwJdh6T1iNsHWSXvUjjH158SOrM=
+github.com/speakeasy-api/sc v0.1.1/go.mod h1:AToHQG8/Tqd2cAe5Ob7jYH/yyFxGruDMC3FrcFUXxec=
 github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=
 github.com/spf13/afero v1.15.0/go.mod h1:NC2ByUVxtQs4b3sIUphxK0NioZnmxgyCrfzeuq8lxMg=
 github.com/spf13/cast v1.10.0 h1:h2x0u2shc1QuLHfxi+cTJvs30+ZAHOGRic8uyGTDWxY=

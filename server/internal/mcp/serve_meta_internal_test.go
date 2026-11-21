@@ -68,7 +68,7 @@ func TestMetaServerDiscover_MemberSummaryIsPrivate(t *testing.T) {
 		} `json:"result"`
 	}
 	require.NoError(t, json.Unmarshal(bs, &response))
-	require.True(t, strings.HasPrefix(response.Result.Instructions, `Tools from these servers: "Linear".`+"\n\n"))
+	require.True(t, strings.HasPrefix(response.Result.Instructions, `Tools from these servers: "Linear".`+metamcp.ProgressiveMemberInstructionsHint+"\n\n"))
 	require.True(t, strings.HasSuffix(response.Result.Instructions, metamcp.Instructions))
 	require.Equal(t, "private", response.Result.CacheScope)
 }

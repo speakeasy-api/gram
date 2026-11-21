@@ -12,12 +12,16 @@ import (
 // not bypass an exclusion on the actual resource (or vice versa).
 //
 // Checks carry base scopes, not blocked scopes, and must include the concrete
-// resource dimensions. Exclusions use strict selector matching and never expand
+// resource dimensions. Exclusions match exactly, open no key, and never expand
 // to root. Every admitted policy can exclude; one allow alternative must still
 // be satisfied by all policies, just as with RequireAny. An exclusion inherited
 // from a role or user:all does not reject a check that a direct grant naming
 // the concrete resource satisfies.
 func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error {
+	checks, refused := e.withoutOtherOrganization(ctx, checks)
+	if len(checks) == 0 && len(refused) > 0 {
+		return e.mapError(ctx, Denied(refused[0].Scope, refused[0].selector()))
+	}
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -33,17 +37,44 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 	for _, check := range checks {
-		if err := validateInput(check); err != nil {
+		if err := validateRequireInput(check); err != nil {
 			return e.mapError(ctx, err)
 		}
 	}
+	blocked, err := firstUnoverriddenExclusion(authorization, checks)
+	if err != nil {
+		return e.mapError(ctx, err)
+	}
+	if blocked != nil {
+		challengeLogger{
+			Operation:            authzrepo.OperationRequireAny,
+			Outcome:              authzrepo.OutcomeDeny,
+			Reason:               authzrepo.ReasonDenyGrant,
+			Checks:               checks,
+			Focus:                blocked,
+			Matches:              nil,
+			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
+			FilterCandidateCount: 0,
+			FilterAllowedCount:   0,
+		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+		return e.mapError(ctx, Denied(blocked.Scope, blocked.selector()))
+	}
+	return e.RequireAny(ctx, checks...)
+}
+
+// firstUnoverriddenExclusion returns the first check an exclusion rejects,
+// bound to the caller, or nil when none does. An exclusion inherited from a
+// role or user:all does not count when a direct grant naming the concrete
+// resource satisfies the check.
+func firstUnoverriddenExclusion(authorization grantAuthorization, checks []Check) (*Check, error) {
 	for _, check := range checks {
 		check = authorization.bind(check)
 		exclusionScope, ok := ExclusionScopeFor(check.Scope)
 		if !ok {
 			continue
 		}
-		exclusion := check.WithStrictSelectorMatch()
+		exclusion := check
+		exclusion.exact = true
 		exclusion.Scope = exclusionScope
 		// Preserve the base resource kind, including explicit overrides.
 		if exclusion.ResourceKind == "" {
@@ -56,24 +87,13 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 			}
 			override, _, err := directOverride(policy, check)
 			if err != nil {
-				return e.mapError(ctx, err)
+				return nil, err
 			}
 			if override != nil {
 				continue
 			}
-			challengeLogger{
-				Operation:            authzrepo.OperationRequireAny,
-				Outcome:              authzrepo.OutcomeDeny,
-				Reason:               authzrepo.ReasonDenyGrant,
-				Checks:               checks,
-				Focus:                &check,
-				Matches:              nil,
-				EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
-				FilterCandidateCount: 0,
-				FilterAllowedCount:   0,
-			}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-			return e.mapError(ctx, Denied(check.Scope, check.selector()))
+			return &check, nil
 		}
 	}
-	return e.RequireAny(ctx, checks...)
+	return nil, nil
 }

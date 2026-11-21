@@ -117,6 +117,18 @@ func TestAssistantRuntimeRefusalIsBounded(t *testing.T) {
 	require.NotContains(t, text, "private")
 }
 
+func TestAssistantRuntimeRefusalWhenAssistantsDisabled(t *testing.T) {
+	t.Parallel()
+	result, ok := assistantRuntimeToolResult(oops.E(oops.CodeNotImplemented, nil, "assistants are not available on this deployment"))
+	require.True(t, ok)
+	require.True(t, result.IsError)
+	content, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, content.Text, unavailableCode)
+	require.Contains(t, content.Text, "not available on this deployment")
+	require.NotContains(t, content.Text, "temporarily")
+}
+
 func TestAssistantRuntimeToolContract(t *testing.T) {
 	t.Parallel()
 	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))

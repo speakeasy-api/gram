@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -39,42 +38,6 @@ const (
 )
 
 var stubAssertionSecret = []byte("stub-assertion-secret-0123456789abcdef")
-
-// stubCiphertextPrefix marks a stubDecrypter ciphertext; the plaintext follows it.
-const stubCiphertextPrefix = "enc:"
-
-// stubDecrypter decrypts stubCiphertextPrefix-prefixed values, or fails with err.
-type stubDecrypter struct {
-	mu    sync.Mutex
-	err   error
-	calls int
-}
-
-func (d *stubDecrypter) Decrypt(ciphertext string) (string, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.calls++
-	if d.err != nil {
-		return "", d.err
-	}
-	plaintext, ok := strings.CutPrefix(ciphertext, stubCiphertextPrefix)
-	if !ok {
-		return "", errors.New("stub decrypter: not a stub ciphertext")
-	}
-	return plaintext, nil
-}
-
-func (d *stubDecrypter) Calls() int {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.calls
-}
-
-func (d *stubDecrypter) setErr(err error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.err = err
-}
 
 // fakeClock is shared by the client and the stub so iat checks agree.
 type fakeClock struct {
@@ -940,12 +903,11 @@ func (f *fakeSleeper) Waits() []time.Duration {
 }
 
 type testClient struct {
-	client    *httpClient
-	stub      *stubOkta
-	signer    *stubSigner
-	decrypter *stubDecrypter
-	sleeper   *fakeSleeper
-	clock     *fakeClock
+	client  *httpClient
+	stub    *stubOkta
+	signer  *stubSigner
+	sleeper *fakeSleeper
+	clock   *fakeClock
 }
 
 func (tc testClient) currentNonce() string {
@@ -967,8 +929,7 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	decrypter := &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0}
-	factory, ok := NewClientFactory(logger, policy, signer, decrypter).(*clientFactory)
+	factory, ok := NewClientFactory(logger, policy, signer).(*clientFactory)
 	require.True(t, ok)
 
 	cfg.OrgURL = stub.srv.URL
@@ -983,8 +944,8 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 	if cfg.JSONWebKeySetID == uuid.Nil && cfg.AuthMethod != remotesessions.TokenEndpointAuthMethodBasic {
 		cfg.JSONWebKeySetID = uuid.New()
 	}
-	if secret, ok := strings.CutPrefix(cfg.ClientSecretEncrypted, stubCiphertextPrefix); ok && cfg.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic {
-		stub.setClientSecret(secret)
+	if credentials, ok := cfg.Credentials.(*fakeCredentials); ok && cfg.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		stub.setClientSecret(credentials.secret)
 	}
 
 	client, err := factory.Client(cfg)
@@ -1001,7 +962,7 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 	impl.now = clock.Now
 	impl.jitter = func() time.Duration { return maxRateLimitJitter / 2 }
 
-	return testClient{client: impl, stub: stub, signer: signer, decrypter: decrypter, sleeper: sleeper, clock: clock}
+	return testClient{client: impl, stub: stub, signer: signer, sleeper: sleeper, clock: clock}
 }
 
 func testConfig() Config {
@@ -1013,7 +974,6 @@ func testConfig() Config {
 		OrganizationID:        "",
 		AuthMethod:            "",
 		JSONWebKeySetID:       uuid.New(),
-		ClientSecretEncrypted: "",
 		MaxPages:              0,
 	}
 }
@@ -1023,7 +983,7 @@ func basicTestConfig(secret string) Config {
 	cfg := testConfig()
 	cfg.AuthMethod = remotesessions.TokenEndpointAuthMethodBasic
 	cfg.JSONWebKeySetID = uuid.Nil
-	cfg.ClientSecretEncrypted = stubCiphertextPrefix + secret
+	cfg.Credentials = newFakeCredentials(secret)
 	return cfg
 }
 

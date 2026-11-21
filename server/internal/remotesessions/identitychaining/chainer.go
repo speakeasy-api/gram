@@ -16,11 +16,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
@@ -117,9 +117,9 @@ type Chainer struct {
 // New builds a chainer over the challenge manager's egress, tunnel and
 // client-assertion configuration. keys verifies identity provider assertions;
 // locks serializes acquisition across processes and shares failures.
-func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, keys *jwks.KeyResolver, locks cache.Cache) *Chainer {
+func New(logger *slog.Logger, db *pgxpool.Pool, tokens *upstreamtokens.Tokens, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, keys *jwks.KeyResolver, locks cache.Cache) *Chainer {
 	c := &Chainer{
-		Governor:   *NewGovernor(logger, db, enc, delegation),
+		Governor:   *NewGovernor(logger, db, tokens, delegation),
 		challenges: challenges,
 		keys:       keys,
 		locks:      locks,

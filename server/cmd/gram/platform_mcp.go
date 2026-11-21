@@ -1,4 +1,4 @@
-//nolint:exhaustruct,wrapcheck // Composition intentionally relies on documented optional zero values.
+//nolint:exhaustruct_v5,wrapcheck // Composition intentionally relies on documented optional zero values.
 package gram
 
 import (
@@ -60,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
@@ -93,25 +94,29 @@ type platformMCPConfig struct {
 	InboundEMARemoteIssuers platformmcp.InboundEMARemoteIssuerManagement
 	// Workspaces creates the first organization for a user who connects with
 	// none. Nil refuses such a user, as before self-serve signup existed.
-	Workspaces             platformmcp.WorkspaceProvisioner
-	SignalAuthoring        *sigint.Service
-	Logger                 *slog.Logger
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	Mux                    goahttp.Muxer
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	ServerURL              *url.URL
-	DashboardURL           *url.URL
-	Environment            string
-	JWTSigningKey          string
-	ProductFeatures        *productfeatures.Client
-	IssuerGate             *internalsessionissuers.Gate
-	IssuerSigner           *internalsessionissuers.Signer
-	FeatureFlags           feature.Provider
-	DistributionAdmission  *admission.Guard
-	Authz                  *authz.Engine
-	Encryption             *encryption.Client
+	Workspaces            platformmcp.WorkspaceProvisioner
+	SignalAuthoring       *sigint.Service
+	Logger                *slog.Logger
+	MeterProvider         metric.MeterProvider
+	TracerProvider        trace.TracerProvider
+	Mux                   goahttp.Muxer
+	DB                    *pgxpool.Pool
+	Redis                 *redis.Client
+	ServerURL             *url.URL
+	DashboardURL          *url.URL
+	Environment           string
+	JWTSigningKey         string
+	ProductFeatures       *productfeatures.Client
+	IssuerGate            *internalsessionissuers.Gate
+	IssuerSigner          *internalsessionissuers.Signer
+	FeatureFlags          feature.Provider
+	DistributionAdmission *admission.Guard
+	Authz                 *authz.Engine
+	Encryption            *encryption.Client
+
+	// UpstreamTokens opens stored upstream OAuth tokens over the process's
+	// organization encryption.
+	UpstreamTokens         *upstreamtokens.Tokens
 	Identity               *identity.Resolver
 	Sessions               *sessions.Manager
 	Catalog                *externalmcp.CatalogService
@@ -122,6 +127,8 @@ type platformMCPConfig struct {
 	AccessRoles            access.RoleProvider
 	PluginPublisher        *plugins.Service
 	PluginManagement       *plugins.Service
+	// DataExportRouteTests is shared with the dashboard, so both spend the same allowances.
+	DataExportRouteTests *dataexports.RouteTestCore
 	// DirectoryReview backs the directory review tools with the dashboard's
 	// access service, so they share its authorization, checks and audit.
 	DirectoryReview        platformmcp.DirectoryReviewBackend
@@ -151,6 +158,9 @@ type platformMCPConfig struct {
 	// CodeModeAvailable lets gateway connection settings report whether Code
 	// Mode is served. Nil reports it unavailable.
 	CodeModeAvailable platformmcp.CodeModeAvailability
+	// FunctionsDisabled is true when the deployment runs with the disabled
+	// Functions provider, so creating an MCP server from functions refuses.
+	FunctionsDisabled bool
 	// CodeExecutor runs Platform MCP execute programs for connections the
 	// discovery flag serves Code Mode. Nil keeps Code Mode unavailable.
 	CodeExecutor codemode.Executor
@@ -561,6 +571,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithFunctionsDisabled(config.FunctionsDisabled).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
@@ -571,6 +582,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithDataExportTestEvent(platformmcp.NewDataExportTestEventService(config.Logger, config.DB, config.DataExportRouteTests, authorizer)).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
@@ -586,7 +598,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, budgets.TeamMemory, platformmcp.NewChatSearchRedactor())).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.UpstreamTokens, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
@@ -1115,7 +1127,7 @@ func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityC
 	if config.RemoteChallengeManager == nil {
 		return nil
 	}
-	g := identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g := identitychaining.NewGovernor(config.Logger, config.DB, config.UpstreamTokens, remotesessions.NewDelegationService(config.DB, config.RemoteChallengeManager))
 	g.SetSpeakeasyIssuer(config.IssuerGate, config.IssuerSigner, config.FeatureFlags)
 	g.SetResourceResolver(config.RemoteChallengeManager.ResolveEMAResource)
 	return g
@@ -1354,6 +1366,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCustomDomainTargetSuffix(config.CustomDomainTargetSuffix).
 		WithCodeModeAvailability(config.CodeModeAvailable).
+		WithFunctionsDisabled(config.FunctionsDisabled).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
@@ -1364,6 +1377,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
+		WithDataExportTestEvent(platformmcp.NewDataExportTestEventService(config.Logger, config.DB, config.DataExportRouteTests, authorizer)).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
@@ -1379,7 +1393,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithTeamMemory(platformmcp.NewTeamMemoryService(config.DB, config.Authz, config.AuditLogger, budgets.TeamMemory, platformmcp.NewChatSearchRedactor())).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.UpstreamTokens, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).

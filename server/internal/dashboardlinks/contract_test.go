@@ -37,22 +37,24 @@ var builders = map[string]func() Link{
 	"EventFeed":                           func() Link { return EventFeed(":orgSlug") },
 	"AgentManagement":                     func() Link { return AgentManagement(":orgSlug") },
 	"AccessRoles":                         func() Link { return AccessRoles(":orgSlug") },
-	"AccessGrant":                         func() Link { return AccessGrant(":orgSlug", ":userId", ":scope", ":resourceId", ":projectId") },
-	"AccessChallenges":                    func() Link { return AccessChallenges(":orgSlug") },
-	"RequestAccess":                       func() Link { return RequestAccess(":orgSlug", ":scope", ":resourceId", ":resourceName") },
-	"Assistants":                          func() Link { return Assistants(":orgSlug", ":projectSlug") },
-	"NewAssistant":                        func() Link { return NewAssistant(":orgSlug", ":projectSlug", ":disposition") },
-	"Assistant":                           func() Link { return Assistant(":orgSlug", ":projectSlug", ":assistantId") },
-	"AssistantThread":                     func() Link { return AssistantThread(":orgSlug", ":projectSlug", ":assistantId", ":threadId") },
-	"AssistantSessions":                   func() Link { return AssistantSessions(":orgSlug", ":projectSlug", ":assistantId") },
-	"Chat":                                func() Link { return Chat(":orgSlug", ":projectSlug", ":chatId") },
-	"Deployment":                          func() Link { return Deployment(":orgSlug", ":projectSlug", ":deploymentId") },
-	"Dashboard":                           func() Link { return Dashboard(":orgSlug", ":projectSlug", ":dashboardId") },
-	"SignalsIntelligence":                 func() Link { return SignalsIntelligence(":orgSlug", ":projectSlug") },
-	"Logs":                                func() Link { return Logs(":orgSlug", ":projectSlug") },
-	"Plugins":                             func() Link { return Plugins(":orgSlug", ":projectSlug") },
-	"MCPServer":                           func() Link { return MCPServer(":orgSlug", ":projectSlug", ":mcpServerSlug") },
-	"MCPServerInspect":                    func() Link { return MCPServerInspect(":orgSlug", ":projectSlug", ":mcpServerSlug") },
+	"AccessGrant": func() Link {
+		return AccessGrant(":orgSlug", ":userId", ":scope", ":resourceId", ":projectId", ":requestId")
+	},
+	"AccessChallenges":    func() Link { return AccessChallenges(":orgSlug") },
+	"RequestAccess":       func() Link { return RequestAccess(":orgSlug", ":scope", ":resourceId", ":resourceName") },
+	"Assistants":          func() Link { return Assistants(":orgSlug", ":projectSlug") },
+	"NewAssistant":        func() Link { return NewAssistant(":orgSlug", ":projectSlug", ":disposition") },
+	"Assistant":           func() Link { return Assistant(":orgSlug", ":projectSlug", ":assistantId") },
+	"AssistantThread":     func() Link { return AssistantThread(":orgSlug", ":projectSlug", ":assistantId", ":threadId") },
+	"AssistantSessions":   func() Link { return AssistantSessions(":orgSlug", ":projectSlug", ":assistantId") },
+	"Chat":                func() Link { return Chat(":orgSlug", ":projectSlug", ":chatId") },
+	"Deployment":          func() Link { return Deployment(":orgSlug", ":projectSlug", ":deploymentId") },
+	"Dashboard":           func() Link { return Dashboard(":orgSlug", ":projectSlug", ":dashboardId") },
+	"SignalsIntelligence": func() Link { return SignalsIntelligence(":orgSlug", ":projectSlug") },
+	"Logs":                func() Link { return Logs(":orgSlug", ":projectSlug") },
+	"Plugins":             func() Link { return Plugins(":orgSlug", ":projectSlug") },
+	"MCPServer":           func() Link { return MCPServer(":orgSlug", ":projectSlug", ":mcpServerSlug") },
+	"MCPServerInspect":    func() Link { return MCPServerInspect(":orgSlug", ":projectSlug", ":mcpServerSlug") },
 	"MCPServerAuthentication": func() Link {
 		return MCPServerAuthentication(":orgSlug", ":projectSlug", ":mcpServerSlug", ":setupStep")
 	},
@@ -166,7 +168,7 @@ func TestURLWithoutSiteIsEmpty(t *testing.T) {
 func TestOptionalQueryValuesAreLeftOut(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "/org/request-access", RequestAccess("org", "", "", "").Path())
-	require.Equal(t, "/org/access/roles?grant_user=u&scope=s", AccessGrant("org", "u", "s", "", "").Path())
+	require.Equal(t, "/org/access/roles?grant_user=u&scope=s", AccessGrant("org", "u", "s", "", "", "").Path())
 	require.Equal(t, "/org/projects/p/mcp/srv/settings#authentication", MCPServerAuthentication("org", "p", "srv", "").Path())
 }
 

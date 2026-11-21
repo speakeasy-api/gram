@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -60,6 +61,11 @@ type Service struct {
 	posthog      *posthog.Posthog
 	siteURL      *url.URL
 	audit        *audit.Logger
+
+	// functionsAvailable is whether this deployment can run Functions. It
+	// comes from the Functions provider, so it is the same for every
+	// organization.
+	functionsAvailable bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -76,6 +82,7 @@ func NewService(
 	siteURL *url.URL,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	functionsAvailable bool,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deployments"))
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/deployments")
@@ -95,6 +102,8 @@ func NewService(
 		siteURL:      siteURL,
 		audit:        auditLogger,
 		Service:      annotations.Service[gen.Service, gen.Auther]{},
+
+		functionsAvailable: functionsAvailable,
 	}
 }
 
@@ -118,7 +127,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -165,7 +174,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -233,7 +242,7 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -279,7 +288,7 @@ func (s *Service) GetActiveDeployment(ctx context.Context, _ *gen.GetActiveDeplo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -325,7 +334,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -383,12 +392,16 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
 	organizationID := authCtx.ActiveOrganizationID
 	projectID := *authCtx.ProjectID
+
+	if !s.functionsAvailable && len(form.Functions) > 0 {
+		return nil, functionsDisabledError(ctx, logger)
+	}
 
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
@@ -544,7 +557,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -553,6 +566,13 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()), attr.SlogOrganizationID(organizationID))
 	span.SetAttributes(attr.ProjectID(projectID.String()), attr.OrganizationID(organizationID))
+
+	// Only new function sources are refused. Excluding functions still works,
+	// and functions carried over from the previous deployment fail the new
+	// deployment when it tries to deploy their runners.
+	if !s.functionsAvailable && len(form.UpsertFunctions) > 0 {
+		return nil, functionsDisabledError(ctx, logger)
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -785,7 +805,7 @@ func (s *Service) PrepareRedeploy(ctx context.Context, dbtx pgx.Tx, payload *gen
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -908,7 +928,7 @@ func (s *Service) processRedeploy(ctx context.Context, deploymentID string, nonB
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -959,7 +979,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 	dbtx, err := s.db.Begin(ctx)
@@ -1151,4 +1171,10 @@ func (s *Service) captureDeploymentProcessedEvent(
 	if err := s.posthog.CaptureEvent(ctx, "deployment_processed", dep.ID, properties); err != nil {
 		logger.ErrorContext(ctx, "error capturing deployment_processed event", attr.SlogError(err))
 	}
+}
+
+// functionsDisabledError refuses a request that adds function sources on a
+// deployment that runs with the disabled Functions provider.
+func functionsDisabledError(ctx context.Context, logger *slog.Logger) error {
+	return oops.E(oops.CodeNotImplemented, functions.ErrFunctionsDisabled, "%s", functions.ErrFunctionsDisabled.Error()).LogWarn(ctx, logger)
 }

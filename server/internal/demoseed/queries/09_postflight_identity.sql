@@ -178,7 +178,7 @@ SELECT count(*) FROM remote_session_ema_providers
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
 -- The Example OAuth server's remote identity provider, the identity chaining example, Jamf
--- Pro, the Enterprise Sign-In (ID-JAG) Server's authorization server, and Linear.
+-- Pro, Acme Wiki's authorization server, Linear and Notion.
 -- name: PostflightIDProjectRemoteSessionIssuers :one
 SELECT count(*) FROM remote_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;

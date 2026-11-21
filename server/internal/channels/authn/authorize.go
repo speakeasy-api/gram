@@ -84,7 +84,7 @@ func (s *Service) authorize(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, 500, "server_error")
 		return
 	}
-	//nolint:exhaustruct // Optional cookie fields must remain unset for this host-only browser proof.
+	//nolint:exhaustruct_v5 // Optional cookie fields must remain unset for this host-only browser proof.
 	http.SetCookie(w, &http.Cookie{Name: proofCookie, Value: proof, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Use the same callback-aware form-action sources as Platform MCP.

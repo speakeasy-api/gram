@@ -94,10 +94,10 @@ func TestRenewalPointAndFallback(t *testing.T) {
 	require.Len(t, spread, 2, "different certificates renew at different moments in a window")
 }
 
-func TestJitteredStaysWithinATenth(t *testing.T) {
+func TestRefreshIntervalStaysWithinATenth(t *testing.T) {
 	t.Parallel()
 	for range 1000 {
-		d := jittered(time.Hour)
+		d := refreshInterval()
 		require.GreaterOrEqual(t, d, 54*time.Minute)
 		require.LessOrEqual(t, d, 66*time.Minute)
 	}

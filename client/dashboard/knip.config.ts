@@ -20,6 +20,8 @@ const config: KnipConfig = {
   ignoreDependencies: [
     // Launched by .mise-tasks/start/agentation.sh, outside the import graph.
     "agentation-mcp",
+    // oxlint spawns its tsrs-lint binary for --type-aware; nothing imports it.
+    "tsrs",
   ],
   ignoreBinaries: [
     // The package manager itself, used to chain scripts and to reach the

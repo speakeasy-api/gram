@@ -286,14 +286,14 @@ func TestGrantsSatisfy_assistantWriteSatisfiesAssistantRead(t *testing.T) {
 	t.Parallel()
 
 	grants := []Grant{NewGrant(ScopeAssistantWrite, "assistant_1")}
-	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+	require.True(t, GrantsSatisfy(grants, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Read()))
 }
 
 func TestGrantsSatisfy_assistantReadDoesNotSatisfyAssistantWrite(t *testing.T) {
 	t.Parallel()
 
 	grants := []Grant{NewGrant(ScopeAssistantRead, "assistant_1")}
-	require.False(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+	require.False(t, GrantsSatisfy(grants, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Write()))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {
@@ -643,12 +643,12 @@ func TestWorkloadScopeIsAdminAndMemberDefault(t *testing.T) {
 
 	// Administrators configure workload identity, beside agent:authorize: both
 	// hand a machine an agent's authority.
-	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleAdmin], ScopeWorkloadRead))
-	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleAdmin], ScopeWorkloadWrite))
+	require.True(t, slices.Contains(systemRoleScopes[SystemRoleAdmin], ScopeWorkloadRead))
+	require.True(t, slices.Contains(systemRoleScopes[SystemRoleAdmin], ScopeWorkloadWrite))
 
 	// workload:read is a member default so that team members can view the Access
 	// Hub in preview deployments. workload:write remains admin-only since it
 	// allows granting machine access.
-	require.True(t, slices.Contains(Model.SystemRoles[SystemRoleMember], ScopeWorkloadRead))
-	require.False(t, slices.Contains(Model.SystemRoles[SystemRoleMember], ScopeWorkloadWrite))
+	require.True(t, slices.Contains(systemRoleScopes[SystemRoleMember], ScopeWorkloadRead))
+	require.False(t, slices.Contains(systemRoleScopes[SystemRoleMember], ScopeWorkloadWrite))
 }

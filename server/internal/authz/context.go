@@ -3,6 +3,8 @@ package authz
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
@@ -10,6 +12,7 @@ import (
 type contextKey string
 
 type admissionBoundaryKey struct{}
+type withoutCredentialCeilingKey struct{}
 
 const (
 	grantsContextKey contextKey = "authz_grants"
@@ -18,6 +21,7 @@ const (
 	// later admission always replaces an earlier one instead of being shadowed
 	// by it.
 	admittedPoliciesContextKey contextKey = "authz_admitted_policies"
+	admittedCeilingContextKey  contextKey = "authz_admitted_ceiling"
 )
 
 // grantAuthorization is the set of independent policies a caller acts under.
@@ -58,7 +62,8 @@ func GrantsFromContext(ctx context.Context) ([]Grant, bool) {
 // GrantsToContext. Use it only after replacing the auth context with a user's
 // own and loading that user's grants; otherwise Require has nothing to evaluate.
 func WithoutAdmittedPolicies(ctx context.Context) context.Context {
-	return context.WithValue(ctx, admittedPoliciesContextKey, struct{}{})
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, struct{}{})
+	return context.WithValue(ctx, admittedCeilingContextKey, struct{}{})
 }
 
 // RefreshContext reloads authorization for a new operation within a long-lived
@@ -66,6 +71,7 @@ func WithoutAdmittedPolicies(ctx context.Context) context.Context {
 func (e *Engine) RefreshContext(ctx context.Context) (context.Context, error) {
 	ctx = context.WithValue(ctx, grantsContextKey, struct{}{})
 	ctx = context.WithValue(ctx, admittedPoliciesContextKey, struct{}{})
+	ctx = context.WithValue(ctx, admittedCeilingContextKey, struct{}{})
 	return e.PrepareContext(ctx)
 }
 
@@ -110,9 +116,53 @@ func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserP
 		policies.representedPolicies = [][]Grant{append([]Grant{}, represented.Policy...)}
 	}
 	for _, set := range sets {
-		policies.policies = append(policies.policies, append([]Grant(nil), set...))
+		policies.policies = append(policies.policies, cloneGrants(set))
 	}
-	return context.WithValue(ctx, admittedPoliciesContextKey, policies)
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, policies)
+	if len(sets) == 0 {
+		return context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+	}
+	return context.WithValue(ctx, admittedCeilingContextKey, cloneGrants(sets[0]))
+}
+
+// WithoutCredentialCeiling keeps live admitted policies but removes the
+// credential policy after it has authorized a gateway entry target. Member
+// authorization can then evaluate the live agent and owner policies without
+// treating the gateway identifier as a member-server grant.
+func WithoutCredentialCeiling(ctx context.Context) context.Context {
+	policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization)
+	if !ok || len(policies.policies) == 0 {
+		return ctx
+	}
+	policies.legacyAuthCeiling = false
+	policies.policies = append([][]Grant{}, policies.policies[1:]...)
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, policies)
+	ctx = context.WithValue(ctx, admittedCeilingContextKey, []Grant{})
+	return context.WithValue(ctx, withoutCredentialCeilingKey{}, true)
+}
+
+// CredentialCeilingFromContext returns the immutable credential policy loaded
+// by the most recent principal or workload admission. Live agent and owner
+// policies are deliberately excluded.
+func CredentialCeilingFromContext(ctx context.Context) ([]Grant, bool) {
+	ceiling, ok := ctx.Value(admittedCeilingContextKey).([]Grant)
+	return cloneGrants(ceiling), ok
+}
+
+func cloneGrants(grants []Grant) []Grant {
+	if grants == nil {
+		return nil
+	}
+	cloned := make([]Grant, len(grants))
+	for i, grant := range grants {
+		cloned[i] = grant
+		if grant.Selector == nil {
+			continue
+		}
+		cloned[i].Selector = make(Selector, len(grant.Selector))
+		maps.Copy(cloned[i].Selector, grant.Selector)
+	}
+	return cloned
 }
 
 func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
@@ -183,6 +233,32 @@ func (a grantAuthorization) policiesFor(check Check) [][]Grant {
 		return a.policies
 	}
 	return append(append([][]Grant{}, a.policies...), a.representedPolicies...)
+}
+
+// keysMissingFrom lists the grant keys the check does not carry, where that
+// alone is why a grant of a scope that would satisfy the check was refused.
+// Only policies that refuse the check are read, since a policy that allows it
+// is not why it was refused. It explains a refusal and decides nothing.
+func (a grantAuthorization) keysMissingFrom(check Check) []string {
+	check = a.bind(check)
+	seen := map[string]bool{}
+	for _, policy := range a.policiesFor(check) {
+		if grant, _ := matchingGrant(policy, check.expand()); grant != nil {
+			continue
+		}
+		for _, grant := range policy {
+			for _, expanded := range check.expand() {
+				if grant.Scope != expanded.Scope {
+					continue
+				}
+				missing, _ := expanded.keysRefusingGrant(grant.Selector)
+				for _, key := range missing {
+					seen[key] = true
+				}
+			}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
 }
 
 func (a grantAuthorization) grantCount() int {

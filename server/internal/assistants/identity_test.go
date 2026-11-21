@@ -70,6 +70,7 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: agentID})
 	require.NoError(t, err)
 	require.Equal(t, "user-1", agent.OwnerUserID)
+	require.Equal(t, record.Name, agent.Name)
 	grants, err := agentrepo.New(db).ListAgentPolicyGrants(t.Context(), agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: agentID})
 	require.NoError(t, err)
 	policy := make([]authz.Grant, 0, len(grants))
@@ -80,23 +81,24 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	}
 	anyServer := uuid.NewString()
 	for _, check := range []authz.Check{
-		authz.MCPCheck(authz.ScopeMCPConnect, anyServer, project.String()),
-		authz.MCPCheck(authz.ScopeMCPRead, anyServer, project.String()),
+		authz.MCPServer(authz.MCPServerIDFrom(anyServer), authz.ProjectIDOf(project)).Connect(),
+		authz.MCPServer(authz.MCPServerIDFrom(anyServer), authz.ProjectIDOf(project)).Read(),
 		{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: project.String(), Dimensions: nil},
 	} {
 		allowed, err := authz.GrantsAuthorize(policy, check)
 		require.NoError(t, err)
 		require.True(t, allowed, check.Scope)
 	}
-	allowed, err := authz.GrantsAuthorize(policy, authz.MCPCheck(authz.ScopeMCPConnect, anyServer, uuid.NewString()))
+	allowed, err := authz.GrantsAuthorize(policy, authz.MCPServer(authz.MCPServerIDFrom(anyServer), authz.ProjectIDFrom(uuid.NewString())).Connect())
 	require.NoError(t, err)
 	require.False(t, allowed, "the ceiling is limited to the assistant's project")
-	for _, scope := range []authz.Scope{authz.ScopeAssistantRead, authz.ScopeAssistantWrite} {
-		allowed, err = authz.GrantsAuthorize(policy, authz.AssistantCheck(scope, record.ID.String(), project.String()))
+	ref := authz.Assistant(authz.AssistantIDOf(record.ID), authz.ProjectIDOf(project))
+	for _, check := range []authz.Check{ref.Read(), ref.Write()} {
+		allowed, err = authz.GrantsAuthorize(policy, check)
 		require.NoError(t, err)
-		require.True(t, allowed, scope)
+		require.True(t, allowed, check.Scope)
 	}
-	allowed, err = authz.GrantsAuthorize(policy, authz.AssistantCheck(authz.ScopeAssistantWrite, uuid.NewString(), project.String()))
+	allowed, err = authz.GrantsAuthorize(policy, authz.Assistant(authz.AssistantIDFrom(uuid.NewString()), authz.ProjectIDOf(project)).Write())
 	require.NoError(t, err)
 	require.False(t, allowed, "the agent administers only its own assistant")
 
@@ -106,6 +108,60 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	created, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAgentCreate)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, created)
+}
+
+func TestAssistantAgentNamesAcrossProjects(t *testing.T) {
+	t.Parallel()
+	for _, secondName := range []string{"Shared assistant", "SHARED ASSISTANT"} {
+		t.Run(secondName, func(t *testing.T) {
+			t.Parallel()
+			db, err := assistantsInfra.CloneTestDatabase(t, "identity_name_projects")
+			require.NoError(t, err)
+			firstProject := newProvisioningProject(t, db, "identity-name-first")
+			secondProject := newProvisioningProject(t, db, "identity-name-second")
+			core := newProvisioningCore(t, db)
+			var agentIDs []string
+			for i, name := range []string{"Shared assistant", secondName} {
+				project := []uuid.UUID{firstProject, secondProject}[i]
+				record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", name, "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+				require.NoError(t, err)
+				require.Equal(t, name, record.Name)
+				require.Equal(t, string(assistantidentity.Active), record.IdentityState)
+				require.NotNil(t, record.AgentID)
+				agentIDs = append(agentIDs, *record.AgentID)
+				agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: uuid.MustParse(*record.AgentID)})
+				require.NoError(t, err)
+				require.Equal(t, project, agent.ProjectID.UUID)
+				if i == 0 {
+					require.Equal(t, name, agent.Name)
+				} else {
+					require.Regexp(t, "^"+name+` \(assistant [0-9a-f-]{36}\)$`, agent.Name)
+				}
+			}
+			require.NotEqual(t, agentIDs[0], agentIDs[1])
+		})
+	}
+}
+
+func TestAssistantAgentNameCollidesWithUserAgent(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "identity_name_user_agent")
+	require.NoError(t, err)
+	project := newProvisioningProject(t, db, "identity-name-user-agent")
+	existing, err := agentrepo.New(db).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: "org-test", OwnerUserID: "user-1", ProjectID: uuid.NullUUID{UUID: project, Valid: true}, Name: "Research assistant"})
+	require.NoError(t, err)
+	core := newProvisioningCore(t, db)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Research assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, string(assistantidentity.Active), record.IdentityState)
+	require.NotNil(t, record.AgentID)
+	agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: uuid.MustParse(*record.AgentID)})
+	require.NoError(t, err)
+	require.NotEqual(t, existing.ID, agent.ID)
+	require.Regexp(t, `^Research assistant \(assistant [0-9a-f-]{36}\)$`, agent.Name)
+	unchanged, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: existing.ID})
+	require.NoError(t, err)
+	require.Equal(t, existing, unchanged)
 }
 
 func TestManagedDashboardTriggerBindsLikeAnyRoot(t *testing.T) {
@@ -123,8 +179,11 @@ func TestManagedDashboardTriggerBindsLikeAnyRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.NeverConfigured, resolution.State)
 
-	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", Staff: nil})
+	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", Staff: nil})
 	require.NoError(t, err)
+	agent, err := agentrepo.New(db).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: uuid.MustParse(*upgraded.AgentID)})
+	require.NoError(t, err)
+	require.Equal(t, legacy.Name, agent.Name)
 	reused, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
 	require.Equal(t, root, reused)
@@ -178,6 +237,7 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	kept, err := agents.GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: agentID})
 	require.NoError(t, err)
 	require.Equal(t, lifecycle.Suspended, lifecycle.Derive(kept), "deleting the assistant leaves its agent as the user left it")
+	require.Equal(t, "Renamed by a user", kept.Name)
 }
 
 func TestDeleteAssistantWithdrawsWorkloads(t *testing.T) {
@@ -238,10 +298,10 @@ func TestDerivedWorkloadCeilingCarriesAssistantSelfAdministration(t *testing.T) 
 	require.NoError(t, err)
 	grants, err := runtimepolicy.DelegatedRuntimeGrants(agentPolicy, agentPolicy, agentPolicy)
 	require.NoError(t, err)
-	allowed, err := authz.GrantsAuthorize(grants, authz.AssistantCheck(authz.ScopeAssistantWrite, record.ID.String(), project.String()))
+	allowed, err := authz.GrantsAuthorize(grants, authz.Assistant(authz.AssistantIDOf(record.ID), authz.ProjectIDOf(project)).Write())
 	require.NoError(t, err)
 	require.True(t, allowed, "the ceiling keeps the agent's own-assistant administration")
-	allowed, err = authz.GrantsAuthorize(grants, authz.AssistantCheck(authz.ScopeAssistantWrite, uuid.NewString(), project.String()))
+	allowed, err = authz.GrantsAuthorize(grants, authz.Assistant(authz.AssistantIDFrom(uuid.NewString()), authz.ProjectIDOf(project)).Write())
 	require.NoError(t, err)
 	require.False(t, allowed)
 }

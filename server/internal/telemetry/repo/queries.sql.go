@@ -620,8 +620,11 @@ type ShadowMCPInventoryUsageRow struct {
 	FirstCalled        *time.Time
 	LastCalled         *time.Time
 	CallCount          uint64
-	UserCount          uint64
-	TopUsers           []string
+	// BlockedCallCount counts the calls a Speakeasy hook denied, such as a
+	// Shadow MCP block. They are included in CallCount too.
+	BlockedCallCount uint64
+	UserCount        uint64
+	TopUsers         []string
 }
 
 type ListShadowMCPInventoryUsersParams struct {
@@ -651,6 +654,7 @@ type shadowMCPInventoryTraceUsageRow struct {
 	UserKey    string    `ch:"user_key"`
 	UserEmail  string    `ch:"user_email"`
 	HookSource string    `ch:"hook_source"`
+	Blocked    uint8     `ch:"blocked"`
 	CalledAt   time.Time `ch:"called_at"`
 }
 
@@ -1353,6 +1357,7 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 				FirstCalled:        &firstCalled,
 				LastCalled:         &lastCalled,
 				CallCount:          0,
+				BlockedCallCount:   0,
 				UserCount:          0,
 				TopUsers:           nil,
 			}
@@ -1370,6 +1375,9 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 			usage.LastCalled = &lastCalled
 		}
 		usage.CallCount++
+		if traceRow.Blocked > 0 {
+			usage.BlockedCallCount++
+		}
 
 		if traceRow.UserKey == "" {
 			continue
@@ -1496,6 +1504,7 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, orgID st
 		"if(max(trace_summaries.user_email) != '', max(trace_summaries.user_email), max(trace_summaries.user_id)) AS user_key",
 		"max(trace_summaries.user_email) AS user_email",
 		"max(hook_source) AS hook_source",
+		"max(has_block) AS blocked",
 		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
 	).
 		From("trace_summaries").
@@ -2088,6 +2097,14 @@ type ListTelemetryLogsParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListTelemetryLogs(ctx context.Context, arg ListTelemetryLogsParams) ([]TelemetryLog, error) {
+	if arg.GramChatID != "" {
+		bounds, err := q.getChatLogTimeBounds(ctx, arg.GramProjectID, arg.GramChatID)
+		if err != nil {
+			return nil, err
+		}
+		arg.TimeStart, arg.TimeEnd = bounds.narrow(arg.TimeStart, arg.TimeEnd)
+	}
+
 	sb := sq.Select(
 		"id",
 		"time_unix_nano",
@@ -2804,12 +2821,8 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	// A canonical user scope is a user filter even though arg.User stays empty
-	// in fold mode, so it must force the raw path off the unfiltered MV.
-	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
-
 	var sb squirrel.SelectBuilder
-	if hasFilters {
+	if arg.hasFilters() {
 		sb = q.getOverviewSummaryRaw(arg)
 	} else {
 		sb = q.getOverviewSummaryMV(arg)
@@ -2860,6 +2873,14 @@ func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummary
 	}
 
 	return &summary, nil
+}
+
+// hasFilters reports whether the scope narrows below whole projects, which
+// the metrics_summaries view cannot express. A canonical user scope is a user
+// filter even though User stays empty in fold mode, so it must force the raw
+// path off the unfiltered view.
+func (arg GetOverviewSummaryParams) hasFilters() bool {
+	return !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
 }
 
 // getOverviewSummaryMV builds a query against the pre-aggregated metrics_summaries table.
@@ -4563,11 +4584,13 @@ type ToolUsageClientToolBreakdownRow struct {
 
 // GetToolUsageSummary retrieves target-aware MCP and tool usage aggregates.
 func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSummaryParams) (*ToolUsageSummary, error) {
-	// The aggregates are independent reads of the same window — run them
-	// concurrently so the endpoint costs the slowest query, not the sum.
-	// Each goroutine writes a distinct field of summary.
+	// The aggregates are independent reads of the same window. They run
+	// concurrently, but a few at a time: each is a full GROUP BY trace_id over
+	// the window, and all nine at once can exhaust ClickHouse memory on a large
+	// project. Each goroutine writes a distinct field of summary.
 	var summary ToolUsageSummary
 	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(toolUsageFanOutLimit)
 	eg.Go(func() error {
 		var err error
 		summary.Totals, err = q.GetToolUsageTotals(egCtx, arg)
@@ -4651,10 +4674,12 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	agentArg.AgentIDs = nil
 	splitAgents := len(arg.UserFilters) > 0 || len(arg.AgentIDs) > 0
 
-	// Independent reads of the same window — run concurrently; each goroutine
-	// writes a distinct field of options.
+	// Independent reads of the same window, run a few at a time for the same
+	// reason as GetToolUsageSummary; each goroutine writes a distinct field of
+	// options.
 	var options ToolUsageFilterOptions
 	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(toolUsageFanOutLimit)
 	if groups.HostedServers {
 		eg.Go(func() error {
 			var err error
@@ -5038,7 +5063,7 @@ func (q *Queries) GetToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 		return ToolUsageTotalsRow{}, fmt.Errorf("building tool usage totals query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return ToolUsageTotalsRow{}, err
 	}
@@ -5101,7 +5126,7 @@ func (q *Queries) GetToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 		return nil, fmt.Errorf("building tool usage targets query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5285,7 +5310,7 @@ func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 		return nil, fmt.Errorf("building tool usage users query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5337,7 +5362,7 @@ func (q *Queries) GetToolUsageClients(ctx context.Context, arg GetToolUsageSumma
 		return nil, fmt.Errorf("building tool usage clients query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5386,7 +5411,7 @@ func (q *Queries) GetToolUsageClientToolBreakdown(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage client tool breakdown query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5433,7 +5458,7 @@ func (q *Queries) GetToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 		return nil, fmt.Errorf("building tool usage target time series query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5477,7 +5502,7 @@ func (q *Queries) GetToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsa
 		return nil, fmt.Errorf("building tool usage user time series query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5523,7 +5548,7 @@ func (q *Queries) GetToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 		return nil, fmt.Errorf("building tool usage users by target query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5569,7 +5594,7 @@ func (q *Queries) GetToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage target tool breakdown query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5609,7 +5634,7 @@ func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg
 		return nil, fmt.Errorf("building tool usage hosted server filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5648,7 +5673,7 @@ func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg
 		return nil, fmt.Errorf("building tool usage shadow server filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5687,7 +5712,7 @@ func (q *Queries) getToolUsageGatewayFilterOptions(ctx context.Context, arg GetT
 		return nil, fmt.Errorf("building tool usage gateway filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5726,7 +5751,7 @@ func (q *Queries) getToolUsageClientFilterOptions(ctx context.Context, arg GetTo
 		return nil, fmt.Errorf("building tool usage client filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5767,7 +5792,7 @@ func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetTool
 		return nil, fmt.Errorf("building tool usage user filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -5805,7 +5830,7 @@ func (q *Queries) getToolUsageAuthorizerFilterOptions(ctx context.Context, arg G
 		return nil, fmt.Errorf("building tool usage authorizer filter options query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -6193,6 +6218,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
 		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (g_event_source = 'hook' AND (" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	groupedSB = withTraceWindowScanBounds(groupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	groupedSB = withToolUsageIdentityChips(groupedSB, arg.Filters)
 	groupedSB, err := withToolUsageAgentTraces(groupedSB, arg.GramProjectID, arg.TimeStart, arg.TimeEnd, toolUsageAgentScope(arg.UserFilters, arg.AuthorizerUserIDs, arg.AgentIDs))
 	if err != nil {
 		return "", nil, err
@@ -6978,14 +7004,38 @@ func toolUsageSummaryNeedsRawScan(arg GetToolUsageSummaryParams) bool {
 	return false
 }
 
+// toolUsageIdentityChipColumns maps the identity chips the trace_summaries
+// path can answer to the per-trace columns its grouped queries project.
+var toolUsageIdentityChipColumns = map[string]string{
+	"user.email":            "g_user_email",
+	"user.id":               "g_user_id",
+	"gram.external_user.id": "g_external_user_id",
+}
+
 // toolUsageSummaryAnswersFilter reports whether the trace_summaries path can
-// apply the chip to its per-trace event_source column. Every other chip,
-// http.response.status_code included, still takes the raw scan.
+// apply the chip itself: an event source or identity chip with eq, not_eq or
+// in. Every other chip, http.response.status_code included, still takes the
+// raw scan.
 func toolUsageSummaryAnswersFilter(filter AttributeFilter) bool {
-	if filter.Path != toolUsageEventSourcePath {
+	if filter.Path != toolUsageEventSourcePath && toolUsageIdentityChipColumns[filter.Path] == "" {
 		return false
 	}
 	return filter.Op == "eq" || filter.Op == "not_eq" || filter.Op == "in"
+}
+
+// withToolUsageIdentityChips applies identity chips to a grouped
+// trace_summaries query, against the trace's own identity columns.
+func withToolUsageIdentityChips(sb squirrel.SelectBuilder, filters []AttributeFilter) squirrel.SelectBuilder {
+	for _, filter := range filters {
+		col := toolUsageIdentityChipColumns[filter.Path]
+		if col == "" {
+			continue
+		}
+		if pred := filter.Predicate(col); pred != nil {
+			sb = sb.Having(pred)
+		}
+	}
+	return sb
 }
 
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
@@ -7057,6 +7107,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) != 'hook'").
 		Having("((startsWith(g_gram_urn, 'tools:') AND (g_toolset_slug != '' OR g_tool_source != '')) OR (" + toolUsageSummaryMCPSkillLoad + "))")
 	directGroupedSB = withTraceWindowScanBounds(directGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	directGroupedSB = withToolUsageIdentityChips(directGroupedSB, arg.Filters)
 	if identityFilter != nil {
 		directGroupedSB = directGroupedSB.Where(identityFilter)
 	}
@@ -7091,6 +7142,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Having("any(event_source) = 'hook'").
 		Having("(" + hookToolNamePredicate("g_tool_name") + " OR g_skill_name != '')")
 	hookGroupedSB = withTraceWindowScanBounds(hookGroupedSB, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	hookGroupedSB = withToolUsageIdentityChips(hookGroupedSB, arg.Filters)
 	if identityFilter != nil {
 		hookGroupedSB = hookGroupedSB.Where(identityFilter)
 	}
@@ -8335,7 +8387,7 @@ func (q *Queries) GetTopServers(ctx context.Context, arg GetTopServersParams) ([
 		return nil, fmt.Errorf("building top servers query: %w", err)
 	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -8697,7 +8749,7 @@ func (q *Queries) GetUnifiedActiveServerCount(ctx context.Context, arg GetTopSer
 	args := make([]any, 0, len(normalizedArgs)+len(proxiedArgs))
 	args = append(args, normalizedArgs...)
 	args = append(args, proxiedArgs...)
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query+toolUsageReadSettings, args...)
 	if err != nil {
 		return 0, fmt.Errorf("querying active server count: %w", err)
 	}

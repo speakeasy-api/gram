@@ -51,10 +51,8 @@ const (
 // Fixed uuids for the local-only rows, derived from LocalSpec's prefix so they
 // live in the same identifier family as everything else the seed writes and
 // can be published as static environment defaults.
-func localEnvironmentID() string    { return LocalSpec().FixedUUID("0000-4000-a000-000000007004") }
-func localAPIKeyID() string         { return LocalSpec().FixedUUID("0000-4000-a000-000000007005") }
-func localMCPAppAssetID() string    { return LocalSpec().FixedUUID("0000-4000-a000-000000007006") }
-func localMCPAppFunctionID() string { return LocalSpec().FixedUUID("0000-4000-a000-000000007007") }
+func localEnvironmentID() string { return LocalSpec().FixedUUID("0000-4000-a000-000000007004") }
+func localAPIKeyID() string      { return LocalSpec().FixedUUID("0000-4000-a000-000000007005") }
 
 // LocalFixturesOptions configures RunLocalFixtures.
 type LocalFixturesOptions struct {
@@ -72,7 +70,7 @@ type LocalFixturesOptions struct {
 	// Slack connects the org to the developer's Slack test app, when set.
 	Slack LocalSlackOptions
 	// Upstreams wires the servers that need the developer's machine: the
-	// Linear and Notion clients.
+	// Enterprise Sign-In (ID-JAG) Server and the Linear and Notion clients.
 	Upstreams LocalUpstreamOptions
 	// ClickHouse receives the local-only servers' telemetry; nil skips it.
 	ClickHouse driver.Conn
@@ -97,7 +95,8 @@ type LocalFixturesOptions struct {
 //     live in the seed proper;
 //   - a global catalog logo entry and public platform asset when SiteURL is set;
 //   - the upstreams that need the developer's machine (fixture_servers.go):
-//     the Linear and Notion clients registered with those vendors;
+//     the Enterprise Sign-In (ID-JAG) Server through the dev-idp, and the
+//     Linear and Notion clients registered with those vendors;
 //   - the Inspect tab's local-only remote servers (runLocalInspectFixtures).
 //
 // Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
@@ -134,13 +133,9 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if err != nil {
 		return fmt.Errorf("hash local api key: %w", err)
 	}
-	// Upload the MCP App bundle before the transaction: the assets row has to
-	// point at a blob that already exists, and the write is idempotent by
-	// object name.
-	app, err := uploadMCPAppArchive(ctx, blob)
-	if err != nil {
-		return err
-	}
+	// The dev-idp calls happen before the transaction opens, so a slow
+	// dev-idp never holds the transaction's locks.
+	emaProvisioned := provisionLocalEMA(ctx, logger, opts.Upstreams, dev)
 
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -166,8 +161,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	logger.InfoContext(ctx, "adopting developer into the local org", attr.SlogUserID(dev.ID))
 
 	projectID := uuid.MustParse(spec.ProjectID())
-	deploymentID := uuid.MustParse(spec.DeploymentID())
-	assetID := uuid.MustParse(localMCPAppAssetID())
 	for _, step := range []struct {
 		name string
 		run  func() error
@@ -177,6 +170,11 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}},
 		{"adopt developer", func() error {
 			return q.LocalAdoptDeveloper(ctx, repo.LocalAdoptDeveloperParams{OrganizationID: spec.OrgID, UserID: dev.ID, WorkosUserID: workosID})
+		}},
+		{"provision developer in the directory", func() error {
+			// A directory stores given and family names apart.
+			first, last := splitDemoName(dev.Name)
+			return q.LocalProvisionDeveloperDirectoryUser(ctx, repo.LocalProvisionDeveloperDirectoryUserParams{OrganizationID: spec.OrgID, UserID: dev.ID, Email: dev.Email, FirstName: first, LastName: last})
 		}},
 		{"grant session visibility", func() error {
 			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
@@ -219,37 +217,8 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"code mode gateway", func() error {
 			return q.LocalSetCodeModeGateway(ctx, repo.LocalSetCodeModeGatewayParams{OrganizationID: spec.OrgID, ProjectID: projectID})
 		}},
-		{"mcp app asset", func() error {
-			return q.LocalUpsertMCPAppAsset(ctx, repo.LocalUpsertMCPAppAssetParams{
-				ID:             assetID,
-				ProjectID:      projectID,
-				OrganizationID: spec.OrgID,
-				Url:            app.url,
-				ContentLength:  int64(app.size),
-				Sha256:         app.sha256,
-			})
-		}},
-		{"mcp app function", func() error {
-			return q.LocalUpsertMCPApp(ctx, repo.LocalUpsertMCPAppParams{
-				ProjectID:       projectID,
-				DeploymentID:    deploymentID,
-				FunctionID:      uuid.MustParse(localMCPAppFunctionID()),
-				AssetID:         assetID,
-				FunctionSlug:    MCPAppFunctionSlug,
-				Runtime:         MCPAppRuntime,
-				ToolUrn:         mcpAppToolURN(),
-				ToolName:        MCPAppToolName,
-				ToolDescription: mcpAppToolDescription,
-				InputSchema:     []byte(mcpAppInputSchema),
-				ResourceUri:     MCPAppResourceURI,
-				ResourceUrn:     mcpAppResourceURN(),
-			})
-		}},
-		{"mcp app toolset entry", func() error {
-			return q.LocalAttachMCPAppToToolset(ctx, repo.LocalAttachMCPAppToToolsetParams{OrganizationID: spec.OrgID, ToolUrn: mcpAppToolURN(), ResourceUrn: mcpAppResourceURN(), ToolsetSlug: MCPAppToolsetSlug})
-		}},
 		{"local upstreams", func() error {
-			return wireLocalUpstreams(ctx, logger, tx, opts.Upstreams)
+			return wireLocalUpstreams(ctx, logger, tx, opts.Upstreams, emaProvisioned)
 		}},
 	} {
 		if err := step.run(); err != nil {
@@ -264,6 +233,18 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit local fixtures: %w", err)
+	}
+
+	if emaProvisioned {
+		// The Enterprise Sign-In (ID-JAG) Server is added after the seed
+		// recorded the organization's typed upstream auth, so record it again
+		// for the new server. The seed's readiness check is not repeated: the
+		// local Inspect tab servers deliberately leave choices undecided.
+		if err := withSeedLock(ctx, logger, db, func(*pgxpool.Conn) error {
+			return recordTypedUpstreamAuth(ctx, logger, db, spec.OrgID)
+		}); err != nil {
+			return fmt.Errorf("local fixture %q: %w", "enterprise sign-in upstream auth", err)
+		}
 	}
 
 	if opts.ClickHouse != nil && opts.MockMCPURL != "" {

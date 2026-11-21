@@ -82,7 +82,7 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 		Content:      "",
 		ToolCalls:    nil,
 		FinishReason: nil,
-		Usage:        openrouter.Usage{}, //nolint:exhaustruct // zero usage until a chunk carries it
+		Usage:        openrouter.Usage{}, //nolint:exhaustruct_v5 // zero usage until a chunk carries it
 	}
 	var content strings.Builder
 	toolCalls := map[int]openrouter.ToolCall{}

@@ -32,11 +32,6 @@ func GetOrganizationFeaturesAdminPath() string {
 	return "/admin/organization.features"
 }
 
-// SetOrganizationProviderSetupAdminPath returns the URL path to the admin service setOrganizationProviderSetup HTTP endpoint.
-func SetOrganizationProviderSetupAdminPath() string {
-	return "/admin/organization.providerSetup"
-}
-
 // SetOrganizationFeatureAdminPath returns the URL path to the admin service setOrganizationFeature HTTP endpoint.
 func SetOrganizationFeatureAdminPath() string {
 	return "/admin/organization.features"
@@ -602,6 +597,16 @@ func StartMemoryEvalRunAdminPath() string {
 	return "/admin/memoryEval.start"
 }
 
+// ListAssistantOrganizationsAdminPath returns the URL path to the admin service listAssistantOrganizations HTTP endpoint.
+func ListAssistantOrganizationsAdminPath() string {
+	return "/admin/assistants.organizations"
+}
+
+// RepairOrganizationAssistantAgentNamesAdminPath returns the URL path to the admin service repairOrganizationAssistantAgentNames HTTP endpoint.
+func RepairOrganizationAssistantAgentNamesAdminPath() string {
+	return "/admin/organization.repairAssistantAgentNames"
+}
+
 // ListOrganizationAssistantsAdminPath returns the URL path to the admin service listOrganizationAssistants HTTP endpoint.
 func ListOrganizationAssistantsAdminPath() string {
 	return "/admin/organization.assistants"
@@ -615,4 +620,29 @@ func MigrateOrganizationAssistantIdentitiesAdminPath() string {
 // MigrateOrganizationAssistantsToKitAdminPath returns the URL path to the admin service migrateOrganizationAssistantsToKit HTTP endpoint.
 func MigrateOrganizationAssistantsToKitAdminPath() string {
 	return "/admin/organization.migrateAssistantsToKit"
+}
+
+// GetHooksRolloutAdminPath returns the URL path to the admin service getHooksRollout HTTP endpoint.
+func GetHooksRolloutAdminPath() string {
+	return "/admin/hooksRollout.get"
+}
+
+// SetHooksRolloutDefaultAdminPath returns the URL path to the admin service setHooksRolloutDefault HTTP endpoint.
+func SetHooksRolloutDefaultAdminPath() string {
+	return "/admin/hooksRollout.setDefault"
+}
+
+// GetOrganizationHooksRolloutAdminPath returns the URL path to the admin service getOrganizationHooksRollout HTTP endpoint.
+func GetOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.hooksRollout"
+}
+
+// SetOrganizationHooksRolloutAdminPath returns the URL path to the admin service setOrganizationHooksRollout HTTP endpoint.
+func SetOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.setHooksRollout"
+}
+
+// ClearOrganizationHooksRolloutAdminPath returns the URL path to the admin service clearOrganizationHooksRollout HTTP endpoint.
+func ClearOrganizationHooksRolloutAdminPath() string {
+	return "/admin/organization.clearHooksRollout"
 }

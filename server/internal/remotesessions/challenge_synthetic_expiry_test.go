@@ -39,9 +39,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -199,6 +202,18 @@ type syntheticExpiryEnv struct {
 	// the meter the manager (and the rotator it builds) records registration
 	// failures on.
 	registrationTelemetryReader *sdkmetric.ManualReader
+
+	// orgEncryption is set by withOrganizationEncryption: the organization's
+	// keys and the transition state the manager and refresher seal under.
+	orgEncryption *syntheticOrgEncryption
+}
+
+// syntheticOrgEncryption is the organization encryption a synthetic login
+// seals its tokens under.
+type syntheticOrgEncryption struct {
+	fixture     *orgencryptiontest.Fixture
+	transitions *orgencryption.Transitions
+	tokens      *upstreamtokens.Tokens
 }
 
 // callback drives HandleRemoteLoginCallback with the given query string, as
@@ -247,6 +262,10 @@ type syntheticLoginOptions struct {
 	// registrationTelemetry gives the manager a readable meter so a test can
 	// assert on recorded client-registration failures.
 	registrationTelemetry bool
+	// orgEncryption seals tokens under organization encryption in dual_write.
+	orgEncryption bool
+	// suspendOrganizationKey suspends the organization's key before the callback.
+	suspendOrganizationKey bool
 	// keyCache, when set, backs the key resolver so a test can seed key-set state.
 	keyCache jwks.Cache
 	// signingAlgs is the issuer row's id_token_signing_alg_values_supported.
@@ -331,6 +350,19 @@ func withMaxDBConns(maxConns int32) syntheticLoginOption {
 
 func withRegistrationTelemetry() syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.registrationTelemetry = true }
+}
+
+// withOrganizationEncryption gives the manager and refresher organization
+// encryption, and moves the test organization's session tokens to dual_write
+// before the sign-in.
+func withOrganizationEncryption() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.orgEncryption = true }
+}
+
+// withSuspendedOrganizationKey is withOrganizationEncryption with the
+// organization's key suspended before the callback.
+func withSuspendedOrganizationKey() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.orgEncryption, o.suspendOrganizationKey = true, true }
 }
 
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
@@ -545,6 +577,20 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
 	}
+	var orgEncryption *syntheticOrgEncryption
+	if options.orgEncryption {
+		fixture := orgencryptiontest.New(t, ti.conn)
+		transitions := orgencryption.NewTransitions(logger, ti.conn, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+		tokens := upstreamtokens.New(logger, orgencryption.NewCipher(logger, enc, fixture.Service, transitions), enc)
+		_, err := transitions.Enroll(ctx, authCtx.ActiveOrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+		require.NoError(t, err)
+		if options.suspendOrganizationKey {
+			require.NoError(t, fixture.Provisioner.Suspend(ctx, authCtx.ActiveOrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+		}
+		orgEncryption = &syntheticOrgEncryption{fixture: fixture, transitions: transitions, tokens: tokens}
+		managerOptions = append(managerOptions, remotesessions.WithUpstreamTokens(tokens))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshUpstreamTokens(tokens))
+	}
 	managerMeterProvider := testenv.NewMeterProvider(t)
 	var registrationTelemetryReader *sdkmetric.ManualReader
 	if options.registrationTelemetry {
@@ -628,7 +674,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		}
 	}
 
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -718,6 +764,8 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		issuerMetadataReader: issuerMetadataReader,
 
 		registrationTelemetryReader: registrationTelemetryReader,
+
+		orgEncryption: orgEncryption,
 	}
 	cbW, callbackErr := env.callback(t, cbQuery.Encode())
 

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -133,8 +134,27 @@ func TestServePublic_MetaEndpoint_DescribeServer_HostedMember(t *testing.T) {
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool", "beta_tool")
+	args := map[string]any{"server": member.slug}
+	before := decodeMetaToolResult(t, callMetaTool(t, ctx, ti, slug, "describe_server", args))
+	require.False(t, before.IsError)
+	var withoutInstructions map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(before.StructuredContent, &withoutInstructions))
+	require.NotContains(t, withoutInstructions, "instructions")
 
-	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	const instructions = "Use alpha before beta.\nRead the result before continuing."
+	_, err := metadatarepo.New(ti.conn).UpsertMetadataByMcpServerID(ctx, metadatarepo.UpsertMetadataByMcpServerIDParams{
+		McpServerID:               member.toolsetID,
+		ProjectID:                 *authCtx.ProjectID,
+		Instructions:              conv.ToPGText(instructions),
+		ExternalDocumentationUrl:  pgtype.Text{},
+		ExternalDocumentationText: pgtype.Text{},
+		LogoID:                    uuid.NullUUID{},
+		DefaultEnvironmentID:      uuid.NullUUID{},
+		InstallationOverrideUrl:   pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", args)
 	result := decodeMetaToolResult(t, envelope)
 	require.False(t, result.IsError)
 
@@ -143,11 +163,13 @@ func TestServePublic_MetaEndpoint_DescribeServer_HostedMember(t *testing.T) {
 			Slug   string `json:"slug"`
 			Status string `json:"status"`
 		} `json:"server"`
-		Tools []map[string]json.RawMessage `json:"tools"`
+		Instructions string                       `json:"instructions"`
+		Tools        []map[string]json.RawMessage `json:"tools"`
 	}
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &described))
 	require.Equal(t, member.slug, described.Server.Slug)
 	require.Equal(t, "available", described.Server.Status)
+	require.Equal(t, instructions, described.Instructions)
 
 	names := make([]string, 0, len(described.Tools))
 	for _, tool := range described.Tools {

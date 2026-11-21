@@ -53,7 +53,7 @@ func (s *Service) GetStripeSubscription(ctx context.Context, _ *gen.GetStripeSub
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -69,7 +69,7 @@ func (s *Service) CreateStripePortalSession(ctx context.Context, _ *gen.CreateSt
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return "", err
 	}
 	if s.siteURL == nil {
@@ -131,7 +131,7 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, ca
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 

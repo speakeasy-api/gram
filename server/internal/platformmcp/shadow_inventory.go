@@ -78,6 +78,7 @@ type ShadowMCPTargetSummary struct {
 	LastSeen           string                  `json:"last_seen,omitempty"`
 	LastCalled         string                  `json:"last_called,omitempty"`
 	ObservedUseCount   int                     `json:"observed_use_count"`
+	BlockedCallCount   int                     `json:"blocked_call_count"`
 	UserCount          SubjectCount            `json:"user_count"`
 	Access             ShadowMCPAccessSummary  `json:"access"`
 	Review             *ShadowMCPReviewSummary `json:"review,omitempty"`
@@ -343,9 +344,10 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 	result := ShadowMCPTargetSummary{
 		Display: display, TargetKind: kind, ObservationState: observationState,
 		FirstSeen: "", LastSeen: "", LastCalled: "", ObservedUseCount: max(row.ObservedUseCount, 0),
-		UserCount: NewSubjectCount(int64(row.UserCount)),
-		Access:    ShadowMCPAccessSummary{State: row.AccessSummary.State, AllowedFor: row.AccessSummary.AllowedFor, BlockedFor: row.AccessSummary.BlockedFor, BlockingDefault: row.AccessSummary.BlockingDefault, Decision: "", DecisionCoverage: row.AccessSummary.DecisionCoverage},
-		Review:    nil, DecisionVersion: "", TargetReference: reference, ReferenceExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
+		BlockedCallCount: max(row.BlockedCallCount, 0),
+		UserCount:        NewSubjectCount(int64(row.UserCount)),
+		Access:           ShadowMCPAccessSummary{State: row.AccessSummary.State, AllowedFor: row.AccessSummary.AllowedFor, BlockedFor: row.AccessSummary.BlockedFor, BlockingDefault: row.AccessSummary.BlockingDefault, Decision: "", DecisionCoverage: row.AccessSummary.DecisionCoverage},
+		Review:           nil, DecisionVersion: "", TargetReference: reference, ReferenceExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
 	}
 	if !validShadowAccessSummary(result.Access) {
 		return ShadowMCPTargetSummary{}, ErrShadowInventoryUnavailable

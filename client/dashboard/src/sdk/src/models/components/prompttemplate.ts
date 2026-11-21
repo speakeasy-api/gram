@@ -22,13 +22,13 @@ import { ToolVariation, ToolVariation$inboundSchema } from "./toolvariation.js";
 /**
  * The template engine
  */
-export const Engine = {
+export const PromptTemplateEngine = {
   Mustache: "mustache",
 } as const;
 /**
  * The template engine
  */
-export type Engine = OpenEnum<typeof Engine>;
+export type PromptTemplateEngine = OpenEnum<typeof PromptTemplateEngine>;
 
 /**
  * The kind of prompt the template is used for
@@ -77,7 +77,7 @@ export type PromptTemplate = {
   /**
    * The template engine
    */
-  engine: Engine;
+  engine: PromptTemplateEngine;
   /**
    * The revision tree ID for the prompt template
    */
@@ -138,8 +138,10 @@ export type PromptTemplate = {
 };
 
 /** @internal */
-export const Engine$inboundSchema: z.ZodMiniType<Engine, unknown> = openEnums
-  .inboundSchema(Engine);
+export const PromptTemplateEngine$inboundSchema: z.ZodMiniType<
+  PromptTemplateEngine,
+  unknown
+> = openEnums.inboundSchema(PromptTemplateEngine);
 
 /** @internal */
 export const PromptTemplateKind$inboundSchema: z.ZodMiniType<
@@ -163,7 +165,7 @@ export const PromptTemplate$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     description: z.string(),
-    engine: Engine$inboundSchema,
+    engine: PromptTemplateEngine$inboundSchema,
     history_id: z.string(),
     id: z.string(),
     kind: PromptTemplateKind$inboundSchema,

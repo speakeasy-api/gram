@@ -88,12 +88,7 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 	if err != nil || ac.ProjectID == nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing project auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   ac.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {
@@ -168,7 +163,7 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 	})
 	eg.Go(func() error {
 		var egErr error
-		rows, egErr = telemetryrepo.New(s.chConn).ListAIDetectionUsers(egCtx, telemetryrepo.ListAIDetectionUsersParams{
+		rows, egErr = telemetryrepo.New(s.chReadConn).ListAIDetectionUsers(egCtx, telemetryrepo.ListAIDetectionUsersParams{
 			OrganizationID:       ac.ActiveOrganizationID,
 			TargetID:             targetID,
 			CanonicalIdentityOrg: canonicalOrg,
@@ -206,7 +201,7 @@ func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAID
 }
 
 func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrepo.ListAIDetectionSummariesParams) (*gen.ListAIDetectionsResult, error) {
-	rows, err := telemetryrepo.New(s.chConn).ListAIDetectionSummaries(ctx, params)
+	rows, err := telemetryrepo.New(s.chReadConn).ListAIDetectionSummaries(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai detections").LogError(ctx, s.logger)
 	}

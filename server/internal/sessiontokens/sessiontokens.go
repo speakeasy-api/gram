@@ -33,7 +33,7 @@ type SessionClaims struct {
 const FirstPartyClientID = "client:first-party"
 
 // FirstPartyClientName is the connections label for a session the dashboard
-// minted for itself (Inspect, the playground). Those rows have no OAuth
+// minted for itself (Inspect). Those rows have no OAuth
 // client registration, so the session list supplies this name when
 // DashboardMintRefreshTokenHashPrefix marks the row.
 const FirstPartyClientName = "Dashboard"

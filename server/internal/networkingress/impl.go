@@ -68,6 +68,10 @@ type Service struct {
 	// namer turns requested hostnames into stored ones, so a local
 	// development stack's stay apart from production's on a shared tailnet.
 	namer Namer
+
+	// gatewayTag is the Tailscale tag this environment's reconciler and
+	// gateway use, returned so the dashboard shows the policy they need.
+	gatewayTag string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -95,6 +99,7 @@ func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerP
 		health:               health,
 		features:             nil,
 		namer:                ProductionNamer{},
+		gatewayTag:           DefaultGatewayTag,
 	}
 }
 
@@ -123,9 +128,16 @@ func (s *Service) newIngressRuntime(ctx context.Context, authCtx *contextvalues.
 	return conv.ToPGText(RuntimeGateway)
 }
 
-// UseNamer replaces the ProductionNamer, as a local development stack does.
-func (s *Service) UseNamer(namer Namer) {
-	s.namer = namer
+// UseGateway applies the environment's gateway settings: the namer replacing
+// the ProductionNamer, as a local development stack's does, and the Tailscale
+// tag its gateways carry. An empty tag keeps DefaultGatewayTag.
+func (s *Service) UseGateway(config GatewayRuntimeConfig) {
+	if config.Namer != nil {
+		s.namer = config.Namer
+	}
+	if config.Tag != "" {
+		s.gatewayTag = config.Tag
+	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service, enabled bool) {
@@ -151,12 +163,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+func (s *Service) authorize(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -173,7 +185,7 @@ func (s *Service) requireExpansion(ctx context.Context, organizationID string) e
 }
 
 func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*gen.NetworkIngressResult, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -186,12 +198,34 @@ func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*ge
 		ingress, err = queries.GetPendingDeletedNetworkIngressByOrganization(ctx, authCtx.ActiveOrganizationID)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &gen.NetworkIngressResult{Ingress: nil}, nil
+		return &gen.NetworkIngressResult{Ingress: nil, GatewayTag: s.gatewayTag}, nil
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get network ingress").LogError(ctx, s.logger)
 	}
-	return &gen.NetworkIngressResult{Ingress: mv.BuildNetworkIngressView(ingress)}, nil
+	view := mv.BuildNetworkIngressView(ingress)
+	if ingress.LastError.String == k8s.NetworkIngressErrorProviderCertificateUnavailable {
+		view.StatusDetail = s.certificateFailure(ctx, ingress)
+	}
+	return &gen.NetworkIngressResult{Ingress: view, GatewayTag: s.gatewayTag}, nil
+}
+
+// certificateFailure is the gateway's message for why ingress has no TLS
+// certificate, or nil when no slot reports one. The error code alone still
+// explains the state, so a failed read is logged rather than failing the
+// request.
+func (s *Service) certificateFailure(ctx context.Context, ingress repo.NetworkIngress) *string {
+	message, err := repo.New(s.db).GetNetworkIngressCertificateFailure(ctx, repo.GetNetworkIngressCertificateFailureParams{
+		NetworkIngressID: ingress.ID, OrganizationID: ingress.OrganizationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		s.logger.ErrorContext(ctx, "read gateway certificate failure", attr.SlogError(err), attr.SlogNetworkIngressID(ingress.ID.String()))
+		return nil
+	}
+	return conv.FromPGText[string](message)
 }
 
 type tailscaleCredentials struct {
@@ -222,7 +256,7 @@ func validateHostname(hostname string) error {
 }
 
 func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +357,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 }
 
 func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +429,7 @@ func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressP
 }
 
 func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCredentialsPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +471,7 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 }
 
 func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPayload) (*gen.NetworkIngressDeleteImpact, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +488,7 @@ func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPay
 }
 
 func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload) error {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -507,7 +541,7 @@ func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload
 }
 
 func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}

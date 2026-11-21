@@ -218,26 +218,32 @@ function OwnSessionsNotice(): JSX.Element | null {
 
   return (
     <Alert variant="info" dismissible={false} className="text-sm">
-      Only your own sessions and those of agents you own or can edit are shown.{" "}
-      <code className="font-mono">chat:read</code> is required to view other
-      members&apos; sessions.
-      {hasScope("org:admin") && (
-        <>
-          {" "}
-          <Link
-            to={orgRoutes.access.roles.href()}
-            className="underline underline-offset-2"
-          >
-            Manage roles
-          </Link>
-        </>
-      )}
-      {/* An admin gives themselves chat:read on every session for a while;
-          anyone else asks an admin. The list then reloads unfiltered. */}
-      <ChatReadAccess
-        className="mt-2"
-        onGranted={() => void invalidateAllListChats(queryClient)}
-      />
+      {/* The way to get chat:read sits under the text, lined up with it, the
+          same layout as the Tool Logs notice. An admin gives themselves
+          chat:read on every session for a while; anyone else asks an admin.
+          The list then reloads unfiltered. */}
+      <div className="flex flex-col items-start gap-2">
+        <span>
+          Only your own sessions and those of agents you own or can edit are
+          shown. <code className="font-mono">chat:read</code> is required to
+          view other members&apos; sessions.
+          {hasScope("org:admin") && (
+            <>
+              {" "}
+              <Link
+                to={orgRoutes.access.roles.href()}
+                className="underline underline-offset-2"
+              >
+                Manage roles
+              </Link>
+            </>
+          )}
+        </span>
+        <ChatReadAccess
+          align="start"
+          onGranted={() => void invalidateAllListChats(queryClient)}
+        />
+      </div>
     </Alert>
   );
 }

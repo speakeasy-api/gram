@@ -99,7 +99,7 @@ func kitObject(kind, version, name string, i KitGKEIdentity) *unstructured.Unstr
 // RenderKitGKEProvision is pure. Returned objects contain credentials and must
 // never be logged. KitGKERuntimeBackend.Ensure creates them in Secret -> Template -> WarmPool -> Claim order.
 //
-//nolint:exhaustruct,exhaustive // Only renderer-defined Kubernetes fields and CPU/memory budgets are set; optional fields retain API defaults.
+//nolint:exhaustruct_v5,exhaustive // Only renderer-defined Kubernetes fields and CPU/memory budgets are set; optional fields retain API defaults.
 func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 	var out KitGKEObjects
 	if err := in.validate(); err != nil {

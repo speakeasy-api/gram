@@ -256,16 +256,14 @@ func handleToolsCall(
 	// privacy read and the resource id follow the wrapper when one fronts
 	// the request.
 	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
-		var disposition string
+		// A tool whose annotations cannot be read is refused: classifying it
+		// as unannotated would guess at a value the tool may not have.
 		baseTool, err := conv.ToBaseTool(tool)
-		if err == nil {
-			disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read tool annotations for authorization").LogError(ctx, logger)
 		}
-		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
-			Tool:        params.Name,
-			Disposition: disposition,
-			ProjectID:   payload.projectID.String(),
-		})); err != nil {
+		disposition := toolDisposition(ctx, logger, params.Name, baseTool.Annotations)
+		if err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(payload.mcpConnectResourceID(toolset.ID)), authz.ProjectIDOf(payload.projectID)).ToolCall(params.Name, disposition)); err != nil {
 			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 		}
 	}
@@ -382,6 +380,10 @@ func handleToolsCall(
 	}
 
 	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
+	agentID := ""
+	if agent, ok := contextvalues.EffectiveAgent(ctx); ok {
+		agentID = agent.ID
+	}
 
 	// One id names the call on its telemetry_logs row and its agent_events row.
 	call := toolCall{
@@ -402,6 +404,7 @@ func handleToolsCall(
 		externalUserID:  externalUserID,
 		userID:          callerID,
 		userEmail:       callerEmail,
+		agentID:         agentID,
 	}
 
 	logAttrs := tm.HTTPLogAttributes{}
@@ -548,6 +551,18 @@ func handleToolsCall(
 			invocation.dispatched = false
 			invocation.rejected = true
 			invocation.message = "invalid request body"
+		}
+		// A function tool on a deployment without Functions is answered as a
+		// failed tool result, so the agent reads why the tool cannot run
+		// instead of a protocol error that suggests tools/call is unsupported.
+		if errors.Is(err, functions.ErrFunctionsDisabled) {
+			logger.WarnContext(ctx, "function tool call refused: functions are disabled", attr.SlogToolName(params.Name), attr.SlogError(err))
+			rw.resultIsError = true
+			identity := serverInfoHostedToolset
+			if payload.metaMcpServerID != "" {
+				identity = serverInfoMetaServer
+			}
+			return marshalToolErrorResult(ctx, logger, req.ID, functions.ErrFunctionsDisabled.Error(), identity)
 		}
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)
@@ -740,7 +755,11 @@ func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, 
 		return mcpconnectionattempts.CodeSharedCredentialRejected
 	case toolconfig.ClientGrantUnavailable:
 		return mcpconnectionattempts.CodeRemoteSessionUnavailable
-	case toolconfig.ClientGrantBlocked, toolconfig.ClientGrantMisconfigured:
+	case toolconfig.ClientGrantBlocked:
+		return mcpconnectionattempts.CodeAddressNotAllowed
+	case toolconfig.ClientGrantAddressNotFound:
+		return mcpconnectionattempts.CodeAddressNotFound
+	case toolconfig.ClientGrantMisconfigured:
 		return mcpconnectionattempts.CodeCredentialMisconfigured
 	}
 	code, _ := remotemcp.UpstreamFailureHappened(status, true, sent, false, "")

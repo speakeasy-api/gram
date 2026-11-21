@@ -354,3 +354,23 @@ export function groupUpstreams(group: ConnectionGroup): UserSessionUpstream[] {
   }
   return [...byId.values()];
 }
+
+const GROUPING_OPTIONS: { value: ConnectionGrouping; label: string }[] = [
+  { value: "subject", label: CONNECTION_GROUPING_LABELS.subject },
+  { value: "issuer", label: CONNECTION_GROUPING_LABELS.issuer },
+  { value: "provider", label: CONNECTION_GROUPING_LABELS.provider },
+  { value: "client", label: CONNECTION_GROUPING_LABELS.client },
+];
+
+/**
+ * Groupings worth offering for the scope a caller is showing.
+ *
+ * A grouping the caller has already fixed sorts a list of one: the MCP server
+ * detail lists that server's own sessions, so filing them by MCP server draws
+ * a single group and an option that appears to do nothing.
+ */
+export function groupingOptions(
+  hide: ConnectionGrouping[],
+): { value: ConnectionGrouping; label: string }[] {
+  return GROUPING_OPTIONS.filter((option) => !hide.includes(option.value));
+}

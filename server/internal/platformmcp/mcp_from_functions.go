@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Refusals, results and repository literals only set fields applicable to the outcome.
+//nolint:exhaustruct_v5 // Refusals, results and repository literals only set fields applicable to the outcome.
 package platformmcp
 
 import (
@@ -440,8 +440,12 @@ func (s *MCPToolExposureService) resolveCreateTarget(ctx context.Context, princi
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
 		return ResolvedProject{}, toolExposureAdminAuthorizationError(err)
 	}
-	if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, projectID.String(), projectID.String())); err != nil {
-		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
+	if projectID == uuid.Nil {
+		return ResolvedProject{}, mcpFromFunctionsInvalid("Provide the project's slug, as list_projects returns it.")
+	}
+	check := authz.MCPServers(authz.ProjectIDOf(projectID)).Write()
+	if err := s.engine.Require(ctx, check); err != nil {
+		mapped := toolExposureAuthorizationError(err, check.Scope)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			return ResolvedProject{}, mcpFromFunctionsUnavailable(err)
 		}

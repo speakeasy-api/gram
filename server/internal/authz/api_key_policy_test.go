@@ -110,8 +110,8 @@ func TestAPIKeyGrantsMatchStrictly(t *testing.T) {
 	userGrant := keyGrant
 	userGrant.PrincipalUrn = "user:someone"
 
-	withProject := MCPCheck(ScopeMCPConnect, "toolset_1", "p")
-	withoutProject := MCPCheck(ScopeMCPConnect, "toolset_1", "")
+	withProject := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("p")).Connect()
+	withoutProject := mcpCheck(ScopeMCPConnect, "toolset_1", "")
 
 	for name, tc := range map[string]struct {
 		grant   Grant
@@ -120,7 +120,7 @@ func TestAPIKeyGrantsMatchStrictly(t *testing.T) {
 	}{
 		"key grant, check names the project":   {keyGrant, withProject, true},
 		"user grant, check names the project":  {userGrant, withProject, true},
-		"key grant, check names other project": {keyGrant, MCPCheck(ScopeMCPConnect, "toolset_1", "q"), false},
+		"key grant, check names other project": {keyGrant, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("q")).Connect(), false},
 	} {
 		allowed, err := GrantsAuthorize([]Grant{tc.grant}, tc.check)
 		require.NoError(t, err, name)
@@ -139,7 +139,7 @@ func TestAuthorizeMandatoryForLegacyAPIKeys(t *testing.T) {
 
 	f := newAPIKeyFixture(t)
 	ctx := f.keyContext(t)
-	connect := MCPCheck(ScopeMCPConnect, "toolset_1", f.projectID)
+	connect := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(f.projectID)).Connect()
 	clientA := MCPAuthClientCheck("client_a", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: f.projectID, ConnectionOwner: "", UpstreamClient: ""})
 	clientB := MCPAuthClientCheck("client_b", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: f.projectID, ConnectionOwner: "", UpstreamClient: ""})
 
@@ -155,9 +155,9 @@ func TestAuthorizeMandatoryForLegacyAPIKeys(t *testing.T) {
 	f.grant(t, ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"})
 	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNone}, connect, clientA)
 	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNotGranted}, clientB)
-	_, err = f.engine.AuthorizeMandatory(ctx, MCPCheck(ScopeMCPConnect, "toolset_1", ""))
+	_, err = f.engine.AuthorizeMandatory(ctx, mcpCheck(ScopeMCPConnect, "toolset_1", ""))
 	require.ErrorIs(t, err, ErrInvalidCheck, "an MCP check must name its project")
-	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNotGranted}, MCPCheck(ScopeMCPConnect, "toolset_1", "other-project"))
+	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNotGranted}, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("other-project")).Connect())
 
 	f.grant(t, ScopeMCPBlockedAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"})
 	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonBlocked}, clientA)
@@ -183,14 +183,14 @@ func TestAuthorizeMandatoryRejectsForeignTenantKeys(t *testing.T) {
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: other, UserID: f.creatorID, APIKeyID: f.keyID.String(), AccountType: "enterprise",
 	})
-	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonAPIKeyInactive}, MCPCheck(ScopeMCPConnect, "toolset_1", f.projectID))
+	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonAPIKeyInactive}, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(f.projectID)).Connect())
 }
 
 func TestAuthorizeMandatoryNeverReadsSkippedAsAllow(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	connect := MCPCheck(ScopeMCPConnect, "toolset_1", "p")
+	connect := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("p")).Connect()
 
 	sessionless := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_123", UserID: sessionUserID, AccountType: "enterprise"})
 	require.NoError(t, engine.Require(sessionless, connect), "ordinary RBAC skips this caller")
@@ -221,14 +221,14 @@ func checkForTest(scope Scope, resourceID string) Check {
 		}
 		dimensions[key] = testProjectID
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: ""}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
 
 func TestAuthorizeMandatoryKeepsAgentKeyAdmission(t *testing.T) {
 	t.Parallel()
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	connect := MCPCheck(ScopeMCPConnect, "toolset_1", "p")
+	connect := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("p")).Connect()
 	allow := []Grant{NewGrant(ScopeMCPConnect, WildcardResource)}
 	ctx := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), RepresentedUserPolicy{UserID: "user_u", Policy: allow}, false, allow, allow, allow)
 	requireMandatory(t, engine, ctx, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNone}, connect)
@@ -251,16 +251,16 @@ func TestAPIKeyBlockCannotBeSkippedByOmittingTheProject(t *testing.T) {
 		check   Check
 		allowed bool
 	}{
-		"blocked project": {MCPCheck(ScopeMCPConnect, "toolset_1", "p"), false},
-		"other project":   {MCPCheck(ScopeMCPConnect, "toolset_1", "q"), true},
+		"blocked project": {MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("p")).Connect(), false},
+		"other project":   {MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("q")).Connect(), true},
 	} {
 		allowed, err := GrantsAuthorize(grants, tc.check)
 		require.NoError(t, err, name)
 		require.Equal(t, tc.allowed, allowed, name)
 	}
 	for name, check := range map[string]Check{
-		"project omitted":  MCPCheck(ScopeMCPConnect, "toolset_1", ""),
-		"tool call no prj": MCPToolCallCheck("toolset_1", MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""}),
+		"project omitted":  mcpCheck(ScopeMCPConnect, "toolset_1", ""),
+		"tool call no prj": mcpToolCallCheck("toolset_1", mcpToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""}),
 	} {
 		allowed, err := GrantsAuthorize(grants, check)
 		require.ErrorIs(t, err, ErrInvalidCheck, name)
@@ -275,12 +275,12 @@ func TestAuthorizeMandatoryHonorsKeyLimits(t *testing.T) {
 	created, err := projectsrepo.New(base.db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{Name: "bound", Slug: "bound-" + uuid.NewString()[:8], OrganizationID: base.organizationID})
 	require.NoError(t, err)
 	project := uuid.NullUUID{UUID: created.ID, Valid: true}
-	inProject := MCPCheck(ScopeMCPConnect, "toolset_1", created.ID.String())
+	inProject := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDOf(created.ID)).Connect()
 
 	bound := base.withKey(t, project, []string{"consumer"})
 	bound.grant(t, ScopeMCPConnect, NewSelector(ScopeMCPConnect, WildcardResource))
 	requireMandatory(t, bound.engine, bound.keyContext(t), MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNone}, inProject)
-	requireMandatory(t, bound.engine, bound.keyContext(t), MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonOutsideKey}, MCPCheck(ScopeMCPConnect, "toolset_1", uuid.NewString()))
+	requireMandatory(t, bound.engine, bound.keyContext(t), MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonOutsideKey}, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(uuid.NewString())).Connect())
 
 	hooks := base.withKey(t, uuid.NullUUID{}, []string{"hooks"})
 	hooks.grant(t, ScopeMCPConnect, NewSelector(ScopeMCPConnect, WildcardResource))
@@ -293,7 +293,7 @@ func TestAuthorizeMandatoryDeniesInactiveAgentCredentials(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
 	ctx := contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_123", APIKeyID: uuid.NewString()}, actor, contextvalues.PrincipalCredential{})
-	requireMandatory(t, engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonInactiveCredential}, MCPCheck(ScopeMCPConnect, "toolset_1", "p"))
+	requireMandatory(t, engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonInactiveCredential}, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("p")).Connect())
 }
 
 func TestAudienceEditsNeverSeeOrRemoveAPIKeyGrants(t *testing.T) {
@@ -338,7 +338,7 @@ func TestAuthorizeMandatoryHonorsANarrowerCredentialProject(t *testing.T) {
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: f.organizationID, UserID: f.creatorID, APIKeyID: f.keyID.String(), ProjectID: &narrowed, AccountType: "enterprise",
 	})
-	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonOutsideKey}, MCPCheck(ScopeMCPConnect, "toolset_1", other.String()))
+	requireMandatory(t, f.engine, ctx, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonOutsideKey}, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDOf(other)).Connect())
 }
 
 func TestAuthorizeMandatoryRejectsModelessKeyContexts(t *testing.T) {
@@ -346,7 +346,7 @@ func TestAuthorizeMandatoryRejectsModelessKeyContexts(t *testing.T) {
 
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_123", APIKeyID: uuid.NewString(), AccountType: "enterprise"})
-	_, err := engine.AuthorizeMandatory(ctx, MCPCheck(ScopeMCPConnect, "toolset_1", "p"))
+	_, err := engine.AuthorizeMandatory(ctx, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("p")).Connect())
 	require.Error(t, err, "a wiring bug is an error, never a recorded denial")
 }
 
@@ -372,11 +372,11 @@ func TestPrepareMandatoryAdmitsOnceAndDecidesPerServer(t *testing.T) {
 
 	_, err = keysrepo.New(f.db).DeleteAPIKey(t.Context(), keysrepo.DeleteAPIKeyParams{ID: f.keyID, OrganizationID: f.organizationID})
 	require.NoError(t, err)
-	got, err := prepared.Decide(f.organizationID, MCPCheck(ScopeMCPConnect, "toolset_1", f.projectID), MCPCheck(ScopeMCPConnect, "toolset_2", f.projectID))
+	got, err := prepared.Decide(f.organizationID, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(f.projectID)).Connect(), MCPServer(MCPServerIDFrom("toolset_2"), ProjectIDFrom(f.projectID)).Connect())
 	require.NoError(t, err)
 	require.Equal(t, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonNone}, got, "deciding reuses the admission")
 
-	got, err = prepared.Decide("org-elsewhere", MCPCheck(ScopeMCPConnect, "toolset_1", f.projectID))
+	got, err = prepared.Decide("org-elsewhere", MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(f.projectID)).Connect())
 	require.NoError(t, err)
 	require.Equal(t, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceAPIKey, Reason: MandatoryDenyReasonOrganizationMismatch}, got)
 }
@@ -391,7 +391,7 @@ func TestPrepareMandatoryBindsTheSignedInUser(t *testing.T) {
 	require.Equal(t, MandatoryCallerUser, prepared.Caller())
 	require.Equal(t, sessionUserID, prepared.RepresentedUserID())
 
-	got, err := prepared.Decide("org-elsewhere", MCPCheck(ScopeMCPConnect, "toolset_1", "p"))
+	got, err := prepared.Decide("org-elsewhere", MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom("p")).Connect())
 	require.NoError(t, err)
 	require.Equal(t, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonOrganizationMismatch}, got, "a wildcard grant in another organization is no authority here")
 

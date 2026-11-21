@@ -58,6 +58,8 @@ import TrialEnded from "./pages/demo/TrialEnded";
 import { pageHrefs, withOrgPages, withProjectPages } from "./route-pages";
 import { useRoutes, useOrgRoutes } from "./routes";
 import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
+import { InspectOAuthCallback } from "@/pages/mcp/inspect/InspectOAuthCallback";
+import { INSPECT_OAUTH_CALLBACK } from "@/lib/inspect-oauth";
 
 // Logout may have navigated here after Clear-Site-Data emptied localStorage.
 // theme-init.ts already restores when it can; this covers the module path
@@ -100,6 +102,12 @@ export default function App(): JSX.Element {
     const initialTheme = savedTheme || "light";
     applyTheme(initialTheme);
   }, []);
+
+  // Keep the authorization code out of analytics and session replay.
+  // The issuer always reaches this path by full-page navigation.
+  if (window.location.pathname === INSPECT_OAUTH_CALLBACK) {
+    return <InspectOAuthCallback />;
+  }
 
   return (
     <ConfigProvider theme={theme} setTheme={applyTheme}>

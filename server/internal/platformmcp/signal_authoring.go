@@ -139,11 +139,11 @@ func (s *SignalAuthoringService) scope(ctx context.Context, principal Principal,
 	}
 
 	// Check exact selectors before looking up rows so denied callers cannot probe existence.
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+	if err := s.engine.Require(ctx, authz.Project(authz.ProjectIDOf(id)).Read()); err != nil {
 		return ctx, project, state, ErrForbidden
 	}
 	if write {
-		if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+		if err := s.engine.Require(ctx, authz.Project(authz.ProjectIDOf(id)).Write()); err != nil {
 			return ctx, project, state, ErrForbidden
 		}
 	}

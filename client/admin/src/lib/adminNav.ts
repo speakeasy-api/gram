@@ -24,6 +24,7 @@ import {
   GlobeIcon,
   MessageSquareIcon,
   FlaskConicalIcon,
+  RocketIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -95,10 +96,22 @@ export const ADMIN_NAV_GROUPS = [
         icon: BookOpenIcon,
       },
       {
+        to: "/hooks-rollout",
+        label: "Hooks rollout",
+        keywords: "hooks observability plugin version release pin posthog",
+        icon: RocketIcon,
+      },
+      {
         to: "/remote-session-issuers",
         label: "Remote Session Issuers",
         keywords: "oauth identity providers issuers",
         icon: KeyRoundIcon,
+      },
+      {
+        to: "/assistants",
+        label: "Assistants",
+        keywords: "assistant agent identity names migration kit runtime repair",
+        icon: MessageSquareIcon,
       },
       {
         to: "/upstream-oauth-migration",

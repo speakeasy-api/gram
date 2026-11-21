@@ -124,7 +124,7 @@ func refreshableConnection(t *testing.T, ctx context.Context, fx consentActionFi
 	require.NoError(t, err)
 	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
 	require.NoError(t, err)
-	_, err = repo.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = repo.UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn: fx.subject, UserSessionIssuerID: session.UserSessionIssuerID, RemoteSessionClientID: clientID,
 		AccessTokenEncrypted: session.AccessTokenEncrypted.String, AccessExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: session.Scopes, Resource: session.Resource,

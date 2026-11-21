@@ -55,24 +55,9 @@ func NewLogTransformHandler(
 }
 
 func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.InboundLogRecord, _ gcp.MessageMetadata) error {
-	out, err := logRecordFromInbound(record)
+	out, err := transformInboundLog(ctx, h.instruments, record, h.enrichers)
 	if err != nil {
-		return fmt.Errorf("convert inbound log record: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound log record"))
-	}
-	// The producer's copy of anything in the pipeline's namespace goes
-	// before the pipeline writes its own, so the scope rewrite below and
-	// the enrichers after it leave exactly one copy of each key.
-	dropReservedLogAttributes(out)
-	if err := rewriteLogInstrumentationScope(out); err != nil {
-		return fmt.Errorf("rewrite instrumentation scope: %w", err)
-	}
-
-	enrichments, err := enrich.Log(ctx, h.instruments, record, h.enrichers)
-	if err != nil {
-		return fmt.Errorf("enrich log record: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich log record"))
-	}
-	if err := applyLogEnrichments(out, enrichments); err != nil {
-		return fmt.Errorf("apply log enrichments: %w", o11y.LogError(ctx, h.logger, err, "failed to apply log enrichments"))
+		return o11y.LogError(ctx, h.logger, err, "failed to transform inbound log record")
 	}
 
 	result := h.logPublisher.Publish(ctx, out)
@@ -81,6 +66,31 @@ func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.Inbound
 	}
 
 	return nil
+}
+
+// transformInboundLog turns an inbound record into what every consumer and relay receives.
+func transformInboundLog(ctx context.Context, instruments *enrich.Instruments, record *otelv1.InboundLogRecord, enrichers []enrich.LogEnricher) (*otelv1.LogRecord, error) {
+	out, err := logRecordFromInbound(record)
+	if err != nil {
+		return nil, fmt.Errorf("convert inbound log record: %w", err)
+	}
+	// The producer's copy of anything in the pipeline's namespace goes
+	// before the pipeline writes its own, so the scope rewrite below and
+	// the enrichers after it leave exactly one copy of each key.
+	dropReservedLogAttributes(out)
+	stripLogTestEventMarks(out)
+	if err := rewriteLogInstrumentationScope(out); err != nil {
+		return nil, fmt.Errorf("rewrite instrumentation scope: %w", err)
+	}
+
+	enrichments, err := enrich.Log(ctx, instruments, record, enrichers)
+	if err != nil {
+		return nil, fmt.Errorf("enrich log record: %w", err)
+	}
+	if err := applyLogEnrichments(out, enrichments); err != nil {
+		return nil, fmt.Errorf("apply log enrichments: %w", err)
+	}
+	return out, nil
 }
 
 func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {

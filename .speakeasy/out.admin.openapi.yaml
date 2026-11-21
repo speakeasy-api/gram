@@ -204,6 +204,77 @@ paths:
             schema:
               type: string
               format: binary
+  /admin/assistants.organizations:
+    get:
+      description: Lists live organizations with live assistants in live projects.
+      operationId: adminListAssistantOrganizations
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAssistantOrganizations'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listAssistantOrganizations admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listAssistantOrganizations
+      x-speakeasy-react-hook:
+        name: AdminListAssistantOrganizations
   /admin/auth.callback:
     get:
       tags:
@@ -1144,6 +1215,150 @@ paths:
       x-speakeasy-name-override: getHookClients
       x-speakeasy-react-hook:
         name: AdminGetHookClients
+  /admin/hooksRollout.get:
+    get:
+      tags:
+        - admin
+      summary: getHooksRollout admin
+      description: 'Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.'
+      operationId: adminGetHooksRollout
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHooksRollout'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getHooksRollout
+  /admin/hooksRollout.setDefault:
+    post:
+      tags:
+        - admin
+      summary: setHooksRolloutDefault admin
+      description: Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.
+      operationId: adminSetHooksRolloutDefault
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetHooksRolloutDefaultRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminHooksRollout'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setHooksRolloutDefault
   /admin/mcpAuthGrants.backfill:
     post:
       description: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
@@ -2923,6 +3138,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: triggerOrganizationChatAnalysis
+  /admin/organization.clearHooksRollout:
+    post:
+      tags:
+        - admin
+      summary: clearOrganizationHooksRollout admin
+      description: Removes an organization's hooks version override so it follows the default pin again.
+      operationId: adminClearOrganizationHooksRollout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClearOrganizationHooksRolloutRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationHooksRollout'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: clearOrganizationHooksRollout
   /admin/organization.create:
     post:
       tags:
@@ -3378,6 +3668,82 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getOrganization
+  /admin/organization.hooksRollout:
+    get:
+      tags:
+        - admin
+      summary: getOrganizationHooksRollout admin
+      description: Returns the hooks version rollout state for one organization.
+      operationId: adminGetOrganizationHooksRollout
+      parameters:
+        - name: organization_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationHooksRollout'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getOrganizationHooksRollout
   /admin/organization.inferenceKeys:
     get:
       tags:
@@ -4318,22 +4684,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: listOrganizationProjects
-  /admin/organization.providerSetup:
+  /admin/organization.repairAssistantAgentNames:
     post:
-      description: Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.
-      operationId: adminSetOrganizationProviderSetup
+      description: Repairs exact legacy generated names of live bound agents in one organization, preserving custom names and reporting conflicts. Safe to retry.
+      operationId: adminRepairOrganizationAssistantAgentNames
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetOrganizationProviderSetupRequestBody'
+              $ref: '#/components/schemas/RepairOrganizationAssistantAgentNamesRequestBody'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductFeatures'
+                $ref: '#/components/schemas/AdminAssistantAgentNameRepairRun'
           description: OK response.
         "400":
           content:
@@ -4389,12 +4755,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
-      summary: setOrganizationProviderSetup admin
+      summary: repairOrganizationAssistantAgentNames admin
       tags:
         - admin
+      x-speakeasy-name-override: repairOrganizationAssistantAgentNames
       x-speakeasy-react-hook:
-        name: SetAdminOrganizationProviderSetup
-      x-speakeasy-name-override: setOrganizationProviderSetup
+        name: AdminRepairOrganizationAssistantAgentNames
   /admin/organization.repairInferenceKey:
     post:
       tags:
@@ -4626,6 +4992,81 @@ paths:
       tags:
         - admin
       x-speakeasy-name-override: setAdoptionDashboardUrl
+  /admin/organization.setHooksRollout:
+    post:
+      tags:
+        - admin
+      summary: setOrganizationHooksRollout admin
+      description: Pins one organization to its own hooks version, regardless of the default pin.
+      operationId: adminSetOrganizationHooksRollout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOrganizationHooksRolloutRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationHooksRollout'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setOrganizationHooksRollout
   /admin/organization.setInferenceKeyMonthlyLimit:
     post:
       tags:
@@ -9998,6 +10439,50 @@ paths:
       x-speakeasy-name-override: listUserOrganizations
 components:
   schemas:
+    AdminAssistantAgentNameRepairResult:
+      type: object
+      properties:
+        assistant_id:
+          type: string
+        name:
+          type: string
+        outcome:
+          type: string
+          enum:
+            - repaired
+            - conflict
+            - failed
+        project_id:
+          type: string
+      required:
+        - assistant_id
+        - project_id
+        - name
+        - outcome
+    AdminAssistantAgentNameRepairRun:
+      type: object
+      properties:
+        conflicts:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        organization_id:
+          type: string
+        repaired:
+          type: integer
+          format: int64
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAssistantAgentNameRepairResult'
+      required:
+        - organization_id
+        - repaired
+        - conflicts
+        - failed
+        - results
     AdminAssistantIdentityMigrationResult:
       type: object
       properties:
@@ -10136,6 +10621,32 @@ components:
         - busy
         - failed
         - results
+    AdminAssistantOrganization:
+      type: object
+      properties:
+        assistants:
+          type: integer
+          format: int64
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - assistants
+    AdminAssistantOrganizations:
+      type: object
+      properties:
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAssistantOrganization'
+      required:
+        - organizations
     AdminAuditLog:
       type: object
       properties:
@@ -10735,6 +11246,96 @@ components:
         - version
         - status
         - installs
+    AdminHooksRollout:
+      type: object
+      properties:
+        canary_organization_slugs:
+          type: array
+          items:
+            type: string
+          description: Organizations that always receive current_version and ignore pins.
+        current_version:
+          type: integer
+          description: The hooks generator version this server build publishes to an organization once its pin reaches it.
+          format: int64
+        default_pin:
+          $ref: '#/components/schemas/AdminHooksRolloutPin'
+        overrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksRolloutOverride'
+          description: Organizations with an override, by slug.
+        recent_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminHooksRolloutChange'
+          description: The most recent pin changes, newest first.
+      description: Platform-wide hooks version rollout state.
+      required:
+        - current_version
+        - canary_organization_slugs
+        - overrides
+        - recent_changes
+    AdminHooksRolloutChange:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: Organization whose override changed. Absent for a change to the default pin.
+        organization_slug:
+          type: string
+          description: Slug of organization_id. Absent for a change to the default pin.
+        set_at:
+          type: string
+          description: When the change was made.
+          format: date-time
+        set_by:
+          type: string
+          description: Email of the staff operator who made the change.
+        version:
+          type: integer
+          description: Version the change set. Absent when the change cleared an organization override.
+          format: int64
+      description: One change to a hooks rollout pin.
+      required:
+        - set_by
+        - set_at
+    AdminHooksRolloutOverride:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        organization_name:
+          type: string
+        organization_slug:
+          type: string
+        pin:
+          $ref: '#/components/schemas/AdminHooksRolloutPin'
+      description: An organization pinned to its own hooks version instead of the default pin.
+      required:
+        - organization_id
+        - organization_name
+        - organization_slug
+        - pin
+    AdminHooksRolloutPin:
+      type: object
+      properties:
+        set_at:
+          type: string
+          description: When the pin was set.
+          format: date-time
+        set_by:
+          type: string
+          description: Email of the staff operator who set the pin.
+        version:
+          type: integer
+          description: Highest hooks generator version the pin clears.
+          format: int64
+      description: 'A hooks version rollout pin: the highest hooks generator version its scope is cleared to receive.'
+      required:
+        - version
+        - set_by
+        - set_at
     AdminInferenceHookCell:
       type: object
       properties:
@@ -12153,6 +12754,16 @@ components:
           type: string
           description: The dedicated agent, when the assistant has one.
           format: uuid
+        agent_name:
+          type: string
+          description: The live bound agent name, when available.
+        agent_name_repair_state:
+          type: string
+          description: Whether the exact legacy generated agent name needs repair.
+          enum:
+            - not_needed
+            - pending
+            - conflict
         created_at:
           type: string
           description: When the assistant was created.
@@ -12199,6 +12810,7 @@ components:
           description: The assistant status.
       description: One live assistant of an organization, with where it stands in the move to agent identity.
       required:
+        - agent_name_repair_state
         - id
         - name
         - project_id
@@ -12223,6 +12835,33 @@ components:
       required:
         - organization_id
         - assistants
+    AdminOrganizationHooksRollout:
+      type: object
+      properties:
+        current_version:
+          type: integer
+          description: The hooks generator version this server build publishes to an organization once its pin reaches it.
+          format: int64
+        default_pin:
+          $ref: '#/components/schemas/AdminHooksRolloutPin'
+        effective_version:
+          type: integer
+          description: Version of the pin that applies. Absent for canary and legacy_flag.
+          format: int64
+        eligible:
+          type: boolean
+          description: Whether the organization's next publish moves its hooks plugin to current_version. Absent for legacy_flag, which the admin server cannot read.
+        organization_id:
+          type: string
+        override:
+          $ref: '#/components/schemas/AdminHooksRolloutPin'
+        source:
+          $ref: "#/components/schemas/AdminHooksRolloutSource"
+      description: Hooks version rollout state for one organization.
+      required:
+        - organization_id
+        - current_version
+        - source
     AdminOrganizationMember:
       type: object
       properties:
@@ -13692,6 +14331,13 @@ components:
       required:
         - id
         - ends_at
+    ClearOrganizationHooksRolloutRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+      required:
+        - organization_id
     CloneOnboardingPlaybookRequestBody:
       type: object
       properties:
@@ -14534,6 +15180,9 @@ components:
         ai_platform_push_integrations_enabled:
           type: boolean
           description: Whether the organization can provision push integrations for AI platforms
+        assistants_available:
+          type: boolean
+          description: 'Whether this deployment can run assistants. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled assistant runtime provider. Absent from staff admin responses.'
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
@@ -14549,6 +15198,9 @@ components:
         device_agent:
           type: boolean
           description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+        functions_available:
+          type: boolean
+          description: 'Whether this deployment can run Speakeasy Functions. A deployment-wide setting, not an organization entitlement: false when the deployment runs with the disabled Functions provider. Absent from staff admin responses.'
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -14567,9 +15219,6 @@ components:
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Speakeasy Platform MCP capability
-        provider_setup_enabled:
-          type: boolean
-          description: Whether the staff-managed provider setup rollout is enabled. Defaults to false when absent.
         remote_session_auto_refresh_enabled:
           type: boolean
           description: Whether consent screens expose automatic remote-session refresh for the organization
@@ -15094,6 +15743,13 @@ components:
         - remove_causes
         - confirmation
         - reason
+    RepairOrganizationAssistantAgentNamesRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+      required:
+        - organization_id
     ResumeStripeSubscriptionRequestBody:
       type: object
       properties:
@@ -15162,6 +15818,17 @@ components:
           type: string
       required:
         - organization_id
+    SetHooksRolloutDefaultRequestBody:
+      type: object
+      properties:
+        version:
+          type: integer
+          description: Highest hooks generator version to clear. Must not exceed the version this build publishes.
+          format: int64
+          minimum: 1
+          maximum: 100000
+      required:
+        - version
     SetInferenceKeyMonthlyLimitRequestBody:
       type: object
       properties:
@@ -15263,6 +15930,20 @@ components:
         - organization_id
         - feature_name
         - enabled
+    SetOrganizationHooksRolloutRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        version:
+          type: integer
+          description: Highest hooks generator version to clear for the organization. Must not exceed the version this build publishes.
+          format: int64
+          minimum: 1
+          maximum: 100000
+      required:
+        - organization_id
+        - version
     SetOrganizationOnboardingStackRequestBody:
       type: object
       properties:
@@ -15283,16 +15964,6 @@ components:
         - organization_id
         - vendors
         - mdm_vendor
-    SetOrganizationProviderSetupRequestBody:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-        organization_id:
-          type: string
-      required:
-        - organization_id
-        - enabled
     SetRegistryEntryPublishedRequestBody:
       type: object
       properties:
@@ -15921,6 +16592,14 @@ components:
       description: Result of a live 'who am I' probe against a platform credential's resolved identity.
       required:
         - verified
+    AdminHooksRolloutSource:
+      type: string
+      description: "What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides."
+      enum:
+        - canary
+        - organization
+        - default
+        - legacy_flag
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

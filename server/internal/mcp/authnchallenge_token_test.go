@@ -130,7 +130,7 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 		RefreshToken string `json:"refresh_token"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 	require.Equal(t, urn.NewAgentSubject(agent.ID).String(), claims.Subject)
 	require.Equal(t, fx.client.ClientID, claims.ClientID)
@@ -154,14 +154,15 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 		authz.SelectorKeyResourceID:   fx.target.MCPResourceID.String(),
 		authz.SelectorKeyProjectID:    fx.target.ProjectID.String(),
 	}, policy.Requested[0].Selector)
-	require.True(t, authz.GrantsSatisfy(policy.RuntimeGrants(), authz.MCPCheck(authz.ScopeMCPConnect, fx.target.MCPResourceID.String(), fx.target.ProjectID.String())))
+	require.True(t, authz.GrantsSatisfy(policy.RuntimeGrants(), authz.MCPServer(authz.MCPServerIDOf(fx.target.MCPResourceID), authz.ProjectIDOf(fx.target.ProjectID)).Connect()))
 
 	endpoint := &mcp.ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
+		AudienceURN:         urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
 		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
+		McpServerID:         uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
 	}
@@ -174,7 +175,7 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 		AccessToken string `json:"access_token"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(refreshed.body), &refreshedResponse))
-	refreshedClaims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(refreshedResponse.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	refreshedClaims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(refreshedResponse.AccessToken, urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String())
 	require.NoError(t, err)
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), refreshedResponse.AccessToken, ti.serverURL.String(), endpoint)
 	require.NoError(t, err)
