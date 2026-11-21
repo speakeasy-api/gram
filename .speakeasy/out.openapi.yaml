@@ -4458,7 +4458,7 @@ paths:
         type: mutation
   /rpc/access.setShadowMCPOfficialServer:
     post:
-      description: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is linked automatically (the oldest, when several do). While a link exists and the linked server has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server; a linked server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is linked instead; with keep_shadow no server is linked, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic link applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
+      description: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
       operationId: setShadowMCPOfficialServer
       parameters:
         - allowEmptyValue: true
@@ -117870,10 +117870,10 @@ components:
       properties:
         keep_shadow:
           type: boolean
-          description: 'Keep using the Shadow MCP server directly: no official server is linked, not even automatically. Cannot be combined with mcp_server_id.'
+          description: 'Keep using the Shadow MCP server directly: no server is made official, not even automatically. Cannot be combined with mcp_server_id.'
         mcp_server_id:
           type: string
-          description: The MCP server to link as the official version. Omit it, with keep_shadow unset, to go back to the automatic link.
+          description: The MCP server to make the official version. Omit it, with keep_shadow unset, to go back to the automatic choice.
           format: uuid
         project_id:
           type: string
@@ -118272,7 +118272,7 @@ components:
           $ref: '#/components/schemas/ShadowMCPOfficialServer'
         official_server_declined:
           type: boolean
-          description: True when an administrator chose to keep using the Shadow MCP server directly, so no official server is linked automatically.
+          description: True when an administrator chose to keep using the Shadow MCP server directly, so no official server is chosen automatically.
         request_count:
           type: integer
           format: int64
@@ -118397,10 +118397,10 @@ components:
       properties:
         automatic:
           type: boolean
-          description: True when the link was made automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
+          description: True when the server was made official automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
         direct_access_allowed:
           type: boolean
-          description: 'Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
+          description: 'Deprecated: official servers no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
         gateway_name:
           type: string
           description: The gateway that serves the official server, when url is a gateway's address.
@@ -118432,7 +118432,7 @@ components:
         slug:
           type: string
           description: The server's slug, when it has one.
-      description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+      description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be made its official version.
       required:
         - mcp_server_id
         - name
