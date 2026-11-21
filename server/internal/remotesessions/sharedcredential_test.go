@@ -472,7 +472,7 @@ func TestRefreshSweep_SiblingIssuerKeepsCredentialEligible(t *testing.T) {
 	require.Equal(t, session.ID, candidate.RemoteSession.ID)
 }
 
-func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
+func TestRefreshSweep_ForeignProjectSignInWithoutOfferNotEligible(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -480,12 +480,8 @@ func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// The client is owned by the fixture project. A binding row attached
-	// directly (bypassing the attach handlers' tenancy validation, as a
-	// corrupted or maliciously inserted row would) links it to an issuer in a
-	// DIFFERENT project. That issuer holds the only live Speakeasy session for the
-	// subject, so without the client-tenancy predicate the sweep would claim
-	// the credential through the foreign project's binding.
+	// A sign-in in another project must not make an unoffered registration
+	// eligible for background refresh.
 	issuerID := createRemoteIssuer(t, ctx, ti, "shared-sweep-xten-issuer", "")
 	provenance := createUserSessionIssuer(t, ctx, ti.conn, "shared-sweep-xten-usi-a")
 	clientID := createRemoteClient(t, ctx, ti, issuerID, provenance.String(), "shared-sweep-xten-client")
@@ -518,7 +514,7 @@ func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
 	window := newSweepWindow()
 	rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
 	require.NoError(t, err)
-	require.Empty(t, rows, "a binding to an issuer outside the client's own project must not make the credential keepalive-eligible")
+	require.Empty(t, rows, "a foreign sign-in without a scoped offer cannot renew the grant")
 
 	_, err = repo.New(ti.conn).GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(session.ID, authCtx.ActiveOrganizationID))
 	require.ErrorIs(t, err, pgx.ErrNoRows)

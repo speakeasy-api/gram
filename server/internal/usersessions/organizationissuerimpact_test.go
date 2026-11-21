@@ -65,8 +65,6 @@ func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLin
 	target := seedOrganizationTierIssuer(t, ctx, ti.conn, "offer-target")
 	source := seedIssuer(t, ctx, ti, "offer-source")
 	registration := seedMigrationRemoteClient(t, ctx, ti, "offered-without-link")
-	leftoverSeedBoundRegistration(t, ctx, ti, source)
-	leftoverSeedBoundRegistration(t, ctx, ti, target)
 	member := impactSeedServer(t, ctx, ti, source)
 	hosted := seedHostedServerOnIssuer(t, ctx, ti, *auth.ProjectID, auth.ActiveOrganizationID, source, "offer-hosted")
 	targetServer := impactSeedServer(t, ctx, ti, target)

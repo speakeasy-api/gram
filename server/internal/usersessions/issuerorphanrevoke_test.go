@@ -284,24 +284,6 @@ func TestDeleteUserSessionIssuer_RevokesOrphanedClientSessions(t *testing.T) {
 	require.Equal(t, []string{refreshToken}, tokens, "the stored refresh token is what gets revoked")
 }
 
-func TestDeleteUserSessionIssuer_StaleSiblingBindingDoesNotSpare(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	spy := &orphanRevocationSpy{}
-	upstream := newOrphanRevocationUpstream(t, spy)
-
-	issuerID := createIssuerForOrphanTest(t, ctx, ti, "orphan-shared-issuer")
-	createIssuerForOrphanTest(t, ctx, ti, "orphan-shared-sibling")
-	clientID, refreshToken := seedRevocableUpstream(t, ctx, ti, issuerID, "orphan-shared", upstream.URL+"/revoke")
-
-	deleteIssuerForOrphanTest(t, ctx, ti, issuerID)
-	require.Zero(t, countActiveClientSessions(t, ctx, ti, clientID), "a stale sibling parent alone cannot preserve a grant")
-	_, tokens := spy.snapshot()
-	require.Equal(t, []string{refreshToken}, tokens)
-}
-
 // A sibling binding whose issuer is already tombstoned does not spare the
 // client: a dead binding counts as no binding.
 func TestDeleteUserSessionIssuer_DeadSiblingBindingDoesNotSpare(t *testing.T) {

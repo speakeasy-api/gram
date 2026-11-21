@@ -162,7 +162,8 @@ type liveCredential struct {
 // the gateways' issuer issued. A choice already
 // naming an auth client is usable while that client is, as the typed
 // resolver reads it, whatever the legacy issuer binding. An unmapped OAuth
-// choice holds while its registration is associated with the server and live.
+// choice is never mapped in legacy mode: server association alone does not
+// authorize the credential issuer.
 // For an organization enforcing upstream auth (typedOnly), a server's upstream
 // OAuth client associations make no choice stale or rejected, as issuance reads
 // them there, but an unmapped OAuth choice still needs its registration and
@@ -170,11 +171,7 @@ type liveCredential struct {
 func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID, typedOnly bool) (SelectionOutcome, uuid.UUID) {
 	readsNoAuth := row.NoAuth || row.NamesHeaders
 	staleNoAuth := readsNoAuth && ((row.ServerHasAssociations && !typedOnly) || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
-	registrationServes := row.RegistrationLive
-	if !typedOnly {
-		registrationServes = row.RegistrationAssociated
-	}
-	oauthRejected := !readsNoAuth && !registrationServes
+	oauthRejected := !readsNoAuth && (!typedOnly || !row.RegistrationLive)
 	switch {
 	case staleNoAuth:
 		return SelectionStaleNoAuth, uuid.Nil

@@ -221,7 +221,10 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 // the credential's typed choice without reconstructing legacy links.
 func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org *migrationOrg, server, registration, credential uuid.UUID) {
 	t.Helper()
-	q := authclientbackfill.New(db)
+	tx, err := db.Begin(ctx) //nolint:glint // notestingrawsql: fixture transaction uses generated SQL.
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
+	q := authclientbackfill.New(tx)
 	client, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
 		OrganizationID: org.id, ProjectID: uuid.NullUUID{UUID: org.projectID, Valid: true}, ClientType: "remote_session", Source: "admin",
 		RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true},
@@ -236,6 +239,8 @@ func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.
 	require.NoError(t, q.SwapUpstreamAuthClientFixture(ctx, authclientbackfill.SwapUpstreamAuthClientFixtureParams{
 		McpServerID: server, CredentialID: credential, AuthClientID: uuid.NullUUID{UUID: client, Valid: true},
 	}))
+	require.NoError(t, authclientbackfill.ProvisionFromTypedOffers(ctx, tx, org.id))
+	require.NoError(t, tx.Commit(ctx))
 }
 
 func TestUpstreamOAuthMigration_StaffCannotRunRetiredMigration(t *testing.T) {

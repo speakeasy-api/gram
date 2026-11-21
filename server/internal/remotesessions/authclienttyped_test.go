@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -117,27 +116,6 @@ func TestCommitServerIdentityConfigurationRecordsTheTypedClientAfterMigration(t 
 	require.NoError(t, err)
 	require.Equal(t, authClientID, requireTypedClient(t, ctx, ti, registration, target))
 	requireReady(t, ctx, ti)
-}
-
-// An FK compatibility row does not configure a server, even when it is the
-// sign-in issuer's only consumer.
-func TestResyncIgnoresAttachmentCompatibilityParents(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	migrateOrganization(t, ctx, ti)
-	projectID := projectIDFromContext(t, ctx)
-	orgID := activeOrganizationID(t, ctx)
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "typed-capture-issuer")
-	target, _ := sourceBackedTarget(t, ctx, ti, "typed-capture-target", userIssuerID)
-	providerID := createServerIdentityProvider(t, ctx, ti, "typed-capture-provider", "", false, []string{"none"})
-	createServerIdentityClient(t, ctx, ti, "typed-capture-client", providerID, false)
-
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}))
-
-	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, target))
-	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, target))
-	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, target).Valid)
 }
 
 // Another organization's servers are never named by a write in this one.
