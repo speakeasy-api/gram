@@ -438,8 +438,8 @@ type config struct {
 	// servedFlushInterval is how long a served connection waits in memory.
 	servedFlushInterval time.Duration
 
-	// servedStampBudget bounds the reported-client reads of one served flush.
-	servedStampBudget time.Duration
+	// servedFlushBudget bounds the logs checks and reported-client reads of one served flush.
+	servedFlushBudget time.Duration
 
 	// servedTable is where served connections are written.
 	servedTable string
@@ -508,9 +508,11 @@ type Recorder struct {
 	referenceChecks singleflight.Group
 }
 
-// referableOrg is one logs answer and when it was read.
+// referableOrg is one logs answer and when it was read. failed is a check that gave no answer,
+// which references treat as off and Served does not.
 type referableOrg struct {
 	allowed bool
+	failed  bool
 	at      time.Time
 }
 
@@ -552,7 +554,7 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 
 		servedInterval:      defaultServedInterval,
 		servedFlushInterval: defaultServedFlushInterval,
-		servedStampBudget:   defaultServedStampBudget,
+		servedFlushBudget:   defaultServedFlushBudget,
 		servedTable:         lastServedTable,
 	}, opts...)
 }
@@ -651,7 +653,7 @@ func NewCapturing(capture func(Row), captureServed func(Served), logsEnabled fun
 		deviceKeys:  nil,
 		exporter:    nil,
 		capture:     capture,
-		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0, servedInterval: 0, servedFlushInterval: 0, servedStampBudget: 0, servedTable: ""},
+		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0, servedInterval: 0, servedFlushInterval: 0, servedFlushBudget: 0, servedTable: ""},
 		steps:       nil,
 		dropped:     nil,
 
@@ -850,22 +852,22 @@ func FailureWorthAReference(what Happened) bool {
 
 // referenceLogsAnswer asks the logs setting off the writer's and record's panic guards, so it has
 // its own: a logs check that panics shows no reference.
-func (r *Recorder) referenceLogsAnswer(organizationID string) (allowed bool) {
+func (r *Recorder) referenceLogsAnswer(organizationID string) (answer referableOrg) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			r.drop(context.Background(), dropPanic, 1, fmt.Errorf("connection reference logs check: %v", recovered))
-			allowed = false
+			answer = referableOrg{allowed: false, failed: true, at: time.Now()}
 		}
 	}()
-	reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
-	return reason == ""
+	reason, err := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+	return referableOrg{allowed: reason == "", failed: err != nil, at: time.Now()}
 }
 
 // logsAllowForReference waits a bounded time for one background logs check per organization.
 // A slow check answers false now and fills the cache for the next failure.
 func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID string) bool {
 	if r.referableOrgs == nil {
-		return r.referenceLogsAnswer(organizationID)
+		return r.referenceLogsAnswer(organizationID).allowed
 	}
 	r.referableMu.Lock()
 	cached, ok := r.referableOrgs.Get(organizationID)
@@ -874,11 +876,11 @@ func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID str
 		return cached.allowed
 	}
 	answer := r.referenceChecks.DoChan(organizationID, func() (any, error) {
-		allowed := r.referenceLogsAnswer(organizationID)
+		answer := r.referenceLogsAnswer(organizationID)
 		r.referableMu.Lock()
-		r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, at: time.Now()})
+		r.referableOrgs.Add(organizationID, answer)
 		r.referableMu.Unlock()
-		return allowed, nil
+		return answer.allowed, nil
 	})
 	timer := time.NewTimer(referenceLogsTimeout)
 	defer timer.Stop()
@@ -1174,11 +1176,10 @@ func (r *Recorder) run() {
 				default:
 					addPending(r.limiter.pendingRows(time.Now(), true))
 					flush()
-					if drainFailed {
-						r.abandonServed()
-					} else {
+					if !drainFailed {
 						r.flushServed()
 					}
+					r.abandonServed()
 					return
 				}
 			}

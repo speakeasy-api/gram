@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -131,6 +133,7 @@ func TestRequestConnections_NotServed(t *testing.T) {
 		{name: "tool error", request: connectionToolsCall, upstream: answering("application/json", `{"jsonrpc":"2.0","id":7,"result":{"isError":true,"content":[]}}`)},
 		{name: "tool error over SSE", request: connectionToolsCall, upstream: answering("text/event-stream", "data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"isError\":true,\"content\":[]}}\n\n")},
 		{name: "JSON-RPC error", request: `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, upstream: answering("application/json", `{"jsonrpc":"2.0","id":2,"error":{"code":-32603,"message":"boom"}}`)},
+		{name: "notification acknowledged with a page", request: `{"jsonrpc":"2.0","method":"notifications/initialized"}`, upstream: answering("text/html", "<html>error</html>")},
 		{name: "empty answer to a request owed a reply", request: `{"jsonrpc":"2.0","id":3,"method":"ping"}`, upstream: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }},
 		{name: "SSE stream closed without a reply", request: connectionToolsCall, upstream: answering("text/event-stream", ": keepalive\n\n")},
 		{name: "server error", request: connectionToolsCall, upstream: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) }},
@@ -144,6 +147,40 @@ func TestRequestConnections_NotServed(t *testing.T) {
 			rec.RequireNoneServed()
 		})
 	}
+}
+
+// An SSE reply is recorded as it reaches the client, while the server still holds the stream open.
+func TestRequestConnections_ServedWhenTheSSEReplyIsRelayed(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	upstream := upstreamURL(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[]}}\n\n"))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	})
+	var closeOnce sync.Once
+	stop := func() { closeOnce.Do(func() { close(release) }) }
+	t.Cleanup(stop)
+	rec := mcpconnectionattemptstest.New(t)
+	p := newKillswitchTestProxy(t, upstream, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
+	servedConnections(rec, uuid.Nil).install(p)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(connectionToolsCall))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	posted := make(chan error, 1)
+	go func() { posted <- p.Post(httptest.NewRecorder(), req) }()
+
+	require.Eventually(t, func() bool { return len(rec.Served()) == 1 }, 5*time.Second, 10*time.Millisecond, "recorded while the stream is open")
+	stop()
+	require.NoError(t, <-posted)
+	rec.RequireServed(true)
 }
 
 type refusingToolsCall struct{ err error }

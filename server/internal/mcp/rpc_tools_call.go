@@ -633,7 +633,7 @@ func handleToolsCall(
 		}
 		// The call's records follow the upstream's own isError verdict.
 		rw.resultIsError = dialect.MCPResultIsError(rw.body.Bytes())
-		payload.backendAnswered = !rw.resultIsError
+		payload.backendAnswered = backendSucceeded(rw.statusCode, rw.resultIsError)
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -686,8 +686,13 @@ func handleToolsCall(
 	}
 
 	// A prompt is rendered and a platform tool is run by Speakeasy, not a backend.
-	payload.backendAnswered = rw.statusCode >= 200 && rw.statusCode < 300 && plan.Kind != gateway.ToolKindPrompt && plan.Kind != gateway.ToolKindPlatform
+	payload.backendAnswered = backendSucceeded(rw.statusCode, false) && plan.Kind != gateway.ToolKindPrompt && plan.Kind != gateway.ToolKindPlatform
 	return bs, nil
+}
+
+// backendSucceeded is a backend answer with a 2xx status and no isError result.
+func backendSucceeded(status int, resultIsError bool) bool {
+	return status >= 200 && status < 300 && !resultIsError
 }
 
 // credentialSource is who supplied a variable a tool call may send as a credential.

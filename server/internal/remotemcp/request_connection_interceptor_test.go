@@ -393,6 +393,7 @@ func TestRefusalHappened(t *testing.T) {
 		{name: "a malformed call is ours", err: &proxy.RejectError{Code: proxy.RejectCodeInvalidParams, Message: "malformed", Data: nil}, want: mcpconnectionattempts.CodeInternalError},
 		{name: "an unreachable server stops a cold catalog's listing", err: &proxy.UpstreamListingRefusalError{Cause: errors.New("dial tcp: connection refused"), Response: nil, Answered: false}, want: mcpconnectionattempts.CodeProviderUnreachable},
 		{name: "a slow server stops a cold catalog's listing", err: &proxy.UpstreamListingRefusalError{Cause: fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut), Response: nil, Answered: false}, want: mcpconnectionattempts.CodeProviderUnreachable},
+		{name: "a slow server whose timeout canceled the listing", err: &proxy.UpstreamListingRefusalError{Cause: fmt.Errorf("forward: %w: %w", proxy.ErrUpstreamTimedOut, context.Canceled), Response: nil, Answered: false}, want: mcpconnectionattempts.CodeProviderUnreachable},
 		{name: "a listing that could not be built is ours", err: &proxy.UpstreamListingRefusalError{Cause: &proxy.ForwardSetupError{Err: errors.New("build"), Kind: proxy.ForwardSetupInternal}, Response: nil, Answered: false}, want: mcpconnectionattempts.CodeInternalError},
 		{name: "a response check that refused an answered listing is ours", err: &proxy.UpstreamListingRefusalError{Cause: oops.E(oops.CodeUnauthorized, nil, "credential refused"), Response: nil, Answered: true}, want: mcpconnectionattempts.CodeInternalError},
 	} {

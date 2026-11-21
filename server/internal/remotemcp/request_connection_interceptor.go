@@ -345,7 +345,9 @@ func refusalHappened(err error, tunneled bool) (mcpconnectionattempts.Code, bool
 	// A cold tool catalog lists the server first, so a server that never answered can stop the call here.
 	if listing, ok := errors.AsType[*proxy.UpstreamListingRefusalError](err); ok && !listing.Answered && listing.Cause != nil {
 		_, rejected := errors.AsType[*proxy.RejectError](listing.Cause)
-		if !rejected && !errors.Is(listing.Cause, context.Canceled) {
+		// The proxy's own timeout also reads as canceled; only a caller that left is not the server's.
+		left := errors.Is(listing.Cause, context.Canceled) && !errors.Is(listing.Cause, proxy.ErrUpstreamTimedOut)
+		if !rejected && !left {
 			return UpstreamFailureHappened(0, false, UpstreamCredentialSent{Attached: false, Self: false, Configured: false}, tunneled, "", listing.Cause)
 		}
 	}

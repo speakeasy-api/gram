@@ -5,6 +5,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -376,37 +379,171 @@ func TestServed_ShutdownCountsWhatItLeftBehind(t *testing.T) {
 	})
 }
 
-// Past a flush's budget the reported name is not read, and the User-Agent names the client.
-func TestServed_StampingStopsReadingReportedNamesPastItsBudget(t *testing.T) {
+// A connection a flush's budget did not reach is not written with a guessed client: it waits, with
+// its time, and the next flush writes it with the name its session reported.
+func TestServed_AConnectionPastTheBudgetWaitsForTheNextFlush(t *testing.T) {
 	t.Parallel()
+	conn := clickhouseConn(t)
+	cfg := testConfig()
+	cfg.servedFlushInterval = time.Hour
+	cfg.servedFlushBudget = -time.Second
+	r := newTestRecorder(t, conn, cfg)
+	scope, org, _ := servedScope()
+	person := urn.NewUserSubject("user-" + uuid.NewString())
+	var reads atomic.Int64
 
-	for _, tc := range []struct {
-		name   string
-		budget time.Duration
-		reads  int64
-		family string
-	}{
-		{name: "within the budget", budget: 10 * time.Second, reads: 1, family: FamilyCursor},
-		{name: "past the budget", budget: -time.Second, reads: 0, family: FamilyClaudeCode},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			conn := clickhouseConn(t)
-			cfg := testConfig()
-			cfg.servedStampBudget = tc.budget
-			r := newTestRecorder(t, conn, cfg)
-			scope, org, _ := servedScope()
-			person := urn.NewUserSubject("user-" + uuid.NewString())
-			var reads atomic.Int64
+	r.Served(t.Context(), scope, true, Subject(&person), FromRequest(requestFrom("claude-code/2.1.0")),
+		ReportedClient(func() (string, string) { reads.Add(1); return "cursor", "1.0.0" }))
+	r.flushServed()
+	require.Empty(t, storedServed(t, conn, org))
+	require.Zero(t, reads.Load())
+	require.Zero(t, r.counted(t, meterServedDropped, ""), "a connection not reached is not dropped")
 
-			r.Served(t.Context(), scope, true, Subject(&person), FromRequest(requestFrom("claude-code/2.1.0")),
-				ReportedClient(func() (string, string) { reads.Add(1); return "cursor", "1.0.0" }))
-			flushed(t, r)
+	r.cfg.servedFlushBudget = 10 * time.Second
+	waited := time.Now()
+	flushed(t, r)
 
-			got := storedServed(t, conn, org)
-			require.Len(t, got, 1)
-			require.Equal(t, tc.family, got[0].ClientFamily)
-			require.Equal(t, tc.reads, reads.Load())
-		})
+	got := storedServed(t, conn, org)
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCursor, got[0].ClientFamily)
+	require.Equal(t, int64(1), reads.Load())
+	require.True(t, got[0].ServedAt.Before(waited), "the request's time, not the flush's")
+}
+
+// Slow logs checks for many organizations hold a flush no longer than its budget, so a failure row behind it is written promptly.
+func TestServed_SlowLogsChecksDoNotHoldFailureRowsBack(t *testing.T) {
+	t.Parallel()
+	conn := clickhouseConn(t)
+	prefix := "slow-" + uuid.NewString() + "-"
+	started := make(chan struct{})
+	var once sync.Once
+	var slow atomic.Bool
+	slow.Store(true)
+	check := func(ctx context.Context, organizationID string) (bool, error) {
+		if strings.HasPrefix(organizationID, prefix) && slow.Load() {
+			once.Do(func() { close(started) })
+			select {
+			case <-time.After(300 * time.Millisecond):
+			case <-ctx.Done():
+				return false, ctx.Err()
+			}
+		}
+		return true, nil
 	}
+	cfg := testConfig()
+	cfg.servedFlushBudget = 100 * time.Millisecond
+	r := newTestRecorderWithLogs(t, conn, check, cfg)
+	person := urn.NewUserSubject("user-" + uuid.NewString())
+	const organizations = 30
+	for i := range organizations {
+		r.Served(t.Context(), ServerScope(prefix+strconv.Itoa(i), uuid.New(), uuid.New(), AppDCR), true, Subject(&person))
+	}
+
+	<-started
+	attempt := Begin(testScope())
+	failed := time.Now()
+	r.End(t.Context(), attempt, StepProviderSignIn, CodeProviderRateLimited)
+	stored := func(query string, arg any) uint64 {
+		var n uint64
+		if err := conn.QueryRow(context.Background(), query, arg).Scan(&n); err != nil {
+			return 0
+		}
+		return n
+	}
+	require.Eventually(t, func() bool {
+		return stored(`SELECT count() FROM mcp_connection_events WHERE attempt_id = ?`, attempt.ID()) == 1
+	}, 10*time.Second, 10*time.Millisecond)
+	require.Less(t, time.Since(failed), 4*time.Second, "30 checks of 300ms would hold it 9s")
+
+	slow.Store(false)
+	require.Eventually(t, func() bool {
+		return stored(`SELECT uniqExact(organization_id) FROM `+lastServedTable+` WHERE startsWith(organization_id, ?)`, prefix) == organizations
+	}, 10*time.Second, 50*time.Millisecond, "the connections not reached were kept for later flushes")
+	require.Zero(t, r.counted(t, meterServedDropped, ""))
+}
+
+// A served request after the final flush is counted as lost to shutdown, not held where nothing writes it.
+func TestServed_AfterShutdownIsCounted(t *testing.T) {
+	t.Parallel()
+	conn := clickhouseConn(t)
+	r := newTestRecorder(t, conn, testConfig())
+	scope, _, _ := servedScope()
+	person := urn.NewUserSubject("user-" + uuid.NewString())
+	flushed(t, r)
+
+	r.Served(t.Context(), scope, true, Subject(&person))
+
+	require.Equal(t, int64(1), r.counted(t, meterServedDropped, dropShutdown))
+	pending, _ := r.served.take()
+	require.Empty(t, pending)
+}
+
+// A logs check that failed keeps references off but does not discard served requests; logs off does.
+func TestServed_OnlyALogsOffAnswerSkipsTheWriter(t *testing.T) {
+	t.Parallel()
+	conn := clickhouseConn(t)
+	failing, failingOrg, _ := servedScope()
+	off, offOrg, _ := servedScope()
+	cfg := testConfig()
+	cfg.servedFlushInterval = time.Hour
+	r := newTestRecorderWithLogs(t, conn, func(_ context.Context, organizationID string) (bool, error) {
+		if organizationID == failingOrg {
+			return false, errors.New("feature cache down")
+		}
+		return false, nil
+	}, cfg)
+	person := urn.NewUserSubject("user-" + uuid.NewString())
+
+	require.False(t, r.logsAllowForReference(t.Context(), failingOrg), "references fail closed")
+	require.False(t, r.logsAllowForReference(t.Context(), offOrg))
+	r.Served(t.Context(), failing, true, Subject(&person))
+	r.Served(t.Context(), off, true, Subject(&person))
+
+	pending, _ := r.served.take()
+	require.Len(t, pending, 1)
+	for key := range pending {
+		require.Equal(t, failingOrg, key.organizationID, "the writer checks again")
+	}
+}
+
+// A failed insert does not count as a write, so the connection's next request is written.
+func TestServed_AFailedInsertLetsTheNextRequestRetry(t *testing.T) {
+	t.Parallel()
+	conn := clickhouseConn(t)
+	cfg := testConfig()
+	cfg.servedFlushInterval = time.Hour
+	cfg.servedTable = "mcp_connection_last_served_not_migrated_yet"
+	r := newTestRecorder(t, conn, cfg)
+	scope, _, _ := servedScope()
+	person := urn.NewUserSubject("user-" + uuid.NewString())
+
+	r.Served(t.Context(), scope, true, Subject(&person))
+	r.flushServed()
+	require.Equal(t, int64(1), r.counted(t, meterServedDropped, dropTableMissing))
+
+	r.Served(t.Context(), scope, true, Subject(&person))
+	pending, _ := r.served.take()
+	require.Len(t, pending, 1, "due again after the failed insert")
+}
+
+func TestServedConnections_PutBackKeepsTimesWithinTheBound(t *testing.T) {
+	t.Parallel()
+	s := newServedConnections(time.Minute, 10, 2)
+	first, second, at := servedKeyOf("user:a"), servedKeyOf("user:b"), time.Unix(1_000_000, 0).UTC()
+
+	s.note(first, servedRowAt(at), true)
+	s.note(second, servedRowAt(at), false)
+	taken, _ := s.take()
+	s.note(second, servedRowAt(at.Add(time.Second)), true)
+	s.note(servedKeyOf("user:c"), servedRowAt(at.Add(time.Second)), false)
+
+	require.Equal(t, 1, s.putBack(taken), "one merged into a later request, the other over the bound")
+	pending, _ := s.take()
+	require.Len(t, pending, 2)
+	require.Equal(t, at.Add(time.Second), pending[second].row.EventTime, "a later request keeps its row")
+	require.Equal(t, at.Add(time.Second), pending[second].answeredAt)
+
+	s.note(first, servedRowAt(at.Add(2*time.Second)), false)
+	pending, _ = s.take()
+	require.Contains(t, pending, first, "a connection turned away is forgotten, so its next request is due")
 }

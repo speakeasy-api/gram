@@ -1108,3 +1108,13 @@ func TestRecordHostedServed(t *testing.T) {
 	record(bare, "resources/read", true).RequireNoneServed()
 	require.Equal(t, toolset.ID.String(), record(bare, "tools/list", false).RequireServed(false).ServerID)
 }
+
+// A passthrough function's result counts as the backend answering only with a 2xx status and no isError.
+func TestBackendSucceededNeedsA2xxWithoutAnError(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, backendSucceeded(http.StatusOK, false))
+	require.False(t, backendSucceeded(http.StatusOK, true), "isError")
+	require.False(t, backendSucceeded(http.StatusInternalServerError, false), "a 500 with valid JSON and no isError")
+	require.False(t, backendSucceeded(http.StatusUnauthorized, false))
+}

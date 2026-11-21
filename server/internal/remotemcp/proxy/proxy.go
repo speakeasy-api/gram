@@ -965,9 +965,6 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, userReqID, relay, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, label)
 		responseBytes = relay.bytes
 		responseRelayed := relay.responseRelayed.Load()
-		if relay.served {
-			p.runRequestServedInterceptors(ctx)
-		}
 		reason := streamEndReason(r, upstreamResp.Body, streamErr)
 		if shutdowndrain.Interrupted(forwardCtx) {
 			// The interrupt only fires before the response is relayed, but the
@@ -1218,7 +1215,8 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	if err != nil {
 		return err
 	}
-	if observeReply(ctx, msg, userReqID, jsonrpcMethod, p.wantsServed(upstreamStatus)) {
+	// An acknowledgement with no reply serves a notification only when it is empty, not an error page.
+	if observeReply(ctx, msg, userReqID, jsonrpcMethod, p.wantsServed(upstreamStatus) && (msg != nil || len(bodyBytes) == 0)) {
 		p.runRequestServedInterceptors(ctx)
 	}
 	return nil
@@ -1668,8 +1666,10 @@ func (p *Proxy) relaySSEStream(
 		if replied {
 			result.markResponseRelayed(p.Drain, upstreamResp.Body)
 		}
-		if served := observeReply(ctx, msg, responseID, result.method, replied && p.wantsServed(upstreamResp.StatusCode)); replied {
-			result.served = served
+		// Recorded as the reply reaches the client, not when the stream ends.
+		if observeReply(ctx, msg, responseID, result.method, replied && p.wantsServed(upstreamResp.StatusCode)) && !result.served {
+			result.served = true
+			p.runRequestServedInterceptors(ctx)
 		}
 		if flusher != nil {
 			flusher.Flush()
@@ -1752,7 +1752,7 @@ type sseRelay struct {
 	// method is the JSON-RPC method of the request that opened the stream.
 	method string
 
-	// served reports that the response relayed to that request served it without an error.
+	// served reports that the served interceptors ran for the response relayed to that request.
 	served bool
 
 	// age is the stream's maximum age.

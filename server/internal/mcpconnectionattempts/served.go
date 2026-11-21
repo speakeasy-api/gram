@@ -36,9 +36,9 @@ const (
 	// defaultServedFlushInterval is how long a served connection waits in memory.
 	defaultServedFlushInterval = 10 * time.Second
 
-	// defaultServedStampBudget bounds the reported-client reads of one flush, so failure rows
-	// queued behind it wait no longer. Past it a row's family comes from its User-Agent and catalog.
-	defaultServedStampBudget = time.Second
+	// defaultServedFlushBudget bounds the logs checks and reported-client reads of one flush, so
+	// failure rows queued behind it wait no longer. Rows it does not reach wait for the next flush.
+	defaultServedFlushBudget = time.Second
 
 	// servedMaxConnections bounds the memory of the write times. An evicted connection writes early.
 	servedMaxConnections = 25_000
@@ -46,7 +46,7 @@ const (
 	// servedMaxPending bounds what one flush holds. More connections than this wait for the next one.
 	servedMaxPending = 10_000
 
-	// dropPendingFull counts connections a full flush turned away, once per flush. They retry on the next.
+	// dropPendingFull counts connections a full flush turned away, once per flush. Their next request retries.
 	dropPendingFull dropReason = "pending_full"
 )
 
@@ -138,6 +138,42 @@ func (s *servedConnections) note(key servedKey, row Row, answered bool) {
 	s.written.Add(key, last)
 }
 
+// putBack returns connections a flush did not reach to the next one, with their times. Past the
+// bound the rest are turned away and forgotten, so their next request is due. It returns how many.
+func (s *servedConnections) putBack(rows map[servedKey]servedRow) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	turnedAway := 0
+	for key, waiting := range rows {
+		if queued, ok := s.pending[key]; ok {
+			// A later request was queued since, so it keeps its row and the later answer.
+			if waiting.answeredAt.After(queued.answeredAt) {
+				queued.answeredAt = waiting.answeredAt
+				s.pending[key] = queued
+			}
+			continue
+		}
+		if len(s.pending) >= s.maxPending {
+			s.written.Remove(key)
+			turnedAway++
+			continue
+		}
+		s.pending[key] = waiting
+	}
+	return turnedAway
+}
+
+// forget clears the write times of connections a flush did not store, so their next request is due.
+func (s *servedConnections) forget(keys []servedKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, key := range keys {
+		s.written.Remove(key)
+	}
+}
+
 // take returns what is waiting and how many connections were turned away, and starts a new flush.
 func (s *servedConnections) take() (map[servedKey]servedRow, int) {
 	s.mu.Lock()
@@ -181,13 +217,30 @@ func (r *Recorder) Served(ctx context.Context, scope Scope, answered bool, opts 
 		}
 		return
 	}
-	if r.served == nil || r.logsOffCached(row.OrganizationID) {
+	if r.served == nil {
 		return
 	}
-	r.served.note(servedKey{
+	if reason, cached := r.cachedLogs(row.OrganizationID); cached && reason != "" {
+		return
+	}
+	if stopped := r.admitServed(servedKey{
 		organizationID: row.OrganizationID, serverKind: row.ServerKind, serverID: row.ServerID, memberID: row.MemberID,
 		subjectURN: row.SubjectURN, appKey: row.AppKey, remoteSessionClientID: row.RemoteSessionClientID, userAgent: row.client.userAgent,
-	}, row, answered)
+	}, row, answered); stopped {
+		r.servedDrop(ctx, dropShutdown, 1, nil)
+	}
+}
+
+// admitServed notes a served connection under stopMu, so none arrives after the final flush.
+func (r *Recorder) admitServed(key servedKey, row Row, answered bool) (stopped bool) {
+	r.stopMu.RLock()
+	defer r.stopMu.RUnlock()
+
+	if r.stopped {
+		return true
+	}
+	r.served.note(key, row, answered)
+	return false
 }
 
 func answeredAt(row Row, answered bool) time.Time {
@@ -205,15 +258,23 @@ func servedOf(s servedRow) Served {
 	}
 }
 
-// logsOffCached reports a fresh logs-off answer already held for an organization, without asking.
-func (r *Recorder) logsOffCached(organizationID string) bool {
+// cachedLogs returns a fresh logs answer already held for an organization, without asking. A check
+// that failed is no answer.
+func (r *Recorder) cachedLogs(organizationID string) (reason dropReason, cached bool) {
 	if r.referableOrgs == nil {
-		return false
+		return "", false
 	}
 	r.referableMu.Lock()
-	cached, ok := r.referableOrgs.Get(organizationID)
+	held, ok := r.referableOrgs.Get(organizationID)
 	r.referableMu.Unlock()
-	return ok && !cached.allowed && time.Since(cached.at) < cached.ttl()
+	switch {
+	case !ok || held.failed || time.Since(held.at) >= held.ttl():
+		return "", false
+	case held.allowed:
+		return "", true
+	default:
+		return dropLogsOff, true
+	}
 }
 
 // rememberLogs keeps a logs answer the writer read, for references and for Served.
@@ -222,11 +283,13 @@ func (r *Recorder) rememberLogs(organizationID string, allowed bool) {
 		return
 	}
 	r.referableMu.Lock()
-	r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, at: time.Now()})
+	r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, failed: false, at: time.Now()})
 	r.referableMu.Unlock()
 }
 
-// flushServed writes the connections waiting, once, for organizations with logs on. It runs on the writer.
+// flushServed writes the connections waiting, once, for organizations with logs on. It runs on the
+// writer, so one flush's logs checks and reported-client reads share a budget; connections it does
+// not reach keep their times and wait for the next flush.
 func (r *Recorder) flushServed() {
 	if r.served == nil {
 		return
@@ -236,45 +299,52 @@ func (r *Recorder) flushServed() {
 	if len(pending) == 0 {
 		return
 	}
+	taken, putBack := len(pending), 0
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			r.servedDrop(context.Background(), dropPanic, len(pending), fmt.Errorf("connection served writer: %v", recovered))
+			r.servedDrop(context.Background(), dropPanic, taken-putBack, fmt.Errorf("connection served writer: %v", recovered))
 		}
 	}()
 	organizations := map[string]dropReason{}
 	rows := make([]Served, 0, len(pending))
-	read, stampUntil := 0, time.Now().Add(r.cfg.servedStampBudget)
-	for _, waiting := range pending {
-		if r.writerCtx.Err() != nil {
+	keys := make([]servedKey, 0, len(pending))
+	until := time.Now().Add(r.cfg.servedFlushBudget)
+	for key, waiting := range pending {
+		if r.writerCtx.Err() != nil || time.Now().After(until) {
 			break
 		}
-		read++
+		// What is left in pending is what this flush did not reach.
+		delete(pending, key)
 		organizationID := waiting.row.OrganizationID
 		reason, checked := organizations[organizationID]
 		if !checked {
-			var err error
-			reason, err = r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
-			organizations[organizationID] = reason
-			if err != nil {
-				r.servedDrop(context.Background(), reason, 1, err)
-				continue
+			var cached bool
+			if reason, cached = r.cachedLogs(organizationID); !cached {
+				var err error
+				reason, err = r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+				if err != nil {
+					organizations[organizationID] = reason
+					r.servedDrop(context.Background(), reason, 1, err)
+					continue
+				}
+				r.rememberLogs(organizationID, reason == "")
 			}
-			r.rememberLogs(organizationID, reason == "")
+			organizations[organizationID] = reason
 		}
 		if reason != "" {
 			r.servedDrop(context.Background(), reason, 1, nil)
 			continue
 		}
-		if time.Now().After(stampUntil) {
-			waiting.row.client.reported = nil
-		}
 		r.stampClient(&waiting.row)
 		rows = append(rows, servedOf(waiting))
+		keys = append(keys, key)
 	}
 	if r.writerCtx.Err() != nil {
-		r.servedDrop(context.Background(), dropShutdown, len(rows)+len(pending)-read, nil)
+		r.servedDrop(context.Background(), dropShutdown, len(rows)+len(pending), nil)
 		return
 	}
+	putBack = len(pending)
+	r.servedDrop(context.Background(), dropPendingFull, r.served.putBack(pending), nil)
 	if len(rows) == 0 {
 		return
 	}
@@ -287,6 +357,8 @@ func (r *Recorder) flushServed() {
 		if exception, ok := errors.AsType[*clickhouse.Exception](err); ok && exception.Code == unknownTableCode {
 			reason = dropTableMissing
 		}
+		// Their next request retries, at most once a flush.
+		r.served.forget(keys)
 		r.servedDrop(ctx, reason, len(rows), err)
 		return
 	}

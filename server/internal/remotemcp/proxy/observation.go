@@ -53,7 +53,8 @@ func observeRejection(ctx context.Context) {
 
 // observeReply settles the request metric for a reply and, when wantServed, reports whether msg
 // served the request with id without an error. A reply is decoded at most once. A request owed
-// no reply, a notification, is served by an answer with no reply message.
+// no reply, a notification, is served by an answer with no reply message; the caller passes
+// wantServed false when that answer had a body.
 func observeReply(ctx context.Context, msg jsonrpc.Message, id jsonrpc.ID, method string, wantServed bool) bool {
 	if msg == nil {
 		return wantServed && !id.IsValid()
