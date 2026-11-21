@@ -364,6 +364,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, transcriptShadowFlag())
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
@@ -858,6 +859,9 @@ func newWorkerCommand() *cli.Command {
 			// unsuspended.
 			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
+				return err
+			}
+			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
 				return err
 			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
