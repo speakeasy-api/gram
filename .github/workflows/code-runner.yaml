@@ -95,7 +95,7 @@ jobs:
           install: true
           cache: true
           env: false
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
+      - uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v1.17.0 # zizmor: ignore[cache-poisoning]
         with:
           rust-src-dir: agents/code-runner
           rustflags: ""
