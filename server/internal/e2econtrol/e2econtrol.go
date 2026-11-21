@@ -96,6 +96,7 @@ type Users interface {
 // SessionStore issues the dashboard session. Implemented by sessions.Manager.
 type SessionStore interface {
 	SignInEnforced(ctx context.Context, organizationID string) bool
+	InvalidateUserInfoCache(ctx context.Context, userID string) error
 	Issue(ctx context.Context, w http.ResponseWriter, session sessions.Session, issuedAt time.Time) error
 }
 
@@ -224,6 +225,11 @@ func (s *Service) handleSignIn(w http.ResponseWriter, r *http.Request) error {
 	}
 	if reason := s.refusal(user); reason != "" {
 		return oops.E(oops.CodeForbidden, nil, "%s", reason).LogError(ctx, s.logger)
+	}
+	// Requests are authorized from a cached copy of the user (staff bit,
+	// organizations). Drop it, so the session is judged by the rows just read.
+	if err := s.sessions.InvalidateUserInfoCache(ctx, user.UserID); err != nil {
+		return fmt.Errorf("e2e sign-in: drop cached user: %w", err)
 	}
 
 	sessionID, err := sessions.NewSessionID()

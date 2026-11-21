@@ -111,7 +111,14 @@ func RunPreviewFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Po
 			return q.LocalUpsertEnvironment(ctx, repo.LocalUpsertEnvironmentParams{ID: uuid.MustParse(spec.FixedUUID("0000-4000-a000-000000007004")), OrganizationID: spec.OrgID, ProjectID: projectID})
 		}},
 		{"runner", func() error {
-			return q.PreviewUpsertRunner(ctx, repo.PreviewUpsertRunnerParams{ID: runner.ID, Email: runner.Email, DisplayName: runner.Name, WorkosID: workosID})
+			rows, err := q.PreviewUpsertRunner(ctx, repo.PreviewUpsertRunnerParams{ID: runner.ID, Email: runner.Email, DisplayName: runner.Name, WorkosID: workosID})
+			switch {
+			case err != nil:
+				return fmt.Errorf("upsert runner: %w", err)
+			case rows != 1:
+				return errors.New("the runner's id belongs to another user")
+			}
+			return nil
 		}},
 		{"runner membership", func() error {
 			return q.LocalAdoptDeveloper(ctx, repo.LocalAdoptDeveloperParams{OrganizationID: spec.OrgID, UserID: runner.ID, WorkosUserID: workosID})

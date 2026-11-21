@@ -91,6 +91,45 @@ func TestPreviewFixturesRefuseADatabaseWithoutBuiltInRoles(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
+// The runner's id already belonging to someone is a refusal too: their row is
+// not rewritten into the runner.
+func TestPreviewFixturesDoNotRewriteAnotherUsersRow(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	spec, err := PreviewSpec(126)
+	require.NoError(t, err)
+	runner := spec.PreviewRunner()
+
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	neighbour := LocalSpec()
+	seedLocalPostgres(ctx, t, db, neighbour)
+	require.NoError(t, RunLocalFixtures(ctx, logger, db, assetstest.NewTestBlobStore(t), nil, LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}))
+	require.NoError(t, demoseedtest.PlantLoginArtifacts(ctx, db, demoseedtest.LoginArtifacts{
+		OrgID:        "org-someone-else",
+		OrgWorkOSID:  "workos-org-someone-else",
+		OrgName:      "Someone else",
+		OrgSlug:      "someone-else",
+		UserID:       runner.ID,
+		Email:        "someone-else@example.test",
+		WorkOSID:     "workos-user-someone-else",
+		MembershipID: "membership-someone-else",
+	}))
+	seedLocalPostgres(ctx, t, db, spec)
+
+	require.ErrorContains(t, RunPreviewFixtures(ctx, logger, db, nil, spec), "belongs to another user")
+
+	user, err := userrepo.New(db).GetUser(ctx, runner.ID)
+	require.NoError(t, err)
+	require.Equal(t, "someone-else@example.test", user.Email)
+	organizations, err := orgrepo.New(db).ListOrganizationsForUser(ctx, conv.ToPGText(runner.ID))
+	require.NoError(t, err)
+	require.Len(t, organizations, 1)
+	require.Equal(t, "org-someone-else", organizations[0].ID)
+}
+
 // The runner's address already belonging to someone is a refusal, not an
 // adoption: that user keeps their id and gains no membership.
 func TestPreviewFixturesDoNotAdoptAnotherUsersAddress(t *testing.T) {

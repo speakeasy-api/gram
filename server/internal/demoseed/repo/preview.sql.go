@@ -25,13 +25,13 @@ func (q *Queries) PreviewCurrentDatabase(ctx context.Context) (string, error) {
 	return column_1, err
 }
 
-const previewUpsertRunner = `-- name: PreviewUpsertRunner :exec
+const previewUpsertRunner = `-- name: PreviewUpsertRunner :execrows
 INSERT INTO users (id, email, display_name, workos_id, admin)
 VALUES ($1::text, $2::text, $3::text, $4::text, FALSE)
 ON CONFLICT (id) DO UPDATE
-  SET email = EXCLUDED.email, display_name = EXCLUDED.display_name,
-      workos_id = EXCLUDED.workos_id, admin = FALSE, deleted_at = NULL,
-      updated_at = clock_timestamp()
+  SET display_name = EXCLUDED.display_name, workos_id = EXCLUDED.workos_id,
+      admin = FALSE, deleted_at = NULL, updated_at = clock_timestamp()
+  WHERE users.email = EXCLUDED.email
 `
 
 type PreviewUpsertRunnerParams struct {
@@ -41,15 +41,20 @@ type PreviewUpsertRunnerParams struct {
 	WorkosID    string
 }
 
-// The one account an end-to-end test run signs in as. Never platform staff,
-// and keyed on id only: an address that already belongs to another user is a
-// unique violation, which aborts the fixtures instead of adopting that user.
-func (q *Queries) PreviewUpsertRunner(ctx context.Context, arg PreviewUpsertRunnerParams) error {
-	_, err := q.db.Exec(ctx, previewUpsertRunner,
+// The one account an end-to-end test run signs in as. Never platform staff.
+// It only ever creates the runner or restores its own row: an address that
+// already belongs to another user is a unique violation, and an id that
+// already belongs to another address updates nothing, which the caller treats
+// as a refusal. Neither adopts or rewrites somebody else.
+func (q *Queries) PreviewUpsertRunner(ctx context.Context, arg PreviewUpsertRunnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, previewUpsertRunner,
 		arg.ID,
 		arg.Email,
 		arg.DisplayName,
 		arg.WorkosID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

@@ -48,11 +48,20 @@ func (f *fakeUsers) UserByEmail(_ context.Context, email string) (*sessions.Cach
 }
 
 type fakeSessions struct {
-	issued   []sessions.Session
-	enforced bool
+	issued      []sessions.Session
+	invalidated []string
+	enforced    bool
 }
 
 func (f *fakeSessions) SignInEnforced(context.Context, string) bool { return f.enforced }
+
+func (f *fakeSessions) InvalidateUserInfoCache(_ context.Context, userID string) error {
+	// Before the session exists, or its first request could be judged by a stale copy.
+	if len(f.issued) == 0 {
+		f.invalidated = append(f.invalidated, userID)
+	}
+	return nil
+}
 
 func (f *fakeSessions) Issue(_ context.Context, w http.ResponseWriter, session sessions.Session, _ time.Time) error {
 	f.issued = append(f.issued, session)
@@ -107,7 +116,7 @@ func newHarness(t *testing.T) *harness {
 		users: &fakeUsers{asked: nil, users: map[string]*sessions.CachedUserInfo{
 			testEmail: {UserID: testUserID, Email: testEmail, Admin: true, Organizations: []sessions.Organization{otherOrg, testOrg}},
 		}},
-		sessions: &fakeSessions{issued: nil, enforced: false},
+		sessions: &fakeSessions{issued: nil, invalidated: nil, enforced: false},
 		reseeds:  0,
 		reseed:   func(context.Context) error { return nil },
 	}
@@ -260,6 +269,7 @@ func TestSignInLinkSignsTheTestUserIntoTheTestOrganizationOnce(t *testing.T) {
 	require.Equal(t, []string{testEmail}, h.users.asked, "only the configured user is ever signed in")
 
 	require.Len(t, h.sessions.issued, 1)
+	require.Equal(t, []string{testUserID}, h.sessions.invalidated, "the cached copy of the user is dropped before the session exists")
 	session := h.sessions.issued[0]
 	require.Equal(t, testUserID, session.UserID)
 	require.Equal(t, testOrgID, session.ActiveOrganizationID)

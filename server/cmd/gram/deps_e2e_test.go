@@ -50,6 +50,8 @@ type recordingSessions struct {
 
 func (recordingSessions) SignInEnforced(context.Context, string) bool { return false }
 
+func (recordingSessions) InvalidateUserInfoCache(context.Context, string) error { return nil }
+
 func (recordingSessions) Issue(context.Context, http.ResponseWriter, sessions.Session, time.Time) error {
 	return nil
 }

@@ -216,14 +216,15 @@ func reseedLocalOrganization(ctx context.Context, logger *slog.Logger, d e2eCont
 // environment's ClickHouse, so the organization's telemetry pages stay empty.
 // Every session the test user was issued before the reset ends with it.
 func reseedPreviewOrganization(ctx context.Context, logger *slog.Logger, d e2eControlDeps, spec demoseed.Spec) error {
-	started := time.Now()
 	if err := demoseed.Run(ctx, logger, d.db, nil, d.blob, d.encryption, d.issuerURL, d.serverURL.String(), spec); err != nil {
 		return fmt.Errorf("apply seed: %w", err)
 	}
 	if err := demoseed.RunPreviewFixtures(ctx, logger, d.db, d.redis, spec); err != nil {
 		return fmt.Errorf("apply preview fixtures: %w", err)
 	}
-	if err := d.sessions.RaiseUserEpoch(ctx, spec.PreviewRunner().ID, started); err != nil {
+	// Taken once the reset is committed, so a sign-in that read the
+	// organization while it was being rebuilt ends too.
+	if err := d.sessions.RaiseUserEpoch(ctx, spec.PreviewRunner().ID, time.Now()); err != nil {
 		return fmt.Errorf("end the test user's earlier sessions: %w", err)
 	}
 	return nil
