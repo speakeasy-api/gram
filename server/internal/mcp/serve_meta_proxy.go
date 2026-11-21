@@ -740,6 +740,7 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	if !call.isError {
 		s.recordMemberServed(ctx, gate, member, call.dial.serviceClient)
+		markMetaToolCallSucceeded(ctx)
 	}
 	return bs, nil
 }

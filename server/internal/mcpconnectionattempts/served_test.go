@@ -191,8 +191,12 @@ func servedKeyOf(subject string) servedKey {
 	return servedKey{organizationID: "org", serverKind: serverKindMCP, serverID: "server", memberID: "", subjectURN: subject, appKey: "dcr", remoteSessionClientID: "", userAgent: ""}
 }
 
-func servedRowAt(at time.Time) Row {
-	return newRow(testScope(), at)
+func servedAt(at time.Time, answered bool) servedRequest {
+	req := servedRequest{projectID: uuid.Nil, at: at, answeredAt: time.Time{}, client: requestClient{present: false, userAgent: "", ipAddress: "", appFamily: "", reported: nil}}
+	if answered {
+		req.answeredAt = at
+	}
+	return req
 }
 
 func TestServedConnections_HoldsAConnectionToOneWritePerInterval(t *testing.T) {
@@ -200,61 +204,217 @@ func TestServedConnections_HoldsAConnectionToOneWritePerInterval(t *testing.T) {
 	s := newServedConnections(time.Minute, 10, 10)
 	key, start := servedKeyOf("user:a"), time.Unix(1_000_000, 0).UTC()
 
-	s.note(key, servedRowAt(start), false)
-	s.note(key, servedRowAt(start.Add(30*time.Second)), false)
-	pending, turnedAway := s.take()
-	require.Zero(t, turnedAway)
+	s.note(key, servedAt(start, false))
+	s.note(key, servedAt(start.Add(30*time.Second), false))
+	pending, lost := s.take(start.Add(30*time.Second), false)
+	require.Zero(t, lost)
 	require.Len(t, pending, 1)
-	require.Equal(t, start, pending[key].row.EventTime, "a request within the interval is not due")
+	require.Equal(t, start, pending[key].at, "a request within the interval is not due")
 	require.True(t, pending[key].answeredAt.IsZero())
 
-	s.note(key, servedRowAt(start.Add(40*time.Second)), true)
-	s.note(key, servedRowAt(start.Add(50*time.Second)), true)
-	pending, _ = s.take()
-	require.Equal(t, start.Add(40*time.Second), pending[key].row.EventTime, "the server's first answer is due within the interval")
+	s.note(key, servedAt(start.Add(40*time.Second), true))
+	s.note(key, servedAt(start.Add(50*time.Second), true))
+	pending, _ = s.take(start.Add(50*time.Second), false)
+	require.Equal(t, start.Add(40*time.Second), pending[key].at, "the server's first answer is due within the interval")
 	require.Equal(t, start.Add(40*time.Second), pending[key].answeredAt, "a second answer within the interval is not")
 
-	s.note(key, servedRowAt(start.Add(90*time.Second)), false)
-	pending, _ = s.take()
+	s.note(key, servedAt(start.Add(90*time.Second), false))
+	pending, _ = s.take(start.Add(90*time.Second), false)
 	require.Empty(t, pending, "the interval counts from the last write")
 
-	s.note(key, servedRowAt(start.Add(101*time.Second)), false)
-	pending, _ = s.take()
-	require.Equal(t, start.Add(101*time.Second), pending[key].row.EventTime, "due once the interval passed")
+	s.note(key, servedAt(start.Add(101*time.Second), false))
+	pending, _ = s.take(start.Add(101*time.Second), false)
+	require.Equal(t, start.Add(101*time.Second), pending[key].at, "due once the interval passed")
+	require.Equal(t, start.Add(50*time.Second), pending[key].answeredAt, "with the answer held back")
+}
+
+// Answered, then a failure, then a retry answered within the interval: the retry is written once the interval passes.
+func TestServedConnections_ARecoveryWithinTheIntervalIsWritten(t *testing.T) {
+	t.Parallel()
+	s := newServedConnections(5*time.Minute, 10, 10)
+	key, t0 := servedKeyOf("user:a"), time.Unix(1_000_000, 0).UTC()
+
+	s.note(key, servedAt(t0, true))
+	pending, _ := s.take(t0.Add(10*time.Second), false)
+	require.Equal(t, t0, pending[key].answeredAt)
+
+	s.note(key, servedAt(t0.Add(3*time.Minute), true))
+	pending, _ = s.take(t0.Add(3*time.Minute+10*time.Second), false)
+	require.Empty(t, pending, "not before the interval")
+	pending, _ = s.take(t0.Add(5*time.Minute), false)
+	require.Equal(t, t0.Add(3*time.Minute), pending[key].at)
+	require.Equal(t, t0.Add(3*time.Minute), pending[key].answeredAt)
+
+	pending, _ = s.take(t0.Add(time.Hour), false)
+	require.Empty(t, pending, "nothing left to write")
+}
+
+// Requests every few seconds write about once an interval, and the stored time never trails the latest request by more than one.
+func TestServedConnections_SteadyRequestsAreBoundedAndCurrent(t *testing.T) {
+	t.Parallel()
+	const interval, flushEvery, requestEvery, requestsFor = 5 * time.Minute, 10 * time.Second, 3 * time.Second, 12 * time.Minute
+	s := newServedConnections(interval, 10, 10)
+	key, t0 := servedKeyOf("user:a"), time.Unix(1_000_000, 0).UTC()
+
+	var stored, lastRequest time.Time
+	writes := 0
+	for elapsed := time.Duration(0); elapsed <= requestsFor+2*interval; elapsed += time.Second {
+		now := t0.Add(elapsed)
+		if elapsed <= requestsFor && elapsed%requestEvery == 0 {
+			s.note(key, servedAt(now, true))
+			lastRequest = now
+		}
+		if elapsed%flushEvery != 0 {
+			continue
+		}
+		pending, _ := s.take(now, false)
+		if waiting, ok := pending[key]; ok {
+			writes++
+			require.True(t, waiting.at.After(stored), "each write moves the time forward")
+			stored = waiting.at
+			require.Equal(t, stored, waiting.answeredAt)
+		}
+		require.LessOrEqual(t, lastRequest.Sub(stored), interval, "at %s", elapsed)
+	}
+	require.Equal(t, lastRequest, stored, "the last request is written after they stop")
+	require.LessOrEqual(t, writes, 1+int(requestsFor/interval)+1)
+}
+
+func TestServedConnections_AConnectionThatStopsIsWrittenByALaterFlush(t *testing.T) {
+	t.Parallel()
+	s := newServedConnections(time.Minute, 10, 10)
+	key, at := servedKeyOf("user:a"), time.Unix(1_000_000, 0).UTC()
+
+	s.note(key, servedAt(at, false))
+	s.note(key, servedAt(at.Add(20*time.Second), false))
+	pending, _ := s.take(at.Add(20*time.Second), false)
+	require.Equal(t, at, pending[key].at)
+	pending, _ = s.take(at.Add(50*time.Second), false)
+	require.Empty(t, pending)
+	pending, _ = s.take(at.Add(time.Minute), false)
+	require.Equal(t, at.Add(20*time.Second), pending[key].at)
 	require.True(t, pending[key].answeredAt.IsZero())
 }
 
-func TestServedConnections_AFullFlushTurnsAConnectionAwayUntilTheNext(t *testing.T) {
+func TestServedConnections_TheFinalFlushTakesEveryUnwrittenTime(t *testing.T) {
+	t.Parallel()
+	s := newServedConnections(time.Minute, 10, 10)
+	key, at := servedKeyOf("user:a"), time.Unix(1_000_000, 0).UTC()
+
+	s.note(key, servedAt(at, false))
+	_, _ = s.take(at, false)
+	s.note(key, servedAt(at.Add(time.Second), true))
+	s.note(key, servedAt(at.Add(2*time.Second), false))
+	pending, _ := s.take(at.Add(2*time.Second), true)
+	require.Equal(t, at.Add(2*time.Second), pending[key].at)
+	require.Equal(t, at.Add(time.Second), pending[key].answeredAt)
+
+	s.note(key, servedAt(at.Add(3*time.Second), false))
+	left, lost := s.abandon()
+	require.Equal(t, 1, left, "what is still unwritten is counted")
+	require.Zero(t, lost)
+}
+
+// A connection a full flush cannot take is not lost: it waits, and a later flush writes it.
+func TestServedConnections_AFullFlushLeavesAConnectionForTheNext(t *testing.T) {
 	t.Parallel()
 	s := newServedConnections(time.Minute, 10, 1)
 	first, second, at := servedKeyOf("user:a"), servedKeyOf("user:b"), time.Unix(1_000_000, 0).UTC()
 
-	s.note(first, servedRowAt(at), false)
-	for range 3 {
-		s.note(second, servedRowAt(at), false)
+	s.note(first, servedAt(at, false))
+	for i := range 3 {
+		s.note(second, servedAt(at.Add(time.Duration(i)*time.Second), false))
 	}
-	pending, turnedAway := s.take()
+	pending, lost := s.take(at.Add(2*time.Second), false)
 	require.Len(t, pending, 1)
 	require.Contains(t, pending, first)
-	require.Equal(t, 1, turnedAway, "a connection counts once per flush")
+	require.Zero(t, lost)
 
-	s.note(second, servedRowAt(at.Add(time.Second)), false)
-	pending, turnedAway = s.take()
-	require.Contains(t, pending, second, "a connection turned away is taken on the next flush")
-	require.Zero(t, turnedAway)
+	pending, lost = s.take(at.Add(3*time.Second), false)
+	require.Equal(t, at.Add(2*time.Second), pending[second].at, "taken by the next flush with its latest time")
+	require.Zero(t, lost)
 }
 
-func TestServedConnections_AnEvictedConnectionWritesEarly(t *testing.T) {
+func TestServedConnections_EvictionKeepsUnwrittenTimes(t *testing.T) {
 	t.Parallel()
 	s := newServedConnections(time.Minute, 1, 10)
 	first, second, at := servedKeyOf("user:a"), servedKeyOf("user:b"), time.Unix(1_000_000, 0).UTC()
 
-	s.note(first, servedRowAt(at), false)
-	s.note(second, servedRowAt(at), false)
-	_, _ = s.take()
-	s.note(first, servedRowAt(at.Add(time.Second)), false)
-	pending, _ := s.take()
-	require.Contains(t, pending, first)
+	s.note(first, servedAt(at, true))
+	_, _ = s.take(at, false)
+	s.note(first, servedAt(at.Add(10*time.Second), true))
+	s.note(second, servedAt(at.Add(20*time.Second), false))
+	pending, lost := s.take(at.Add(20*time.Second), false)
+	require.Zero(t, lost)
+	require.Equal(t, at.Add(10*time.Second), pending[first].at, "the evicted connection's unwritten time goes to the next flush")
+	require.Equal(t, at.Add(10*time.Second), pending[first].answeredAt)
+	require.Contains(t, pending, second)
+
+	s.note(first, servedAt(at.Add(30*time.Second), false))
+	pending, _ = s.take(at.Add(30*time.Second), false)
+	require.Contains(t, pending, first, "an evicted connection is due again")
+}
+
+func TestServedConnections_ForgetClearsTheThrottleAndUnwrittenTimes(t *testing.T) {
+	t.Parallel()
+	s := newServedConnections(time.Minute, 10, 10)
+	key, at := servedKeyOf("user:a"), time.Unix(1_000_000, 0).UTC()
+
+	s.note(key, servedAt(at, false))
+	_, _ = s.take(at, false)
+	s.note(key, servedAt(at.Add(time.Second), false))
+	s.forget([]servedKey{key})
+	pending, lost := s.take(at.Add(time.Hour), true)
+	require.Empty(t, pending, "nothing held is written")
+	require.Zero(t, lost)
+
+	s.note(key, servedAt(at.Add(2*time.Second), false))
+	pending, _ = s.take(at.Add(2*time.Second), false)
+	require.Equal(t, at.Add(2*time.Second), pending[key].at, "the next request is due at once")
+}
+
+func TestServedConnections_EvictionPastAFullFlushIsCounted(t *testing.T) {
+	t.Parallel()
+	s := newServedConnections(time.Minute, 1, 1)
+	first, second, at := servedKeyOf("user:a"), servedKeyOf("user:b"), time.Unix(1_000_000, 0).UTC()
+
+	s.note(first, servedAt(at, false))
+	s.note(second, servedAt(at, false))
+	s.note(first, servedAt(at.Add(time.Second), false))
+	pending, lost := s.take(at.Add(time.Second), false)
+	require.Equal(t, 1, lost, "the second waited unwritten, was evicted and could not be taken")
+	require.Len(t, pending, 1)
+	require.Equal(t, at.Add(time.Second), pending[first].at)
+}
+
+// A retry answered within the interval after a failure is stored by a later flush, so the failure can end.
+func TestServed_ARecoveryWithinTheIntervalIsStored(t *testing.T) {
+	t.Parallel()
+	conn := clickhouseConn(t)
+	cfg := testConfig()
+	cfg.servedFlushInterval = time.Hour
+	r := newTestRecorder(t, conn, cfg)
+	scope, org, _ := servedScope()
+	person := urn.NewUserSubject("user-" + uuid.NewString())
+
+	r.Served(t.Context(), scope, true, Subject(&person))
+	r.flushServed(time.Now(), false)
+	first := storedServed(t, conn, org)
+	require.Len(t, first, 1)
+	r.Once(t.Context(), scope, StepMCPRequest, CodeProviderServerError, Subject(&person))
+
+	retried := time.Now()
+	r.Served(t.Context(), scope, true, Subject(&person))
+	r.flushServed(time.Now(), false)
+	require.Equal(t, first, storedServed(t, conn, org), "held back within the interval")
+
+	r.flushServed(time.Now().Add(cfg.servedInterval), false)
+	got := storedServed(t, conn, org)
+	require.Len(t, got, 1)
+	require.False(t, got[0].AnsweredAt.Before(retried), "the retry's answer is stored")
+	require.True(t, got[0].AnsweredAt.After(first[0].AnsweredAt))
+	require.Equal(t, got[0].ServedAt, got[0].AnsweredAt)
+	require.Equal(t, int64(2), r.counted(t, meterServedWritten, ""))
 }
 
 // Rows written apart, in either order, read back as the latest times.
@@ -323,16 +483,41 @@ func TestServed_AnOrganizationWithLogsOffIsNotHeld(t *testing.T) {
 	person := urn.NewUserSubject("user-" + uuid.NewString())
 
 	r.Served(t.Context(), off, true, Subject(&person))
-	r.flushServed()
+	r.flushServed(time.Now(), false)
 	other := urn.NewUserSubject("user-" + uuid.NewString())
 	r.Served(t.Context(), off, true, Subject(&other))
 	r.Served(t.Context(), on, true, Subject(&other))
 
-	pending, _ := r.served.take()
+	pending, _ := r.served.take(time.Now(), false)
 	require.Len(t, pending, 1)
 	for key := range pending {
 		require.NotEqual(t, offOrg, key.organizationID)
 	}
+}
+
+// A connection served while its organization's logs were off is written by its first request once they are on.
+func TestServed_LogsTurnedOnAreNotHeldBack(t *testing.T) {
+	t.Parallel()
+	conn := clickhouseConn(t)
+	var on atomic.Bool
+	cfg := testConfig()
+	cfg.servedFlushInterval = time.Hour
+	r := newTestRecorderWithLogs(t, conn, func(context.Context, string) (bool, error) { return on.Load(), nil }, cfg)
+	scope, org, _ := servedScope()
+	person := urn.NewUserSubject("user-" + uuid.NewString())
+
+	r.Served(t.Context(), scope, true, Subject(&person))
+	r.flushServed(time.Now(), false)
+	require.Equal(t, int64(1), r.counted(t, meterServedDropped, dropLogsOff))
+
+	on.Store(true)
+	// The logs-off answer held for the hot path has gone stale.
+	r.referableMu.Lock()
+	r.referableOrgs.Remove(org)
+	r.referableMu.Unlock()
+	r.Served(t.Context(), scope, true, Subject(&person))
+	r.flushServed(time.Now(), false)
+	require.Len(t, storedServed(t, conn, org), 1)
 }
 
 // Served connections lost at shutdown are counted, and never as connection events.
@@ -394,7 +579,7 @@ func TestServed_AConnectionPastTheBudgetWaitsForTheNextFlush(t *testing.T) {
 
 	r.Served(t.Context(), scope, true, Subject(&person), FromRequest(requestFrom("claude-code/2.1.0")),
 		ReportedClient(func() (string, string) { reads.Add(1); return "cursor", "1.0.0" }))
-	r.flushServed()
+	r.flushServed(time.Now(), false)
 	require.Empty(t, storedServed(t, conn, org))
 	require.Zero(t, reads.Load())
 	require.Zero(t, r.counted(t, meterServedDropped, ""), "a connection not reached is not dropped")
@@ -474,7 +659,7 @@ func TestServed_AfterShutdownIsCounted(t *testing.T) {
 	r.Served(t.Context(), scope, true, Subject(&person))
 
 	require.Equal(t, int64(1), r.counted(t, meterServedDropped, dropShutdown))
-	pending, _ := r.served.take()
+	pending, _ := r.served.take(time.Now(), false)
 	require.Empty(t, pending)
 }
 
@@ -499,15 +684,15 @@ func TestServed_OnlyALogsOffAnswerSkipsTheWriter(t *testing.T) {
 	r.Served(t.Context(), failing, true, Subject(&person))
 	r.Served(t.Context(), off, true, Subject(&person))
 
-	pending, _ := r.served.take()
+	pending, _ := r.served.take(time.Now(), false)
 	require.Len(t, pending, 1)
 	for key := range pending {
 		require.Equal(t, failingOrg, key.organizationID, "the writer checks again")
 	}
 }
 
-// A failed insert does not count as a write, so the connection's next request is written.
-func TestServed_AFailedInsertLetsTheNextRequestRetry(t *testing.T) {
+// A failed insert does not count as a write, so the next flush tries the connection again.
+func TestServed_AFailedInsertIsRetriedByTheNextFlush(t *testing.T) {
 	t.Parallel()
 	conn := clickhouseConn(t)
 	cfg := testConfig()
@@ -518,12 +703,11 @@ func TestServed_AFailedInsertLetsTheNextRequestRetry(t *testing.T) {
 	person := urn.NewUserSubject("user-" + uuid.NewString())
 
 	r.Served(t.Context(), scope, true, Subject(&person))
-	r.flushServed()
+	r.flushServed(time.Now(), false)
 	require.Equal(t, int64(1), r.counted(t, meterServedDropped, dropTableMissing))
 
-	r.Served(t.Context(), scope, true, Subject(&person))
-	pending, _ := r.served.take()
-	require.Len(t, pending, 1, "due again after the failed insert")
+	pending, _ := r.served.take(time.Now(), false)
+	require.Len(t, pending, 1, "waiting again after the failed insert")
 }
 
 func TestServedConnections_PutBackKeepsTimesWithinTheBound(t *testing.T) {
@@ -531,19 +715,20 @@ func TestServedConnections_PutBackKeepsTimesWithinTheBound(t *testing.T) {
 	s := newServedConnections(time.Minute, 10, 2)
 	first, second, at := servedKeyOf("user:a"), servedKeyOf("user:b"), time.Unix(1_000_000, 0).UTC()
 
-	s.note(first, servedRowAt(at), true)
-	s.note(second, servedRowAt(at), false)
-	taken, _ := s.take()
-	s.note(second, servedRowAt(at.Add(time.Second)), true)
-	s.note(servedKeyOf("user:c"), servedRowAt(at.Add(time.Second)), false)
+	s.note(first, servedAt(at, true))
+	s.note(second, servedAt(at, false))
+	taken, _ := s.take(at, false)
+	s.note(second, servedAt(at.Add(time.Second), true))
+	s.note(servedKeyOf("user:c"), servedAt(at.Add(time.Second), false))
 
-	require.Equal(t, 1, s.putBack(taken), "one merged into a later request, the other over the bound")
-	pending, _ := s.take()
-	require.Len(t, pending, 2)
-	require.Equal(t, at.Add(time.Second), pending[second].row.EventTime, "a later request keeps its row")
+	s.putBack(taken)
+	pending, lost := s.take(at.Add(time.Second), false)
+	require.Zero(t, lost)
+	require.Len(t, pending, 2, "one merged into a later request, the other past the bound waits")
+	require.Equal(t, at.Add(time.Second), pending[second].at, "a later request keeps its time")
 	require.Equal(t, at.Add(time.Second), pending[second].answeredAt)
 
-	s.note(first, servedRowAt(at.Add(2*time.Second)), false)
-	pending, _ = s.take()
-	require.Contains(t, pending, first, "a connection turned away is forgotten, so its next request is due")
+	pending, _ = s.take(at.Add(2*time.Second), false)
+	require.Equal(t, at, pending[first].at, "the one past the bound is written by a later flush")
+	require.Equal(t, at, pending[first].answeredAt)
 }

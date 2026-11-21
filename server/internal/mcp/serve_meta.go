@@ -306,7 +306,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	// Every member and toolset check this request shadows shares one
 	// admission of its caller.
-	ctx = withMandatoryAdmission(ctx)
+	ctx = withGatewayMemberCalls(withMandatoryAdmission(ctx))
 	body, err := s.handleMetaMCPRequest(ctx, logger, mcpEndpoint, metaServer, gate, &req, r.Header.Get(mcpversions.HTTPHeader))
 	if err == nil {
 		s.recordGatewayServed(ctx, gate)

@@ -276,6 +276,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	// A row from earlier in the request is about something else, not this call.
 	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
 	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
+	noteGatewayMemberCall(ctx, err == nil && attempt.succeeded)
 	if err != nil {
 		contextvalues.ReplaceConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
 	}
@@ -418,6 +419,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	}
 	if inputs.backendAnswered {
 		s.recordMemberServed(ctx, gate, member, uuid.Nil)
+	}
+	if inputs.resultSucceeded {
+		attempt.succeeded = true
 	}
 	return body, nil
 }
@@ -627,6 +631,7 @@ func (s *Service) buildMemberDispatch(
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
 		backendAnswered:          false,
+		resultSucceeded:          false,
 	}
 	return toolset, hosting, inputs, nil
 }

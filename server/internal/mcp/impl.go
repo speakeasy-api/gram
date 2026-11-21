@@ -502,6 +502,9 @@ type mcpInputs struct {
 
 	// backendAnswered is set by tools/call and resources/read when the tool's own backend returned a result that is not an error.
 	backendAnswered bool
+
+	// resultSucceeded is set by tools/call and resources/read when the result is not an error, whoever produced it.
+	resultSucceeded bool
 }
 
 // recordServingAnalytics adds the known serving ids to product event properties.
@@ -1562,6 +1565,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
 		backendAnswered:          false,
+		resultSucceeded:          false,
 	}
 
 	// Call handlers resolve attribution after loading their toolset. Other

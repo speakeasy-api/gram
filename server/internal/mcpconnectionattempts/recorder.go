@@ -589,7 +589,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterServedWritten), attr.SlogError(err))
 	}
 	servedDropped, err := meter.Int64Counter(meterServedDropped,
-		metric.WithDescription("MCP connections served but not stored, by reason. A connection a full flush turned away counts once per flush."),
+		metric.WithDescription("MCP connections served but not stored, by reason. A failed insert is retried by the next flush and counts each time it fails."),
 		metric.WithUnit("{connection}"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterServedDropped), attr.SlogError(err))
@@ -1166,8 +1166,8 @@ func (r *Recorder) run() {
 			flush()
 		case <-repeats.C:
 			addPending(r.limiter.pendingRows(time.Now(), false))
-		case <-served.C:
-			r.flushServed()
+		case now := <-served.C:
+			r.flushServed(now, false)
 		case <-r.stop:
 			for {
 				select {
@@ -1177,7 +1177,7 @@ func (r *Recorder) run() {
 					addPending(r.limiter.pendingRows(time.Now(), true))
 					flush()
 					if !drainFailed {
-						r.flushServed()
+						r.flushServed(time.Now(), true)
 					}
 					r.abandonServed()
 					return

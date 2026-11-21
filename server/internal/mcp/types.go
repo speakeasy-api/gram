@@ -120,5 +120,6 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		skillsOverMCP:            nil,
 		upstreamRejection:        mcpconnectionattempts.Code{},
 		backendAnswered:          false,
+		resultSucceeded:          false,
 	}
 }

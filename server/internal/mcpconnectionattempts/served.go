@@ -29,8 +29,8 @@ const (
 	meterServedWritten = "mcp.connection.served.written"
 	meterServedDropped = "mcp.connection.served.dropped"
 
-	// defaultServedInterval is how often one connection's served requests are written. It
-	// is the grain a recovery shows at, and matches the sessions' last-used stamps.
+	// defaultServedInterval is how often one connection's served requests are written. Stored
+	// times trail the latest request by at most this, and it matches the sessions' last-used stamps.
 	defaultServedInterval = 5 * time.Minute
 
 	// defaultServedFlushInterval is how long a served connection waits in memory.
@@ -40,13 +40,13 @@ const (
 	// failure rows queued behind it wait no longer. Rows it does not reach wait for the next flush.
 	defaultServedFlushBudget = time.Second
 
-	// servedMaxConnections bounds the memory of the write times. An evicted connection writes early.
+	// servedMaxConnections bounds the connections held. An evicted one's unwritten times go to the next flush.
 	servedMaxConnections = 25_000
 
 	// servedMaxPending bounds what one flush holds. More connections than this wait for the next one.
 	servedMaxPending = 10_000
 
-	// dropPendingFull counts connections a full flush turned away, once per flush. Their next request retries.
+	// dropPendingFull counts evicted connections whose unwritten times a full flush could not take.
 	dropPendingFull dropReason = "pending_full"
 )
 
@@ -82,110 +82,191 @@ type servedKey struct {
 	userAgent             string
 }
 
-// servedTimes are when a connection was last queued as served and as answered by its server.
+// servedTimes are a connection's served and answered request times.
 type servedTimes struct{ served, answered time.Time }
 
-// servedRow is a connection waiting to be written.
-type servedRow struct {
-	row        Row
+// servedRequest is what a served row needs beyond its key.
+type servedRequest struct {
+	projectID uuid.UUID
+	at        time.Time
+
+	// answeredAt is the latest time the server itself answered, zero when only Speakeasy did.
 	answeredAt time.Time
+	client     requestClient
 }
 
-// servedConnections holds each connection to one write per interval, and what the next flush writes.
+// merged keeps the later request and the later answer.
+func (w servedRequest) merged(o servedRequest) servedRequest {
+	if o.at.After(w.at) {
+		w.projectID, w.at, w.client = o.projectID, o.at, o.client
+	}
+	if o.answeredAt.After(w.answeredAt) {
+		w.answeredAt = o.answeredAt
+	}
+	return w
+}
+
+// servedState is one connection's last write and the latest request seen since.
+type servedState struct {
+	// queuedAt is when it was last queued: the request's time, or the flush's for a trailing write.
+	queuedAt time.Time
+	queued   servedTimes
+	latest   servedRequest
+}
+
+// unwritten reports a request or answer later than what was last queued.
+func (st *servedState) unwritten() bool {
+	return st.latest.at.After(st.queued.served) || st.latest.answeredAt.After(st.queued.answered)
+}
+
+// servedConnections holds each connection to about one write per interval and what the next flush writes.
+// The first request when due is queued at once; later ones are written by a flush once the interval passed.
 type servedConnections struct {
 	mu         sync.Mutex
 	interval   time.Duration
 	maxPending int
-	written    *simplelru.LRU[servedKey, servedTimes]
-	pending    map[servedKey]servedRow
+	states     *simplelru.LRU[servedKey, *servedState]
+	pending    map[servedKey]servedRequest
 
-	// turnedAway holds the connections a full flush turned away, so each counts once per flush.
-	turnedAway map[servedKey]struct{}
+	// unwritten holds the connections with times later than their last write.
+	unwritten map[servedKey]*servedState
+
+	// lost counts evicted connections with unwritten times a full flush could not take.
+	lost int
+
+	// forgetting is set while forget removes connections, so their removal is not an eviction.
+	forgetting bool
 }
 
 func newServedConnections(interval time.Duration, maxConnections, maxPending int) *servedConnections {
-	written, err := simplelru.NewLRU[servedKey, servedTimes](maxConnections, nil)
+	s := &servedConnections{mu: sync.Mutex{}, interval: interval, maxPending: maxPending, states: nil, pending: map[servedKey]servedRequest{}, unwritten: map[servedKey]*servedState{}, lost: 0, forgetting: false}
+	states, err := simplelru.NewLRU(maxConnections, s.evicted)
 	if err != nil {
 		// Only a non-positive size fails, and callers pass constants.
 		panic("served connections size must be positive")
 	}
-	return &servedConnections{mu: sync.Mutex{}, interval: interval, maxPending: maxPending, written: written, pending: map[servedKey]servedRow{}, turnedAway: map[servedKey]struct{}{}}
+	s.states = states
+	return s
 }
 
-// note queues the connection if it is due: nothing was queued for it within the interval, or
-// its server answered and no answer was. A full flush turns it away until the next one.
-func (s *servedConnections) note(key servedKey, row Row, answered bool) {
+// note keeps the request as the connection's latest and queues it if due: nothing was queued
+// within the interval, or its server answered and no answer was. Otherwise a later flush writes it.
+func (s *servedConnections) note(key servedKey, req servedRequest) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	now := row.EventTime
-	last, _ := s.written.Get(key)
-	if now.Sub(last.served) < s.interval && (!answered || now.Sub(last.answered) < s.interval) {
+	st, ok := s.states.Get(key)
+	if !ok {
+		st = new(servedState)
+		s.states.Add(key, st)
+	}
+	st.latest = st.latest.merged(req)
+	now := req.at
+	answered := !req.answeredAt.IsZero()
+	if (now.Sub(st.queuedAt) >= s.interval || answered && now.Sub(st.queued.answered) >= s.interval) && s.queue(key, st, now) {
 		return
 	}
-	queued, waiting := s.pending[key]
-	if !waiting && len(s.pending) >= s.maxPending {
-		if len(s.turnedAway) < s.maxPending {
-			s.turnedAway[key] = struct{}{}
-		}
-		return
+	if st.unwritten() {
+		s.unwritten[key] = st
 	}
-	queued.row, last.served = row, now
-	if answered {
-		queued.answeredAt, last.answered = now, now
-	}
-	s.pending[key] = queued
-	s.written.Add(key, last)
 }
 
-// putBack returns connections a flush did not reach to the next one, with their times. Past the
-// bound the rest are turned away and forgotten, so their next request is due. It returns how many.
-func (s *servedConnections) putBack(rows map[servedKey]servedRow) int {
+// queue moves a connection's latest times to the next flush, unless that flush is full.
+func (s *servedConnections) queue(key servedKey, st *servedState, at time.Time) bool {
+	waiting, ok := s.pending[key]
+	if !ok && len(s.pending) >= s.maxPending {
+		return false
+	}
+	s.pending[key] = waiting.merged(st.latest)
+	st.queuedAt, st.queued = at, servedTimes{served: st.latest.at, answered: st.latest.answeredAt}
+	delete(s.unwritten, key)
+	return true
+}
+
+// evicted hands a connection's unwritten times to the next flush, so eviction loses none while it has room.
+func (s *servedConnections) evicted(key servedKey, st *servedState) {
+	delete(s.unwritten, key)
+	if s.forgetting || !st.unwritten() {
+		return
+	}
+	if waiting, ok := s.pending[key]; ok || len(s.pending) < s.maxPending {
+		s.pending[key] = waiting.merged(st.latest)
+		return
+	}
+	s.lost++
+}
+
+// putBack returns connections a flush did not store to the next one. Past the bound they wait as
+// unwritten, so a later flush writes them.
+func (s *servedConnections) putBack(rows map[servedKey]servedRequest) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	turnedAway := 0
-	for key, waiting := range rows {
-		if queued, ok := s.pending[key]; ok {
-			// A later request was queued since, so it keeps its row and the later answer.
-			if waiting.answeredAt.After(queued.answeredAt) {
-				queued.answeredAt = waiting.answeredAt
-				s.pending[key] = queued
-			}
+	for key, req := range rows {
+		if waiting, ok := s.pending[key]; ok || len(s.pending) < s.maxPending {
+			s.pending[key] = waiting.merged(req)
 			continue
 		}
-		if len(s.pending) >= s.maxPending {
-			s.written.Remove(key)
-			turnedAway++
-			continue
+		st, ok := s.states.Get(key)
+		if !ok {
+			st = new(servedState)
+			s.states.Add(key, st)
 		}
-		s.pending[key] = waiting
+		st.latest = st.latest.merged(req)
+		st.queuedAt, st.queued = time.Time{}, servedTimes{served: time.Time{}, answered: time.Time{}}
+		s.unwritten[key] = st
 	}
-	return turnedAway
 }
 
-// forget clears the write times of connections a flush did not store, so their next request is due.
+// forget drops what is held for connections a flush did not write because of their organization's
+// logs, so their next request is due as soon as logs are on.
 func (s *servedConnections) forget(keys []servedKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.forgetting = true
+	defer func() { s.forgetting = false }()
 	for _, key := range keys {
-		s.written.Remove(key)
+		s.states.Remove(key)
 	}
 }
 
-// take returns what is waiting and how many connections were turned away, and starts a new flush.
-func (s *servedConnections) take() (map[servedKey]servedRow, int) {
+// take returns what the flush at now writes and how many evicted connections were lost. It adds
+// each connection with unwritten times last queued at least an interval ago, or every one when final.
+func (s *servedConnections) take(now time.Time, final bool) (map[servedKey]servedRequest, int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	pending, turnedAway := s.pending, len(s.turnedAway)
-	s.pending = map[servedKey]servedRow{}
-	clear(s.turnedAway)
-	return pending, turnedAway
+	for key, st := range s.unwritten {
+		if !final && now.Sub(st.queuedAt) < s.interval {
+			continue
+		}
+		if !s.queue(key, st, now) {
+			break
+		}
+	}
+	pending, lost := s.pending, s.lost
+	s.pending, s.lost = map[servedKey]servedRequest{}, 0
+	return pending, lost
 }
 
-// Served records that a request on a connection was served without an error, at most once
+// abandon clears what is left at shutdown and returns how many connections had unwritten times and how many were lost.
+func (s *servedConnections) abandon() (left, lost int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	left, lost = len(s.pending), s.lost
+	for key := range s.unwritten {
+		if _, ok := s.pending[key]; !ok {
+			left++
+		}
+	}
+	s.pending, s.lost = map[servedKey]servedRequest{}, 0
+	clear(s.unwritten)
+	return left, lost
+}
+
+// Served records that a request on a connection was served without an error, written about once
 // per connection per interval. answered says the server itself answered, not Speakeasy
 // from what it holds. opts are the ones the connection's failure rows carry: Subject,
 // Member, FromRequest, ReportedClient, and RemoteSessionClient when the person's own
@@ -207,13 +288,20 @@ func (r *Recorder) Served(ctx context.Context, scope Scope, answered bool, opts 
 	}
 	// The table has no device key.
 	row.client.ipAddress = ""
+	key := servedKey{
+		organizationID: row.OrganizationID, serverKind: row.ServerKind, serverID: row.ServerID, memberID: row.MemberID,
+		subjectURN: row.SubjectURN, appKey: row.AppKey, remoteSessionClientID: row.RemoteSessionClientID, userAgent: row.client.userAgent,
+	}
+	req := servedRequest{projectID: row.ProjectID, at: row.EventTime, answeredAt: time.Time{}, client: row.client}
+	if answered {
+		req.answeredAt = row.EventTime
+	}
 	if r.capture != nil {
 		if r.captureServed == nil {
 			return
 		}
 		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
-			r.stampClient(&row)
-			r.captureServed(servedOf(servedRow{row: row, answeredAt: answeredAt(row, answered)}))
+			r.captureServed(r.servedOf(key, req))
 		}
 		return
 	}
@@ -223,38 +311,32 @@ func (r *Recorder) Served(ctx context.Context, scope Scope, answered bool, opts 
 	if reason, cached := r.cachedLogs(row.OrganizationID); cached && reason != "" {
 		return
 	}
-	if stopped := r.admitServed(servedKey{
-		organizationID: row.OrganizationID, serverKind: row.ServerKind, serverID: row.ServerID, memberID: row.MemberID,
-		subjectURN: row.SubjectURN, appKey: row.AppKey, remoteSessionClientID: row.RemoteSessionClientID, userAgent: row.client.userAgent,
-	}, row, answered); stopped {
+	if stopped := r.admitServed(key, req); stopped {
 		r.servedDrop(ctx, dropShutdown, 1, nil)
 	}
 }
 
 // admitServed notes a served connection under stopMu, so none arrives after the final flush.
-func (r *Recorder) admitServed(key servedKey, row Row, answered bool) (stopped bool) {
+func (r *Recorder) admitServed(key servedKey, req servedRequest) (stopped bool) {
 	r.stopMu.RLock()
 	defer r.stopMu.RUnlock()
 
 	if r.stopped {
 		return true
 	}
-	r.served.note(key, row, answered)
+	r.served.note(key, req)
 	return false
 }
 
-func answeredAt(row Row, answered bool) time.Time {
-	if answered {
-		return row.EventTime
-	}
-	return time.Time{}
-}
-
-func servedOf(s servedRow) Served {
+// servedOf names a served connection's client on the writer and returns it as stored.
+func (r *Recorder) servedOf(key servedKey, req servedRequest) Served {
+	var row Row
+	row.OrganizationID, row.client = key.organizationID, req.client
+	r.stampClient(&row)
 	return Served{
-		OrganizationID: s.row.OrganizationID, ProjectID: s.row.ProjectID, ServerKind: s.row.ServerKind, ServerID: s.row.ServerID,
-		MemberID: s.row.MemberID, SubjectURN: s.row.SubjectURN, AppKey: s.row.AppKey, ClientFamily: s.row.ClientFamily,
-		RemoteSessionClientID: s.row.RemoteSessionClientID, ServedAt: s.row.EventTime, AnsweredAt: s.answeredAt,
+		OrganizationID: key.organizationID, ProjectID: req.projectID, ServerKind: key.serverKind, ServerID: key.serverID,
+		MemberID: key.memberID, SubjectURN: key.subjectURN, AppKey: key.appKey, ClientFamily: row.ClientFamily,
+		RemoteSessionClientID: key.remoteSessionClientID, ServedAt: req.at, AnsweredAt: req.answeredAt,
 	}
 }
 
@@ -287,18 +369,21 @@ func (r *Recorder) rememberLogs(organizationID string, allowed bool) {
 	r.referableMu.Unlock()
 }
 
-// flushServed writes the connections waiting, once, for organizations with logs on. It runs on the
-// writer, so one flush's logs checks and reported-client reads share a budget; connections it does
-// not reach keep their times and wait for the next flush.
-func (r *Recorder) flushServed() {
+// flushServed writes the connections due at now, once, for organizations with logs on. final takes
+// every connection with unwritten times. It runs on the writer, so one flush's logs checks and
+// reported-client reads share a budget; connections it does not reach wait for the next flush.
+func (r *Recorder) flushServed(now time.Time, final bool) {
 	if r.served == nil {
 		return
 	}
-	pending, turnedAway := r.served.take()
-	r.servedDrop(context.Background(), dropPendingFull, turnedAway, nil)
+	pending, lost := r.served.take(now, final)
+	r.servedDrop(context.Background(), dropPendingFull, lost, nil)
 	if len(pending) == 0 {
 		return
 	}
+	var skipped []servedKey
+	// Logs turned back on must not find the connection still held back.
+	defer func() { r.served.forget(skipped) }()
 	taken, putBack := len(pending), 0
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -307,7 +392,7 @@ func (r *Recorder) flushServed() {
 	}()
 	organizations := map[string]dropReason{}
 	rows := make([]Served, 0, len(pending))
-	keys := make([]servedKey, 0, len(pending))
+	written := make(map[servedKey]servedRequest, len(pending))
 	until := time.Now().Add(r.cfg.servedFlushBudget)
 	for key, waiting := range pending {
 		if r.writerCtx.Err() != nil || time.Now().After(until) {
@@ -315,7 +400,7 @@ func (r *Recorder) flushServed() {
 		}
 		// What is left in pending is what this flush did not reach.
 		delete(pending, key)
-		organizationID := waiting.row.OrganizationID
+		organizationID := key.organizationID
 		reason, checked := organizations[organizationID]
 		if !checked {
 			var cached bool
@@ -324,6 +409,7 @@ func (r *Recorder) flushServed() {
 				reason, err = r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
 				if err != nil {
 					organizations[organizationID] = reason
+					skipped = append(skipped, key)
 					r.servedDrop(context.Background(), reason, 1, err)
 					continue
 				}
@@ -332,19 +418,19 @@ func (r *Recorder) flushServed() {
 			organizations[organizationID] = reason
 		}
 		if reason != "" {
+			skipped = append(skipped, key)
 			r.servedDrop(context.Background(), reason, 1, nil)
 			continue
 		}
-		r.stampClient(&waiting.row)
-		rows = append(rows, servedOf(waiting))
-		keys = append(keys, key)
+		rows = append(rows, r.servedOf(key, waiting))
+		written[key] = waiting
 	}
 	if r.writerCtx.Err() != nil {
 		r.servedDrop(context.Background(), dropShutdown, len(rows)+len(pending), nil)
 		return
 	}
 	putBack = len(pending)
-	r.servedDrop(context.Background(), dropPendingFull, r.served.putBack(pending), nil)
+	r.served.putBack(pending)
 	if len(rows) == 0 {
 		return
 	}
@@ -357,8 +443,10 @@ func (r *Recorder) flushServed() {
 		if exception, ok := errors.AsType[*clickhouse.Exception](err); ok && exception.Code == unknownTableCode {
 			reason = dropTableMissing
 		}
-		// Their next request retries, at most once a flush.
-		r.served.forget(keys)
+		// The next flush retries them, unless this was the last.
+		if !final {
+			r.served.putBack(written)
+		}
 		r.servedDrop(ctx, reason, len(rows), err)
 		return
 	}
@@ -367,14 +455,14 @@ func (r *Recorder) flushServed() {
 	}
 }
 
-// abandonServed counts the connections still waiting as lost to shutdown.
+// abandonServed counts the connections still unwritten as lost to shutdown.
 func (r *Recorder) abandonServed() {
 	if r.served == nil {
 		return
 	}
-	pending, turnedAway := r.served.take()
-	r.servedDrop(context.Background(), dropPendingFull, turnedAway, nil)
-	r.servedDrop(context.Background(), dropShutdown, len(pending), nil)
+	left, lost := r.served.abandon()
+	r.servedDrop(context.Background(), dropPendingFull, lost, nil)
+	r.servedDrop(context.Background(), dropShutdown, left, nil)
 }
 
 // servedDrop counts served connections not written. They are not connection events, so

@@ -75,8 +75,8 @@ func TestDirectServedRecordsTheConnection(t *testing.T) {
 	require.Empty(t, served.RemoteSessionClientID, "no stored sign-in to the service was sent")
 }
 
-// A hosted server records each served request; only a tool whose backend answered without an error counts as answered.
-func TestHostedServedRecordsWhetherTheBackendAnswered(t *testing.T) {
+// A hosted server records each served request; a tool call counts only when its backend answered without an error.
+func TestHostedServedOnlyWhenTheBackendAnswered(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -123,6 +123,10 @@ func TestHostedServedRecordsWhetherTheBackendAnswered(t *testing.T) {
 			require.True(t, called.Load())
 
 			served := rec.Served()
+			if !tc.answered {
+				require.Len(t, served, 1, "a call whose backend failed is not served")
+				return
+			}
 			require.Len(t, served, 2)
 			callServed := served[1]
 			require.Equal(t, tc.answered, !callServed.AnsweredAt.IsZero())
@@ -219,9 +223,17 @@ func TestGatewayMemberFailureNamesTheServiceSignIn(t *testing.T) {
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
 	require.Equal(t, clientID.String(), row.RemoteSessionClientID)
 	require.Empty(t, servedOn(rec, true), "a failed member call is not served")
+	require.Empty(t, servedOn(rec, false), "nor is the gateway request that carried it")
+
+	resp, err := servePublicHTTP(t, context.Background(), ti, metaSlug, makeMetaRPCBody(t, "tools/list", map[string]any{}), bearer, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	gateway := servedOn(rec, false)
+	require.Len(t, gateway, 1, "the gateway's own method is served")
+	require.Equal(t, subject.String(), gateway[0].SubjectURN)
 }
 
-// A member's own error result is not served, though the gateway answered.
+// A member's own error result is not served, on the member or the gateway.
 func TestGatewayMemberErrorResultIsNotServed(t *testing.T) {
 	t.Parallel()
 
@@ -251,5 +263,5 @@ func TestGatewayMemberErrorResultIsNotServed(t *testing.T) {
 	require.Contains(t, text, "tool failed")
 	require.True(t, isError)
 	require.Empty(t, servedOn(rec, true))
-	require.Len(t, servedOn(rec, false), 1)
+	require.Empty(t, servedOn(rec, false))
 }

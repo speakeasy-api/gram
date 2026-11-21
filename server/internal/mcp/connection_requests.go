@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -116,7 +117,8 @@ func callerSubject(ctx context.Context) mcpconnectionattempts.Option {
 	return mcpconnectionattempts.Subject(resolvedCaller(ctx))
 }
 
-// resolvedCaller is the authenticated actor, or the user when there is none. Nil when neither resolves.
+// resolvedCaller is the authenticated actor, else the user, else the API key of a session whose
+// subject is one, as the gate's rows name it. Nil when none resolves.
 func resolvedCaller(ctx context.Context) *urn.SessionSubject {
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
 		subject, err := urn.ParseSessionSubject(actor.String())
@@ -126,11 +128,18 @@ func resolvedCaller(ctx context.Context) *urn.SessionSubject {
 		return nil
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.UserID == "" {
+	if !ok || authCtx == nil {
 		return nil
 	}
-	subject := urn.NewUserSubject(authCtx.UserID)
-	return &subject
+	if authCtx.UserID != "" {
+		subject := urn.NewUserSubject(authCtx.UserID)
+		return &subject
+	}
+	if keyID, err := uuid.Parse(authCtx.APIKeyID); err == nil {
+		subject := urn.NewAPIKeySubject(keyID)
+		return &subject
+	}
+	return nil
 }
 
 func (g *metaGateContext) connectionSubject(ctx context.Context) mcpconnectionattempts.Option {
@@ -184,9 +193,36 @@ func (s *Service) recordMemberServed(ctx context.Context, gate *metaGateContext,
 	s.connections.Served(ctx, gate.connectionScope(ctx), true, append(s.memberConnection(ctx, gate, member, serviceClient), mcpconnectionattempts.FromRequest(gate.request))...)
 }
 
+// gatewayMemberCallsKey holds a gateway request's member tool calls.
+type gatewayMemberCallsKey struct{}
+
+// gatewayMemberCalls counts a gateway request's member tool calls and those whose result was not an error.
+type gatewayMemberCalls struct{ called, succeeded atomic.Int32 }
+
+// withGatewayMemberCalls starts counting the member tool calls of the gateway request on ctx.
+func withGatewayMemberCalls(ctx context.Context) context.Context {
+	return context.WithValue(ctx, gatewayMemberCallsKey{}, &gatewayMemberCalls{called: atomic.Int32{}, succeeded: atomic.Int32{}})
+}
+
+// noteGatewayMemberCall counts a member tool call of the request. A Code Mode program's calls are not the request's own.
+func noteGatewayMemberCall(ctx context.Context, succeeded bool) {
+	calls, ok := ctx.Value(gatewayMemberCallsKey{}).(*gatewayMemberCalls)
+	if !ok || ctx.Value(metaCodeInvocationKey{}) != nil {
+		return
+	}
+	calls.called.Add(1)
+	if succeeded {
+		calls.succeeded.Add(1)
+	}
+}
+
 // recordGatewayServed records a gateway request served without an error. Speakeasy answered it,
-// so it names no member: a member call also writes its own row.
+// so it names no member: a member call also writes its own row. A member tool call that failed or
+// returned an error result writes nothing.
 func (s *Service) recordGatewayServed(ctx context.Context, gate *metaGateContext) {
+	if calls, ok := ctx.Value(gatewayMemberCallsKey{}).(*gatewayMemberCalls); ok && calls.called.Load() > 0 && calls.succeeded.Load() == 0 {
+		return
+	}
 	s.connections.Served(ctx, gate.connectionScope(ctx), false, gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate), mcpconnectionattempts.FromRequest(gate.request))
 }
 
@@ -263,9 +299,10 @@ func (s *Service) recordHostedToolsCallOutcome(ctx context.Context, payload *mcp
 }
 
 // recordHostedServed records a hosted request served without an error, under the scope its
-// failures use. A call is recorded only when a server fronts it, as its outcome rows are.
+// failures use: its fronting server, else its toolset. A tool call or resource read counts only
+// when its result is not an error.
 func (s *Service) recordHostedServed(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing, payload *mcpInputs, method string) {
-	if (method == mcpversions.MethodToolsCall || method == mcpversions.MethodResourcesRead) && cfg.mcpServerID == nil {
+	if (method == mcpversions.MethodToolsCall || method == mcpversions.MethodResourcesRead) && !payload.resultSucceeded {
 		return
 	}
 	s.connections.Served(ctx, hostedConnectionScope(ctx, toolset, cfg), payload.backendAnswered,

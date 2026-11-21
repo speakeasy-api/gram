@@ -168,9 +168,13 @@ func handleToolsCall(
 	if dynamicFacade {
 		switch params.Name {
 		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+			found, searchErr := handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+			payload.resultSucceeded = searchErr == nil
+			return found, searchErr
 		case describeToolsToolName:
-			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+			described, describeErr := handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+			payload.resultSucceeded = describeErr == nil
+			return described, describeErr
 		case executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {
@@ -634,6 +638,7 @@ func handleToolsCall(
 		// The call's records follow the upstream's own isError verdict.
 		rw.resultIsError = dialect.MCPResultIsError(rw.body.Bytes())
 		payload.backendAnswered = backendSucceeded(rw.statusCode, rw.resultIsError)
+		payload.resultSucceeded = payload.backendAnswered
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -686,7 +691,8 @@ func handleToolsCall(
 	}
 
 	// A prompt is rendered and a platform tool is run by Speakeasy, not a backend.
-	payload.backendAnswered = backendSucceeded(rw.statusCode, false) && plan.Kind != gateway.ToolKindPrompt && plan.Kind != gateway.ToolKindPlatform
+	payload.resultSucceeded = backendSucceeded(rw.statusCode, false)
+	payload.backendAnswered = payload.resultSucceeded && plan.Kind != gateway.ToolKindPrompt && plan.Kind != gateway.ToolKindPlatform
 	return bs, nil
 }
 

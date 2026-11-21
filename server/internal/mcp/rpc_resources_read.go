@@ -311,6 +311,7 @@ func handleResourcesRead(
 		}
 
 		payload.backendAnswered = rw.statusCode >= 200 && rw.statusCode < 300
+		payload.resultSucceeded = payload.backendAnswered
 		return bs, nil
 	}
 
@@ -362,6 +363,7 @@ func handleResourcesRead(
 	}
 
 	payload.backendAnswered = rw.statusCode >= 200 && rw.statusCode < 300
+	payload.resultSucceeded = payload.backendAnswered
 	return bs, nil
 }
 
