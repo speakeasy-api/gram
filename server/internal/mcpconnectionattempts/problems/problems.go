@@ -3,10 +3,12 @@
 // The rule, over the open episodes of people (users) from mcpconnectionattempts.ReadFailingNow:
 //  1. Each episode failed one way: its part and who fixes its latest reason.
 //  2. Per way, these are candidates when MinPeople distinct people are in them:
-//     - a server: an MCP server, gateway or toolset, as its mcp_servers row however reached;
-//     - a service, only for service sign-in or server failures the provider fixes: the
-//     configured upstream (the issuer for a service sign-in when the server has one, else
-//     the URL host), on MinServersPerService or more servers;
+//     - a server (inbound): the Speakeasy MCP server, gateway or toolset the app connects
+//     to, as its mcp_servers row however reached;
+//     - a service (outbound), only for service sign-in or server failures the provider
+//     fixes: what the server connects out to (the remote session issuer for a service
+//     sign-in when the server has one, else the remote URL host), on MinServersPerService
+//     or more servers;
 //     - an app version: a named client family and version, when another named family
 //     worked on one of its servers after its first failure there (served for an app
 //     sign-in, answered by the server otherwise).
@@ -64,10 +66,10 @@ const (
 type ScopeKind string
 
 const (
-	// ScopeServer is one server. Its key is the mcp_servers id, else kind:id.
+	// ScopeServer is the inbound side: one Speakeasy MCP server. Its key is the mcp_servers id, else kind:id.
 	ScopeServer ScopeKind = "server"
 
-	// ScopeService is a configured upstream. Its key is the issuer or the URL host.
+	// ScopeService is the outbound side: what servers connect out to. Its key is the remote session issuer or the remote URL host.
 	ScopeService ScopeKind = "service"
 
 	// ScopeAppVersion is one client family and version. Its key is family@version.
