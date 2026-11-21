@@ -19,7 +19,7 @@ thing:
 | -------------------------------------------- | ----------------------------------- |
 | `remote_session_issuers`                     | where users sign in                 |
 | `remote_session_clients`                     | the OAuth client registered there   |
-| `remote_session_client_user_session_issuers` | that client bound to one MCP server |
+| `mcp_server_auth_clients`                    | a typed offer on one MCP server    |
 
 Nobody configuring a server thinks in those terms, and AIM-230 says so
 outright: _"Administrators experience the upstream provider and client as one

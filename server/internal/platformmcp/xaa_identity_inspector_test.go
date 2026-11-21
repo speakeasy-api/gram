@@ -370,7 +370,6 @@ func TestXAAReadinessToolReportsConnectionScopes(t *testing.T) {
 	q := remotesessionsrepo.New(conn)
 	current, err := q.GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: upstream})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: current.RemoteSessionClientID.UUID, UserSessionIssuerID: f.userIssuer}))
 	stale, _ := call()
 	require.Equal(t, []string{"read"}, stale.ConnectionScopes, "the compatibility pair is not an offer")
 	offerMemberMCPClient(t, ctx, conn, f.organizationID, f.projectID, f.serverID, current.RemoteSessionClientID.UUID)

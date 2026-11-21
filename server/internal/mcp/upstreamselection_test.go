@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -234,13 +233,6 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 
 	// Unbinding the chosen client from the issuer, though it stays associated
 	// with the server, does not revoke the typed offer.
-	_, err = remotesessions_repo.New(f.ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, remotesessions_repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
-		RemoteSessionClientID: linearClient,
-		UserSessionIssuerID:   sharedIssuerID,
-		ProjectID:             f.projectID,
-		OrganizationID:        f.orgID,
-	})
-	require.NoError(t, err)
 	beforeLinear := linearUpstream.requestCount()
 	resp, err = callTool(t, f.ti, linearSlug, linearBearer, "ping")
 	require.NoError(t, err)

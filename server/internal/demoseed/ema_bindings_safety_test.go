@@ -76,7 +76,7 @@ func TestRemoteSessionFixturesRejectForeignTenants(t *testing.T) {
 		OrganizationID: conv.ToPGText(DefaultSpec().OrgID), ProjectID: DefaultSpec().ProjectID(),
 	})
 	require.NoError(t, err)
-	foreign, err := queries.GetVisitorEMAFixtureParents(ctx, demoseedtest.GetVisitorEMAFixtureParentsParams{
+	_, err := queries.GetVisitorEMAFixtureParents(ctx, demoseedtest.GetVisitorEMAFixtureParentsParams{
 		OrganizationID: conv.ToPGText(otherTenantSpec.OrgID), ProjectID: otherTenantSpec.ProjectID(),
 	})
 	require.NoError(t, err)
@@ -113,9 +113,6 @@ func TestRemoteSessionFixturesRejectForeignTenants(t *testing.T) {
 			require.Zero(t, n)
 		}
 	}
-	n, err := q.AttachPreparationFixtureInteractiveClient(ctx, testrepo.AttachPreparationFixtureInteractiveClientParams{ID: clientID, UserID: uuid.UUID(foreign.UserSessionIssuerID.Bytes), ProjectID: project})
-	require.NoError(t, err)
-	require.Zero(t, n, "a valid client scope must not admit a foreign user issuer")
 	after, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "rejected fixture mutations must leave all tenants unchanged")

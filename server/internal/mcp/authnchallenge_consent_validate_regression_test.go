@@ -53,10 +53,6 @@ func TestConsentValidationVerifiesAnOfferedGatewayMemberBesideAnotherProvidersDu
 		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: second.ID,
-		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
-	}))
 
 	sibling := newValidationMember(t)
 	server := createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "validate-associated-sibling", sibling.url, conv.ToNullUUID(otherIssuer), 1)
@@ -93,10 +89,6 @@ func TestConsentValidationVerifiesATypedOfferBesideASameProviderClientUnderEnfor
 		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: duplicate.ID,
-		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
-	}))
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-typed-duplicate", fx.member.url)
 
 	requireValidated(t, fx)
@@ -199,9 +191,6 @@ func TestConsentValidationDirectServerScopesTypedOffers(t *testing.T) {
 				ClientID: prefix + "-duplicate", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 			})
 			require.NoError(t, err)
-			require.NoError(t, remotesessionsrepo.New(fx.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: duplicate.ID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID,
-			}))
 			seedConsentAuthOffer(t, ctx, fx.ti, orgID, projectID, boundServer, duplicate.ID, authz.AuthClientTypeRemoteSession)
 			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-duplicate", resource)
 

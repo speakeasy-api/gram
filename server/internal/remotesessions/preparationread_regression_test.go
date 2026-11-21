@@ -9,7 +9,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -54,16 +53,4 @@ func TestPreparationRead_ProjectsStaleClaimWithoutWriting(t *testing.T) {
 	after, err := q.GetEMABinding(ctx, key)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
-}
-
-func TestDetachUserSessionIssuer_OrganizationOwnedIssuer(t *testing.T) {
-	t.Parallel()
-	ctx, ti, in := preparationFixture(t)
-	user := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "detach-organization-user")
-	_, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: user.String()})
-	require.NoError(t, err)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, user))
-	_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{ID: in.ClientID.String(), UserSessionIssuerID: user.String()})
-	require.NoError(t, err)
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, in.ClientID, user))
 }

@@ -74,9 +74,6 @@ func TestHostedCallbackAuthorizesExactPlacement(t *testing.T) {
 				}
 				return nil
 			}
-			if tt.checkNoIssuerParent {
-				require.Zero(t, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, fx.ti.conn, fx.clientID, fx.userIssuer))
-			}
 			if tt.detachBeforeExchange {
 				require.NoError(t, detach(ctx))
 				if tt.reattach {

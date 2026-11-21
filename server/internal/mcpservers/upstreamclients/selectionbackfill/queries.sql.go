@@ -564,21 +564,6 @@ func (q *Queries) SeedAssociationFixture(ctx context.Context, arg SeedAssociatio
 	return err
 }
 
-const seedClientBindingFixture = `-- name: SeedClientBindingFixture :exec
-INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
-VALUES ($1, $2)
-`
-
-type SeedClientBindingFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) SeedClientBindingFixture(ctx context.Context, arg SeedClientBindingFixtureParams) error {
-	_, err := q.db.Exec(ctx, seedClientBindingFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
-}
-
 const seedHeaderAuthClientFixture = `-- name: SeedHeaderAuthClientFixture :one
 INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
 VALUES ($1, $2, 'static_credential', 'backfill', 'headers')
@@ -927,20 +912,5 @@ UPDATE user_session_issuers SET deleted_at = clock_timestamp() WHERE id = $1
 
 func (q *Queries) SoftDeleteUserSessionIssuerFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, softDeleteUserSessionIssuerFixture, id)
-	return err
-}
-
-const unbindClientFixture = `-- name: UnbindClientFixture :exec
-DELETE FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2
-`
-
-type UnbindClientFixtureParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) UnbindClientFixture(ctx context.Context, arg UnbindClientFixtureParams) error {
-	_, err := q.db.Exec(ctx, unbindClientFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	return err
 }

@@ -212,10 +212,6 @@ func (f healthFixture) seedRemoteSessionClient(t *testing.T, remoteIssuerID, use
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
-	require.NoError(t, queries.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userIssuerID,
-	}))
 	return client.ID
 }
 
@@ -736,10 +732,6 @@ func TestDescribeMcpServerHealth_SharedClientCountsOnlyIssuerProvenance(t *testi
 
 	remoteIssuerID := f.seedGlobalRemoteSessionIssuer(t, "shared-"+uuid.NewString()[:8])
 	clientID := f.seedRemoteSessionClient(t, remoteIssuerID, issuerA, "shared-client", true)
-	require.NoError(t, remotesessionsrepo.New(f.conn).AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   issuerB,
-	}))
 	session := f.seedRemoteSession(t, issuerB, clientID, "erin", 2)
 	f.validateRemoteSession(t, session, "valid")
 

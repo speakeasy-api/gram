@@ -658,9 +658,6 @@ func TestRefreshSweep_ProjectClientWithOrganizationSignIn(t *testing.T) {
 					ID: o.signIn, ProjectID: uuid.NullUUID{}, OrganizationID: organization,
 				}))
 				if reach == "linked" {
-					require.NoError(t, repo.New(o.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-						RemoteSessionClientID: o.registration, UserSessionIssuerID: o.signIn,
-					}))
 				} else {
 					enforceUpstreamAuth(t, ctx, o.ti.conn, o.organization)
 					o.requireNoLink(t, ctx)

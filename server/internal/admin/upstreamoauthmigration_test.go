@@ -12,7 +12,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/executionprofiles"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
@@ -52,8 +51,8 @@ func (o *migrationOrg) issuer() uuid.UUID {
 	return id
 }
 
-// client creates a project client bound to userIssuerID.
-func (o *migrationOrg) client(userIssuerID uuid.UUID) uuid.UUID {
+// client creates a project registration without granting server access.
+func (o *migrationOrg) client() uuid.UUID {
 	o.t.Helper()
 	ctx := o.t.Context()
 	issuerID, clientID := uuid.New(), uuid.New()
@@ -70,7 +69,6 @@ func (o *migrationOrg) client(userIssuerID uuid.UUID) uuid.UUID {
 		RemoteSessionIssuerID: issuerID,
 		ClientID:              "cid-" + clientID.String()[:8],
 	}))
-	require.NoError(o.t, o.q.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: userIssuerID}))
 	return clientID
 }
 
@@ -150,7 +148,7 @@ func TestUpstreamOAuthMigration_EnforcedOrganizationHasNoPendingInferredAssociat
 
 	org := newMigrationOrg(t, ctx, db, "migrate-enforced")
 	issuer := org.issuer()
-	org.client(issuer)
+	org.client()
 	org.server(issuer)
 
 	before, err := svc.GetUpstreamOAuthMigrationStatus(ctx, &gen.GetUpstreamOAuthMigrationStatusPayload{OrganizationID: org.id})
@@ -219,17 +217,25 @@ func TestUpstreamOAuthMigration_ReportsAnAuthClientRunInProgress(t *testing.T) {
 	require.Empty(t, status.AuthClients.Warnings)
 }
 
-// seedCoveredMigrationFixture makes a historical, fully migrated tenant for
-// the compatibility status and enforcement tests, without calling staff APIs.
-func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org string) {
+// seedCoveredMigrationFixture explicitly offers a registration and records
+// the credential's typed choice without reconstructing legacy links.
+func seedCoveredMigrationFixture(t *testing.T, ctx context.Context, db *pgxpool.Pool, org *migrationOrg, server, registration, credential uuid.UUID) {
 	t.Helper()
-	_, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0})
+	q := authclientbackfill.New(db)
+	client, err := q.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+		OrganizationID: org.id, ProjectID: uuid.NullUUID{UUID: org.projectID, Valid: true}, ClientType: "remote_session", Source: "admin",
+		RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true},
+	})
 	require.NoError(t, err)
-	_, err = selectionbackfill.Run(ctx, db, selectionbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0})
-	require.NoError(t, err)
-	report, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: org, Apply: true, PageSize: 0, TypedOnly: false})
-	require.NoError(t, err)
-	require.Empty(t, report.PhaseErrors)
+	require.NoError(t, q.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+		OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, AuthClientID: client, Source: "admin",
+	}))
+	require.NoError(t, q.SeedOAuthSelectionFixture(ctx, authclientbackfill.SeedOAuthSelectionFixtureParams{
+		OrganizationID: org.id, ProjectID: org.projectID, McpServerID: server, RemoteSessionClientID: registration, CredentialID: credential,
+	}))
+	require.NoError(t, q.SwapUpstreamAuthClientFixture(ctx, authclientbackfill.SwapUpstreamAuthClientFixtureParams{
+		McpServerID: server, CredentialID: credential, AuthClientID: uuid.NullUUID{UUID: client, Valid: true},
+	}))
 }
 
 func TestUpstreamOAuthMigration_StaffCannotRunRetiredMigration(t *testing.T) {

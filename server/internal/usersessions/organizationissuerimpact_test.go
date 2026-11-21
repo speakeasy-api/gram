@@ -14,7 +14,6 @@ import (
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -66,7 +65,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLin
 	target := seedOrganizationTierIssuer(t, ctx, ti.conn, "offer-target")
 	source := seedIssuer(t, ctx, ti, "offer-source")
 	registration := seedMigrationRemoteClient(t, ctx, ti, "offered-without-link")
-	linkOnly := leftoverSeedBoundRegistration(t, ctx, ti, source)
+	leftoverSeedBoundRegistration(t, ctx, ti, source)
 	leftoverSeedBoundRegistration(t, ctx, ti, target)
 	member := impactSeedServer(t, ctx, ti, source)
 	hosted := seedHostedServerOnIssuer(t, ctx, ti, *auth.ProjectID, auth.ActiveOrganizationID, source, "offer-hosted")
@@ -96,11 +95,6 @@ func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLin
 	choice, err := fixtures.GetSelectionAuthClientFixture(ctx, selectionbackfill.GetSelectionAuthClientFixtureParams{CredentialKind: "user_session", CredentialID: migrationCredentialID(session), McpServerID: member})
 	require.NoError(t, err)
 	require.Equal(t, conv.ToNullUUID(clientID), choice.AuthClientID)
-	for _, reg := range []uuid.UUID{registration, linkOnly} {
-		parents, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: reg, UserSessionIssuerID: target})
-		require.NoError(t, err)
-		require.Zero(t, parents, "only actual attachment rekeys may write target parents")
-	}
 	for _, id := range []uuid.UUID{member, hosted, targetServer} {
 		require.Empty(t, impactAssociatedClients(t, ctx, ti, id))
 	}
@@ -158,9 +152,6 @@ func TestOrganizationUserSessionIssuerMigrateNeverCarriesDeletedClient(t *testin
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
 	require.NoError(t, err)
 
-	bound, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: deleted, UserSessionIssuerID: targetID})
-	require.NoError(t, err)
-	require.Zero(t, bound)
 }
 
 // The preview reports how far the source's sign-ins reach once they move,

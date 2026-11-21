@@ -59,7 +59,7 @@ const (
 )
 
 // createConsentRemoteClient mints a remote_session_issuer plus a client
-// with optional compatibility rows for the principal attachment FK.
+// without configuring a sign-in or offer.
 // To configure sign-in behavior, seed server associations or typed offers.
 // asBase "" uses fake AS
 // endpoints (BuildAuthorizationUrl never contacts them); pass an httptest
@@ -101,9 +101,6 @@ func createConsentRemoteClientWithCallback(t *testing.T, ctx context.Context, co
 		CallbackBaseUrl:       conv.ToPGTextEmpty(callbackBase),
 	})
 	require.NoError(t, err)
-	for _, usi := range userSessionIssuerIDs {
-		retainClientIssuerFK(t, ctx, conn, rsc.ID, usi)
-	}
 	return rsc.ID
 }
 

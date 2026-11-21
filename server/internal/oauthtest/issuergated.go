@@ -55,7 +55,8 @@ type IssuerGatedToolsetResult struct {
 // CreateIssuerGatedToolset provisions a user_session_issuer + one
 // remote_session_issuer + one DCR-registered remote_session_client wired to
 // the provided upstream AS metadata, then creates a toolset bound to the
-// user_session_issuer. Used by integration tests that exercise the
+// user_session_issuer. Callers place the client explicitly on the hosted
+// server. Used by integration tests that exercise the
 // /mcp/{slug}/connect + /mcp/remote_login_callback handlers against a live
 // dev-idp instance.
 func CreateIssuerGatedToolset(
@@ -144,12 +145,6 @@ func CreateIssuerGatedToolset(
 		ClientSecretEncrypted: conv.ToPGText(encSecret),
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		ClientSecretExpiresAt: pgtype.Timestamptz{Valid: false},
-	})
-	require.NoError(t, err)
-
-	err = remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: rsc.ID,
-		UserSessionIssuerID:   usi.ID,
 	})
 	require.NoError(t, err)
 

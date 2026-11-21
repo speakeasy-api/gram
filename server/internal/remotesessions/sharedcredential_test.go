@@ -512,10 +512,6 @@ func TestRefreshSweep_CrossTenantBindingNotEligible(t *testing.T) {
 
 	otherProject := createProject(t, ctx, ti.conn, "shared-sweep-xten-other")
 	foreign := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "shared-sweep-xten-usi-b")
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientUUID,
-		UserSessionIssuerID:   foreign,
-	}))
 	seedGramSession(t, ctx, ti, subject, foreign, "shared-sweep-xten-b", 24*time.Hour)
 	enableOrgAutoRefreshFeature(t, ctx, ti, authCtx.ActiveOrganizationID, productfeatures.FeatureRemoteSessionAutoRefresh)
 

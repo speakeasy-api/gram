@@ -83,7 +83,6 @@ func TestGatewayConnectFollowsTypedOffers(t *testing.T) {
 				})
 				require.NoError(t, err)
 				registration = client.ID
-				require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: fx.shared}))
 			}
 			memberSlug := "typed-gw-member-" + uuid.NewString()[:8]
 			member := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, memberSlug, upstream, uuid.NullUUID{}, 0)

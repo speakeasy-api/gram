@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -155,9 +154,6 @@ func TestDeleteClient(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	bindings, err := testrepo.New(ti.conn).CountRemoteSessionClientBindingsFixture(ctx, uuid.MustParse(clientID))
-	require.NoError(t, err)
-	require.Zero(t, bindings, "retirement does not create a legacy link")
 }
 
 // A server that took its upstream issuer from the deleted client no longer

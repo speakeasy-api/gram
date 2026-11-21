@@ -132,11 +132,6 @@ func seedRevocableClient(t *testing.T, ctx context.Context, ti *testInstance, us
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
-
 	return client.ID
 }
 
@@ -189,10 +184,6 @@ func seedLegacyProjectRevocableClient(t *testing.T, ctx context.Context, ti *tes
 		LegacyCallbackUrl:       false,
 	})
 	require.NoError(t, err)
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
 	return client.ID
 }
 
@@ -302,13 +293,8 @@ func TestDeleteUserSessionIssuer_StaleSiblingBindingDoesNotSpare(t *testing.T) {
 	upstream := newOrphanRevocationUpstream(t, spy)
 
 	issuerID := createIssuerForOrphanTest(t, ctx, ti, "orphan-shared-issuer")
-	siblingID := createIssuerForOrphanTest(t, ctx, ti, "orphan-shared-sibling")
+	createIssuerForOrphanTest(t, ctx, ti, "orphan-shared-sibling")
 	clientID, refreshToken := seedRevocableUpstream(t, ctx, ti, issuerID, "orphan-shared", upstream.URL+"/revoke")
-
-	require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   siblingID,
-	}))
 
 	deleteIssuerForOrphanTest(t, ctx, ti, issuerID)
 	require.Zero(t, countActiveClientSessions(t, ctx, ti, clientID), "a stale sibling parent alone cannot preserve a grant")
@@ -331,11 +317,6 @@ func TestDeleteUserSessionIssuer_DeadSiblingBindingDoesNotSpare(t *testing.T) {
 	issuerID := createIssuerForOrphanTest(t, ctx, ti, "orphan-deadsib-issuer")
 	siblingID := createIssuerForOrphanTest(t, ctx, ti, "orphan-deadsib-sibling")
 	clientID, refreshToken := seedRevocableUpstream(t, ctx, ti, issuerID, "orphan-deadsib", upstream.URL+"/revoke")
-
-	require.NoError(t, remotesessionsrepo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   siblingID,
-	}))
 
 	// Tombstone the sibling issuer directly so its binding row survives dead.
 	_, err := usersessionsrepo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
@@ -536,10 +517,6 @@ func TestDeleteUserSessionIssuer_RebindMintsFreshSessionWithoutResurrection(t *t
 
 	// Fresh connect: bind the client to a new issuer and re-auth the subject.
 	rebindIssuer := createIssuerForOrphanTest(t, ctx, ti, "orphan-rebind-fresh")
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   rebindIssuer,
-	}))
 	seedRemoteSession(t, ctx, ti, rebindIssuer, clientID, "orphan-subject-orphan-rebind")
 
 	fresh, err := q.GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{

@@ -6377,15 +6377,6 @@ type RemoteSessionClient struct {
 	Deleted bool
 }
 
-type RemoteSessionClientUserSessionIssuer struct {
-	// @access: confidential
-	RemoteSessionClientID uuid.UUID
-	// @access: confidential
-	UserSessionIssuerID uuid.UUID
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-}
-
 type RemoteSessionEmaBinding struct {
 	// @access: confidential
 	ID uuid.UUID

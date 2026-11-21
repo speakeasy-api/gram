@@ -234,11 +234,6 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: client.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-	}))
-
 	_, err = q.UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             subject,
 		UserSessionIssuerID:    userSessionIssuerID,
@@ -296,11 +291,7 @@ func TestListUserSessionsDoesNotAttributeUpstreamsThroughStaleSiblingLinks(t *te
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), provenanceID, subject, "mcp.shared.example")
-	require.NoError(t, remotesessions_repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   siblingID,
-	}))
+	seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), provenanceID, subject, "mcp.shared.example")
 
 	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
 		SessionToken:        nil,
@@ -345,13 +336,7 @@ func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
-	detached, err := testrepo.New(ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, testrepo.DetachRemoteSessionClientFromUserSessionIssuerParams{
-		RemoteSessionClientID: clientID,
-		UserSessionIssuerID:   issuerID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), detached)
+	seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
 
 	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
 		SessionToken:        nil,
@@ -461,13 +446,6 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 			}
 			return rows, nil
 		}, humanRemains: true},
-		{name: "removing a legacy link preserves the attachment", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
-			rows, err := q.MutateAttachmentClientDetachedFromRequestingIssuerFixture(ctx, testrepo.MutateAttachmentClientDetachedFromRequestingIssuerFixtureParams{Client: args.Client, Requesting: args.Requesting})
-			if err != nil {
-				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
-			}
-			return rows, nil
-		}, wantAttached: true},
 		{name: "deleted client", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
 			rows, err := q.MutateAttachmentDeletedClientFixture(ctx, testrepo.MutateAttachmentDeletedClientFixtureParams{Client: args.Client, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
 			if err != nil {
@@ -599,18 +577,11 @@ func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
 				require.NoError(t, err)
 			}
 			clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(projectID), provenance, owner, "attachment.example.com")
-			q := remotesessions_repo.New(ti.conn)
-			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: clientID, UserSessionIssuerID: otherIssuer,
-			}))
 			var sourceID uuid.UUID
 			sourceID, err = testrepo.New(ti.conn).GetAttachmentSourceIDFixture(ctx, testrepo.GetAttachmentSourceIDFixtureParams{RemoteSessionClientID: clientID, SubjectUrn: owner})
 			require.NoError(t, err)
 			// Bind both clients so mismatches exercise the exact source-client guard.
 			otherClient := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(projectID), provenance, urn.NewUserSubject("other-source"), "other-attachment.example.com")
-			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: otherClient, UserSessionIssuerID: otherIssuer,
-			}))
 			foreignProject := uuid.New()
 			_, err = testrepo.New(ti.conn).CreateAttachmentForeignProjectFixture(ctx, testrepo.CreateAttachmentForeignProjectFixtureParams{ID: foreignProject, OrganizationID: auth.ActiveOrganizationID})
 			require.NoError(t, err)

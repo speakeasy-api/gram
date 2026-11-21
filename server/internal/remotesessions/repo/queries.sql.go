@@ -116,27 +116,6 @@ func (q *Queries) AttachPrincipalRemoteSessionBinding(ctx context.Context, arg A
 	return i, err
 }
 
-const attachRemoteSessionClientToUserSessionIssuer = `-- name: AttachRemoteSessionClientToUserSessionIssuer :exec
-INSERT INTO remote_session_client_user_session_issuers (
-    remote_session_client_id,
-    user_session_issuer_id
-) VALUES (
-    $1,
-    $2
-)
-ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING
-`
-
-type AttachRemoteSessionClientToUserSessionIssuerParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) AttachRemoteSessionClientToUserSessionIssuer(ctx context.Context, arg AttachRemoteSessionClientToUserSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, attachRemoteSessionClientToUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
-	return err
-}
-
 const authorizeEMADelegation = `-- name: AuthorizeEMADelegation :one
 SELECT EXISTS (
   SELECT 1 FROM user_session_issuers AS usi
@@ -1362,25 +1341,6 @@ WHERE remote_session_client_id = $1 AND deleted IS FALSE
 
 func (q *Queries) CountActiveRemoteSessionsByClientID(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countActiveRemoteSessionsByClientID, remoteSessionClientID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countRemoteSessionClientUserSessionIssuerBindings = `-- name: CountRemoteSessionClientUserSessionIssuerBindings :one
-SELECT COUNT(remote_session_client_id)
-FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = $1
-  AND user_session_issuer_id = $2
-`
-
-type CountRemoteSessionClientUserSessionIssuerBindingsParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-}
-
-func (q *Queries) CountRemoteSessionClientUserSessionIssuerBindings(ctx context.Context, arg CountRemoteSessionClientUserSessionIssuerBindingsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countRemoteSessionClientUserSessionIssuerBindings, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -3435,35 +3395,6 @@ func (q *Queries) DescribeUserSessionIssuerConsumers(ctx context.Context, arg De
 	return i, err
 }
 
-const detachOrganizationRemoteSessionClientFromUserSessionIssuer = `-- name: DetachOrganizationRemoteSessionClientFromUserSessionIssuer :execrows
-DELETE FROM remote_session_client_user_session_issuers link
-USING remote_session_clients c, user_session_issuers u
-WHERE link.remote_session_client_id = $1
-AND link.user_session_issuer_id = $2
-AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
-AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
-AND ((c.project_id IS NULL AND c.organization_id = $3::text) OR EXISTS (
-    SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = $3::text AND p.deleted IS FALSE
-))
-AND ((u.project_id IS NULL AND u.organization_id = $3::text) OR EXISTS (
-    SELECT 1 FROM projects p WHERE p.id = u.project_id AND p.organization_id = $3::text AND p.deleted IS FALSE
-))
-`
-
-type DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	OrganizationID        string
-}
-
-func (q *Queries) DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx context.Context, arg DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, detachOrganizationRemoteSessionClientFromUserSessionIssuer, arg.RemoteSessionClientID, arg.UserSessionIssuerID, arg.OrganizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const detachPrincipalRemoteSessionBinding = `-- name: DetachPrincipalRemoteSessionBinding :one
 UPDATE principal_remote_session_bindings AS b
 SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -3510,38 +3441,6 @@ func (q *Queries) DetachPrincipalRemoteSessionBinding(ctx context.Context, arg D
 		&i.UpstreamAccount,
 	)
 	return i, err
-}
-
-const detachProjectRemoteSessionClientFromUserSessionIssuer = `-- name: DetachProjectRemoteSessionClientFromUserSessionIssuer :execrows
-DELETE FROM remote_session_client_user_session_issuers link
-USING remote_session_clients c, user_session_issuers u, projects p
-WHERE link.remote_session_client_id = $1
-AND link.user_session_issuer_id = $2
-AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
-AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
-AND (u.project_id = $3::uuid OR (u.project_id IS NULL AND u.organization_id = $4::text))
-AND p.id = $3::uuid AND p.organization_id = $4::text AND p.deleted IS FALSE
-AND (c.project_id = p.id OR (c.project_id IS NULL AND c.organization_id = p.organization_id))
-`
-
-type DetachProjectRemoteSessionClientFromUserSessionIssuerParams struct {
-	RemoteSessionClientID uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	ProjectID             uuid.UUID
-	OrganizationID        string
-}
-
-func (q *Queries) DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx context.Context, arg DetachProjectRemoteSessionClientFromUserSessionIssuerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, detachProjectRemoteSessionClientFromUserSessionIssuer,
-		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
-		arg.ProjectID,
-		arg.OrganizationID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const ensureEMABinding = `-- name: EnsureEMABinding :exec
@@ -13046,44 +12945,6 @@ func (q *Queries) ListTrustedRemoteSessionClientsByIssuerID(ctx context.Context,
 	return items, nil
 }
 
-const listUserSessionIssuersBoundToProjectClient = `-- name: ListUserSessionIssuersBoundToProjectClient :many
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
-WHERE link.remote_session_client_id = $1
-  AND c.project_id = $2
-ORDER BY link.user_session_issuer_id
-`
-
-type ListUserSessionIssuersBoundToProjectClientParams struct {
-	RemoteSessionClientID uuid.UUID
-	ProjectID             uuid.NullUUID
-}
-
-// The bindings DeleteRemoteSessionClient is about to purge, read first so the
-// post-commit resync knows which issuers to recompute. Mirrors the purge's own
-// predicate exactly: narrower would miss bindings the purge still deletes.
-func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context, arg ListUserSessionIssuersBoundToProjectClientParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToProjectClient, arg.RemoteSessionClientID, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_session_issuer_id uuid.UUID
-		if err := rows.Scan(&user_session_issuer_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_session_issuer_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockEMABinding = `-- name: LockEMABinding :one
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
@@ -13970,19 +13831,9 @@ const lockRemoteSessionIssuerForClientBinding = `-- name: LockRemoteSessionIssue
 SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
 `
 
-// Serialize every writer that adds or re-points a remote_session_client or
-// trusted user_session_issuer reference on a given remote_session_issuer. No
-// database constraint enforces the "at most one active client per
-// (user_session_issuer, remote_session_issuer)"
-// invariant: remote_session_issuer_id lives on remote_session_clients, not on
-// remote_session_client_user_session_issuers, so no unique index over the join
-// table can express the pair. Row locks on the issuer do not help either, since
-// the attach guard reads remote_session_clients and never touches the issuer
-// row. A transaction-scoped advisory lock keyed on the issuer id is what
-// serializes client attachments and trusted-issuer links against lifecycle
-// operations that can delete or re-scope the target. Callers taking more than
-// one lock MUST take them in ascending issuer id order so two concurrent
-// migrations cannot deadlock.
+// Serialize registration and trusted-issuer mutations against deletion and
+// scope changes on the same upstream issuer. Callers taking more than one lock
+// must take them in ascending issuer ID order.
 func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, remoteSessionIssuerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockRemoteSessionIssuerForClientBinding, remoteSessionIssuerID)
 	return err

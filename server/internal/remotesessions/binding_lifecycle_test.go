@@ -38,7 +38,6 @@ func TestRefreshSweep_AttachmentOnlyLifecycle(t *testing.T) {
 			session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), source.String(), client)
 			binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionID: session.ID, SubjectUrn: session.SubjectUrn.String()})
 			require.NoError(t, err)
-			requireNoAttachmentParent(t, ctx, ti, session.RemoteSessionClientID, config)
 			_, err = testrepo.New(ti.conn).EnableAttachmentSourceRefreshFixture(ctx, testrepo.EnableAttachmentSourceRefreshFixtureParams{ID: session.ID, UpdatedAt: pgtype.Timestamptz{Time: time.Now().Add(-25 * time.Hour), Valid: true}})
 			require.NoError(t, err)
 			enableOrgAutoRefreshFeature(t, ctx, ti, auth.ActiveOrganizationID, productfeatures.FeatureRemoteSessionAutoRefresh)

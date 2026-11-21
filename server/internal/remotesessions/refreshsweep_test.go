@@ -438,10 +438,6 @@ func seedSweepSharedGrant(
 	clientID := createRemoteClient(t, ctx, ti, remoteIssuerID, issuerA.String(), slug+"-client")
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
-	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: clientUUID,
-		UserSessionIssuerID:   issuerB,
-	}))
 
 	seedSweepOffer(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerB, clientUUID, slug)
 	subject := urn.NewUserSubject("subject-" + slug)

@@ -100,7 +100,6 @@ func newChainedRefreshFixture(t *testing.T) (context.Context, chainedRefreshFixt
 	require.NoError(t, err)
 	_, err = rs.SetEMAClientGrants(ctx, remotesessions_repo.SetEMAClientGrantsParams{GrantTypes: []string{oauthwire.GrantTypeJWTBearer}, ID: resourceClient.ID, ProjectID: uuid.NullUUID{}, OrganizationID: conv.ToPGText(org)})
 	require.NoError(t, err)
-	require.NoError(t, rs.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: resourceClient.ID, UserSessionIssuerID: userIssuer.ID}))
 
 	const upstream = "https://api.chained-refresh.example.test/mcp"
 	key := remotesessions_repo.GetEMABindingParams{ProjectID: project, OrganizationID: org, UserSessionIssuerID: userIssuer.ID, RemoteSessionIssuerID: resourceIssuer.ID, Resource: upstream}

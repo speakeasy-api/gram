@@ -66,9 +66,6 @@ func TestRefreshSweepProviderScope(t *testing.T) {
 						}
 						q := repo.New(ti.conn)
 						if reach == "direct" {
-							require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-								RemoteSessionClientID: clientID, UserSessionIssuerID: signIn,
-							}))
 						} else {
 							serverID := seedRemoteMcpServerForLogin(t, ctx, ti.conn, projectID, signIn, "provider-scope", "https://provider-scope.example.com/mcp")
 							offerRegistration(t, ctx, ti.conn, organization, projectID, serverID, clientID)

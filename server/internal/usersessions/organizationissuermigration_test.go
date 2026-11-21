@@ -483,10 +483,6 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: remoteClient.ID,
-		UserSessionIssuerID:   sourceID,
-	}))
 	targetRemoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -501,7 +497,7 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		CodeChallengeMethodsSupported:     []string{"S256"},
 	})
 	require.NoError(t, err)
-	targetRemoteClient, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+	_, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: targetRemoteIssuer.ID,
@@ -509,10 +505,6 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: targetRemoteClient.ID,
-		UserSessionIssuerID:   targetID,
-	}))
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Name: "Remote migration toolset", Slug: "remote-migration-toolset", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
@@ -626,9 +618,6 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, targetID, emaBinding.UserSessionIssuerID)
 	require.Equal(t, int64(2), emaBinding.Generation)
-	linkCount, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: remoteClient.ID, UserSessionIssuerID: targetID})
-	require.NoError(t, err)
-	require.Zero(t, linkCount, "migration does not recreate a legacy link")
 	mcpServerAfter, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: mcpServerID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, targetID, mcpServerAfter.UserSessionIssuerID.UUID)
@@ -668,12 +657,6 @@ func seedMigrationRemoteClient(t *testing.T, ctx context.Context, ti *testInstan
 		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	require.NoError(t, err)
-	for _, issuerID := range issuerIDs {
-		require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: client.ID,
-			UserSessionIssuerID:   issuerID,
-		}))
-	}
 	return client.ID
 }
 
@@ -763,19 +746,12 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	require.EqualValues(t, 1, changed)
 
 	remoteRepo := remotesessionsrepo.New(ti.conn)
-	parent := remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: targetID}
-	parents, err := remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
-	require.NoError(t, err)
-	require.Zero(t, parents)
 	result, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 	require.Equal(t, 0, result.RemoteSessionsMigrated, "the login was made through the gateway, not the source")
 
 	requireMigrationAttachment(t, ctx, ti, bindingIDs[sourceID], targetID, login)
 	requireMigrationAttachment(t, ctx, ti, secondBindings[sourceID], targetID, secondLogin)
-	parents, err = remoteRepo.CountRemoteSessionClientUserSessionIssuerBindings(ctx, parent)
-	require.NoError(t, err)
-	require.Zero(t, parents, "rekeying must not create a legacy link")
 	loginAfter, err := remoteRepo.GetRemoteSessionByID(ctx, remotesessionsrepo.GetRemoteSessionByIDParams{ID: login, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
 	require.Equal(t, gatewayID, loginAfter.UserSessionIssuerID, "the login stays on the issuer it was made through")

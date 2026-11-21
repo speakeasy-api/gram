@@ -598,17 +598,7 @@ func attachTestRemoteSessionClient(t *testing.T, ctx context.Context, ti *testIn
 	})
 	require.NoError(t, err)
 
-	retainClientIssuerFK(t, ctx, ti.conn, remoteClient.ID, userSessionIssuerID)
 	return remoteClient
-}
-
-// retainClientIssuerFK is not a runtime sign-in binding.
-func retainClientIssuerFK(t *testing.T, ctx context.Context, conn *pgxpool.Pool, registrationID, issuerID uuid.UUID) {
-	t.Helper()
-	require.NoError(t, remotesessions_repo.New(conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: registrationID,
-		UserSessionIssuerID:   issuerID,
-	}))
 }
 
 // upsertExpiredRefreshableRemoteSession links subject with an access token

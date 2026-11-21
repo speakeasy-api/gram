@@ -895,22 +895,6 @@ WHERE id = @id
   AND identity_provider_connection_id IS NULL
 RETURNING *;
 
--- name: AttachRemoteSessionClientToUserSessionIssuer :exec
-INSERT INTO remote_session_client_user_session_issuers (
-    remote_session_client_id,
-    user_session_issuer_id
-) VALUES (
-    @remote_session_client_id,
-    @user_session_issuer_id
-)
-ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING;
-
--- name: CountRemoteSessionClientUserSessionIssuerBindings :one
-SELECT COUNT(remote_session_client_id)
-FROM remote_session_client_user_session_issuers
-WHERE remote_session_client_id = @remote_session_client_id
-  AND user_session_issuer_id = @user_session_issuer_id;
-
 -- name: CheckRemoteSessionClientBindingForUserSessionIssuer :one
 -- Tenant-scoped binding probe: does this user_session_issuer, in this
 -- project, hold a live binding to this remote_session_client? The tenancy
@@ -4347,19 +4331,9 @@ LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.p
 WHERE c.remote_session_issuer_id = @remote_session_issuer_id AND NOT association.deleted;
 
 -- name: LockRemoteSessionIssuerForClientBinding :exec
--- Serialize every writer that adds or re-points a remote_session_client or
--- trusted user_session_issuer reference on a given remote_session_issuer. No
--- database constraint enforces the "at most one active client per
--- (user_session_issuer, remote_session_issuer)"
--- invariant: remote_session_issuer_id lives on remote_session_clients, not on
--- remote_session_client_user_session_issuers, so no unique index over the join
--- table can express the pair. Row locks on the issuer do not help either, since
--- the attach guard reads remote_session_clients and never touches the issuer
--- row. A transaction-scoped advisory lock keyed on the issuer id is what
--- serializes client attachments and trusted-issuer links against lifecycle
--- operations that can delete or re-scope the target. Callers taking more than
--- one lock MUST take them in ascending issuer id order so two concurrent
--- migrations cannot deadlock.
+-- Serialize registration and trusted-issuer mutations against deletion and
+-- scope changes on the same upstream issuer. Callers taking more than one lock
+-- must take them in ascending issuer ID order.
 SELECT pg_advisory_xact_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
 
 -- name: LockRemoteSessionIssuerForClientBindingSession :exec
@@ -5374,18 +5348,6 @@ WHERE id = @id
   AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
 
--- name: ListUserSessionIssuersBoundToProjectClient :many
--- The bindings DeleteRemoteSessionClient is about to purge, read first so the
--- post-commit resync knows which issuers to recompute. Mirrors the purge's own
--- predicate exactly: narrower would miss bindings the purge still deletes.
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
-WHERE link.remote_session_client_id = @remote_session_client_id
-  AND c.project_id = @project_id
-ORDER BY link.user_session_issuer_id;
-
 -- name: GetRemoteSessionIssuerForMetadataRefresh :one
 -- Tier-agnostic read for the on-use refresh, scoped by the listed identity so a moved row matches nothing.
 SELECT *
@@ -5825,17 +5787,6 @@ AND (u.project_id = @project_id::uuid OR (u.project_id IS NULL AND u.organizatio
     AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
 ) FOR UPDATE;
 
--- name: DetachProjectRemoteSessionClientFromUserSessionIssuer :execrows
-DELETE FROM remote_session_client_user_session_issuers link
-USING remote_session_clients c, user_session_issuers u, projects p
-WHERE link.remote_session_client_id = @remote_session_client_id
-AND link.user_session_issuer_id = @user_session_issuer_id
-AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
-AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
-AND (u.project_id = @project_id::uuid OR (u.project_id IS NULL AND u.organization_id = @organization_id::text))
-AND p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
-AND (c.project_id = p.id OR (c.project_id IS NULL AND c.organization_id = p.organization_id));
-
 -- name: LockPreparationSubmission :exec
 -- Session-scoped: caller must unlock on the same reserved connection.
 SELECT pg_advisory_lock(hashtextextended(@binding_key::text, 0));
@@ -5856,20 +5807,6 @@ AND s.project_id = @project_id AND s.user_session_issuer_id = @user_session_issu
 AND EXISTS (SELECT 1 FROM projects p WHERE p.id = s.project_id
     AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE)
 FOR UPDATE;
-
--- name: DetachOrganizationRemoteSessionClientFromUserSessionIssuer :execrows
-DELETE FROM remote_session_client_user_session_issuers link
-USING remote_session_clients c, user_session_issuers u
-WHERE link.remote_session_client_id = @remote_session_client_id
-AND link.user_session_issuer_id = @user_session_issuer_id
-AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
-AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
-AND ((c.project_id IS NULL AND c.organization_id = @organization_id::text) OR EXISTS (
-    SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
-))
-AND ((u.project_id IS NULL AND u.organization_id = @organization_id::text) OR EXISTS (
-    SELECT 1 FROM projects p WHERE p.id = u.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
-));
 
 -- name: LockEMAProject :one
 SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR SHARE;

@@ -69,7 +69,7 @@ func TestOrganizationUserSessionIssuerMigrateDoesNotInheritTargetClientsUnderEnf
 				CodeChallengeMethodsSupported:     []string{"S256"},
 			})
 			require.NoError(t, err)
-			client, err := remote.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+			_, err := remote.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 				ProjectID:             conv.ToNullUUID(projectID),
 				OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
 				RemoteSessionIssuerID: remoteIssuer.ID,
@@ -77,10 +77,6 @@ func TestOrganizationUserSessionIssuerMigrateDoesNotInheritTargetClientsUnderEnf
 				ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 			})
 			require.NoError(t, err)
-			require.NoError(t, remote.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-				RemoteSessionClientID: client.ID,
-				UserSessionIssuerID:   targetID,
-			}))
 
 			_, err = ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 			require.NoError(t, err)

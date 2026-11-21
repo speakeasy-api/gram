@@ -55,11 +55,9 @@ func (f *fixture) interactiveCredential() uuid.UUID {
 	return f.credential(urn.NewUserSubject("user_"+uuid.NewString()[:8]), "refresh-"+uuid.NewString())
 }
 
-// oauthSelection seeds a credential's choice of clientID, bound to the
-// credential's user session issuer as issuance requires.
+// oauthSelection seeds a credential's registration choice.
 func (f *fixture) oauthSelection(credentialID, serverID, clientID uuid.UUID) {
 	f.t.Helper()
-	require.NoError(f.t, f.q.BindClientIssuerFixture(f.t.Context(), BindClientIssuerFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: f.sessionIssuer()}))
 	f.unboundOAuthSelection(credentialID, serverID, clientID)
 }
 
@@ -300,20 +298,6 @@ func TestRun_HeaderClientWithoutTheServersHeadersIsNotACandidate(t *testing.T) {
 	require.NotEqual(t, stale, named.UUID, "only the client carrying the server's current headers is the server's headers")
 }
 
-func TestRun_OAuthChoiceTheIssuerIsNotBoundToIsAGap(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	server, registration := f.server(), f.client("subject")
-	f.associate(server, registration)
-	credential := f.interactiveCredential()
-	f.unboundOAuthSelection(credential, server, registration)
-
-	report := f.run(true)
-	require.Zero(t, report.SelectionsMapped)
-	require.Len(t, selectionGaps(report, SelectionUnusable), 1, "the upstream client choice already rejects it")
-	require.False(t, f.selection(credential, server).AuthClientID.Valid)
-}
-
 // A choice for a deleted server is never served again: it stays recorded but
 // is not counted as live coverage, while a live server's unusable choice still
 // is.
@@ -337,8 +321,8 @@ func TestRun_ChoiceForADeletedServerIsNotLiveCoverage(t *testing.T) {
 
 // A choice already naming its registration's auth client no longer depends on
 // the legacy issuer binding: the typed resolver serves it on the client
-// alone, so removing the binding leaves it covered.
-func TestRun_MappedOAuthChoiceKeepsCoverageWhenTheIssuerBindingIsRemoved(t *testing.T) {
+// alone, so no issuer binding is needed.
+func TestRun_MappedOAuthChoiceKeepsCoverageWithoutIssuerBinding(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	server, registration := f.server(), f.client("subject")
@@ -347,7 +331,6 @@ func TestRun_MappedOAuthChoiceKeepsCoverageWhenTheIssuerBindingIsRemoved(t *test
 	credential := f.interactiveCredential()
 	f.oauthSelection(credential, server, registration)
 	require.Equal(t, 1, f.run(true).SelectionsMapped)
-	require.NoError(t, f.q.UnbindClientIssuerFixture(t.Context(), UnbindClientIssuerFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: f.sessionIssuer()}))
 
 	report := f.run(true)
 	require.Equal(t, 1, report.Selections[ClassInteractive].Outcomes[SelectionMapped])
@@ -415,43 +398,6 @@ func TestRun_ChoiceIsDecidedAgainUnderLock(t *testing.T) {
 	require.False(t, f.selection(credential, server).AuthClientID.Valid)
 }
 
-// TestRun_OAuthChoiceIsNotMappedAfterItsIssuerBindingIsRemoved removes the
-// binding an unmapped OAuth choice is decided from while the mapping waits on
-// it: the choice is decided again and left unmapped.
-func TestRun_OAuthChoiceIsNotMappedAfterItsIssuerBindingIsRemoved(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	server, registration := f.server(), f.client("subject")
-	f.associate(server, registration)
-	f.run(true)
-	credential := f.interactiveCredential()
-	f.oauthSelection(credential, server, registration)
-
-	tx, err := f.pool.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary only; the write uses a generated SQLc method.
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
-	require.NoError(t, New(tx).UnbindClientIssuerFixture(t.Context(), UnbindClientIssuerFixtureParams{RemoteSessionClientID: registration, UserSessionIssuerID: f.sessionIssuer()}))
-
-	done := make(chan Report, 1)
-	go func() {
-		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
-		assert.NoError(t, err)
-		done <- report
-	}()
-	require.Eventually(t, func() bool {
-		_, err := f.q.ProbeServerLockFixture(t.Context(), server)
-		var pgErr *pgconn.PgError
-		return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.LockNotAvailable
-	}, 10*time.Second, 20*time.Millisecond, "the mapping holds the server and waits on the binding")
-	require.NoError(t, tx.Commit(t.Context()))
-
-	report := <-done
-	require.Equal(t, 1, report.PendingSelectionMappings, "the first read saw the binding")
-	require.Zero(t, report.SelectionsMapped)
-	require.Len(t, selectionGaps(report, SelectionUnusable), 1)
-	require.False(t, f.selection(credential, server).AuthClientID.Valid)
-}
-
 // TestRun_ChoicesAreNotMappedAfterAFailedPhase is not parallel: it swaps
 // beforePhase.
 func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paralleltest // swaps a package seam
@@ -485,10 +431,9 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 	t.Parallel()
 	issuer, candidate := uuid.New(), uuid.New()
 	for name, tc := range map[string]struct {
-		row                       ListSelectionMappingsRow
-		typedOnly                 bool
-		registrationIssuerMatches bool
-		want                      SelectionOutcome
+		row       ListSelectionMappingsRow
+		typedOnly bool
+		want      SelectionOutcome
 	}{
 		"no-auth beside an association, not enforcing": {
 			row:  ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
@@ -505,31 +450,23 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 			want:      SelectionStaleNoAuth,
 		},
 		"unmapped client without an association, not enforcing": {
-			row:                       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
-			registrationIssuerMatches: true,
-			want:                      SelectionUnusable,
+			row:  ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
+			want: SelectionUnusable,
 		},
 		"unmapped client without an association, enforcing": {
-			row:                       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
-			registrationIssuerMatches: true,
-			typedOnly:                 true,
-			want:                      SelectionMap,
+			row:       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
+			typedOnly: true,
+			want:      SelectionMap,
 		},
 		"unmapped client whose registration was deleted, enforcing": {
-			row:                       ListSelectionMappingsRow{CandidateIds: []uuid.UUID{candidate}},
-			registrationIssuerMatches: true,
-			typedOnly:                 true,
-			want:                      SelectionUnusable,
-		},
-		"unmapped client the issuer does not bind, enforcing": {
-			row:       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
+			row:       ListSelectionMappingsRow{CandidateIds: []uuid.UUID{candidate}},
 			typedOnly: true,
 			want:      SelectionUnusable,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly, tc.registrationIssuerMatches)
+			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly)
 			require.Equal(t, tc.want, got)
 			if got == SelectionMap {
 				require.Equal(t, candidate, mapped, "the candidate is the client recorded")
@@ -539,15 +476,6 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 		})
 	}
 }
-func TestTypedSelectionRepairSkipsLegacyIssuerEvidence(t *testing.T) {
-	t.Parallel()
-	row := ListSelectionMappingsRow{RemoteSessionClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
-	// With no SQL client this would fail if typed repair tried the legacy read.
-	matches, err := legacySelectionIssuerEvidence(t.Context(), nil, "fixture-org", []ListSelectionMappingsRow{row}, true, func(ListSelectionMappingsRow) uuid.UUID { return uuid.New() })
-	require.NoError(t, err)
-	require.Empty(t, matches)
-}
-
 func TestListSelectionMappingsScopedLiveCredentialsRespectTenant(t *testing.T) {
 	t.Parallel()
 	for _, organizationIssuer := range []bool{false, true} {

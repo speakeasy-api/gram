@@ -400,7 +400,7 @@ func TestCreate_AbandonedClientRetiresRegistrationWithoutUnlinkingParent(t *test
 
 	orphanID := provisiontest.CreateConnection(t, ctx, si.conn.conn, si.orgID, identityproviderconnections.ProviderOkta)
 	issuerID := createIssuer(t, ctx, si.conn.conn, si.orgID, noProject, tokenEndpoint)
-	managed, err := si.provisioner.ProvisionClient(ctx, secretParams(si.orgID, orphanID, issuerID))
+	_, err := si.provisioner.ProvisionClient(ctx, secretParams(si.orgID, orphanID, issuerID))
 	require.NoError(t, err)
 
 	fixtures := testrepo.New(si.conn.conn)
@@ -408,7 +408,7 @@ func TestCreate_AbandonedClientRetiresRegistrationWithoutUnlinkingParent(t *test
 		ID: uuid.New(), Name: "Abandoned binding", Slug: "abandoned-binding-" + uuid.NewString()[:8], OrganizationID: si.orgID,
 	})
 	require.NoError(t, err)
-	userIssuer, err := usersessionsrepo.New(si.conn.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+	_, err := usersessionsrepo.New(si.conn.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
 		OrganizationID:     conv.ToPGText(si.orgID),
 		Slug:               "abandoned-binding-" + uuid.NewString()[:8],
@@ -416,16 +416,9 @@ func TestCreate_AbandonedClientRetiresRegistrationWithoutUnlinkingParent(t *test
 		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
 	})
 	require.NoError(t, err)
-	require.NoError(t, remotesessionsrepo.New(si.conn.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
-		RemoteSessionClientID: managed.ClientRowID,
-		UserSessionIssuerID:   userIssuer.ID,
-	}))
 
 	createOINConnection(t, ctx, si)
 
 	_, err = si.provisioner.GetManagedClient(ctx, si.orgID, orphanID)
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned, "the orphan's client was tombstoned")
-	bindings, err := fixtures.CountRemoteSessionClientBindingsFixture(ctx, managed.ClientRowID)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, bindings, "cleanup does not physically unlink compatibility parents")
 }

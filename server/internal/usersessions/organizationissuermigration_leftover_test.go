@@ -13,12 +13,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
-	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -80,9 +78,8 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 				sourceID := seedIssuer(t, ctx, ti, "leftover-source")
 				targetServer, targetRegistration := leftoverSeedServer(t, ctx, ti, targetID)
 				leftoverSyncServers(t, ctx, ti, targetServer)
-				var stale uuid.UUID
 				if leftover {
-					stale = leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
+					leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
 				}
 				typed := authclientbackfill.New(ti.conn)
 				clientsBefore, err := typed.ListLiveAuthClientIDsFixture(ctx, auth.ActiveOrganizationID)
@@ -109,11 +106,6 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 				clientsAfter, err := typed.ListLiveAuthClientIDsFixture(ctx, auth.ActiveOrganizationID)
 				require.NoError(t, err)
 				assert.Len(t, clientsAfter, 1)
-				if leftover {
-					bound, err := remotesessionsrepo.New(ti.conn).CountRemoteSessionClientUserSessionIssuerBindings(ctx, remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: stale, UserSessionIssuerID: targetID})
-					require.NoError(t, err)
-					assert.Zero(t, bound, "the leftover binding stays behind with the source")
-				}
 
 				// A credential issued after consolidation takes the path issuance
 				// takes, and still has one decidable client on the target's server.
@@ -135,10 +127,6 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 					assert.Equal(t, targetRegistration, choices[0].RemoteSessionClientID.UUID)
 				}
 
-				report, err := associationbackfill.Run(ctx, ti.conn, associationbackfill.Options{OrganizationID: auth.ActiveOrganizationID, Apply: false, PageSize: 0})
-				require.NoError(t, err)
-				assert.Equal(t, report.Enforced, report.Decided)
-				assert.Zero(t, report.Gaps)
 			})
 		}
 	}
@@ -189,7 +177,6 @@ func leftoverSeedBoundRegistration(t *testing.T, ctx context.Context, ti *testIn
 	providerID, clientID := uuid.New(), uuid.New()
 	require.NoError(t, fixtures.SeedRemoteSessionIssuerFixture(ctx, selectionbackfill.SeedRemoteSessionIssuerFixtureParams{ID: providerID, ProjectID: conv.ToNullUUID(*auth.ProjectID), Slug: "provider-" + providerID.String(), Issuer: "https://" + providerID.String() + ".example.com"}))
 	require.NoError(t, fixtures.SeedRemoteSessionClientFixture(ctx, selectionbackfill.SeedRemoteSessionClientFixtureParams{ID: clientID, ProjectID: conv.ToNullUUID(*auth.ProjectID), OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), RemoteSessionIssuerID: providerID, ClientID: clientID.String()}))
-	require.NoError(t, fixtures.SeedClientBindingFixture(ctx, selectionbackfill.SeedClientBindingFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID}))
 	return clientID
 }
 

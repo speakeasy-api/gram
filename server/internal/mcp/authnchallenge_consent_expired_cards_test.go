@@ -537,9 +537,6 @@ func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *te
 			ctx, fx := seedStandaloneValidationFixture(t, prefix)
 			projectID, orgID := consentTestTenant(t, ctx)
 			linked, shared := fx.clientID, fx.endpoint.UserSessionIssuerID
-			if !tc.sibling {
-				require.NoError(t, testrepo.New(fx.ti.conn).DeleteRegistrationJunctionFixture(ctx, testrepo.DeleteRegistrationJunctionFixtureParams{RemoteSessionClientID: linked, ProjectID: conv.ToNullUUID(projectID)}))
-			}
 
 			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
 			fixtures := authclientfixtures.New(fx.ti.conn)
