@@ -29,7 +29,6 @@ const (
 // every request goes through, did not answer whoever asked. Every other reason there
 // can be one caller's own, so another caller's success proves nothing about it.
 var serverDidNotAnswer = []string{
-	CodeKillswitchCheckUnavailable.name,
 	CodeAuthCheckUnavailable.name,
 	CodeProviderUnreachable.name,
 	CodeProviderUnavailable.name,
@@ -38,10 +37,17 @@ var serverDidNotAnswer = []string{
 	CodeTunnelAtCapacity.name,
 }
 
+// serviceSignInNeedsRenewing are reasons a refresh is refused for because the person's
+// sign-in to the service needs renewing, whatever step records them.
+var serviceSignInNeedsRenewing = []string{CodeUpstreamReconnectRequired.name, CodeUpstreamEMARefused.name}
+
 // PartOf returns the part a failure broke, from the step it was recorded on. A request
 // or listing can be refused for any part, so there the reason decides. An unknown
 // reason on those steps is the caller's own, which only their own success ends.
 func PartOf(step, reason string) Part {
+	if slices.Contains(serviceSignInNeedsRenewing, reason) {
+		return PartServiceSignIn
+	}
 	switch step {
 	case StepProviderSignIn.name, StepProviderToken.name, StepProviderRefresh.name, StepUpstreamEMA.name:
 		return PartServiceSignIn

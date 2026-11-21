@@ -26,6 +26,8 @@ func TestParts_AStepNamesThePartItBroke(t *testing.T) {
 		{StepMCPRequest, CodeProviderUnreachable, PartServer},
 		{StepDiscoveryMember, CodeTunnelUnavailable, PartServer},
 		{StepMCPRequest, CodeInvalidBearerToken, PartAppSignIn},
+		{StepInboundToken, CodeUpstreamReconnectRequired, PartServiceSignIn},
+		{StepInboundToken, CodeUpstreamEMARefused, PartServiceSignIn},
 	} {
 		require.Equal(t, c.want, PartOf(c.step.String(), c.code.String()), c.step.String()+" "+c.code.String())
 	}
@@ -36,11 +38,11 @@ func TestParts_ARequestReasonNamesThePartItBroke(t *testing.T) {
 	t.Parallel()
 	for _, step := range []Step{StepMCPRequest, StepDiscoveryListing, StepDiscoveryMember} {
 		require.Equal(t, PartAppSignIn, PartOf(step.String(), CodeInvalidBearerToken.String()))
-		for _, code := range []Code{CodeKillswitchCheckUnavailable, CodeProviderUnreachable, CodeProviderUnavailable, CodeProviderServerError, CodeTunnelUnavailable, CodeTunnelAtCapacity} {
+		for _, code := range []Code{CodeProviderUnreachable, CodeProviderUnavailable, CodeProviderServerError, CodeTunnelUnavailable, CodeTunnelAtCapacity} {
 			require.Equal(t, PartServer, PartOf(step.String(), code.String()), code.String())
 		}
 		// Reasons that can be one caller's own, which another caller's success says nothing about.
-		for _, code := range []Code{CodeInvalidRemoteSession, CodeProviderRejected, CodeStoredSignInUnreadable, CodeCredentialMisconfigured, CodeCallerCredentialMissing, CodeProviderRateLimited, CodeInternalError, CodeStaticKeyRejected, CodeSharedCredentialRejected, CodeAddressNotFound, CodeMemberToolsMissing} {
+		for _, code := range []Code{CodeKillswitchCheckUnavailable, CodeInvalidRemoteSession, CodeProviderRejected, CodeStoredSignInUnreadable, CodeCredentialMisconfigured, CodeCallerCredentialMissing, CodeProviderRateLimited, CodeInternalError, CodeStaticKeyRejected, CodeSharedCredentialRejected, CodeAddressNotFound, CodeMemberToolsMissing} {
 			require.Equal(t, PartServiceSignIn, PartOf(step.String(), code.String()), code.String())
 		}
 		require.Equal(t, PartServiceSignIn, PartOf(step.String(), "a_reason_added_later"), "an unknown reason is ended only by the person's own success")
@@ -105,7 +107,7 @@ var callerOwnOnRequest = []Code{
 	CodeRenewalMisconfigured, CodeInvalidIdentity, CodeRenewalRetryable, CodeRenewalAmbiguous, CodeCatalogTooLarge,
 	CodeApprovalNeedsAdmin, CodeRefreshTokenClientMismatch, CodeRefreshTokenUsedByOtherApp, CodeStoredSessionInvalid,
 	CodeStoredSignInUnreadable, CodeUpstreamCredentialNotChosen, CodeSignInMethodNotAccepted, CodeCredentialChoiceInvalid,
-	CodeAddressNotAllowed, CodeAddressNotFound,
+	CodeAddressNotAllowed, CodeAddressNotFound, CodeKillswitchCheckUnavailable,
 }
 
 // A new failed reason must be placed: the server not answering anyone, or one caller's own.

@@ -97,7 +97,7 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 	ev := indexEvidence(attempts, served, answers, now)
 
 	var out []FailingPerson
-	for _, e := range openEpisodes(failures, ev) {
+	for _, e := range openEpisodes(failures, ev, since) {
 		switch {
 		case now.Sub(e.OpenedAt) < GraceOf(e.Reason),
 			filter.ServerID != "" && e.ServerID != filter.ServerID && e.MemberID != filter.ServerID,

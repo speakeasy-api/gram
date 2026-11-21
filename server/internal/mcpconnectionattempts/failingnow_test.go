@@ -163,6 +163,22 @@ func TestFailingNow_TriedSinceKeepsWhoTriedSinceThen(t *testing.T) {
 }
 
 // An attempt with no final row reads as failed only after its live window, so TriedSince counts from then.
+// TriedSince applies to the latest failure of the open run, not an older one that ended and became known late.
+func TestFailingNow_TriedSinceAppliesToTheOpenRunsLatestFailure(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	started := f.at(90 * time.Minute)
+	stopped, err := RowAt(AttemptAt(uuid.New(), started, f.direct(AppDCR)), StepInboundToken, CodeRefreshTokenExpired, false, started.Add(time.Minute), Subject(&p))
+	require.NoError(t, err)
+	require.NoError(t, AppendRows(t.Context(), f.ch, []Row{stopped}))
+	f.attempt(f.direct(AppDCR), 80*time.Minute, StepInboundToken, ResultRefreshed, Subject(&p))
+	f.attempt(f.direct(AppDCR), 70*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p))
+
+	require.Len(t, f.failing(), 1)
+	require.Empty(t, f.read(FailingNowFilter{OrganizationID: "", ProviderHost: "", ServerID: "", TriedSince: f.at(40 * time.Minute)}))
+}
+
 func TestFailingNow_AnAttemptThatStoppedOnAFailureIsCountedFromWhenItReadsAsFailed(t *testing.T) {
 	t.Parallel()
 	f := newFailingFixture(t)
@@ -451,6 +467,26 @@ func TestFailingNow_AServiceSignInFailureEndsOnlyOnAnAnswerOverTheSameServiceCon
 	require.Equal(t, r.String(), got[0].SubjectURN)
 }
 
+// A refresh refused because the service sign-in needs renewing is the service's part, whatever step records it.
+func TestFailingNow_ARefreshRefusedForTheServiceEndsOnTheServiceSignIn(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	for _, code := range []Code{CodeUpstreamReconnectRequired, CodeUpstreamEMARefused} {
+		p, q := person(), person()
+		f.attempt(f.direct(AppDCR), 40*time.Minute, StepInboundToken, code, Subject(&p))
+		f.attempt(f.direct(AppDCR), 40*time.Minute, StepInboundToken, code, Subject(&q))
+		f.served(f.onServer(p, AppDCR), 30*time.Minute)
+		f.served(f.onServer(q, AppDCR), 30*time.Minute)
+		got := f.failing()
+		require.Len(t, got, 2, "%s: the app's token still being served does not show the service sign-in works", code)
+		require.Equal(t, PartServiceSignIn, got[0].Part, code.String())
+
+		f.attempt(f.direct(AppFirstParty), 20*time.Minute, StepProviderSignIn, ResultSignedIn, Subject(&p), Member(f.server))
+		f.answered(f.onServer(q, AppDCR), 20*time.Minute)
+		require.Empty(t, f.failing(), code.String())
+	}
+}
+
 func TestFailingNow_AServiceSignInFailureEndsOnThatMembersSignIn(t *testing.T) {
 	t.Parallel()
 	f := newFailingFixture(t)
@@ -584,6 +620,19 @@ func TestFailingNow_AGateCheckOutageEndsWhenAnyMemberAnswers(t *testing.T) {
 	s := f.conn(someone, serverKindMeta, gateway, AppDCR)
 	s.MemberID = uuid.NewString()
 	f.answered(s, 39*time.Minute)
+	require.Empty(t, f.failing())
+}
+
+// The kill switch check runs only on tool calls, so another caller's answer does not show it works.
+func TestFailingNow_AKillSwitchCheckOutageEndsOnlyOnTheCallersOwnAnswer(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, someone := person(), person()
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepMCPRequest, CodeKillswitchCheckUnavailable, Subject(&p))
+	f.answered(f.onServer(someone, AppDCR), 30*time.Minute)
+	require.Len(t, f.failing(), 1)
+
+	f.answered(f.onServer(p, AppDCR), 20*time.Minute)
 	require.Empty(t, f.failing())
 }
 
@@ -729,7 +778,7 @@ func TestFailingNow_AGatewaysFailureEndsWhenAnyMemberAnswersThroughIt(t *testing
 		s.MemberID = uuid.NewString()
 		return s
 	}
-	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, CodeKillswitchCheckUnavailable, Subject(&p))
+	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, CodeAuthCheckUnavailable, Subject(&p))
 	f.answered(through(uuid.New()), 35*time.Minute)
 	f.served(f.conn(someone, serverKindMeta, gateway, AppDCR), 35*time.Minute)
 	require.Len(t, f.failing(), 1, "another gateway's member, and the gateway serving its own request")
@@ -789,6 +838,23 @@ func TestFailingNow_TheProviderFilterReadsTheAttemptsProvider(t *testing.T) {
 }
 
 // A company sign-in is renewed for a person, not an app or a server.
+// First-party sign-in has no token step: it connects on consent.
+func TestFailingNow_AFirstPartyFailureEndsOnAFirstPartySignIn(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, q := person(), person()
+	f.attempt(f.direct(AppFirstParty), 40*time.Minute, StepInboundConsent, CodeConnectionCatalogExpired, Subject(&p))
+	f.attempt(f.direct(AppUnverified), 40*time.Minute, StepInboundConsent, CodeConnectionCatalogExpired, Subject(&q))
+	f.attempt(f.direct(AppCodeMode), 30*time.Minute, StepInboundConsent, ResultComplete, Subject(&q))
+	got := f.failing()
+	require.Len(t, got, 2, "another app's consent completing is not a sign-in")
+
+	f.attempt(f.direct(AppFirstParty), 20*time.Minute, StepInboundConsent, ResultComplete, Subject(&p))
+	got = f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, q.String(), got[0].SubjectURN)
+}
+
 func TestFailingNow_ACompanySignInRenewalEndsOnTheNextRenewal(t *testing.T) {
 	t.Parallel()
 	f := newFailingFixture(t)
@@ -863,7 +929,7 @@ func TestFailingNow_AGatewayFailureWithNoMemberReportsWhenAnyMemberLastAnswered(
 	f := newFailingFixture(t)
 	p, someone := person(), person()
 	gateway := uuid.New()
-	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, CodeKillswitchCheckUnavailable, Subject(&p))
+	f.attempt(GatewayScope(f.org, f.project, gateway, AppDCR), 40*time.Minute, StepMCPRequest, CodeAuthCheckUnavailable, Subject(&p))
 	for _, ago := range []time.Duration{3 * time.Hour, 2 * time.Hour} {
 		s := f.conn(someone, serverKindMeta, gateway, AppDCR)
 		s.MemberID = uuid.NewString()

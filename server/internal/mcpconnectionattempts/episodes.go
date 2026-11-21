@@ -251,7 +251,10 @@ func indexEvidence(attempts []attemptFacts, served, answers []lastServed, now ti
 		}
 		// Connected on the token step means the app was handed a working sign-in, new or
 		// renewed. A renewed company sign-in is the same for an attempt that reached no server.
-		if e := a.End(now); e.Outcome == OutcomeConnected && (e.Step == StepInboundToken.name || e.Step == StepSignInRenewal.name) {
+		// First-party sign-in has no token step and connects on consent.
+		e := a.End(now)
+		if e.Outcome == OutcomeConnected && (e.Step == StepInboundToken.name || e.Step == StepSignInRenewal.name ||
+			(e.Step == StepInboundConsent.name && a.AppKey == AppFirstParty.key)) {
 			s.at = e.At
 			ev.signIns[a.SubjectURN] = append(ev.signIns[a.SubjectURN], s)
 		}
@@ -394,8 +397,9 @@ func serviceEndpoint(kind, server, member string) string {
 }
 
 // openEpisodes returns the run of failures since the broken part last worked, for each
-// part of a connection whose latest failure is not over.
-func openEpisodes(failures []failure, ev evidence) []Episode {
+// part of a connection whose latest failure is not over and became known since since.
+// Evidence at exactly the failure's time does not end it.
+func openEpisodes(failures []failure, ev evidence, since time.Time) []Episode {
 	byKey := map[string][]failure{}
 	for _, f := range failures {
 		byKey[f.connectionKey()] = append(byKey[f.connectionKey()], f)
@@ -405,6 +409,9 @@ func openEpisodes(failures []failure, ev evidence) []Episode {
 		latest := slices.MaxFunc(fs, func(x, y failure) int {
 			return cmp.Or(x.end.At.Compare(y.end.At), slices.Compare(x.a.AttemptID[:], y.a.AttemptID[:]))
 		})
+		if latest.knownAt.Before(since) {
+			continue
+		}
 		worked := ev.lastWorked(latest)
 		if worked.After(latest.end.At) {
 			continue
