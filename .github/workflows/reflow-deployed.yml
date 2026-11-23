@@ -1,0 +1,229 @@
+name: Reflow (deployed host)
+
+# PROPOSAL, not wired to any event: it only runs when another workflow calls
+# it, and nothing calls it automatically.
+#
+# Runs the golden flows tagged `portable` against a deployed non-production
+# host and gates on them. It boots nothing: the suite's root asks the host to
+# reseed its one test organization and waits until the host serves the expected
+# build, and the shared sign-in asks the host for a one-time sign-in link
+# (server/internal/e2econtrol). No job here holds a database DSN, an API key or
+# an identity-provider password: its one credential is the control token.
+#
+# The control surface exists on a pull request preview that opted in (the
+# preview-e2e label), and not on dev: a dev run cannot pass the suite's root
+# until dev is admitted there, which is a separate decision.
+#
+# Callers:
+#   reflow-preview.yml (this repository)        a pull request's preview
+#   dev-readiness.yaml (speakeasy-api/gram-infra)  dev, once dev is admitted
+#
+# Passes are recorded on `record_branch`, never on the code branch, so a pass
+# from a local-stack run is not carried into a deployed run or the reverse.
+
+on:
+  workflow_call:
+    inputs:
+      url:
+        description: "Deployed non-production host, e.g. https://pr-123.dev.getgram.ai"
+        required: true
+        type: string
+      expect_build:
+        description: "Commit the host must serve (a short SHA is enough)"
+        required: true
+        type: string
+      source_ref:
+        description: "Commit of this repository to take the Reflow tasks and the API contract from"
+        required: true
+        type: string
+      record_branch:
+        description: "Name the CI runs are recorded under, e.g. env/dev or preview/pr-123"
+        required: true
+        type: string
+      reflow_collection:
+        description: "Reflow application collection ID"
+        required: true
+        type: string
+      reflow_team:
+        description: "Reflow team ID"
+        required: true
+        type: string
+      reflow_installer_sha256:
+        description: "Expected SHA-256 of https://reflow.io/install.sh"
+        required: true
+        type: string
+    secrets:
+      REFLOW_TOKEN:
+        required: true
+      E2E_CONTROL_TOKEN:
+        description: "The host's end-to-end control token (GRAM_E2E_CONTROL_TOKEN on the server)"
+        required: true
+    outputs:
+      conclusion:
+        description: "passed or failed"
+        value: ${{ jobs.golden.outputs.conclusion }}
+
+permissions:
+  contents: read
+
+env:
+  # Exact Reflow CLI release; bump deliberately.
+  REFLOW_VERSION: 0.1.0-c0811c5f88c6c2f2ce35
+  REFLOW_API: https://app.reflow.io
+
+jobs:
+  golden:
+    name: portable golden flows
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      conclusion: ${{ steps.conclude.outputs.conclusion }}
+    env:
+      REFLOW_COLLECTION: ${{ inputs.reflow_collection }}
+      TARGET_URL: ${{ inputs.url }}
+      EXPECT_BUILD: ${{ inputs.expect_build }}
+      RECORD_BRANCH: ${{ inputs.record_branch }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          repository: speakeasy-api/gram
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+
+      # Only what the two Reflow tasks need: no Go, Rust or database tooling.
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          install_args: node aube jq
+          cache: true
+          cache_key_prefix: mise-reflow-deployed-v1
+          env: false
+
+      - name: Install task dependencies
+        run: mise run install:aube
+
+      - name: Refuse a production host
+        run: |
+          case "$TARGET_URL" in
+            https://pr-*.dev.getgram.ai|https://dev.getgram.ai|https://dev.ai.speakeasy.com) ;;
+            *)
+              echo "::error::$TARGET_URL is not a known non-production host"
+              exit 1
+              ;;
+          esac
+
+      - name: Install Reflow
+        env:
+          REFLOW_INSTALLER_SHA256: ${{ inputs.reflow_installer_sha256 }}
+        run: |
+          installer="$RUNNER_TEMP/reflow-install.sh"
+          curl -fsSL -o "$installer" https://reflow.io/install.sh
+          echo "${REFLOW_INSTALLER_SHA256}  ${installer}" | sha256sum -c -
+          sh "$installer" --no-agent-setup --version "$REFLOW_VERSION"
+          echo "$HOME/.local/share/reflow-sidecar/bin" >> "$GITHUB_PATH"
+
+      - name: Connect Reflow
+        env:
+          REFLOW_TOKEN: ${{ secrets.REFLOW_TOKEN }}
+        run: |
+          printf '%s' "$REFLOW_TOKEN" | reflow-connection configure --api-url "$REFLOW_API" --app-url "$REFLOW_API"
+          reflow connection
+
+      - name: Bind the checkout to the collection
+        env:
+          REFLOW_TEAM: ${{ inputs.reflow_team }}
+        run: |
+          mkdir -p .reflow
+          printf 'team: %s\ncollection: %s\nrepository: %s\n' "$REFLOW_TEAM" "$REFLOW_COLLECTION" "speakeasy-api/gram" > .reflow/app.yml
+          reflow init --collection "$REFLOW_COLLECTION"
+
+      # A host that does not answer yet (a preview still rolling out) fails a
+      # flow's first request at once, so wait here until it answers at all. The
+      # suite's root then waits for the expected build before it reseeds.
+      - name: Wait for the host to answer
+        env:
+          GRAM_E2E_CONTROL_TOKEN: ${{ secrets.E2E_CONTROL_TOKEN }}
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS -o /dev/null -H "Gram-E2E-Token: $GRAM_E2E_CONTROL_TOKEN" "$TARGET_URL/rpc/e2e.tenant"; then
+              exit 0
+            fi
+            echo "attempt $attempt: $TARGET_URL does not answer yet"
+            sleep 15
+          done
+          echo "::error::$TARGET_URL did not answer /rpc/e2e.tenant within 15 minutes"
+          exit 1
+
+      - name: Target the host
+        env:
+          GRAM_E2E_CONTROL_TOKEN: ${{ secrets.E2E_CONTROL_TOKEN }}
+        run: >-
+          mise run reflow:target
+          --url "$TARGET_URL"
+          --expect-build "$EXPECT_BUILD"
+          --group "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          --dir "$RUNNER_TEMP/reflow-target"
+
+      - name: Describe this CI run
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n \
+            --arg repo "speakeasy-api/gram" \
+            --arg branch "$RECORD_BRANCH" \
+            --arg url "$RUN_URL" \
+            '{provider: "github-actions", repository: $repo, branch: $branch, run_url: $url}' \
+            > "$RUNNER_TEMP/reflow-ci.json"
+
+      # No --base-branch: the code branch's runs were made against a local
+      # stack, and a pass there says nothing about this host.
+      - name: Run portable golden flows
+        id: golden
+        continue-on-error: true
+        run: >-
+          mise run reflow:golden
+          --label portable
+          --ci-context "$RUNNER_TEMP/reflow-ci.json"
+          --branch "$RECORD_BRANCH"
+          --out-dir "$RUNNER_TEMP/reflow-ci"
+          --publish
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "Host: \`$TARGET_URL\` · expected build: \`$EXPECT_BUILD\` · recorded on \`$RECORD_BRANCH\`"
+            echo
+            if [ -f "$RUNNER_TEMP/reflow-ci/report.md" ]; then
+              cat "$RUNNER_TEMP/reflow-ci/report.md"
+            else
+              echo "No report was produced."
+            fi
+          } | tee "$RUNNER_TEMP/reflow-deployed-report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reflow-deployed-report
+          path: ${{ runner.temp }}/reflow-deployed-report.md
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Conclude
+        id: conclude
+        if: always()
+        env:
+          OUTCOME: ${{ steps.golden.outcome }}
+        run: |
+          if [ "$OUTCOME" = "success" ]; then
+            echo "conclusion=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "conclusion=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi

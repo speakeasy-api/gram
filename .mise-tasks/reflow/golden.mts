@@ -12,6 +12,7 @@
 //USAGE flag "--out-dir <dir>" default=".reflow-ci" help="Directory for CI run results and the Markdown report"
 //USAGE flag "--publish" help="Publish the report as a private Reflow review page"
 //USAGE flag "--post" help="Ask the Reflow GitHub App to write the report as the pull request's comment"
+//USAGE flag "--label <tag>" help="Run only the golden flows that carry this tag, e.g. `portable` against a deployed host"
 
 // One CI run covers every golden flow, so there is one report, one gate and
 // one pull request comment. Reflow refuses a run in which more than 20 flows
@@ -29,7 +30,7 @@ import { $ } from "zx";
 $.verbose = false;
 
 type SearchPage = {
-  flows: { slug: string; golden?: unknown }[];
+  flows: { slug: string; golden?: unknown; tags?: string[] }[];
   next_offset?: number | null;
 };
 type CiRunResult = {
@@ -52,6 +53,10 @@ const ciContext = process.env["usage_ci_context"];
 const outDir = path.resolve(process.env["usage_out_dir"] ?? ".reflow-ci");
 const publish = process.env["usage_publish"] === "true";
 const post = process.env["usage_post"] === "true";
+// A tag narrows every selection: the single run, the shard list and the
+// repeat. Flows without it are neither run nor reported as missing.
+const label = process.env["usage_label"];
+const labelArgs = label ? ["--label", label] : [];
 const baseArgs = baseBranch ? ["--base-branch", baseBranch] : [];
 
 // search_flows is the CLI's one flow listing. Its golden filter "golden" keeps
@@ -85,7 +90,10 @@ async function goldenSlugs(): Promise<string[]> {
       "search_flows returned no flows list",
     );
     slugs.push(
-      ...page.flows.filter((f) => f.golden != null).map((f) => f.slug),
+      ...page.flows
+        .filter((f) => f.golden != null)
+        .filter((f) => !label || (f.tags ?? []).includes(label))
+        .map((f) => f.slug),
     );
     offset = page.next_offset ?? null;
   }
@@ -108,6 +116,7 @@ async function ciRun(
   const runArgs = [
     ...selection,
     "--golden",
+    ...labelArgs,
     "--collection",
     collection,
     "--parallelism",
