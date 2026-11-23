@@ -25,7 +25,7 @@ const rolesDeleteAccessRequests = `-- name: RolesDeleteAccessRequests :exec
 DELETE FROM access_requests WHERE organization_id = $1
 `
 
-// Access requests: one pending, one denied, so the Access Requests tab and
+// Access requests: two pending, one denied, so the Access Requests tab and
 // the grant dialog's approval choices have something to show. Messages
 // cascade with their request.
 func (q *Queries) RolesDeleteAccessRequests(ctx context.Context, organizationID string) error {

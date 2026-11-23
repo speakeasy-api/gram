@@ -24,7 +24,11 @@ import { Check } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { RequireScope } from "@/components/require-scope";
+import type { AccessRequest } from "@gram/client/models/components/accessrequest.js";
+import { formatDistanceToNow } from "date-fns";
 import { isDisplayableBucket, principalDisplayName } from "./challengeHelpers";
+import { pendingRequestForBucket } from "./pendingRequestMatch";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
@@ -264,7 +268,35 @@ function flattenWithExpanded(
   return result;
 }
 
-export function ChallengesTab(): JSX.Element {
+/** The line under a denied member's name that says they asked for access. */
+function RequestedLine({ request }: { request: AccessRequest }): JSX.Element {
+  const asked = `Asked ${formatDistanceToNow(request.createdAt, { addSuffix: true })}`;
+  const text = request.message ? `${asked}: “${request.message}”` : asked;
+  return (
+    <Text
+      muted
+      small
+      className="block truncate"
+      title={text}
+      data-testid="challenge-request-line"
+    >
+      {text}
+    </Text>
+  );
+}
+
+export function ChallengesTab({
+  pendingRequests,
+  onReviewRequest,
+}: {
+  /**
+   * Members' pending access requests. A denied row whose member asked for
+   * that access says so, and is decided as the request.
+   */
+  pendingRequests?: readonly AccessRequest[];
+  /** Opens the decision dialog on a request. */
+  onReviewRequest?: (request: AccessRequest) => void;
+} = {}): JSX.Element {
   const [searchParams] = useSearchParams();
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>("deny");
   const [principalFilter, setPrincipalFilter] = useState(
@@ -469,17 +501,75 @@ export function ChallengesTab(): JSX.Element {
     agentsById,
   );
 
+  // The pending request each denied bucket answers. Only buckets are matched:
+  // an expanded child row belongs to the bucket above it.
+  const requestByBucketId = useMemo(() => {
+    const map = new Map<string, AccessRequest>();
+    if (!pendingRequests?.length || !onReviewRequest) return map;
+    for (const bucket of rows) {
+      const request = pendingRequestForBucket(bucket, pendingRequests);
+      if (request) map.set(bucket.id, request);
+    }
+    return map;
+  }, [rows, pendingRequests, onReviewRequest]);
+
+  const columnsWithRequests: Column<ChallengeBucket>[] = useMemo(
+    () =>
+      challengeRowColumns.map((column) =>
+        column.key === "identity"
+          ? {
+              ...column,
+              render: (row: ChallengeBucket) => {
+                const request = requestByBucketId.get(row.id);
+                const cell = column.render?.(row);
+                if (!request) return cell;
+                return (
+                  <div className="min-w-0">
+                    {cell}
+                    <RequestedLine request={request} />
+                  </div>
+                );
+              },
+            }
+          : column,
+      ),
+    [challengeRowColumns, requestByBucketId],
+  );
+
   const wrappedActionsColumn: Column<ChallengeBucket> = useMemo(
     () => ({
       ...actionsColumn,
-      render: (row: ChallengeBucket) =>
-        expandedChildIds.has(row.id) ? null : actionsColumn.render?.(row),
+      render: (row: ChallengeBucket) => {
+        if (expandedChildIds.has(row.id)) return null;
+        const request = requestByBucketId.get(row.id);
+        if (!request || !onReviewRequest) return actionsColumn.render?.(row);
+        // Decided as the request, so the member's ask and the denial close
+        // together; the dialog still offers a role.
+        return (
+          <RequireScope
+            scope="org:admin"
+            level="component"
+            reason="Only organization admins can decide access requests."
+          >
+            {({ disabled }) => (
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={disabled}
+                onClick={() => onReviewRequest(request)}
+              >
+                <Button.Text>Review</Button.Text>
+              </Button>
+            )}
+          </RequireScope>
+        );
+      },
     }),
-    [actionsColumn, expandedChildIds],
+    [actionsColumn, expandedChildIds, requestByBucketId, onReviewRequest],
   );
 
   const columns: Column<ChallengeBucket>[] = [
-    ...challengeRowColumns,
+    ...columnsWithRequests,
     wrappedActionsColumn,
   ];
 

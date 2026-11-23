@@ -226,7 +226,12 @@ function AccessInner() {
         </TabsContent>
 
         <TabsContent value="challenges" className="mt-6">
-          <ChallengesTab />
+          <ChallengesTab
+            pendingRequests={
+              accessRequestsOn ? pendingRequests.data?.requests : undefined
+            }
+            onReviewRequest={reviewRequest}
+          />
         </TabsContent>
 
         {accessRequestsOn && (
