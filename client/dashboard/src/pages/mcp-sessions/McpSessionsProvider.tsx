@@ -13,11 +13,6 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { RequireScope } from "@/components/require-scope";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
 import { useProject } from "@/contexts/Auth";
 import { useScrollToSettingsHash } from "@/hooks/useScrollToSettingsHash";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
@@ -35,7 +30,7 @@ import { useRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useOrganizationUserSessionIssuer } from "@gram/client/react-query/organizationUserSessionIssuer.js";
-import { ChevronRight, Info } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useEffect } from "react";
 import {
   Link,
@@ -48,8 +43,7 @@ import { ConnectionsTab } from "./ConnectionsTab";
 import { ConnectionsViews } from "./connection-health/ConnectionsViews";
 import { useConnectionHealthFlag } from "./connection-health/flag";
 import { OverviewTab } from "./connection-health/OverviewTab";
-import { SessionDurationControl } from "./connection-health/SessionDurationControl";
-import { ProviderPicker } from "./ProviderPicker";
+import { ProviderPicker, ProviderSwitcher } from "./ProviderPicker";
 import {
   clientAccessLabel,
   HEALTH_PROVIDER_SEGMENTS,
@@ -166,6 +160,11 @@ function ProviderPage(): JSX.Element {
     href: tabHref(tab === "connections" && healthOn ? "connection-logs" : tab),
   }));
 
+  // Same tab, other provider; the query's filters (a person, a status)
+  // still apply.
+  const switchProvider = (next: UserSessionIssuer) =>
+    void navigate(`${tabHref(segment, next.id)}${search}`);
+
   return (
     <DetailFrame
       breadcrumbs={{ substitutions: {} }}
@@ -173,43 +172,52 @@ function ProviderPage(): JSX.Element {
       tabs={tabs}
       activeTab={activeTab}
       contentRef={contentRef}
+      tabsAside={
+        healthOn && provider ? (
+          <ProviderSwitcher
+            current={provider}
+            providers={providers}
+            onSelect={switchProvider}
+          />
+        ) : undefined
+      }
       header={
-        <DetailHeaderLayout
-          title={
-            provider ? (
-              <DetailHeaderTitle
-                eyebrow={healthOn ? <ProviderEyebrow /> : PROVIDER_EYEBROW}
-                name={
-                  <ProviderPicker
-                    current={provider}
-                    providers={providers}
-                    // Same tab, other provider; the query's filters (a
-                    // person, a status) still apply.
-                    onSelect={(next) =>
-                      void navigate(`${tabHref(segment, next.id)}${search}`)
-                    }
-                  />
-                }
-              />
-            ) : (
-              <DetailHeaderTitleSkeleton icon={false} />
-            )
-          }
-          controls={
-            provider ? (
-              <ProviderHeaderControls
-                provider={provider}
-                settingsHref={tabHref("settings")}
-                healthOn={healthOn}
-              />
-            ) : null
-          }
-        />
+        healthOn ? undefined : (
+          <DetailHeaderLayout
+            title={
+              provider ? (
+                <DetailHeaderTitle
+                  eyebrow="MCP Authentication Provider"
+                  name={
+                    <ProviderPicker
+                      current={provider}
+                      providers={providers}
+                      onSelect={switchProvider}
+                    />
+                  }
+                />
+              ) : (
+                <DetailHeaderTitleSkeleton icon={false} />
+              )
+            }
+            controls={
+              provider ? (
+                <ProviderHeaderControls
+                  provider={provider}
+                  settingsHref={tabHref("settings")}
+                />
+              ) : null
+            }
+          />
+        )
       }
     >
       {/* Keyed, so switching project or provider starts each tab afresh:
           a search for one project's connections never carries over. */}
       <div key={`${project.id}:${issuerId}`} className="contents">
+        {healthOn && provider ? (
+          <h1 className="sr-only">{provider.slug}</h1>
+        ) : null}
         {segment === "overview" ? (
           provider ? (
             <OverviewTab provider={provider} />
@@ -234,59 +242,14 @@ function ProviderPage(): JSX.Element {
   );
 }
 
-const PROVIDER_EYEBROW = "MCP Authentication Provider";
-
-/** The eyebrow, with a short answer to "what is this?" beside it. */
-function ProviderEyebrow(): JSX.Element {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      {PROVIDER_EYEBROW}
-      <Tooltip>
-        <TooltipTrigger
-          aria-label="What is an MCP Authentication Provider?"
-          className="text-muted-foreground hover:text-foreground inline-flex cursor-help"
-        >
-          <Info className="size-3.5" aria-hidden />
-        </TooltipTrigger>
-        <TooltipContent side="bottom" align="start">
-          What AI apps sign in through to reach your MCP servers. It decides who
-          gets a session and how long it lasts.
-        </TooltipContent>
-      </Tooltip>
-    </span>
-  );
-}
-
 /** How sign-in through the provider is set up, each linking to its setting. */
 function ProviderHeaderControls({
   provider,
   settingsHref,
-  healthOn,
 }: {
   provider: UserSessionIssuer;
   settingsHref: string;
-  healthOn: boolean;
 }): JSX.Element {
-  if (healthOn) {
-    return (
-      <DetailHeaderControls
-        fitContent
-        rows={[
-          {
-            key: "session-duration",
-            label: "Session duration",
-            control: (
-              <SessionDurationControl
-                providerId={provider.id}
-                configuredHours={provider.sessionDurationHours}
-                href={`${settingsHref}#session-length`}
-              />
-            ),
-          },
-        ]}
-      />
-    );
-  }
   const duration = splitIntoUnit(provider.sessionDurationHours);
   const rows: DetailHeaderControlRow[] = [
     {
