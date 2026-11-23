@@ -19,14 +19,13 @@ import (
 // answers in microseconds, so this only stops a broken test from hanging.
 const splitTurnStreamTimeout = 10 * time.Second
 
-// TestTurnStreamOnSplitInstancesLeavesSessionsEmpty runs publish, subscribe
-// (XREAD), replay and reset on a separate evictable instance whose client
-// refuses any sessions-role key, and checks that the sessions instance stays
-// empty.
-func TestTurnStreamOnSplitInstancesLeavesSessionsEmpty(t *testing.T) {
+// TestTurnStreamOnEvictableInstanceWritesOnlyEvictableKeys runs publish,
+// subscribe (XREAD), replay and reset on an evictable instance whose client
+// refuses any declared sessions-role key, then checks that every key left on
+// the instance classifies as evictable.
+func TestTurnStreamOnEvictableInstanceWritesOnlyEvictableKeys(t *testing.T) {
 	t.Parallel()
 
-	sessionsRedis := miniredis.RunT(t)
 	evictableRedis := miniredis.RunT(t)
 	guard := redisrole.NewGuard(testenv.NewLogger(t), testenv.NewMeterProvider(t), redisrole.GuardEnforce)
 	evictableClient := redis.NewClient(&redis.Options{Addr: evictableRedis.Addr()})
@@ -58,6 +57,10 @@ func TestTurnStreamOnSplitInstancesLeavesSessionsEmpty(t *testing.T) {
 	require.Len(t, replayed, 2)
 	require.NoError(t, stream.Reset(ctx, chatID))
 
-	require.Empty(t, sessionsRedis.Keys())
-	require.NotEmpty(t, evictableRedis.Keys())
+	keys := evictableRedis.Keys()
+	require.NotEmpty(t, keys)
+	for _, key := range keys {
+		role, _ := redisrole.Of(key)
+		require.Equal(t, redisrole.RoleEvictable, role, "key %q", key)
+	}
 }

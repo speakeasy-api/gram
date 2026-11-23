@@ -12,13 +12,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// TestStoreOnSplitInstancesLeavesSessionsEmpty runs both scripts (admit with
-// an eviction, and load) on a separate evictable instance whose client refuses
-// any sessions-role key, and checks that the sessions instance stays empty.
-func TestStoreOnSplitInstancesLeavesSessionsEmpty(t *testing.T) {
+// TestStoreOnEvictableInstanceWritesOnlyEvictableKeys runs both scripts (admit
+// with an eviction, and load) on an evictable instance whose client refuses
+// any declared sessions-role key, then checks that every key left on the
+// instance, including those built inside the scripts, classifies as
+// evictable. A family written here that belongs to the sessions role would
+// be lost to eviction once the instance is split.
+func TestStoreOnEvictableInstanceWritesOnlyEvictableKeys(t *testing.T) {
 	t.Parallel()
 
-	sessionsRedis := miniredis.RunT(t)
 	evictableRedis := miniredis.RunT(t)
 	guard := redisrole.NewGuard(testenv.NewLogger(t), testenv.NewMeterProvider(t), redisrole.GuardEnforce)
 	evictableClient := redis.NewClient(&redis.Options{Addr: evictableRedis.Addr()})
@@ -40,6 +42,10 @@ func TestStoreOnSplitInstancesLeavesSessionsEmpty(t *testing.T) {
 	_, err = store.Load(ctx, projectID, "toolset", "first", 4)
 	require.ErrorIs(t, err, ErrNotFound)
 
-	require.Empty(t, sessionsRedis.Keys())
-	require.Len(t, evictableRedis.Keys(), 2, "the live set and the surviving record")
+	keys := evictableRedis.Keys()
+	require.Len(t, keys, 2, "the live set and the surviving record")
+	for _, key := range keys {
+		role, _ := redisrole.Of(key)
+		require.Equal(t, redisrole.RoleEvictable, role, "key %q", key)
+	}
 }
