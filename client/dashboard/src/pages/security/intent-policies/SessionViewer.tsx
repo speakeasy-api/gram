@@ -68,8 +68,9 @@ export function SessionViewer({
     const index = events.findIndex((e) => e.key === focus.key);
     if (index === -1) return;
     appliedFocus.current = focus;
+    if (!matchesFilter(events[index]!, filter)) setFilter("all");
     setSelected(index);
-  }, [focus, events]);
+  }, [focus, events, filter]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

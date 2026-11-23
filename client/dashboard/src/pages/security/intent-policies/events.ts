@@ -68,9 +68,13 @@ export function buildSessionEvents(
   messages: ChatMessage[],
   calls: IntentCallAssessment[],
 ): SessionEvent[] {
-  const byKey = new Map(
-    calls.map((c) => [callKey(c.messageId, c.toolCallId), c]),
-  );
+  const byKey = new Map<string, IntentCallAssessment>();
+  const ambiguous = new Set<string>();
+  for (const c of calls) {
+    const k = callKey(c.messageId, c.toolCallId);
+    if (byKey.has(k)) ambiguous.add(k);
+    byKey.set(k, c);
+  }
   const placed = new Set<string>();
   const events: SessionEvent[] = [];
 
@@ -90,11 +94,11 @@ export function buildSessionEvents(
     }
     const { callMessage, toolCall, resultMessage } = row;
     if (!callMessage || !toolCall) continue;
-    // The server keys id-less calls by an empty id; extra ones in the same
-    // message can't be matched and only need a unique key.
+    // The server keys id-less calls by an empty id; when several share a
+    // message they can't be matched, so they stay unanalyzed.
     let key = callKey(callMessage.id, toolCall.id ?? "");
+    const call = ambiguous.has(key) ? undefined : byKey.get(key);
     if (placed.has(key)) key = `${key}#${events.length}`;
-    const call = byKey.get(key);
     placed.add(key);
     events.push({
       kind: "tool_call",
