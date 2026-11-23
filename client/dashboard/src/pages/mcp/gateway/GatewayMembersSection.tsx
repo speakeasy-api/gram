@@ -544,6 +544,7 @@ export function GatewayMembersSection({
         <RequireScope
           scope="mcp:write"
           resourceId={metaMcpServer.id}
+          projectId={metaMcpServer.projectId}
           level="component"
         >
           <Button
@@ -578,6 +579,7 @@ export function GatewayMembersSection({
             <RequireScope
               scope="mcp:write"
               resourceId={metaMcpServer.id}
+              projectId={metaMcpServer.projectId}
               level="component"
             >
               <Button size="sm" onClick={() => setAddOpen(true)}>
@@ -624,6 +626,7 @@ export function GatewayMembersSection({
                       <RequireScope
                         scope="mcp:write"
                         resourceId={metaMcpServer.id}
+                        projectId={metaMcpServer.projectId}
                         level="component"
                       >
                         <Button
@@ -757,9 +760,17 @@ export function AddServersSheet({
 }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { hasScope, isLoading: permissionsLoading } = useRBAC();
-  const canWrite = !permissionsLoading && hasScope("mcp:write", gatewayId);
-  const canCreate = !permissionsLoading && hasScope("mcp:write", projectId);
+  const {
+    hasScope,
+    canWriteMCPServer,
+    canWriteProjectMCPServers,
+    isLoading: permissionsLoading,
+  } = useRBAC();
+  const canWrite =
+    !permissionsLoading &&
+    canWriteMCPServer({ serverId: gatewayId, projectId });
+  const canCreate =
+    !permissionsLoading && canWriteProjectMCPServers(projectId);
   const functionsAvailable = useFunctionsAvailable();
   const canWriteProject =
     !permissionsLoading && hasScope("project:write", projectId);

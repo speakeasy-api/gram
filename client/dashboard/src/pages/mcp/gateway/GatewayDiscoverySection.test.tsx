@@ -22,7 +22,7 @@ const state = vi.hoisted(() => ({
   success: undefined as undefined | (() => Promise<void>),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => state.canWrite }),
+  useRBAC: () => ({ canWriteProjectMCPServers: () => state.canWrite }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: (props: {
@@ -128,6 +128,7 @@ describe("Gateway discovery settings", () => {
       expect.objectContaining({
         scope: "mcp:write",
         resourceId: gateway.projectId,
+        projectId: gateway.projectId,
       }),
     );
   });
