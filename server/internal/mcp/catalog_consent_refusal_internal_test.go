@@ -35,7 +35,7 @@ func approveChangedMember(gate *metaGateContext, member *metaMember, mode toolfi
 	approved := connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: "approved", Auth: nil}
 	member.configuration = memberConfiguration{hash: "changed", typedHash: "changed"}
 	if member.backend == metaMemberBackendProxied {
-		approved.Auth = &connectionCatalogAuth{ClientID: uuid.Nil, RegistrationID: member.chosenClientID, ExplicitPick: false}
+		approved.Auth = &connectionCatalogAuth{ClientID: uuid.Nil, RegistrationID: member.chosenClientID}
 		if signInChanged {
 			approved.Auth.RegistrationID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 		}

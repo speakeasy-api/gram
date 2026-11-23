@@ -328,8 +328,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 			if member.authClient != nil {
 				clientID = member.authClient.clientID
 			}
-			explicitPick := clientID != uuid.Nil && r.URL.Query().Get(gatewayAuthClientParam+member.slug) == clientID.String()
-			authBinding = &connectionCatalogAuth{ClientID: clientID, RegistrationID: member.chosenClientID, ExplicitPick: explicitPick}
+			authBinding = &connectionCatalogAuth{ClientID: clientID, RegistrationID: member.chosenClientID}
 		}
 		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID].hash, TypedBackendHash: backendHashes[member.serverID].typedHash, TypedApproval: false, Auth: authBinding}
 	}
