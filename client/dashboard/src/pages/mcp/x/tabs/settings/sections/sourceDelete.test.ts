@@ -62,26 +62,18 @@ const tunneled = {
 } as TunneledMcpServer;
 
 describe("sourceDeleteSpec", () => {
-  it("keys remote and unproxied confirmation on the URL", () => {
-    expect(sourceDeleteSpec({ kind: "remote", source: remote })).toMatchObject({
-      confirmLabel: "the server URL",
-      confirmValue: remote.url,
-    });
+  it("names the source each kind deletes", () => {
     expect(
-      sourceDeleteSpec({ kind: "unproxied", source: unproxied }),
-    ).toMatchObject({
-      confirmLabel: "the server URL",
-      confirmValue: unproxied.url,
-    });
-  });
-
-  it("keys tunneled confirmation on the trimmed display name", () => {
+      sourceDeleteSpec({ kind: "remote", source: remote }).entityDescription,
+    ).toBe("the remote MCP source");
     expect(
-      sourceDeleteSpec({ kind: "tunneled", source: tunneled }),
-    ).toMatchObject({
-      confirmLabel: "the source name",
-      confirmValue: "Internal tools",
-    });
+      sourceDeleteSpec({ kind: "tunneled", source: tunneled })
+        .entityDescription,
+    ).toBe("the tunneled MCP source");
+    expect(
+      sourceDeleteSpec({ kind: "unproxied", source: unproxied })
+        .entityDescription,
+    ).toBe("the unproxied MCP source");
   });
 });
 

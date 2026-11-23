@@ -11,15 +11,18 @@ import {
 
 // Deleting a source-backed MCP server deletes the source row too, which
 // takes every sibling server and their endpoints with it. This picks the
-// delete mutation for the source kind. `linkedMcpServers` is what the dialog
-// lists; the mutation refetches the current set before deleting, so a sibling
-// created after the page loaded goes too.
+// delete mutation for the source kind. The dialog lists the siblings other
+// than `mcpServer`; the mutation refetches the current set before deleting,
+// so a sibling created after the page loaded goes too.
 export function DeleteSourceBackedServerDialogContent({
+  mcpServer,
   target,
   linkedMcpServers,
   onClose,
   onSuccess,
 }: {
+  /** The server whose settings the delete started from. */
+  mcpServer: McpServer;
   target: SourceBackedDeleteTarget;
   linkedMcpServers: McpServer[];
   onClose: () => void;
@@ -54,32 +57,21 @@ export function DeleteSourceBackedServerDialogContent({
     }
   };
 
+  const otherServers = linkedMcpServers.filter(
+    (server) => server.id !== mcpServer.id,
+  );
+
   return (
     <RemoveMcpSourceDialogContent
       {...sourceDeleteSpec(target)}
-      linkedMcpServers={linkedMcpServers}
+      serverName={mcpServer.name || "MCP server"}
+      linkedMcpServers={otherServers}
       isPending={mutation.isPending}
       errorMessage={mutation.isError ? mutation.error.message : undefined}
       onClose={onClose}
       onSuccess={onSuccess}
       onConfirm={confirm}
-      usage={
-        linkedMcpServers.length > 0 && (
-          <div className="grid max-h-96 gap-4 overflow-y-auto">
-            {linkedMcpServers.map((server) => (
-              <ServerUsageImpactById
-                key={server.id}
-                mcpServerId={server.id}
-                heading={
-                  linkedMcpServers.length > 1
-                    ? `Who uses ${server.name}`
-                    : undefined
-                }
-              />
-            ))}
-          </div>
-        )
-      }
+      usage={<ServerUsageImpactById mcpServerId={mcpServer.id} />}
     />
   );
 }

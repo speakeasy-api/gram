@@ -42,10 +42,19 @@ const SOURCE_KIND_LABEL: Record<SourceBackedDeleteTarget["kind"], string> = {
   unproxied: "unproxied MCP source",
 };
 
+// "A", "A and B", "A, B, and 2 more": the servers a cascade takes with it.
+function nameList(servers: McpServer[]): string {
+  const names = servers.map((server) => server.name || "Unnamed server");
+  if (names.length <= 2) return names.join(" and ");
+  if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
+  return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
+}
+
 function deleteRowCopy(
   deleteTarget: SourceBackedDeleteTarget | undefined,
   sourceUnavailable: boolean,
   staffOnly: boolean,
+  otherServers: McpServer[],
 ): {
   title: string;
   description: string;
@@ -72,7 +81,10 @@ function deleteRowCopy(
   }
   return {
     title: "Delete MCP server and source",
-    description: `Permanently remove this server, the ${SOURCE_KIND_LABEL[deleteTarget.kind]} behind it, every other server backed by that source, and all of their endpoints. This action cannot be undone.`,
+    description:
+      otherServers.length > 0
+        ? `Permanently remove this server and the ${SOURCE_KIND_LABEL[deleteTarget.kind]} behind it. ${nameList(otherServers)} ${otherServers.length === 1 ? "uses" : "use"} the same source and will be removed too. This action cannot be undone.`
+        : `Permanently remove this server, the ${SOURCE_KIND_LABEL[deleteTarget.kind]} behind it, and its endpoints. This action cannot be undone.`,
   };
 }
 
@@ -125,7 +137,12 @@ export function DangerZoneSection({
     (!isSourceBacked ||
       (!!deleteTarget && linkedQuery.isSuccess && !linkedQuery.isFetching) ||
       sourceUnavailable);
-  const deleteRow = deleteRowCopy(deleteTarget, sourceUnavailable, staffOnly);
+  const deleteRow = deleteRowCopy(
+    deleteTarget,
+    sourceUnavailable,
+    staffOnly,
+    linkedMcpServers.filter((server) => server.id !== mcpServer.id),
+  );
   const hostedWrapper = isCanonicalHostedWrapper(mcpServer);
   // A canonical hosted server is deleted with its toolset; without the
   // toolset there is nothing here to offer.
@@ -210,6 +227,7 @@ export function DangerZoneSection({
         <Dialog.Content className="max-w-2xl!">
           {deleteTarget ? (
             <DeleteSourceBackedServerDialogContent
+              mcpServer={mcpServer}
               target={deleteTarget}
               linkedMcpServers={linkedMcpServers}
               onClose={() => setDeleteDialogOpen(false)}
@@ -294,8 +312,8 @@ function DeleteMcpServerDialogContent({
       </Dialog.Header>
       <Stack gap={3}>
         <Text>
-          This will soft-delete the MCP server <strong>{mcpServer.name}</strong>{" "}
-          and the following endpoints. The action cannot be undone.
+          This permanently deletes <strong>{mcpServer.name}</strong> and these
+          addresses. This cannot be undone.
         </Text>
         {endpoints.length > 0 ? (
           <ul className="list-disc pl-6">
