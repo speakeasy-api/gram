@@ -26,6 +26,7 @@ import { DeleteSourceBackedServerDialogContent } from "./DeleteSourceBackedServe
 import { ServerControlRow } from "./ServerControlRow";
 import {
   linkedMcpServersFilter,
+  nameList,
   serversBackedBySameSource,
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
@@ -41,14 +42,6 @@ const SOURCE_KIND_LABEL: Record<SourceBackedDeleteTarget["kind"], string> = {
   tunneled: "tunneled MCP source",
   unproxied: "unproxied MCP source",
 };
-
-// "A", "A and B", "A, B, and 2 more": the servers a cascade takes with it.
-function nameList(servers: McpServer[]): string {
-  const names = servers.map((server) => server.name || "Unnamed server");
-  if (names.length <= 2) return names.join(" and ");
-  if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
-  return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
-}
 
 function deleteRowCopy(
   deleteTarget: SourceBackedDeleteTarget | undefined,
@@ -312,8 +305,9 @@ function DeleteMcpServerDialogContent({
       </Dialog.Header>
       <Stack gap={3}>
         <Text>
-          This permanently deletes <strong>{mcpServer.name}</strong> and these
-          addresses. This cannot be undone.
+          This permanently deletes <strong>{mcpServer.name}</strong>
+          {endpoints.length > 0 ? " and these addresses" : ""}. This cannot be
+          undone.
         </Text>
         {endpoints.length > 0 ? (
           <ul className="list-disc pl-6">

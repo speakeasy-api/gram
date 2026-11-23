@@ -70,7 +70,7 @@ function LinkedMcpServerRow({
     <li className="flex flex-col gap-1 px-3 py-2">
       <div className="flex items-center gap-2">
         <Text small className="font-medium" title={server.id}>
-          {server.name || "MCP Server"}
+          {server.name || "Unnamed server"}
         </Text>
         <Badge variant="neutral">
           <Badge.Text>{server.visibility}</Badge.Text>
@@ -141,7 +141,7 @@ export function RemoveMcpSourceDialogContent({
         <div className="space-y-3">
           <Text small muted>
             {linkedMcpServers.length === 1
-              ? "The source also backs this server, which will be deleted too:"
+              ? "The source also backs another server, which will be deleted too:"
               : `The source also backs these ${linkedMcpServers.length} servers, which will be deleted too:`}
           </Text>
           {/* Bounded so a source with many servers cannot push the

@@ -555,7 +555,10 @@ function GatewayDangerZoneSection({
             <Button
               variant="secondary"
               disabled={remove.isPending}
-              onClick={() => setConfirmOpen(false)}
+              onClick={() => {
+                setConfirmOpen(false);
+                setTypedName("");
+              }}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>

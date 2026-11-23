@@ -62,6 +62,7 @@ describe("RemoveMcpSourceDialogContent", () => {
   it("lists the other servers and says it cannot be undone once", () => {
     show();
     expect(screen.getByText("Other server")).toBeTruthy();
+    expect(screen.getByText("1 endpoint: other-one")).toBeTruthy();
     expect(screen.getByText(/which will be deleted too/)).toBeTruthy();
     expect(screen.getAllByText(/cannot be undone/)).toHaveLength(1);
     expect(screen.queryByRole("alert")).toBeNull();
