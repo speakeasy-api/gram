@@ -20,67 +20,6 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-type apiKeyFixture struct {
-	db             *pgxpool.Pool
-	engine         *Engine
-	organizationID string
-	creatorID      string
-	keyID          uuid.UUID
-	projectID      string
-}
-
-func newAPIKeyFixture(t *testing.T) apiKeyFixture {
-	t.Helper()
-	ctx := t.Context()
-	db := newTestDB(t)
-	organizationID := "org-apikey-" + uuid.NewString()
-	creatorID := "creator-" + uuid.NewString()
-	seedOrganization(t, ctx, db, organizationID)
-	_, err := usersrepo.New(db).UpsertUser(ctx, usersrepo.UpsertUserParams{
-		ID: creatorID, Email: creatorID + "@example.com", DisplayName: creatorID, PhotoUrl: conv.PtrToPGText(nil), Admin: false,
-	})
-	require.NoError(t, err)
-	_, err = orgrepo.New(db).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: organizationID, UserID: conv.ToPGText(creatorID),
-	})
-	require.NoError(t, err)
-	key, err := keysrepo.New(db).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-		OrganizationID: organizationID, ProjectID: uuid.NullUUID{}, CreatedByUserID: creatorID,
-		Name: "legacy", KeyPrefix: "gram_test", KeyHash: "hash-" + uuid.NewString(), Scopes: []string{"consumer"},
-	})
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), db, staticChallengeLogging(false), workos.NewStubClient())
-	return apiKeyFixture{db: db, engine: engine, organizationID: organizationID, creatorID: creatorID, keyID: key.ID, projectID: "project-" + uuid.NewString()}
-}
-
-// withKey returns the fixture for a new key with the given binding and scopes.
-func (f apiKeyFixture) withKey(t *testing.T, projectID uuid.NullUUID, scopes []string) apiKeyFixture {
-	t.Helper()
-	key, err := keysrepo.New(f.db).CreateAPIKey(t.Context(), keysrepo.CreateAPIKeyParams{
-		OrganizationID: f.organizationID, ProjectID: projectID, CreatedByUserID: f.creatorID,
-		Name: "legacy-" + uuid.NewString()[:8], KeyPrefix: "gram_test", KeyHash: "hash-" + uuid.NewString(), Scopes: scopes,
-	})
-	require.NoError(t, err)
-	f.keyID = key.ID
-	return f
-}
-
-func (f apiKeyFixture) keyContext(t *testing.T) context.Context {
-	t.Helper()
-	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: f.organizationID, UserID: f.creatorID, APIKeyID: f.keyID.String(), AccountType: "enterprise",
-	})
-}
-
-func (f apiKeyFixture) grant(t *testing.T, scope Scope, selector Selector) {
-	t.Helper()
-	seedGrantWithSelector(t, t.Context(), f.db, f.organizationID, urn.NewAPIKeyPrincipal(f.keyID), scope, selector)
-}
-
-func projectConnectSelector(projectID string) Selector {
-	return Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: WildcardResource, SelectorKeyProjectID: projectID}
-}
-
 func TestAPIKeyPrincipalParses(t *testing.T) {
 	t.Parallel()
 
@@ -202,26 +141,6 @@ func TestAuthorizeMandatoryNeverReadsSkippedAsAllow(t *testing.T) {
 	requireMandatory(t, engine, session, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNone}, connect)
 	requireMandatory(t, engine, session, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}, sharedClientCheck(authProjectP))
 	requireMandatory(t, engine, session, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceNone, Reason: MandatoryDenyReasonUnsupportedScope}, checkForTest(ScopeProjectRead, "proj"))
-}
-
-func requireMandatory(t *testing.T, engine *Engine, ctx context.Context, want MandatoryDecision, checks ...Check) {
-	t.Helper()
-	got, err := engine.AuthorizeMandatory(ctx, checks...)
-	require.NoError(t, err)
-	require.Equal(t, want, got)
-}
-
-// checkForTest builds a check for scope on resourceID, naming testProjectID
-// when the scope's resource kind requires a project.
-func checkForTest(scope Scope, resourceID string) Check {
-	var dimensions map[string]string
-	for _, key := range RequiredCheckDimensions(ResourceKindForScope(scope)) {
-		if dimensions == nil {
-			dimensions = map[string]string{}
-		}
-		dimensions[key] = testProjectID
-	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
 
 func TestAuthorizeMandatoryKeepsAgentKeyAdmission(t *testing.T) {
@@ -406,4 +325,111 @@ func TestAuthorizeMandatoryValidatesChecksBeforeAdmission(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	modeless := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_123", APIKeyID: uuid.NewString(), AccountType: "enterprise"})
 	requireMandatory(t, engine, modeless, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceNone, Reason: MandatoryDenyReasonUnsupportedScope}, checkForTest(ScopeProjectRead, "proj"))
+}
+
+func TestValidateAPIKeyPolicyGrant(t *testing.T) {
+	t.Parallel()
+
+	client := Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a"}
+	require.NoError(t, ValidateAPIKeyPolicyGrant(ScopeMCPConnect, projectConnectSelector("p")))
+	require.NoError(t, ValidateAPIKeyPolicyGrant(ScopeMCPAuth, client))
+	require.NoError(t, ValidateAPIKeyPolicyGrant(ScopeMCPBlockedAuth, client))
+	require.NoError(t, ValidateAPIKeyPolicyGrant(ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: WildcardResource}))
+
+	invalid := map[string]struct {
+		scope    Scope
+		selector Selector
+	}{
+		"org admin":       {ScopeOrgAdmin, NewSelector(ScopeOrgAdmin, "org")},
+		"mcp write":       {ScopeMCPWrite, NewSelector(ScopeMCPWrite, "*")},
+		"personal owner":  {ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a", SelectorKeyClientType: AuthClientTypeRemoteSession, SelectorKeyConnectionOwner: SelectorValueRepresentedUser}},
+		"remote session":  {ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a", SelectorKeyClientType: AuthClientTypeRemoteSession}},
+		"invalid sel":     {ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "*"}},
+		"root":            {ScopeRoot, Selector{SelectorKeyResourceKind: WildcardResource, SelectorKeyResourceID: WildcardResource}},
+		"hooks ingestion": {ScopeOrgHooksIngest, NewSelector(ScopeOrgHooksIngest, "org")},
+	}
+	for name, tc := range invalid {
+		require.ErrorIs(t, ValidateAPIKeyPolicyGrant(tc.scope, tc.selector), ErrInvalidAPIKeyGrant, name)
+	}
+}
+
+type apiKeyFixture struct {
+	db             *pgxpool.Pool
+	engine         *Engine
+	organizationID string
+	creatorID      string
+	keyID          uuid.UUID
+	projectID      string
+}
+
+func newAPIKeyFixture(t *testing.T) apiKeyFixture {
+	t.Helper()
+	ctx := t.Context()
+	db := newTestDB(t)
+	organizationID := "org-apikey-" + uuid.NewString()
+	creatorID := "creator-" + uuid.NewString()
+	seedOrganization(t, ctx, db, organizationID)
+	_, err := usersrepo.New(db).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: creatorID, Email: creatorID + "@example.com", DisplayName: creatorID, PhotoUrl: conv.PtrToPGText(nil), Admin: false,
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(db).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(creatorID),
+	})
+	require.NoError(t, err)
+	key, err := keysrepo.New(db).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+		OrganizationID: organizationID, ProjectID: uuid.NullUUID{}, CreatedByUserID: creatorID,
+		Name: "legacy", KeyPrefix: "gram_test", KeyHash: "hash-" + uuid.NewString(), Scopes: []string{"consumer"},
+	})
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), db, staticChallengeLogging(false), workos.NewStubClient())
+	return apiKeyFixture{db: db, engine: engine, organizationID: organizationID, creatorID: creatorID, keyID: key.ID, projectID: "project-" + uuid.NewString()}
+}
+
+// withKey returns the fixture for a new key with the given binding and scopes.
+func (f apiKeyFixture) withKey(t *testing.T, projectID uuid.NullUUID, scopes []string) apiKeyFixture {
+	t.Helper()
+	key, err := keysrepo.New(f.db).CreateAPIKey(t.Context(), keysrepo.CreateAPIKeyParams{
+		OrganizationID: f.organizationID, ProjectID: projectID, CreatedByUserID: f.creatorID,
+		Name: "legacy-" + uuid.NewString()[:8], KeyPrefix: "gram_test", KeyHash: "hash-" + uuid.NewString(), Scopes: scopes,
+	})
+	require.NoError(t, err)
+	f.keyID = key.ID
+	return f
+}
+
+func (f apiKeyFixture) keyContext(t *testing.T) context.Context {
+	t.Helper()
+	return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: f.organizationID, UserID: f.creatorID, APIKeyID: f.keyID.String(), AccountType: "enterprise",
+	})
+}
+
+func (f apiKeyFixture) grant(t *testing.T, scope Scope, selector Selector) {
+	t.Helper()
+	seedGrantWithSelector(t, t.Context(), f.db, f.organizationID, urn.NewAPIKeyPrincipal(f.keyID), scope, selector)
+}
+
+func projectConnectSelector(projectID string) Selector {
+	return Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: WildcardResource, SelectorKeyProjectID: projectID}
+}
+
+func requireMandatory(t *testing.T, engine *Engine, ctx context.Context, want MandatoryDecision, checks ...Check) {
+	t.Helper()
+	got, err := engine.AuthorizeMandatory(ctx, checks...)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+// checkForTest builds a check for scope on resourceID, naming testProjectID
+// when the scope's resource kind requires a project.
+func checkForTest(scope Scope, resourceID string) Check {
+	var dimensions map[string]string
+	for _, key := range RequiredCheckDimensions(ResourceKindForScope(scope)) {
+		if dimensions == nil {
+			dimensions = map[string]string{}
+		}
+		dimensions[key] = testProjectID
+	}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 }
