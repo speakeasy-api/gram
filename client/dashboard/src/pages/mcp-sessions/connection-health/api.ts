@@ -2,6 +2,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { nextScheduleBoundaryDelay } from "@/components/killswitch/killswitch-view-model";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { isExpectedAPIError } from "@/lib/errors";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useKillswitches } from "@gram/client/react-query/killswitches.js";
 import {
@@ -291,6 +292,21 @@ export function useAttemptHere(
   };
 }
 
+// Grouping is costly and changes slowly; a 503 means it ran out of time and will again right away.
+export const problemRetry = (failures: number, error: Error): boolean =>
+  retry(failures, error) && !isUnavailable(error);
+
+const PROBLEM_QUERY = {
+  staleTime: 60_000,
+  refetchOnWindowFocus: false,
+  retry: problemRetry,
+  throwOnError: false,
+} as const;
+
+export function isUnavailable(error: unknown): boolean {
+  return error instanceof GramError && error.statusCode === 503;
+}
+
 export function useSuspectedProblems(
   scope: Scope,
   part?: ProblemPart,
@@ -304,8 +320,7 @@ export function useSuspectedProblems(
         serverId: scope.serverId,
         part,
       }),
-    retry,
-    throwOnError: false,
+    ...PROBLEM_QUERY,
   });
 }
 
@@ -323,8 +338,7 @@ export function useSuspectedProblem(
         id: id ?? "",
       }),
     enabled: !!id,
-    retry,
-    throwOnError: false,
+    ...PROBLEM_QUERY,
   });
 }
 

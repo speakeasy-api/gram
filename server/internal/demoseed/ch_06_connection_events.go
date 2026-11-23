@@ -201,7 +201,7 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 		return err
 	}
 	rows = append(rows, tokenRows...)
-	healthRows, err := s.connectionHealthRows()
+	healthRows, healthServed, err := s.connectionHealthRows()
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 	if err := mcpconnectionattempts.AppendRows(ctx, ch, rows); err != nil {
 		return fmt.Errorf("seed connection events: %w", err)
 	}
-	if err := mcpconnectionattempts.AppendServedInto(ctx, ch, mcpconnectionattempts.LastServedTable, s.healthServed(healthRows)); err != nil {
+	if err := mcpconnectionattempts.AppendServed(ctx, ch, healthServed); err != nil {
 		return fmt.Errorf("seed served connections: %w", err)
 	}
 	return s.chRunChecks(ctx, ch, []chCheck{

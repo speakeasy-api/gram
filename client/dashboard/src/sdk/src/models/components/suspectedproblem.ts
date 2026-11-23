@@ -62,7 +62,7 @@ export type SuspectedProblem = {
    */
   headline: string;
   /**
-   * Stable while the same people fail the same way on the same scope.
+   * Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.
    */
   id: string;
   lastFailedAt: Date;

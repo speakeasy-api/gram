@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listSuspectedProblems mcpConnectionHealth
  *
  * @remarks
- * List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Empty without log:read.
+ * List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.
  */
 export function mcpConnectionHealthListSuspectedProblems(
   client: GramCore,

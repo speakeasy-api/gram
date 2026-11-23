@@ -114,28 +114,17 @@ export function OverviewTab({
   const activeKillswitches = killswitches.killswitches;
   const activityPage = activity.data?.pages[0];
   const activityRows = activityPage?.attempts ?? [];
-  // Problems name other people, so only viewers who read everyone's attempts see them.
-  const showProblems =
-    activityPage?.loggingEnabled === true && activityPage.viewerScope === "all";
 
   return (
     <div className="space-y-10 pb-8">
       <div className="space-y-3">
-        {!showProblems ? null : problems.isPending ? (
-          <Skeleton className="h-40 w-full" />
-        ) : problems.isError ? (
-          <p className="text-muted-foreground text-sm">
-            Couldn't load suspected problems. Refresh the page to try again.
-          </p>
-        ) : (
-          <SuspectedProblems
-            problems={problems.data?.problems ?? []}
-            now={now}
-            onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
-            rule={SIGN_IN_PROBLEMS_RULE}
-            empty="No suspected problems signing in right now."
-          />
-        )}
+        <SuspectedProblems
+          query={problems}
+          now={now}
+          onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
+          rule={SIGN_IN_PROBLEMS_RULE}
+          empty="No suspected problems signing in right now."
+        />
 
         <p className="text-muted-foreground text-sm">
           Problems with a service show on the page of each MCP server that uses
@@ -274,7 +263,7 @@ export function OverviewTab({
         onClose={() => setParam(ATTEMPT_PARAM, null)}
       />
       <ProblemDetailSheet
-        id={showProblems ? searchParams.get(PROBLEM_PARAM) : null}
+        id={searchParams.get(PROBLEM_PARAM)}
         providerId={providerId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}

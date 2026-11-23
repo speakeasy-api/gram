@@ -2519,6 +2519,7 @@ func marshalMcpconnectionhealthSuspectedProblemDetailToSuspectedProblemDetailRes
 		LastConnectedAt:        v.LastConnectedAt,
 		OtherFailuresOnService: v.OtherFailuresOnService,
 		PeopleTotal:            v.PeopleTotal,
+		CountsWidened:          v.CountsWidened,
 		ID:                     v.ID,
 		Rule:                   string(v.Rule),
 		Part:                   string(v.Part),
@@ -2628,9 +2629,39 @@ func marshalMcpconnectionhealthSuspectedProblemPersonToSuspectedProblemPersonRes
 	if v.Person != nil {
 		res.Person = marshalMcpconnectionhealthConnectionPersonToConnectionPersonResponseBody(v.Person)
 	}
-	if v.App != nil {
-		res.App = marshalMcpconnectionhealthConnectionAppToConnectionAppResponseBody(v.App)
+	if v.Apps != nil {
+		res.Apps = make([]*ConnectionAppResponseBody, len(v.Apps))
+		for i, val := range v.Apps {
+			if val == nil {
+				res.Apps[i] = nil
+				continue
+			}
+			res.Apps[i] = marshalMcpconnectionhealthConnectionAppToConnectionAppResponseBody(val)
+		}
+	} else {
+		res.Apps = []*ConnectionAppResponseBody{}
 	}
+	if v.Servers != nil {
+		res.Servers = make([]*SuspectedProblemPlaceResponseBody, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = marshalMcpconnectionhealthSuspectedProblemPlaceToSuspectedProblemPlaceResponseBody(val)
+		}
+	} else {
+		res.Servers = []*SuspectedProblemPlaceResponseBody{}
+	}
+
+	return res
+}
+
+// marshalMcpconnectionhealthSuspectedProblemPlaceToSuspectedProblemPlaceResponseBody
+// builds a value of type *SuspectedProblemPlaceResponseBody from a value of
+// type *mcpconnectionhealth.SuspectedProblemPlace.
+func marshalMcpconnectionhealthSuspectedProblemPlaceToSuspectedProblemPlaceResponseBody(v *mcpconnectionhealth.SuspectedProblemPlace) *SuspectedProblemPlaceResponseBody {
+	res := &SuspectedProblemPlaceResponseBody{}
 	if v.Server != nil {
 		res.Server = marshalMcpconnectionhealthConnectionServerToConnectionServerResponseBody(v.Server)
 	}

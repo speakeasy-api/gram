@@ -16,19 +16,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems/repo"
 )
 
-// Read returns the suspected problems at now, or mcpconnectionattempts.ErrLogsOff.
-// A non-nil projectID groups only that project's episodes; organization gateways have none.
+// ReadScope is whose episodes are grouped.
+type ReadScope struct {
+	// OrganizationID is the organization. Required.
+	OrganizationID string
+
+	// ProjectID keeps one project's episodes. Required unless WholeOrganization.
+	ProjectID uuid.UUID
+
+	// WholeOrganization reads every project and organization gateway instead of one project.
+	WholeOrganization bool
+
+	// Keep, when set, keeps only the episodes it accepts, before grouping.
+	Keep func(mcpconnectionattempts.FailingPerson) bool
+}
+
+// Read returns the suspected problems of the scope at now, or mcpconnectionattempts.ErrLogsOff.
 // Failures before recordedSince (zero for none) cannot be seen to end; app versions need served rows.
-func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(context.Context, string) (bool, error), organizationID string, projectID uuid.UUID, recordedSince, now time.Time) ([]Problem, error) {
-	if organizationID == "" {
+func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(context.Context, string) (bool, error), scope ReadScope, recordedSince, now time.Time) ([]Problem, error) {
+	switch {
+	case scope.OrganizationID == "":
 		return nil, errors.New("suspected problems need an organization")
+	case scope.ProjectID == uuid.Nil && !scope.WholeOrganization:
+		return nil, errors.New("suspected problems need a project")
+	case scope.ProjectID != uuid.Nil && scope.WholeOrganization:
+		return nil, errors.New("suspected problems need a project or the whole organization, not both")
 	}
+	organizationID := scope.OrganizationID
 	triedSince := now.Add(-TriedWithin)
 	if recordedSince.After(triedSince) {
 		triedSince = recordedSince
 	}
 	episodes, err := mcpconnectionattempts.ReadFailingNow(ctx, ch, logsEnabled, mcpconnectionattempts.FailingNowFilter{
 		OrganizationID: organizationID,
+		ProjectID:      scope.ProjectID,
 		ProviderHost:   "",
 		ServerID:       "",
 		TriedSince:     triedSince,
@@ -36,8 +57,8 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 	if err != nil {
 		return nil, fmt.Errorf("read failing now: %w", err)
 	}
-	if projectID != uuid.Nil {
-		episodes = slices.DeleteFunc(episodes, func(e mcpconnectionattempts.FailingPerson) bool { return e.ProjectID != projectID })
+	if scope.Keep != nil {
+		episodes = slices.DeleteFunc(episodes, func(e mcpconnectionattempts.FailingPerson) bool { return !scope.Keep(e) })
 	}
 	episodes = sinceRecording(episodes, triedSince, recordedSince, now)
 	if len(episodes) == 0 {

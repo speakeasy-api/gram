@@ -277,7 +277,11 @@ export interface SuspectedProblem {
 
 export interface ListSuspectedProblemsResponse {
   loggingEnabled: boolean;
+  viewerScope: ViewerScope;
+  /** At most 100, most people first. */
   problems: SuspectedProblem[];
+  /** Problems before the cap. */
+  problemsTotal: number;
 }
 
 export interface SuspectedProblemDetail extends SuspectedProblem {
@@ -293,21 +297,23 @@ export interface SuspectedProblemDetail extends SuspectedProblem {
     adminMessage?: string;
     attempts: number;
   }[];
-  /** At most 50; `peopleTotal` counts them all. */
+  /** One row per person, at most 50; `peopleTotal` counts them all. */
   people: {
     person: Person;
-    app: App;
-    server?: ServerRef;
-    member?: ServerRef;
+    apps: App[];
+    servers: { server: ServerRef; member?: ServerRef }[];
     attempts: number;
     firstFailedAt: string;
   }[];
   peopleTotal: number;
   servers: { server: ServerRef; member?: ServerRef; attempts: number }[];
+  /** The chart, messages and filters cover everyone failing with these messages on these servers. */
+  countsWidened: boolean;
 }
 
 export interface GetSuspectedProblemResponse {
   loggingEnabled: boolean;
+  viewerScope: ViewerScope;
   found: boolean;
   problem?: SuspectedProblemDetail;
 }

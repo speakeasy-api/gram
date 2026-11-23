@@ -12,12 +12,18 @@ import (
 func TestConnectionHealthRowsTellTheSampleStories(t *testing.T) {
 	t.Parallel()
 	s := &seeder{spec: DefaultSpec(), now: time.Date(2026, 11, 20, 15, 30, 0, 0, time.UTC)}
-	rows, err := s.connectionHealthRows()
+	rows, served, err := s.connectionHealthRows()
 	require.NoError(t, err)
 
-	again, err := s.connectionHealthRows()
+	again, servedAgain, err := s.connectionHealthRows()
 	require.NoError(t, err)
 	require.Equal(t, rows, again, "the dataset is deterministic for one clock")
+	require.Equal(t, served, servedAgain)
+	require.NotEmpty(t, served)
+	for _, r := range served {
+		require.Equal(t, r.ServedAt, r.AnsweredAt, "every seeded served row is an answered request")
+		require.False(t, r.ServedAt.After(s.now))
+	}
 
 	finals := map[string]int{}
 	attempts := map[string]bool{}

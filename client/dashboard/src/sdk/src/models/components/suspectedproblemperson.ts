@@ -13,17 +13,19 @@ import {
   ConnectionPerson$inboundSchema,
 } from "./connectionperson.js";
 import {
-  ConnectionServer,
-  ConnectionServer$inboundSchema,
-} from "./connectionserver.js";
+  SuspectedProblemPlace,
+  SuspectedProblemPlace$inboundSchema,
+} from "./suspectedproblemplace.js";
 
+/**
+ * One person in the problem, with every app and server they fail on.
+ */
 export type SuspectedProblemPerson = {
-  app: ConnectionApp;
+  apps: Array<ConnectionApp>;
   attempts: number;
   firstFailedAt: Date;
-  member?: ConnectionServer | undefined;
   person: ConnectionPerson;
-  server?: ConnectionServer | undefined;
+  servers: Array<SuspectedProblemPlace>;
 };
 
 /** @internal */
@@ -32,15 +34,14 @@ export const SuspectedProblemPerson$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    app: ConnectionApp$inboundSchema,
+    apps: z.array(ConnectionApp$inboundSchema),
     attempts: z.int(),
     first_failed_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    member: z.optional(ConnectionServer$inboundSchema),
     person: ConnectionPerson$inboundSchema,
-    server: z.optional(ConnectionServer$inboundSchema),
+    servers: z.array(SuspectedProblemPlace$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

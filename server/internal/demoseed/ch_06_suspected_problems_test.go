@@ -37,16 +37,16 @@ func seededProblems(t *testing.T, now time.Time) {
 	spec.UUIDPrefix = strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
 	s := &seeder{spec: spec, now: now.Add(-time.Minute)}
 
-	rows, err := s.connectionHealthRows()
+	rows, served, err := s.connectionHealthRows()
 	require.NoError(t, err)
 	ch, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 	require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), ch, rows))
-	require.NoError(t, mcpconnectionattempts.AppendServedInto(t.Context(), ch, mcpconnectionattempts.LastServedTable, s.healthServed(rows)))
+	require.NoError(t, mcpconnectionattempts.AppendServed(t.Context(), ch, served))
 
-	got, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, s.orgID(), s.projectID(), time.Time{}, now)
+	got, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, Keep: nil}, time.Time{}, now)
 	require.NoError(t, err)
 
 	subject := func(key string) string {

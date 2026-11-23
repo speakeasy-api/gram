@@ -3,7 +3,11 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SuspectedProblems } from "./SuspectedProblems";
-import type { SuspectedProblem, SuspectedProblemDetail } from "./types";
+import type {
+  ListSuspectedProblemsResponse,
+  SuspectedProblem,
+  SuspectedProblemDetail,
+} from "./types";
 
 const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
@@ -52,10 +56,30 @@ const PROBLEM: SuspectedProblem = {
 function person(id: string) {
   return {
     person: { subjectUrn: `user:${id}`, kind: "user" as const, name: id },
-    app: { family: "claude_code", name: "Claude Code", version: "2.1.4" },
-    server: { id: "srv_1", kind: "mcp" as const, name: "Linear" },
+    apps: [{ family: "claude_code", name: "Claude Code", version: "2.1.4" }],
+    servers: [
+      { server: { id: "srv_1", kind: "mcp" as const, name: "Linear" } },
+    ],
     attempts: 3,
     firstFailedAt: "2026-11-20T10:00:00Z",
+  };
+}
+
+function listed(
+  problems: SuspectedProblem[],
+  more: Partial<ListSuspectedProblemsResponse> = {},
+) {
+  return {
+    data: {
+      loggingEnabled: true,
+      viewerScope: "all" as const,
+      problems,
+      problemsTotal: problems.length,
+      ...more,
+    },
+    isPending: false,
+    isError: false,
+    error: null,
   };
 }
 
@@ -71,8 +95,22 @@ const DETAIL: SuspectedProblemDetail = {
       attempts: 6,
     },
   ],
-  people: Array.from({ length: 50 }, (_, i) => person(`p${i}`)),
+  people: [
+    {
+      ...person("ana"),
+      apps: [
+        { family: "claude_code", name: "Claude Code", version: "2.1.4" },
+        { family: "cursor", name: "Cursor", version: "2.0.1" },
+      ],
+      servers: [
+        { server: { id: "srv_1", kind: "mcp", name: "Linear" } },
+        { server: { id: "srv_2", kind: "mcp", name: "GitHub" } },
+      ],
+    },
+    ...Array.from({ length: 49 }, (_, i) => person(`p${i}`)),
+  ],
   peopleTotal: 51,
+  countsWidened: false,
   servers: [
     { server: { id: "srv_1", kind: "mcp", name: "Linear" }, attempts: 6 },
   ],
@@ -93,9 +131,17 @@ function renderSheet() {
 
 describe("SuspectedProblems", () => {
   afterEach(cleanup);
+  const EMPTY = "No suspected problems signing in right now.";
 
   it("lists API problems with the rule and no sample badge", () => {
-    render(<SuspectedProblems problems={[PROBLEM]} now={NOW} onOpen={noop} />);
+    render(
+      <SuspectedProblems
+        query={listed([PROBLEM])}
+        now={NOW}
+        onOpen={noop}
+        empty={EMPTY}
+      />,
+    );
     expect(
       screen.getByText(/2 people can't connect to Linear since/),
     ).toBeTruthy();
@@ -103,34 +149,76 @@ describe("SuspectedProblems", () => {
     expect(screen.queryByText("Sample data")).toBeNull();
   });
 
+  it("counts every problem and says when the list is cut", () => {
+    render(
+      <SuspectedProblems
+        query={listed([PROBLEM], { problemsTotal: 140 })}
+        now={NOW}
+        onOpen={noop}
+        empty={EMPTY}
+      />,
+    );
+    expect(screen.getByText("Suspected problems · 140")).toBeTruthy();
+    expect(screen.getByText(/Showing the first 1\./)).toBeTruthy();
+  });
+
   it("splits the people on this server from all of them", () => {
     render(
       <SuspectedProblems
-        problems={[{ ...PROBLEM, peopleOnServerCount: 1 }]}
+        query={listed([{ ...PROBLEM, peopleOnServerCount: 1 }])}
         now={NOW}
         onOpen={noop}
+        empty={EMPTY}
       />,
     );
     expect(screen.getByText(/1 on this server · 2 in all/)).toBeTruthy();
   });
 
-  it("says there is nothing only when asked to", () => {
-    const { container } = render(
-      <SuspectedProblems problems={[]} now={NOW} onOpen={noop} />,
-    );
-    expect(container.textContent).toBe("");
-    cleanup();
+  it("says when there is nothing", () => {
     render(
       <SuspectedProblems
-        problems={[]}
+        query={listed([])}
         now={NOW}
         onOpen={noop}
-        empty="No suspected problems signing in right now."
+        empty={EMPTY}
       />,
     );
-    expect(
-      screen.getByText("No suspected problems signing in right now."),
-    ).toBeTruthy();
+    expect(screen.getByText(EMPTY)).toBeTruthy();
+  });
+
+  it("shows nothing with logging off or to someone who reads only their own logs", () => {
+    for (const more of [
+      { loggingEnabled: false },
+      { viewerScope: "own" as const },
+    ]) {
+      const { container } = render(
+        <SuspectedProblems
+          query={listed([PROBLEM], more)}
+          now={NOW}
+          onOpen={noop}
+          empty={EMPTY}
+        />,
+      );
+      expect(container.textContent).toBe("");
+      cleanup();
+    }
+  });
+
+  it("says when it could not load", () => {
+    render(
+      <SuspectedProblems
+        query={{
+          data: undefined,
+          isPending: false,
+          isError: true,
+          error: new Error("x"),
+        }}
+        now={NOW}
+        onOpen={noop}
+        empty={EMPTY}
+      />,
+    );
+    expect(screen.getByText("Couldn't load suspected problems")).toBeTruthy();
   });
 });
 
@@ -142,9 +230,17 @@ describe("ProblemDetailSheet", () => {
 
   it("renders the detail and links to exactly its rows", () => {
     state.query = {
-      data: { loggingEnabled: true, found: true, problem: DETAIL },
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: DETAIL,
+      },
     };
     renderSheet();
+    expect(
+      screen.getByText("Claude Code 2.1.4, Cursor 2.0.1 · Linear, GitHub"),
+    ).toBeTruthy();
     expect(screen.getByText("2 people can't connect to Linear")).toBeTruthy();
     expect(screen.getByText(/Showing the first 50 of 51/)).toBeTruthy();
     expect(
@@ -162,10 +258,38 @@ describe("ProblemDetailSheet", () => {
     expect(url.searchParams.get("message")).toBe("static_key_rejected");
   });
 
-  it("says a stale problem has cleared", () => {
-    state.query = { data: { loggingEnabled: true, found: false } };
+  it("says the counts are wider when the filters had to be", () => {
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: { ...DETAIL, countsWidened: true },
+      },
+    };
     renderSheet();
-    expect(screen.getByText("This problem has cleared")).toBeTruthy();
+    expect(screen.getByText(/too many people or servers/)).toBeTruthy();
+    expect(
+      screen.getByRole("link", {
+        name: "Open matching attempts in Connection Logs",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("says a stale problem is no longer listed", () => {
+    state.query = {
+      data: { loggingEnabled: true, viewerScope: "all", found: false },
+    };
+    renderSheet();
+    expect(screen.getByText("This problem is no longer listed.")).toBeTruthy();
+  });
+
+  it("says logging is off", () => {
+    state.query = {
+      data: { loggingEnabled: false, viewerScope: "all", found: false },
+    };
+    renderSheet();
+    expect(screen.getByText("Logging is off")).toBeTruthy();
   });
 
   it("says when it could not load", () => {

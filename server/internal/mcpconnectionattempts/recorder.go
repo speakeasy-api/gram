@@ -556,7 +556,7 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		servedInterval:      defaultServedInterval,
 		servedFlushInterval: defaultServedFlushInterval,
 		servedFlushBudget:   defaultServedFlushBudget,
-		servedTable:         LastServedTable,
+		servedTable:         lastServedTable,
 	}, opts...)
 }
 

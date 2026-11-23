@@ -8,25 +8,57 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // failOn writes one failed request by person on a gateway, ago before now.
-func (ti *testInstance) failOn(t *testing.T, org string, project, gateway uuid.UUID, person urn.SessionSubject, ago time.Duration, code mcpconnectionattempts.Code) uuid.UUID {
+func (ti *testInstance) failOn(t *testing.T, org string, project, gateway uuid.UUID, person urn.SessionSubject, ago time.Duration, code mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) uuid.UUID {
+	t.Helper()
+	return ti.attemptAs(t, mcpconnectionattempts.GatewayScope(org, project, gateway, mcpconnectionattempts.AppDCR), person, ago, mcpconnectionattempts.StepMCPRequest, code, opts...)
+}
+
+// attemptAs writes one finished attempt by person on scope, ago before now.
+func (ti *testInstance) attemptAs(t *testing.T, scope mcpconnectionattempts.Scope, person urn.SessionSubject, ago time.Duration, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) uuid.UUID {
 	t.Helper()
 	at := ti.now.Add(-ago)
-	a := mcpconnectionattempts.AttemptAt(uuid.New(), at, mcpconnectionattempts.GatewayScope(org, project, gateway, mcpconnectionattempts.AppDCR))
-	row, err := mcpconnectionattempts.RowAt(a, mcpconnectionattempts.StepMCPRequest, code, true, at.Add(time.Second), mcpconnectionattempts.Subject(&person))
+	a := mcpconnectionattempts.AttemptAt(uuid.New(), at, scope)
+	row, err := mcpconnectionattempts.RowAt(a, step, what, true, at.Add(time.Second), append(opts, mcpconnectionattempts.Subject(&person))...)
 	require.NoError(t, err)
 	require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), ti.ch, []mcpconnectionattempts.Row{row}))
 	return a.ID()
+}
+
+// provider creates another MCP authentication provider in the project with a gateway on it.
+func (ti *testInstance) provider(t *testing.T, name string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(t.Context(), usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          ti.project,
+		OrganizationID:     pgtype.Text{String: ti.org, Valid: true},
+		Slug:               "other-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: 0, Days: 14, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	gateway, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(t.Context(), metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      ti.org,
+		ProjectID:           ti.project,
+		Name:                name,
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		Visibility:          "private",
+	})
+	require.NoError(t, err)
+	return issuer.ID, gateway.ID
 }
 
 // failPeople has n new people fail on a gateway with code, ago before now.
@@ -85,7 +117,7 @@ func TestListSuspectedProblems_ListsTheProvidersProblems(t *testing.T) {
 	require.Equal(t, int64(2), p.PeopleCount)
 	require.Nil(t, p.PeopleOnServerCount)
 	require.Equal(t, "2 people can't connect to Linear", p.Headline)
-	require.Equal(t, "Signing in to the service fails. The server, or the API one of its tools calls, rejected the credential saved for it.", p.Fact)
+	require.Equal(t, "The server, or the API one of its tools calls, rejected the credential saved for it.", p.Fact)
 }
 
 func TestListSuspectedProblems_FiltersByPart(t *testing.T) {
@@ -139,10 +171,13 @@ func TestSuspectedProblems_WithoutLogReadAreEmpty(t *testing.T) {
 	listed := ti.listProblems(t, admin, nil, nil).Problems
 	require.Len(t, listed, 1)
 
+	require.Equal(t, gen.ConnectionViewerScope("all"), ti.listProblems(t, admin, nil, nil).ViewerScope)
 	res := ti.listProblems(t, member, nil, nil)
 	require.True(t, res.LoggingEnabled)
+	require.Equal(t, gen.ConnectionViewerScope("own"), res.ViewerScope)
 	require.Empty(t, res.Problems)
 	got := ti.getProblem(t, member, listed[0].ID)
+	require.Equal(t, gen.ConnectionViewerScope("own"), got.ViewerScope)
 	require.False(t, got.Found)
 	require.Nil(t, got.Problem)
 }
@@ -203,6 +238,15 @@ func TestGetSuspectedProblem_FiltersOpenExactlyItsAttempts(t *testing.T) {
 	// Noise: the same person failing another way, and someone else failing the same way elsewhere.
 	ti.failOn(t, ti.org, ti.project, ti.server, p1, 30*time.Minute, mcpconnectionattempts.CodeInvalidBearerToken)
 	ti.failOn(t, ti.org, ti.project, other, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	// A success, a run that ended before the problem began, a gateway member, another project.
+	ti.attemptAs(t, mcpconnectionattempts.GatewayScope(ti.org, ti.project, ti.server, mcpconnectionattempts.AppDCR), p1, 20*time.Minute, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued)
+	ti.failOn(t, ti.org, ti.project, ti.server, p2, 5*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.NoError(t, mcpconnectionattempts.AppendServed(t.Context(), ti.ch, []mcpconnectionattempts.Served{{
+		OrganizationID: ti.org, ProjectID: ti.project, ServerKind: "meta", ServerID: ti.server.String(), MemberID: "", SubjectURN: p2.String(),
+		AppKey: mcpconnectionattempts.AppDCR.String(), ClientFamily: "", RemoteSessionClientID: "", ServedAt: ti.now.Add(-4 * time.Hour), AnsweredAt: ti.now.Add(-4 * time.Hour),
+	}}))
+	ti.failOn(t, ti.org, ti.project, ti.server, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.Member(uuid.New()))
+	ti.failOn(t, ti.org, uuid.New(), ti.server, p1, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
 
 	listed := ti.listProblems(t, ctx, nil, nil).Problems
 	require.Len(t, listed, 1)
@@ -246,7 +290,7 @@ func TestGetSuspectedProblem_FiltersOpenExactlyItsAttempts(t *testing.T) {
 		failed += b.Attempts
 	}
 	require.Equal(t, int64(2), failed)
-	require.Zero(t, d.OtherFailuresOnService)
+	require.False(t, d.CountsWidened)
 }
 
 func TestGetSuspectedProblem_CapsPeople(t *testing.T) {
@@ -261,6 +305,7 @@ func TestGetSuspectedProblem_CapsPeople(t *testing.T) {
 	got := ti.getProblem(t, ctx, listed[0].ID)
 	require.Len(t, got.Problem.People, 50)
 	require.Equal(t, int64(51), got.Problem.PeopleTotal)
+	require.True(t, got.Problem.CountsWidened, "the people filter was left out")
 	require.Equal(t, int64(51), got.Problem.PeopleCount)
 }
 
@@ -281,4 +326,129 @@ func TestListSuspectedProblems_OnePersonNamesTheServer(t *testing.T) {
 	require.Equal(t, p.Scope.Name+" can't connect", p.Headline)
 	require.True(t, strings.HasPrefix(p.Fact, "On Linear. "), p.Fact)
 	require.False(t, slices.Contains(strings.Fields(p.Headline), mcpconnectionattempts.CodeStaticKeyRejected.String()))
+}
+
+func TestSuspectedProblems_NeverShowAnOrganizationGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	gateway := uuid.New()
+	for range 2 {
+		ti.attemptAs(t, mcpconnectionattempts.OrganizationGatewayScope(ti.org, gateway, mcpconnectionattempts.AppDCR), urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	}
+	require.Empty(t, ti.listProblems(t, ctx, nil, nil).Problems)
+}
+
+func TestGetSuspectedProblem_OnOneServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	other := ti.gateway(t, "GitHub")
+	ti.failPeople(t, ti.server, 2, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	id := ti.listProblems(t, ctx, nil, nil).Problems[0].ID
+
+	get := func(server uuid.UUID) *gen.GetSuspectedProblemResult {
+		res, err := ti.service.GetSuspectedProblem(ctx, &gen.GetSuspectedProblemPayload{UserSessionIssuerID: ti.issuer.String(), ID: id, ServerID: new(server.String())})
+		require.NoError(t, err)
+		return res
+	}
+	onIt := get(ti.server)
+	require.True(t, onIt.Found)
+	require.Equal(t, int64(2), *onIt.Problem.PeopleOnServerCount)
+	require.False(t, get(other).Found)
+}
+
+// The same problem in another project or organization has an id this project never finds.
+func TestGetSuspectedProblem_NeverFindsAnotherProjectsOrOrganizationsProblem(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	otherProject, otherOrg := uuid.New(), "org-"+uuid.NewString()
+	for range 2 {
+		ti.failOn(t, ti.org, otherProject, ti.server, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+		ti.failOn(t, otherOrg, ti.project, ti.server, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	}
+	for _, scope := range []problems.ReadScope{
+		{OrganizationID: ti.org, ProjectID: otherProject, WholeOrganization: false, Keep: nil},
+		{OrganizationID: otherOrg, ProjectID: ti.project, WholeOrganization: false, Keep: nil},
+	} {
+		there, err := problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, scope, time.Time{}, time.Now())
+		require.NoError(t, err)
+		require.Len(t, there, 1)
+		require.False(t, ti.getProblem(t, ctx, there[0].ID).Found)
+	}
+}
+
+// A person failing on two providers' servers shows on each with only that provider's server.
+func TestSuspectedProblems_SplitByProvider(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	otherIssuer, otherGateway := ti.provider(t, "Notion")
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	for _, gateway := range []uuid.UUID{ti.server, otherGateway} {
+		ti.failOn(t, ti.org, ti.project, gateway, p, 30*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+		ti.failOn(t, ti.org, ti.project, gateway, p, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	}
+	for issuer, gateway := range map[uuid.UUID]uuid.UUID{ti.issuer: ti.server, otherIssuer: otherGateway} {
+		res, err := ti.service.ListSuspectedProblems(ctx, &gen.ListSuspectedProblemsPayload{UserSessionIssuerID: issuer.String(), ServerID: nil, Part: nil})
+		require.NoError(t, err)
+		require.Len(t, res.Problems, 1)
+		require.Equal(t, []string{gateway.String()}, res.Problems[0].Filters.ServerIds)
+		got, err := ti.service.GetSuspectedProblem(ctx, &gen.GetSuspectedProblemPayload{UserSessionIssuerID: issuer.String(), ID: res.Problems[0].ID, ServerID: nil})
+		require.NoError(t, err)
+		require.True(t, got.Found)
+		require.Len(t, got.Problem.Servers, 1)
+		require.Equal(t, gateway.String(), got.Problem.Servers[0].Server.ID)
+		require.Equal(t, int64(2), got.Problem.Servers[0].Attempts)
+	}
+}
+
+// A failed sign-in on the provider's own authorization server belongs to that provider only.
+func TestSuspectedProblems_ListAFailedSignInToTheProvider(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	otherIssuer, _ := ti.provider(t, "Notion")
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	scope := mcpconnectionattempts.AuthorizationServerScope(ti.org, ti.project, ti.issuer, mcpconnectionattempts.AppDCR)
+	for _, ago := range []time.Duration{30 * time.Hour, time.Hour} {
+		ti.attemptAs(t, scope, p, ago, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodePKCEMismatch)
+	}
+	listed := ti.listProblems(t, ctx, nil, nil).Problems
+	require.Len(t, listed, 1)
+	require.Equal(t, gen.SuspectedProblemRule("one_person"), listed[0].Rule)
+	res, err := ti.service.ListSuspectedProblems(ctx, &gen.ListSuspectedProblemsPayload{UserSessionIssuerID: otherIssuer.String(), ServerID: nil, Part: nil})
+	require.NoError(t, err)
+	require.Empty(t, res.Problems)
+}
+
+// One row per person, with every server and app they fail on.
+func TestGetSuspectedProblem_OneRowPerPerson(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	other := ti.gateway(t, "GitHub")
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	for _, ago := range []time.Duration{30 * time.Hour, time.Hour} {
+		ti.failOn(t, ti.org, ti.project, ti.server, p, ago, mcpconnectionattempts.CodeStaticKeyRejected)
+		ti.failOn(t, ti.org, ti.project, other, p, ago, mcpconnectionattempts.CodeStaticKeyRejected)
+		for _, app := range []mcpconnectionattempts.App{mcpconnectionattempts.AppDCR, mcpconnectionattempts.AppOtherMetadataURL} {
+			ti.attemptAs(t, mcpconnectionattempts.GatewayScope(ti.org, ti.project, ti.server, app), p, ago, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken)
+		}
+	}
+	listed := ti.listProblems(t, ctx, nil, nil).Problems
+	require.Len(t, listed, 2)
+	for _, l := range listed {
+		got := ti.getProblem(t, ctx, l.ID)
+		require.True(t, got.Found)
+		require.Len(t, got.Problem.People, 1)
+		require.Equal(t, int64(1), got.Problem.PeopleTotal)
+		row := got.Problem.People[0]
+		if l.Part == "service" {
+			require.Len(t, row.Servers, 2, "two servers fold into one row")
+		} else {
+			require.Len(t, row.Apps, 2, "two apps fold into one row")
+		}
+	}
 }

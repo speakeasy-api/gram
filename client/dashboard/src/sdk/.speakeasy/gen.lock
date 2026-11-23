@@ -2135,6 +2135,7 @@ trackedFiles:
   src/models/components/suspectedproblemfilters.ts: {}
   src/models/components/suspectedproblemmessage.ts: {}
   src/models/components/suspectedproblemperson.ts: {}
+  src/models/components/suspectedproblemplace.ts: {}
   src/models/components/suspectedproblemscope.ts: {}
   src/models/components/suspectedproblemserver.ts: {}
   src/models/components/switchorgencryptionkeyrequestbody.ts: {}
@@ -8294,7 +8295,7 @@ examples:
         application/json: {"id": "<id>", "user_session_issuer_id": "b56b4975-49cb-4de0-911d-12ea137e05b3"}
       responses:
         "200":
-          application/json: {"found": true, "logging_enabled": true}
+          application/json: {"found": true, "logging_enabled": true, "viewer_scope": "own"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -10865,7 +10866,7 @@ examples:
         application/json: {"user_session_issuer_id": "3a5c8124-c801-4f27-8efc-d863b859804a"}
       responses:
         "200":
-          application/json: {"logging_enabled": false, "problems": []}
+          application/json: {"logging_enabled": false, "problems": [], "problems_total": 218600, "viewer_scope": "own"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

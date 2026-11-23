@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -25,6 +25,9 @@ const (
 	// problemsDeadline bounds one problems request, well under its reads' own caps.
 	problemsDeadline = 30 * time.Second
 
+	// maxProblems bounds the problems one list returns.
+	maxProblems = 100
+
 	// maxProblemPeople bounds the people listed on one problem.
 	maxProblemPeople = 50
 
@@ -37,6 +40,9 @@ const (
 
 	// problemFromSlack reaches attempts that started before the failure that opened the problem ended.
 	problemFromSlack = attemptlog.FoldGap
+
+	// kindAuthorizationServer is an attempt on a provider's shared authorization server; its server id is the provider.
+	kindAuthorizationServer = "authorization_server"
 
 	partSpeakeasy gen.SuspectedProblemPart = "speakeasy"
 	partService   gen.SuspectedProblemPart = "service"
@@ -58,15 +64,10 @@ type listed struct {
 	problems       []problems.Problem
 }
 
-// readProblems reads the project's problems with a person on one of the provider's
-// servers, and on serverID when set. Callers without log:read get none.
+// readProblems groups the failures on the provider's servers, gateways and authorization
+// server in the project, then keeps those on serverID when set. Callers without log:read get none.
 func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, serverID *string, now time.Time) (listed, error) {
 	var out listed
-	issuer, err := s.provider(ctx, c, issuerID)
-	if err != nil {
-		return out, err
-	}
-	out.issuerID = issuer.ID
 	if serverID != nil {
 		parsed, err := uuid.Parse(*serverID)
 		if err != nil {
@@ -74,9 +75,7 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 		}
 		out.serverID = parsed.String()
 	}
-	if out.issuerServers, err = s.issuerServerIDs(ctx, c, issuer.ID); err != nil {
-		return out, err
-	}
+	var err error
 	if out.loggingEnabled, err = s.loggingOn(ctx, c); err != nil || !out.loggingEnabled {
 		return out, err
 	}
@@ -84,26 +83,44 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 	if c.ownSubjects != nil {
 		return out, nil
 	}
+	issuer, err := s.provider(ctx, c, issuerID)
+	if err != nil {
+		return out, err
+	}
+	out.issuerID = issuer.ID
+	if out.issuerServers, err = s.issuerServerIDs(ctx, c, issuer.ID); err != nil {
+		return out, err
+	}
 
+	ofProvider := func(e mcpconnectionattempts.FailingPerson) bool {
+		return slices.Contains(out.issuerServers, e.ServerID) || (e.ServerKind == kindAuthorizationServer && e.ServerID == issuer.ID.String())
+	}
 	// Zero: a person who has not tried for a day no longer counts, so failures from before
 	// served requests were recorded age out a day after that writer shipped.
-	all, err := problems.Read(ctx, s.ch, s.db, s.logsEnabled, c.organizationID, c.projectID, time.Time{}, now)
+	all, err := problems.Read(ctx, s.ch, s.db, s.logsEnabled, problems.ReadScope{
+		OrganizationID: c.organizationID, ProjectID: c.projectID, WholeOrganization: false, Keep: ofProvider,
+	}, time.Time{}, now)
 	switch {
 	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
 		out.loggingEnabled = false
 		return out, nil
 	case err != nil:
-		return out, oops.E(oops.CodeUnexpected, err, "read suspected problems").LogError(ctx, s.logger)
+		return out, s.problemsError(ctx, err, "read suspected problems")
 	}
 	for _, p := range all {
-		if slices.ContainsFunc(p.Episodes, func(e mcpconnectionattempts.FailingPerson) bool {
-			return slices.Contains(out.issuerServers, e.ServerID)
-		}) &&
-			(out.serverID == "" || peopleOn(p, out.serverID) > 0) {
+		if out.serverID == "" || peopleOn(p, out.serverID) > 0 {
 			out.problems = append(out.problems, p)
 		}
 	}
 	return out, nil
+}
+
+// problemsError reports a read past the deadline as temporarily unavailable, anything else as unexpected.
+func (s *Service) problemsError(ctx context.Context, err error, what string) error {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return oops.E(oops.CodeUnavailable, err, "suspected problems took too long to read, try again in a minute").LogWarn(ctx, s.logger)
+	}
+	return oops.E(oops.CodeUnexpected, err, "%s", what).LogError(ctx, s.logger)
 }
 
 // peopleOn counts the problem's people failing on a server, gateway member or toolset.
@@ -128,10 +145,11 @@ func (s *Service) ListSuspectedProblems(ctx context.Context, payload *gen.ListSu
 	if err != nil {
 		return nil, err
 	}
-	result := &gen.ListSuspectedProblemsResult{LoggingEnabled: l.loggingEnabled, Problems: []*gen.SuspectedProblem{}}
+	result := &gen.ListSuspectedProblemsResult{LoggingEnabled: l.loggingEnabled, ViewerScope: c.viewerScope(), Problems: []*gen.SuspectedProblem{}, ProblemsTotal: 0}
 	if payload.Part != nil {
 		l.problems = slices.DeleteFunc(l.problems, func(p problems.Problem) bool { return partOf(p.Part) != *payload.Part })
 	}
+	l.problems, result.ProblemsTotal = capProblems(l.problems)
 	if len(l.problems) == 0 {
 		return result, nil
 	}
@@ -140,7 +158,8 @@ func (s *Service) ListSuspectedProblems(ctx context.Context, payload *gen.ListSu
 		return nil, err
 	}
 	for _, p := range l.problems {
-		result.Problems = append(result.Problems, problemView(n, p, l.serverID))
+		view, _ := problemView(n, p, l.serverID)
+		result.Problems = append(result.Problems, view)
 	}
 	return result, nil
 }
@@ -157,7 +176,7 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 	if err != nil {
 		return nil, err
 	}
-	result := &gen.GetSuspectedProblemResult{LoggingEnabled: l.loggingEnabled, Found: false, Problem: nil}
+	result := &gen.GetSuspectedProblemResult{LoggingEnabled: l.loggingEnabled, ViewerScope: c.viewerScope(), Found: false, Problem: nil}
 	i := slices.IndexFunc(l.problems, func(p problems.Problem) bool { return p.ID == payload.ID })
 	if i < 0 {
 		return result, nil
@@ -167,7 +186,7 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 	if err != nil {
 		return nil, err
 	}
-	view := problemView(n, p, l.serverID)
+	view, widened := problemView(n, p, l.serverID)
 	filters := filtersOf(&gen.ConnectionAttemptFilters{
 		Outcomes:    view.Filters.Outcomes,
 		Steps:       nil,
@@ -192,20 +211,37 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 		To:              now.Add(detailLookahead),
 		OwnSubjects:     nil,
 	}
-	counts, err := attemptlog.Count(ctx, s.ch, scope, filters, now)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count suspected problem attempts").LogError(ctx, s.logger)
-	}
 	chart := scope
 	chart.From, chart.To = later(from, now.Add(-problemChartSpan)), now
-	buckets, err := attemptlog.CountOver(ctx, s.ch, chart, filters, problemBucket, now)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count suspected problem attempts over time").LogError(ctx, s.logger)
+	var reasons []attemptlog.FacetValue
+	var buckets []attemptlog.TimeCount
+	eg, egctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		var err error
+		if reasons, err = attemptlog.CountByReason(egctx, s.ch, scope, filters, now); err != nil {
+			return fmt.Errorf("count by reason: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		var err error
+		if buckets, err = attemptlog.CountOver(egctx, s.ch, chart, filters, problemBucket, now); err != nil {
+			return fmt.Errorf("count over time: %w", err)
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return nil, s.problemsError(ctx, err, "count suspected problem attempts")
 	}
 
 	result.Found = true
-	result.Problem = detailView(n, p, view, counts, buckets)
+	result.Problem = detailView(n, p, view, widened, reasons, buckets)
 	return result, nil
+}
+
+// capProblems keeps the first maxProblems, already sorted most people first, and counts them all.
+func capProblems(ps []problems.Problem) ([]problems.Problem, int64) {
+	return ps[:min(len(ps), maxProblems)], int64(len(ps))
 }
 
 func later(a, b time.Time) time.Time {
@@ -228,8 +264,10 @@ func problemIDs(ps []problems.Problem) *collector {
 	return ids
 }
 
-func problemView(n names, p problems.Problem, serverID string) *gen.SuspectedProblem {
+// problemView is the listed problem, and whether its filters had to leave a list out.
+func problemView(n names, p problems.Problem, serverID string) (*gen.SuspectedProblem, bool) {
 	scope := &gen.SuspectedProblemScope{Kind: string(p.Scope.Kind), ID: p.Scope.Key, Name: scopeName(n, p)}
+	filters, widened := problemFilters(p)
 	view := &gen.SuspectedProblem{
 		ID:                  p.ID,
 		Rule:                gen.SuspectedProblemRule(p.Rule),
@@ -241,12 +279,12 @@ func problemView(n names, p problems.Problem, serverID string) *gen.SuspectedPro
 		PeopleOnServerCount: nil,
 		Headline:            headline(p, scope.Name),
 		Fact:                fact(n, p),
-		Filters:             problemFilters(p),
+		Filters:             filters,
 	}
 	if serverID != "" {
 		view.PeopleOnServerCount = new(int64(peopleOn(p, serverID)))
 	}
-	return view
+	return view, widened
 }
 
 // scopeName is what the problem is about as the pages name it.
@@ -259,10 +297,7 @@ func scopeName(n names, p problems.Problem) string {
 		}
 		return "an MCP server"
 	case problems.ScopeService:
-		if u, err := url.Parse(key); err == nil && u.Hostname() != "" {
-			return u.Hostname()
-		}
-		return key
+		return hostOf(key)
 	case problems.ScopeAppVersion:
 		family, version, _ := strings.Cut(key, "@")
 		return attemptlog.AppName(family) + " " + version
@@ -301,114 +336,9 @@ func episodeServerName(n names, e mcpconnectionattempts.FailingPerson) string {
 	return ""
 }
 
-func headline(p problems.Problem, scope string) string {
-	verb := "can't connect"
-	if p.Part == mcpconnectionattempts.PartAppSignIn {
-		verb = "can't sign in"
-	}
-	people := fmt.Sprintf("%d people", p.People)
-	switch p.Rule {
-	case problems.RuleSameServer, problems.RuleSameService:
-		target := " to " + scope
-		return people + " " + verb + target
-	case problems.RuleSameAppVersion:
-		return people + " on " + scope + " " + verb
-	case problems.RuleOnePerson:
-		return scope + " " + verb
-	}
-	return people + " " + verb
-}
-
-// fact states only what the episodes establish, in the catalog's words where it has them.
-func fact(n names, p problems.Problem) string {
-	var out []string
-	if p.Rule == problems.RuleOnePerson || p.Rule == problems.RuleSameAppVersion {
-		if where := serversPhrase(n, p); where != "" {
-			out = append(out, "On "+where+".")
-		}
-	}
-	service := "the service"
-	if p.Rule == problems.RuleSameService {
-		service = p.Scope.Key
-		if u, err := url.Parse(service); err == nil && u.Hostname() != "" {
-			service = u.Hostname()
-		}
-	}
-	switch p.Part {
-	case mcpconnectionattempts.PartAppSignIn:
-		out = append(out, "The app's sign-in to Speakeasy fails.")
-	case mcpconnectionattempts.PartServiceSignIn:
-		out = append(out, "Signing in to "+service+" fails.")
-	case mcpconnectionattempts.PartServer:
-		if p.Rule == problems.RuleSameService {
-			out = append(out, "The service at "+service+" is not answering.")
-		} else {
-			out = append(out, "The server is not answering.")
-		}
-	}
-	if reason := sharedReason(p); reason != "" {
-		if meaning, ok := mcpconnectionattempts.MeaningOf(reason); ok && meaning.WhatHappenedForAdmin != "" {
-			out = append(out, meaning.WhatHappenedForAdmin)
-		}
-	}
-	if p.SharedApp.Family != "" && p.Rule != problems.RuleSameAppVersion {
-		app := attemptlog.AppName(p.SharedApp.Family) + " " + p.SharedApp.Version
-		if p.People == 1 {
-			out = append(out, "Uses "+app+".")
-		} else {
-			out = append(out, "All use "+app+".")
-		}
-	}
-	if p.OtherAppsServed {
-		out = append(out, "Other apps worked there in this time.")
-	}
-	return strings.Join(out, " ")
-}
-
-func sharedReason(p problems.Problem) string {
-	reason := p.Episodes[0].Reason
-	for _, e := range p.Episodes[1:] {
-		if e.Reason != reason {
-			return ""
-		}
-	}
-	return reason
-}
-
-// serversPhrase names the servers the problem's people fail on: "Linear", "Linear and GitHub", "Linear and 2 other servers".
-func serversPhrase(n names, p problems.Problem) string {
-	var named []string
-	seen := map[string]bool{}
-	for _, e := range p.Episodes {
-		if !e.ReachedServer() {
-			continue
-		}
-		key := e.ServerID + "/" + e.MemberID
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		name := episodeServerName(n, e)
-		if name == "" {
-			name = "an MCP server"
-		}
-		named = append(named, name)
-	}
-	switch len(named) {
-	case 0:
-		return ""
-	case 1:
-		return named[0]
-	case 2:
-		return named[0] + " and " + named[1]
-	default:
-		return fmt.Sprintf("%s and %d other servers", named[0], len(named)-1)
-	}
-}
-
-// problemFilters are the Connection Logs filters for the problem's failed attempts. A
-// list over the filter's cap is left out, which widens the match.
-func problemFilters(p problems.Problem) *gen.SuspectedProblemFilters {
+// problemFilters are the Connection Logs filters for the problem's failed attempts, and
+// whether a list over the filter's cap was left out, which widens the match.
+func problemFilters(p problems.Problem) (*gen.SuspectedProblemFilters, bool) {
 	var servers, people, reasons []string
 	allOnServer := true
 	for _, e := range p.Episodes {
@@ -419,8 +349,12 @@ func problemFilters(p problems.Problem) *gen.SuspectedProblemFilters {
 		people = appendNew(people, e.SubjectURN)
 		reasons = appendNew(appendNew(reasons, e.OpeningReason), e.Reason)
 	}
+	widened := !allOnServer
 	capped := func(values []string) []string {
 		values = slices.DeleteFunc(values, func(v string) bool { return v == "" })
+		if len(values) > maxFilterValues {
+			widened = true
+		}
 		if len(values) == 0 || len(values) > maxFilterValues {
 			return nil
 		}
@@ -446,7 +380,7 @@ func problemFilters(p problems.Problem) *gen.SuspectedProblemFilters {
 	if p.Rule == problems.RuleSameAppVersion {
 		out.AppVersions = []string{p.Scope.Key}
 	}
-	return out
+	return out, widened
 }
 
 func appendNew(values []string, v string) []string {
@@ -456,16 +390,17 @@ func appendNew(values []string, v string) []string {
 	return append(values, v)
 }
 
-func detailView(n names, p problems.Problem, view *gen.SuspectedProblem, counts attemptlog.Counts, buckets []attemptlog.TimeCount) *gen.SuspectedProblemDetail {
+func detailView(n names, p problems.Problem, view *gen.SuspectedProblem, widened bool, reasons []attemptlog.FacetValue, buckets []attemptlog.TimeCount) *gen.SuspectedProblemDetail {
 	d := &gen.SuspectedProblemDetail{
 		Source:                 nil,
 		FailedPer10Minutes:     make([]*gen.SuspectedProblemBucket, len(buckets)),
 		LastConnectedAt:        nil,
 		OtherFailuresOnService: int64(p.OthersOnScope),
-		Messages:               []*gen.SuspectedProblemMessage{},
+		Messages:               make([]*gen.SuspectedProblemMessage, len(reasons)),
 		People:                 []*gen.SuspectedProblemPerson{},
-		PeopleTotal:            int64(len(p.Episodes)),
+		PeopleTotal:            int64(p.People),
 		Servers:                []*gen.SuspectedProblemServer{},
+		CountsWidened:          widened,
 		ID:                     view.ID,
 		Rule:                   view.Rule,
 		Part:                   view.Part,
@@ -480,6 +415,15 @@ func detailView(n names, p problems.Problem, view *gen.SuspectedProblem, counts 
 	}
 	for i, b := range buckets {
 		d.FailedPer10Minutes[i] = &gen.SuspectedProblemBucket{Start: formatTime(b.Start), Attempts: count(b.Attempts)}
+	}
+	for i, v := range reasons {
+		meaning, _ := mcpconnectionattempts.MeaningOf(v.Value)
+		d.Messages[i] = &gen.SuspectedProblemMessage{
+			Reason:       v.Value,
+			Message:      meaning.WhatHappened,
+			AdminMessage: conv.PtrEmpty(meaning.WhatHappenedForAdmin),
+			Attempts:     count(v.Attempts),
+		}
 	}
 
 	var lastWorked time.Time
@@ -497,37 +441,13 @@ func detailView(n names, p problems.Problem, view *gen.SuspectedProblem, counts 
 		d.Source = new(gen.ConnectionFailureSource(sources[0]))
 	}
 
-	// The reasons facet ignores its own filter, so keep the problem's reasons only.
-	for _, v := range counts.Facets[attemptlog.FacetReasons] {
-		if view.Filters.Reasons != nil && !slices.Contains(view.Filters.Reasons, v.Value) {
-			continue
-		}
-		meaning, _ := mcpconnectionattempts.MeaningOf(v.Value)
-		d.Messages = append(d.Messages, &gen.SuspectedProblemMessage{
-			Reason:       v.Value,
-			Message:      meaning.WhatHappened,
-			AdminMessage: conv.PtrEmpty(meaning.WhatHappenedForAdmin),
-			Attempts:     count(v.Attempts),
-		})
-	}
-
+	d.People = peopleRows(n, p)
 	type serverKey struct{ kind, id, member string }
 	perServer := map[serverKey]uint64{}
-	for i, e := range p.Episodes {
+	for _, e := range p.Episodes {
 		if e.ReachedServer() {
 			perServer[serverKey{e.ServerKind, e.ServerID, e.MemberID}] += e.Failures
 		}
-		if i >= maxProblemPeople {
-			continue
-		}
-		d.People = append(d.People, &gen.SuspectedProblemPerson{
-			Person:        n.person(e.SubjectURN, false),
-			App:           appView(e.ClientFamily, e.ClientVersion, e.AppKey),
-			Server:        n.server(e.ServerID, e.ServerKind),
-			Member:        n.member(e.MemberID),
-			Attempts:      count(e.Failures),
-			FirstFailedAt: formatTime(e.OpenedAt),
-		})
 	}
 	for _, k := range slices.SortedFunc(maps.Keys(perServer), func(a, b serverKey) int {
 		return cmp.Or(cmp.Compare(perServer[b], perServer[a]), cmp.Compare(a.id, b.id), cmp.Compare(a.member, b.member))
@@ -539,4 +459,38 @@ func detailView(n names, p problems.Problem, view *gen.SuspectedProblem, counts 
 		d.Servers = append(d.Servers, &gen.SuspectedProblemServer{Server: server, Member: n.member(k.member), Attempts: count(perServer[k])})
 	}
 	return d
+}
+
+// peopleRows is one row per person, earliest failure first, with their apps and servers folded in.
+func peopleRows(n names, p problems.Problem) []*gen.SuspectedProblemPerson {
+	var out []*gen.SuspectedProblemPerson
+	bySubject := map[string]*gen.SuspectedProblemPerson{}
+	seen := map[string]bool{}
+	// Episodes are sorted by when they opened, so a person's first row is their earliest failure.
+	for _, e := range p.Episodes {
+		row := bySubject[e.SubjectURN]
+		if row == nil {
+			if len(out) == maxProblemPeople {
+				continue
+			}
+			row = &gen.SuspectedProblemPerson{
+				Person: n.person(e.SubjectURN, false), Apps: []*gen.ConnectionApp{}, Servers: []*gen.SuspectedProblemPlace{},
+				Attempts: 0, FirstFailedAt: formatTime(e.OpenedAt),
+			}
+			bySubject[e.SubjectURN] = row
+			out = append(out, row)
+		}
+		row.Attempts += count(e.Failures)
+		if app := e.SubjectURN + "|" + e.ClientFamily + "|" + e.ClientVersion + "|" + e.AppKey; !seen[app] {
+			seen[app] = true
+			row.Apps = append(row.Apps, appView(e.ClientFamily, e.ClientVersion, e.AppKey))
+		}
+		if place := e.SubjectURN + "|" + e.ServerKind + "|" + e.ServerID + "|" + e.MemberID; e.ReachedServer() && !seen[place] {
+			if server := n.server(e.ServerID, e.ServerKind); server != nil {
+				seen[place] = true
+				row.Servers = append(row.Servers, &gen.SuspectedProblemPlace{Server: server, Member: n.member(e.MemberID)})
+			}
+		}
+	}
+	return out
 }

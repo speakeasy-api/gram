@@ -16,7 +16,7 @@ import { useRoutes } from "@/routes";
 import { ArrowRight } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
-import { useSuspectedProblem } from "./api";
+import { isUnavailable, useSuspectedProblem } from "./api";
 import { AskAiButton, type Investigation } from "./AskAiButton";
 import { logsSearch } from "./filters";
 import {
@@ -49,6 +49,7 @@ export function ProblemDetailSheet({
 }): JSX.Element {
   const query = useSuspectedProblem({ providerId, serverId }, id);
   const problem = query.data?.problem;
+  const data = query.data;
   return (
     <Sheet
       open={!!id}
@@ -77,18 +78,33 @@ export function ProblemDetailSheet({
                 <InlineEmptyState
                   icon="triangle-alert"
                   heading="Couldn't load this problem"
-                  description="Close it and open it again."
+                  description={
+                    isUnavailable(query.error)
+                      ? "It took too long to load. Try again in a minute."
+                      : "Close it and open it again."
+                  }
                 />
               ) : query.isPending ? (
                 <div className="space-y-3">
                   <Skeleton className="h-6 w-2/3" />
                   <Skeleton className="h-32 w-full" />
                 </div>
+              ) : data && !data.loggingEnabled ? (
+                <InlineEmptyState
+                  icon="file-x"
+                  heading="Logging is off"
+                  description="Connection attempt logs are not kept while logging is off for this organization."
+                />
+              ) : data?.viewerScope === "own" ? (
+                <InlineEmptyState
+                  icon="lock"
+                  heading="You can't see suspected problems"
+                  description="They name other people, so they need permission to read every log in this project."
+                />
               ) : (
                 <InlineEmptyState
                   icon="circle-check"
-                  heading="This problem has cleared"
-                  description="The people in it have connected since, or stopped trying."
+                  heading="This problem is no longer listed."
                 />
               )}
             </div>
@@ -124,7 +140,7 @@ function sourceName(problem: SuspectedProblemDetail): string | undefined {
   if (problem.source === "service")
     return problem.scope.kind === "service" ? problem.scope.name : undefined;
   if (problem.source !== "app") return undefined;
-  const apps = new Set(problem.people.map((p) => appLabel(p.app)));
+  const apps = new Set(problem.people.flatMap((p) => p.apps.map(appLabel)));
   return apps.size === 1 ? [...apps][0] : undefined;
 }
 
@@ -223,19 +239,26 @@ function ProblemBody({
         </div>
 
         <Block
-          title={`Failed attempts · ${formatCount(failed)}`}
+          title={`${problem.countsWidened ? "Failed attempts with these messages on these servers" : "Failed attempts"} · ${formatCount(failed)}`}
           aside="10-minute intervals, last 24 hours"
         >
           <div className="border p-3">
             <FailureBars buckets={problem.failedPer10Minutes} now={now} />
           </div>
+          {problem.countsWidened ? (
+            <p className="text-muted-foreground text-sm">
+              This problem has too many people or servers to filter by. These
+              counts include everyone who failed with these messages on these
+              servers.
+            </p>
+          ) : null}
         </Block>
 
         <Block title={`People · ${peopleCount}`} aside="Attempts">
           <div className="divide-y border">
             {problem.people.map((p) => (
               <PersonRow
-                key={`${p.person.subjectUrn}-${p.server?.id}-${p.member?.id}`}
+                key={p.person.subjectUrn}
                 to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(
                   { ...problem.filters, people: [p.person.subjectUrn] },
                   now,
@@ -246,8 +269,10 @@ function ProblemBody({
                   <div className="min-w-0">
                     <div className="truncate text-sm">{personLabel(p)}</div>
                     <div className="text-muted-foreground truncate text-xs">
-                      {appLabel(p.app)}
-                      {p.server ? ` · ${serverLabel(p)}` : ""}
+                      {p.apps.map(appLabel).join(", ")}
+                      {p.servers.length > 0
+                        ? ` · ${p.servers.map(serverLabel).join(", ")}`
+                        : ""}
                     </div>
                   </div>
                 </div>
@@ -320,7 +345,11 @@ function ProblemBody({
           onLaunched={onClose}
         />
         <Button asChild>
-          <Link to={logsHref}>Open in Connection Logs</Link>
+          <Link to={logsHref}>
+            {problem.countsWidened
+              ? "Open matching attempts in Connection Logs"
+              : "Open in Connection Logs"}
+          </Link>
         </Button>
       </SheetFooter>
     </div>

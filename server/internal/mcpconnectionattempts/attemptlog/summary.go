@@ -180,11 +180,12 @@ func CountOver(ctx context.Context, ch driver.Conn, s Scope, f Filters, width ti
 	}
 	where, filterArgs := filterSQL(f)
 	args = append(args, filterArgs...)
-	query := fmt.Sprintf(`
-	SELECT toDateTime(toStartOfInterval(a_started, INTERVAL %d SECOND), 'UTC') AS t_start, toUInt64(sum(a_weight)) AS t_attempts
-	FROM (`+attempts+`)
-	WHERE `+where+`
-	GROUP BY t_start`+readSettings, int64(width/time.Second))
+	interval := fmt.Sprintf("INTERVAL %d SECOND", int64(width/time.Second))
+	query := `
+	SELECT toDateTime(toStartOfInterval(a_started, ` + interval + `), 'UTC') AS t_start, toUInt64(sum(a_weight)) AS t_attempts
+	FROM (` + attempts + `)
+	WHERE ` + where + `
+	GROUP BY t_start` + readSettings
 	rows, err := queryAll[TimeCount](ctx, ch, "attempts over time", query, args...)
 	if err != nil {
 		return nil, err
@@ -196,6 +197,38 @@ func CountOver(ctx context.Context, ch driver.Conn, s Scope, f Filters, width ti
 	var out []TimeCount
 	for start := s.From.UTC().Truncate(width); start.Before(s.To); start = start.Add(width) {
 		out = append(out, TimeCount{Start: start, Attempts: found[start.Unix()]})
+	}
+	return out, nil
+}
+
+// maxReasons bounds the reasons CountByReason returns.
+const maxReasons = 100
+
+// CountByReason counts the attempts matching the filters per reason, most first.
+func CountByReason(ctx context.Context, ch driver.Conn, s Scope, f Filters, now time.Time) ([]FacetValue, error) {
+	attempts, args, err := attemptsSQL(s, now)
+	if err != nil {
+		return nil, err
+	}
+	where, filterArgs := filterSQL(f)
+	args = append(append(args, filterArgs...), maxReasons)
+	type reasonCount struct {
+		Reason   string `ch:"x_reason"`
+		Attempts uint64 `ch:"x_attempts"`
+	}
+	rows, err := queryAll[reasonCount](ctx, ch, "attempts by reason", `
+	SELECT d_reason AS x_reason, toUInt64(sum(a_weight)) AS x_attempts
+	FROM (`+attempts+`)
+	WHERE `+where+` AND d_reason != ''
+	GROUP BY x_reason
+	ORDER BY x_attempts DESC, x_reason
+	LIMIT ?`+readSettings, args...)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FacetValue, len(rows))
+	for i, r := range rows {
+		out[i] = FacetValue{Value: r.Reason, Attempts: r.Attempts}
 	}
 	return out, nil
 }

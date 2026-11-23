@@ -5,6 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -12,13 +14,43 @@ import {
   SuspectedProblem$inboundSchema,
 } from "./suspectedproblem.js";
 
+/**
+ * all when the caller reads the whole project, own when only their own attempts.
+ */
+export const ListSuspectedProblemsResultConnectionViewerScope = {
+  All: "all",
+  Own: "own",
+} as const;
+/**
+ * all when the caller reads the whole project, own when only their own attempts.
+ */
+export type ListSuspectedProblemsResultConnectionViewerScope = OpenEnum<
+  typeof ListSuspectedProblemsResultConnectionViewerScope
+>;
+
 export type ListSuspectedProblemsResult = {
   /**
    * False when the organization has logging off. Nothing else is returned then.
    */
   loggingEnabled: boolean;
+  /**
+   * At most 100, most people first.
+   */
   problems: Array<SuspectedProblem>;
+  /**
+   * Problems before the cap.
+   */
+  problemsTotal: number;
+  /**
+   * all when the caller reads the whole project, own when only their own attempts.
+   */
+  connectionViewerScope: ListSuspectedProblemsResultConnectionViewerScope;
 };
+
+/** @internal */
+export const ListSuspectedProblemsResultConnectionViewerScope$inboundSchema:
+  z.ZodMiniType<ListSuspectedProblemsResultConnectionViewerScope, unknown> =
+    openEnums.inboundSchema(ListSuspectedProblemsResultConnectionViewerScope);
 
 /** @internal */
 export const ListSuspectedProblemsResult$inboundSchema: z.ZodMiniType<
@@ -28,10 +60,15 @@ export const ListSuspectedProblemsResult$inboundSchema: z.ZodMiniType<
   z.object({
     logging_enabled: z.boolean(),
     problems: z.array(SuspectedProblem$inboundSchema),
+    problems_total: z.int(),
+    viewer_scope:
+      ListSuspectedProblemsResultConnectionViewerScope$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "logging_enabled": "loggingEnabled",
+      "problems_total": "problemsTotal",
+      "viewer_scope": "connectionViewerScope",
     });
   }),
 );

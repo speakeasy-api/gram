@@ -56,7 +56,8 @@ func (f *readFixture) failAs(p urn.SessionSubject, scope mcpconnectionattempts.S
 
 func (f *readFixture) read(org string, project uuid.UUID, recordedSince time.Time) []Problem {
 	f.t.Helper()
-	got, err := Read(f.t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, org, project, recordedSince, f.now)
+	scope := ReadScope{OrganizationID: org, ProjectID: project, WholeOrganization: project == uuid.Nil, Keep: nil}
+	got, err := Read(f.t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, scope, recordedSince, f.now)
 	require.NoError(f.t, err)
 	return got
 }
@@ -64,15 +65,17 @@ func (f *readFixture) read(org string, project uuid.UUID, recordedSince time.Tim
 func TestRead_LogsOffReturnsTheError(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
-	_, err := Read(t.Context(), f.ch, f.db, logsOff, "org-"+uuid.NewString(), uuid.Nil, time.Time{}, f.now)
+	_, err := Read(t.Context(), f.ch, f.db, logsOff, ReadScope{OrganizationID: "org-" + uuid.NewString(), WholeOrganization: true}, time.Time{}, f.now)
 	require.ErrorIs(t, err, mcpconnectionattempts.ErrLogsOff)
 }
 
-func TestRead_RejectsAnEmptyOrganization(t *testing.T) {
+func TestRead_RejectsAnEmptyScope(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
-	_, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, "", uuid.Nil, time.Time{}, f.now)
+	_, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, ReadScope{WholeOrganization: true}, time.Time{}, f.now)
 	require.Error(t, err)
+	_, err = Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, ReadScope{OrganizationID: "org-" + uuid.NewString()}, time.Time{}, f.now)
+	require.Error(t, err, "no project is an error, not the whole organization")
 }
 
 // Another organization failing on the same server id is not counted.
@@ -103,12 +106,32 @@ func TestRead_GroupsOneProjectsFailures(t *testing.T) {
 	require.Empty(t, f.read(org, projectA, time.Time{}), "one person in each project makes no problem")
 
 	f.fail(mcpconnectionattempts.ServerScope(org, projectA, server, mcpconnectionattempts.AppDCR), time.Hour)
+	gateway := uuid.New()
+	for range 2 {
+		f.fail(mcpconnectionattempts.OrganizationGatewayScope(org, gateway, mcpconnectionattempts.AppDCR), time.Hour)
+	}
 	got := f.read(org, projectA, time.Time{})
 	require.Len(t, got, 1)
 	require.Equal(t, 2, got[0].People)
 	for _, e := range got[0].Episodes {
 		require.Equal(t, projectA, e.ProjectID)
 	}
+}
+
+// Keep narrows the episodes before they are grouped.
+func TestRead_KeepsOnlyTheEpisodesAskedFor(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	org, project, a, b := "org-"+uuid.NewString(), uuid.New(), uuid.New(), uuid.New()
+	for range 2 {
+		f.fail(mcpconnectionattempts.ServerScope(org, project, a, mcpconnectionattempts.AppDCR), time.Hour)
+		f.fail(mcpconnectionattempts.ServerScope(org, project, b, mcpconnectionattempts.AppDCR), time.Hour)
+	}
+	keepA := func(e mcpconnectionattempts.FailingPerson) bool { return e.ServerID == a.String() }
+	got, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, ReadScope{OrganizationID: org, ProjectID: project, WholeOrganization: false, Keep: keepA}, time.Time{}, f.now)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, a.String(), got[0].Scope.Key)
 }
 
 func TestRead_StartsWhereRecordingStarted(t *testing.T) {

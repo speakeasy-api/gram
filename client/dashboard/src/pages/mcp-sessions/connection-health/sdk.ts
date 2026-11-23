@@ -349,13 +349,16 @@ function problemDetail(d: SdkSuspectedProblemDetail): SuspectedProblemDetail {
     messages: d.messages,
     people: d.people.map((p) => ({
       person: personOf(p.person),
-      app: p.app,
-      server: server(p.server),
-      member: server(p.member),
+      apps: p.apps,
+      servers: p.servers.map((s) => ({
+        server: serverOf(s.server),
+        member: server(s.member),
+      })),
       attempts: p.attempts,
       firstFailedAt: iso(p.firstFailedAt),
     })),
     peopleTotal: d.peopleTotal,
+    countsWidened: d.countsWidened,
     servers: d.servers.map((s) => ({
       server: serverOf(s.server),
       member: server(s.member),
@@ -381,7 +384,9 @@ export async function listSuspectedProblems(
   );
   return {
     loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
     problems: result.problems.map(problem),
+    problemsTotal: result.problemsTotal,
   };
 }
 
@@ -398,6 +403,7 @@ export async function getSuspectedProblem(
   );
   return {
     loggingEnabled: result.loggingEnabled,
+    viewerScope: result.connectionViewerScope as ViewerScope,
     found: result.found,
     problem: result.problem && problemDetail(result.problem),
   };

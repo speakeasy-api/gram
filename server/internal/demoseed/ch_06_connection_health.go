@@ -1,7 +1,9 @@
 package demoseed
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"time"
@@ -16,12 +18,39 @@ import (
 // healthGen builds the connection health attempts (seed_04_connection_health.go): a
 // month of sign-ins with a weekday rhythm, and the stories the suspected problems tell.
 type healthGen struct {
-	s    *seeder
-	clk  healthClock
-	r    *seedRand
-	rows []mcpconnectionattempts.Row
-	n    int
-	err  error
+	s      *seeder
+	clk    healthClock
+	r      *seedRand
+	rows   []mcpconnectionattempts.Row
+	served map[servedKey]mcpconnectionattempts.Served
+	n      int
+	err    error
+}
+
+// servedKey is one connection as mcp_connection_last_served keys it.
+type servedKey struct{ kind, server, member, subject, app, family string }
+
+// servedRequest is a request of the person's app that the server answered. It has no event row.
+func (g *healthGen) servedRequest(p healthPerson, server, member string, at time.Time) {
+	if latest := g.clk.now.Add(-5 * time.Second); at.After(latest) {
+		return
+	}
+	kind, id := "mcp", g.s.healthServerID(server).String()
+	if server == healthGatewayKey {
+		kind, id = "meta", g.s.healthGateway().String()
+	}
+	memberID := ""
+	if member != "" {
+		memberID = g.s.healthServerID(member).String()
+	}
+	k := servedKey{kind: kind, server: id, member: memberID, subject: urn.NewUserSubject(g.userID(p)).String(), app: healthApp(p.family).String(), family: p.family}
+	if prev, ok := g.served[k]; ok && !at.After(prev.ServedAt) {
+		return
+	}
+	g.served[k] = mcpconnectionattempts.Served{
+		OrganizationID: g.s.orgID(), ProjectID: g.s.projectID(), ServerKind: k.kind, ServerID: k.server, MemberID: k.member,
+		SubjectURN: k.subject, AppKey: k.app, ClientFamily: k.family, RemoteSessionClientID: "", ServedAt: at, AnsweredAt: at,
+	}
 }
 
 // healthAttempt is one attempt being built.
@@ -217,6 +246,9 @@ func (g *healthGen) listing(p healthPerson, t time.Time, missing string) {
 		what = mcpconnectionattempts.CodeMemberToolsMissing
 	}
 	a.row(mcpconnectionattempts.StepDiscoveryListing, what, t.Add(4*time.Second), true, g.person(p))
+	if missing == "" {
+		g.servedRequest(p, healthGatewayKey, "", t.Add(4*time.Second))
+	}
 }
 
 // network is a row of nobody known yet: an app or browser on one of a few networks.
@@ -379,6 +411,11 @@ func (g *healthGen) baseline() {
 				continue
 			}
 			g.emit(kind, p, server, when, recoverAt)
+			// After a sign-in or renewal the app usually makes requests the server answers.
+			if requestAt := when.Add(g.r.span(time.Minute, 20*time.Minute)); (kind == "renewal" || kind == "service_renewal" || kind == "sign_in") &&
+				g.r.float() < .6 && !g.busy(p, server, requestAt) {
+				g.servedRequest(p, server, "", requestAt)
+			}
 		}
 	}
 }
@@ -390,6 +427,7 @@ var healthBlips = map[string]bool{"renewal_fail": true, "service_fail": true, "r
 // gateway member's service, and listing the gateway's tools.
 func (g *healthGen) recovered(p healthPerson, server, member string, at time.Time) {
 	g.signIn(p, server, at, healthConnected)
+	g.servedRequest(p, server, member, at.Add(90*time.Second))
 	if server == healthGatewayKey {
 		g.serviceRenewal(p, server, member, at.Add(time.Minute), mcpconnectionattempts.ResultRefreshed)
 		g.listing(p, at.Add(2*time.Minute), "")
@@ -520,10 +558,12 @@ func (g *healthGen) storyLinear() {
 	}{{"priya", 11, 12}, {"sofia", 11, 19}, {"omar", 11, 26}, {"sam", 11, 41}, {"priya", 12, 8}} {
 		if t := at(0, r.hour, r.minute, 0); t.Before(g.clk.now) {
 			g.serviceRenewal(g.personByKey(r.who), "linear", "", t, mcpconnectionattempts.ResultRefreshed)
+			g.servedRequest(g.personByKey(r.who), "linear", "", t.Add(time.Minute))
 		}
 	}
 	if t := at(0, 11, 33, 0); t.Before(g.clk.now) {
 		g.serviceRenewal(g.personByKey("mei"), healthGatewayKey, "linear", t, mcpconnectionattempts.ResultRefreshed)
+		g.servedRequest(g.personByKey("mei"), healthGatewayKey, "linear", t.Add(time.Minute))
 	}
 }
 
@@ -663,9 +703,10 @@ func (g *healthGen) storyFirsts() {
 	}
 }
 
-// connectionHealthRows is the whole dataset, deterministic for the seed's clock.
-func (s *seeder) connectionHealthRows() ([]mcpconnectionattempts.Row, error) {
-	g := &healthGen{s: s, clk: newHealthClock(s.now), r: &seedRand{name: s.name("health-attempts"), n: 0}, rows: nil, n: 0, err: nil}
+// connectionHealthRows is the whole dataset, deterministic for the seed's clock: the attempts,
+// and the answered requests that have no attempt rows.
+func (s *seeder) connectionHealthRows() ([]mcpconnectionattempts.Row, []mcpconnectionattempts.Served, error) {
+	g := &healthGen{s: s, clk: newHealthClock(s.now), r: &seedRand{name: s.name("health-attempts"), n: 0}, rows: nil, served: map[servedKey]mcpconnectionattempts.Served{}, n: 0, err: nil}
 	g.baseline()
 	g.storyFirsts()
 	g.storyLinear()
@@ -676,42 +717,8 @@ func (s *seeder) connectionHealthRows() ([]mcpconnectionattempts.Row, error) {
 	g.storyKillswitch()
 	g.storyDenied()
 	g.storyNow()
-	return g.rows, g.err
-}
-
-// healthServed is what each successful attempt implies: the person's app was served, and the
-// server answered, a minute later. Failures imply nothing, so a run ends only on a later success.
-func (s *seeder) healthServed(rows []mcpconnectionattempts.Row) []mcpconnectionattempts.Served {
-	type key struct {
-		kind, server, member, subject, app, family string
-		project                                    uuid.UUID
-	}
-	latest := map[key]time.Time{}
-	var order []key
-	for _, r := range rows {
-		if !r.IsFinal || r.Outcome != string(mcpconnectionattempts.OutcomeConnected) || r.SubjectURN == "" || r.ClientFamily == mcpconnectionattempts.FamilyBrowser {
-			continue
-		}
-		k := key{kind: r.ServerKind, server: r.ServerID, member: r.MemberID, subject: r.SubjectURN, app: r.AppKey, family: r.ClientFamily, project: r.ProjectID}
-		at := r.EventTime.Add(time.Minute)
-		if limit := s.now.Add(-5 * time.Second); at.After(limit) {
-			at = limit
-		}
-		prev, seen := latest[k]
-		if !seen {
-			order = append(order, k)
-		}
-		if at.After(prev) {
-			latest[k] = at
-		}
-	}
-	out := make([]mcpconnectionattempts.Served, 0, len(order))
-	for _, k := range order {
-		out = append(out, mcpconnectionattempts.Served{
-			OrganizationID: s.orgID(), ProjectID: k.project, ServerKind: k.kind, ServerID: k.server, MemberID: k.member,
-			SubjectURN: k.subject, AppKey: k.app, ClientFamily: k.family, RemoteSessionClientID: "",
-			ServedAt: latest[k], AnsweredAt: latest[k],
-		})
-	}
-	return out
+	served := slices.SortedFunc(maps.Values(g.served), func(a, b mcpconnectionattempts.Served) int {
+		return cmp.Or(cmp.Compare(a.ServerID, b.ServerID), cmp.Compare(a.MemberID, b.MemberID), cmp.Compare(a.SubjectURN, b.SubjectURN), cmp.Compare(a.ClientFamily, b.ClientFamily))
+	})
+	return g.rows, served, g.err
 }

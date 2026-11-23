@@ -181,7 +181,7 @@ var _ = Service("mcpConnectionHealth", func() {
 	})
 
 	Method("listSuspectedProblems", func() {
-		Description("List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Empty without log:read.")
+		Description("List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.")
 		Payload(func() {
 			Attribute("user_session_issuer_id", String, "The MCP authentication provider.", func() {
 				Format(FormatUUID)
@@ -478,7 +478,7 @@ var ProblemFilters = Type("SuspectedProblemFilters", func() {
 })
 
 var Problem = Type("SuspectedProblem", func() {
-	Attribute("id", String, "Stable while the same people fail the same way on the same scope.")
+	Attribute("id", String, "Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.")
 	Attribute("rule", ProblemRule)
 	Attribute("part", ProblemPart)
 	Attribute("scope", ProblemScope)
@@ -506,14 +506,20 @@ var ProblemMessage = Type("SuspectedProblemMessage", func() {
 	Required("reason", "message", "attempts")
 })
 
-var ProblemPerson = Type("SuspectedProblemPerson", func() {
-	Attribute("person", Person)
-	Attribute("app", App)
+var ProblemPlace = Type("SuspectedProblemPlace", func() {
 	Attribute("server", ServerRef)
 	Attribute("member", ServerRef)
+	Required("server")
+})
+
+var ProblemPerson = Type("SuspectedProblemPerson", func() {
+	Description("One person in the problem, with every app and server they fail on.")
+	Attribute("person", Person)
+	Attribute("apps", ArrayOf(App))
+	Attribute("servers", ArrayOf(ProblemPlace))
 	Attribute("attempts", Int64)
 	Attribute("first_failed_at", String, func() { Format(FormatDateTime) })
-	Required("person", "app", "attempts", "first_failed_at")
+	Required("person", "apps", "servers", "attempts", "first_failed_at")
 })
 
 var ProblemServer = Type("SuspectedProblemServer", func() {
@@ -530,21 +536,23 @@ var ProblemDetail = Type("SuspectedProblemDetail", func() {
 	Attribute("last_connected_at", String, "The latest time any of its people last had the broken part working, when known.", func() { Format(FormatDateTime) })
 	Attribute("other_failures_on_service", Int64, "People failing on the same scope who are not in this problem.")
 	Attribute("messages", ArrayOf(ProblemMessage))
-	Attribute("people", ArrayOf(ProblemPerson), "At most 50, earliest failure first.")
-	Attribute("people_total", Int64, "Rows in people before the cap.")
+	Attribute("people", ArrayOf(ProblemPerson), "At most 50 people, earliest failure first.")
+	Attribute("people_total", Int64, "Distinct people in the problem.")
 	Attribute("servers", ArrayOf(ProblemServer))
-	Required("failed_per_10_minutes", "other_failures_on_service", "messages", "people", "people_total", "servers")
+	Attribute("counts_widened", Boolean, "True when a filter list was too long to send, so the chart, messages and filters cover every failed attempt with these messages on these servers, not only this problem's people.")
+	Required("failed_per_10_minutes", "other_failures_on_service", "messages", "people", "people_total", "servers", "counts_widened")
 })
 
 var ListSuspectedProblemsResult = Type("ListSuspectedProblemsResult", func() {
-	Attribute("logging_enabled", Boolean, "False when the organization has logging off. Nothing else is returned then.")
-	Attribute("problems", ArrayOf(Problem))
-	Required("logging_enabled", "problems")
+	loggingEnabled()
+	Attribute("problems", ArrayOf(Problem), "At most 100, most people first.")
+	Attribute("problems_total", Int64, "Problems before the cap.")
+	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
 })
 
 var GetSuspectedProblemResult = Type("GetSuspectedProblemResult", func() {
-	Attribute("logging_enabled", Boolean, "False when the organization has logging off. Nothing else is returned then.")
+	loggingEnabled()
 	Attribute("found", Boolean)
 	Attribute("problem", ProblemDetail)
-	Required("logging_enabled", "found")
+	Required("logging_enabled", "viewer_scope", "found")
 })

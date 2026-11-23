@@ -2576,6 +2576,7 @@ func unmarshalSuspectedProblemDetailResponseBodyToMcpconnectionhealthSuspectedPr
 		LastConnectedAt:        v.LastConnectedAt,
 		OtherFailuresOnService: *v.OtherFailuresOnService,
 		PeopleTotal:            *v.PeopleTotal,
+		CountsWidened:          *v.CountsWidened,
 		ID:                     *v.ID,
 		Rule:                   mcpconnectionhealth.SuspectedProblemRule(*v.Rule),
 		Part:                   mcpconnectionhealth.SuspectedProblemPart(*v.Part),
@@ -2663,10 +2664,32 @@ func unmarshalSuspectedProblemPersonResponseBodyToMcpconnectionhealthSuspectedPr
 		FirstFailedAt: *v.FirstFailedAt,
 	}
 	res.Person = unmarshalConnectionPersonResponseBodyToMcpconnectionhealthConnectionPerson(v.Person)
-	res.App = unmarshalConnectionAppResponseBodyToMcpconnectionhealthConnectionApp(v.App)
-	if v.Server != nil {
-		res.Server = unmarshalConnectionServerResponseBodyToMcpconnectionhealthConnectionServer(v.Server)
+	res.Apps = make([]*mcpconnectionhealth.ConnectionApp, len(v.Apps))
+	for i, val := range v.Apps {
+		if val == nil {
+			res.Apps[i] = nil
+			continue
+		}
+		res.Apps[i] = unmarshalConnectionAppResponseBodyToMcpconnectionhealthConnectionApp(val)
 	}
+	res.Servers = make([]*mcpconnectionhealth.SuspectedProblemPlace, len(v.Servers))
+	for i, val := range v.Servers {
+		if val == nil {
+			res.Servers[i] = nil
+			continue
+		}
+		res.Servers[i] = unmarshalSuspectedProblemPlaceResponseBodyToMcpconnectionhealthSuspectedProblemPlace(val)
+	}
+
+	return res
+}
+
+// unmarshalSuspectedProblemPlaceResponseBodyToMcpconnectionhealthSuspectedProblemPlace
+// builds a value of type *mcpconnectionhealth.SuspectedProblemPlace from a
+// value of type *SuspectedProblemPlaceResponseBody.
+func unmarshalSuspectedProblemPlaceResponseBodyToMcpconnectionhealthSuspectedProblemPlace(v *SuspectedProblemPlaceResponseBody) *mcpconnectionhealth.SuspectedProblemPlace {
+	res := &mcpconnectionhealth.SuspectedProblemPlace{}
+	res.Server = unmarshalConnectionServerResponseBodyToMcpconnectionhealthConnectionServer(v.Server)
 	if v.Member != nil {
 		res.Member = unmarshalConnectionServerResponseBodyToMcpconnectionhealthConnectionServer(v.Member)
 	}

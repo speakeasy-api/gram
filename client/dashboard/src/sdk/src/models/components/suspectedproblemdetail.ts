@@ -80,6 +80,10 @@ export type SuspectedProblemDetailConnectionFailureSource = OpenEnum<
 
 export type SuspectedProblemDetail = {
   /**
+   * True when a filter list was too long to send, so the chart, messages and filters cover every failed attempt with these messages on these servers, not only this problem's people.
+   */
+  countsWidened: boolean;
+  /**
    * What the data establishes about it, in plain words.
    */
   fact: string;
@@ -96,7 +100,7 @@ export type SuspectedProblemDetail = {
    */
   headline: string;
   /**
-   * Stable while the same people fail the same way on the same scope.
+   * Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.
    */
   id: string;
   /**
@@ -114,7 +118,7 @@ export type SuspectedProblemDetail = {
    */
   suspectedProblemPart: SuspectedProblemPart;
   /**
-   * At most 50, earliest failure first.
+   * At most 50 people, earliest failure first.
    */
   people: Array<SuspectedProblemPerson>;
   peopleCount: number;
@@ -123,7 +127,7 @@ export type SuspectedProblemDetail = {
    */
   peopleOnServerCount?: number | undefined;
   /**
-   * Rows in people before the cap.
+   * Distinct people in the problem.
    */
   peopleTotal: number;
   /**
@@ -167,6 +171,7 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    counts_widened: z.boolean(),
     fact: z.string(),
     failed_per_10_minutes: z.array(SuspectedProblemBucket$inboundSchema),
     filters: SuspectedProblemFilters$inboundSchema,
@@ -199,6 +204,7 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "counts_widened": "countsWidened",
       "failed_per_10_minutes": "failedPer10Minutes",
       "last_connected_at": "lastConnectedAt",
       "last_failed_at": "lastFailedAt",

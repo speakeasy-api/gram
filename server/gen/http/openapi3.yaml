@@ -47463,7 +47463,7 @@ paths:
                 name: McpDeniedClients
     /rpc/mcpConnectionHealth.listSuspectedProblems:
         post:
-            description: 'List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Empty without log:read.'
+            description: 'List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider''s servers, gateways and authorization server count. Empty without log:read.'
             operationId: listMcpSuspectedProblems
             parameters:
                 - allowEmptyValue: true
@@ -117469,8 +117469,16 @@ components:
                     description: False when the organization has logging off. Nothing else is returned then.
                 problem:
                     $ref: '#/components/schemas/SuspectedProblemDetail'
+                viewer_scope:
+                    description: all when the caller reads the whole project, own when only their own attempts.
+                    enum:
+                        - all
+                        - own
+                    type: string
+                    x-speakeasy-name-override: ConnectionViewerScope
             required:
                 - logging_enabled
+                - viewer_scope
                 - found
         GetToolUsageClientToolBreakdownResult:
             type: object
@@ -122597,9 +122605,23 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SuspectedProblem'
+                    description: At most 100, most people first.
+                problems_total:
+                    type: integer
+                    description: Problems before the cap.
+                    format: int64
+                viewer_scope:
+                    description: all when the caller reads the whole project, own when only their own attempts.
+                    enum:
+                        - all
+                        - own
+                    type: string
+                    x-speakeasy-name-override: ConnectionViewerScope
             required:
                 - logging_enabled
+                - viewer_scope
                 - problems
+                - problems_total
         ListSyncedUsersResult:
             type: object
             properties:
@@ -138156,7 +138178,7 @@ components:
                     description: Who cannot do what, in plain words.
                 id:
                     type: string
-                    description: Stable while the same people fail the same way on the same scope.
+                    description: Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.
                 last_failed_at:
                     type: string
                     format: date-time
@@ -138215,6 +138237,9 @@ components:
         SuspectedProblemDetail:
             type: object
             properties:
+                counts_widened:
+                    type: boolean
+                    description: True when a filter list was too long to send, so the chart, messages and filters cover every failed attempt with these messages on these servers, not only this problem's people.
                 fact:
                     type: string
                     description: What the data establishes about it, in plain words.
@@ -138230,7 +138255,7 @@ components:
                     description: Who cannot do what, in plain words.
                 id:
                     type: string
-                    description: Stable while the same people fail the same way on the same scope.
+                    description: Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.
                 last_connected_at:
                     type: string
                     description: The latest time any of its people last had the broken part working, when known.
@@ -138257,7 +138282,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SuspectedProblemPerson'
-                    description: At most 50, earliest failure first.
+                    description: At most 50 people, earliest failure first.
                 people_count:
                     type: integer
                     format: int64
@@ -138267,7 +138292,7 @@ components:
                     format: int64
                 people_total:
                     type: integer
-                    description: Rows in people before the cap.
+                    description: Distinct people in the problem.
                     format: int64
                 rule:
                     description: The rule a problem was listed by.
@@ -138306,6 +138331,7 @@ components:
                 - people
                 - people_total
                 - servers
+                - counts_widened
                 - id
                 - rule
                 - part
@@ -138425,25 +138451,38 @@ components:
         SuspectedProblemPerson:
             type: object
             properties:
-                app:
-                    $ref: '#/components/schemas/ConnectionApp'
+                apps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ConnectionApp'
                 attempts:
                     type: integer
                     format: int64
                 first_failed_at:
                     type: string
                     format: date-time
-                member:
-                    $ref: '#/components/schemas/ConnectionServer'
                 person:
                     $ref: '#/components/schemas/ConnectionPerson'
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SuspectedProblemPlace'
+            description: One person in the problem, with every app and server they fail on.
+            required:
+                - person
+                - apps
+                - servers
+                - attempts
+                - first_failed_at
+        SuspectedProblemPlace:
+            type: object
+            properties:
+                member:
+                    $ref: '#/components/schemas/ConnectionServer'
                 server:
                     $ref: '#/components/schemas/ConnectionServer'
             required:
-                - person
-                - app
-                - attempts
-                - first_failed_at
+                - server
         SuspectedProblemScope:
             type: object
             properties:

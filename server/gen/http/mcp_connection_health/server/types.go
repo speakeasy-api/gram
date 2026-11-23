@@ -187,8 +187,12 @@ type ListDeniedClientsResponseBody struct {
 // service "listSuspectedProblems" endpoint HTTP response body.
 type ListSuspectedProblemsResponseBody struct {
 	// False when the organization has logging off. Nothing else is returned then.
-	LoggingEnabled bool                            `form:"logging_enabled" json:"logging_enabled" xml:"logging_enabled"`
-	Problems       []*SuspectedProblemResponseBody `form:"problems" json:"problems" xml:"problems"`
+	LoggingEnabled bool   `form:"logging_enabled" json:"logging_enabled" xml:"logging_enabled"`
+	ViewerScope    string `form:"viewer_scope" json:"viewer_scope" xml:"viewer_scope"`
+	// At most 100, most people first.
+	Problems []*SuspectedProblemResponseBody `form:"problems" json:"problems" xml:"problems"`
+	// Problems before the cap.
+	ProblemsTotal int64 `form:"problems_total" json:"problems_total" xml:"problems_total"`
 }
 
 // GetSuspectedProblemResponseBody is the type of the "mcpConnectionHealth"
@@ -196,6 +200,7 @@ type ListSuspectedProblemsResponseBody struct {
 type GetSuspectedProblemResponseBody struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled bool                                `form:"logging_enabled" json:"logging_enabled" xml:"logging_enabled"`
+	ViewerScope    string                              `form:"viewer_scope" json:"viewer_scope" xml:"viewer_scope"`
 	Found          bool                                `form:"found" json:"found" xml:"found"`
 	Problem        *SuspectedProblemDetailResponseBody `form:"problem,omitempty" json:"problem,omitempty" xml:"problem,omitempty"`
 }
@@ -1894,7 +1899,8 @@ type ConnectionDeniedClientResponseBody struct {
 
 // SuspectedProblemResponseBody is used to define fields on response body types.
 type SuspectedProblemResponseBody struct {
-	// Stable while the same people fail the same way on the same scope.
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
 	ID    string                             `form:"id" json:"id" xml:"id"`
 	Rule  string                             `form:"rule" json:"rule" xml:"rule"`
 	Part  string                             `form:"part" json:"part" xml:"part"`
@@ -1961,12 +1967,17 @@ type SuspectedProblemDetailResponseBody struct {
 	// People failing on the same scope who are not in this problem.
 	OtherFailuresOnService int64                                  `form:"other_failures_on_service" json:"other_failures_on_service" xml:"other_failures_on_service"`
 	Messages               []*SuspectedProblemMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
-	// At most 50, earliest failure first.
+	// At most 50 people, earliest failure first.
 	People []*SuspectedProblemPersonResponseBody `form:"people" json:"people" xml:"people"`
-	// Rows in people before the cap.
+	// Distinct people in the problem.
 	PeopleTotal int64                                 `form:"people_total" json:"people_total" xml:"people_total"`
 	Servers     []*SuspectedProblemServerResponseBody `form:"servers" json:"servers" xml:"servers"`
-	// Stable while the same people fail the same way on the same scope.
+	// True when a filter list was too long to send, so the chart, messages and
+	// filters cover every failed attempt with these messages on these servers, not
+	// only this problem's people.
+	CountsWidened bool `form:"counts_widened" json:"counts_widened" xml:"counts_widened"`
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
 	ID    string                             `form:"id" json:"id" xml:"id"`
 	Rule  string                             `form:"rule" json:"rule" xml:"rule"`
 	Part  string                             `form:"part" json:"part" xml:"part"`
@@ -2005,12 +2016,18 @@ type SuspectedProblemMessageResponseBody struct {
 // SuspectedProblemPersonResponseBody is used to define fields on response body
 // types.
 type SuspectedProblemPersonResponseBody struct {
-	Person        *ConnectionPersonResponseBody `form:"person" json:"person" xml:"person"`
-	App           *ConnectionAppResponseBody    `form:"app" json:"app" xml:"app"`
-	Server        *ConnectionServerResponseBody `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
-	Member        *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
-	Attempts      int64                         `form:"attempts" json:"attempts" xml:"attempts"`
-	FirstFailedAt string                        `form:"first_failed_at" json:"first_failed_at" xml:"first_failed_at"`
+	Person        *ConnectionPersonResponseBody        `form:"person" json:"person" xml:"person"`
+	Apps          []*ConnectionAppResponseBody         `form:"apps" json:"apps" xml:"apps"`
+	Servers       []*SuspectedProblemPlaceResponseBody `form:"servers" json:"servers" xml:"servers"`
+	Attempts      int64                                `form:"attempts" json:"attempts" xml:"attempts"`
+	FirstFailedAt string                               `form:"first_failed_at" json:"first_failed_at" xml:"first_failed_at"`
+}
+
+// SuspectedProblemPlaceResponseBody is used to define fields on response body
+// types.
+type SuspectedProblemPlaceResponseBody struct {
+	Server *ConnectionServerResponseBody `form:"server" json:"server" xml:"server"`
+	Member *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
 }
 
 // SuspectedProblemServerResponseBody is used to define fields on response body
@@ -2170,6 +2187,8 @@ func NewListDeniedClientsResponseBody(res *mcpconnectionhealth.ConnectionDeniedC
 func NewListSuspectedProblemsResponseBody(res *mcpconnectionhealth.ListSuspectedProblemsResult) *ListSuspectedProblemsResponseBody {
 	body := &ListSuspectedProblemsResponseBody{
 		LoggingEnabled: res.LoggingEnabled,
+		ViewerScope:    string(res.ViewerScope),
+		ProblemsTotal:  res.ProblemsTotal,
 	}
 	if res.Problems != nil {
 		body.Problems = make([]*SuspectedProblemResponseBody, len(res.Problems))
@@ -2192,6 +2211,7 @@ func NewListSuspectedProblemsResponseBody(res *mcpconnectionhealth.ListSuspected
 func NewGetSuspectedProblemResponseBody(res *mcpconnectionhealth.GetSuspectedProblemResult) *GetSuspectedProblemResponseBody {
 	body := &GetSuspectedProblemResponseBody{
 		LoggingEnabled: res.LoggingEnabled,
+		ViewerScope:    string(res.ViewerScope),
 		Found:          res.Found,
 	}
 	if res.Problem != nil {

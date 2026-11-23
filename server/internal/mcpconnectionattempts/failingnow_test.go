@@ -59,14 +59,14 @@ func (f *failingFixture) onServer(p urn.SessionSubject, app App) Served {
 func (f *failingFixture) served(s Served, ago time.Duration) {
 	f.t.Helper()
 	s.ServedAt = f.at(ago)
-	require.NoError(f.t, AppendServedInto(f.t.Context(), f.ch, LastServedTable, []Served{s}))
+	require.NoError(f.t, appendServedInto(f.t.Context(), f.ch, lastServedTable, []Served{s}))
 }
 
 // answered writes a request on s served ago before now that the server answered.
 func (f *failingFixture) answered(s Served, ago time.Duration) {
 	f.t.Helper()
 	s.ServedAt, s.AnsweredAt = f.at(ago), f.at(ago)
-	require.NoError(f.t, AppendServedInto(f.t.Context(), f.ch, LastServedTable, []Served{s}))
+	require.NoError(f.t, appendServedInto(f.t.Context(), f.ch, lastServedTable, []Served{s}))
 }
 
 func (f *failingFixture) read(filter FailingNowFilter) []FailingPerson {
@@ -1019,4 +1019,38 @@ func TestFailingNow_TheVersionComesFromTheRowThatNamedTheClient(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Equal(t, FamilyCursor, got[0].ClientFamily)
 	require.Empty(t, got[0].ClientVersion)
+}
+
+// Reading served connections in batches of one finds what one query finds.
+func TestFailingNow_ReadsServedConnectionsInBatches(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	var failures []failure
+	for range 3 {
+		p, server := urn.NewUserSubject("user-"+uuid.NewString()), uuid.New()
+		failures = append(failures, failure{a: attemptFacts{AttemptSummary: AttemptSummary{ServerKind: serverKindMCP, ServerID: server.String(), SubjectURN: p.String()}}})
+		f.answered(f.conn(p, serverKindMCP, server, AppDCR), time.Minute)
+	}
+	oneServed, oneAnswers, err := readServed(t.Context(), f.ch, f.org, failures, servedBatch)
+	require.NoError(t, err)
+	require.Len(t, oneServed, 3)
+	require.Len(t, oneAnswers, 3)
+	served, answers, err := readServed(t.Context(), f.ch, f.org, failures, 1)
+	require.NoError(t, err)
+	require.ElementsMatch(t, oneServed, served)
+	require.ElementsMatch(t, oneAnswers, answers)
+}
+
+// A project's read leaves out other projects and organization gateways.
+func TestFailingNow_KeepsOneProject(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	for _, scope := range []Scope{f.direct(AppDCR), ServerScope(f.org, uuid.New(), uuid.New(), AppDCR), OrganizationGatewayScope(f.org, uuid.New(), AppDCR)} {
+		p := urn.NewUserSubject("user-" + uuid.NewString())
+		f.attempt(scope, time.Hour, StepMCPRequest, CodeStaticKeyRejected, Subject(&p))
+	}
+	require.Len(t, f.failing(), 3)
+	got := f.read(FailingNowFilter{ProjectID: f.project})
+	require.Len(t, got, 1)
+	require.Equal(t, f.project, got[0].ProjectID)
 }

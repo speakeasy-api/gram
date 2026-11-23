@@ -1,7 +1,11 @@
 import { ArrowRight, ChevronDown } from "lucide-react";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Skeleton } from "@/components/ui/Skeleton";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { useState } from "react";
 import { problemHeadline } from "./format";
-import type { SuspectedProblem } from "./types";
+import { isUnavailable } from "./api";
+import type { ListSuspectedProblemsResponse, SuspectedProblem } from "./types";
 
 const VISIBLE = 3;
 
@@ -16,27 +20,55 @@ const MIXED_PROBLEMS_RULE =
 export const SIGN_IN_PROBLEMS_RULE =
   "Failed to sign in the same way and not signed in since: 2 or more people on one MCP server or one app version, or one person for 24 hours.";
 
-/** The one panel that says we suspect something; `empty`, or nothing, when there is none. */
+/** The one panel that says we suspect something, with its own loading, error and empty states. */
 export function SuspectedProblems({
-  problems,
+  query,
   now,
   onOpen,
   rule,
   empty,
 }: {
-  problems: SuspectedProblem[];
+  query: Pick<
+    UseQueryResult<ListSuspectedProblemsResponse>,
+    "data" | "isPending" | "isError" | "error"
+  >;
   now: Date;
   onOpen: (problem: SuspectedProblem) => void;
   /** The hint under the heading; chosen from the problems listed when absent. */
   rule?: string;
   /** Said when there are no problems. */
-  empty?: string;
+  empty: string;
 }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
+  // Loading and empty share one height, so the page does not jump.
+  if (query.isPending) return <Skeleton className="h-28 w-full" />;
+  if (query.isError)
+    return (
+      <InlineEmptyState
+        orientation="horizontal"
+        className="min-h-28"
+        icon="triangle-alert"
+        heading="Couldn't load suspected problems"
+        description={
+          isUnavailable(query.error)
+            ? "It took too long to load. Try again in a minute."
+            : "Refresh the page to try again."
+        }
+      />
+    );
+  const data = query.data;
+  // Problems name other people: nothing shows with logging off or to someone who reads only their own logs.
+  if (!data?.loggingEnabled || data.viewerScope !== "all") return null;
+  const problems = data.problems;
   if (problems.length === 0)
-    return empty ? (
-      <p className="text-muted-foreground text-sm">{empty}</p>
-    ) : null;
+    return (
+      <InlineEmptyState
+        orientation="horizontal"
+        className="min-h-28"
+        icon="circle-check"
+        heading={empty}
+      />
+    );
   const hint =
     rule ??
     (problems.some((p) => p.part === "speakeasy")
@@ -48,9 +80,14 @@ export function SuspectedProblems({
     <section className="space-y-3" aria-labelledby="suspected-problems">
       <div>
         <h2 id="suspected-problems" className="text-eyebrow">
-          Suspected problems · {problems.length}
+          Suspected problems · {data.problemsTotal}
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">{hint}</p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {hint}
+          {data.problemsTotal > problems.length
+            ? ` Showing the first ${problems.length}.`
+            : ""}
+        </p>
       </div>
       <ul className="bg-card border-l-destructive divide-y border border-l-2">
         {shown.map((problem) => (

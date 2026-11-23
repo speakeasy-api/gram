@@ -11,6 +11,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -39,6 +40,9 @@ var ErrLogsOff = errors.New("logs are off for this organization")
 type FailingNowFilter struct {
 	// OrganizationID is the organization. Required.
 	OrganizationID string
+
+	// ProjectID keeps one project, or every one when nil. A project leaves out organization gateways.
+	ProjectID uuid.UUID
 
 	// ProviderHost keeps one provider, by its normalized host, or every one when empty.
 	ProviderHost string
@@ -83,7 +87,7 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 
 	from := now.Add(-EpisodeLookback)
 	since := later(from, filter.TriedSince)
-	attempts, err := readEpisodeAttempts(ctx, ch, filter.OrganizationID, from, since, now)
+	attempts, err := readEpisodeAttempts(ctx, ch, filter.OrganizationID, filter.ProjectID, from, since, now)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +95,7 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 	if len(failures) == 0 {
 		return nil, nil
 	}
-	served, answers, err := readServed(ctx, ch, filter.OrganizationID, failures)
+	served, answers, err := readServed(ctx, ch, filter.OrganizationID, failures, servedBatch)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +127,7 @@ func triedSince(failures []failure, since time.Time) []failure {
 	return slices.DeleteFunc(failures, func(f failure) bool { return known[f.connectionKey()].Before(since) })
 }
 
-// lastServed is one connection's latest served times in LastServedTable, with max()
+// lastServed is one connection's latest served times in lastServedTable, with max()
 // taken over its unmerged rows. AnsweredAt is zero when the server never answered.
 type lastServed struct {
 	ServerKind            string    `ch:"server_kind"`
@@ -143,7 +147,7 @@ const servedQuery = `
 SELECT
 	server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + LastServedTable + `
+FROM ` + lastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ? AND subject_urn IN ?
 GROUP BY server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id`
 
@@ -154,13 +158,16 @@ const answersQuery = `
 SELECT
 	server_kind, server_id, member_id, '' AS subject_urn, '' AS app_key, '' AS client_family, '' AS remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + LastServedTable + `
+FROM ` + lastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id`
 
+// servedBatch bounds the server ids and subjects in one served query, keeping its text small.
+const servedBatch = 1000
+
 // readServed reads the failing people's served connections, and anyone's latest
-// answers, on the servers the failures reached.
-func readServed(ctx context.Context, ch driver.Conn, organizationID string, failures []failure) (served, answers []lastServed, err error) {
+// answers, on the servers the failures reached, batch ids and subjects per query.
+func readServed(ctx context.Context, ch driver.Conn, organizationID string, failures []failure, batch int) (served, answers []lastServed, err error) {
 	var kinds, ids, subjects []string
 	for _, f := range failures {
 		if f.a.ServerID == "" {
@@ -179,11 +186,19 @@ func readServed(ctx context.Context, ch driver.Conn, organizationID string, fail
 	if len(ids) == 0 {
 		return nil, nil, nil
 	}
-	if served, err = queryServed(ctx, ch, servedQuery, organizationID, kinds, ids, subjects); err != nil {
-		return nil, nil, err
-	}
-	if answers, err = queryServed(ctx, ch, answersQuery, organizationID, kinds, ids); err != nil {
-		return nil, nil, err
+	for idBatch := range slices.Chunk(ids, batch) {
+		for subjectBatch := range slices.Chunk(subjects, batch) {
+			rows, err := queryServed(ctx, ch, servedQuery, organizationID, kinds, idBatch, subjectBatch)
+			if err != nil {
+				return nil, nil, err
+			}
+			served = append(served, rows...)
+		}
+		rows, err := queryServed(ctx, ch, answersQuery, organizationID, kinds, idBatch)
+		if err != nil {
+			return nil, nil, err
+		}
+		answers = append(answers, rows...)
 	}
 	return served, answers, nil
 }
@@ -242,7 +257,7 @@ type ServedByFamily struct {
 const servedByFamilyQuery = `
 SELECT server_kind, server_id, member_id, client_family,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + LastServedTable + `
+FROM ` + lastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id, client_family`
 

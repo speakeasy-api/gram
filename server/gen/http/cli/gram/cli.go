@@ -21556,7 +21556,7 @@ func mcpConnectionHealthUsage() {
 	fmt.Fprintln(os.Stderr, `    get-sign-in-summary: Count sign-ins and renewals through a provider per time bucket, split by whether they succeeded.`)
 	fmt.Fprintln(os.Stderr, `    get-session-activity: Count a provider's active sessions per day and report the average session length.`)
 	fmt.Fprintln(os.Stderr, `    list-denied-clients: List apps refused at sign-in through a provider, with the reason and the last time.`)
-	fmt.Fprintln(os.Stderr, `    list-suspected-problems: List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Empty without log:read.`)
+	fmt.Fprintln(os.Stderr, `    list-suspected-problems: List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.`)
 	fmt.Fprintln(os.Stderr, `    get-suspected-problem: Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -21717,7 +21717,7 @@ func mcpConnectionHealthListSuspectedProblemsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Empty without log:read.`)
+	fmt.Fprintln(os.Stderr, `List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

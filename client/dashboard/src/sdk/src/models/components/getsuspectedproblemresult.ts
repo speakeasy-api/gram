@@ -5,12 +5,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   SuspectedProblemDetail,
   SuspectedProblemDetail$inboundSchema,
 } from "./suspectedproblemdetail.js";
+
+/**
+ * all when the caller reads the whole project, own when only their own attempts.
+ */
+export const GetSuspectedProblemResultConnectionViewerScope = {
+  All: "all",
+  Own: "own",
+} as const;
+/**
+ * all when the caller reads the whole project, own when only their own attempts.
+ */
+export type GetSuspectedProblemResultConnectionViewerScope = OpenEnum<
+  typeof GetSuspectedProblemResultConnectionViewerScope
+>;
 
 export type GetSuspectedProblemResult = {
   found: boolean;
@@ -19,7 +35,16 @@ export type GetSuspectedProblemResult = {
    */
   loggingEnabled: boolean;
   problem?: SuspectedProblemDetail | undefined;
+  /**
+   * all when the caller reads the whole project, own when only their own attempts.
+   */
+  connectionViewerScope: GetSuspectedProblemResultConnectionViewerScope;
 };
+
+/** @internal */
+export const GetSuspectedProblemResultConnectionViewerScope$inboundSchema:
+  z.ZodMiniType<GetSuspectedProblemResultConnectionViewerScope, unknown> =
+    openEnums.inboundSchema(GetSuspectedProblemResultConnectionViewerScope);
 
 /** @internal */
 export const GetSuspectedProblemResult$inboundSchema: z.ZodMiniType<
@@ -30,10 +55,12 @@ export const GetSuspectedProblemResult$inboundSchema: z.ZodMiniType<
     found: z.boolean(),
     logging_enabled: z.boolean(),
     problem: z.optional(SuspectedProblemDetail$inboundSchema),
+    viewer_scope: GetSuspectedProblemResultConnectionViewerScope$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "logging_enabled": "loggingEnabled",
+      "viewer_scope": "connectionViewerScope",
     });
   }),
 );

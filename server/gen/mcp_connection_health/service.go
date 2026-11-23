@@ -36,7 +36,8 @@ type Service interface {
 	ListDeniedClients(context.Context, *ListDeniedClientsPayload) (res *ConnectionDeniedClientsResult, err error)
 	// List suspected problems for a provider: 2 or more people who cannot connect
 	// now and failed the same way on one MCP server, one service or one app
-	// version, or one person failing for 24 hours. Empty without log:read.
+	// version, or one person failing for 24 hours. Only failures on the provider's
+	// servers, gateways and authorization server count. Empty without log:read.
 	ListSuspectedProblems(context.Context, *ListSuspectedProblemsPayload) (res *ListSuspectedProblemsResult, err error)
 	// Get one suspected problem of a provider by id. Not found once it has
 	// cleared, or without log:read.
@@ -397,6 +398,7 @@ type GetSuspectedProblemPayload struct {
 type GetSuspectedProblemResult struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled bool
+	ViewerScope    ConnectionViewerScope
 	Found          bool
 	Problem        *SuspectedProblemDetail
 }
@@ -467,11 +469,16 @@ type ListSuspectedProblemsPayload struct {
 type ListSuspectedProblemsResult struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled bool
-	Problems       []*SuspectedProblem
+	ViewerScope    ConnectionViewerScope
+	// At most 100, most people first.
+	Problems []*SuspectedProblem
+	// Problems before the cap.
+	ProblemsTotal int64
 }
 
 type SuspectedProblem struct {
-	// Stable while the same people fail the same way on the same scope.
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
 	ID    string
 	Rule  SuspectedProblemRule
 	Part  SuspectedProblemPart
@@ -505,12 +512,17 @@ type SuspectedProblemDetail struct {
 	// People failing on the same scope who are not in this problem.
 	OtherFailuresOnService int64
 	Messages               []*SuspectedProblemMessage
-	// At most 50, earliest failure first.
+	// At most 50 people, earliest failure first.
 	People []*SuspectedProblemPerson
-	// Rows in people before the cap.
+	// Distinct people in the problem.
 	PeopleTotal int64
 	Servers     []*SuspectedProblemServer
-	// Stable while the same people fail the same way on the same scope.
+	// True when a filter list was too long to send, so the chart, messages and
+	// filters cover every failed attempt with these messages on these servers, not
+	// only this problem's people.
+	CountsWidened bool
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
 	ID    string
 	Rule  SuspectedProblemRule
 	Part  SuspectedProblemPart
@@ -565,13 +577,18 @@ type SuspectedProblemMessage struct {
 // to the service or the server answering fails.
 type SuspectedProblemPart string
 
+// One person in the problem, with every app and server they fail on.
 type SuspectedProblemPerson struct {
 	Person        *ConnectionPerson
-	App           *ConnectionApp
-	Server        *ConnectionServer
-	Member        *ConnectionServer
+	Apps          []*ConnectionApp
+	Servers       []*SuspectedProblemPlace
 	Attempts      int64
 	FirstFailedAt string
+}
+
+type SuspectedProblemPlace struct {
+	Server *ConnectionServer
+	Member *ConnectionServer
 }
 
 // The rule a problem was listed by.

@@ -125,6 +125,9 @@ func (f AttemptFilter) where() (string, []any, error) {
 		if f.OrganizationID != "" {
 			window, windowArgs = window+" AND organization_id = ?", append(windowArgs, f.OrganizationID)
 		}
+		if f.ProjectID != uuid.Nil {
+			window, windowArgs = window+" AND project_id = ?", append(windowArgs, f.ProjectID)
+		}
 		conds = append(conds, `(organization_id, subject_urn) IN (
 		SELECT organization_id, subject_urn FROM `+EventsTable+`
 		WHERE `+window+` AND subject_urn != ''

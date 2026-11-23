@@ -25,7 +25,7 @@ func storedServed(t *testing.T, conn driver.Conn, organizationID string) []Serve
 	rows, err := conn.Query(t.Context(), `
 		SELECT organization_id, project_id, server_kind, server_id, member_id, subject_urn, app_key, client_family,
 			remote_session_client_id, max(last_served_at) AS served, max(last_answered_at) AS answered
-		FROM `+LastServedTable+` WHERE organization_id = ?
+		FROM `+lastServedTable+` WHERE organization_id = ?
 		GROUP BY organization_id, project_id, server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id
 		ORDER BY subject_urn, client_family, member_id, remote_session_client_id`, organizationID)
 	require.NoError(t, err)
@@ -429,8 +429,8 @@ func TestServed_TheTableKeepsTheLatestTimes(t *testing.T) {
 			AppKey: "dcr", ClientFamily: FamilyClaudeCode, RemoteSessionClientID: "", ServedAt: served, AnsweredAt: answered}
 	}
 
-	require.NoError(t, AppendServedInto(t.Context(), conn, LastServedTable, []Served{row(later, earlier)}))
-	require.NoError(t, AppendServedInto(t.Context(), conn, LastServedTable, []Served{row(earlier, time.Time{})}))
+	require.NoError(t, appendServedInto(t.Context(), conn, lastServedTable, []Served{row(later, earlier)}))
+	require.NoError(t, appendServedInto(t.Context(), conn, lastServedTable, []Served{row(earlier, time.Time{})}))
 
 	got := storedServed(t, conn, org)
 	require.Len(t, got, 1)
@@ -642,7 +642,7 @@ func TestServed_SlowLogsChecksDoNotHoldFailureRowsBack(t *testing.T) {
 
 	slow.Store(false)
 	require.Eventually(t, func() bool {
-		return stored(`SELECT uniqExact(organization_id) FROM `+LastServedTable+` WHERE startsWith(organization_id, ?)`, prefix) == organizations
+		return stored(`SELECT uniqExact(organization_id) FROM `+lastServedTable+` WHERE startsWith(organization_id, ?)`, prefix) == organizations
 	}, 10*time.Second, 50*time.Millisecond, "the connections not reached were kept for later flushes")
 	require.Zero(t, r.counted(t, meterServedDropped, ""))
 }

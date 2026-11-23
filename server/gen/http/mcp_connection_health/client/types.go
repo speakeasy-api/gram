@@ -187,8 +187,12 @@ type ListDeniedClientsResponseBody struct {
 // service "listSuspectedProblems" endpoint HTTP response body.
 type ListSuspectedProblemsResponseBody struct {
 	// False when the organization has logging off. Nothing else is returned then.
-	LoggingEnabled *bool                           `form:"logging_enabled,omitempty" json:"logging_enabled,omitempty" xml:"logging_enabled,omitempty"`
-	Problems       []*SuspectedProblemResponseBody `form:"problems,omitempty" json:"problems,omitempty" xml:"problems,omitempty"`
+	LoggingEnabled *bool   `form:"logging_enabled,omitempty" json:"logging_enabled,omitempty" xml:"logging_enabled,omitempty"`
+	ViewerScope    *string `form:"viewer_scope,omitempty" json:"viewer_scope,omitempty" xml:"viewer_scope,omitempty"`
+	// At most 100, most people first.
+	Problems []*SuspectedProblemResponseBody `form:"problems,omitempty" json:"problems,omitempty" xml:"problems,omitempty"`
+	// Problems before the cap.
+	ProblemsTotal *int64 `form:"problems_total,omitempty" json:"problems_total,omitempty" xml:"problems_total,omitempty"`
 }
 
 // GetSuspectedProblemResponseBody is the type of the "mcpConnectionHealth"
@@ -196,6 +200,7 @@ type ListSuspectedProblemsResponseBody struct {
 type GetSuspectedProblemResponseBody struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled *bool                               `form:"logging_enabled,omitempty" json:"logging_enabled,omitempty" xml:"logging_enabled,omitempty"`
+	ViewerScope    *string                             `form:"viewer_scope,omitempty" json:"viewer_scope,omitempty" xml:"viewer_scope,omitempty"`
 	Found          *bool                               `form:"found,omitempty" json:"found,omitempty" xml:"found,omitempty"`
 	Problem        *SuspectedProblemDetailResponseBody `form:"problem,omitempty" json:"problem,omitempty" xml:"problem,omitempty"`
 }
@@ -1917,7 +1922,8 @@ type ConnectionDeniedClientResponseBody struct {
 
 // SuspectedProblemResponseBody is used to define fields on response body types.
 type SuspectedProblemResponseBody struct {
-	// Stable while the same people fail the same way on the same scope.
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
 	ID    *string                            `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Rule  *string                            `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
 	Part  *string                            `form:"part,omitempty" json:"part,omitempty" xml:"part,omitempty"`
@@ -1984,12 +1990,17 @@ type SuspectedProblemDetailResponseBody struct {
 	// People failing on the same scope who are not in this problem.
 	OtherFailuresOnService *int64                                 `form:"other_failures_on_service,omitempty" json:"other_failures_on_service,omitempty" xml:"other_failures_on_service,omitempty"`
 	Messages               []*SuspectedProblemMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
-	// At most 50, earliest failure first.
+	// At most 50 people, earliest failure first.
 	People []*SuspectedProblemPersonResponseBody `form:"people,omitempty" json:"people,omitempty" xml:"people,omitempty"`
-	// Rows in people before the cap.
+	// Distinct people in the problem.
 	PeopleTotal *int64                                `form:"people_total,omitempty" json:"people_total,omitempty" xml:"people_total,omitempty"`
 	Servers     []*SuspectedProblemServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
-	// Stable while the same people fail the same way on the same scope.
+	// True when a filter list was too long to send, so the chart, messages and
+	// filters cover every failed attempt with these messages on these servers, not
+	// only this problem's people.
+	CountsWidened *bool `form:"counts_widened,omitempty" json:"counts_widened,omitempty" xml:"counts_widened,omitempty"`
+	// Stable for the same kind of failure on the same scope. It can change when
+	// the problem is regrouped.
 	ID    *string                            `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Rule  *string                            `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
 	Part  *string                            `form:"part,omitempty" json:"part,omitempty" xml:"part,omitempty"`
@@ -2028,12 +2039,18 @@ type SuspectedProblemMessageResponseBody struct {
 // SuspectedProblemPersonResponseBody is used to define fields on response body
 // types.
 type SuspectedProblemPersonResponseBody struct {
-	Person        *ConnectionPersonResponseBody `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
-	App           *ConnectionAppResponseBody    `form:"app,omitempty" json:"app,omitempty" xml:"app,omitempty"`
-	Server        *ConnectionServerResponseBody `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
-	Member        *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
-	Attempts      *int64                        `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
-	FirstFailedAt *string                       `form:"first_failed_at,omitempty" json:"first_failed_at,omitempty" xml:"first_failed_at,omitempty"`
+	Person        *ConnectionPersonResponseBody        `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
+	Apps          []*ConnectionAppResponseBody         `form:"apps,omitempty" json:"apps,omitempty" xml:"apps,omitempty"`
+	Servers       []*SuspectedProblemPlaceResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	Attempts      *int64                               `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
+	FirstFailedAt *string                              `form:"first_failed_at,omitempty" json:"first_failed_at,omitempty" xml:"first_failed_at,omitempty"`
+}
+
+// SuspectedProblemPlaceResponseBody is used to define fields on response body
+// types.
+type SuspectedProblemPlaceResponseBody struct {
+	Server *ConnectionServerResponseBody `form:"server,omitempty" json:"server,omitempty" xml:"server,omitempty"`
+	Member *ConnectionServerResponseBody `form:"member,omitempty" json:"member,omitempty" xml:"member,omitempty"`
 }
 
 // SuspectedProblemServerResponseBody is used to define fields on response body
@@ -3183,6 +3200,8 @@ func NewListDeniedClientsGatewayError(body *ListDeniedClientsGatewayErrorRespons
 func NewListSuspectedProblemsResultOK(body *ListSuspectedProblemsResponseBody) *mcpconnectionhealth.ListSuspectedProblemsResult {
 	v := &mcpconnectionhealth.ListSuspectedProblemsResult{
 		LoggingEnabled: *body.LoggingEnabled,
+		ViewerScope:    mcpconnectionhealth.ConnectionViewerScope(*body.ViewerScope),
+		ProblemsTotal:  *body.ProblemsTotal,
 	}
 	v.Problems = make([]*mcpconnectionhealth.SuspectedProblem, len(body.Problems))
 	for i, val := range body.Problems {
@@ -3351,6 +3370,7 @@ func NewListSuspectedProblemsGatewayError(body *ListSuspectedProblemsGatewayErro
 func NewGetSuspectedProblemResultOK(body *GetSuspectedProblemResponseBody) *mcpconnectionhealth.GetSuspectedProblemResult {
 	v := &mcpconnectionhealth.GetSuspectedProblemResult{
 		LoggingEnabled: *body.LoggingEnabled,
+		ViewerScope:    mcpconnectionhealth.ConnectionViewerScope(*body.ViewerScope),
 		Found:          *body.Found,
 	}
 	if body.Problem != nil {
@@ -3671,8 +3691,19 @@ func ValidateListSuspectedProblemsResponseBody(body *ListSuspectedProblemsRespon
 	if body.LoggingEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("logging_enabled", "body"))
 	}
+	if body.ViewerScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("viewer_scope", "body"))
+	}
 	if body.Problems == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("problems", "body"))
+	}
+	if body.ProblemsTotal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("problems_total", "body"))
+	}
+	if body.ViewerScope != nil {
+		if !(*body.ViewerScope == "all" || *body.ViewerScope == "own") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.viewer_scope", *body.ViewerScope, []any{"all", "own"}))
+		}
 	}
 	for _, e := range body.Problems {
 		if e != nil {
@@ -3690,8 +3721,16 @@ func ValidateGetSuspectedProblemResponseBody(body *GetSuspectedProblemResponseBo
 	if body.LoggingEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("logging_enabled", "body"))
 	}
+	if body.ViewerScope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("viewer_scope", "body"))
+	}
 	if body.Found == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("found", "body"))
+	}
+	if body.ViewerScope != nil {
+		if !(*body.ViewerScope == "all" || *body.ViewerScope == "own") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.viewer_scope", *body.ViewerScope, []any{"all", "own"}))
+		}
 	}
 	if body.Problem != nil {
 		if err2 := ValidateSuspectedProblemDetailResponseBody(body.Problem); err2 != nil {
@@ -6299,6 +6338,9 @@ func ValidateSuspectedProblemDetailResponseBody(body *SuspectedProblemDetailResp
 	if body.Servers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
 	}
+	if body.CountsWidened == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("counts_widened", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -6430,8 +6472,11 @@ func ValidateSuspectedProblemPersonResponseBody(body *SuspectedProblemPersonResp
 	if body.Person == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("person", "body"))
 	}
-	if body.App == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("app", "body"))
+	if body.Apps == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("apps", "body"))
+	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
 	}
 	if body.Attempts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attempts", "body"))
@@ -6444,10 +6489,31 @@ func ValidateSuspectedProblemPersonResponseBody(body *SuspectedProblemPersonResp
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.App != nil {
-		if err2 := ValidateConnectionAppResponseBody(body.App); err2 != nil {
-			err = goa.MergeErrors(err, err2)
+	for _, e := range body.Apps {
+		if e != nil {
+			if err2 := ValidateConnectionAppResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateSuspectedProblemPlaceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.FirstFailedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_failed_at", *body.FirstFailedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSuspectedProblemPlaceResponseBody runs the validations defined on
+// SuspectedProblemPlaceResponseBody
+func ValidateSuspectedProblemPlaceResponseBody(body *SuspectedProblemPlaceResponseBody) (err error) {
+	if body.Server == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server", "body"))
 	}
 	if body.Server != nil {
 		if err2 := ValidateConnectionServerResponseBody(body.Server); err2 != nil {
@@ -6458,9 +6524,6 @@ func ValidateSuspectedProblemPersonResponseBody(body *SuspectedProblemPersonResp
 		if err2 := ValidateConnectionServerResponseBody(body.Member); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
-	}
-	if body.FirstFailedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_failed_at", *body.FirstFailedAt, goa.FormatDateTime))
 	}
 	return
 }
