@@ -16,6 +16,7 @@ use rmcp::transport::streamable_http_client::StreamableHttpClient as RmcpStreama
 use thiserror::Error;
 
 use crate::errors::RunnerError;
+use crate::telemetry::McpTraceContexts;
 
 // Liberal retry bounds for every runner-originated request: chat
 // completions, MCP, /threads/turn, bootstrap. A turn that bubbles a
@@ -138,14 +139,21 @@ pub struct McpSessionClient {
     inner: reqwest::Client,
     token: String,
     static_headers: HeaderMap,
+    trace: McpTraceContexts,
 }
 
 impl McpSessionClient {
-    pub fn new(inner: reqwest::Client, token: String, static_headers: HeaderMap) -> Self {
+    pub fn new(
+        inner: reqwest::Client,
+        token: String,
+        static_headers: HeaderMap,
+        trace: McpTraceContexts,
+    ) -> Self {
         Self {
             inner,
             token,
             static_headers,
+            trace,
         }
     }
 
@@ -175,7 +183,15 @@ impl McpHttpClient for McpSessionClient {
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
         let token = self.bearer();
-        let headers = self.merged_headers(custom_headers);
+        let mut headers = self.merged_headers(custom_headers);
+        // Tool calls carry the dispatching span's trace context, so the
+        // server's MCP request can be tied to the runner trace.
+        if let Some(cx) = serde_json::to_value(&message)
+            .ok()
+            .and_then(|value| self.trace.take_for_message(&value))
+        {
+            crate::telemetry::inject_trace_context_into(&cx, &mut headers);
+        }
         RmcpStreamableHttpClient::post_message(
             &self.inner,
             uri,

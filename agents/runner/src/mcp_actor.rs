@@ -26,6 +26,7 @@ use tracing::Instrument;
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpSessionClient, TokenRegistry};
+use crate::telemetry::McpTraceContexts;
 use crate::wire::McpServer;
 
 const MCP_CMD_CAPACITY: usize = 32;
@@ -162,6 +163,7 @@ pub fn spawn_mcp_actor(
     servers: &[McpServer],
     tokens: &TokenRegistry,
     inbox_tx: UnboundedSender<String>,
+    trace: &McpTraceContexts,
 ) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, KnownTools), RunnerError> {
     let mut manager = McpServerManager::new();
     let catalog = manager.source();
@@ -169,7 +171,7 @@ pub fn spawn_mcp_actor(
     let token = tokens.current()?;
 
     for server in servers {
-        let config = build_mcp_server_config(server, &http_client, &token)?;
+        let config = build_mcp_server_config(server, &http_client, &token, trace)?;
         manager.register_server_with_options(
             config,
             McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
@@ -190,6 +192,7 @@ pub fn spawn_mcp_actor(
         last_reconnects: BTreeMap::new(),
         configured,
         known_tools: KnownTools::default(),
+        trace: trace.clone(),
     };
     let known_tools = actor.known_tools.clone();
     tokio::spawn(actor.run(cmd_rx));
@@ -218,6 +221,7 @@ struct McpActor {
     // so a detached server cannot be resurrected.
     configured: BTreeMap<String, McpServer>,
     known_tools: KnownTools,
+    trace: McpTraceContexts,
 }
 
 impl McpActor {
@@ -502,7 +506,8 @@ impl McpActor {
                 attached.push(id.clone());
             }
             if is_new || changed || rotating {
-                let config = build_mcp_server_config(server, &self.http_client, &token)?;
+                let config =
+                    build_mcp_server_config(server, &self.http_client, &token, &self.trace)?;
                 prepared.push((id.clone(), config, changed));
             }
         }
@@ -763,12 +768,14 @@ fn build_mcp_server_config(
     server: &McpServer,
     http_client: &reqwest::Client,
     token: &str,
+    trace: &McpTraceContexts,
 ) -> Result<McpServerConfig, RunnerError> {
     let server_headers = validated_server_headers(server)?;
     let mcp_http = Arc::new(McpSessionClient::new(
         http_client.clone(),
         token.to_string(),
         server_headers,
+        trace.clone(),
     ));
     let transport = StreamableHttpTransportConfig::new(&server.url).with_http_client(mcp_http);
     Ok(McpServerConfig::new(
@@ -849,6 +856,7 @@ mod tests {
             std::slice::from_ref(&old),
             &tokens,
             notice_tx,
+            &McpTraceContexts::default(),
         )
         .unwrap();
         let (reply, ack) = oneshot::channel();
@@ -977,6 +985,7 @@ mod tests {
             last_errors: BTreeMap::from([("server".into(), ("old error".into(), Instant::now()))]),
             last_reconnects: BTreeMap::from([("server".into(), Instant::now())]),
             known_tools: KnownTools::default(),
+            trace: McpTraceContexts::default(),
         };
         actor.turn_boundary("opaque-a".into(), None).await.unwrap();
         assert_eq!(actor.auth_pending.len(), 1);
@@ -1049,6 +1058,7 @@ mod tests {
             std::slice::from_ref(&server),
             &tokens,
             notice_tx,
+            &McpTraceContexts::default(),
         )
         .unwrap();
         let (reply, ack) = oneshot::channel();

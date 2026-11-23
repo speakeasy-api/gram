@@ -24,12 +24,14 @@ use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::mcp_actor::{KnownTools, McpCmd};
+use crate::telemetry::McpTraceContexts;
 
 /// Exposes the MCP catalog for dispatch without advertising any specs.
 pub struct HiddenCatalogSource {
     catalog: Arc<CatalogReader>,
     cmd_tx: mpsc::Sender<McpCmd>,
     known: KnownTools,
+    trace: McpTraceContexts,
 }
 
 impl HiddenCatalogSource {
@@ -38,7 +40,15 @@ impl HiddenCatalogSource {
             catalog: Arc::new(catalog),
             cmd_tx,
             known,
+            trace: McpTraceContexts::default(),
         }
+    }
+
+    /// Shares the thread's trace hand-off with its MCP transports, so each
+    /// MCP request carries the trace context of the call that sent it.
+    pub fn with_trace_contexts(mut self, trace: McpTraceContexts) -> Self {
+        self.trace = trace;
+        self
     }
 }
 
@@ -52,6 +62,7 @@ impl ToolSource for HiddenCatalogSource {
             return Some(Arc::new(ReconnectingTool {
                 inner,
                 cmd_tx: self.cmd_tx.clone(),
+                trace: self.trace.clone(),
             }));
         }
         // A tool discovered earlier whose session has since closed: connect
@@ -61,6 +72,7 @@ impl ToolSource for HiddenCatalogSource {
                 spec: placeholder_spec(name),
                 catalog: self.catalog.clone(),
                 cmd_tx: self.cmd_tx.clone(),
+                trace: self.trace.clone(),
             }) as Arc<dyn Tool>
         })
     }
@@ -83,6 +95,7 @@ impl ToolSource for HiddenCatalogSource {
 struct ReconnectingTool {
     inner: Arc<dyn Tool>,
     cmd_tx: mpsc::Sender<McpCmd>,
+    trace: McpTraceContexts,
 }
 
 impl ReconnectingTool {
@@ -141,6 +154,7 @@ impl Tool for ReconnectingTool {
         request: ToolRequest,
         ctx: &mut ToolContext<'_>,
     ) -> Result<ToolResult, ToolError> {
+        let _trace = self.trace.register(&request.input);
         match self.inner.invoke(request, ctx).await {
             Err(err) if transport_suspect(&err) => Err(self.reconnected(err).await),
             other => other,
@@ -152,6 +166,7 @@ impl Tool for ReconnectingTool {
         request: ToolRequest,
         ctx: &mut ToolContext<'_>,
     ) -> ToolExecutionOutcome {
+        let _trace = self.trace.register(&request.input);
         match self.inner.invoke_outcome(request, ctx).await {
             ToolExecutionOutcome::Failed(err) if transport_suspect(&err) => {
                 ToolExecutionOutcome::Failed(self.reconnected(err).await)
@@ -169,6 +184,7 @@ struct DeferredMcpTool {
     spec: ToolSpec,
     catalog: Arc<CatalogReader>,
     cmd_tx: mpsc::Sender<McpCmd>,
+    trace: McpTraceContexts,
 }
 
 impl DeferredMcpTool {
@@ -229,6 +245,7 @@ impl Tool for DeferredMcpTool {
         let tool = ReconnectingTool {
             inner,
             cmd_tx: self.cmd_tx.clone(),
+            trace: self.trace.clone(),
         };
         let requests = match tool.proposed_requests(&request) {
             Ok(requests) => requests,
@@ -255,9 +272,17 @@ impl Tool for DeferredMcpTool {
 }
 
 fn placeholder_spec(name: &ToolName) -> ToolSpec {
+    placeholder_spec_described(name, "Unknown tool placeholder.")
+}
+
+/// Spec description of [`UnknownToolSource`] tools. Never advertised; it lets
+/// the tool span tell an unresolved name apart from a deferred MCP tool.
+pub const UNRESOLVED_TOOL_DESCRIPTION: &str = "Unresolved tool name placeholder.";
+
+fn placeholder_spec_described(name: &ToolName, description: &str) -> ToolSpec {
     ToolSpec::new(
         name.clone(),
-        "Unknown tool placeholder.",
+        description,
         json!({"type": "object", "additionalProperties": true}),
     )
 }
@@ -275,7 +300,7 @@ impl ToolSource for UnknownToolSource {
 
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
         Some(Arc::new(UnknownTool {
-            spec: placeholder_spec(name),
+            spec: placeholder_spec_described(name, UNRESOLVED_TOOL_DESCRIPTION),
         }))
     }
 }
