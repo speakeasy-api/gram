@@ -30,6 +30,10 @@ const (
 	// Storage integration is not yet enabled, so platform-key transitions are
 	// deliberately unavailable for this use case.
 	UseCaseChatTranscripts UseCase = "chat-transcripts"
+
+	// UseCaseMarketplaceTokens is the use case for the plugin marketplace
+	// tokens, the URL-as-secret credentials of marketplace install URLs.
+	UseCaseMarketplaceTokens UseCase = "marketplace-tokens"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -39,6 +43,7 @@ var registeredUseCases = []UseCase{
 	UseCaseOAuthClientSecrets,
 	UseCaseOAuthSessionTokens,
 	UseCaseChatTranscripts,
+	UseCaseMarketplaceTokens,
 }
 
 // ParseUseCase returns the registered use case named value.

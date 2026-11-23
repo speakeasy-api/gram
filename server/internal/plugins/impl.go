@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -196,6 +197,10 @@ type Service struct {
 	// staffOrg is the deployment's Speakeasy staff organization, which always
 	// receives the current hooksGeneratorVersion immediately.
 	staffOrg staff.Organization
+
+	// marketplaceTokens mints a connection's marketplace token on its first
+	// publish and opens it to show the marketplace URL again.
+	marketplaceTokens *marketplacetokens.Tokens
 }
 
 var (
@@ -217,6 +222,7 @@ func NewService(
 	features feature.Provider,
 	publisher PluginPublishSignaler,
 	staffOrg staff.Organization,
+	marketplaceTokens *marketplacetokens.Tokens,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -243,6 +249,7 @@ func NewService(
 		distributionAdmission: admission.NewGuard(),
 		orgHosts:              nil,
 		staffOrg:              staffOrg,
+		marketplaceTokens:     marketplaceTokens,
 	}
 }
 
@@ -260,6 +267,7 @@ func NewPublisher(
 	serverURL string,
 	features feature.Provider,
 	staffOrg staff.Organization,
+	marketplaceTokens *marketplacetokens.Tokens,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -283,6 +291,7 @@ func NewPublisher(
 		distributionAdmission: admission.NewGuard(),
 		orgHosts:              nil,
 		staffOrg:              staffOrg,
+		marketplaceTokens:     marketplaceTokens,
 	}
 }
 
@@ -1645,7 +1654,7 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "no published marketplace found; publish plugins first")
 	}
 
-	if !conn.MarketplaceToken.Valid || s.serverURL == "" {
+	if !marketplacetokens.FromConnection(conn).Has() || s.serverURL == "" {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "marketplace URL not available; publish plugins first")
 	}
 
@@ -1657,7 +1666,11 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "observability plugin is disabled for this project")
 	}
 
-	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
+	token, err := s.marketplaceTokens.Open(ctx, s.db, marketplacetokens.FromConnection(conn))
+	if err != nil {
+		return nil, nil, marketplacetokens.OpenError(ctx, s.logger, err, ac.ActiveOrganizationID)
+	}
+	marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, token)
 
 	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
 	if err != nil {
@@ -1866,8 +1879,12 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				}
 			}
 			// The marketplace URL contains a bearer token, not just a package location.
-			if admin && conn.MarketplaceToken.Valid && s.serverURL != "" {
-				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
+			if stored := marketplacetokens.FromConnection(conn); admin && stored.Has() && s.serverURL != "" {
+				token, err := s.marketplaceTokens.Open(ctx, s.db, stored)
+				if err != nil {
+					return nil, marketplacetokens.OpenError(ctx, s.logger, err, ac.ActiveOrganizationID)
+				}
+				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, token)
 				result.MarketplaceURL = &marketplaceURL
 			}
 			// Only a successful publish moves updated_at (recording or dropping
@@ -3530,25 +3547,26 @@ func (s *Service) persistPluginAPIKeys(
 		}
 	}
 
-	// Mint a candidate marketplace token for first-time publishes. The upsert
-	// preserves any existing token via COALESCE, so passing a fresh value on
-	// every publish never overwrites a token that's already minted — token
-	// rotation goes through a dedicated path.
-	candidateToken, err := generateMarketplaceToken()
-	if err != nil {
-		return fmt.Errorf("generate marketplace token: %w", err)
-	}
-	if _, err := s.upsertGitHubConnection(ctx, tx, repo.UpsertGitHubConnectionParams{
+	conn, err := s.upsertGitHubConnection(ctx, tx, repo.UpsertGitHubConnectionParams{
 		ProjectID:                input.ProjectID,
+		OrganizationID:           conv.ToPGText(input.OrganizationID),
 		InstallationID:           s.github.InstallationID,
 		RepoOwner:                repoOwner,
 		RepoName:                 repoName,
-		MarketplaceToken:         pgtype.Text{String: candidateToken, Valid: true},
 		PublishedMcpFingerprints: mcpFingerprintsJSON,
 		PublishedHooksVersion:    conv.ToPGText(hooksVersion),
 		PublishedHooksConfig:     hooksConfigJSON,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
+	}
+
+	// A first publish mints the connection's marketplace token. The upsert
+	// holds the row's lock until commit, so a concurrent publish cannot mint a
+	// second one, and a connection that already holds a token keeps it: token
+	// rotation goes through a dedicated path.
+	if err := s.marketplaceTokens.Ensure(ctx, tx, conn); err != nil {
+		return fmt.Errorf("ensure marketplace token: %w", err)
 	}
 
 	if err := s.audit.LogPluginPublish(ctx, tx, audit.LogPluginPublishEvent{

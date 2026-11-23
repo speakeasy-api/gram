@@ -281,6 +281,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 			AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 			AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 			DevMode:                          serviceEnv == "local",
+			LoadUserPolicy:                   nil,
 		})
 
 	_, psbroker, stop, err := newPubSubClient(ctx, c, logger)

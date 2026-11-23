@@ -36,6 +36,9 @@ type EngineOpts struct {
 	AdmitWorkloadSession WorkloadSessionAdmitter
 	// AdmitWorkloadSessionInTx must be configured for atomic workload issuance.
 	AdmitWorkloadSessionInTx WorkloadSessionTxAdmitter
+	// LoadUserPolicy reads a member's live policy for consent to a connection
+	// they attached to an agent. Nil reads it from the database.
+	LoadUserPolicy UserPolicyLoader
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -47,6 +50,7 @@ type Engine struct {
 	admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	admitWorkloadSession             WorkloadSessionAdmitter
 	admitWorkloadSessionInTx         WorkloadSessionTxAdmitter
+	loadUserPolicy                   UserPolicyLoader
 	logger                           *slog.Logger
 	db                               *pgxpool.Pool
 	challengeLoggingEnabled          ChallengeLoggingEnabled
@@ -66,12 +70,14 @@ func NewEngine(
 	var admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	var admitWorkloadSession WorkloadSessionAdmitter
 	var admitWorkloadSessionInTx WorkloadSessionTxAdmitter
+	var loadUserPolicy UserPolicyLoader
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
 		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
 		admitPrincipalCredentialWithDBTX = opts[0].AdmitPrincipalCredentialWithDBTX
 		admitWorkloadSession = opts[0].AdmitWorkloadSession
 		admitWorkloadSessionInTx = opts[0].AdmitWorkloadSessionInTx
+		loadUserPolicy = opts[0].LoadUserPolicy
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
@@ -81,6 +87,7 @@ func NewEngine(
 		admitPrincipalCredentialWithDBTX: admitPrincipalCredentialWithDBTX,
 		admitWorkloadSession:             admitWorkloadSession,
 		admitWorkloadSessionInTx:         admitWorkloadSessionInTx,
+		loadUserPolicy:                   loadUserPolicy,
 		logger:                           authzLogger,
 		db:                               db,
 		challengeLoggingEnabled:          challengeLogging,
