@@ -107,16 +107,16 @@ func TestInvalidCheckOnUnenforcedPathFailsInTests(t *testing.T) {
 	ctx := unenforcedContext(t)
 	typo := Check{Scope: Scope("project:reed"), ResourceID: "project-one"}
 
-	require.Error(t, engine.Require(ctx, typo))
-	require.Error(t, engine.RequireAny(ctx, typo))
+	require.ErrorIs(t, engine.Require(ctx, typo), ErrInvalidCheck)
+	require.ErrorIs(t, engine.RequireAny(ctx, typo), ErrInvalidCheck)
 	_, err := engine.Evaluate(ctx, typo)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	_, err = engine.Can(ctx, AnyOf(typo, typo))
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	_, err = engine.Filter(ctx, []Check{typo})
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 	_, err = engine.FindMatched(ctx, []Check{typo})
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrInvalidCheck)
 
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeProjectRead, ResourceID: "project-one"}))
 }
