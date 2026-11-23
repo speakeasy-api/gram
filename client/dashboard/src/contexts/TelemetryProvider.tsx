@@ -102,6 +102,9 @@ export const TelemetryProvider = (props: {
           posthogSettings.key,
           {
             api_host: posthogSettings.apiHost,
+            defaults: "2025-05-24",
+            // Capture in-app pathname changes as well as the initial page load.
+            capture_pageview: "history_change",
             // PostHog otherwise collects the hardware model by default on
             // Chromium-based Android browsers.
             disableDeviceModel: true,

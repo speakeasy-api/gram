@@ -103,9 +103,31 @@ describe("PostHog initialization", () => {
     render(<TelemetryProvider>{null}</TelemetryProvider>);
     expect(posthogInit).toHaveBeenCalledWith(
       "phc_test",
-      expect.objectContaining({ api_host: "https://metrics.example.com" }),
+      expect.objectContaining({
+        api_host: "https://metrics.example.com",
+        defaults: "2025-05-24",
+        capture_pageview: "history_change",
+        disableDeviceModel: true,
+        disable_session_recording: true,
+      }),
       "speakeasy",
     );
+  });
+
+  it("stays off on public share pages even with valid configuration", () => {
+    window.history.pushState({}, "", "/shared/skills/test-token");
+    try {
+      setRuntimeConfig({
+        ...rumSettings,
+        posthogKey: "phc_test",
+        posthogHost: "https://metrics.example.com",
+      });
+      render(<TelemetryProvider>{null}</TelemetryProvider>);
+      expect(posthogInit).not.toHaveBeenCalled();
+      expect(datadogRum.init).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
   });
 
   it.each([
