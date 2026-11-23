@@ -11,17 +11,12 @@ import (
 	"testing"
 )
 
-// The decision snapshot is the evaluator's answer to a broad, fixed set of
-// grants and checks (decision_snapshot_cases_test.go), committed in
-// testdata/decision_snapshot.json. The test builds the cases again, checks
-// that they are exactly the committed ones, and compares every answer. A
-// change that reshapes how decisions are made, without meaning to change any,
-// must reproduce the file exactly. A change that means to change answers, or
-// adds cases, regenerates it from server/ with
+// A refactor must reproduce testdata/decision_snapshot.json exactly. A change
+// that means to change answers, or adds cases, regenerates it from server/:
 //
 //	go test ./internal/authz -run TestDecisionSnapshot -args -write-decision-snapshot
 //
-// and the diff of the file is the list of answers it changes.
+// and the file's diff lists the answers it changes.
 
 const decisionSnapshotPath = "testdata/decision_snapshot.json"
 
@@ -82,8 +77,6 @@ func TestDecisionSnapshot(t *testing.T) {
 	}
 }
 
-// sameSnapshotCases reports whether two snapshots ask the same questions of
-// the same grants, whatever their answers.
 func sameSnapshotCases(a, b snapshotFile) bool {
 	if !reflect.DeepEqual(a.Grants, b.Grants) || !reflect.DeepEqual(a.Checks, b.Checks) || len(a.Groups) != len(b.Groups) {
 		return false
@@ -125,8 +118,7 @@ func describeSnapshotCheck(c snapshotCheck) string {
 	return string(data)
 }
 
-// encodeDecisionSnapshot writes one grant, check or grant set per line, so a
-// change to the answers shows as a readable diff.
+// One item per line, so a change to the answers is a readable diff.
 func encodeDecisionSnapshot(snapshot snapshotFile) ([]byte, error) {
 	var out bytes.Buffer
 	line := func(prefix string, v any, last bool) error {

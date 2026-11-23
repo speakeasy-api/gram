@@ -1,8 +1,8 @@
 package authz
 
-// The parts of the decision snapshot that depend on this branch's API. To
-// compare with another version of the evaluator, copy
-// decision_snapshot_cases_test.go there and write this file for its API.
+// The snapshot parts that depend on the current API. To compare with an older
+// evaluator, copy decision_snapshot_cases_test.go there and write this file
+// for its API.
 
 func snapshotMCPServer(id, project string) MCPServerRef {
 	return MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project))

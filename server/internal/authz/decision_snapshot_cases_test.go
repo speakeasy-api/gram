@@ -6,13 +6,10 @@ import (
 	"sort"
 )
 
-// The decision snapshot's cases. This file uses only API that main also has,
-// so the same cases can be answered by main and by this branch and the two
-// snapshots compared. Everything that differs between the two lives in
+// This file uses only long-standing API, so an older evaluator can answer the
+// same cases and the snapshots can be compared. API that may differ lives in
 // decision_snapshot_refs_test.go.
 
-// snapshotFile is the evaluator's answers to every case, grouped so each
-// grant and check is written once.
 type snapshotFile struct {
 	Grants []snapshotGrant `json:"grants"`
 	Checks []snapshotCheck `json:"checks"`
@@ -26,12 +23,8 @@ type snapshotGrant struct {
 	Inferred  bool              `json:"inferred,omitempty"`
 }
 
-// snapshotCheck names a check by how a caller builds it, so the replay can
-// build it again whatever the Check type looks like by then. Op is "" for a
-// check built from its scope, kind, id and dimensions, one of the MCP server
-// methods (read, write, connect, tool_call), or auth_client for
-// MCPAuthClientCheck, with the client type in Kind and the connection owner
-// and upstream client in Dimensions.
+// snapshotCheck records how a caller builds a check, not the Check value, so
+// the replay keeps working when the Check type changes.
 type snapshotCheck struct {
 	Op          string            `json:"op,omitempty"`
 	Scope       string            `json:"scope,omitempty"`
@@ -44,15 +37,13 @@ type snapshotCheck struct {
 	Probe       bool              `json:"probe,omitempty"`
 }
 
-// snapshotGroup asks every check in Checks of every grant set in Sets.
 type snapshotGroup struct {
 	Name   string        `json:"name"`
 	Checks []int         `json:"checks"`
 	Sets   []snapshotSet `json:"sets"`
 }
 
-// snapshotSet is one grant set and its answers, one character per check in
-// the group's order: 1 allowed, 0 refused, e refused as an invalid check.
+// Answers has one character per check: 1 allowed, 0 refused, e invalid check.
 type snapshotSet struct {
 	Grants  []int  `json:"grants"`
 	Answers string `json:"answers"`
@@ -66,7 +57,6 @@ const (
 	snapshotProjectB = "p2"
 )
 
-// snapshotBuilder collects grants and checks and gives each an index.
 type snapshotBuilder struct {
 	file   snapshotFile
 	grants map[string]int
@@ -103,7 +93,6 @@ func (b *snapshotBuilder) check(c snapshotCheck) int {
 	return len(b.file.Checks) - 1
 }
 
-// group answers every check of every set and adds the group to the file.
 func (b *snapshotBuilder) group(name string, checks []int, sets [][]int) {
 	group := snapshotGroup{Name: name, Checks: checks, Sets: make([]snapshotSet, 0, len(sets))}
 	for _, set := range sets {
@@ -175,7 +164,6 @@ func describeSelectorKey(m map[string]string) string {
 	return out
 }
 
-// buildDecisionSnapshot builds every case and asks the evaluator each one.
 func buildDecisionSnapshot() snapshotFile {
 	b := newSnapshotBuilder()
 	b.everyPermission()
@@ -186,14 +174,11 @@ func buildDecisionSnapshot() snapshotFile {
 	return b.file
 }
 
-// everyPermission: for each allow scope, a grant on one resource, on every
-// resource, an implying scope, root, and blocks from a role, the user and
-// everyone, asked on that resource and on another.
 func (b *snapshotBuilder) everyPermission() {
 	scopes := slices.Collect(maps.Keys(scopeExpansions))
 	sort.Slice(scopes, func(i, j int) bool { return scopes[i] < scopes[j] })
 	for _, scope := range scopes {
-		// mcp:auth checks need their client dimensions; authClients covers them.
+		// authClients covers mcp:auth, which needs client dimensions.
 		if scope == ScopeRoot || scope == ScopeMCPAuth || IsBlocklistScope(scope) {
 			continue
 		}
@@ -252,8 +237,6 @@ var (
 	snapshotMCPScopes    = []Scope{ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect, ScopeMCPBlockedRead, ScopeMCPBlockedWrite, ScopeMCPBlockedConnect}
 )
 
-// mcpChecks is read, write and connect on each server, plus every tool call
-// and probe when withCalls is set.
 func (b *snapshotBuilder) mcpChecks(withCalls bool) []int {
 	var checks []int
 	for _, server := range snapshotMCPServers {
@@ -268,7 +251,6 @@ func (b *snapshotBuilder) mcpChecks(withCalls bool) []int {
 	return checks
 }
 
-// mcpCallChecks is every tool call and probe on one server.
 func (b *snapshotBuilder) mcpCallChecks(id, project string) []int {
 	var checks []int
 	for _, tool := range append([]string{""}, snapshotTools...) {
@@ -282,9 +264,7 @@ func (b *snapshotBuilder) mcpCallChecks(id, project string) []int {
 	return checks
 }
 
-// mcpAllowsWithLimitedBlocks: an unlimited connect allow together with a
-// connect block limited to a tool or a disposition, asked every tool call and
-// probe. This is where a call that leaves out the blocked value shows.
+// A call that leaves out a blocked tool or disposition only shows up here.
 func (b *snapshotBuilder) mcpAllowsWithLimitedBlocks() {
 	var checks []int
 	for _, server := range snapshotMCPServers {
@@ -311,10 +291,8 @@ func (b *snapshotBuilder) mcpAllowsWithLimitedBlocks() {
 	b.group("mcp allows with limited blocks", checks, sets)
 }
 
-// mcpGrants is every MCP grant a selector can name in the small world: each
-// principal, scope, server (s1 or every one), project limit, tool limit and
-// disposition limit. Grants ValidateSelector refuses are kept: stored rows
-// from before a rule existed are answered too.
+// Grants ValidateSelector refuses are kept: rows stored before a rule existed
+// are still answered.
 func (b *snapshotBuilder) mcpGrants(withLimits bool) []int {
 	var grants []int
 	for _, principal := range []string{snapshotUser, snapshotRole, snapshotEveryone} {
@@ -348,7 +326,6 @@ func (b *snapshotBuilder) mcpGrants(withLimits bool) []int {
 	return grants
 }
 
-// mcpSingleGrants: every MCP grant alone, asked every MCP check.
 func (b *snapshotBuilder) mcpSingleGrants() {
 	checks := b.mcpChecks(true)
 	grants := b.mcpGrants(true)
@@ -359,8 +336,7 @@ func (b *snapshotBuilder) mcpSingleGrants() {
 	b.group("mcp single grants", checks, sets)
 }
 
-// mcpServerGrantPairs: every pair of MCP grants with no tool or disposition
-// limit, asked the server-level checks. Pairs are where precedence shows.
+// Pairs are where precedence shows.
 func (b *snapshotBuilder) mcpServerGrantPairs() {
 	checks := b.mcpChecks(false)
 	grants := b.mcpGrants(false)
@@ -373,14 +349,12 @@ func (b *snapshotBuilder) mcpServerGrantPairs() {
 	b.group("mcp server grant pairs", checks, sets)
 }
 
-// authClients: every type of auth client, shared and personal, against grants on one client,
-// on every client in a project, on personal clients and their blocks. The
-// evaluator binds no represented user here, so personal checks are refused.
+// No represented user is bound here, so personal client checks are refused.
 func (b *snapshotBuilder) authClients() {
 	var checks []int
 	for _, project := range []string{snapshotProjectA, snapshotProjectB} {
 		for _, client := range []string{"c1", "c2"} {
-			// Literal names: main does not have constants for every type.
+			// Literal names: older versions lack constants for some types.
 			for _, clientType := range []string{"service_account", "static_credential", "pass_through", "ema"} {
 				checks = append(checks, b.check(snapshotCheck{Op: "auth_client", ID: client, Kind: clientType, Project: project}))
 			}
