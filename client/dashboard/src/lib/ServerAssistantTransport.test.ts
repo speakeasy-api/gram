@@ -119,27 +119,53 @@ const TOOL_TURN_ROWS: Row[] = [
   { id: "m2", role: "assistant", content: ANSWER, finish_reason: "stop" },
 ];
 
-function chatBody(chatId: string, rows: Row[]) {
+function chatBody(
+  chatId: string,
+  rows: (Row & { seq: number })[],
+  hasMoreBefore: boolean,
+) {
   return {
     id: chatId,
     title: "Weather",
     generation: 0,
     max_generation: 0,
     has_more_after: false,
-    has_more_before: false,
+    has_more_before: hasMoreBefore,
     num_messages: rows.length,
     content_parts: [],
     created_at: TIMESTAMP,
     updated_at: TIMESTAMP,
     last_message_timestamp: TIMESTAMP,
-    messages: rows.map((row, seq) => ({
+    messages: rows.map((row) => ({
       ...row,
-      seq: seq + 1,
       generation: 0,
       model: "test-model",
       created_at: TIMESTAMP,
     })),
   };
+}
+
+/**
+ * Serves chat.load like the server's keyset pagination. The chat's rows carry
+ * stable seqs (older rows first); the newest page leaves out `rowsOlder`, as
+ * a page too small to reach them would, and a `before_seq` request returns
+ * only the rows strictly older than it.
+ */
+function loadChatPage(chatId: string, query: URLSearchParams) {
+  const current = api.sent ? api.rowsAfter : api.rowsBefore;
+  const all = [...api.rowsOlder, ...current].map((row, i) => ({
+    ...row,
+    seq: i + 1,
+  }));
+  const beforeSeq = query.get("before_seq");
+  if (beforeSeq === null) {
+    const page = all.slice(api.rowsOlder.length);
+    return chatBody(chatId, page, api.rowsOlder.length > 0);
+  }
+  const limit = Number(query.get("limit") ?? "50");
+  const older = all.filter((row) => row.seq < Number(beforeSeq));
+  const page = older.slice(-limit);
+  return chatBody(chatId, page, older.length > page.length);
 }
 
 /** What the fake API answers for the current test. */
@@ -151,7 +177,10 @@ const api = {
   rowsBefore: [] as Row[],
   /** chat.load rows after the message is sent. */
   rowsAfter: [] as Row[],
-  /** The page before the newest, served for a `before_seq` request. */
+  /**
+   * Rows older than the newest page, numbered before `rowsAfter`: reachable
+   * only with `before_seq`.
+   */
   rowsOlder: [] as Row[],
   sent: false,
 };
@@ -184,14 +213,7 @@ beforeAll(async () => {
         }
         case "/rpc/chat.load": {
           const chatId = url.searchParams.get("id") ?? "";
-          if (url.searchParams.has("before_seq")) {
-            json(200, chatBody(chatId, api.rowsOlder));
-            return;
-          }
-          json(200, {
-            ...chatBody(chatId, api.sent ? api.rowsAfter : api.rowsBefore),
-            has_more_before: api.rowsOlder.length > 0,
-          });
+          json(200, loadChatPage(chatId, url.searchParams));
           return;
         }
         case "/chat/turnstream": {
@@ -426,8 +448,13 @@ describe("Project Assistant turn", () => {
         ? { ...frame, output: undefined, body_omitted: true }
         : frame,
     );
+    // Seqs: an earlier row (1) and the tool row (2) fall off the newest page,
+    // which starts at seq 3. A before_seq at or below 2 would miss the tool row.
+    api.rowsOlder = [
+      { id: "u0", role: "user", content: "earlier" },
+      ...TOOL_TURN_ROWS.filter((row) => row.role === "tool"),
+    ];
     api.rowsAfter = TOOL_TURN_ROWS.filter((row) => row.role !== "tool");
-    api.rowsOlder = TOOL_TURN_ROWS.filter((row) => row.role === "tool");
 
     const { chat, sends } = await runTurn({});
 
@@ -436,7 +463,11 @@ describe("Project Assistant turn", () => {
     expect(visibleParts(assistantOf(chat))).toEqual(EXPECTED_TOOL_TURN);
     const loads = api.requests.filter((r) => r.path === "/rpc/chat.load");
     expect(loads).toHaveLength(2);
-    expect(loads[1]!.query.get("before_seq")).toBe("1");
+    expect(loads[0]!.query.has("before_seq")).toBe(false);
+    // The read-back starts just before the newest page's oldest row, on the
+    // generation that page came from.
+    expect(loads[1]!.query.get("before_seq")).toBe("3");
+    expect(loads[1]!.query.get("generation")).toBe("0");
   });
 
   it("falls back to polling chat.load when streaming is refused", async () => {
