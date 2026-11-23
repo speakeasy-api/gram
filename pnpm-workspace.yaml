@@ -13,7 +13,7 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.175
+  "@ai-sdk/react": ^4.0.177
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.32.0
   "@tailwindcss/vite": ^4.3.5
@@ -22,7 +22,7 @@ catalog:
   "@types/react-dom": ^19.3.0
   "@assistant-ui/react": ^0.15.37
   "@vitejs/plugin-react": ^6.3.0
-  ai: ^7.0.171
+  ai: ^7.0.173
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.3.7
@@ -47,8 +47,8 @@ overrides:
   # @ai-sdk/react depends on an exact ai version. Keep both pinned together so
   # the dashboard, @ai-sdk/react, and the ai peers of @assistant-ui/react-ai-sdk
   # and assistant-stream all resolve to one ai instance.
-  ai: 7.0.171
-  "@ai-sdk/react": 4.0.175
+  ai: 7.0.173
+  "@ai-sdk/react": 4.0.177
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.
   # 3.4.17 also fixes GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr in 3.4.16.
   dompurify@<3.4.17: 3.4.17
