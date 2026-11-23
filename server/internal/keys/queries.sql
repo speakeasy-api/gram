@@ -173,9 +173,10 @@ RETURNING id, project_id, name;
 -- of these holds:
 --
 --   * it was created within the retention window;
---   * it was created within the retention window before the project's latest
---     publish, so the current plugin generation keeps working however long ago
---     it shipped. Revoked publish keys still count as publishes;
+--   * it was created within the retention window up to and including the
+--     project's latest publish, so the current plugin generation keeps working
+--     however long ago it shipped. Revoked publish keys still count as
+--     publishes; a download minted after the latest publish gets no extra time;
 --   * it was used within the retention window.
 WITH plugin_keys AS (
   SELECT id, project_id, name, created_at, last_accessed_at, deleted
@@ -196,7 +197,11 @@ stale AS (
   LEFT JOIN last_publish lp ON lp.project_id = k.project_id
   WHERE k.deleted IS FALSE
     AND k.created_at < clock_timestamp() - (sqlc.arg(retention_days)::int * interval '1 day')
-    AND (lp.published_at IS NULL OR k.created_at < lp.published_at - (sqlc.arg(retention_days)::int * interval '1 day'))
+    AND (
+      lp.published_at IS NULL
+      OR k.created_at < lp.published_at - (sqlc.arg(retention_days)::int * interval '1 day')
+      OR k.created_at > lp.published_at
+    )
     AND (k.last_accessed_at IS NULL OR k.last_accessed_at < clock_timestamp() - (sqlc.arg(retention_days)::int * interval '1 day'))
   ORDER BY k.created_at
   LIMIT sqlc.arg(batch_size)

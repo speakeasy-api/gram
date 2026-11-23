@@ -57,13 +57,17 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 	handNamed := insert("plugins-hooks-20260101-000000-a00007", false, project, 300*day, nil)
 	claudeWeb := insert("plugins-claude-web-hooks-20260101-000000-a00008", true, project, 300*day, nil)
 	orphaned := insert("plugins-hooks-download-20261001-000000-a00009", true, orphan, 40*day, nil)
+	postPublishDownload := insert("plugins-hooks-download-20260815-000000-a0000a", true, project, 90*day, nil)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
 	require.NoError(t, err)
 
-	reaped, err := keys.ReapStalePluginAPIKeys(ctx, ti.conn, audit.NewLogger(), 100)
+	reaped, err := keys.ReapStalePluginAPIKeys(ctx, ti.conn, audit.NewLogger(), 3)
 	require.NoError(t, err)
 	require.Equal(t, 3, reaped)
+	reaped, err = keys.ReapStalePluginAPIKeys(ctx, ti.conn, audit.NewLogger(), 3)
+	require.NoError(t, err)
+	require.Equal(t, 1, reaped)
 
 	for id, wantDeleted := range map[uuid.UUID]bool{
 		latestPublish: false,
@@ -75,13 +79,20 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 		handNamed:     false,
 		claudeWeb:     false,
 		orphaned:      true,
+		// Created after the latest publish, so the publish anchor doesn't cover it.
+		postPublishDownload: true,
 	} {
 		require.Equal(t, wantDeleted, isKeyDeleted(t, ti.conn, id), fmt.Sprintf("key %s", id))
 	}
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
 	require.NoError(t, err)
-	require.Equal(t, before+3, after)
+	require.Equal(t, before+4, after)
+
+	latest, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionKeyRevoke)
+	require.NoError(t, err)
+	require.Equal(t, "system", latest.ActorType)
+	require.Equal(t, "plugin-api-key-reaper", latest.ActorID)
 
 	reaped, err = keys.ReapStalePluginAPIKeys(ctx, ti.conn, audit.NewLogger(), 100)
 	require.NoError(t, err)
