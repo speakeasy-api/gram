@@ -6,6 +6,7 @@ import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignO
 import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
 import { adminBackfillMcpConnectGrants } from "../funcs/adminBackfillMcpConnectGrants.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
+import { adminCancelHooksRolloutStage } from "../funcs/adminCancelHooksRolloutStage.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
 import { adminClearOrganizationHooksRollout } from "../funcs/adminClearOrganizationHooksRollout.js";
@@ -93,12 +94,14 @@ import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseT
 import { adminMigrateOrganizationAssistantIdentities } from "../funcs/adminMigrateOrganizationAssistantIdentities.js";
 import { adminMigrateOrganizationAssistantsToKit } from "../funcs/adminMigrateOrganizationAssistantsToKit.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
+import { adminPauseHooksRolloutStage } from "../funcs/adminPauseHooksRolloutStage.js";
 import { adminPromoteRegistryCandidate } from "../funcs/adminPromoteRegistryCandidate.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRedeployProject } from "../funcs/adminRedeployProject.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
 import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminRepairOrganizationAssistantAgentNames } from "../funcs/adminRepairOrganizationAssistantAgentNames.js";
+import { adminResumeHooksRolloutStage } from "../funcs/adminResumeHooksRolloutStage.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryPromotionDocs.js";
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
@@ -106,10 +109,6 @@ import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
 import { adminSetHooksRolloutDefault } from "../funcs/adminSetHooksRolloutDefault.js";
-import { adminStartHooksRolloutStage } from "../funcs/adminStartHooksRolloutStage.js";
-import { adminPauseHooksRolloutStage } from "../funcs/adminPauseHooksRolloutStage.js";
-import { adminResumeHooksRolloutStage } from "../funcs/adminResumeHooksRolloutStage.js";
-import { adminCancelHooksRolloutStage } from "../funcs/adminCancelHooksRolloutStage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetMcpServerScopePin } from "../funcs/adminSetMcpServerScopePin.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
@@ -119,6 +118,7 @@ import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizati
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
+import { adminStartHooksRolloutStage } from "../funcs/adminStartHooksRolloutStage.js";
 import { adminStartMemoryEvalRun } from "../funcs/adminStartMemoryEvalRun.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
@@ -196,6 +196,7 @@ import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminups
 import { AssignOrganizationOnboardingPlaybookRequestBody } from "../models/components/assignorganizationonboardingplaybookrequestbody.js";
 import { BackfillMcpConnectGrantsRequestBody } from "../models/components/backfillmcpconnectgrantsrequestbody.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
+import { CancelHooksRolloutStageRequestBody } from "../models/components/cancelhooksrolloutstagerequestbody.js";
 import { CancelStripeSubscriptionRequestBody } from "../models/components/cancelstripesubscriptionrequestbody.js";
 import { ChangeTrialEndDateRequestBody } from "../models/components/changetrialenddaterequestbody.js";
 import { ClearOrganizationHooksRolloutRequestBody } from "../models/components/clearorganizationhooksrolloutrequestbody.js";
@@ -229,6 +230,7 @@ import { MigrateOrganizationAssistantIdentitiesRequestBody } from "../models/com
 import { MigrateOrganizationAssistantsToKitRequestBody } from "../models/components/migrateorganizationassistantstokitrequestbody.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
+import { PauseHooksRolloutStageRequestBody } from "../models/components/pausehooksrolloutstagerequestbody.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
 import { PromoteRegistryCandidateRequestBody } from "../models/components/promoteregistrycandidaterequestbody.js";
 import { RearmTrialRequestBody } from "../models/components/rearmtrialrequestbody.js";
@@ -246,9 +248,6 @@ import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runup
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
 import { SetHooksRolloutDefaultRequestBody } from "../models/components/sethooksrolloutdefaultrequestbody.js";
-import { StartHooksRolloutStageRequestBody } from "../models/components/starthooksrolloutstagerequestbody.js";
-import { PauseHooksRolloutStageRequestBody } from "../models/components/pausehooksrolloutstagerequestbody.js";
-import { CancelHooksRolloutStageRequestBody } from "../models/components/cancelhooksrolloutstagerequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetMcpServerScopePinRequestBody } from "../models/components/setmcpserverscopepinrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
@@ -258,6 +257,7 @@ import { SetOrganizationOnboardingStackRequestBody } from "../models/components/
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
+import { StartHooksRolloutStageRequestBody } from "../models/components/starthooksrolloutstagerequestbody.js";
 import { StartMemoryEvalRunRequestBody } from "../models/components/startmemoryevalrunrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
 import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
@@ -540,6 +540,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * cancelHooksRolloutStage admin
+   *
+   * @remarks
+   * Ends a staged rollout. Organizations it cleared go back to the default pin; hooks plugins already published are not downgraded.
+   */
+  async cancelHooksRolloutStage(
+    request: CancelHooksRolloutStageRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminCancelHooksRolloutStage(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getHooksRollout admin
    *
    * @remarks
@@ -550,40 +567,6 @@ export class Admin extends ClientSDK {
   ): Promise<AdminHooksRollout> {
     return unwrapAsync(adminGetHooksRollout(
       this,
-      options,
-    ));
-  }
-
-  /**
-   * setHooksRolloutDefault admin
-   *
-   * @remarks
-   * Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.
-   */
-  async setHooksRolloutDefault(
-    request: SetHooksRolloutDefaultRequestBody,
-    options?: RequestOptions,
-  ): Promise<AdminHooksRollout> {
-    return unwrapAsync(adminSetHooksRolloutDefault(
-      this,
-      request,
-      options,
-    ));
-  }
-
-  /**
-   * startHooksRolloutStage admin
-   *
-   * @remarks
-   * Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of another version.
-   */
-  async startHooksRolloutStage(
-    request: StartHooksRolloutStageRequestBody,
-    options?: RequestOptions,
-  ): Promise<AdminHooksRollout> {
-    return unwrapAsync(adminStartHooksRolloutStage(
-      this,
-      request,
       options,
     ));
   }
@@ -621,16 +604,33 @@ export class Admin extends ClientSDK {
   }
 
   /**
-   * cancelHooksRolloutStage admin
+   * setHooksRolloutDefault admin
    *
    * @remarks
-   * Ends a staged rollout. Organizations it cleared go back to the default pin; hooks plugins already published are not downgraded.
+   * Moves the default hooks rollout pin for every organization without an override. Customer organizations receive a hooks version on the next rollout sweep once the pin reaches it. Lowering the pin holds back later versions; it never downgrades a published hooks plugin.
    */
-  async cancelHooksRolloutStage(
-    request: CancelHooksRolloutStageRequestBody,
+  async setHooksRolloutDefault(
+    request: SetHooksRolloutDefaultRequestBody,
     options?: RequestOptions,
   ): Promise<AdminHooksRollout> {
-    return unwrapAsync(adminCancelHooksRolloutStage(
+    return unwrapAsync(adminSetHooksRolloutDefault(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * startHooksRolloutStage admin
+   *
+   * @remarks
+   * Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of another version.
+   */
+  async startHooksRolloutStage(
+    request: StartHooksRolloutStageRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminStartHooksRolloutStage(
       this,
       request,
       options,
