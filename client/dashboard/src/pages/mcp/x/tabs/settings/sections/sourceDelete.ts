@@ -1,5 +1,4 @@
 import { isNotFoundError } from "@/lib/route-errors";
-import { formatTunneledMcpDisplay } from "@/lib/sources";
 import type { Gram } from "@gram/client";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
@@ -18,15 +17,12 @@ export type SourceBackedDeleteTarget =
 export type SourceDeleteSpec = {
   title: string;
   entityDescription: string;
-  confirmLabel: string;
-  confirmValue: string;
   successMessage: string;
   failureMessage: string;
 };
 
-// Copy and the typed-confirmation value for the cascade dialog. Remote and
-// unproxied sources have no slugified name, so the URL is what gets typed;
-// a tunneled source has nothing but its name.
+// Copy for the cascade dialog. The user confirms by typing the server's own
+// name, the same as every other delete.
 export function sourceDeleteSpec(
   target: SourceBackedDeleteTarget,
 ): SourceDeleteSpec {
@@ -34,9 +30,7 @@ export function sourceDeleteSpec(
     case "remote":
       return {
         title: "Delete remote MCP server",
-        entityDescription: "the remote MCP server",
-        confirmLabel: "the server URL",
-        confirmValue: target.source.url,
+        entityDescription: "the remote MCP source",
         successMessage: "Remote MCP server deleted",
         failureMessage: "Failed to delete remote MCP server",
       };
@@ -44,17 +38,13 @@ export function sourceDeleteSpec(
       return {
         title: "Delete tunneled MCP server",
         entityDescription: "the tunneled MCP source",
-        confirmLabel: "the source name",
-        confirmValue: formatTunneledMcpDisplay(target.source),
         successMessage: "Tunneled MCP server deleted",
         failureMessage: "Failed to delete tunneled MCP server",
       };
     case "unproxied":
       return {
         title: "Delete unproxied MCP server",
-        entityDescription: "the unproxied MCP server",
-        confirmLabel: "the server URL",
-        confirmValue: target.source.url,
+        entityDescription: "the unproxied MCP source",
         successMessage: "Unproxied MCP server deleted",
         failureMessage: "Failed to delete unproxied MCP server",
       };

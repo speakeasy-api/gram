@@ -117,7 +117,7 @@ export function DeleteHostedServerButton({
                 onClick={() => void handleDeleteMcpServer()}
                 disabled={isDeletingMcpServer || !usage.canConfirm}
               >
-                Delete MCP Server
+                Delete MCP server
               </Button>
             </div>
           </div>
