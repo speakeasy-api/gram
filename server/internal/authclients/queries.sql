@@ -170,6 +170,10 @@ SELECT
   ms.slug,
   ms.visibility,
   ms.toolset_id,
+  (ms.user_session_issuer_id IS NOT NULL)::boolean AS has_sign_in,
+  COALESCE(ms.requires_upstream_auth, ms.user_session_issuer_id IS NOT NULL)::boolean AS hosted_requires_assignment,
+  COALESCE(placement.total, 0)::bigint AS hosted_placements,
+  COALESCE(placement.reachable, 0)::bigint AS reachable_hosted_placements,
   (
     -- Upstream credentials the auth client records do not cover yet: no
     -- auth client was ever linked to the server, live or detached, but it
@@ -242,6 +246,20 @@ JOIN projects p
   ON p.id = ms.project_id
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
+-- Count stale placements as well as live ones: a stale placement is not an
+-- opt-out, and more than one placement is ambiguous even if only one is live.
+LEFT JOIN LATERAL (
+  SELECT count(*) AS total, count(i.id) AS reachable
+  FROM mcp_server_remote_session_clients AS a
+  LEFT JOIN remote_session_clients AS c
+    ON c.id = a.remote_session_client_id AND NOT c.deleted
+   AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  LEFT JOIN remote_session_issuers AS i
+    ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  WHERE ms.toolset_id IS NOT NULL AND a.mcp_server_id = ms.id
+    AND a.project_id = ms.project_id AND a.organization_id = p.organization_id AND NOT a.deleted
+) AS placement ON TRUE
 WHERE ms.id = ANY(@ids::uuid[])
   AND (sqlc.narg(project_id)::uuid IS NULL OR ms.project_id = sqlc.narg(project_id)::uuid)
   AND ms.deleted IS FALSE;

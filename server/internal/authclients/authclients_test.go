@@ -301,6 +301,12 @@ func TestSetHostedNoUpstreamRequiresExactServerWriteAndPreservesSignIn(t *testin
 		t.Helper()
 		result, err := ti.service.GetMcpServerAuthentication(reader, &gen.GetMcpServerAuthenticationPayload{McpServerID: id.String()})
 		require.NoError(t, err)
+		shared, err := authclients.ReadServerAuthentication(ctx, ti.conn, ti.organizationID, id)
+		require.NoError(t, err)
+		require.Equal(t, result, shared)
+		statuses, err := authclients.ReadServerAuthenticationStatuses(ctx, ti.conn, ti.organizationID, ti.projectID, []uuid.UUID{server, sibling})
+		require.NoError(t, err)
+		require.Equal(t, result.Status, statuses[id])
 		return result.Status
 	}
 	require.Equal(t, authclients.StatusSetupIncomplete, readStatus(server))
@@ -339,6 +345,9 @@ func TestSetHostedNoUpstreamRequiresExactServerWriteAndPreservesSignIn(t *testin
 	stored, err := testrepo.New(ti.conn).GetMCPServerRequiresUpstreamAuthFixture(ctx, server)
 	require.NoError(t, err)
 	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, stored)
+	require.Equal(t, authclients.StatusConfigured, readStatus(server))
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteRemoteSessionIssuerFixture(ctx, provider))
+	require.Equal(t, authclients.StatusSetupIncomplete, readStatus(server))
 
 	require.EqualValues(t, 1, auditCount(t, ti, audit.ActionMcpServerUpstreamAuthRequirementUpdate))
 }
