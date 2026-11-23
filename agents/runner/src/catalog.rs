@@ -25,6 +25,10 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::mcp_actor::{KnownTools, McpCmd};
 
+/// agentkit's default MCP namespace names every server tool
+/// `mcp_<server id>_<tool name>`.
+const MCP_TOOL_PREFIX: &str = "mcp_";
+
 /// Exposes the MCP catalog for dispatch without advertising any specs.
 pub struct HiddenCatalogSource {
     catalog: Arc<CatalogReader>,
@@ -54,9 +58,13 @@ impl ToolSource for HiddenCatalogSource {
                 cmd_tx: self.cmd_tx.clone(),
             }));
         }
-        // A tool discovered earlier whose session has since closed: connect
-        // its server when the call dispatches rather than reporting it unknown.
-        self.known.contains(&name.0).then(|| {
+        // A tool discovered earlier whose session has since closed, or an
+        // MCP-namespaced tool whose server has not connected yet (the model
+        // knows its name from the instructions, so it skips tool_search):
+        // connect the owning server when the call dispatches rather than
+        // reporting it unknown. The actor maps the name to a configured
+        // server and refuses names that map to none.
+        (self.known.contains(&name.0) || name.0.starts_with(MCP_TOOL_PREFIX)).then(|| {
             Arc::new(DeferredMcpTool {
                 spec: placeholder_spec(name),
                 catalog: self.catalog.clone(),
@@ -325,7 +333,7 @@ fn unknown_tool_message(name: &ToolName) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use agentkit_tools_core::dynamic_catalog;
@@ -376,6 +384,46 @@ mod tests {
             source.drain_catalog_events().is_empty(),
             "catalog churn must never surface as a spec change"
         );
+    }
+
+    #[tokio::test]
+    async fn undiscovered_namespaced_tool_connects_its_server_on_first_call() {
+        use agentkit_tools_core::{BasicToolExecutor, OwnedToolContext, ToolExecutor};
+        let (writer, reader) = dynamic_catalog("mcp");
+        let (cmd_tx, mut cmd_rx) = mpsc::channel(4);
+        tokio::spawn(async move {
+            while let Some(cmd) = cmd_rx.recv().await {
+                if let McpCmd::ConnectForTool { tool_name, reply } = cmd {
+                    assert_eq!(tool_name, "mcp_srv_echo");
+                    writer.upsert(echo());
+                    let _ = reply.send(Ok(()));
+                }
+            }
+        });
+        let source = HiddenCatalogSource::new(reader, cmd_tx, KnownTools::default());
+        assert!(
+            source.get(&ToolName::new("bun_run")).is_none(),
+            "names outside the MCP namespace fall through to the other sources"
+        );
+
+        let executor = BasicToolExecutor::new([Arc::new(source) as Arc<dyn ToolSource>]);
+        let owned = OwnedToolContext {
+            session_id: "s".into(),
+            turn_id: "t".into(),
+            metadata: Default::default(),
+            permissions: Arc::new(Policy(PermissionDecision::Allow)),
+            resources: Arc::new(()),
+            cancellation: None,
+            execution_scope: None,
+            approved_request: None,
+        };
+        let request = ToolRequest::new("call", "mcp_srv_echo", json!({}), "s", "t");
+        match executor.execute(request, &mut owned.borrowed()).await {
+            ToolExecutionOutcome::Completed(result) => {
+                assert!(matches!(result.result.output, ToolOutput::Text(ref s) if s == "echo"));
+            }
+            other => panic!("expected the call to dispatch after connecting, got {other:?}"),
+        }
     }
 
     #[test]

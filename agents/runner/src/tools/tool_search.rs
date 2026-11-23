@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::mcp_actor::{McpCmd, McpServerStatus};
+use crate::mcp_actor::{McpCmd, McpServerConnectionStatus, McpServerStatus};
 
 pub const TOOL_NAME: &str = "tool_search";
 
@@ -54,11 +54,13 @@ fn build_spec() -> ToolSpec {
 
     let description = "Search the catalog of MCP-backed tools attached to this assistant. \
 Those tools are not listed in your declared tool schema; this is how you discover them. \
-Results carry full input schemas for matches, a compact name index of the whole catalog, \
-and the connection status of every attached MCP server (including authorization links \
-for servers that require auth). A discovered tool is invoked by its exact name — \
-directly, or from a compose script via tool(name, input); it never appears in your \
-declared tool list. Also callable from inside compose scripts.";
+Keyword results carry full input schemas for matches, a compact name index of the whole \
+catalog, and the connection status of every attached MCP server (including authorization \
+links for servers that require auth). A `select:` query returns only the named tools' \
+schemas, plus any names it could not find and any server that is not connected. \
+A discovered tool is invoked by its exact name — directly, or from a compose script via \
+tool(name, input); it never appears in your declared tool list. Also callable from \
+inside compose scripts.";
 
     ToolSpec::new(TOOL_NAME, description, input_schema)
         .with_annotations(agentkit_tools_core::ToolAnnotations::default().with_idempotent(true))
@@ -105,46 +107,84 @@ impl Tool for ToolSearchTool {
             .into_iter()
             .filter(|spec| live_names.contains(spec.name.0.as_str()))
             .collect();
-        let matches = rank(&specs, &input.query);
-
-        let matched_tools: Vec<Value> = matches
-            .iter()
-            .map(|spec| {
-                let mut entry = serde_json::Map::new();
-                entry.insert("name".into(), Value::String(spec.name.0.clone()));
-                entry.insert(
-                    "description".into(),
-                    Value::String(spec.description.clone()),
-                );
-                entry.insert("input_schema".into(), spec.input_schema.clone());
-                if let Some(output_schema) = &spec.output_schema {
-                    entry.insert("output_schema".into(), output_schema.clone());
-                }
-                Value::Object(entry)
-            })
-            .collect();
-
-        let catalog_index: Vec<Value> = specs
-            .iter()
-            .map(|spec| {
-                json!({
-                    "name": spec.name.0,
-                    "brief": brief(&spec.description),
-                })
-            })
-            .collect();
-
-        let body = json!({
-            "matched_tools": matched_tools,
-            "catalog": catalog_index,
-            "servers": servers,
-        });
+        let body = search_body(&specs, &input.query, &servers);
 
         Ok(ToolResult::new(ToolResultPart::success(
             request.call_id,
             ToolOutput::Structured(body),
         )))
     }
+}
+
+/// Builds the search result. A `select:` query names the tools it wants, so it
+/// gets back only their schemas: the catalog index and the per-server tool
+/// lists would repeat what the model already has, on every select. Names that
+/// matched nothing and servers that are not connected (which carry the
+/// authorization link) are still reported, so a miss stays explainable.
+fn search_body(specs: &[ToolSpec], query: &str, servers: &[McpServerStatus]) -> Value {
+    let matches = rank(specs, query);
+    let matched_tools: Vec<Value> = matches.iter().map(|spec| full_entry(spec)).collect();
+
+    if let Some(wanted) = selection(query) {
+        let mut body = serde_json::Map::new();
+        body.insert("matched_tools".into(), Value::Array(matched_tools));
+        let not_found: Vec<&str> = wanted
+            .into_iter()
+            .filter(|w| !matches.iter().any(|spec| spec.name.0 == *w))
+            .collect();
+        if !not_found.is_empty() {
+            body.insert("not_found".into(), json!(not_found));
+        }
+        let unconnected: Vec<&McpServerStatus> = servers
+            .iter()
+            .filter(|server| server.status != McpServerConnectionStatus::Connected)
+            .collect();
+        if !unconnected.is_empty() {
+            body.insert("servers".into(), json!(unconnected));
+        }
+        return Value::Object(body);
+    }
+
+    let catalog_index: Vec<Value> = specs
+        .iter()
+        .map(|spec| {
+            json!({
+                "name": spec.name.0,
+                "brief": brief(&spec.description),
+            })
+        })
+        .collect();
+
+    json!({
+        "matched_tools": matched_tools,
+        "catalog": catalog_index,
+        "servers": servers,
+    })
+}
+
+fn full_entry(spec: &ToolSpec) -> Value {
+    let mut entry = serde_json::Map::new();
+    entry.insert("name".into(), Value::String(spec.name.0.clone()));
+    entry.insert(
+        "description".into(),
+        Value::String(spec.description.clone()),
+    );
+    entry.insert("input_schema".into(), spec.input_schema.clone());
+    if let Some(output_schema) = &spec.output_schema {
+        entry.insert("output_schema".into(), output_schema.clone());
+    }
+    Value::Object(entry)
+}
+
+/// The exact names a `select:` query asks for, or `None` for a keyword query.
+fn selection(query: &str) -> Option<Vec<&str>> {
+    query.trim().strip_prefix("select:").map(|selection| {
+        selection
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect()
+    })
 }
 
 fn brief(description: &str) -> String {
@@ -157,13 +197,7 @@ fn brief(description: &str) -> String {
 }
 
 fn rank<'a>(specs: &'a [ToolSpec], query: &str) -> Vec<&'a ToolSpec> {
-    let query = query.trim();
-    if let Some(selection) = query.strip_prefix("select:") {
-        let wanted: Vec<&str> = selection
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
+    if let Some(wanted) = selection(query) {
         return specs
             .iter()
             .filter(|spec| wanted.iter().any(|w| spec.name.0 == *w))
@@ -255,6 +289,78 @@ mod tests {
     fn rank_empty_query_matches_nothing() {
         let specs = vec![spec("mcp_srv_get_weather", "Reads a forecast.")];
         assert!(rank(&specs, "   ").is_empty());
+    }
+
+    fn status(id: &str, status: McpServerConnectionStatus, tools: &[&str]) -> McpServerStatus {
+        McpServerStatus {
+            id: id.into(),
+            status,
+            tools: tools.iter().map(|t| (*t).to_string()).collect(),
+            authorization_url: None,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn select_returns_only_the_selected_schemas() {
+        let specs = vec![
+            spec("mcp_srv_get_weather", "Reads a forecast."),
+            spec("mcp_srv_list_cities", "Cities with weather stations."),
+        ];
+        let servers = vec![
+            status(
+                "srv",
+                McpServerConnectionStatus::Connected,
+                &["mcp_srv_get_weather", "mcp_srv_list_cities"],
+            ),
+            status(
+                "auth",
+                McpServerConnectionStatus::AuthorizationRequired,
+                &[],
+            ),
+        ];
+        let body = search_body(&specs, "select:mcp_srv_get_weather,mcp_srv_nope", &servers);
+        let keys: Vec<&str> = body
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(keys, ["matched_tools", "not_found", "servers"]);
+        assert_eq!(body["matched_tools"].as_array().unwrap().len(), 1);
+        assert_eq!(body["matched_tools"][0]["name"], "mcp_srv_get_weather");
+        assert_eq!(body["not_found"], json!(["mcp_srv_nope"]));
+        assert_eq!(
+            body["servers"],
+            json!([{"id": "auth", "status": "authorization_required"}])
+        );
+
+        let body = search_body(&specs, "select:mcp_srv_get_weather", &servers[..1]);
+        let keys: Vec<&str> = body
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            keys,
+            ["matched_tools"],
+            "a clean select carries nothing else"
+        );
+    }
+
+    #[test]
+    fn keyword_search_keeps_catalog_index_and_server_status() {
+        let specs = vec![spec("mcp_srv_get_weather", "Reads a forecast.")];
+        let servers = vec![status(
+            "srv",
+            McpServerConnectionStatus::Connected,
+            &["mcp_srv_get_weather"],
+        )];
+        let body = search_body(&specs, "weather", &servers);
+        assert_eq!(body["matched_tools"][0]["name"], "mcp_srv_get_weather");
+        assert_eq!(body["catalog"][0]["name"], "mcp_srv_get_weather");
+        assert_eq!(body["servers"][0]["id"], "srv");
     }
 
     #[test]

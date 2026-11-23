@@ -64,8 +64,9 @@ pub enum McpCmd {
     },
     /// Sent by the catalog dispatch layer when the model calls a tool that a
     /// configured server exposed before its connection was closed — at a
-    /// credential boundary, typically. The actor connects the owning server
-    /// so the call can dispatch against the fresh session.
+    /// credential boundary, typically — or a namespaced tool of a configured
+    /// server that has not connected yet. The actor connects the owning
+    /// server so the call can dispatch against the fresh session.
     ConnectForTool {
         tool_name: String,
         reply: oneshot::Sender<Result<(), String>>,
@@ -342,16 +343,19 @@ impl McpActor {
         }
     }
 
-    /// Reconnects the configured server that last exposed `tool_name`, so a
-    /// discovered tool keeps dispatching after its session was closed.
+    /// Connects the configured server that owns `tool_name`: the one that last
+    /// exposed it, so a discovered tool keeps dispatching after its session
+    /// was closed, or else the one whose namespace the name carries, so a tool
+    /// the model already knows by name dispatches without a tool_search first.
     async fn connect_for_tool(&mut self, tool_name: &str) -> Result<(), String> {
-        let Some(id) = self
-            .known_tools
-            .server_for(tool_name)
-            .filter(|id| self.configured.contains_key(id))
-        else {
+        let owner = match self.known_tools.server_for(tool_name) {
+            Some(id) => Some(id).filter(|id| self.configured.contains_key(id)),
+            None => self.configured_server_for(tool_name),
+        };
+        let Some(id) = owner else {
             return Err(format!(
-                "tool {tool_name} does not map to a configured MCP server"
+                "tool {tool_name} does not map to a configured MCP server. Use tool_search \
+                 to discover available tools and their schemas."
             ));
         };
         if !self.is_connected(&id) {
@@ -419,13 +423,12 @@ impl McpActor {
             .collect()
     }
 
-    /// Reseats the connection owning `tool_name` after a transport-shaped
-    /// call failure. The server is recovered by inverting the manager's
-    /// tool namespace; the longest matching id wins so a server id that
-    /// prefixes another cannot capture its sibling's tools.
-    async fn reconnect_for_tool(&mut self, tool_name: &str) -> Result<(), String> {
-        let Some(id) = self
-            .configured
+    /// The configured server whose namespace `tool_name` carries, recovered
+    /// by inverting the manager's tool namespace; the longest matching id
+    /// wins so a server id that prefixes another cannot capture its
+    /// sibling's tools.
+    fn configured_server_for(&self, tool_name: &str) -> Option<String> {
+        self.configured
             .keys()
             .filter(|id| {
                 self.manager
@@ -435,7 +438,12 @@ impl McpActor {
             })
             .max_by_key(|id| id.len())
             .cloned()
-        else {
+    }
+
+    /// Reseats the connection owning `tool_name` after a transport-shaped
+    /// call failure.
+    async fn reconnect_for_tool(&mut self, tool_name: &str) -> Result<(), String> {
+        let Some(id) = self.configured_server_for(tool_name) else {
             return Err(format!(
                 "tool {tool_name} does not map to a configured MCP server"
             ));

@@ -1,10 +1,12 @@
 package logs
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -12,6 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
+
+// compactToolRows is how many per-target tool rows the compact summary keeps.
+const compactToolRows = 25
 
 type GetToolUsageSummary struct {
 	telemetry TelemetryService
@@ -27,6 +32,8 @@ type getToolUsageSummaryInput struct {
 	MetaMcpServerIDs   []string `json:"meta_mcp_server_ids,omitempty" jsonschema:"Gateway (meta MCP server) ids to include: calls dispatched through the gateway plus calls observed against it."`
 	HookSources        []string `json:"hook_sources,omitempty" jsonschema:"Hook plugin sources to include. Direct MCP calls have no hook source."`
 	ClientKeys         []string `json:"client_keys,omitempty" jsonschema:"MCP clients to include, lowercased as the client named itself at the initialize handshake. Use \"unattributed\" for calls whose caller reported no client name."`
+	IncludeTimeSeries  bool     `json:"include_time_series,omitempty" jsonschema:"Include the per-target and per-user time series (very large: one row per bucket per target or user). Defaults to false."`
+	IncludeBreakdowns  bool     `json:"include_breakdowns,omitempty" jsonschema:"Include every per-target tool row and the cross breakdowns of users by target and of tools by MCP client (large). Defaults to false: totals, targets, users, clients and the 25 per-target tool rows with the most failures are returned."`
 }
 
 func NewGetToolUsageSummaryTool(telemetrySvc TelemetryService) *GetToolUsageSummary {
@@ -38,7 +45,7 @@ func (s *GetToolUsageSummary) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "logs",
 		HandlerName: "get_tool_usage_summary",
 		Name:        "platform_get_tool_usage_summary",
-		Description: "Summarize target-aware tool usage for hosted MCP, tunneled MCP, gateways, shadow MCP, local tools, and skills in the current project. Use target_types=[\"tunneled_mcp_server\"] for questions like which tunneled MCPs the team uses.",
+		Description: "Summarize target-aware tool usage for hosted MCP, tunneled MCP, gateways, shadow MCP, local tools, and skills in the current project over a time window (default: the last 7 days). Returns a compact summary: totals, the top targets, users and MCP clients, and the 25 per-target tool rows with the most failures, with success and failure counts — use it for which-tools-or-MCP-servers-are-failing questions. Use target_types=[\"tunneled_mcp_server\"] for questions like which tunneled MCPs the team uses. Time series and cross breakdowns are omitted unless include_time_series or include_breakdowns is true.",
 		InputSchema: core.BuildInputSchema[getToolUsageSummaryInput](
 			core.WithPropertyFormat("from", "date-time"),
 			core.WithPropertyFormat("to", "date-time"),
@@ -66,6 +73,8 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		MetaMcpServerIDs:   nil,
 		HookSources:        nil,
 		ClientKeys:         nil,
+		IncludeTimeSeries:  false,
+		IncludeBreakdowns:  false,
 	}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -114,5 +123,34 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		return fmt.Errorf("get tool usage summary: %w", err)
 	}
 
+	// The time series and cross breakdowns are most of the result's size, and
+	// an assistant re-reads every tool result on each later step of its turn,
+	// so they are left out unless asked for.
+	if !input.IncludeTimeSeries {
+		result.TargetTimeSeries = nil
+		result.UserTimeSeries = nil
+	}
+	if !input.IncludeBreakdowns {
+		result.UsersByTarget = nil
+		result.ClientToolBreakdown = nil
+		result.TargetToolBreakdown = mostFailingToolRows(result.TargetToolBreakdown, compactToolRows)
+	}
+
 	return core.EncodeResult(wr, result)
+}
+
+// mostFailingToolRows keeps the n rows with the most failures, then the most
+// calls, so a compact summary still names the tools that are failing.
+func mostFailingToolRows(rows []*telemetry.ToolUsageTargetToolBreakdownRow, n int) []*telemetry.ToolUsageTargetToolBreakdownRow {
+	if len(rows) <= n {
+		return rows
+	}
+	sorted := slices.Clone(rows)
+	slices.SortStableFunc(sorted, func(a, b *telemetry.ToolUsageTargetToolBreakdownRow) int {
+		if c := cmp.Compare(b.FailureCount, a.FailureCount); c != 0 {
+			return c
+		}
+		return cmp.Compare(b.EventCount, a.EventCount)
+	})
+	return sorted[:n]
 }
