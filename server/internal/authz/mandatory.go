@@ -91,6 +91,9 @@ type MandatoryAuthorization struct {
 	narrowedProject *uuid.UUID
 	// workloadOwner is resolved by live admission, not credential claims.
 	workloadOwner string
+	// reportAuthorizerRefusal logs an allowed decision the policies of the
+	// user the credential acts for would refuse. Nil when nothing reports.
+	reportAuthorizerRefusal func(refused *Check, err error)
 }
 
 func (m MandatoryAuthorization) Caller() MandatoryCaller { return m.caller }
@@ -135,16 +138,17 @@ func (e *Engine) AuthorizeMandatory(ctx context.Context, checks ...Check) (Manda
 
 func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, error) {
 	m := MandatoryAuthorization{
-		publicAnonymous: false,
-		organizationID:  "",
-		caller:          MandatoryCallerAnonymous,
-		principalID:     "",
-		source:          MandatoryPolicySourceNone,
-		decided:         nil,
-		authorization:   grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false},
-		key:             nil,
-		narrowedProject: nil,
-		workloadOwner:   "",
+		publicAnonymous:         false,
+		organizationID:          "",
+		caller:                  MandatoryCallerAnonymous,
+		principalID:             "",
+		source:                  MandatoryPolicySourceNone,
+		decided:                 nil,
+		authorization:           grantAuthorization{policies: nil, representedUser: "", representedPolicies: nil, legacyAuthCeiling: false, attached: nil, credentialRemoved: false},
+		key:                     nil,
+		narrowedProject:         nil,
+		workloadOwner:           "",
+		reportAuthorizerRefusal: nil,
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -189,6 +193,9 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 	m.authorization = authorization
 	if m.caller == MandatoryCallerWorkload {
 		m.workloadOwner, _ = AdmittedWorkloadOwner(ctx)
+	}
+	m.reportAuthorizerRefusal = func(refused *Check, err error) {
+		reportAuthorizerRefusal(ctx, e.logger, authorization, refused, err)
 	}
 	return m, nil
 }
@@ -324,7 +331,11 @@ func (m MandatoryAuthorization) Decide(organizationID string, checks ...Check) (
 	if m.key != nil {
 		return m.decideAPIKey(checks)
 	}
-	return evaluateMandatory(m.authorization, MandatoryPolicySourceRequest, checks)
+	decision, err := evaluateMandatory(m.authorization, MandatoryPolicySourceRequest, checks)
+	if err == nil && decision.Allowed && m.reportAuthorizerRefusal != nil {
+		m.reportAuthorizerRefusal(m.authorization.authorizerRefusesEach(checks))
+	}
+	return decision, err
 }
 
 // validateMandatoryChecks rejects malformed checks before any admission. done
