@@ -1,10 +1,12 @@
 package mcp_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -13,9 +15,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// largeInventoryListingTime replaces the 3s production listing budget. These
+// inventories list in a few hundred milliseconds alone, but a full parallel
+// suite can slow one past 3s, and the member is then left out as unresponsive.
+const largeInventoryListingTime = 30 * time.Second
+
+func newLargeInventoryTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	ti.service.SetGatewayListingTime(largeInventoryListingTime)
+	return ctx, ti
+}
+
 func TestGatewayLargeInventoryApproval(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	ctx, ti := newLargeInventoryTestService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "large-catalog-" + uuid.NewString()
@@ -40,7 +54,7 @@ func TestGatewayLargeInventoryApproval(t *testing.T) {
 
 func TestGatewayOverLimitExplainsRecovery(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	ctx, ti := newLargeInventoryTestService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "over-limit-" + uuid.NewString()
@@ -58,7 +72,7 @@ func TestGatewayLargeSelectedInventoryApproval(t *testing.T) {
 	for _, kind := range []string{"manual", "annotation"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
-			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			ctx, ti := newLargeInventoryTestService(t)
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			slug := "selected-catalog-" + uuid.NewString()
@@ -97,7 +111,7 @@ func TestGatewayLargeInventoryConsentBoundary(t *testing.T) {
 	for _, specific := range []bool{false, true} {
 		t.Run(fmt.Sprintf("specific=%t", specific), func(t *testing.T) {
 			t.Parallel()
-			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			ctx, ti := newLargeInventoryTestService(t)
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			slug := "bounded-catalog-" + uuid.NewString()

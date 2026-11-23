@@ -327,6 +327,10 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// gatewayListingTime overrides maxGatewayListingTime in tests whose
+	// inventories are large enough to outrun it on a loaded machine; zero
+	// keeps maxGatewayListingTime.
+	gatewayListingTime time.Duration
 	// codeSessions keeps proxied member sessions for verified callers'
 	// rapid successive Code Mode executions.
 	codeSessions *codeMemberSessions
@@ -759,6 +763,7 @@ func NewService(
 		tunnelManager:          newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
 		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
+		gatewayListingTime:     0,
 	}
 	if remoteChallengeMgr != nil {
 		remoteChallengeMgr.SetTypedAuthorizationValidator(service.ValidateRemoteLoginTypedAuthorization)
