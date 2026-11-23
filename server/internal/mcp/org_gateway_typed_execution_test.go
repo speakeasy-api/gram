@@ -33,10 +33,11 @@ import (
 func TestOrganizationGatewayTypedPersonalConsentExecution(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, clientType          string
-		picker, alternate, repeat bool
+		name, clientType                   string
+		picker, alternate, repeat, inspect bool
 	}{
 		{name: "personal picker", clientType: authz.AuthClientTypeRemoteSession, picker: true, alternate: true},
+		{name: "gateway Inspect chooses OAuth over static", clientType: authz.AuthClientTypeRemoteSession, picker: true, inspect: true},
 		{name: "EMA picker", clientType: authz.AuthClientTypeEMA, picker: true, alternate: true},
 		{name: "sole EMA", clientType: authz.AuthClientTypeEMA},
 		{name: "default EMA with another offer", clientType: authz.AuthClientTypeEMA, alternate: true},
@@ -44,12 +45,12 @@ func TestOrganizationGatewayTypedPersonalConsentExecution(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			testOrganizationGatewayTypedPersonalConsentExecution(t, tc.clientType, tc.picker, tc.alternate, tc.repeat)
+			testOrganizationGatewayTypedPersonalConsentExecution(t, tc.clientType, tc.picker, tc.alternate, tc.repeat, tc.inspect)
 		})
 	}
 }
 
-func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientType string, picker, alternate, repeat bool) {
+func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientType string, picker, alternate, repeat, inspect bool) {
 	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
@@ -75,7 +76,7 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 	if picker && alternate {
 		tokens = append([]string{"unselected-personal-token"}, tokens...)
 	}
-	if !picker && alternate {
+	if (!picker && alternate) || inspect {
 		seedStaticIssuanceOffer(t, ctx, ti, ac.ActiveOrganizationID, projectID, serverID)
 	}
 	for i, token := range tokens {
@@ -103,6 +104,30 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 	require.NoError(t, err)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)
+	statusFor := func(token string) metamcp.ConnectionStatusServer {
+		t.Helper()
+		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": metamcp.ToolConnectionStatus, "arguments": map[string]any{}})
+		w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, body)
+		require.NoError(t, err)
+		var result struct {
+			StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
+		}
+		require.NoError(t, json.Unmarshal(decodeRPCResponse(t, w)["result"], &result))
+		for _, member := range result.StructuredContent.Servers {
+			if member.Slug == "typed-personal" {
+				return member
+			}
+		}
+		t.Fatal("gateway Inspect status did not include the OAuth member")
+		return metamcp.ConnectionStatusServer{}
+	}
+	if inspect {
+		// A mint-shaped progressive session has no reviewed choice, even
+		// though this viewer already has an OAuth connection.
+		status := statusFor(mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeProgressive))
+		require.Equal(t, metamcp.SignInNeedsConsent, status.Status)
+		require.Contains(t, status.Detail, "Choose a connection")
+	}
 	approveAndCall := func() {
 		t.Helper()
 		stateID := uuid.NewString()
@@ -167,6 +192,9 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		choice, err := authclientfixtures.New(ti.conn).GetSelectionFixture(ctx, authclientfixtures.GetSelectionFixtureParams{CredentialID: session.CredentialID, McpServerID: serverID})
 		require.NoError(t, err)
 		require.Equal(t, conv.ToNullUUID(selectedClient), choice.AuthClientID)
+		if inspect {
+			require.Equal(t, metamcp.SignInVerifiedAtConsent, statusFor(tokens.AccessToken).Status)
+		}
 
 		for _, name := range []string{"typed-personal--ping", "typed-excluded--other"} {
 			response, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": name, "arguments": map[string]any{}}}))

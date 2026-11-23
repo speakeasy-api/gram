@@ -233,6 +233,14 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
 			return s.staleMemberStatus(ctx, logger, gate, member)
 		}
+		if gate.caller.kind == gatewayCallerPerson && gate.connectURL != "" && member.authClient != nil && member.authClient.outcome == authClientGap {
+			switch member.authClient.reason {
+			case authClientReasonAmbiguous, authClientReasonUnmapped, authClientReasonClientGone, authClientReasonClientDeleted, authClientReasonClientDisabled, authClientReasonUnassociated, authClientReasonRegistration, authClientReasonDetached:
+				if offered, readErr := requiresAuth(ctx, member); readErr == nil && offered {
+					return signInRow(metamcp.SignInNeedsConsent, "Choose a current connection for this server when you sign in to the gateway.", nil)
+				}
+			}
+		}
 		return memberFailureSignIn(ctx, *gate, member, err)
 	}
 	if !dial.anonymous {
@@ -298,6 +306,9 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 // agent gateway, a missing or unusable connection is a row the agent's
 // sign-in step fixes.
 func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
+	if _, missingChoice := errors.AsType[memberChoiceGapError](err); missingChoice && gate.caller.kind == gatewayCallerPerson && gate.connectURL != "" {
+		return signInRow(metamcp.SignInNeedsConsent, "Choose a connection for this server when you sign in to the gateway.", nil)
+	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable {
 		if gate.agentFix != nil {
 			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)
