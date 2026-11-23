@@ -60,6 +60,9 @@ type Tenant struct {
 	ProjectSlug      string `json:"project_slug"`
 	// SeededUserPrefix prefixes the ids of the seeded fictional members.
 	SeededUserPrefix string `json:"seeded_user_prefix"`
+	// CustomDomain is the verified custom domain the seed gives the
+	// organization.
+	CustomDomain string `json:"custom_domain"`
 }
 
 // Config fixes everything the surface acts on.

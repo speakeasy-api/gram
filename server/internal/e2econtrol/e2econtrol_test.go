@@ -91,7 +91,7 @@ func validConfig(t *testing.T, h *harness, site string) e2econtrol.Config {
 		Confined:  false,
 		SiteURL:   siteURL,
 		Build:     "0123abc",
-		Tenant:    e2econtrol.Tenant{OrganizationID: testOrgID, OrganizationSlug: "e2e-org", ProjectSlug: "default", SeededUserPrefix: "user_e2e_"},
+		Tenant:    e2econtrol.Tenant{OrganizationID: testOrgID, OrganizationSlug: "e2e-org", ProjectSlug: "default", SeededUserPrefix: "user_e2e_", CustomDomain: "mcp.e2e-org.example.com"},
 		Reseed: func(ctx context.Context) error {
 			h.reseeds++
 			return h.reseed(ctx)
@@ -207,7 +207,7 @@ func TestTenantNamesTheTestOrganizationAndTheBuild(t *testing.T) {
 
 	res := do(t, h.mux, http.MethodGet, "/rpc/e2e.tenant", testToken)
 	require.Equal(t, http.StatusOK, res.Code)
-	require.JSONEq(t, `{"organization_slug":"e2e-org","project_slug":"default","seeded_user_prefix":"user_e2e_","build":"0123abc"}`, res.Body.String())
+	require.JSONEq(t, `{"organization_slug":"e2e-org","project_slug":"default","seeded_user_prefix":"user_e2e_","custom_domain":"mcp.e2e-org.example.com","build":"0123abc"}`, res.Body.String())
 	require.Zero(t, h.reseeds, "reading the tenant must not reseed")
 }
 

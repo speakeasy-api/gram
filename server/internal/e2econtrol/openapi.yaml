@@ -26,13 +26,21 @@ paths:
               schema:
                 type: object
                 required:
-                  [organization_slug, project_slug, seeded_user_prefix, build]
+                  [
+                    organization_slug,
+                    project_slug,
+                    seeded_user_prefix,
+                    custom_domain,
+                    build,
+                  ]
                 properties:
                   organization_slug:
                     type: string
                   project_slug:
                     type: string
                   seeded_user_prefix:
+                    type: string
+                  custom_domain:
                     type: string
                   build:
                     type: string
