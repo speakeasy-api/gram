@@ -539,6 +539,8 @@ export function ChallengesTab({
   const wrappedActionsColumn: Column<ChallengeBucket> = useMemo(
     () => ({
       ...actionsColumn,
+      // Review is wider than Grant; give it room only when a row shows it.
+      width: requestByBucketId.size > 0 ? "120px" : actionsColumn.width,
       render: (row: ChallengeBucket) => {
         if (expandedChildIds.has(row.id)) return null;
         const request = requestByBucketId.get(row.id);
