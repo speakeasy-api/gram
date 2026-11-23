@@ -538,7 +538,7 @@ it("reviews a missing choice and inspects with the approved session", () => {
       tools: [],
       error: "no connection chosen",
       isLoading: false,
-      refetch: vi.fn(),
+      refetch: vi.fn<() => void>(),
     },
   ];
   state.unconnected = ["oauth"];
