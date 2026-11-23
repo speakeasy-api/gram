@@ -11,7 +11,7 @@ export type McpServerKind = "hosted" | "remote" | "tunneled" | "unproxied";
 
 export const MCP_SERVER_KIND_LABEL: Record<McpServerKind, string> = {
   hosted: "Hosted by Speakeasy",
-  remote: "Remote (by URL)",
+  remote: "Remote",
   tunneled: "Tunneled",
   unproxied: "Unproxied",
 };
