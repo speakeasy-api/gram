@@ -56,9 +56,7 @@
             "description": "Exact tool names from search_platform_tools."
           }
         },
-        "required": [
-          "names"
-        ],
+        "required": ["names"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -85,9 +83,7 @@
             "description": "Arguments matching the tool's input schema from describe_platform_tool."
           }
         },
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -175,12 +171,7 @@
           },
           "reasoning_effort": {
             "type": "string",
-            "enum": [
-              "none",
-              "low",
-              "medium",
-              "high"
-            ]
+            "enum": ["none", "low", "medium", "high"]
           }
         },
         "required": [
@@ -238,10 +229,7 @@
             "description": "remove the choice so the next turn makes it from the server's configuration"
           },
           "expected_version": {
-            "type": [
-              "null",
-              "integer"
-            ],
+            "type": ["null", "integer"],
             "description": "the profile version from a fresh preview, required with confirmed:true; on conflict preview again and reconfirm"
           },
           "confirmed": {
@@ -249,11 +237,7 @@
             "description": "false previews every profile; true only after explicit confirmation of this exact assistant, trigger, context, server and choice"
           }
         },
-        "required": [
-          "project_slug",
-          "assistant_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "assistant_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -284,72 +268,39 @@
                 "type": "string"
               },
               "name": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "slug": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "description": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "classifier_criteria": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "instructions": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "mode": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "match_expression": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "enabled": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
+                "type": ["null", "boolean"]
               },
               "input_strategy": {
-                "type": [
-                  "null",
-                  "string"
-                ],
+                "type": ["null", "string"],
                 "description": "single_message (default) or sliding_window; classify the target using timestamp-ordered preceding context"
               },
               "window_size": {
-                "type": [
-                  "null",
-                  "integer"
-                ],
+                "type": ["null", "integer"],
                 "description": "total sliding window messages, from 2 to 10; defaults to 5; omission preserves updates"
               },
               "signals": {
-                "type": [
-                  "null",
-                  "array"
-                ],
+                "type": ["null", "array"],
                 "items": {
                   "type": "object",
                   "properties": {
@@ -357,36 +308,22 @@
                       "type": "string"
                     },
                     "new_signal": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": ["null", "object"],
                       "properties": {
                         "name": {
                           "type": "string"
                         },
                         "slug": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         },
                         "description": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         },
                         "classifier_criteria": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         }
                       },
-                      "required": [
-                        "name"
-                      ],
+                      "required": ["name"],
                       "additionalProperties": false
                     }
                   },
@@ -395,9 +332,7 @@
               }
             },
             "description": "complete desired proposal; operation must match the tool name",
-            "required": [
-              "operation"
-            ],
+            "required": ["operation"],
             "additionalProperties": false
           },
           "confirmed": {
@@ -417,11 +352,7 @@
             "description": "required for confirmation; reuse only for retries of this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "proposal",
-          "confirmed"
-        ],
+        "required": ["project_slug", "proposal", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -452,72 +383,39 @@
                 "type": "string"
               },
               "name": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "slug": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "description": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "classifier_criteria": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "instructions": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "mode": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "match_expression": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "enabled": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
+                "type": ["null", "boolean"]
               },
               "input_strategy": {
-                "type": [
-                  "null",
-                  "string"
-                ],
+                "type": ["null", "string"],
                 "description": "single_message (default) or sliding_window; classify the target using timestamp-ordered preceding context"
               },
               "window_size": {
-                "type": [
-                  "null",
-                  "integer"
-                ],
+                "type": ["null", "integer"],
                 "description": "total sliding window messages, from 2 to 10; defaults to 5; omission preserves updates"
               },
               "signals": {
-                "type": [
-                  "null",
-                  "array"
-                ],
+                "type": ["null", "array"],
                 "items": {
                   "type": "object",
                   "properties": {
@@ -525,36 +423,22 @@
                       "type": "string"
                     },
                     "new_signal": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": ["null", "object"],
                       "properties": {
                         "name": {
                           "type": "string"
                         },
                         "slug": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         },
                         "description": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         },
                         "classifier_criteria": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         }
                       },
-                      "required": [
-                        "name"
-                      ],
+                      "required": ["name"],
                       "additionalProperties": false
                     }
                   },
@@ -563,9 +447,7 @@
               }
             },
             "description": "complete desired proposal; operation must match the tool name",
-            "required": [
-              "operation"
-            ],
+            "required": ["operation"],
             "additionalProperties": false
           },
           "confirmed": {
@@ -585,11 +467,7 @@
             "description": "required for confirmation; reuse only for retries of this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "proposal",
-          "confirmed"
-        ],
+        "required": ["project_slug", "proposal", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -620,72 +498,39 @@
                 "type": "string"
               },
               "name": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "slug": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "description": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "classifier_criteria": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "instructions": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "mode": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "match_expression": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "enabled": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
+                "type": ["null", "boolean"]
               },
               "input_strategy": {
-                "type": [
-                  "null",
-                  "string"
-                ],
+                "type": ["null", "string"],
                 "description": "single_message (default) or sliding_window; classify the target using timestamp-ordered preceding context"
               },
               "window_size": {
-                "type": [
-                  "null",
-                  "integer"
-                ],
+                "type": ["null", "integer"],
                 "description": "total sliding window messages, from 2 to 10; defaults to 5; omission preserves updates"
               },
               "signals": {
-                "type": [
-                  "null",
-                  "array"
-                ],
+                "type": ["null", "array"],
                 "items": {
                   "type": "object",
                   "properties": {
@@ -693,36 +538,22 @@
                       "type": "string"
                     },
                     "new_signal": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": ["null", "object"],
                       "properties": {
                         "name": {
                           "type": "string"
                         },
                         "slug": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         },
                         "description": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         },
                         "classifier_criteria": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         }
                       },
-                      "required": [
-                        "name"
-                      ],
+                      "required": ["name"],
                       "additionalProperties": false
                     }
                   },
@@ -731,9 +562,7 @@
               }
             },
             "description": "complete desired proposal; operation must match the tool name",
-            "required": [
-              "operation"
-            ],
+            "required": ["operation"],
             "additionalProperties": false
           },
           "confirmed": {
@@ -753,11 +582,7 @@
             "description": "required for confirmation; reuse only for retries of this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "proposal",
-          "confirmed"
-        ],
+        "required": ["project_slug", "proposal", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -788,72 +613,39 @@
                 "type": "string"
               },
               "name": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "slug": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "description": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "classifier_criteria": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "instructions": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "mode": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "match_expression": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+                "type": ["null", "string"]
               },
               "enabled": {
-                "type": [
-                  "null",
-                  "boolean"
-                ]
+                "type": ["null", "boolean"]
               },
               "input_strategy": {
-                "type": [
-                  "null",
-                  "string"
-                ],
+                "type": ["null", "string"],
                 "description": "single_message (default) or sliding_window; classify the target using timestamp-ordered preceding context"
               },
               "window_size": {
-                "type": [
-                  "null",
-                  "integer"
-                ],
+                "type": ["null", "integer"],
                 "description": "total sliding window messages, from 2 to 10; defaults to 5; omission preserves updates"
               },
               "signals": {
-                "type": [
-                  "null",
-                  "array"
-                ],
+                "type": ["null", "array"],
                 "items": {
                   "type": "object",
                   "properties": {
@@ -861,36 +653,22 @@
                       "type": "string"
                     },
                     "new_signal": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": ["null", "object"],
                       "properties": {
                         "name": {
                           "type": "string"
                         },
                         "slug": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         },
                         "description": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         },
                         "classifier_criteria": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": ["null", "string"]
                         }
                       },
-                      "required": [
-                        "name"
-                      ],
+                      "required": ["name"],
                       "additionalProperties": false
                     }
                   },
@@ -899,9 +677,7 @@
               }
             },
             "description": "complete desired proposal; operation must match the tool name",
-            "required": [
-              "operation"
-            ],
+            "required": ["operation"],
             "additionalProperties": false
           },
           "confirmed": {
@@ -921,11 +697,7 @@
             "description": "required for confirmation; reuse only for retries of this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "proposal",
-          "confirmed"
-        ],
+        "required": ["project_slug", "proposal", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -959,9 +731,7 @@
             "description": "page size from 1 to 100; defaults to 20"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -995,9 +765,7 @@
             "description": "page size from 1 to 100; defaults to 20"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1023,10 +791,7 @@
             "description": "exact sensor UUID returned by find_sensors"
           }
         },
-        "required": [
-          "project_slug",
-          "sensor_id"
-        ],
+        "required": ["project_slug", "sensor_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1052,18 +817,12 @@
             "description": "boolean CEL expression over message.role; at most 4096 bytes"
           },
           "examples": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "object",
               "properties": {
                 "role": {
-                  "type": [
-                    "null",
-                    "string"
-                  ],
+                  "type": ["null", "string"],
                   "description": "user, assistant, system, or tool; omit to test absent message context"
                 }
               },
@@ -1072,11 +831,7 @@
             "description": "up to 20 caller-supplied metadata examples; never fetches transcripts or runs inference"
           }
         },
-        "required": [
-          "project_slug",
-          "match_expression",
-          "examples"
-        ],
+        "required": ["project_slug", "match_expression", "examples"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1114,11 +869,7 @@
             "description": "true only after the user confirms the exact project, source snapshot, active snapshot, and project-wide impact shown in the preview"
           }
         },
-        "required": [
-          "project_slug",
-          "idempotency_key",
-          "confirmed"
-        ],
+        "required": ["project_slug", "idempotency_key", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -1144,10 +895,7 @@
             "description": "exact organization-tier workload issuer UUID; never a name or URL"
           }
         },
-        "required": [
-          "project_slug",
-          "issuer_id"
-        ],
+        "required": ["project_slug", "issuer_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1289,10 +1037,7 @@
             "description": "tool_exposure.next_tool_cursor from the previous get_mcp read of this same server; omit for the first page"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1318,10 +1063,7 @@
             "description": "exact MCP server ID, not a Platform MCP registration or legacy toolset ID"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_server_id"
-        ],
+        "required": ["project_slug", "mcp_server_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1389,11 +1131,7 @@
             "description": "false previews without changing anything; true only after the user confirms this exact issuer and identity provider"
           }
         },
-        "required": [
-          "user_session_issuer_id",
-          "issuer_url",
-          "confirmed"
-        ],
+        "required": ["user_session_issuer_id", "issuer_url", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -1423,10 +1161,7 @@
             "description": "false previews without changing anything; true only after the user confirms removing this issuer's trust"
           }
         },
-        "required": [
-          "user_session_issuer_id",
-          "confirmed"
-        ],
+        "required": ["user_session_issuer_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -1471,11 +1206,7 @@
             "description": "ID of the exact MCP server or gateway"
           }
         },
-        "required": [
-          "project_slug",
-          "target_kind",
-          "target_id"
-        ],
+        "required": ["project_slug", "target_kind", "target_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1497,10 +1228,7 @@
             "description": "organization, gateway, or project; gateway requires gateway_id and project requires project_slug"
           },
           "gateway_id": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "exact gateway UUID for gateway scope; omit otherwise"
           },
           "project_slug": {
@@ -1508,25 +1236,16 @@
             "description": "the project's slug, as list_projects returns it, for project scope, selecting that project's Project Gateway; omit otherwise"
           },
           "search": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "literal identity name, email, or subject search; at most 200 Unicode characters; identities are omitted from results",
             "maxLength": 200
           },
           "server_id": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "exact member server UUID"
           },
           "provider_id": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "exact upstream provider issuer UUID"
           },
           "status": {
@@ -1534,17 +1253,11 @@
             "description": "active, expired, revoked, or all; defaults to active"
           },
           "created_after": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "inclusive creation timestamp in RFC3339 format"
           },
           "created_before": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "exclusive creation timestamp in RFC3339 format"
           },
           "sort": {
@@ -1552,10 +1265,7 @@
             "description": "newest, oldest, last_used, or expiry"
           },
           "cursor": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "next_cursor from the previous page; reuse only with identical filters and ordering"
           },
           "limit": {
@@ -1565,9 +1275,7 @@
             "maximum": 100
           }
         },
-        "required": [
-          "scope"
-        ],
+        "required": ["scope"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1589,9 +1297,7 @@
             "description": "exact agent UUID, as list_recent_tool_calls returns it or the agent's dashboard page shows it"
           }
         },
-        "required": [
-          "agent_id"
-        ],
+        "required": ["agent_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1613,23 +1319,15 @@
             "description": "exact agent UUID, as list_recent_tool_calls returns it or the agent's dashboard page shows it"
           },
           "from": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "inclusive RFC3339 start of the period; defaults to seven days before to"
           },
           "to": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "exclusive RFC3339 end of the period; defaults to now; at most 90 days after from"
           }
         },
-        "required": [
-          "agent_id"
-        ],
+        "required": ["agent_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1813,9 +1511,7 @@
             "description": "maximum number of tools to return; server clamps this to 100"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -1841,10 +1537,7 @@
             "description": "exact MCP server ID from find_mcp or get_mcp"
           },
           "tool_urns": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
@@ -1896,10 +1589,7 @@
             "description": "exact MCP server ID from find_mcp or get_mcp"
           },
           "tool_urns": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
@@ -1951,10 +1641,7 @@
             "description": "display name for the new MCP server; at most 60 characters"
           },
           "tool_urns": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
@@ -2001,21 +1688,14 @@
             "description": "display name for the gateway, at most 100 characters"
           },
           "mcp_ids": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
             "description": "exact IDs of the MCP servers to put behind the gateway, from find_mcp in this project, in the order the gateway lists them; at most 50"
           }
         },
-        "required": [
-          "project_slug",
-          "name",
-          "mcp_ids"
-        ],
+        "required": ["project_slug", "name", "mcp_ids"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -2041,21 +1721,14 @@
             "description": "exact ID of the gateway to change"
           },
           "mcp_ids": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
             "description": "the complete list of MCP servers the gateway should front afterwards, in order; servers left out are removed and an empty list removes them all; at most 50"
           }
         },
-        "required": [
-          "project_slug",
-          "gateway_id",
-          "mcp_ids"
-        ],
+        "required": ["project_slug", "gateway_id", "mcp_ids"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -2085,11 +1758,7 @@
             "description": "false to preview the exact slug without creating anything; true only after the user confirmed this exact name and the slug the preview returned"
           }
         },
-        "required": [
-          "name",
-          "idempotency_key",
-          "confirmed"
-        ],
+        "required": ["name", "idempotency_key", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -2123,12 +1792,7 @@
             "description": "true only after the user confirmed this exact project and new name"
           }
         },
-        "required": [
-          "project_slug",
-          "name",
-          "idempotency_key",
-          "confirmed"
-        ],
+        "required": ["project_slug", "name", "idempotency_key", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -2162,12 +1826,7 @@
             "description": "why you need this MCP server; required and visible to reviewers"
           }
         },
-        "required": [
-          "project_slug",
-          "target_kind",
-          "target",
-          "justification"
-        ],
+        "required": ["project_slug", "target_kind", "target", "justification"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -2193,10 +1852,7 @@
             "description": "request ID returned by request_mcp_review"
           }
         },
-        "required": [
-          "project_slug",
-          "request_id"
-        ],
+        "required": ["project_slug", "request_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -2281,9 +1937,7 @@
             "maxLength": 128
           }
         },
-        "required": [
-          "policy_id"
-        ],
+        "required": ["policy_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -2340,9 +1994,7 @@
         "properties": {
           "confirmed": {
             "type": "boolean",
-            "enum": [
-              true
-            ]
+            "enum": [true]
           },
           "expected_version": {
             "type": "string",
@@ -2465,11 +2117,7 @@
           "action": {
             "type": "string",
             "description": "What happens when the policy fires; default flag. MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools. One of:\nblock: Deny the prompt or tool call that matched.\nflag: Log the finding for review without interrupting the session.\nwarn: Warn the user and require acknowledgement before the action proceeds; falls back to blocking where confirmation is not possible.",
-            "enum": [
-              "block",
-              "flag",
-              "warn"
-            ]
+            "enum": ["block", "flag", "warn"]
           },
           "approved_email_domains": {
             "type": "array",
@@ -2520,10 +2168,7 @@
                   "uniqueItems": true
                 }
               },
-              "required": [
-                "category",
-                "message_types"
-              ],
+              "required": ["category", "message_types"],
               "additionalProperties": false
             },
             "description": "policy_type standard only. Optional per-category override of which message surfaces are scanned. Omit to use the recommended scope for each category.",
@@ -2859,9 +2504,7 @@
                       "uniqueItems": true
                     }
                   },
-                  "required": [
-                    "mcp_server_id"
-                  ],
+                  "required": ["mcp_server_id"],
                   "additionalProperties": false
                 },
                 "description": "MCP servers the policy covers. Required unless all_servers is true.",
@@ -2896,10 +2539,7 @@
           "policy_type": {
             "type": "string",
             "description": "Kind of policy to build by hand; required unless preset is named, and left out when it is. One of:\nprompt_based: A plain-language instruction judged by the policy model on each in-scope message. Use when the risk is about intent or context, such as destructive changes to production.\nstandard: Built-in detectors chosen with sources and presidio_entities. Deterministic and cheap; use when the risk is a recognizable pattern such as a credential or a card number.",
-            "enum": [
-              "standard",
-              "prompt_based"
-            ]
+            "enum": ["standard", "prompt_based"]
           },
           "preset": {
             "type": "string",
@@ -3011,10 +2651,7 @@
             "maxLength": 500
           }
         },
-        "required": [
-          "project_slug",
-          "idempotency_key"
-        ],
+        "required": ["project_slug", "idempotency_key"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -3048,11 +2685,7 @@
               "action": {
                 "type": "string",
                 "description": "What happens when the policy fires; default flag. MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools. One of:\nblock: Deny the prompt or tool call that matched.\nflag: Log the finding for review without interrupting the session.\nwarn: Warn the user and require acknowledgement before the action proceeds; falls back to blocking where confirmation is not possible.",
-                "enum": [
-                  "block",
-                  "flag",
-                  "warn"
-                ]
+                "enum": ["block", "flag", "warn"]
               },
               "approved_email_domains": {
                 "type": "array",
@@ -3073,9 +2706,7 @@
                     "properties": {
                       "confirm": {
                         "type": "boolean",
-                        "enum": [
-                          true
-                        ]
+                        "enum": [true]
                       },
                       "principal_urns": {
                         "type": "array",
@@ -3092,11 +2723,7 @@
                         "const": "everyone"
                       }
                     },
-                    "required": [
-                      "type",
-                      "principal_urns",
-                      "confirm"
-                    ],
+                    "required": ["type", "principal_urns", "confirm"],
                     "additionalProperties": false
                   },
                   {
@@ -3104,9 +2731,7 @@
                     "properties": {
                       "confirm": {
                         "type": "boolean",
-                        "enum": [
-                          true
-                        ]
+                        "enum": [true]
                       },
                       "principal_urns": {
                         "type": "array",
@@ -3123,11 +2748,7 @@
                         "const": "targeted"
                       }
                     },
-                    "required": [
-                      "type",
-                      "principal_urns",
-                      "confirm"
-                    ],
+                    "required": ["type", "principal_urns", "confirm"],
                     "additionalProperties": false
                   }
                 ]
@@ -3168,10 +2789,7 @@
                       "uniqueItems": true
                     }
                   },
-                  "required": [
-                    "category",
-                    "message_types"
-                  ],
+                  "required": ["category", "message_types"],
                   "additionalProperties": false
                 },
                 "description": "Optional per-category override of which message surfaces are scanned. Omit to use the recommended scope for each category.",
@@ -3609,12 +3227,7 @@
           "match_type": {
             "type": "string",
             "description": "What match_value names. exact: one literal value, such as a known test key. rule_id: one detector rule. source: one detector source. entity_type: one personal-data entity type.",
-            "enum": [
-              "exact",
-              "rule_id",
-              "source",
-              "entity_type"
-            ]
+            "enum": ["exact", "rule_id", "source", "entity_type"]
           },
           "match_value": {
             "type": "string",
@@ -4113,13 +3726,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "severity",
-                "data_type",
-                "team",
-                "app",
-                "user"
-              ]
+              "enum": ["severity", "data_type", "team", "app", "user"]
             },
             "description": "Optional independent per-alert finding histograms. Each returns top 200 buckets plus explicit truncation. Empty bucket means unknown. Users are organization-scoped pseudonyms; app is observed chat_source.",
             "maxItems": 5,
@@ -4134,13 +3741,7 @@
           "severity": {
             "type": "string",
             "description": "Exact severity band; default critical. Use all for no severity filter. Critical is rule signal score \u003e=9.",
-            "enum": [
-              "critical",
-              "high",
-              "medium",
-              "low",
-              "all"
-            ]
+            "enum": ["critical", "high", "medium", "low", "all"]
           },
           "to": {
             "type": "string",
@@ -4186,9 +3787,7 @@
             "maxLength": 500
           }
         },
-        "required": [
-          "description"
-        ],
+        "required": ["description"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4387,9 +3986,7 @@
             "description": "Exclusive detection time in RFC3339. Defaults to now. Maximum interval 31 days."
           }
         },
-        "required": [
-          "category"
-        ],
+        "required": ["category"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4452,10 +4049,7 @@
             "description": "whether sensitive fields are included: exclude (default) or include"
           },
           "enabled": {
-            "type": [
-              "null",
-              "boolean"
-            ],
+            "type": ["null", "boolean"],
             "description": "whether delivery starts immediately; defaults to true"
           },
           "min_severity": {
@@ -4687,9 +4281,7 @@
             "description": "maximum calls to return; defaults to 10 and is capped at 50"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4723,11 +4315,7 @@
             "description": "24h or 7d (default)"
           }
         },
-        "required": [
-          "project_slug",
-          "target_kind",
-          "target_id"
-        ],
+        "required": ["project_slug", "target_kind", "target_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4786,9 +4374,7 @@
             "description": "maximum targets to return; server clamps this to 50"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4814,10 +4400,7 @@
             "description": "short-lived opaque target reference returned by list_shadow_mcp_inventory"
           }
         },
-        "required": [
-          "project_slug",
-          "target_reference"
-        ],
+        "required": ["project_slug", "target_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -4851,10 +4434,7 @@
             "description": "bounded reason for the decision; required and stored in the audit trail"
           },
           "audience_references": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
@@ -4907,10 +4487,7 @@
             "description": "allowed: every server connects unless denied, and the managed policy is removed; blocked: every server nobody approved is blocked"
           },
           "audience_references": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
@@ -5073,10 +4650,7 @@
             "description": "one MDM provider, e.g. jamf or kandji, which leaves out agent-only machines; omit for the whole fleet"
           },
           "in_inventory": {
-            "type": [
-              "null",
-              "boolean"
-            ],
+            "type": ["null", "boolean"],
             "description": "true for devices a connected MDM holds, false for machines only their agent reports; omit for both"
           },
           "coverage_bucket": {
@@ -5148,9 +4722,7 @@
             "maxLength": 128
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5222,9 +4794,7 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "sensor_id"
-            ],
+            "required": ["sensor_id"],
             "additionalProperties": false
           },
           "to": {
@@ -5233,13 +4803,7 @@
             "format": "date-time"
           }
         },
-        "required": [
-          "project_slug",
-          "dataset",
-          "dimension",
-          "from",
-          "to"
-        ],
+        "required": ["project_slug", "dataset", "dimension", "from", "to"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5288,10 +4852,7 @@
                 "operator": {
                   "type": "string",
                   "description": "Operator the dimension admits, per describe_analytics_catalog.",
-                  "enum": [
-                    "equals",
-                    "in"
-                  ]
+                  "enum": ["equals", "in"]
                 },
                 "values": {
                   "type": "array",
@@ -5304,11 +4865,7 @@
                   "uniqueItems": true
                 }
               },
-              "required": [
-                "field",
-                "operator",
-                "values"
-              ],
+              "required": ["field", "operator", "values"],
               "additionalProperties": false
             },
             "description": "Filters, ANDed. At most 100 values per filter.",
@@ -5364,9 +4921,7 @@
                   ]
                 }
               },
-              "required": [
-                "op"
-              ],
+              "required": ["op"],
               "additionalProperties": false
             },
             "description": "Composed measures. Required when grouped, forbidden when ungrouped.",
@@ -5380,10 +4935,7 @@
                 "direction": {
                   "type": "string",
                   "description": "Defaults to desc.",
-                  "enum": [
-                    "asc",
-                    "desc"
-                  ]
+                  "enum": ["asc", "desc"]
                 },
                 "measure": {
                   "type": "string",
@@ -5392,9 +4944,7 @@
                   "maxLength": 64
                 }
               },
-              "required": [
-                "measure"
-              ],
+              "required": ["measure"],
               "additionalProperties": false
             },
             "description": "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.",
@@ -5433,14 +4983,10 @@
                       "additionalProperties": false,
                       "oneOf": [
                         {
-                          "required": [
-                            "field"
-                          ]
+                          "required": ["field"]
                         },
                         {
-                          "required": [
-                            "attribute"
-                          ]
+                          "required": ["attribute"]
                         }
                       ]
                     },
@@ -5462,10 +5008,7 @@
                       "uniqueItems": true
                     }
                   },
-                  "required": [
-                    "dimension",
-                    "operator"
-                  ],
+                  "required": ["dimension", "operator"],
                   "additionalProperties": false
                 },
                 "minItems": 0,
@@ -5492,14 +5035,10 @@
                   "additionalProperties": false,
                   "oneOf": [
                     {
-                      "required": [
-                        "field"
-                      ]
+                      "required": ["field"]
                     },
                     {
-                      "required": [
-                        "attribute"
-                      ]
+                      "required": ["attribute"]
                     }
                   ]
                 },
@@ -5550,21 +5089,14 @@
                     "exclusiveMinimum": 0
                   }
                 },
-                "required": [
-                  "sensor_id",
-                  "threshold"
-                ],
+                "required": ["sensor_id", "threshold"],
                 "additionalProperties": false,
                 "oneOf": [
                   {
-                    "required": [
-                      "signal_id"
-                    ]
+                    "required": ["signal_id"]
                   },
                   {
-                    "required": [
-                      "minimum_level"
-                    ]
+                    "required": ["minimum_level"]
                   }
                 ]
               },
@@ -5575,9 +5107,7 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "selection"
-            ],
+            "required": ["selection"],
             "additionalProperties": false
           },
           "to": {
@@ -5590,12 +5120,7 @@
             "description": "Return rows at the dataset's grain instead of aggregating. Defaults to false."
           }
         },
-        "required": [
-          "project_slug",
-          "dataset",
-          "from",
-          "to"
-        ],
+        "required": ["project_slug", "dataset", "from", "to"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5630,11 +5155,7 @@
             "format": "uuid"
           }
         },
-        "required": [
-          "project_slug",
-          "sensor_id",
-          "definition_hash"
-        ],
+        "required": ["project_slug", "sensor_id", "definition_hash"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5690,21 +5211,14 @@
                 "exclusiveMinimum": 0
               }
             },
-            "required": [
-              "sensor_id",
-              "threshold"
-            ],
+            "required": ["sensor_id", "threshold"],
             "additionalProperties": false,
             "oneOf": [
               {
-                "required": [
-                  "signal_id"
-                ]
+                "required": ["signal_id"]
               },
               {
-                "required": [
-                  "minimum_level"
-                ]
+                "required": ["minimum_level"]
               }
             ]
           },
@@ -5741,14 +5255,10 @@
                       "additionalProperties": false,
                       "oneOf": [
                         {
-                          "required": [
-                            "field"
-                          ]
+                          "required": ["field"]
                         },
                         {
-                          "required": [
-                            "attribute"
-                          ]
+                          "required": ["attribute"]
                         }
                       ]
                     },
@@ -5770,10 +5280,7 @@
                       "uniqueItems": true
                     }
                   },
-                  "required": [
-                    "dimension",
-                    "operator"
-                  ],
+                  "required": ["dimension", "operator"],
                   "additionalProperties": false
                 },
                 "minItems": 0,
@@ -5810,21 +5317,14 @@
                     "exclusiveMinimum": 0
                   }
                 },
-                "required": [
-                  "sensor_id",
-                  "threshold"
-                ],
+                "required": ["sensor_id", "threshold"],
                 "additionalProperties": false,
                 "oneOf": [
                   {
-                    "required": [
-                      "signal_id"
-                    ]
+                    "required": ["signal_id"]
                   },
                   {
-                    "required": [
-                      "minimum_level"
-                    ]
+                    "required": ["minimum_level"]
                   }
                 ]
               },
@@ -5835,9 +5335,7 @@
                 "maxLength": 64
               }
             },
-            "required": [
-              "selection"
-            ],
+            "required": ["selection"],
             "additionalProperties": false
           },
           "to": {
@@ -5846,12 +5344,7 @@
             "format": "date-time"
           }
         },
-        "required": [
-          "project_slug",
-          "from",
-          "to",
-          "signal_query"
-        ],
+        "required": ["project_slug", "from", "to", "signal_query"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5873,9 +5366,7 @@
             "description": "the project's slug, as list_projects returns it"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5901,10 +5392,7 @@
             "description": "exact widget UUID from list_widgets"
           }
         },
-        "required": [
-          "project_slug",
-          "widget_id"
-        ],
+        "required": ["project_slug", "widget_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -5934,10 +5422,7 @@
             "description": "display name, 1 to 200 characters"
           },
           "description": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "what the widget is for, at most 2000 characters"
           },
           "dataset": {
@@ -6020,11 +5505,7 @@
             "description": "required to confirm; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "widget_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "widget_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6066,11 +5547,7 @@
             "description": "required to confirm; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "widget_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "widget_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6092,9 +5569,7 @@
             "description": "the project's slug, as list_projects returns it"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6120,10 +5595,7 @@
             "description": "a project dashboard id, or a Speakeasy-built dashboard slug, as list_dashboards returns them"
           }
         },
-        "required": [
-          "project_slug",
-          "dashboard_id"
-        ],
+        "required": ["project_slug", "dashboard_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6153,10 +5625,7 @@
             "description": "display name, at most 200 characters"
           },
           "description": {
-            "type": [
-              "null",
-              "string"
-            ],
+            "type": ["null", "string"],
             "description": "what the dashboard is for, at most 2000 characters; omit or leave empty for none"
           },
           "confirmed": {
@@ -6176,11 +5645,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "name",
-          "confirmed"
-        ],
+        "required": ["project_slug", "name", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6222,11 +5687,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "dashboard_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "dashboard_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6268,11 +5729,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "dashboard_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "dashboard_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6298,10 +5755,7 @@
             "description": "the project dashboard whose cards change"
           },
           "operations": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "object",
               "properties": {
@@ -6318,37 +5772,23 @@
                   "description": "move_card and remove_card: the card, as get_dashboard returns it"
                 },
                 "x": {
-                  "type": [
-                    "null",
-                    "integer"
-                  ],
+                  "type": ["null", "integer"],
                   "description": "column the card starts at, 0 to 11; move_card needs all four of x, y, w and h; add_card defaults to 0"
                 },
                 "y": {
-                  "type": [
-                    "null",
-                    "integer"
-                  ],
+                  "type": ["null", "integer"],
                   "description": "row the card starts at, from 0; move_card needs all four of x, y, w and h; add_card defaults to below every card"
                 },
                 "w": {
-                  "type": [
-                    "null",
-                    "integer"
-                  ],
+                  "type": ["null", "integer"],
                   "description": "width in columns, up to 12; move_card needs all four of x, y, w and h; add_card defaults to the chart type's opening size"
                 },
                 "h": {
-                  "type": [
-                    "null",
-                    "integer"
-                  ],
+                  "type": ["null", "integer"],
                   "description": "height in rows; move_card needs all four of x, y, w and h; add_card defaults to the chart type's opening size"
                 }
               },
-              "required": [
-                "op"
-              ],
+              "required": ["op"],
               "additionalProperties": false
             },
             "description": "one to 100 card changes, applied in order and checked as one final layout"
@@ -6370,12 +5810,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "dashboard_id",
-          "operations",
-          "confirmed"
-        ],
+        "required": ["project_slug", "dashboard_id", "operations", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6404,37 +5839,22 @@
             "type": "object",
             "properties": {
               "range": {
-                "type": [
-                  "null",
-                  "object"
-                ],
+                "type": ["null", "object"],
                 "properties": {
                   "preset": {
-                    "type": [
-                      "null",
-                      "string"
-                    ],
+                    "type": ["null", "string"],
                     "description": "a relative window such as 24h, 7d or 30d; not with from and to"
                   },
                   "from": {
-                    "type": [
-                      "null",
-                      "string"
-                    ],
+                    "type": ["null", "string"],
                     "description": "start of an absolute range, RFC 3339"
                   },
                   "to": {
-                    "type": [
-                      "null",
-                      "string"
-                    ],
+                    "type": ["null", "string"],
                     "description": "end of an absolute range, RFC 3339"
                   },
                   "label": {
-                    "type": [
-                      "null",
-                      "string"
-                    ],
+                    "type": ["null", "string"],
                     "description": "a name for an absolute range, at most 200 characters"
                   }
                 },
@@ -6445,10 +5865,7 @@
                 "type": "object",
                 "description": "values picked per catalog dimension, by dimension name from describe_analytics_catalog; at most 20 dimensions and 100 values each, each value at most 500 characters",
                 "additionalProperties": {
-                  "type": [
-                    "null",
-                    "array"
-                  ],
+                  "type": ["null", "array"],
                   "items": {
                     "type": "string"
                   }
@@ -6475,12 +5892,7 @@
             "description": "required to confirm, at most 128 characters; reuse it only to retry this exact confirmed request"
           }
         },
-        "required": [
-          "project_slug",
-          "dashboard_id",
-          "filters",
-          "confirmed"
-        ],
+        "required": ["project_slug", "dashboard_id", "filters", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6502,9 +5914,7 @@
             "description": "question or provider name to look up in the reviewed Speakeasy setup guides, for example 'GitHub OAuth client id' or 'Snowflake tenant URL'"
           }
         },
-        "required": [
-          "query"
-        ],
+        "required": ["query"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6607,11 +6017,7 @@
             "description": "caller-generated idempotency key; reuse only to retry the same project, catalogue candidate, and non-secret configuration"
           }
         },
-        "required": [
-          "provider_key",
-          "catalog_ref",
-          "idempotency_key"
-        ],
+        "required": ["provider_key", "catalog_ref", "idempotency_key"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6645,10 +6051,7 @@
             "description": "caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"
           }
         },
-        "required": [
-          "remote_url",
-          "idempotency_key"
-        ],
+        "required": ["remote_url", "idempotency_key"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6678,10 +6081,7 @@
             "description": "set true only after the user explicitly confirms connecting this MCP server to its advertised sign-in provider; never include credentials, client secrets, OAuth codes, or tokens"
           }
         },
-        "required": [
-          "mcp_id",
-          "confirmed"
-        ],
+        "required": ["mcp_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6837,12 +6237,7 @@
             "description": "reviewed catalog reference returned by register_catalog_mcp"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id",
-          "provider_key",
-          "catalog_ref"
-        ],
+        "required": ["project_slug", "mcp_id", "provider_key", "catalog_ref"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6868,10 +6263,7 @@
             "description": "MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6905,12 +6297,7 @@
             "description": "set true only after the user explicitly confirms this exact setting for this exact MCP server; it takes effect for every app that connects to it"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id",
-          "mode",
-          "confirmed"
-        ],
+        "required": ["project_slug", "mcp_id", "mode", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -6940,9 +6327,7 @@
             "description": "force one authenticated provider readiness probe; limited to three probes per minute for this MCP server; unavailable to managed project assistants"
           }
         },
-        "required": [
-          "mcp_id"
-        ],
+        "required": ["mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -6968,10 +6353,7 @@
             "description": "MCP server ID from find_mcp or get_mcp, or the mcp_id setup returned"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7001,11 +6383,7 @@
             "description": "exact existing plugin in the project, by ID, slug, or name, as returned by list_plugins; there is no implicit default"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id",
-          "plugin"
-        ],
+        "required": ["project_slug", "mcp_id", "plugin"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -7035,11 +6413,7 @@
             "description": "exact existing plugin in the project, by ID, slug, or name, as returned by list_plugins; there is no implicit default"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id",
-          "plugin"
-        ],
+        "required": ["project_slug", "mcp_id", "plugin"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -7065,9 +6439,7 @@
             "description": "observation window: 1h, 24h (default), 7d, or 30d"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7097,10 +6469,7 @@
             "description": "observation window: 1h (default) or 24h"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7130,10 +6499,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7163,10 +6529,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7204,10 +6567,7 @@
             "description": "opaque cursor returned by a previous query_mcp_traces result"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7237,10 +6597,7 @@
             "description": "observation window: 1h, 24h (default), or 7d"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7274,11 +6631,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id",
-          "subject_reference"
-        ],
+        "required": ["project_slug", "mcp_id", "subject_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7304,9 +6657,7 @@
             "description": "observation window: 1h, 24h, 7d (default), or 30d"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7348,10 +6699,7 @@
             "description": "opaque cursor returned by a previous search_users result"
           }
         },
-        "required": [
-          "project_slug",
-          "query"
-        ],
+        "required": ["project_slug", "query"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7385,10 +6733,7 @@
             "description": "configured MCP ID that minted the reference through list_mcp_usage_users; only needed for such a reference, and the summary itself stays project-wide"
           }
         },
-        "required": [
-          "project_slug",
-          "user_reference"
-        ],
+        "required": ["project_slug", "user_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7434,10 +6779,7 @@
             "description": "optional person reference from a previous search_tool_calls row in this project, or from list_mcp_usage_users when the same mcp_id and window are supplied"
           },
           "attributes": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "object",
               "properties": {
@@ -7450,19 +6792,14 @@
                   "description": "comparison: eq (default), not_eq, in, exists, not_exists, or contains (custom @ keys only)"
                 },
                 "values": {
-                  "type": [
-                    "null",
-                    "array"
-                  ],
+                  "type": ["null", "array"],
                   "items": {
                     "type": "string"
                   },
                   "description": "values to compare against: one for eq, not_eq and contains, up to 10 for in, none for exists and not_exists"
                 }
               },
-              "required": [
-                "key"
-              ],
+              "required": ["key"],
               "additionalProperties": false
             },
             "description": "optional attribute filters, at most 5, combined with AND; discover keys with list_attribute_keys. A system key is refused when it identifies a person, in which case narrow to one person with user_reference instead, and when it carries tool content or an HTTP header. An @-prefixed custom key is the project's own integration data and allows every operator, whatever it is named"
@@ -7476,9 +6813,7 @@
             "description": "opaque cursor returned by a previous search_tool_calls result; it pins the observation window to the interval the first page read, so paging a relative window does not drift as time passes. One search walks at most 500 calls in total, so a missing next cursor can mean that budget ran out rather than that nothing else matches"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7504,9 +6839,7 @@
             "description": "observation window: 1h, 24h, 7d (default), or 30d"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7532,9 +6865,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7564,10 +6895,7 @@
             "description": "observation window: 1h or 24h (default); this tool looks back at most 24h"
           }
         },
-        "required": [
-          "project_slug",
-          "skill_name"
-        ],
+        "required": ["project_slug", "skill_name"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7601,11 +6929,7 @@
             "description": "observation window: 1h or 24h (default); must match the window used to mint the reference"
           }
         },
-        "required": [
-          "project_slug",
-          "skill_name",
-          "subject_reference"
-        ],
+        "required": ["project_slug", "skill_name", "subject_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7639,9 +6963,7 @@
             "description": "maximum skills to return; defaults to 50 and is capped at 100"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7671,10 +6993,7 @@
             "description": "include the latest version's SKILL.md content; off by default because a manifest is up to 64 KiB"
           }
         },
-        "required": [
-          "project_slug",
-          "skill_id"
-        ],
+        "required": ["project_slug", "skill_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7712,10 +7031,7 @@
             "description": "maximum versions to return; defaults to 50 and is capped at 100"
           }
         },
-        "required": [
-          "project_slug",
-          "skill_id"
-        ],
+        "required": ["project_slug", "skill_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7749,10 +7065,7 @@
             "description": "maximum feedback records to return; defaults to 20 and is capped at 50"
           }
         },
-        "required": [
-          "project_slug",
-          "skill_id"
-        ],
+        "required": ["project_slug", "skill_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7794,9 +7107,7 @@
             "description": "maximum suggestions to return; defaults to 20 and is capped at 50"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7826,10 +7137,7 @@
             "description": "maximum linked feedback records to return; defaults to 20 and is capped at 50"
           }
         },
-        "required": [
-          "project_slug",
-          "change_id"
-        ],
+        "required": ["project_slug", "change_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -7855,10 +7163,7 @@
             "description": "suggestion ID returned by list_skill_suggestions"
           },
           "change_ids": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
@@ -7873,11 +7178,7 @@
             "description": "set true only after the user explicitly confirms recording this new version of this exact skill"
           }
         },
-        "required": [
-          "project_slug",
-          "suggestion_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "suggestion_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -7907,11 +7208,7 @@
             "description": "set true only after the user explicitly confirms discarding this suggestion"
           }
         },
-        "required": [
-          "project_slug",
-          "suggestion_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "suggestion_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -7937,10 +7234,7 @@
             "description": "the complete SKILL.md, including YAML frontmatter and instructions; at most 65536 UTF-8 bytes"
           }
         },
-        "required": [
-          "project_slug",
-          "content"
-        ],
+        "required": ["project_slug", "content"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -8025,11 +7319,7 @@
             "description": "the version the caller read before writing, from get_skill; the write is refused as a conflict if the skill has moved on"
           }
         },
-        "required": [
-          "project_slug",
-          "skill_id",
-          "expected_latest_version_id"
-        ],
+        "required": ["project_slug", "skill_id", "expected_latest_version_id"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -8063,10 +7353,7 @@
             "description": "exact existing assistant in the project, by ID or name; exactly one of plugin or assistant is required"
           }
         },
-        "required": [
-          "project_slug",
-          "skill_id"
-        ],
+        "required": ["project_slug", "skill_id"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -8104,9 +7391,7 @@
             "description": "maximum distributions to return; defaults to 20 and is capped at 50"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8295,9 +7580,7 @@
             "description": "how many skills to return; defaults to 10 and is capped at 20"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8327,10 +7610,7 @@
             "description": "how far back to look: 1h, 24h, 7d, or 30d (default and maximum)"
           }
         },
-        "required": [
-          "project_slug",
-          "skill_id"
-        ],
+        "required": ["project_slug", "skill_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8364,12 +7644,7 @@
             "description": "true only after the user confirms removal of this exact membership"
           }
         },
-        "required": [
-          "project_slug",
-          "plugin_id",
-          "membership_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "plugin_id", "membership_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -8395,10 +7670,7 @@
             "description": "exact plugin ID, slug, or name returned by list_plugins"
           },
           "assignment_references": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
@@ -8453,9 +7725,7 @@
             "description": "the project's slug, as list_projects returns it"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8485,9 +7755,7 @@
             "description": "opaque cursor from a previous list_plugins result"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8521,10 +7789,7 @@
             "description": "opaque membership cursor from a previous get_plugin result"
           }
         },
-        "required": [
-          "project_slug",
-          "plugin"
-        ],
+        "required": ["project_slug", "plugin"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8558,12 +7823,7 @@
             "description": "caller-generated idempotency key, at most 128 characters; reuse only to retry this exact request"
           }
         },
-        "required": [
-          "project_slug",
-          "plugin",
-          "confirmed",
-          "idempotency_key"
-        ],
+        "required": ["project_slug", "plugin", "confirmed", "idempotency_key"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -8618,9 +7878,7 @@
             "description": "client receiving the installation guidance"
           }
         },
-        "required": [
-          "client_family"
-        ],
+        "required": ["client_family"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8646,10 +7904,7 @@
             "description": "exact configured MCP server ID"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8675,10 +7930,7 @@
             "description": "exact configured MCP server ID"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8712,10 +7964,7 @@
             "description": "optional plugin description; at most 1024 bytes"
           },
           "auto_sync_enabled": {
-            "type": [
-              "null",
-              "boolean"
-            ],
+            "type": ["null", "boolean"],
             "description": "whether the plugin's changes publish to the marketplace on their own; defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand"
           },
           "idempotency_key": {
@@ -8727,12 +7976,7 @@
             "description": "set true only after the user explicitly confirms the project, name, and slug of the plugin to create"
           }
         },
-        "required": [
-          "project_slug",
-          "name",
-          "idempotency_key",
-          "confirmed"
-        ],
+        "required": ["project_slug", "name", "idempotency_key", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -8916,9 +8160,7 @@
             "description": "opaque member reference returned by list_access_members"
           }
         },
-        "required": [
-          "member_reference"
-        ],
+        "required": ["member_reference"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8944,10 +8186,7 @@
             "description": "configured MCP ID returned by find_mcp"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id"
-        ],
+        "required": ["project_slug", "mcp_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -8977,10 +8216,7 @@
             "description": "optional description for the new custom role"
           },
           "rules": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "object",
               "properties": {
@@ -8997,9 +8233,7 @@
                   "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
-              "required": [
-                "mcp_id"
-              ],
+              "required": ["mcp_id"],
               "additionalProperties": false
             },
             "description": "MCP access rules generated only for configured MCP IDs in this project; an empty list creates a role with no grants"
@@ -9049,10 +8283,7 @@
             "description": "opaque role version returned by the preceding role mutation"
           },
           "add_rules": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "object",
               "properties": {
@@ -9069,18 +8300,13 @@
                   "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
-              "required": [
-                "mcp_id"
-              ],
+              "required": ["mcp_id"],
               "additionalProperties": false
             },
             "description": "MCP access rules to add without replacing other grants"
           },
           "remove_rules": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "object",
               "properties": {
@@ -9097,9 +8323,7 @@
                   "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
-              "required": [
-                "mcp_id"
-              ],
+              "required": ["mcp_id"],
               "additionalProperties": false
             },
             "description": "MCP access rules to remove without replacing other grants"
@@ -9259,12 +8483,7 @@
             "description": "set true only after the user confirms this exact credential and server; the credential stays one credential, so changing or rotating it changes every server that offers it"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id",
-          "auth_client_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "mcp_id", "auth_client_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -9322,11 +8541,7 @@
             "description": "false previews the server's credentials and every caller's choice; true only after the user confirms this exact caller, server and choice"
           }
         },
-        "required": [
-          "project_slug",
-          "mcp_id",
-          "confirmed"
-        ],
+        "required": ["project_slug", "mcp_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -9478,10 +8693,7 @@
             "description": "the item's version from list_directory_review_items; required to approve"
           },
           "roles": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "object",
               "properties": {
@@ -9503,11 +8715,7 @@
             "description": "true only after the user confirms this exact item, decision and role set"
           }
         },
-        "required": [
-          "item_id",
-          "decision",
-          "confirmed"
-        ],
+        "required": ["item_id", "decision", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -9550,10 +8758,7 @@
             "description": "the exact session_id the user selected from a displayed list_my_sessions numbered chooser; never ask the user to remember or type it from memory"
           },
           "ttl_seconds": {
-            "type": [
-              "null",
-              "integer"
-            ],
+            "type": ["null", "integer"],
             "description": "exact link lifetime the user chose or confirmed, in seconds; defaults to 900 and is clamped to 60..3600; display the exact clamped lifetime before confirmation"
           },
           "confirmed": {
@@ -9561,10 +8766,7 @@
             "description": "true only after the user explicitly confirms the exact displayed session title/session_id and exact clamped lifetime; a general request to share is not confirmation"
           }
         },
-        "required": [
-          "session_id",
-          "confirmed"
-        ],
+        "required": ["session_id", "confirmed"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -9586,9 +8788,7 @@
             "description": "the session to recall — a session id from list_my_sessions"
           }
         },
-        "required": [
-          "session_id"
-        ],
+        "required": ["session_id"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -9636,10 +8836,7 @@
           "risk": {
             "type": "string",
             "description": "Optional risk presence filter: with_findings keeps chats with at least one live finding, without_findings keeps the rest. Omit for no filter.",
-            "enum": [
-              "with_findings",
-              "without_findings"
-            ]
+            "enum": ["with_findings", "without_findings"]
           },
           "source": {
             "type": "string",
@@ -9656,12 +8853,7 @@
           "window": {
             "type": "string",
             "description": "Activity window: 1h, 24h, 7d (default), or 30d. A chat is listed when its last message is at or after the window start and it was created at or before the window end.",
-            "enum": [
-              "1h",
-              "24h",
-              "7d",
-              "30d"
-            ]
+            "enum": ["1h", "24h", "7d", "30d"]
           }
         },
         "additionalProperties": false
@@ -9741,10 +8933,7 @@
           "sort_order": {
             "type": "string",
             "description": "Message time order: newest_first (default) or oldest_first.",
-            "enum": [
-              "newest_first",
-              "oldest_first"
-            ]
+            "enum": ["newest_first", "oldest_first"]
           },
           "source": {
             "type": "string",
@@ -9759,15 +8948,9 @@
             "maxLength": 64
           }
         },
-        "required": [
-          "project_slug",
-          "from",
-          "to"
-        ],
+        "required": ["project_slug", "from", "to"],
         "dependentRequired": {
-          "participant_provider": [
-            "participant_id"
-          ]
+          "participant_provider": ["participant_id"]
         },
         "additionalProperties": false
       },
@@ -9808,10 +8991,7 @@
             "maxLength": 128
           }
         },
-        "required": [
-          "project_slug",
-          "chat_id"
-        ],
+        "required": ["project_slug", "chat_id"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -9838,11 +9018,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": [
-                "chat",
-                "memo",
-                "digest"
-              ]
+              "enum": ["chat", "memo", "digest"]
             },
             "description": "Optional kinds to search: chat (session summaries), memo (saved facts) and digest (day, week and month digests). Omit to search all three.",
             "minItems": 1,
@@ -9873,10 +9049,7 @@
             "maxLength": 64
           }
         },
-        "required": [
-          "project_slug",
-          "query"
-        ],
+        "required": ["project_slug", "query"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -9911,10 +9084,7 @@
             "maxLength": 128
           }
         },
-        "required": [
-          "project_slug",
-          "content"
-        ],
+        "required": ["project_slug", "content"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -9936,9 +9106,7 @@
             "description": "the project's slug, as list_projects returns it"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -10002,9 +9170,7 @@
             "description": "next_cursor from the previous page of the same search"
           }
         },
-        "required": [
-          "query"
-        ],
+        "required": ["query"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -10026,19 +9192,14 @@
             "description": "Server slug from list_my_servers"
           },
           "tools": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "string"
             },
             "description": "Tool names on that server to return input schemas for; omit to list every tool's name and description"
           }
         },
-        "required": [
-          "server"
-        ],
+        "required": ["server"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -10069,10 +9230,7 @@
             "additionalProperties": true
           }
         },
-        "required": [
-          "server",
-          "tool"
-        ],
+        "required": ["server", "tool"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -10094,9 +9252,7 @@
             "description": "the project's slug, as list_projects returns it"
           }
         },
-        "required": [
-          "project_slug"
-        ],
+        "required": ["project_slug"],
         "additionalProperties": false
       },
       "read_only": true,
@@ -10118,17 +9274,11 @@
             "description": "feedback category: success, failure, confusing_guidance, missing_capability, incorrect_result, authorization_problem, setup_problem, performance, or other"
           },
           "rating": {
-            "type": [
-              "null",
-              "integer"
-            ],
+            "type": ["null", "integer"],
             "description": "optional rating from 1 through 5"
           },
           "success": {
-            "type": [
-              "null",
-              "boolean"
-            ],
+            "type": ["null", "boolean"],
             "description": "optional success outcome"
           },
           "tool_name": {
@@ -10148,10 +9298,7 @@
             "description": "caller-generated retry key, at most 128 characters; reuse only for the same feedback"
           }
         },
-        "required": [
-          "category",
-          "idempotency_key"
-        ],
+        "required": ["category", "idempotency_key"],
         "additionalProperties": false
       },
       "read_only": false,
@@ -10185,10 +9332,7 @@
             "description": "local client the run was driven from, for example claude_code"
           },
           "items": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": ["null", "array"],
             "items": {
               "type": "object",
               "properties": {
@@ -10213,20 +9357,13 @@
                   "description": "short explanation for a blocked or failed outcome, at most 1000 characters"
                 }
               },
-              "required": [
-                "name",
-                "outcome"
-              ],
+              "required": ["name", "outcome"],
               "additionalProperties": false
             },
             "description": "everything the run handled, including the items it excluded; send an empty list when the run handled nothing"
           }
         },
-        "required": [
-          "skill",
-          "run_id",
-          "items"
-        ],
+        "required": ["skill", "run_id", "items"],
         "additionalProperties": false
       },
       "read_only": false,
