@@ -569,7 +569,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	if i := slices.IndexFunc(checks, isAnyOf); i >= 0 {
 		return false, e.mapError(ctx, InvalidCheck(checks[i].Scope, checks[i].ResourceID))
 	}
-	d, err := e.decideAll(ctx, checks, false)
+	d, err := e.Decide(WithoutChallenges(ctx), checks...)
 	return d.AllAllowed, err
 }
 
@@ -578,7 +578,7 @@ func (e *Engine) Can(ctx context.Context, checks ...Check) (bool, error) {
 	if _, ok := singleAnyOf(checks); !ok {
 		return e.Evaluate(ctx, checks...)
 	}
-	d, err := e.decideAll(ctx, checks, false)
+	d, err := e.Decide(WithoutChallenges(ctx), checks...)
 	return d.AllAllowed, err
 }
 
@@ -624,7 +624,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	if i := slices.IndexFunc(checks, isAnyOf); i >= 0 {
 		return nil, e.mapError(ctx, InvalidCheck(checks[i].Scope, checks[i].ResourceID))
 	}
-	d, err := e.decideAll(ctx, checks, true)
+	d, err := e.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}
@@ -642,7 +642,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	if i := slices.IndexFunc(checks, isAnyOf); i >= 0 {
 		return nil, e.mapError(ctx, InvalidCheck(checks[i].Scope, checks[i].ResourceID))
 	}
-	d, err := e.decideAll(ctx, checks, true)
+	d, err := e.Decide(ctx, checks...)
 	if err != nil {
 		return nil, err
 	}

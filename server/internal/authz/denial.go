@@ -97,7 +97,7 @@ const (
 
 // DenialReasons returns each check's Reason. Replaced by Decide.
 func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]Reason, error) {
-	d, err := e.decideAll(ctx, checks, false)
+	d, err := e.Decide(WithoutChallenges(ctx), checks...)
 	if err != nil {
 		return nil, err
 	}

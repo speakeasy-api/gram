@@ -39,11 +39,6 @@ type Decisions struct {
 // the handler, not a denial. Use Require to gate an action. Example: a list
 // page passes one check per server and shows those whose decision is allowed.
 func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error) {
-	return e.decideAll(ctx, checks, true)
-}
-
-// decideAll lets the wrappers that record no challenge today keep doing so.
-func (e *Engine) decideAll(ctx context.Context, checks []Check, record bool) (Decisions, error) {
 	q, err := e.prepare(ctx, checks, false)
 	if err != nil {
 		return Decisions{AllAllowed: false, Each: nil}, e.mapError(ctx, err)
@@ -53,7 +48,7 @@ func (e *Engine) decideAll(ctx context.Context, checks []Check, record bool) (De
 	for _, check := range checks {
 		d, err := q.decide(check)
 		if err != nil {
-			if record && q.enforced {
+			if q.enforced {
 				focus := check
 				e.recordBatch(ctx, q, result.Each, &focus)
 			}
@@ -71,7 +66,7 @@ func (e *Engine) decideAll(ctx context.Context, checks []Check, record bool) (De
 			e.reportAuthorizerRefusals(ctx, q.grants, q.grants.allowedAlternatives(d.Check.anyOf), true)
 		}
 	}
-	if record && len(checks) > 0 {
+	if len(checks) > 0 {
 		e.recordBatch(ctx, q, result.Each, nil)
 	}
 	return result, nil
