@@ -1,21 +1,41 @@
 package mcp_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
+// newLargeInventoryTestService lets a consent capture of thousands of tools
+// finish. Under the race detector one such capture takes over a second of CPU,
+// so on a loaded runner it can outlast the production gateway listing time and
+// report the upstream as not responding.
+func newLargeInventoryTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithPoolConfig(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	}, nil, nil, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, GatewayListingTimeout: 30 * time.Second, AutoVerifyWait: 0, RecheckInterval: 0})
+}
+
 func TestGatewayLargeInventoryApproval(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	ctx, ti := newLargeInventoryTestService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "large-catalog-" + uuid.NewString()
@@ -40,7 +60,7 @@ func TestGatewayLargeInventoryApproval(t *testing.T) {
 
 func TestGatewayOverLimitExplainsRecovery(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	ctx, ti := newLargeInventoryTestService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "over-limit-" + uuid.NewString()
@@ -58,7 +78,7 @@ func TestGatewayLargeSelectedInventoryApproval(t *testing.T) {
 	for _, kind := range []string{"manual", "annotation"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
-			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			ctx, ti := newLargeInventoryTestService(t)
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			slug := "selected-catalog-" + uuid.NewString()
@@ -97,7 +117,7 @@ func TestGatewayLargeInventoryConsentBoundary(t *testing.T) {
 	for _, specific := range []bool{false, true} {
 		t.Run(fmt.Sprintf("specific=%t", specific), func(t *testing.T) {
 			t.Parallel()
-			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			ctx, ti := newLargeInventoryTestService(t)
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			slug := "bounded-catalog-" + uuid.NewString()

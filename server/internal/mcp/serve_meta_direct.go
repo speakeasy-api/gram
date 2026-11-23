@@ -31,7 +31,7 @@ import (
 const maxConcurrentMemberDescribes = 6
 
 // memberDescribeBudget bounds a whole inventory, in member call timeouts, when
-// a deployment configures member calls shorter than maxGatewayListingTime
+// a deployment configures member calls shorter than the gateway listing time
 // allows for, so a listing never waits past two of them.
 const memberDescribeBudget = 2
 
@@ -40,9 +40,10 @@ const (
 	// whose upstream failed retryably: the first try plus two retries.
 	maxMemberDescribeAttempts = 3
 
-	// maxGatewayListingTime bounds a whole inventory, retries included. A
-	// listing answers an agent's startup, so a rate-limited or slow member is
-	// left out after a few seconds rather than holding every other tool.
+	// maxGatewayListingTime is the default GatewayListingTimeout, and bounds
+	// the Retry-After a listing waits out. A listing answers an agent's
+	// startup, so a rate-limited or slow member is left out after a few
+	// seconds rather than holding every other tool.
 	maxGatewayListingTime = 3 * time.Second
 
 	// memberRetryBaseDelay is the first retry's delay when the upstream sent no
@@ -77,7 +78,7 @@ type memberDescribeResult struct {
 // failures, and returns results in member order. Every describe and retry
 // shares one listing deadline.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
-	budget, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, maxGatewayListingTime))
+	budget, cancelAll := context.WithTimeout(ctx, min(memberDescribeBudget*s.metaRuntime.MemberCallTimeout, s.metaRuntime.GatewayListingTimeout))
 	defer cancelAll()
 	ctx = context.WithValue(budget, listingBudgetKey{}, budget)
 	results := make([]memberDescribeResult, len(members))
