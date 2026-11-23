@@ -204,6 +204,10 @@ type authClientPermitRequest struct {
 	// exact attached connection for an attached agent, and empty when there is
 	// none, which no personal grant matches.
 	ConnectionOwner string
+	// AttachedConsent is the owner's consent to an attached connection, read
+	// with ConnectionOwner when the owner is not the user an agent acts for.
+	// The mandatory decision applies it; it is zero otherwise.
+	AttachedConsent authz.AttachedConnectionConsent
 }
 
 // connectionOwner is the owner the mcp:auth check names: the resolved
@@ -298,7 +302,9 @@ func decideAuthClientUse(ctx context.Context, authorization authz.MandatoryAutho
 		}
 		return authz.MandatoryDecision{Allowed: false, Source: authz.MandatoryPolicySourceNone, Reason: reason}, nil
 	}
-	decision, err := authorization.DecideAuthClientAdmission(req.OrganizationID, admittedUnder, use)
+	// An attachment is its owner's consent to the agent using their
+	// connection, whoever issued the agent's key.
+	decision, err := authorization.WithAttachedConnection(req.AttachedConsent).DecideAuthClientAdmission(req.OrganizationID, admittedUnder, use)
 	if err != nil {
 		return authz.MandatoryDecision{}, fmt.Errorf("decide auth client admission: %w", err)
 	}
@@ -478,7 +484,7 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 	req := authClientPermitRequest{
 		OrganizationID: selector.organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 		CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject,
-		UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "",
+		UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{},
 	}
 	return s.prepareAuthClient(ctx, req, res, func(permit authClientPermitRequest, _ bool) {
 		if resolved {
@@ -530,7 +536,7 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 		res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
 	}
 
-	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: ""}, res, nil)
+	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{}}, res, nil)
 }
 
 // resolveNoAuthChoice decides a no-auth choice for a server as a recorded one
@@ -590,6 +596,7 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 			return res, fmt.Errorf("check auth client permission: %w", err)
 		}
 		permit.ConnectionOwner = connection.owner
+		permit.AttachedConsent = connection.consent
 		res.attachedSession = connection.attachedSession
 		res.connectionOwner = connection.owner
 		if connection.authorizer {
@@ -1000,12 +1007,14 @@ func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelect
 		permit := authClientPermitRequest{
 			OrganizationID: selector.organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 			CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject, UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "",
+			AttachedConsent: authz.AttachedConnectionConsent{},
 		}
 		connection, err := s.authClientConnection(ctx, permit)
 		if err != nil {
 			s.logger.WarnContext(ctx, "auth client shadow could not resolve the connection owner", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
 		} else {
 			permit.ConnectionOwner = connection.owner
+			permit.AttachedConsent = connection.consent
 			s.shadowAuthClientUse(ctx, choiceErr == nil, permit)
 		}
 	}
