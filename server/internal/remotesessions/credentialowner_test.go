@@ -144,7 +144,7 @@ func TestCreateRemoteSessionClient_SelfProjectClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(remotesessions.CredentialOwnerSelf), created.CredentialOwner)
 	require.NotEmpty(t, created.ProjectID)
-	require.Equal(t, []string{userIssuerID.String()}, created.UserSessionIssuerIds)
+	require.Empty(t, created.UserSessionIssuerIds, "the requested sign-in has no server placement")
 }
 
 func TestCreateClient_SelfClientRefusesInvalidCombinations(t *testing.T) {
