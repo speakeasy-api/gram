@@ -840,7 +840,7 @@ export function AttachRemoteIdentityProviderSheet({
         >
           <SheetHeader className="px-6 pt-6 pb-0">
             <SheetTitle className="text-lg font-semibold">
-              Attach Authorization Server
+              Attach authorization server
             </SheetTitle>
           </SheetHeader>
 

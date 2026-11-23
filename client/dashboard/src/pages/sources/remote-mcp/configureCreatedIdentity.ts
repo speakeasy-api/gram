@@ -87,7 +87,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        `Couldn't connect the server to ${serviceAccountClient.issuerName}. Finish the Service Account in Settings > Sign-in.`,
+        `Couldn't connect the server to ${serviceAccountClient.issuerName}. Finish the service account in Settings > Sign-in.`,
       );
     }
 
@@ -100,7 +100,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
+        "Service account was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
   }

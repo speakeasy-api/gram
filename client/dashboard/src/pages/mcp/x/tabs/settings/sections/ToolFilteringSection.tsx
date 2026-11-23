@@ -125,7 +125,8 @@ export function ToolFilteringSection({
         <SettingsSection.Description>
           Filter the tools exposed by this server based on their tags. All tools
           are returned by default. Filtering applies only when it is enabled and
-          the client asks for tags in the connection URL.
+          the client adds a <code>tags</code> query parameter to the connection
+          URL.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>

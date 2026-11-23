@@ -217,7 +217,7 @@ export function AddVariableSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            Add Environment Variable
+            Add environment variable
           </SheetTitle>
         </SheetHeader>
 

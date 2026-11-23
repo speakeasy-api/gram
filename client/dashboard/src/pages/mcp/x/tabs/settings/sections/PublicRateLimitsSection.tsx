@@ -187,8 +187,8 @@ function PublicRateLimits({
         Caps the total requests that anonymous callers can send to MCP servers
         fronting this source. All anonymous callers share one limit, so it
         protects your server from overload but does not split the limit fairly
-        between callers. Requests over the limit are refused until the rate
-        drops.
+        between callers. Requests over the limit are refused until capacity
+        frees up again.
         {tunneledMcpServer.allowPublic ? null : (
           <>
             {" "}

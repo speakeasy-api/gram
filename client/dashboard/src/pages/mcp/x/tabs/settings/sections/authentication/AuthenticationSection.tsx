@@ -67,7 +67,7 @@ export function AuthenticationSection({
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Sign-in</SettingsSection.Title>
+        <SettingsSection.Title>Sign-in method</SettingsSection.Title>
         <SettingsSection.Description>
           {authenticationSectionDescription(
             isUnproxied,

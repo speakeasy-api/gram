@@ -1,3 +1,4 @@
+import { MCP_SERVER_KIND_LABEL } from "@/components/mcp/mcp-server-kind";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   pluginServerRef,
@@ -299,13 +300,13 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   // but there is no separate page to send anyone to.
   let sourceDescription = "Connect an MCP server as this server's source.";
   if (hosted) {
-    sourceDescription = "Hosted by Speakeasy.";
+    sourceDescription = `${MCP_SERVER_KIND_LABEL.hosted}.`;
   } else if (mcpServer?.remoteMcpServerId) {
-    sourceDescription = "Remote (by URL).";
+    sourceDescription = `${MCP_SERVER_KIND_LABEL.remote}.`;
   } else if (mcpServer?.tunneledMcpServerId) {
-    sourceDescription = "Tunneled.";
+    sourceDescription = `${MCP_SERVER_KIND_LABEL.tunneled}.`;
   } else if (mcpServer?.unproxiedMcpServerId) {
-    sourceDescription = "Backed by an unproxied MCP server.";
+    sourceDescription = `${MCP_SERVER_KIND_LABEL.unproxied}.`;
   }
 
   const settingsHref = mcpServerTabHref(routes, idOrSlug, "settings");
@@ -518,13 +519,13 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
 
   if (!mcpServer) return null;
   const kindLabel = isRemoteBacked
-    ? "Remote (by URL)"
+    ? MCP_SERVER_KIND_LABEL.remote
     : isTunneledBacked
-      ? "Tunneled"
+      ? MCP_SERVER_KIND_LABEL.tunneled
       : isUnproxied
-        ? "Unproxied"
+        ? MCP_SERVER_KIND_LABEL.unproxied
         : hosted
-          ? "Hosted by Speakeasy"
+          ? MCP_SERVER_KIND_LABEL.hosted
           : undefined;
 
   return {

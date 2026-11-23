@@ -14,12 +14,13 @@ export function CallerIdentitySection(): JSX.Element {
       <SettingsSection.Header>
         <SettingsSection.Title>Caller identity</SettingsSection.Title>
         <SettingsSection.Description>
-          Speakeasy signs every request it forwards through the tunnel. If this
-          server can also be reached without the tunnel, have it accept only
-          requests signed for this organization.
+          Requests Speakeasy forwards for signed-in callers carry a signature
+          naming this organization. If this server can also be reached without
+          the tunnel, check that signature.
         </SettingsSection.Description>
         <TechnicalDetails>
-          Requests carry a signed X-Speakeasy-Identity assertion. Require its
+          Signed-in requests carry a signed X-Speakeasy-Identity assertion;
+          anonymous and background requests carry none. Require its
           organization_id claim to match the organization ID below.
         </TechnicalDetails>
       </SettingsSection.Header>

@@ -578,7 +578,11 @@ function UpstreamIdentityPendingSection({
   return (
     <SettingsSection id={id}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Sign-in</SettingsSection.Title>
+        <SettingsSection.Title>
+          {id === UPSTREAM_CREDENTIALS_SECTION_ID
+            ? "Upstream credentials"
+            : "Sign-in method"}
+        </SettingsSection.Title>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>

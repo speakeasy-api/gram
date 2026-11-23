@@ -1114,7 +1114,7 @@ function OAuthStatusDisplay({
       <div className="border-success-softest bg-success-softest border border-dashed p-8 text-center">
         <p className="text-success-foreground mb-1">
           <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
-          Login Secured
+          Login secured
         </p>
         <p className="text-success-foreground text-sm">
           Users will authenticate with interactive auth before accessing this
