@@ -62,6 +62,16 @@ impl<S> ClippedToolSource<S> {
     }
 }
 
+impl<S: ToolSource> ClippedToolSource<S> {
+    fn kind_of(&self, name: &ToolName, tool: &dyn Tool) -> &'static str {
+        if tool.spec().description == crate::catalog::UNRESOLVED_TOOL_DESCRIPTION {
+            return "unknown";
+        }
+        let advertised = self.inner.specs().iter().any(|spec| spec.name == *name);
+        tool_kind(name, advertised)
+    }
+}
+
 impl<S> ToolSource for ClippedToolSource<S>
 where
     S: ToolSource,
@@ -72,11 +82,11 @@ where
 
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
         self.inner.get(name).map(|inner| {
-            let advertised = self.inner.specs().iter().any(|spec| spec.name == *name);
+            let kind = self.kind_of(name, inner.as_ref());
             Arc::new(ClippedTool {
                 inner,
                 spill_root: self.spill_root.clone(),
-                kind: tool_kind(name, advertised),
+                kind,
             }) as Arc<dyn Tool>
         })
     }
@@ -94,7 +104,8 @@ struct ClippedTool {
 
 /// Low-cardinality tool class for the `assistant.tool` span. MCP tools are
 /// never advertised (see `catalog`), so any name the wrapped source resolves
-/// without advertising it is MCP-backed, or the unknown-tool fallback.
+/// without advertising it is MCP-backed. Unresolved names (the unknown-tool
+/// fallback) are classed `unknown` before this runs.
 fn tool_kind(name: &ToolName, advertised: bool) -> &'static str {
     match name.0.as_str() {
         agentkit_tool_compose::COMPOSE_TOOL_NAME => "compose",
@@ -362,6 +373,14 @@ mod tests {
         );
         assert_eq!(tool_kind(&ToolName::new("bun_run"), true), "builtin");
         assert_eq!(tool_kind(&ToolName::new("platform_overview"), false), "mcp");
+    }
+
+    #[test]
+    fn unresolved_tool_names_are_classed_unknown() {
+        let source = ClippedToolSource::new(crate::catalog::UnknownToolSource, "/tmp/unused");
+        let name = ToolName::new("hallucinated_tool");
+        let tool = source.inner.get(&name).unwrap();
+        assert_eq!(source.kind_of(&name, tool.as_ref()), "unknown");
     }
 
     use super::*;
