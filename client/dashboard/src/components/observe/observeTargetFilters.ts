@@ -45,7 +45,7 @@ export const TOOL_USAGE_TYPE_OPTIONS: Array<{
   value: ObserveTypeFilterValue;
 }> = [
   { label: "Hosted MCP Servers", value: "hosted_mcp_server" },
-  { label: "Tunneled MCP Servers", value: "tunneled_mcp_server" },
+  { label: "Tunneled MCP servers", value: "tunneled_mcp_server" },
   { label: "Gateways", value: "meta_mcp_server" },
   { label: "Shadow MCP Servers", value: "shadow_mcp_server" },
   { label: "Local Tools", value: "local_tool" },

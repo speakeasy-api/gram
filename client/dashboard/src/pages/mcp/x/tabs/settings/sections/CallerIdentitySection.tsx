@@ -1,4 +1,5 @@
 import { SettingsSection } from "@/components/detail/settings-section";
+import { TechnicalDetails } from "@/components/technical-details";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
@@ -13,11 +14,14 @@ export function CallerIdentitySection(): JSX.Element {
       <SettingsSection.Header>
         <SettingsSection.Title>Caller identity</SettingsSection.Title>
         <SettingsSection.Description>
-          Requests forwarded through the tunnel carry a signed
-          X-Speakeasy-Identity assertion. If this server is reachable other than
-          through the tunnel agent, require the assertion's organization_id
-          claim to match this organization ID.
+          Speakeasy signs every request it forwards through the tunnel. If this
+          server can also be reached without the tunnel, have it accept only
+          requests signed for this organization.
         </SettingsSection.Description>
+        <TechnicalDetails>
+          Requests carry a signed X-Speakeasy-Identity assertion. Require its
+          organization_id claim to match the organization ID below.
+        </TechnicalDetails>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>

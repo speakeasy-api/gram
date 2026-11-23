@@ -578,7 +578,7 @@ function UpstreamIdentityPendingSection({
   return (
     <SettingsSection id={id}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Identity</SettingsSection.Title>
+        <SettingsSection.Title>Sign-in</SettingsSection.Title>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>

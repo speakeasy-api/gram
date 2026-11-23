@@ -437,7 +437,7 @@ function GatewayAuthenticationSection({
   return (
     <SettingsSection id={GATEWAY_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Authentication</SettingsSection.Title>
+        <SettingsSection.Title>Sign-in</SettingsSection.Title>
         <SettingsSection.Description>
           Who may connect to this gateway and how they sign in. Changes take
           effect on new connections. Without an identity provider it serves

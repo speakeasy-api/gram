@@ -301,9 +301,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   if (hosted) {
     sourceDescription = "Hosted by Speakeasy.";
   } else if (mcpServer?.remoteMcpServerId) {
-    sourceDescription = "Backed by a remote MCP server.";
+    sourceDescription = "Remote (by URL).";
   } else if (mcpServer?.tunneledMcpServerId) {
-    sourceDescription = "Backed by a tunneled MCP server.";
+    sourceDescription = "Tunneled.";
   } else if (mcpServer?.unproxiedMcpServerId) {
     sourceDescription = "Backed by an unproxied MCP server.";
   }
@@ -372,7 +372,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
         }),
         {
           key: "authentication",
-          label: "Authentication",
+          label: "Sign-in",
           // A step may point somewhere more exact, so it comes after.
           href: `${settingsHref}#${MCP_AUTHENTICATION_SECTION_ID}`,
           ...(hosted
@@ -504,7 +504,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
           <span className="flex items-center gap-1.5">
             Settings
             <SimpleTooltip
-              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Sign-in and identity.`}
+              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Settings > Sign-in.`}
             >
               <AlertTriangle
                 className="text-warning h-3.5 w-3.5 shrink-0"
@@ -518,13 +518,13 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
 
   if (!mcpServer) return null;
   const kindLabel = isRemoteBacked
-    ? "Remote MCP"
+    ? "Remote (by URL)"
     : isTunneledBacked
-      ? "Tunneled MCP"
+      ? "Tunneled"
       : isUnproxied
-        ? "Unproxied MCP"
+        ? "Unproxied"
         : hosted
-          ? "Hosted MCP"
+          ? "Hosted by Speakeasy"
           : undefined;
 
   return {
@@ -575,7 +575,7 @@ const SETUP_PROVIDER_NAME: Record<SetupProvider, string> = {
 
 // The identity modes' names, as Settings' identity cards call them.
 const IDENTITY_LABEL: Record<IdentityMode, string> = {
-  user: "User Identity",
+  user: "User identity",
   agent: "Shared credential",
   none: "Manual",
 };
