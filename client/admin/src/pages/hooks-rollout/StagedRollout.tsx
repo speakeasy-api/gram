@@ -96,12 +96,23 @@ export function StagedRollout({
     if (confirmed) mutation.mutate({ kind: "pause", reason: reason.trim() });
   };
 
+  const resume = async () => {
+    const confirmed = await confirm({
+      title: "Resume the staged rollout?",
+      description:
+        "The day at the current share starts over, then the rollout moves on to the next share.",
+      confirmLabel: "Resume rollout",
+    });
+    if (confirmed) mutation.mutate({ kind: "resume" });
+  };
+
   const cancel = async () => {
     const confirmed = await confirm({
       title: "Cancel the staged rollout?",
       description:
         "Organizations it cleared go back to the default pin. Hooks plugins already published are not downgraded.",
       confirmLabel: "Cancel rollout",
+      destructive: true,
     });
     if (confirmed) mutation.mutate({ kind: "cancel", reason: reason.trim() });
   };
@@ -154,7 +165,7 @@ export function StagedRollout({
                 <Button
                   size="sm"
                   disabled={disabled}
-                  onClick={() => mutation.mutate({ kind: "resume" })}
+                  onClick={() => void resume()}
                 >
                   Resume
                 </Button>

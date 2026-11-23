@@ -311,8 +311,46 @@ describe("HooksRollout", () => {
     await renderWithApp(<HooksRollout />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+    expect(mocks.resumeHooksRolloutStage).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Resume rollout" }),
+    );
     await waitFor(() =>
       expect(mocks.resumeHooksRolloutStage).toHaveBeenCalled(),
     );
+  });
+
+  it("cancels a rollout only with a reason and after confirmation", async () => {
+    mocks.getHooksRollout.mockResolvedValue({ ...PINNED, stage: RUNNING });
+    const cancelled: AdminHooksRollout = {
+      ...PINNED,
+      stage: { ...RUNNING, state: "cancelled", reason: "bad release" },
+    };
+    mocks.cancelHooksRolloutStage.mockImplementation(async () => {
+      mocks.getHooksRollout.mockResolvedValue(cancelled);
+      return cancelled;
+    });
+    await renderWithApp(<HooksRollout />);
+
+    const cancel = (await screen.findByRole("button", {
+      name: "Cancel rollout",
+    })) as HTMLButtonElement;
+    expect(cancel.disabled).toBe(true);
+
+    fireEvent.change(
+      screen.getByLabelText("Reason for pausing or cancelling"),
+      { target: { value: "bad release" } },
+    );
+    fireEvent.click(cancel);
+    const dialog = await screen.findByRole("dialog");
+    expect(mocks.cancelHooksRolloutStage).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Cancel rollout" }),
+    );
+    await waitFor(() =>
+      expect(mocks.cancelHooksRolloutStage).toHaveBeenCalledWith("bad release"),
+    );
+    expect(await screen.findByText(/was cancelled by/)).toBeTruthy();
   });
 });

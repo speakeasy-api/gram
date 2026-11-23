@@ -286,7 +286,10 @@ func TestHooksRolloutStage_Lifecycle(t *testing.T) {
 	_, err = svc.ResumeHooksRolloutStage(ctx, &gen.ResumeHooksRolloutStagePayload{AdminSessionToken: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
 
-	result, err = svc.PauseHooksRolloutStage(ctx, &gen.PauseHooksRolloutStagePayload{AdminSessionToken: nil, Reason: "hooks alert"})
+	_, err = svc.PauseHooksRolloutStage(ctx, &gen.PauseHooksRolloutStagePayload{AdminSessionToken: nil, Reason: "   "})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	result, err = svc.PauseHooksRolloutStage(ctx, &gen.PauseHooksRolloutStagePayload{AdminSessionToken: nil, Reason: " hooks alert "})
 	require.NoError(t, err)
 	require.Equal(t, "paused", result.Stage.State)
 	require.Equal(t, "hooks alert", *result.Stage.Reason)

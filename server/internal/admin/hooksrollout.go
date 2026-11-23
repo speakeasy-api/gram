@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -104,7 +105,11 @@ func (s *Service) PauseHooksRolloutStage(ctx context.Context, payload *gen.Pause
 	if err != nil {
 		return nil, err
 	}
-	if err := hooksrollout.NewStageStore(s.db).Pause(ctx, payload.Reason, setBy); err != nil {
+	reason, err := hooksRolloutStageReason(payload.Reason)
+	if err != nil {
+		return nil, err
+	}
+	if err := hooksrollout.NewStageStore(s.db).Pause(ctx, reason, setBy); err != nil {
 		return nil, s.hooksRolloutStageError(ctx, err, "pause hooks rollout stage")
 	}
 	s.logger.InfoContext(ctx, "paused staged hooks rollout", attr.SlogAuthUserEmail(setBy))
@@ -128,11 +133,23 @@ func (s *Service) CancelHooksRolloutStage(ctx context.Context, payload *gen.Canc
 	if err != nil {
 		return nil, err
 	}
-	if err := hooksrollout.NewStageStore(s.db).Cancel(ctx, payload.Reason, setBy); err != nil {
+	reason, err := hooksRolloutStageReason(payload.Reason)
+	if err != nil {
+		return nil, err
+	}
+	if err := hooksrollout.NewStageStore(s.db).Cancel(ctx, reason, setBy); err != nil {
 		return nil, s.hooksRolloutStageError(ctx, err, "cancel hooks rollout stage")
 	}
 	s.logger.InfoContext(ctx, "cancelled staged hooks rollout", attr.SlogAuthUserEmail(setBy))
 	return s.hooksRolloutResult(ctx)
+}
+
+func hooksRolloutStageReason(reason string) (string, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "", oops.E(oops.CodeBadRequest, nil, "a reason is required")
+	}
+	return reason, nil
 }
 
 func (s *Service) hooksRolloutStageError(ctx context.Context, err error, msg string) error {

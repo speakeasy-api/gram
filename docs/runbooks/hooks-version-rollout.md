@@ -43,7 +43,12 @@ This is the default way to ship a hooks release.
    **Hooks rollout** page (`/hooks-rollout`) shows the new version.
 2. Under **Staged rollout**, enter the current hooks version and click **Start
    staged rollout**. Confirm the dialog. The version must be above the default
-   pin.
+   pin. Set the default pin first (see
+   [Cutover from PostHog](#cutover-from-posthog)): without one, organizations
+   the rollout has not cleared still follow the legacy PostHog flag. Starting a
+   different version while a rollout is active replaces it: the new rollout
+   starts again at Canary, and organizations the old one cleared go back to the
+   default pin.
 3. The rollout then moves on its own, checked hourly:
    - **Canary**: only canary organizations, for 24 hours.
    - **25%**: a fixed quarter of the organizations on the default pin, picked
