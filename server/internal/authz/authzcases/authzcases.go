@@ -82,11 +82,8 @@ func toEffectiveGrants(grants []authz.Grant) []effectiveGrant {
 	return out
 }
 
-// The principals, projects and resources the cases name. Grants go to
-// caseRole (through a role) or caseUser (directly, which can outrank a role's
-// block), on caseProject and caseResource. Checks also ask about caseResource2
-// and caseProject2, so each case records what a grant does not reach as well
-// as what it does: a grant on caseResource must refuse caseResource2.
+// Checks also ask about caseResource2 and caseProject2, so each case records
+// what a grant must not reach.
 const (
 	caseRole      = "role:organization:role-1"
 	caseUser      = "user:user-1"
@@ -110,12 +107,9 @@ func caseGrant(principal string, scope authz.Scope, resourceID, projectID string
 	return authz.Grant{PrincipalUrn: principal, Scope: scope, Selector: selector, Inferred: false}
 }
 
-// dimensionValues are placeholder values for a kind's optional dimensions.
-// atomsFor adds, per dimension, a grant limited to its value (for example an
-// mcp:connect grant limited to tool "tool-1"). The dashboard never sends these
-// dimensions, so those cases pin how a limited grant answers a check that
-// leaves the dimension out. Any value works; it only has to be non-empty and
-// valid for the dimension, so disposition uses a real one.
+// The dashboard never sends these dimensions, so atomsFor's limited grants pin
+// how a grant limited to one answers a check that leaves it out. Any valid,
+// non-empty value works.
 var dimensionValues = map[string]string{
 	authz.SelectorKeyDisposition:    authz.DispositionReadOnly,
 	authz.SelectorKeyServerURL:      "https://example.com",
