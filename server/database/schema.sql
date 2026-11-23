@@ -2370,8 +2370,9 @@ CREATE INDEX IF NOT EXISTS functions_access_organization_id_id_idx
   WHERE encryption_key IS NOT NULL;
 
 -- Finds an organization's runner keys stored before organization_id existed,
--- which keep it from finalizing. Empty once the function runner key
--- organization backfill has run.
+-- which keep it from finalizing. After the function runner key organization
+-- backfill, it holds only keys whose project's organization has no metadata
+-- row.
 CREATE INDEX IF NOT EXISTS functions_access_project_id_unattributed_idx
   ON functions_access (project_id)
   WHERE organization_id IS NULL;
