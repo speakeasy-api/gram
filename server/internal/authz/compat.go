@@ -10,6 +10,9 @@ import (
 //
 // Deprecated: Use Require(ctx, Either(...)), which behaves the same.
 func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
+	if len(checks) == 0 {
+		return e.Require(ctx)
+	}
 	return e.Require(ctx, Either(checks...))
 }
 
@@ -52,6 +55,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	allowed := make([]string, 0, len(checks))
 	for i, decision := range d.Each {
 		if decision.Allowed {
+			// #nosec G602 -- Decide returns one decision per check, in order.
 			allowed = append(allowed, checks[i].ResourceID)
 		}
 	}
@@ -99,8 +103,10 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]Reason, e
 	reasons := make([]Reason, len(checks))
 	for i, decision := range d.Each {
 		reasons[i] = decision.Reason
-		if decision.Enforced && decision.Reason == ReasonNotGranted && !isGroup(checks[i]) {
-			reasons[i], err = grants.dispositionReason(checks[i])
+		// #nosec G602 -- Decide returns one decision per check, in order.
+		check := checks[i]
+		if decision.Enforced && decision.Reason == ReasonNotGranted && !isGroup(check) {
+			reasons[i], err = grants.dispositionReason(check)
 			if err != nil {
 				return nil, e.mapError(ctx, err)
 			}

@@ -298,10 +298,10 @@ func TestGrantsAuthorizeRejectsWildcardResourceID(t *testing.T) {
 	require.False(t, allowed)
 }
 
-func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
+func TestGroup_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	anyOf := AnyUnblocked(Project(ProjectIDFrom("project-one")).Write(), Project(ProjectIDFrom("project-one")).Read())
+	group := AnyUnblocked(Project(ProjectIDFrom("project-one")).Write(), Project(ProjectIDFrom("project-one")).Read())
 
 	// A misuse is refused whether or not RBAC is enforced for the caller.
 	for name, ctx := range shapeTestContexts(t, []Grant{NewGrant(ScopeRoot, WildcardResource)}) {
@@ -309,19 +309,19 @@ func TestAnyOf_OnlyAsTheSingleCheckOfRequireOrCan(t *testing.T) {
 			t.Helper()
 			var shareable *oops.ShareableError
 			require.ErrorAs(t, err, &shareable, name)
-			require.NotEqual(t, oops.CodeForbidden, shareable.Code, "%s: a misused AnyUnblocked is a bad check, not a denial", name)
+			require.NotEqual(t, oops.CodeForbidden, shareable.Code, "%s: a misused group is a bad check, not a denial", name)
 		}
-		requireInvalid(engine.Require(ctx, anyOf, Project(ProjectIDFrom("project-one")).Read()))
-		requireInvalid(engine.Require(ctx, AnyUnblocked(anyOf)))
-		_, err := engine.Evaluate(ctx, anyOf)
+		requireInvalid(engine.Require(ctx, group, Project(ProjectIDFrom("project-one")).Read()))
+		requireInvalid(engine.Require(ctx, AnyUnblocked(group)))
+		_, err := engine.Evaluate(ctx, group)
 		requireInvalid(err)
-		_, err = engine.Filter(ctx, []Check{anyOf})
+		_, err = engine.Filter(ctx, []Check{group})
 		requireInvalid(err)
-		_, err = engine.FindMatched(ctx, []Check{anyOf})
+		_, err = engine.FindMatched(ctx, []Check{group})
 		requireInvalid(err)
-		_, err = engine.Can(ctx, anyOf, Project(ProjectIDFrom("project-one")).Read())
+		_, err = engine.Can(ctx, group, Project(ProjectIDFrom("project-one")).Read())
 		requireInvalid(err)
-		_, err = engine.Can(ctx, AnyUnblocked(anyOf))
+		_, err = engine.Can(ctx, AnyUnblocked(group))
 		requireInvalid(err)
 		requireInvalid(engine.Require(ctx, AnyUnblocked()))
 		_, err = engine.Can(ctx, AnyUnblocked())
