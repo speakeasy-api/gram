@@ -13,10 +13,12 @@ use std::sync::{Arc, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use agentkit_mcp::{
-    McpError, McpServerConfig, McpServerId, McpServerManager, McpServerOptions,
-    McpTransportBinding, StreamableHttpTransportConfig,
+    CallToolResult, Content, ErrorResponderOutcome, McpError, McpErrorContext, McpErrorResponder,
+    McpHandlerConfig, McpInvocationError, McpServerConfig, McpServerId, McpServerManager,
+    McpServerOptions, McpTransportBinding, StreamableHttpTransportConfig,
 };
 use agentkit_tools_core::CatalogReader;
+use async_trait::async_trait;
 use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -166,7 +168,9 @@ pub fn spawn_mcp_actor(
     inbox_tx: UnboundedSender<String>,
 ) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, KnownTools), RunnerError> {
     // Each tool call carries its own trace context to the server.
-    let mut manager = McpServerManager::new().with_request_decorator(mcp_trace_decorator());
+    let mut manager = McpServerManager::new()
+        .with_handler_config(mcp_handler_config())
+        .with_request_decorator(mcp_trace_decorator());
     let catalog = manager.source();
     let mut configured = BTreeMap::new();
     let token = tokens.current()?;
@@ -798,6 +802,43 @@ pub fn validated_server_headers(server: &McpServer) -> Result<http::HeaderMap, R
     Ok(server_headers)
 }
 
+/// JSON-RPC code Speakeasy's MCP servers return when the caller lacks a
+/// permission the tool requires.
+const MCP_PERMISSION_DENIED: i32 = -32003;
+
+fn mcp_handler_config() -> McpHandlerConfig {
+    McpHandlerConfig::new().with_error_responder(Arc::new(ErrorResponseAsToolError))
+}
+
+/// Turns a JSON-RPC error response to a tool call into an error tool result.
+/// Left alone, agentkit surfaces it as `ToolError::ExecutionFailed` — the
+/// same variant as a dropped connection — so the dispatch layer reseats a
+/// connection that just answered and tells the model to retry a call the
+/// server has already refused. An error result reaches the model as is.
+struct ErrorResponseAsToolError;
+
+#[async_trait]
+impl McpErrorResponder for ErrorResponseAsToolError {
+    async fn handle(
+        &self,
+        error: &McpInvocationError,
+        _ctx: McpErrorContext<'_>,
+    ) -> ErrorResponderOutcome {
+        ErrorResponderOutcome::SynthesizeResult(CallToolResult::error(vec![Content::text(
+            invocation_error_text(error),
+        )]))
+    }
+}
+
+fn invocation_error_text(error: &McpInvocationError) -> String {
+    if error.code() == MCP_PERMISSION_DENIED {
+        return format!(
+            "permission denied: this assistant cannot use this tool, so do not retry it ({error})"
+        );
+    }
+    error.to_string()
+}
+
 fn build_mcp_server_config(
     server: &McpServer,
     http_client: &reqwest::Client,
@@ -817,7 +858,7 @@ fn build_mcp_server_config(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -1040,6 +1081,118 @@ mod tests {
         assert!(actor.last_errors.is_empty());
         assert!(actor.last_reconnects.is_empty());
         assert!(actor.configured.contains_key("new"));
+    }
+
+    #[tokio::test]
+    async fn first_call_connects_by_namespace_and_error_responses_stay_tool_errors() {
+        use agentkit_core::ToolOutput;
+        use agentkit_tools_core::{
+            AllowAllPermissions, OwnedToolContext, ToolName, ToolRequest, ToolSource,
+        };
+        use axum::{Json, Router, response::IntoResponse, routing::post};
+        use serde_json::{Value, json};
+        let app = Router::new().route(
+            "/mcp",
+            post(|Json(message): Json<Value>| async move {
+                let method = message["method"].as_str().unwrap().to_string();
+                if message.get("id").is_none() {
+                    return axum::http::StatusCode::ACCEPTED.into_response();
+                }
+                let body = match method.as_str() {
+                    "initialize" => {
+                        json!({"result": {"protocolVersion": message["params"]["protocolVersion"], "capabilities": {"tools": {}}, "serverInfo": {"name": "fixture", "version": "1"}}})
+                    }
+                    "tools/list" => json!({"result": {"tools": [
+                        {"name": "denied", "inputSchema": {"type": "object"}},
+                        {"name": "picky", "inputSchema": {"type": "object"}},
+                    ]}}),
+                    _ if message["params"]["name"] == "denied" => {
+                        json!({"error": {"code": -32003, "message": "insufficient permissions"}})
+                    }
+                    _ => json!({"error": {"code": -32602, "message": "missing field `from`"}}),
+                };
+                let mut body = body.as_object().unwrap().clone();
+                body.insert("jsonrpc".into(), json!("2.0"));
+                body.insert("id".into(), message["id"].clone());
+                let mut response = Json(Value::Object(body)).into_response();
+                response
+                    .headers_mut()
+                    .insert("mcp-session-id", "session".parse().unwrap());
+                response
+            })
+            .get(|| async { axum::http::StatusCode::METHOD_NOT_ALLOWED })
+            .delete(|| async { axum::http::StatusCode::OK }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = reqwest::Client::new();
+        let (notice_tx, _notices) = mpsc::unbounded_channel();
+        let server = McpServer {
+            id: "srv".into(),
+            url: format!("http://{addr}/mcp"),
+            headers: BTreeMap::new(),
+        };
+        let (cmd, catalog, _known) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&server),
+            &TokenRegistry::new("opaque-a"),
+            notice_tx,
+        )
+        .unwrap();
+
+        // No tool_search ran, so nothing is known yet: the namespace alone
+        // routes the first call to its server.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::ConnectForTool {
+            tool_name: "mcp_srv_denied".into(),
+            reply,
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+
+        let owned = OwnedToolContext {
+            session_id: "s".into(),
+            turn_id: "t".into(),
+            metadata: Default::default(),
+            permissions: Arc::new(AllowAllPermissions),
+            resources: Arc::new(()),
+            cancellation: None,
+            execution_scope: None,
+            approved_request: None,
+        };
+        for (name, expected) in [
+            (
+                "mcp_srv_denied",
+                "permission denied: this assistant cannot use this tool, so do not retry it",
+            ),
+            ("mcp_srv_picky", "invalid params: missing field `from`"),
+        ] {
+            let tool = catalog.get(&ToolName::new(name)).expect("connected");
+            let request = ToolRequest::new("call", name, json!({}), "s", "t");
+            let result = tool
+                .invoke(request, &mut owned.borrowed())
+                .await
+                .expect("a JSON-RPC error response is a tool error result, not a failed call");
+            assert!(result.result.is_error, "{name}");
+            match result.result.output {
+                ToolOutput::Text(text) => assert!(text.contains(expected), "{name}: {text}"),
+                ToolOutput::Parts(parts) => {
+                    let text = serde_json::to_string(&parts).unwrap();
+                    assert!(text.contains(expected), "{name}: {text}");
+                }
+                other => panic!("{name}: unexpected output {other:?}"),
+            }
+        }
+        server_task.abort();
     }
 
     #[tokio::test]

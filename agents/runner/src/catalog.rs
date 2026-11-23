@@ -386,6 +386,82 @@ mod tests {
         );
     }
 
+    struct ScriptedTool {
+        spec: ToolSpec,
+        transport_failure: bool,
+    }
+
+    #[async_trait]
+    impl Tool for ScriptedTool {
+        fn spec(&self) -> &ToolSpec {
+            &self.spec
+        }
+
+        async fn invoke(
+            &self,
+            request: ToolRequest,
+            _ctx: &mut ToolContext<'_>,
+        ) -> Result<ToolResult, ToolError> {
+            if self.transport_failure {
+                return Err(ToolError::ExecutionFailed("transport error: closed".into()));
+            }
+            Ok(ToolResult::new(ToolResultPart::error(
+                request.call_id,
+                ToolOutput::text("permission denied: do not retry it"),
+            )))
+        }
+    }
+
+    #[tokio::test]
+    async fn only_failed_calls_reseat_the_connection() {
+        use agentkit_tools_core::OwnedToolContext;
+        let owned = OwnedToolContext {
+            session_id: "s".into(),
+            turn_id: "t".into(),
+            metadata: Default::default(),
+            permissions: Arc::new(Policy(PermissionDecision::Allow)),
+            resources: Arc::new(()),
+            cancellation: None,
+            execution_scope: None,
+            approved_request: None,
+        };
+        for transport_failure in [false, true] {
+            let (cmd_tx, mut cmd_rx) = mpsc::channel(4);
+            let tool = ReconnectingTool {
+                inner: Arc::new(ScriptedTool {
+                    spec: ToolSpec::new("mcp_srv_t", "t", json!({"type": "object"})),
+                    transport_failure,
+                }),
+                cmd_tx,
+            };
+            let responder = tokio::spawn(async move {
+                let mut reconnects = 0;
+                while let Some(cmd) = cmd_rx.recv().await {
+                    if let McpCmd::ReconnectTool { reply, .. } = cmd {
+                        reconnects += 1;
+                        let _ = reply.send(Ok(()));
+                    }
+                }
+                reconnects
+            });
+            let request = ToolRequest::new("call", "mcp_srv_t", json!({}), "s", "t");
+            let outcome = tool.invoke(request, &mut owned.borrowed()).await;
+            drop(tool);
+            let reconnects = responder.await.unwrap();
+            if transport_failure {
+                assert_eq!(reconnects, 1);
+                assert!(outcome.unwrap_err().to_string().contains("retry the call"));
+            } else {
+                assert_eq!(reconnects, 0, "an error result from the server is final");
+                let result = outcome.unwrap();
+                assert!(result.result.is_error);
+                assert!(
+                    matches!(result.result.output, ToolOutput::Text(ref s) if s.contains("do not retry"))
+                );
+            }
+        }
+    }
+
     #[tokio::test]
     async fn undiscovered_namespaced_tool_connects_its_server_on_first_call() {
         use agentkit_tools_core::{BasicToolExecutor, OwnedToolContext, ToolExecutor};
