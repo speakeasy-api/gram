@@ -120,7 +120,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 // targetedFlag models a PostHog flag that is EITHER a group flag (organization
 // slugs, person ignored) OR a person flag (emails, groups ignored). A person
-// flag given no email falls back to looking the distinct ID up as a stored person.
+// flag matches a supplied email exactly; only without one does it look the
+// distinct ID up as a stored person.
 type targetedFlag struct {
 	mu               sync.Mutex
 	orgSlugs         []string

@@ -112,7 +112,7 @@ In production the SDK caches flag definitions (polled every minute) and evaluate
 
 ### Targeting a flag at people
 
-Use `feature.PersonTarget(ctx)` for the distinct ID and person properties, and fall back to the organization ID when it returns `ok == false`; `mcpconnectionhealth.begin` is the example.
+Pass `feature.FlagTarget(ctx, organizationID)`'s distinct ID and person properties to `EvaluateFlag`. It handles sessions and API keys, so a person condition is always decided locally; `mcpconnectionhealth.begin` is the example.
 
 ### Targeting rule for org and project flags
 

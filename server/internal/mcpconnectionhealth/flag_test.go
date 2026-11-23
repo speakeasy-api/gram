@@ -84,9 +84,9 @@ func TestFlag_MatchesAnEmailWhateverItsCaseOrSpacing(t *testing.T) {
 	ti.flags.targetPeople("on@example.com")
 
 	ti.readsWork(t, asPerson(t, ctx, new("On@Example.COM")))
-	ti.requireEvaluatedAs(t, "on@example.com", map[string]string{"email": "on@example.com"})
+	ti.requireEvaluatedAs(t, "On@Example.COM", map[string]string{"email": "on@example.com"})
 	ti.readsWork(t, asPerson(t, ctx, new("  on@example.com\n")))
-	ti.requireEvaluatedAs(t, "on@example.com", map[string]string{"email": "on@example.com"})
+	ti.requireEvaluatedAs(t, "  on@example.com\n", map[string]string{"email": "on@example.com"})
 }
 
 func TestFlag_OnForTheOrganizationWorksForEveryone(t *testing.T) {
@@ -111,7 +111,7 @@ func TestFlag_AnAPIKeyNeverMatchesAPerson(t *testing.T) {
 
 	ti.readsWork(t, ctx)
 	ti.readsAreNotFound(t, asProducerKey(t, ctx))
-	ti.requireEvaluatedAs(t, ti.org, nil)
+	ti.requireEvaluatedAs(t, ti.org, map[string]string{"email": ""})
 }
 
 func TestFlag_ASessionWithoutEmailIsEvaluatedAsTheOrganization(t *testing.T) {
@@ -121,9 +121,9 @@ func TestFlag_ASessionWithoutEmailIsEvaluatedAsTheOrganization(t *testing.T) {
 	ti.flags.targetPeople("on@example.com")
 
 	ti.readsAreNotFound(t, asPerson(t, ctx, nil))
-	ti.requireEvaluatedAs(t, ti.org, nil)
+	ti.requireEvaluatedAs(t, ti.org, map[string]string{"email": ""})
 	ti.readsAreNotFound(t, asPerson(t, ctx, new("  ")))
-	ti.requireEvaluatedAs(t, ti.org, nil)
+	ti.requireEvaluatedAs(t, ti.org, map[string]string{"email": ""})
 }
 
 func TestFlag_AnEvaluationErrorIsNotFound(t *testing.T) {

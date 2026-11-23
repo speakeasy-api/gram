@@ -115,10 +115,19 @@ func TestPosthogEvaluateFlag_PersonAndGroupConditions(t *testing.T) {
 	got, err = p.EvaluateFlag(ctx, personTargetedFlag, "off@example.com", groupsOn, person("off@example.com"))
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationDisabled, got)
+
+	// A caller that is not a person sends an empty email: decided locally as
+	// no match on a person flag, and unchanged on the group flag.
+	notPerson := map[string]string{"email": ""}
+	got, err = p.EvaluateFlag(ctx, personTargetedFlag, "organization-id", groupsOn, notPerson)
+	require.NoError(t, err)
+	require.Equal(t, feature.EvaluationDisabled, got)
+	got, err = p.EvaluateFlag(ctx, groupTargetedFlag, "organization-id", groupsOn, notPerson)
+	require.NoError(t, err)
+	require.Equal(t, feature.EvaluationEnabled, got)
 	require.Empty(t, remote.all(), "supplied person properties decide locally")
 
-	// Without person properties the condition cannot decide locally; the
-	// remote fallback gets no email and the failure stays closed.
+	// Omitting the email instead would ask PostHog to look up a stored person.
 	got, err = p.EvaluateFlag(ctx, personTargetedFlag, "organization-id", groupsOn, nil)
 	require.Error(t, err)
 	require.Equal(t, feature.EvaluationIndeterminate, got)

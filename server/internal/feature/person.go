@@ -7,19 +7,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-// PersonTarget is a signed-in session's lowercased email; API keys are never a person.
-// The dashboard buckets by raw email, so only percentage rollouts can differ by case.
-func PersonTarget(ctx context.Context) (distinctID string, personProperties map[string]string, ok bool) {
-	if !contextvalues.HasValidatedGramSession(ctx) {
-		return "", nil, false
+// FlagTarget evaluates a signed-in session as its raw email (the dashboard's distinct ID) with a lowercased
+// "email"; anyone else, API keys included, is the organization with an empty "email" that never matches.
+func FlagTarget(ctx context.Context, organizationID string) (distinctID string, personProperties map[string]string, person bool) {
+	if contextvalues.HasValidatedGramSession(ctx) {
+		authCtx, _ := contextvalues.GetAuthContext(ctx)
+		if authCtx.Email != nil {
+			if email := strings.ToLower(strings.TrimSpace(*authCtx.Email)); email != "" {
+				return *authCtx.Email, map[string]string{"email": email}, true
+			}
+		}
 	}
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx.Email == nil {
-		return "", nil, false
-	}
-	email := strings.ToLower(strings.TrimSpace(*authCtx.Email))
-	if email == "" {
-		return "", nil, false
-	}
-	return email, map[string]string{"email": email}, true
+	return organizationID, map[string]string{"email": ""}, false
 }

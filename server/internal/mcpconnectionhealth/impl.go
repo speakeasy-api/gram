@@ -117,10 +117,7 @@ func (s *Service) begin(ctx context.Context) (caller, error) {
 		return caller{}, oops.C(oops.CodeUnauthorized)
 	}
 	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	distinctID, person, ok := feature.PersonTarget(ctx)
-	if !ok {
-		distinctID = authCtx.ActiveOrganizationID
-	}
+	distinctID, person, _ := feature.FlagTarget(ctx, authCtx.ActiveOrganizationID)
 	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagMCPConnectionHealth, distinctID, groups, person)
 	if err != nil {
 		s.logger.WarnContext(ctx, "evaluate mcp connection health flag", attr.SlogError(err))

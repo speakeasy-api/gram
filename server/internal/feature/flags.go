@@ -102,9 +102,11 @@ const (
 	FlagExplore Flag = "gram-explore"
 	// FlagMCPConnectionHealth gates the MCP connection health pages and API.
 	// Target by organization group (org slug) or by person "email" (see
-	// PersonTarget); API keys never match a person. Fails closed.
+	// FlagTarget); API keys never match a person. Fails closed.
 	// Switch to a person condition only after this server is fully deployed,
 	// back to organization before rolling it back; list emails lowercase.
+	// Servers pick up a switch within about a minute: check a listed person and
+	// an unlisted member of a previously enabled organization before calling it done.
 	FlagMCPConnectionHealth Flag = "mcp-connection-health"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
