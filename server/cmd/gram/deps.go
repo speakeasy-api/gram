@@ -105,6 +105,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"golang.org/x/oauth2"
 
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -954,6 +955,7 @@ func newAdminOpenRouter(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	c *cli.Context,
+	staffOrg staff.Organization,
 ) admin.AdminOpenRouter {
 	env := c.String("environment")
 	if env == "local" {
@@ -982,6 +984,7 @@ func newAdminOpenRouter(
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
 		encryptionClient,
+		staffOrg,
 	)
 }
 

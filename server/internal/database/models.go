@@ -1836,6 +1836,28 @@ type ChatMessageParticipant struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type ChatMessageTranscript struct {
+	// Source message identity.
+	// @access: confidential
+	MessageID uuid.UUID
+	// Owning project identity.
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Owning organization identity.
+	// @access: confidential
+	OrganizationID string
+	// Organization-key encrypted transcript payload.
+	// @access: opaque-restricted
+	Ciphertext string
+	// Unkeyed freshness digest of sensitive transcript fields.
+	// @access: opaque-restricted
+	SourceHash []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type ChatResolution struct {
 	// @access: confidential
 	ID uuid.UUID

@@ -7,7 +7,6 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
 import { cn } from "@/lib/utils";
-import { trackError } from "@/elements/lib/errorTracking";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { Calendar } from "./calendar";
 
@@ -426,9 +425,7 @@ User input: ${input}`,
     // Returning null keeps the UI graceful on an unparseable string, but the
     // failure must not be invisible — a 401/gateway error here looks identical
     // to "couldn't parse" to the user. Surface it so it's diagnosable.
-    trackError(error, {
-      source: "custom",
-      location: "TimeRangePicker.parseWithAI",
+    console.error("TimeRangePicker.parseWithAI failed:", error, {
       hasAuthHeaders: Boolean(authHeaders),
     });
     return null;

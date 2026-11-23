@@ -135,6 +135,13 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	billingRepo, billingTracker := identityDeps.Billing, identityDeps.BillingTracker
 	productFeatures, siteURL := identityDeps.ProductFeatures, identityDeps.SiteURL
 	identityResolver, sessionManager, chatSessions := identityDeps.Identity, identityDeps.Sessions, identityDeps.ChatSessions
+	staffOrg, err := staffOrganizationFromCLI(c)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+		return nil, err
+	}
 	serverURL, err := url.Parse(c.String("server-url"))
 	if err != nil {
 		return nil, fmt.Errorf("parse server URL: %w", err)
@@ -179,7 +186,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if c.String("environment") == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, openrouter.WithAIProviderKeys(aiProviderKeys))
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 	}
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
 	if err != nil {
@@ -303,6 +310,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+	if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+		return nil, err
+	}
 	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)

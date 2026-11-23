@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -45,6 +46,7 @@ func newSpendTestClient(t *testing.T, handler http.Handler) *OpenRouter {
 		nil,
 		nil,
 		nil,
+		staff.Organization{},
 	)
 	client.baseURL = server.URL
 	return client

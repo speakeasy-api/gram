@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
@@ -203,9 +202,6 @@ func (s *MCPPolicyScanner) ScanMCPPolicy(ctx context.Context, policy policycore.
 func (s *MCPPolicyScanner) scanPromptPolicy(ctx context.Context, policy policycore.Policy, request MCPScanRequest, view risk_analysis.MessageView, scope risk_analysis.CategoryScope) ([]scanners.Finding, error) {
 	if !scope.SourceInScope(view, promptpolicy.Source) {
 		return nil, nil
-	}
-	if !s.scanner.projectFlagEnabled(ctx, policy.OrganizationID, policy.ProjectID, feature.FlagPromptPolicies) {
-		return nil, errors.New("prompt policy detector is disabled")
 	}
 	if s.scanner.promptPolicy == nil {
 		return nil, errors.New("prompt policy detector is unavailable")

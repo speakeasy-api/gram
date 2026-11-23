@@ -62,6 +62,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -191,6 +192,10 @@ type Service struct {
 	// host, which generated plugins use for server routes and MCP addresses.
 	// Nil, or an organization without a stored platform host, uses serverURL.
 	orgHosts *orghost.Resolver
+
+	// staffOrg is the deployment's Speakeasy staff organization, which always
+	// receives the current hooksGeneratorVersion immediately.
+	staffOrg staff.Organization
 }
 
 var (
@@ -211,6 +216,7 @@ func NewService(
 	serverURL string,
 	features feature.Provider,
 	publisher PluginPublishSignaler,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -236,6 +242,7 @@ func NewService(
 		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(),
 		orgHosts:              nil,
+		staffOrg:              staffOrg,
 	}
 }
 
@@ -252,6 +259,7 @@ func NewPublisher(
 	env string,
 	serverURL string,
 	features feature.Provider,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -274,6 +282,7 @@ func NewPublisher(
 		publicationRequests:   PublicationRequests{Enabled: false},
 		distributionAdmission: admission.NewGuard(),
 		orgHosts:              nil,
+		staffOrg:              staffOrg,
 	}
 }
 
@@ -2179,7 +2188,7 @@ type PublishProjectInput struct {
 	// version gating: every publish path is gated unconditionally inside
 	// publishProject, so no caller can force a hooks upgrade onto an org the
 	// rollout hasn't cleared. The only lever to advance hooks is the org's
-	// rollout pin in the admin dashboard (plus the hardcoded canary, and the
+	// rollout pin in the admin dashboard (plus the staff organization canary, and the
 	// legacy hooks-rollout flag for orgs no pin covers yet).
 	SkipIfUnchanged bool
 	// IncludePausedPlugins makes this a manual sync, like the dashboard's
@@ -2333,7 +2342,9 @@ func CurrentHooksGeneratorVersion() (int, error) {
 }
 
 // hooksRolloutEligible reports whether the org is cleared to receive the current
-// hooksGeneratorVersion. Canary orgs always are. Otherwise the org's effective
+// hooksGeneratorVersion. The staff organization, the canary, always is: that is
+// configuration rather than a pin so a missing or mistaken pin can never strand
+// our own team on a stale hooks version. Otherwise the org's effective
 // rollout pin — its override, or else the platform-wide default, both set from
 // the admin dashboard — must reach the current version. Until a default pin
 // exists, an org without an override falls back to the legacy FlagHooksRollout
@@ -2341,7 +2352,7 @@ func CurrentHooksGeneratorVersion() (int, error) {
 // a parse error all mean "not eligible", so the org keeps its published hooks
 // rather than rolling forward on an incomplete signal.
 func (s *Service) hooksRolloutEligible(ctx context.Context, orgID, orgSlug string) bool {
-	if hooksrollout.IsCanary(orgSlug) {
+	if s.staffOrg.Is(orgID) {
 		return true
 	}
 
@@ -2502,7 +2513,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// automated rollout, a dashboard publish, a marketplace rename, an
 	// browser-login toggle) can force a hooks change onto an org that the
 	// rollout hasn't cleared. The single lever to advance an org is its rollout
-	// pin in the admin dashboard (plus the hardcoded canary, and the legacy
+	// pin in the admin dashboard (plus the staff organization canary, and the legacy
 	// hooks-rollout flag for orgs no pin covers yet); see
 	// hooksRolloutEligible. When an org isn't eligible we carry its already-
 	// published hooks verbatim (both version AND config), because regenerating

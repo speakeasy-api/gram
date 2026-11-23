@@ -4,7 +4,6 @@ import type { ToolsFilter } from "@/elements/types";
 import type { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
-import { trackError } from "@/elements/lib/errorTracking";
 import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
 import {
   createLoadSkillTool,
@@ -149,12 +148,11 @@ export function useMCPTools({
         const result = settled[i]!;
         if (result.status === "rejected") {
           rejected++;
-          trackError(result.reason, {
-            source: "custom",
-            scope: "mcp-tools",
-            serverName: server.name ?? deriveNameFromUrl(server.url),
-            serverUrl: server.url,
-          });
+          // The error can carry the endpoint URL and response body, so log
+          // only which server failed.
+          console.error(
+            `Failed to list MCP tools from ${server.name ?? deriveNameFromUrl(server.url)}.`,
+          );
           continue;
         }
         const prefix = namespaced
@@ -315,13 +313,12 @@ async function withSkillTool(
       },
       discovered: true,
     };
-  } catch (error) {
-    trackError(error, {
-      source: "custom",
-      scope: "mcp-skills",
-      serverName: server.name ?? deriveNameFromUrl(server.url),
-      serverUrl: server.url,
-    });
+  } catch {
+    // The error can carry the endpoint URL and response body, so log only
+    // which server failed.
+    console.error(
+      `Failed to list MCP skills from ${server.name ?? deriveNameFromUrl(server.url)}.`,
+    );
     return { tools, discovered: false };
   }
 }

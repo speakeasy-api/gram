@@ -455,9 +455,9 @@ WHERE session.organization_id = @organization_id
 WITH default_project AS (
     SELECT id
     FROM projects
-    WHERE organization_id = @organization_id
-      AND slug = 'default'
-      AND deleted IS FALSE
+    WHERE projects.organization_id = @organization_id
+      AND projects.slug = 'default'
+      AND projects.deleted IS FALSE
     LIMIT 1
 )
 SELECT
