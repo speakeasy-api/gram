@@ -31,6 +31,14 @@ export type AnalyzeSessionRequestBody = {
    * Chat generation to analyze. Defaults to the latest.
    */
   generation?: number | undefined;
+  /**
+   * Most tool calls to analyze from offset. Defaults to all, up to 200.
+   */
+  limit?: number | undefined;
+  /**
+   * Index of the first tool call to analyze, for analyzing a session in batches. Totals still count every call.
+   */
+  offset?: number | undefined;
 };
 
 /** @internal */
@@ -43,6 +51,8 @@ export type AnalyzeSessionRequestBody$Outbound = {
   chat_id: string;
   evaluator: string;
   generation?: number | undefined;
+  limit?: number | undefined;
+  offset: number;
 };
 
 /** @internal */
@@ -54,6 +64,8 @@ export const AnalyzeSessionRequestBody$outboundSchema: z.ZodMiniType<
     chatId: z.string(),
     evaluator: Evaluator$outboundSchema,
     generation: z.optional(z.int()),
+    limit: z.optional(z.int()),
+    offset: z._default(z.int(), 0),
   }),
   z.transform((v) => {
     return remap$(v, {

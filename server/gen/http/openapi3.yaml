@@ -42739,7 +42739,7 @@ paths:
                 name: ListIntegrations
     /rpc/intentPolicies.analyzeSession:
         post:
-            description: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Requires a Speakeasy platform admin.
+            description: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires a Speakeasy platform admin.
             operationId: analyzeIntentSession
             parameters:
                 - allowEmptyValue: true
@@ -106403,6 +106403,18 @@ components:
                     description: Chat generation to analyze. Defaults to the latest.
                     format: int32
                     minimum: 0
+                limit:
+                    type: integer
+                    description: Most tool calls to analyze from offset. Defaults to all, up to 200.
+                    format: int32
+                    minimum: 1
+                    maximum: 200
+                offset:
+                    type: integer
+                    description: Index of the first tool call to analyze, for analyzing a session in batches. Totals still count every call.
+                    default: 0
+                    format: int32
+                    minimum: 0
             required:
                 - chat_id
                 - evaluator
@@ -119648,9 +119660,50 @@ components:
                 - output_tokens
                 - cost_usd
                 - latency_ms
+        IntentCondition:
+            type: object
+            properties:
+                join:
+                    type: string
+                    description: Links the clause to the previous one; empty on the first clause.
+                    enum:
+                        - ""
+                        - and
+                        - or
+                label:
+                    type: string
+                    description: Label key the clause reads. Empty for a shell command pattern.
+                op:
+                    type: string
+                    description: How the label compares to values.
+                    enum:
+                        - ""
+                        - is
+                        - is not
+                        - includes
+                        - includes anything other than
+                pattern:
+                    type: string
+                    description: Regular expression a shell command must match, for a pattern clause.
+                values:
+                    type: array
+                    items:
+                        type: string
+                    description: 'Values compared: "true" for a yes/no label, else option keys. Several read as any of.'
+            required:
+                - join
+                - label
+                - op
+                - values
+                - pattern
         IntentContract:
             type: object
             properties:
+                conditions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/IntentCondition'
+                    description: When the contract fires, for display.
                 expression:
                     type: string
                     description: CEL expression returning PERMIT, CLARIFY, BLOCK, or ABSTAIN.
@@ -119660,9 +119713,21 @@ components:
                 name:
                     type: string
                     description: Display name.
+                outcome:
+                    type: string
+                    description: Decision when the contract fires.
+                    enum:
+                        - block
+                        - clarify
+                statement:
+                    type: string
+                    description: Grounding statement the contract enforces.
             required:
                 - id
                 - name
+                - statement
+                - outcome
+                - conditions
                 - expression
         IntentContractOutcome:
             type: object

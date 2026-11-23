@@ -4,10 +4,32 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  IntentCondition,
+  IntentCondition$inboundSchema,
+} from "./intentcondition.js";
+
+/**
+ * Decision when the contract fires.
+ */
+export const IntentContractOutcome1 = {
+  Block: "block",
+  Clarify: "clarify",
+} as const;
+/**
+ * Decision when the contract fires.
+ */
+export type IntentContractOutcome1 = OpenEnum<typeof IntentContractOutcome1>;
 
 export type IntentContract = {
+  /**
+   * When the contract fires, for display.
+   */
+  conditions: Array<IntentCondition>;
   /**
    * CEL expression returning PERMIT, CLARIFY, BLOCK, or ABSTAIN.
    */
@@ -20,16 +42,33 @@ export type IntentContract = {
    * Display name.
    */
   name: string;
+  /**
+   * Decision when the contract fires.
+   */
+  outcome: IntentContractOutcome1;
+  /**
+   * Grounding statement the contract enforces.
+   */
+  statement: string;
 };
+
+/** @internal */
+export const IntentContractOutcome1$inboundSchema: z.ZodMiniType<
+  IntentContractOutcome1,
+  unknown
+> = openEnums.inboundSchema(IntentContractOutcome1);
 
 /** @internal */
 export const IntentContract$inboundSchema: z.ZodMiniType<
   IntentContract,
   unknown
 > = z.object({
+  conditions: z.array(IntentCondition$inboundSchema),
   expression: z.string(),
   id: z.string(),
   name: z.string(),
+  outcome: IntentContractOutcome1$inboundSchema,
+  statement: z.string(),
 });
 
 export function intentContractFromJSON(

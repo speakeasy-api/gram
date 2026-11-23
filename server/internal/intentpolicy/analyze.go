@@ -57,6 +57,18 @@ type Analysis struct {
 	LimitHit bool
 }
 
+// Window returns the calls from offset, at most limit of them (limit <= 0
+// means no limit), never reaching past MaxActions. Callers analyze a long
+// session in windows to report progress.
+func Window(actions []Action, offset, limit int) []Action {
+	end := min(len(actions), MaxActions)
+	start := min(max(offset, 0), end)
+	if limit > 0 {
+		end = min(end, start+limit)
+	}
+	return actions[start:end]
+}
+
 // Analyze assesses up to MaxActions calls with bounded concurrency. Evaluator
 // failures become fail-closed assessments rather than errors.
 func Analyze(ctx context.Context, g Guardrail, engine *Engine, evaluator Evaluator, actions []Action) (Analysis, error) {

@@ -21,6 +21,11 @@ type AnalyzeSessionRequestBody struct {
 	Evaluator string `form:"evaluator" json:"evaluator" xml:"evaluator"`
 	// Chat generation to analyze. Defaults to the latest.
 	Generation *int32 `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// Index of the first tool call to analyze, for analyzing a session in batches.
+	// Totals still count every call.
+	Offset int32 `form:"offset" json:"offset" xml:"offset"`
+	// Most tool calls to analyze from offset. Defaults to all, up to 200.
+	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 }
 
 // UploadTranscriptRequestBody is the type of the "intentPolicies" service
@@ -674,8 +679,29 @@ type IntentContractResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Grounding statement the contract enforces.
+	Statement *string `form:"statement,omitempty" json:"statement,omitempty" xml:"statement,omitempty"`
+	// Decision when the contract fires.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// When the contract fires, for display.
+	Conditions []*IntentConditionResponseBody `form:"conditions,omitempty" json:"conditions,omitempty" xml:"conditions,omitempty"`
 	// CEL expression returning PERMIT, CLARIFY, BLOCK, or ABSTAIN.
 	Expression *string `form:"expression,omitempty" json:"expression,omitempty" xml:"expression,omitempty"`
+}
+
+// IntentConditionResponseBody is used to define fields on response body types.
+type IntentConditionResponseBody struct {
+	// Links the clause to the previous one; empty on the first clause.
+	Join *string `form:"join,omitempty" json:"join,omitempty" xml:"join,omitempty"`
+	// Label key the clause reads. Empty for a shell command pattern.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// How the label compares to values.
+	Op *string `form:"op,omitempty" json:"op,omitempty" xml:"op,omitempty"`
+	// Values compared: "true" for a yes/no label, else option keys. Several read
+	// as any of.
+	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+	// Regular expression a shell command must match, for a pattern clause.
+	Pattern *string `form:"pattern,omitempty" json:"pattern,omitempty" xml:"pattern,omitempty"`
 }
 
 // IntentEvaluatorDescriptorResponseBody is used to define fields on response
@@ -792,6 +818,14 @@ func NewAnalyzeSessionRequestBody(p *intentpolicies.AnalyzeSessionPayload) *Anal
 		ChatID:     p.ChatID,
 		Evaluator:  p.Evaluator,
 		Generation: p.Generation,
+		Offset:     p.Offset,
+		Limit:      p.Limit,
+	}
+	{
+		var zero int32
+		if body.Offset == zero {
+			body.Offset = 0
+		}
 	}
 	return body
 }
@@ -2199,8 +2233,60 @@ func ValidateIntentContractResponseBody(body *IntentContractResponseBody) (err e
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Statement == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("statement", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.Conditions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
+	}
 	if body.Expression == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("expression", "body"))
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "block" || *body.Outcome == "clarify") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"block", "clarify"}))
+		}
+	}
+	for _, e := range body.Conditions {
+		if e != nil {
+			if err2 := ValidateIntentConditionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateIntentConditionResponseBody runs the validations defined on
+// IntentConditionResponseBody
+func ValidateIntentConditionResponseBody(body *IntentConditionResponseBody) (err error) {
+	if body.Join == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("join", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Op == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("op", "body"))
+	}
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	if body.Pattern == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pattern", "body"))
+	}
+	if body.Join != nil {
+		if !(*body.Join == "" || *body.Join == "and" || *body.Join == "or") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.join", *body.Join, []any{"", "and", "or"}))
+		}
+	}
+	if body.Op != nil {
+		if !(*body.Op == "" || *body.Op == "is" || *body.Op == "is not" || *body.Op == "includes" || *body.Op == "includes anything other than") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"", "is", "is not", "includes", "includes anything other than"}))
+		}
 	}
 	return
 }

@@ -107,8 +107,46 @@ type Contract struct {
 	// Name is a short display name.
 	Name string
 
+	// Statement is the grounding statement this contract enforces.
+	Statement string
+
+	// Outcome is the decision the contract returns when it fires.
+	Outcome Decision
+
+	// Conditions describe when the contract fires, for display. Expression is
+	// what runs; conditions_test keeps the two from drifting.
+	Conditions []Condition
+
 	// Expression evaluates to PERMIT, CLARIFY, BLOCK, or ABSTAIN.
 	Expression string
+}
+
+// Condition operators.
+const (
+	OpIs                = "is"
+	OpIsNot             = "is not"
+	OpIncludes          = "includes"
+	OpIncludesOtherThan = "includes anything other than"
+)
+
+// Condition is one clause of a contract's firing condition. A label clause
+// sets Label; a tool clause sets Pattern, matched against the shell command.
+type Condition struct {
+	// Join links the clause to the previous one: "", "and", or "or".
+	Join string
+
+	// Label is the label key the clause reads.
+	Label string
+
+	// Op compares the label to Values.
+	Op string
+
+	// Values are the label values compared: "true" for a yes/no label, else
+	// option keys. Several values read as "any of".
+	Values []string
+
+	// Pattern is the regular expression a shell command must match.
+	Pattern string
 }
 
 // Guardrail is the versioned set of statements, questions, and contracts.

@@ -23,8 +23,8 @@ type Service interface {
 	GetGuardrail(context.Context, *GetGuardrailPayload) (res *IntentGuardrail, err error)
 	// Label every tool call of one chat session and evaluate the guardrail
 	// contracts. Synchronous, judges at most the first 200 calls of the latest
-	// generation by default, and persists nothing. Requires a Speakeasy platform
-	// admin.
+	// generation by default, and persists nothing. Use offset and limit to analyze
+	// in batches. Requires a Speakeasy platform admin.
 	AnalyzeSession(context.Context, *AnalyzeSessionPayload) (res *IntentSessionAnalysis, err error)
 	// Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as
 	// a chat session in the current project so it can be analyzed. Requires a
@@ -65,6 +65,11 @@ type AnalyzeSessionPayload struct {
 	Evaluator string
 	// Chat generation to analyze. Defaults to the latest.
 	Generation *int32
+	// Index of the first tool call to analyze, for analyzing a session in batches.
+	// Totals still count every call.
+	Offset int32
+	// Most tool calls to analyze from offset. Defaults to all, up to 200.
+	Limit *int32
 }
 
 // GetGuardrailPayload is the payload type of the intentPolicies service
@@ -133,11 +138,31 @@ type IntentCallUsage struct {
 	LatencyMs int64
 }
 
+type IntentCondition struct {
+	// Links the clause to the previous one; empty on the first clause.
+	Join string
+	// Label key the clause reads. Empty for a shell command pattern.
+	Label string
+	// How the label compares to values.
+	Op string
+	// Values compared: "true" for a yes/no label, else option keys. Several read
+	// as any of.
+	Values []string
+	// Regular expression a shell command must match, for a pattern clause.
+	Pattern string
+}
+
 type IntentContract struct {
 	// Stable contract id.
 	ID string
 	// Display name.
 	Name string
+	// Grounding statement the contract enforces.
+	Statement string
+	// Decision when the contract fires.
+	Outcome string
+	// When the contract fires, for display.
+	Conditions []*IntentCondition
 	// CEL expression returning PERMIT, CLARIFY, BLOCK, or ABSTAIN.
 	Expression string
 }

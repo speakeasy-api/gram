@@ -720,7 +720,43 @@ func marshalIntentpoliciesIntentContractToIntentContractResponseBody(v *intentpo
 	res := &IntentContractResponseBody{
 		ID:         v.ID,
 		Name:       v.Name,
+		Statement:  v.Statement,
+		Outcome:    v.Outcome,
 		Expression: v.Expression,
+	}
+	if v.Conditions != nil {
+		res.Conditions = make([]*IntentConditionResponseBody, len(v.Conditions))
+		for i, val := range v.Conditions {
+			if val == nil {
+				res.Conditions[i] = nil
+				continue
+			}
+			res.Conditions[i] = marshalIntentpoliciesIntentConditionToIntentConditionResponseBody(val)
+		}
+	} else {
+		res.Conditions = []*IntentConditionResponseBody{}
+	}
+
+	return res
+}
+
+// marshalIntentpoliciesIntentConditionToIntentConditionResponseBody builds a
+// value of type *IntentConditionResponseBody from a value of type
+// *intentpolicies.IntentCondition.
+func marshalIntentpoliciesIntentConditionToIntentConditionResponseBody(v *intentpolicies.IntentCondition) *IntentConditionResponseBody {
+	res := &IntentConditionResponseBody{
+		Join:    v.Join,
+		Label:   v.Label,
+		Op:      v.Op,
+		Pattern: v.Pattern,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	} else {
+		res.Values = []string{}
 	}
 
 	return res

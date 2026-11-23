@@ -770,7 +770,35 @@ func unmarshalIntentContractResponseBodyToIntentpoliciesIntentContract(v *Intent
 	res := &intentpolicies.IntentContract{
 		ID:         *v.ID,
 		Name:       *v.Name,
+		Statement:  *v.Statement,
+		Outcome:    *v.Outcome,
 		Expression: *v.Expression,
+	}
+	res.Conditions = make([]*intentpolicies.IntentCondition, len(v.Conditions))
+	for i, val := range v.Conditions {
+		if val == nil {
+			res.Conditions[i] = nil
+			continue
+		}
+		res.Conditions[i] = unmarshalIntentConditionResponseBodyToIntentpoliciesIntentCondition(val)
+	}
+
+	return res
+}
+
+// unmarshalIntentConditionResponseBodyToIntentpoliciesIntentCondition builds a
+// value of type *intentpolicies.IntentCondition from a value of type
+// *IntentConditionResponseBody.
+func unmarshalIntentConditionResponseBodyToIntentpoliciesIntentCondition(v *IntentConditionResponseBody) *intentpolicies.IntentCondition {
+	res := &intentpolicies.IntentCondition{
+		Join:    *v.Join,
+		Label:   *v.Label,
+		Op:      *v.Op,
+		Pattern: *v.Pattern,
+	}
+	res.Values = make([]string, len(v.Values))
+	for i, val := range v.Values {
+		res.Values[i] = val
 	}
 
 	return res

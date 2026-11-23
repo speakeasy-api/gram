@@ -1470,6 +1470,7 @@ trackedFiles:
   src/models/components/intentanalysistotals.ts: {}
   src/models/components/intentcallassessment.ts: {}
   src/models/components/intentcallusage.ts: {}
+  src/models/components/intentcondition.ts: {}
   src/models/components/intentcontract.ts: {}
   src/models/components/intentcontractoutcome.ts: {}
   src/models/components/intentevaluatordescriptor.ts: {}
@@ -4865,7 +4866,7 @@ examples:
   analyzeIntentSession:
     speakeasy-default-analyze-intent-session:
       requestBody:
-        application/json: {"chat_id": "208b33c0-724b-4fb5-800e-e38b3695868a", "evaluator": "jev"}
+        application/json: {"chat_id": "208b33c0-724b-4fb5-800e-e38b3695868a", "evaluator": "jev", "offset": 0}
       responses:
         "200":
           application/json: {"assessments": [{"arguments": "<value>", "decided_by": ["<value 1>", "<value 2>"], "decision": "block", "labels": [{"key": "<key>", "probability": 4833.22, "rank": 846408, "value": "<value>"}], "message_id": "d2974872-d50d-480e-9bd3-08a192e33d7a", "occurred_at": "2024-10-04T16:15:04.249Z", "outcomes": [], "seq": 321837, "tool_call_id": "<id>", "tool_name": "<value>", "usage": {"cost_usd": 5214.59, "input_tokens": 668768, "latency_ms": 946735, "output_tokens": 827352}}], "chat_id": "75c5a946-41d6-4a7d-8f1d-d07296b92a9b", "evaluator": {"evaluator": "<value>", "model": "Land Cruiser", "prompt_version": "<value>", "provider": "<value>"}, "generation": 823630, "guardrail_version": "<value>", "limit_hit": true, "totals": {"blocked": 606157, "calls": 716446, "clarified": 67128, "cost_usd": 3166.06, "judged": 59781, "latency_ms": 573921, "permitted": 583589}}
@@ -8092,7 +8093,7 @@ examples:
     speakeasy-default-get-intent-guardrail:
       responses:
         "200":
-          application/json: {"contracts": [{"expression": "<value>", "id": "<id>", "name": "<value>"}], "id": "<id>", "questions": [], "statements": ["<value 1>", "<value 2>"], "version": "<value>"}
+          application/json: {"contracts": [{"conditions": [{"join": "and", "label": "<value>", "op": "includes", "pattern": "<value>", "values": ["<value 1>"]}], "expression": "<value>", "id": "<id>", "name": "<value>", "outcome": "block", "statement": "<value>"}], "id": "<id>", "questions": [], "statements": ["<value 1>", "<value 2>"], "version": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

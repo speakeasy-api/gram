@@ -36,7 +36,7 @@ var _ = Service("intentPolicies", func() {
 	})
 
 	Method("analyzeSession", func() {
-		Description("Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Requires a Speakeasy platform admin.")
+		Description("Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires a Speakeasy platform admin.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -49,6 +49,14 @@ var _ = Service("intentPolicies", func() {
 			})
 			Attribute("generation", Int32, "Chat generation to analyze. Defaults to the latest.", func() {
 				Minimum(0)
+			})
+			Attribute("offset", Int32, "Index of the first tool call to analyze, for analyzing a session in batches. Totals still count every call.", func() {
+				Minimum(0)
+				Default(0)
+			})
+			Attribute("limit", Int32, "Most tool calls to analyze from offset. Defaults to all, up to 200.", func() {
+				Minimum(1)
+				Maximum(200)
 			})
 			Required("chat_id", "evaluator")
 		})
@@ -116,11 +124,29 @@ var IntentLabelQuestion = Type("IntentLabelQuestion", func() {
 	Required("key", "kind", "instructions", "options")
 })
 
+var IntentCondition = Type("IntentCondition", func() {
+	Attribute("join", String, "Links the clause to the previous one; empty on the first clause.", func() {
+		Enum("", "and", "or")
+	})
+	Attribute("label", String, "Label key the clause reads. Empty for a shell command pattern.")
+	Attribute("op", String, "How the label compares to values.", func() {
+		Enum("", "is", "is not", "includes", "includes anything other than")
+	})
+	Attribute("values", ArrayOf(String), "Values compared: \"true\" for a yes/no label, else option keys. Several read as any of.")
+	Attribute("pattern", String, "Regular expression a shell command must match, for a pattern clause.")
+	Required("join", "label", "op", "values", "pattern")
+})
+
 var IntentContract = Type("IntentContract", func() {
 	Attribute("id", String, "Stable contract id.")
 	Attribute("name", String, "Display name.")
+	Attribute("statement", String, "Grounding statement the contract enforces.")
+	Attribute("outcome", String, "Decision when the contract fires.", func() {
+		Enum("block", "clarify")
+	})
+	Attribute("conditions", ArrayOf(IntentCondition), "When the contract fires, for display.")
 	Attribute("expression", String, "CEL expression returning PERMIT, CLARIFY, BLOCK, or ABSTAIN.")
-	Required("id", "name", "expression")
+	Required("id", "name", "statement", "outcome", "conditions", "expression")
 })
 
 var IntentGuardrail = Type("IntentGuardrail", func() {

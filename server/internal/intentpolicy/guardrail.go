@@ -1,6 +1,9 @@
 package intentpolicy
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Label keys exposed to contracts.
 const (
@@ -34,17 +37,6 @@ const GuardrailID = "intent-baseline"
 
 // GuardrailVersion changes whenever statements, questions, or contracts change.
 const GuardrailVersion = "2026-11-20.1"
-
-var statements = []string{
-	"A credential-shaped value, or a reference to a credential source, must not leave the environment in an outbound call.",
-	"Code fetched from the network must not be executed in the same step it is fetched.",
-	"Remote version-control history must not be rewritten or deleted.",
-	"Anything that runs code later outside this session (hooks, shell profiles, CI workflows, scheduled tasks, lifecycle scripts) must not be set up.",
-	"Deleting, discarding work, and terminating processes need a person.",
-	"Publishing a package or release needs a person.",
-	"Reading or searching credential stores needs a person.",
-	"A consequential call whose effects cannot be determined from its arguments needs a person.",
-}
 
 var questions = []LabelQuestion{
 	{
@@ -104,15 +96,85 @@ var questions = []LabelQuestion{
 // shellToolsCEL lists the native shell tool names seen across agent harnesses.
 const shellToolsCEL = `['Bash', 'bash', 'shell', 'execute_command']`
 
+func label(join, key, op string, values ...string) Condition {
+	return Condition{Join: join, Label: key, Op: op, Values: values, Pattern: ""}
+}
+
+func shellMatches(join, pattern string) Condition {
+	return Condition{Join: join, Label: "", Op: "", Values: nil, Pattern: pattern}
+}
+
+const (
+	forcePushPattern = `git push\b.*(-f\b|--force|--mirror|\s\+)`
+	publishPattern   = `\b(npm|pnpm|yarn|cargo|gem|twine|poetry|gh release) (publish|push|upload|create)\b`
+)
+
+// Contract i enforces statement i; the statements also ground the evaluator.
 var contracts = []Contract{
-	{ID: "no_secret_egress", Name: "No secret egress", Expression: `label.carries_secret && 'outbound' in action.effect_class ? BLOCK : ABSTAIN`},
-	{ID: "no_remote_code_inline", Name: "No inline remote code", Expression: `label.executes_remote_code_inline ? BLOCK : ABSTAIN`},
-	{ID: "no_force_push", Name: "No force push", Expression: `label.history_rewrite || (tool.name in ` + shellToolsCEL + ` && has(tool.args.command) && string(tool.args.command).matches('git push\\b.*(-f\\b|--force|--mirror|\\s\\+)')) ? BLOCK : ABSTAIN`},
-	{ID: "no_persistence_write", Name: "No persistence setup", Expression: `label.touches_persistence && ('write_local' in action.effect_class || 'exec' in action.effect_class) ? BLOCK : ABSTAIN`},
-	{ID: "review_destructive", Name: "Review destructive calls", Expression: `'destructive' in action.effect_class ? CLARIFY : ABSTAIN`},
-	{ID: "review_publish", Name: "Review publishing", Expression: `tool.name in ` + shellToolsCEL + ` && has(tool.args.command) && string(tool.args.command).matches('\\b(npm|pnpm|yarn|cargo|gem|twine|poetry|gh release) (publish|push|upload|create)\\b') ? CLARIFY : ABSTAIN`},
-	{ID: "review_credential_read", Name: "Review credential reads", Expression: `label.touches_credential_store ? CLARIFY : ABSTAIN`},
-	{ID: "review_opaque", Name: "Review opaque calls", Expression: `label.effect_coverage != 'understood' && size(action.effect_class) > 0 && !(action.effect_class == ['read']) ? CLARIFY : ABSTAIN`},
+	{
+		ID:         "no_secret_egress",
+		Name:       "No secret egress",
+		Statement:  "A credential-shaped value, or a reference to a credential source, must not leave the environment in an outbound call.",
+		Outcome:    DecisionBlock,
+		Conditions: []Condition{label("", LabelCarriesSecret, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectOutbound)},
+		Expression: `label.carries_secret && 'outbound' in action.effect_class ? BLOCK : ABSTAIN`,
+	},
+	{
+		ID:         "no_remote_code_inline",
+		Name:       "No inline remote code",
+		Statement:  "Code fetched from the network must not be executed in the same step it is fetched.",
+		Outcome:    DecisionBlock,
+		Conditions: []Condition{label("", LabelExecutesRemoteCodeInline, OpIs, "true")},
+		Expression: `label.executes_remote_code_inline ? BLOCK : ABSTAIN`,
+	},
+	{
+		ID:         "no_force_push",
+		Name:       "No force push",
+		Statement:  "Remote version-control history must not be rewritten or deleted.",
+		Outcome:    DecisionBlock,
+		Conditions: []Condition{label("", LabelHistoryRewrite, OpIs, "true"), shellMatches("or", forcePushPattern)},
+		Expression: `label.history_rewrite || (tool.name in ` + shellToolsCEL + ` && has(tool.args.command) && string(tool.args.command).matches('` + strings.ReplaceAll(forcePushPattern, `\`, `\\`) + `')) ? BLOCK : ABSTAIN`,
+	},
+	{
+		ID:         "no_persistence_write",
+		Name:       "No persistence setup",
+		Statement:  "Anything that runs code later outside this session (hooks, shell profiles, CI workflows, scheduled tasks, lifecycle scripts) must not be set up.",
+		Outcome:    DecisionBlock,
+		Conditions: []Condition{label("", LabelTouchesPersistence, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectWriteLocal, EffectExec)},
+		Expression: `label.touches_persistence && ('write_local' in action.effect_class || 'exec' in action.effect_class) ? BLOCK : ABSTAIN`,
+	},
+	{
+		ID:         "review_destructive",
+		Name:       "Review destructive calls",
+		Statement:  "Deleting, discarding work, and terminating processes need a person.",
+		Outcome:    DecisionClarify,
+		Conditions: []Condition{label("", LabelEffectClass, OpIncludes, EffectDestructive)},
+		Expression: `'destructive' in action.effect_class ? CLARIFY : ABSTAIN`,
+	},
+	{
+		ID:         "review_publish",
+		Name:       "Review publishing",
+		Statement:  "Publishing a package or release needs a person.",
+		Outcome:    DecisionClarify,
+		Conditions: []Condition{shellMatches("", publishPattern)},
+		Expression: `tool.name in ` + shellToolsCEL + ` && has(tool.args.command) && string(tool.args.command).matches('` + strings.ReplaceAll(publishPattern, `\`, `\\`) + `') ? CLARIFY : ABSTAIN`,
+	},
+	{
+		ID:         "review_credential_read",
+		Name:       "Review credential reads",
+		Statement:  "Reading or searching credential stores needs a person.",
+		Outcome:    DecisionClarify,
+		Conditions: []Condition{label("", LabelTouchesCredentialStore, OpIs, "true")},
+		Expression: `label.touches_credential_store ? CLARIFY : ABSTAIN`,
+	},
+	{
+		ID:         "review_opaque",
+		Name:       "Review opaque calls",
+		Statement:  "A consequential call whose effects cannot be determined from its arguments needs a person.",
+		Outcome:    DecisionClarify,
+		Conditions: []Condition{label("", LabelEffectCoverage, OpIsNot, CoverageUnderstood), label("and", LabelEffectClass, OpIncludesOtherThan, EffectRead)},
+		Expression: `label.effect_coverage != 'understood' && size(action.effect_class) > 0 && !(action.effect_class == ['read']) ? CLARIFY : ABSTAIN`,
+	},
 }
 
 // DefaultGuardrail returns a copy of the built-in guardrail.
@@ -122,11 +184,25 @@ func DefaultGuardrail() Guardrail {
 		q.Options = slices.Clone(q.Options)
 		qs[i] = q
 	}
+	cs := make([]Contract, len(contracts))
+	for i, c := range contracts {
+		c.Conditions = slices.Clone(c.Conditions)
+		cs[i] = c
+	}
 	return Guardrail{
 		ID:         GuardrailID,
 		Version:    GuardrailVersion,
-		Statements: slices.Clone(statements),
+		Statements: statements(),
 		Questions:  qs,
-		Contracts:  slices.Clone(contracts),
+		Contracts:  cs,
 	}
+}
+
+// statements lists each contract's statement, in contract order.
+func statements() []string {
+	out := make([]string, len(contracts))
+	for i, c := range contracts {
+		out[i] = c.Statement
+	}
+	return out
 }

@@ -23,6 +23,11 @@ type AnalyzeSessionRequestBody struct {
 	Evaluator *string `form:"evaluator,omitempty" json:"evaluator,omitempty" xml:"evaluator,omitempty"`
 	// Chat generation to analyze. Defaults to the latest.
 	Generation *int32 `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// Index of the first tool call to analyze, for analyzing a session in batches.
+	// Totals still count every call.
+	Offset *int32 `form:"offset,omitempty" json:"offset,omitempty" xml:"offset,omitempty"`
+	// Most tool calls to analyze from offset. Defaults to all, up to 200.
+	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
 }
 
 // UploadTranscriptRequestBody is the type of the "intentPolicies" service
@@ -676,8 +681,29 @@ type IntentContractResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
+	// Grounding statement the contract enforces.
+	Statement string `form:"statement" json:"statement" xml:"statement"`
+	// Decision when the contract fires.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// When the contract fires, for display.
+	Conditions []*IntentConditionResponseBody `form:"conditions" json:"conditions" xml:"conditions"`
 	// CEL expression returning PERMIT, CLARIFY, BLOCK, or ABSTAIN.
 	Expression string `form:"expression" json:"expression" xml:"expression"`
+}
+
+// IntentConditionResponseBody is used to define fields on response body types.
+type IntentConditionResponseBody struct {
+	// Links the clause to the previous one; empty on the first clause.
+	Join string `form:"join" json:"join" xml:"join"`
+	// Label key the clause reads. Empty for a shell command pattern.
+	Label string `form:"label" json:"label" xml:"label"`
+	// How the label compares to values.
+	Op string `form:"op" json:"op" xml:"op"`
+	// Values compared: "true" for a yes/no label, else option keys. Several read
+	// as any of.
+	Values []string `form:"values" json:"values" xml:"values"`
+	// Regular expression a shell command must match, for a pattern clause.
+	Pattern string `form:"pattern" json:"pattern" xml:"pattern"`
 }
 
 // IntentEvaluatorDescriptorResponseBody is used to define fields on response
@@ -1321,6 +1347,13 @@ func NewAnalyzeSessionPayload(body *AnalyzeSessionRequestBody, sessionToken *str
 		ChatID:     *body.ChatID,
 		Evaluator:  *body.Evaluator,
 		Generation: body.Generation,
+		Limit:      body.Limit,
+	}
+	if body.Offset != nil {
+		v.Offset = *body.Offset
+	}
+	if body.Offset == nil {
+		v.Offset = 0
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1361,6 +1394,21 @@ func ValidateAnalyzeSessionRequestBody(body *AnalyzeSessionRequestBody) (err err
 	if body.Generation != nil {
 		if *body.Generation < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.generation", *body.Generation, 0, true))
+		}
+	}
+	if body.Offset != nil {
+		if *body.Offset < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.offset", *body.Offset, 0, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 200 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 200, false))
 		}
 	}
 	return

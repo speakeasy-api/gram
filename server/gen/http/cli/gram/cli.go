@@ -20747,7 +20747,7 @@ func intentPoliciesUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] intent-policies COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-guardrail: Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires a Speakeasy platform admin.`)
-	fmt.Fprintln(os.Stderr, `    analyze-session: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Requires a Speakeasy platform admin.`)
+	fmt.Fprintln(os.Stderr, `    analyze-session: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires a Speakeasy platform admin.`)
 	fmt.Fprintln(os.Stderr, `    upload-transcript: Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires a Speakeasy platform admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -20783,7 +20783,7 @@ func intentPoliciesAnalyzeSessionUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Requires a Speakeasy platform admin.`)
+	fmt.Fprintln(os.Stderr, `Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires a Speakeasy platform admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -20792,7 +20792,7 @@ func intentPoliciesAnalyzeSessionUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies analyze-session --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"evaluator\": \"gemini\",\n      \"generation\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies analyze-session --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"evaluator\": \"gemini\",\n      \"generation\": 1,\n      \"limit\": 2,\n      \"offset\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func intentPoliciesUploadTranscriptUsage() {

@@ -46,7 +46,7 @@ func BuildAnalyzeSessionPayload(intentPoliciesAnalyzeSessionBody string, intentP
 	{
 		err = json.Unmarshal([]byte(intentPoliciesAnalyzeSessionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"evaluator\": \"gemini\",\n      \"generation\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"evaluator\": \"gemini\",\n      \"generation\": 1,\n      \"limit\": 2,\n      \"offset\": 1\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", body.ChatID, goa.FormatUUID))
 		if !(body.Evaluator == "jev" || body.Evaluator == "gemini") {
@@ -55,6 +55,19 @@ func BuildAnalyzeSessionPayload(intentPoliciesAnalyzeSessionBody string, intentP
 		if body.Generation != nil {
 			if *body.Generation < 0 {
 				err = goa.MergeErrors(err, goa.InvalidRangeError("body.generation", *body.Generation, 0, true))
+			}
+		}
+		if body.Offset < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.offset", body.Offset, 0, true))
+		}
+		if body.Limit != nil {
+			if *body.Limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+			}
+		}
+		if body.Limit != nil {
+			if *body.Limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 200, false))
 			}
 		}
 		if err != nil {
@@ -77,6 +90,14 @@ func BuildAnalyzeSessionPayload(intentPoliciesAnalyzeSessionBody string, intentP
 		ChatID:     body.ChatID,
 		Evaluator:  body.Evaluator,
 		Generation: body.Generation,
+		Offset:     body.Offset,
+		Limit:      body.Limit,
+	}
+	{
+		var zero int32
+		if v.Offset == zero {
+			v.Offset = 0
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
