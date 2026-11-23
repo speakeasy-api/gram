@@ -79,7 +79,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	flags := &targetedFlag{}
-	flags.target([]string{authCtx.OrganizationSlug}, nil)
+	flags.targetOrganizations(authCtx.OrganizationSlug)
 	logsOn := &atomic.Bool{}
 	logsOn.Store(true)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
@@ -118,19 +118,28 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-// targetedFlag evaluates FlagMCPConnectionHealth the way a PostHog release
-// condition would: on the organization group key or on the person's email.
+// targetedFlag models a PostHog flag that is EITHER a group flag (organization
+// slugs, person ignored) OR a person flag (emails, groups ignored). A person
+// flag given no email falls back to looking the distinct ID up as a stored person.
 type targetedFlag struct {
-	mu       sync.Mutex
-	orgSlugs []string
-	emails   []string
-	err      error
+	mu               sync.Mutex
+	orgSlugs         []string
+	emails           []string
+	err              error
+	distinctID       string
+	personProperties map[string]string
 }
 
-func (f *targetedFlag) target(orgSlugs, emails []string) {
+func (f *targetedFlag) targetOrganizations(slugs ...string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.orgSlugs, f.emails = orgSlugs, emails
+	f.orgSlugs, f.emails = slugs, nil
+}
+
+func (f *targetedFlag) targetPeople(emails ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.orgSlugs, f.emails = nil, emails
 }
 
 func (f *targetedFlag) fail(err error) {
@@ -139,30 +148,48 @@ func (f *targetedFlag) fail(err error) {
 	f.err = err
 }
 
-func (f *targetedFlag) EvaluateFlag(_ context.Context, flag feature.Flag, _ string, groups, personProperties map[string]string) (feature.Evaluation, error) {
+// lastCall returns the distinct ID and person properties last evaluated.
+func (f *targetedFlag) lastCall() (string, map[string]string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	switch {
-	case flag != feature.FlagMCPConnectionHealth:
+	return f.distinctID, f.personProperties
+}
+
+func (f *targetedFlag) EvaluateFlag(_ context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (feature.Evaluation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.distinctID, f.personProperties = distinctID, personProperties
+	if flag != feature.FlagMCPConnectionHealth {
 		return feature.EvaluationIndeterminate, nil
-	case f.err != nil:
-		return feature.EvaluationIndeterminate, f.err
-	case slices.Contains(f.orgSlugs, groups["organization"]), slices.Contains(f.emails, personProperties["email"]):
-		return feature.EvaluationEnabled, nil
-	default:
-		return feature.EvaluationDisabled, nil
 	}
+	if f.err != nil {
+		return feature.EvaluationIndeterminate, f.err
+	}
+	matched := false
+	if f.emails != nil {
+		email, supplied := personProperties["email"]
+		if !supplied {
+			email = distinctID
+		}
+		matched = slices.Contains(f.emails, email)
+	} else {
+		matched = slices.Contains(f.orgSlugs, groups["organization"])
+	}
+	if matched {
+		return feature.EvaluationEnabled, nil
+	}
+	return feature.EvaluationDisabled, nil
 }
 
-func (f *targetedFlag) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+func (*targetedFlag) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
 	return false, nil
 }
 
-func (f *targetedFlag) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
+func (*targetedFlag) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
 	return false, nil
 }
 
-func (f *targetedFlag) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+func (*targetedFlag) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
 	return nil, nil
 }
 

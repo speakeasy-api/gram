@@ -86,7 +86,7 @@ func TestListAttempts_SaysLoggingIsOff(t *testing.T) {
 func TestListAttempts_NotFoundWhenTheFlagIsOff(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	ti.flags.target(nil, nil)
+	ti.flags.targetOrganizations()
 
 	_, err := ti.service.ListAttempts(ctx, ti.listPayload())
 	requireOopsCode(t, err, oops.CodeNotFound)

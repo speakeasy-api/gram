@@ -185,8 +185,7 @@ const (
 
 // EvaluationProvider is implemented by providers that can distinguish an
 // unavailable or inconclusive lookup from an explicit flag result.
-// personProperties feed person-targeted conditions; pass nil when the distinct
-// ID is not a person.
+// personProperties is nil unless the distinct ID is a person.
 type EvaluationProvider interface {
 	EvaluateFlag(ctx context.Context, flag Flag, distinctID string, groups, personProperties map[string]string) (Evaluation, error)
 }
@@ -221,8 +220,7 @@ func (imp *InMemory) FlagDefinitionsConfirmedAt() (time.Time, bool) {
 	return time.Now(), true
 }
 
-// EvaluateFlag ignores groups and person properties: in-memory flags are keyed
-// by distinct ID only.
+// EvaluateFlag matches on distinct ID only.
 func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _, _ map[string]string) (Evaluation, error) {
 	enabled, ok := imp.loadFlag(flag, distinctID)
 	if !ok {

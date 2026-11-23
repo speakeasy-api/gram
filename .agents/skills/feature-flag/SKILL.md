@@ -112,7 +112,7 @@ In production the SDK caches flag definitions (polled every minute) and evaluate
 
 ### Targeting a flag at people
 
-To target signed-in people, evaluate with their email as distinct ID (the dashboard identifies as the email) and pass `{"email": email}` as person properties, only when `contextvalues.HasValidatedGramSession(ctx)`: API-key auth contexts carry the key creator's email. `mcpconnectionhealth.begin` is the example.
+Use `feature.PersonTarget(ctx)` for the distinct ID and person properties, and fall back to the organization ID when it returns `ok == false`; `mcpconnectionhealth.begin` is the example.
 
 ### Targeting rule for org and project flags
 

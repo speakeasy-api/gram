@@ -215,9 +215,7 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 // EvaluateFlag resolves a boolean flag to an authoritative enabled/disabled
 // result, or indeterminate when PostHog cannot decide. With a personal API key
 // the SDK evaluates against its cached definitions first and only falls back
-// to a remote request for flags it cannot decide locally. personProperties are
-// sent with both, so person conditions decide locally when they name a
-// supplied property.
+// to a remote request for flags it cannot decide locally.
 func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (feature.Evaluation, error) {
 	if p == nil || p.disabled || p.client == nil {
 		return feature.EvaluationIndeterminate, nil
