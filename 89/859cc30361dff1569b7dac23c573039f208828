@@ -1,0 +1,72 @@
+.mise-tasks/intent-policies/import.sh
+  s_7f7b161a4d59e4::t_7984c08ef719d3 11,13
+server/internal/intentpolicy/types.go
+  s_7f7b161a4d59e4::t_0e9132e6fea341 3-4,116,292
+server/internal/intentpolicy/store.go
+  s_7f7b161a4d59e4::t_ee4d791919439d 19,78-85,92-93,114,135,165,168-171,175-176,178-202
+server/internal/intentpolicy/evaluator_test.go
+  s_7f7b161a4d59e4::t_9f53791059ec17 51
+  s_7f7b161a4d59e4::t_821eb1cfe83615 157
+  s_7f7b161a4d59e4::t_87f81186bbac68 204
+server/internal/intentpolicy/analyze.go
+  s_7f7b161a4d59e4::t_87f81186bbac68 72-73,75-76,133
+server/cmd/gram/intentpolicies.go
+  s_7f7b161a4d59e4::t_61b218bd58b205 5,20,27-30
+server/internal/intentpolicy/gemini.go
+  s_7f7b161a4d59e4::t_1101512f9a0276 4
+  s_7f7b161a4d59e4::t_08d6a8851e7645 209
+  s_7f7b161a4d59e4::t_9f53791059ec17 208,210-212
+client/dashboard/src/pages/security/intent-policies/model.ts
+  s_7f7b161a4d59e4::t_d5f9c5c08f70c7 161-162,177-180
+  s_7f7b161a4d59e4::t_995b49ef9a3ea4 36,84-85,120,133-139
+  s_7f7b161a4d59e4::t_f5551e6ed524dc 140-141
+client/dashboard/src/pages/security/intent-policies/events.test.ts
+  s_7f7b161a4d59e4::t_2788aba4d3eb2f 11,113-163
+client/dashboard/src/pages/security/intent-policies/IntentPolicies.tsx
+  s_7f7b161a4d59e4::t_5912dc6ff99638 446-447,452-465,599
+server/cmd/gram/intentpoliciesimport.go
+  s_7f7b161a4d59e4::t_4c16e8174189f9 41-42,71-76,81,83,85,89-92
+server/design/intentpolicies/design.go
+  s_7f7b161a4d59e4::t_44bfaad675eff7 88,90-91
+server/internal/intentpolicies/impl.go
+  s_7f7b161a4d59e4::t_87f81186bbac68 205,254
+client/dashboard/src/pages/security/intent-policies/model.test.ts
+  s_7f7b161a4d59e4::t_d3a929be682608 50-64,134-142,167-172,174
+  s_7f7b161a4d59e4::t_5a3f6fdb164478 173
+client/dashboard/src/pages/security/intent-policies/Transcript.tsx
+  s_7f7b161a4d59e4::t_12dd57bc2a5740 175
+client/dashboard/src/pages/security/intent-policies/Inspector.tsx
+  s_7f7b161a4d59e4::t_091bfcb51a7d9a 13
+  s_7f7b161a4d59e4::t_0482b56c4e7efa 15,81-83,101
+server/internal/intentpolicy/guardrail.go
+  s_7f7b161a4d59e4::t_9f53791059ec17 244-246
+client/dashboard/src/pages/security/intent-policies/events.ts
+  s_7f7b161a4d59e4::t_995b49ef9a3ea4 92-96
+  s_7f7b161a4d59e4::t_12dd57bc2a5740 301
+server/internal/intentpolicy/jev.go
+  s_7f7b161a4d59e4::t_cabec80a5fa7a0 34-35,37-39,96
+client/dashboard/src/hooks/useProjectNavRoutes.test.tsx
+  s_7f7b161a4d59e4::t_d75e046c332e6e 267
+server/internal/intentpolicy/store_internal_test.go
+  s_7f7b161a4d59e4::t_821eb1cfe83615 1-17
+client/dashboard/src/pages/security/intent-policies/analysisRun.ts
+  s_7f7b161a4d59e4::t_12dd57bc2a5740 10
+client/dashboard/src/pages/security/intent-policies/GuardrailView.tsx
+  s_7f7b161a4d59e4::t_091bfcb51a7d9a 132-134,259-260,280,536-537,541-542,546-548,550-559,577-580,662-671,678
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "89859cc30361dff1569b7dac23c573039f208828",
+  "prompts": {},
+  "sessions": {
+    "s_7f7b161a4d59e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5f8a32ee-f004-438b-97f5-eb7c5a009f3f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
