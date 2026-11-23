@@ -8,7 +8,7 @@ import {
 } from "ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { streamTurn } from "./turnStream";
+import { type PersistedTurnBodies, streamTurn } from "./turnStream";
 
 // The turn stream is only correct if what assistant-ui ends up holding is a
 // finished message. Asserting on the chunks we emit proves nothing: the same
@@ -31,6 +31,7 @@ interface Frame {
   finish_reason?: string;
   tool_call_id?: string;
   output?: unknown;
+  body_omitted?: boolean;
 }
 
 /** Serialises frames as the SSE body the handler writes. */
@@ -60,7 +61,10 @@ function stubFetch(bodies: string[]): void {
  * Runs a turn end to end and returns the message assistant-ui would hold,
  * reconstructed by the AI SDK from the chunks `streamTurn` wrote.
  */
-async function runTurn(frames: Frame[]): Promise<UIMessage> {
+async function runTurn(
+  frames: Frame[],
+  persistedBodies?: PersistedTurnBodies,
+): Promise<UIMessage> {
   stubFetch([sseBody(frames)]);
 
   const stream = createUIMessageStream<UIMessage>({
@@ -72,6 +76,7 @@ async function runTurn(frames: Frame[]): Promise<UIMessage> {
         writer,
         sessionToken: "session",
         projectSlug: "proj",
+        persistedBodies,
       });
       writer.write({ type: "finish" });
     },
@@ -87,6 +92,7 @@ async function runTurn(frames: Frame[]): Promise<UIMessage> {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("streamTurn", () => {
@@ -159,6 +165,83 @@ describe("streamTurn", () => {
     expect(
       lastAssistantMessageIsCompleteWithToolCalls({ messages: [message] }),
     ).toBe(false);
+  });
+
+  // The server leaves oversized bodies out of the stream. The turn must show
+  // the persisted output and arguments, not an empty result and `{}`.
+  it("reads omitted bodies from the persisted rows", async () => {
+    const toolOutput = vi.fn(async (_toolCallId: string) => ({ rows: 3 }));
+    const toolCallInput = vi.fn(async (_toolCallId: string) => ({
+      path: "big.txt",
+    }));
+    const persistedBodies: PersistedTurnBodies = { toolOutput, toolCallInput };
+    const message = await runTurn(
+      [
+        {
+          kind: "message",
+          cursor: "1-0",
+          message_id: "m1",
+          finish_reason: "tool_calls",
+          tool_calls: [
+            { id: "call-1", type: "function", function: { name: "read" } },
+          ],
+          body_omitted: true,
+        },
+        {
+          kind: "tool_output",
+          cursor: "1-1",
+          tool_call_id: "call-1",
+          body_omitted: true,
+        },
+        { kind: "done", cursor: "1-2", finish_reason: "stop" },
+      ],
+      persistedBodies,
+    );
+
+    expect(toolCallInput).toHaveBeenCalledWith("call-1");
+    expect(toolOutput).toHaveBeenCalledWith("call-1");
+    const tools = message.parts.filter((p) => p.type.startsWith("tool-"));
+    expect(tools).toHaveLength(1);
+    expect(tools[0]).toMatchObject({
+      state: "output-available",
+      input: { path: "big.txt" },
+      output: { rows: 3 },
+    });
+  });
+
+  // A body that cannot be read must not strand the turn: the call is still
+  // answered, as it was before bodies were ever omitted.
+  it("still answers a call whose omitted body cannot be read", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const message = await runTurn(
+      [
+        {
+          kind: "message",
+          cursor: "1-0",
+          message_id: "m1",
+          finish_reason: "tool_calls",
+          tool_calls: [{ id: "call-1", function: { name: "read" } }],
+          body_omitted: true,
+        },
+        {
+          kind: "tool_output",
+          cursor: "1-1",
+          tool_call_id: "call-1",
+          body_omitted: true,
+        },
+        { kind: "done", cursor: "1-2", finish_reason: "stop" },
+      ],
+      {
+        toolOutput: async () => {
+          throw new Error("load failed");
+        },
+        toolCallInput: async () => undefined,
+      },
+    );
+
+    const tools = message.parts.filter((p) => p.type.startsWith("tool-"));
+    expect(tools).toHaveLength(1);
+    expect(tools[0]).toMatchObject({ state: "output-available", input: {} });
   });
 
   // A turn whose tool call is never answered still has to end cleanly: an

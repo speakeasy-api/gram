@@ -192,7 +192,7 @@ func (s *Service) teedCompletion(ctx context.Context, req openrouter.CompletionR
 	publish := func(text string) {
 		if _, pErr := s.turnStream.Publish(ctx, chatID, TurnFrame{
 			Kind: TurnFrameText, Cursor: "", Text: text, MessageID: "",
-			ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil,
+			ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil, BodyOmitted: false,
 		}); pErr != nil {
 			s.logger.WarnContext(ctx, "publish turn text frame", attr.SlogError(pErr))
 		}
@@ -264,7 +264,7 @@ func (s *Service) teeStreamText(ctx context.Context, chatID uuid.UUID) (io.Write
 		for text := range queue {
 			if _, err := s.turnStream.Publish(ctx, chatID, TurnFrame{
 				Kind: TurnFrameText, Cursor: "", Text: text, MessageID: "",
-				ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil,
+				ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil, BodyOmitted: false,
 			}); err != nil {
 				s.logger.WarnContext(ctx, "publish turn text frame", attr.SlogError(err))
 			}
@@ -324,7 +324,7 @@ func (s *Service) teeStreamText(ctx context.Context, chatID uuid.UUID) (io.Write
 			)
 			if _, err := s.turnStream.Publish(ctx, chatID, TurnFrame{
 				Kind: TurnFrameText, Cursor: "", Text: overflow.String(), MessageID: "",
-				ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil,
+				ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil, BodyOmitted: false,
 			}); err != nil {
 				s.logger.WarnContext(ctx, "publish overflowed turn text frame", attr.SlogError(err))
 			}

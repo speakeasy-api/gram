@@ -28,6 +28,40 @@ interface TurnFrame {
   finish_reason?: string;
   tool_call_id?: string;
   output?: unknown;
+  /**
+   * The server left this frame's body out to keep the stream small: a
+   * `tool_output` arrives without `output`, and a `message` carries each tool
+   * call's id and name but not its arguments. The body is in the persisted
+   * row.
+   */
+  body_omitted?: boolean;
+}
+
+/**
+ * Reads the bodies the server leaves out of oversized frames from the
+ * persisted chat rows. Each returns `undefined` when the row is not found.
+ */
+export interface PersistedTurnBodies {
+  toolOutput(toolCallId: string): Promise<unknown>;
+  toolCallInput(toolCallId: string): Promise<unknown>;
+}
+
+/**
+ * Resolves an omitted body, falling back when it cannot be read. A failed
+ * lookup must not end the turn: the call is still answered, just without the
+ * body, which is what the turn showed before bodies were ever omitted.
+ */
+async function readOmitted(
+  read: (() => Promise<unknown>) | undefined,
+  fallback: unknown,
+): Promise<unknown> {
+  if (!read) return fallback;
+  try {
+    return (await read()) ?? fallback;
+  } catch (err) {
+    console.warn("[turnstream] could not load an omitted frame body:", err);
+    return fallback;
+  }
 }
 
 interface ParsedToolCall {
@@ -102,6 +136,11 @@ export async function streamTurn(args: {
    * and end this one before it began.
    */
   replayFromStart?: boolean;
+  /**
+   * Reads bodies the server omitted from oversized frames. Without it an
+   * omitted tool output renders as empty and omitted arguments as `{}`.
+   */
+  persistedBodies?: PersistedTurnBodies;
 }): Promise<void> {
   const { chatId, writer, abortSignal, sessionToken, projectSlug } = args;
 
@@ -321,12 +360,19 @@ export async function streamTurn(args: {
               if (stepHasMessage) closeStep();
               openStep();
               stepHasMessage = true;
+              const bodies = args.persistedBodies;
               for (const call of calls) {
+                const input = frame.body_omitted
+                  ? await readOmitted(
+                      bodies && (() => bodies.toolCallInput(call.id)),
+                      call.input,
+                    )
+                  : call.input;
                 writer.write({
                   type: "tool-input-available",
                   toolCallId: call.id,
                   toolName: call.name,
-                  input: call.input,
+                  input,
                 });
                 pendingToolCalls.add(call.id);
               }
@@ -334,10 +380,18 @@ export async function streamTurn(args: {
             }
             case "tool_output": {
               if (!frame.tool_call_id) break;
+              const toolCallId = frame.tool_call_id;
+              const bodies = args.persistedBodies;
+              const output = frame.body_omitted
+                ? await readOmitted(
+                    bodies && (() => bodies.toolOutput(toolCallId)),
+                    "",
+                  )
+                : (frame.output ?? "");
               writer.write({
                 type: "tool-output-available",
-                toolCallId: frame.tool_call_id,
-                output: frame.output ?? "",
+                toolCallId,
+                output,
               });
               pendingToolCalls.delete(frame.tool_call_id);
               break;

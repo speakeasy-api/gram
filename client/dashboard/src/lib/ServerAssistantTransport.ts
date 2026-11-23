@@ -4,7 +4,7 @@ import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
 import { sleep, type ElementsTransportContext } from "@/elements";
 import { chatAttachmentAssetId } from "@/elements/lib/attachmentUpload";
-import { streamTurn } from "@/lib/turnStream";
+import { type PersistedTurnBodies, streamTurn } from "@/lib/turnStream";
 import {
   type ChatTransport,
   createUIMessageStream,
@@ -266,6 +266,11 @@ export function createServerAssistantTransport(
               projectSlug: deps.projectSlug,
               pendingToolCalls,
               replayFromStart,
+              persistedBodies: createPersistedTurnBodies(
+                deps.client,
+                id,
+                pollSignal,
+              ),
               onSubscribed: () => markSubscribed(),
             })
               .catch((err: unknown) => {
@@ -580,6 +585,58 @@ async function snapshotAssistantIds(
     }
   }
   return { ids, generation: res.value.maxGeneration };
+}
+
+/** chat.load's largest page; the current turn's rows are the newest. */
+const PERSISTED_BODIES_PAGE = 200;
+
+/**
+ * Reads the bodies the turn stream omits from oversized frames out of the
+ * persisted rows. A frame is published only after its row commits, so one
+ * chat.load taken after the frame arrived holds it; the result is reused for
+ * later omitted frames and reloaded only when a row is not in it yet.
+ */
+export function createPersistedTurnBodies(
+  client: GramCore,
+  chatId: string,
+  abortSignal?: AbortSignal,
+): PersistedTurnBodies {
+  let rows: {
+    role: string;
+    toolCallId?: string;
+    toolCalls?: string;
+    content?: unknown;
+  }[] = [];
+  const find = async (match: (row: (typeof rows)[number]) => boolean) => {
+    const cached = rows.find(match);
+    if (cached) return cached;
+    const res = await chatLoad(
+      client,
+      { id: chatId, limit: PERSISTED_BODIES_PAGE },
+      undefined,
+      { fetchOptions: { signal: abortSignal } },
+    );
+    if (!res.ok) throw res.error;
+    rows = res.value.messages;
+    return rows.find(match);
+  };
+  return {
+    async toolOutput(toolCallId) {
+      const row = await find(
+        (r) => r.role === "tool" && r.toolCallId === toolCallId,
+      );
+      return row ? toolOutputValue(row.content) : undefined;
+    },
+    async toolCallInput(toolCallId) {
+      const row = await find(
+        (r) =>
+          r.role === "assistant" &&
+          parseToolCalls(r.toolCalls).some((c) => c.id === toolCallId),
+      );
+      return parseToolCalls(row?.toolCalls).find((c) => c.id === toolCallId)
+        ?.input;
+    },
+  };
 }
 
 // A turn ends when the model returns finish_reason "stop" with no pending

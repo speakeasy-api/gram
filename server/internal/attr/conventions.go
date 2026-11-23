@@ -352,6 +352,12 @@ const (
 	ChatExternalIDKey    = attribute.Key("gram.chat.external_id")
 	ChatContentPartIDKey = attribute.Key("gram.chat.content_part_id")
 	MessageIDKey         = attribute.Key("gram.message.id")
+	// ChatTurnFrameKindKey is the kind of a frame appended to a chat's turn
+	// stream (text, message, tool_output, done).
+	ChatTurnFrameKindKey = attribute.Key("gram.chat.turn_frame.kind")
+	// ChatTurnFrameBodyOmittedKey is whether a turn frame was appended
+	// without its body because the body was over the per-frame byte cap.
+	ChatTurnFrameBodyOmittedKey = attribute.Key("gram.chat.turn_frame.body_omitted")
 	// Chat-analysis score event attributes: stamped on the synthetic
 	// chat_analysis:work_units:score telemetry rows the chat analysis
 	// publisher emits once per scored session, and read back by
@@ -2299,6 +2305,11 @@ func ChatID(v string) attribute.KeyValue { return ChatIDKey.String(v) }
 func SlogChatID(v string) slog.Attr      { return slog.String(string(ChatIDKey), v) }
 func SlogChatExternalID(v string) slog.Attr {
 	return slog.String(string(ChatExternalIDKey), v)
+}
+
+func ChatTurnFrameKind(v string) attribute.KeyValue { return ChatTurnFrameKindKey.String(v) }
+func ChatTurnFrameBodyOmitted(v bool) attribute.KeyValue {
+	return ChatTurnFrameBodyOmittedKey.Bool(v)
 }
 
 func ChatContentPartID(v string) attribute.KeyValue { return ChatContentPartIDKey.String(v) }

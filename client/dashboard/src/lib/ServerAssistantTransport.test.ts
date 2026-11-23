@@ -51,6 +51,7 @@ type Frame = {
   finish_reason?: string;
   tool_call_id?: string;
   output?: unknown;
+  body_omitted?: boolean;
 };
 
 type Row = {
@@ -371,6 +372,43 @@ describe("Project Assistant turn", () => {
     ]);
     expect(api.requests[1]!.query.has("after")).toBe(false);
     expect(api.requests[2]!.body).toMatchObject({ chat_id: EXISTING_CHAT_ID });
+  });
+
+  // The server omits oversized bodies from the stream. The turn must still
+  // show the arguments and output, read from the persisted rows.
+  it("reads bodies omitted from the stream out of chat.load", async () => {
+    api.frames = TOOL_TURN_FRAMES.map((frame) => {
+      if (frame.kind === "message" && frame.tool_calls) {
+        return {
+          ...frame,
+          tool_calls: [
+            {
+              id: WEATHER_CALL.id,
+              type: "function",
+              function: { name: WEATHER_CALL.function.name },
+            },
+          ],
+          body_omitted: true,
+        };
+      }
+      if (frame.kind === "tool_output") {
+        return { ...frame, output: undefined, body_omitted: true };
+      }
+      return frame;
+    });
+    api.rowsAfter = TOOL_TURN_ROWS;
+
+    const { chat, sends } = await runTurn({});
+
+    expect(chat.status).toBe("ready");
+    expect(chat.error).toBeUndefined();
+    expect(sends).toBe(1);
+    expect(visibleParts(assistantOf(chat))).toEqual(EXPECTED_TOOL_TURN);
+    // One load serves both omitted bodies: the rows it returned already held
+    // the tool row when the output frame arrived.
+    expect(
+      api.requests.filter((r) => r.path === "/rpc/chat.load"),
+    ).toHaveLength(1);
   });
 
   it("falls back to polling chat.load when streaming is refused", async () => {
