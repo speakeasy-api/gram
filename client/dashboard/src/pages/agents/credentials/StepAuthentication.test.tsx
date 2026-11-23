@@ -86,48 +86,94 @@ const expired = {
 } as RemoteSession;
 
 describe("authentication assignment warnings", () => {
-  it("shows the editor's live account when the agent's assignment has ended, since saving assigns it", () => {
+  const assignedNone = (
+    own: "ready" | "checking",
+    assigned: "missing" | "ended",
+    onAssign?: (serverId: string) => void,
+  ) =>
     render(
       <StepAuthentication
         servers={[server]}
-        allServers
+        allServers={false}
         onRemove={vi.fn<(id: string) => void>()}
+        onAssign={onAssign}
         connections={{
           byServer: new Map([
-            [server.id, { status: "ready", sessions: [mine] }],
+            [
+              server.id,
+              own === "ready"
+                ? { status: "ready", sessions: [mine] }
+                : { status: "checking" },
+            ],
           ]),
           assignedByServer: new Map([
-            [server.id, { status: "ended", sessions: [expired] }],
+            [
+              server.id,
+              assigned === "ended"
+                ? { status: "ended", sessions: [expired] }
+                : { status: "missing" },
+            ],
           ]),
           refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         }}
       />,
       { wrapper: MemoryRouter },
     );
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getAllByText("Your connection").length).toBeGreaterThan(0);
+
+  it("never shows the editor's own connection as one the agent has", () => {
+    assignedNone("ready", "missing", vi.fn<(serverId: string) => void>());
+    expect(screen.queryByText("Your connection")).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: /Example server.*Requires connection/,
+      }),
+    ).toBeTruthy();
   });
-  it("waits for the editor's own connection before judging an ended assignment", () => {
-    render(
-      <StepAuthentication
-        servers={[server]}
-        allServers
-        onRemove={vi.fn<(id: string) => void>()}
-        connections={{
-          byServer: new Map([[server.id, { status: "checking" }]]),
-          assignedByServer: new Map([
-            [server.id, { status: "ended", sessions: [expired] }],
-          ]),
-          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-        }}
-      />,
-      { wrapper: MemoryRouter },
+
+  it("shows an ended assignment as its owner's, not the editor's", () => {
+    assignedNone("ready", "ended", vi.fn<(serverId: string) => void>());
+    fireEvent.click(
+      screen.getByRole("button", { name: /Example server.*Expired/ }),
     );
-    expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getAllByText("Checking connection…").length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getByText("Another member's connection has expired"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Your connection")).toBeNull();
   });
+
+  it.each(["missing", "ended"] as const)(
+    "assigns the editor's connection only when they ask, for a %s assignment",
+    (assigned) => {
+      const onAssign = vi.fn<(serverId: string) => void>();
+      assignedNone("ready", assigned, onAssign);
+      fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
+      expect(onAssign).not.toHaveBeenCalled();
+      expect(
+        screen.getByText(/The agent can use it only once you assign it/),
+      ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Use your connection" }),
+      );
+      expect(onAssign).toHaveBeenCalledWith(server.id);
+    },
+  );
+
+  it("offers nothing to assign until the editor's own connection is known", () => {
+    assignedNone("checking", "missing", vi.fn<(serverId: string) => void>());
+    fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
+    expect(
+      screen.queryByRole("button", { name: "Use your connection" }),
+    ).toBeNull();
+  });
+
+  it("offers nothing to assign where the page cannot assign it", () => {
+    assignedNone("ready", "missing");
+    fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
+    expect(
+      screen.queryByRole("button", { name: "Use your connection" }),
+    ).toBeNull();
+  });
+
   it("keeps a valid delegated assignment clear of candidate warnings", () => {
     render(
       <StepAuthentication
@@ -307,7 +353,10 @@ describe("saving after a connection", () => {
       close: () => {},
     }) as unknown as Window;
   const connectable = { ...server, connectUrl: "https://example.test/connect" };
-  function row(status: "missing" | "ready", onConnected: () => void) {
+  function row(
+    status: "missing" | "ready",
+    onConnected: (serverId: string) => void,
+  ) {
     return (
       <StepAuthentication
         servers={[connectable]}
@@ -331,7 +380,7 @@ describe("saving after a connection", () => {
 
   it("saves once the reader's connection is ready after the sign-in popup closes", async () => {
     vi.spyOn(window, "open").mockReturnValue(fakePopup());
-    const onConnected = vi.fn<() => void>();
+    const onConnected = vi.fn<(serverId: string) => void>();
     const view = render(row("missing", onConnected), { wrapper: MemoryRouter });
     fireEvent.click(screen.getByText("Example server"));
     fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
@@ -341,11 +390,12 @@ describe("saving after a connection", () => {
       await popup.onComplete?.("popup-closed");
     });
     await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1));
+    expect(onConnected).toHaveBeenCalledWith(connectable.id);
   });
 
   it("does not save when the popup closes without a connection", async () => {
     vi.spyOn(window, "open").mockReturnValue(fakePopup());
-    const onConnected = vi.fn<() => void>();
+    const onConnected = vi.fn<(serverId: string) => void>();
     render(row("missing", onConnected), { wrapper: MemoryRouter });
     fireEvent.click(screen.getByText("Example server"));
     fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
