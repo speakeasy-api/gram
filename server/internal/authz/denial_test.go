@@ -191,7 +191,7 @@ func TestDenialReasons_SkipsValidationWhenRBACIsNotEnforced(t *testing.T) {
 
 	reasons, err := engine.DenialReasons(ctx, []Check{valid, invalid, authClient})
 	require.NoError(t, err, "unenforced callers get the unenforced result, like FindMatched")
-	require.Equal(t, []DenialReason{DenialReasonNone, DenialReasonNone, DenialReasonNotGranted}, reasons)
+	require.Equal(t, []Reason{ReasonNone, ReasonNone, ReasonNotGranted}, reasons)
 }
 
 // A call refused only because the caller's grant names another disposition
@@ -208,7 +208,7 @@ func TestDenialReasons_OtherDispositionIsReported(t *testing.T) {
 	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("delete_all", DispositionDestructive)
 	reasons, err := engine.DenialReasons(ctx, []Check{call})
 	require.NoError(t, err)
-	require.Equal(t, []DenialReason{DenialReasonDisposition}, reasons)
+	require.Equal(t, []Reason{ReasonDisposition}, reasons)
 }
 
 // A call refused because it names no tool while the grant is limited to one
@@ -225,7 +225,7 @@ func TestDenialReasons_MissingToolIsNotADispositionRefusal(t *testing.T) {
 	call := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).ToolCall("", DispositionDestructive)
 	reasons, err := engine.DenialReasons(ctx, []Check{call})
 	require.NoError(t, err)
-	require.Equal(t, []DenialReason{DenialReasonNotGranted}, reasons)
+	require.Equal(t, []Reason{ReasonNotGranted}, reasons)
 }
 
 // A tool call recorded as a denial is rebuilt as a tool call, so a grant that

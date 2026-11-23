@@ -70,31 +70,31 @@ func recordDenial(ctx context.Context, err error) {
 	recorder.denial = &Denial{Scope: denied.Scope, ResourceKind: kind}
 }
 
-// DenialReason says why the caller is not authorized for a check.
-type DenialReason string
+// Reason says why the caller is not authorized for a check.
+type Reason string
 
 const (
-	// DenialReasonNone marks a check the caller is authorized for.
-	DenialReasonNone DenialReason = ""
+	// ReasonNone marks a check the caller is authorized for.
+	ReasonNone Reason = ""
 
-	// DenialReasonBlocked marks a check an exclusion (a *:blocked_* grant)
+	// ReasonBlocked marks a check an exclusion (a *:blocked_* grant)
 	// withdraws.
-	DenialReasonBlocked DenialReason = "blocked"
+	ReasonBlocked Reason = "blocked"
 
-	// DenialReasonReadOnly marks a check no grant allows only because of its
+	// ReasonReadOnly marks a check no grant allows only because of its
 	// disposition dimension, where the caller's access covers read_only: a
 	// grant would allow the same check if it named the read_only disposition.
-	DenialReasonReadOnly DenialReason = "read_only"
+	ReasonReadOnly Reason = "read_only"
 
-	// DenialReasonDisposition marks a check no grant allows only because of
+	// ReasonDisposition marks a check no grant allows only because of
 	// its disposition dimension, where the caller's access is limited to other
 	// dispositions than read_only (for example idempotent or open_world): a
 	// grant would allow the same check if it named one of those dispositions
 	// instead.
-	DenialReasonDisposition DenialReason = "disposition"
+	ReasonDisposition Reason = "disposition"
 
-	// DenialReasonNotGranted marks a check no grant allows.
-	DenialReasonNotGranted DenialReason = "not_granted"
+	// ReasonNotGranted marks a check no grant allows.
+	ReasonNotGranted Reason = "not_granted"
 )
 
 // DenialReasons evaluates each check against the prepared grants and returns
@@ -106,8 +106,8 @@ const (
 // When RBAC is not enforced every check is authorized except auth-client
 // checks, which are not granted, and checks are not validated, matching
 // [Engine.FindMatched] and [Engine.Require].
-func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialReason, error) {
-	reasons := make([]DenialReason, len(checks))
+func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]Reason, error) {
+	reasons := make([]Reason, len(checks))
 	enforce, err := e.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 	if !enforce {
 		for i, c := range checks {
 			if !unenforcedAllows(c) {
-				reasons[i] = DenialReasonNotGranted
+				reasons[i] = ReasonNotGranted
 			}
 		}
 		return reasons, nil
@@ -136,13 +136,13 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 		}
 		switch {
 		case evaluation.Grant != nil:
-			reasons[i] = DenialReasonNone
+			reasons[i] = ReasonNone
 		case evaluation.Denied:
-			reasons[i] = DenialReasonBlocked
+			reasons[i] = ReasonBlocked
 		default:
-			reasons[i] = DenialReasonNotGranted
+			reasons[i] = ReasonNotGranted
 		}
-		if reasons[i] != DenialReasonNotGranted {
+		if reasons[i] != ReasonNotGranted {
 			continue
 		}
 
@@ -160,7 +160,7 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 				return nil, e.mapError(ctx, err)
 			}
 			if evaluation.Grant != nil {
-				reasons[i] = DenialReasonReadOnly
+				reasons[i] = ReasonReadOnly
 				continue
 			}
 		}
@@ -179,7 +179,7 @@ func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]DenialRea
 				return nil, e.mapError(ctx, err)
 			}
 			if evaluation.Grant != nil {
-				reasons[i] = DenialReasonDisposition
+				reasons[i] = ReasonDisposition
 				break
 			}
 		}
