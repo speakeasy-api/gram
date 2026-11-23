@@ -215,6 +215,9 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			session, sessionErr := remotesessionsrepo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: registration})
 			if scenario != "typed" && !strings.HasPrefix(scenario, "typed_alternatives") && scenario != "ema" && scenario != "gateway" && scenario != "gateway_denied_member" && scenario != "legacy" {
 				require.Error(t, callbackErr)
+				if scenario == "gateway_legacy" {
+					require.ErrorIs(t, callbackErr, remotesessions.ErrTypedAuthorizationChanged)
+				}
 				if scenario != "legacy_unlinked" && scenario != "deleted_sign_in" {
 					require.Nil(t, posted.Load(), "revocation must fail before exchanging the code")
 				}

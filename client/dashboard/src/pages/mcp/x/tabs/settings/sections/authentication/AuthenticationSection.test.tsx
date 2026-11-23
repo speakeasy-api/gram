@@ -7,6 +7,7 @@ import type { AuthTarget } from "./authTarget";
 const {
   attachSheet,
   saveNoUpstream,
+  deniedScopes,
   useServerClientAssociations,
   useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
@@ -14,10 +15,15 @@ const {
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
   saveNoUpstream: vi.fn(),
+  deniedScopes: new Set<string>(),
   useServerClientAssociations: vi.fn(),
   useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
+}));
+
+vi.mock("@/pages/mcp/gateway/GatewayMemberSignInField", () => ({
+  GatewayAuthorizationServersField: () => null,
 }));
 
 vi.mock(
@@ -135,15 +141,20 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,
+    scope,
+    level,
   }: {
+    scope: string;
+    level: string;
     children: ReactNode | ((props: { disabled: boolean }) => ReactNode);
-  }) => (
-    <>
-      {typeof children === "function"
-        ? children({ disabled: false })
-        : children}
-    </>
-  ),
+  }) =>
+    level === "section" && deniedScopes.has(scope) ? null : (
+      <>
+        {typeof children === "function"
+          ? children({ disabled: false })
+          : children}
+      </>
+    ),
 }));
 
 vi.mock("./CimdAdmissionModeField", () => ({
@@ -199,6 +210,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  deniedScopes.clear();
 });
 
 describe("AuthenticationSectionBody", () => {
@@ -225,6 +237,44 @@ describe("AuthenticationSectionBody", () => {
         },
       },
     });
+  });
+
+  it.each(["non-hosted", "assigned", "gateway", "org:admin", "mcp:write"])(
+    "does not offer hosted opt-out for %s",
+    (scenario) => {
+      const target = { ...standardTargetWithSessionIssuer };
+      if (scenario === "non-hosted") target.hosted = false;
+      if (scenario === "gateway")
+        target.attachImpactTarget = { metaMcpServerId: "gateway-1" };
+      if (scenario.includes(":")) deniedScopes.add(scenario);
+      useServerClientAssociations.mockReturnValue({
+        data: {
+          associations:
+            scenario === "assigned"
+              ? [{ remoteSessionIssuerId: "provider-1" }]
+              : [],
+        },
+        isLoading: false,
+      });
+      render(<AuthenticationSectionBody target={target} />);
+      expect(
+        screen.queryByRole("button", { name: "No upstream authentication" }),
+      ).toBeNull();
+    },
+  );
+
+  it("shows a saved upstream registration before downstream sign-in is configured", () => {
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [{ remoteSessionIssuerId: "saved-provider" }] },
+      isLoading: false,
+    });
+    render(
+      <AuthenticationSectionBody target={standardTargetWithoutSessionIssuer} />,
+    );
+    expect(screen.getByText("attached-saved-provider")).toBeDefined();
+    expect(
+      screen.queryByRole("button", { name: "No upstream authentication" }),
+    ).toBeNull();
   });
 
   it("includes a target-specific setup action before a session issuer is configured", () => {

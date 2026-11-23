@@ -546,7 +546,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 
 // memberChoices applies one credential's choices to a gateway's proxied
 // members and resolves each member's credential from its chosen client, once
-// per member per request. Hosted members keep the issuer-derived path. Once
+// per member per request. Hosted members use their exact registration. Once
 // the organization enforces, each member is served by the typed auth client
 // resolver and the mandatory check, as a direct endpoint is.
 type memberChoices struct {
@@ -1196,7 +1196,7 @@ func (s *Service) serverAssociatedClients(ctx context.Context, organizationID st
 // attachAssociatedClients records each proxied member's associated clients,
 // so consent and gateway eligibility match a client to the members it is
 // configured for rather than to every member sharing its authorization
-// server. Hosted members keep the issuer match.
+// server. Hosted members use only the exact assigned registration.
 func (s *Service) attachAssociatedClients(ctx context.Context, organizationID string, members []metaMember) error {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {

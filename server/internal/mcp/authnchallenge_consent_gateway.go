@@ -301,6 +301,12 @@ func (d consentTemplateData) gatewayRows(servers []gatewayServer) []gatewayServe
 	return rows
 }
 
+func (v *gatewayConsentView) onlyIncompleteHostedMembers() bool {
+	return len(v.members) == 0 && slices.ContainsFunc(v.Servers, func(server gatewayServer) bool {
+		return !server.Hidden && server.HostedSetupNotice() != ""
+	})
+}
+
 // VisibleServers are the servers the person has not hidden.
 func (v *gatewayConsentView) VisibleServers() []gatewayServer {
 	return slices.DeleteFunc(slices.Clone(v.Servers), func(g gatewayServer) bool { return g.Hidden })

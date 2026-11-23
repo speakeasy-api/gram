@@ -290,8 +290,10 @@ func assignedHostedToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, regi
 			continue
 		}
 		if found {
-			var none remotesessions.UpstreamToken
-			return none, false
+			// A registration belongs to one upstream issuer, the map key used
+			// by the resolver. Refuse inconsistent results rather than using
+			// either credential.
+			return remotesessions.UpstreamToken{}, false
 		}
 		entry, found = token, true
 	}

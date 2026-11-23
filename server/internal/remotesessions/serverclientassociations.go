@@ -512,7 +512,7 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
 	}
 
-	if server.ToolsetID.Valid && (!server.RequiresUpstreamAuth.Valid || !server.RequiresUpstreamAuth.Bool) {
+	if server.ToolsetID.Valid && !server.RequiresUpstreamAuth.Valid {
 		// The presence of the old placement required credentials. Removing it
 		// must not also opt the server (including a gateway member) out.
 		if err := q.RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{ServerID: server.ID, ProjectID: server.ProjectID}); err != nil {

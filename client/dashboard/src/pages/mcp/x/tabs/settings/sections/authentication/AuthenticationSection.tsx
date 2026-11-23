@@ -1,3 +1,5 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateAllMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { useSetMcpServerUpstreamAuthRequirementMutation } from "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -188,7 +190,7 @@ function StandardAuthenticationSectionBody({
     isLoading: isLoadingAssociatedIssuers,
     isError: isAssociatedIssuersError,
   } = useRemoteSessionIssuersByIds(attachedIssuerIds, {
-    enabled: issuerConfigured,
+    enabled: issuerConfigured || target.hosted === true,
   });
 
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -233,10 +235,32 @@ function StandardAuthenticationSectionBody({
           projectId={target.projectId}
           level="section"
         >
-          <HostedNoUpstreamAction key={serverId} serverId={serverId} />
+          <HostedNoUpstreamAction
+            key={serverId}
+            serverId={serverId}
+            invalidate={target.invalidate}
+          />
         </RequireScope>
       </RequireScope>
     );
+
+  const registrationField = (
+    <RemoteIdentityProvidersField
+      associatedIssuers={associatedIssuers}
+      associations={associations.data?.associations}
+      allowAdditionalProviders={false}
+      projectId={target.projectId}
+      isLoading={associations.isLoading || isLoadingAssociatedIssuers}
+      isError={associations.isError || isAssociatedIssuersError}
+      onAdd={() => setSheetOpen(true)}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      readOnly={
+        userSessionIssuer?.projectId === "" &&
+        (!target.hosted || associations.data?.associations.length !== 0)
+      }
+    />
+  );
 
   let authenticationFields: ReactNode;
   if (!issuerConfigured && gatewayId) {
@@ -250,6 +274,9 @@ function StandardAuthenticationSectionBody({
           onStartManual={() => setSheetOpen(true)}
           additionalAction={additionalSetupAction}
         />
+        {target.hosted &&
+          (associations.data?.associations.length ?? 0) > 0 &&
+          registrationField}
         {noUpstreamAction}
       </>
     );
@@ -267,21 +294,7 @@ function StandardAuthenticationSectionBody({
         {gatewayId ? (
           <GatewayAuthorizationServersField metaMcpServerId={gatewayId} />
         ) : (
-          <RemoteIdentityProvidersField
-            associatedIssuers={associatedIssuers}
-            associations={associations.data?.associations}
-            allowAdditionalProviders={false}
-            projectId={target.projectId}
-            isLoading={associations.isLoading || isLoadingAssociatedIssuers}
-            isError={associations.isError || isAssociatedIssuersError}
-            onAdd={() => setSheetOpen(true)}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            readOnly={
-              userSessionIssuer.projectId === "" &&
-              (!target.hosted || associations.data?.associations.length !== 0)
-            }
-          />
+          registrationField
         )}
         {noUpstreamAction}
         {/* Last: its footer Save closes the panel. */}
@@ -389,12 +402,22 @@ function AuthenticationLoadErrorField() {
 
 function HostedNoUpstreamAction({
   serverId,
+  invalidate,
 }: {
   serverId: string;
+  invalidate: AuthTarget["invalidate"];
 }): JSX.Element {
   // The legacy proxied setter is deprecated. This operation still owns the
   // exact hosted no-upstream decision; typed offer mutations cannot save it.
-  const mutation = useSetMcpServerUpstreamAuthRequirementMutation();
+  const queryClient = useQueryClient();
+  const mutation = useSetMcpServerUpstreamAuthRequirementMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidate(queryClient),
+        invalidateAllMcpServerAuthentication(queryClient),
+      ]);
+    },
+  });
   return (
     <Field>
       <FieldLabel>Upstream authentication</FieldLabel>

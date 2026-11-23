@@ -110,4 +110,7 @@ func TestGatewayHostedSetupNoticeDoesNotAdmitMissingPlacement(t *testing.T) {
 	require.Contains(t, w.Body.String(), "An administrator must finish upstream authentication setup")
 	require.NotContains(t, w.Body.String(), "consent-approve-button")
 
+	approval, err := postApproveResult(t, ctx, fx)
+	require.ErrorContains(t, err, "An administrator must finish upstream authentication setup")
+	require.Empty(t, approval.Header().Get("Location"))
 }

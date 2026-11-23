@@ -959,7 +959,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	var gatewayInventory string
 	var approvalError *consentApprovalError
 	var consentProblem mcpconnectionattempts.Happened
-	if gateway != nil && gateway.Focus == nil && len(gateway.members) == 0 && slices.ContainsFunc(gateway.VisibleServers(), func(server gatewayServer) bool { return server.HostedSetupNotice() != "" }) {
+	if gateway != nil && gateway.Focus == nil && gateway.onlyIncompleteHostedMembers() {
 		approvalError = &consentApprovalError{Message: "An administrator must finish upstream authentication setup for the gateway's hosted servers.", ActionURL: "", ActionLabel: ""}
 		consentProblem = mcpconnectionattempts.CodeUpstreamSignInNotSetUp
 		showToolsIsland = false
@@ -1389,6 +1389,17 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeUnavailable, err, "read hosted authentication setup").LogError(ctx, logger)
 		}
 		if incomplete {
+			t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
+			return oops.E(oops.CodeForbidden, nil, hostedSetupNotice).LogWarn(ctx, logger)
+		}
+	}
+	if action == "approve" && endpoint.MetaMcpServerID.Valid {
+		view, _, err := s.gatewayConsent(ctx, endpoint, challengeState, nil, "")
+		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnavailable, err, "read gateway authentication setup").LogError(ctx, logger)
+		}
+		if view.onlyIncompleteHostedMembers() {
 			t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
 			return oops.E(oops.CodeForbidden, nil, hostedSetupNotice).LogWarn(ctx, logger)
 		}
