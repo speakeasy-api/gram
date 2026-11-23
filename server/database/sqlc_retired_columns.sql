@@ -10,3 +10,7 @@ ALTER TABLE chats DROP COLUMN inference_accepted_checkpoint;
 
 -- No longer read or written since Shadow MCP official server links lost their on/off switch (AIS-929).
 ALTER TABLE shadow_mcp_official_servers DROP COLUMN allow_direct_access;
+
+-- The plaintext upstream OpenRouter key (DNO-1571). key_encrypted replaced it and
+-- nothing reads or writes it any more.
+ALTER TABLE openrouter_api_keys DROP COLUMN key;

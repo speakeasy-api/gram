@@ -98,7 +98,6 @@ func TestProvisionAPIKey_ConcurrentFirstProvision(t *testing.T) {
 		KeyType:        string(KeyTypeInternal),
 	})
 	require.NoError(t, err)
-	require.False(t, row.Key.Valid, "plaintext column must stay NULL")
 	require.True(t, row.KeyEncrypted.Valid)
 	decrypted, err := enc.Decrypt(row.KeyEncrypted.String)
 	require.NoError(t, err)
