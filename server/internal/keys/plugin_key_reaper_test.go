@@ -51,6 +51,7 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 	latestPublish := insert("plugins-hooks-20260801-000000-a00001", true, project, 100*day, nil)
 	nearPublish := insert("plugins-mcp-20260710-000000-a00002", true, project, 120*day, nil)
 	stalePublish := insert("plugins-hooks-20260601-000000-a00003", true, project, 140*day, nil)
+	staleMCP := insert("plugins-mcp-20260601-000000-a0000b", true, project, 140*day, nil)
 	staleDownload := insert("plugins-hooks-download-20260601-000000-a00004", true, project, 140*day, nil)
 	usedDownload := insert("plugins-hooks-download-20260601-000000-a00005", true, project, 140*day, &recent)
 	newDownload := insert("plugins-hooks-download-20261110-000000-a00006", true, project, 10*day, nil)
@@ -67,12 +68,13 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 	require.Equal(t, 3, reaped)
 	reaped, err = keys.ReapStalePluginAPIKeys(ctx, ti.conn, audit.NewLogger(), 3)
 	require.NoError(t, err)
-	require.Equal(t, 1, reaped)
+	require.Equal(t, 2, reaped)
 
 	for id, wantDeleted := range map[uuid.UUID]bool{
 		latestPublish: false,
 		nearPublish:   false,
 		stalePublish:  true,
+		staleMCP:      true,
 		staleDownload: true,
 		usedDownload:  false,
 		newDownload:   false,
@@ -87,7 +89,7 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
 	require.NoError(t, err)
-	require.Equal(t, before+4, after)
+	require.Equal(t, before+5, after)
 
 	latest, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionKeyRevoke)
 	require.NoError(t, err)

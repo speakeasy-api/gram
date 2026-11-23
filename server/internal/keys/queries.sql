@@ -211,6 +211,9 @@ SET deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id IN (SELECT id FROM stale)
   AND deleted IS FALSE
+  -- Rechecked here so a use recorded while this statement waited on the row
+  -- still spares the key.
+  AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - (sqlc.arg(retention_days)::int * interval '1 day'))
 RETURNING id, organization_id, project_id, name, scopes;
 
 -- name: ListAPIKeysByOrganization :many
