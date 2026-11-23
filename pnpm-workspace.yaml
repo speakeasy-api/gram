@@ -47,8 +47,8 @@ overrides:
   # @ai-sdk/react depends on an exact ai version. Keep both pinned together so
   # the dashboard, @ai-sdk/react, and the ai peers of @assistant-ui/react-ai-sdk
   # and assistant-stream all resolve to one ai instance.
-  ai: 7.0.171
-  "@ai-sdk/react": 4.0.175
+  ai: 7.0.173
+  "@ai-sdk/react": 4.0.177
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.
   # 3.4.17 also fixes GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr in 3.4.16.
   dompurify@<3.4.17: 3.4.17
