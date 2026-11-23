@@ -20,9 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	funcrepo "github.com/speakeasy-api/gram/server/internal/functions/repo"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -37,7 +37,7 @@ type DeployFunctionRunners struct {
 	db             *pgxpool.Pool
 	deployer       functions.Deployer
 	defaultVersion functions.RunnerVersion
-	enc            *encryption.Client
+	keys           *runnerkeys.Keys
 }
 
 func NewDeployFunctionRunners(
@@ -45,14 +45,14 @@ func NewDeployFunctionRunners(
 	db *pgxpool.Pool,
 	deployer functions.Deployer,
 	defaultVersion functions.RunnerVersion,
-	enc *encryption.Client,
+	keys *runnerkeys.Keys,
 ) *DeployFunctionRunners {
 	return &DeployFunctionRunners{
 		logger:         logger.With(attr.SlogComponent("deploy_function_runner")),
 		db:             db,
 		deployer:       deployer,
 		defaultVersion: defaultVersion,
-		enc:            enc,
+		keys:           keys,
 	}
 }
 
@@ -257,14 +257,17 @@ func (d *DeployFunctionRunners) preflightFunction(
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing credentials").LogError(ctx, logger)
 	}
 
-	enckey := c.EncryptionKey.Reveal()
-	if len(enckey) == 0 || c.BearerFormat.String == "" {
+	if c.BearerFormat.String == "" {
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "malformed credentials generated for function").LogError(ctx, logger)
 	}
 
-	sec, err := d.enc.Decrypt(string(enckey))
+	sec, err := d.keys.Open(ctx, runnerkeys.Stored{
+		OrganizationID: c.OrganizationID,
+		Platform:       c.EncryptionKey,
+		Org:            c.EncryptionKeyOrgEncrypted,
+	})
 	if err != nil {
-		return empty, oops.E(oops.CodeInvariantViolation, err, "failed to unseal function credentials").LogError(ctx, logger)
+		return empty, runnerkeys.Error(ctx, logger, err, "failed to unseal function credentials")
 	}
 
 	if len(sec) == 0 {
@@ -279,7 +282,7 @@ func (d *DeployFunctionRunners) preflightFunction(
 		runtime:          functions.Runtime(fnc.Runtime),
 		memoryMiB:        mem,
 		scale:            scale,
-		bearerSecret:     base64.StdEncoding.EncodeToString([]byte(sec)),
+		bearerSecret:     base64.StdEncoding.EncodeToString(sec),
 		assetID:          fnc.AssetID,
 		assetURL:         assetURL,
 		assetSHA256:      fa.Sha256,

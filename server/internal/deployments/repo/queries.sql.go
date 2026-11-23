@@ -343,54 +343,6 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 	)
 }
 
-const createDeploymentFunctionsAccess = `-- name: CreateDeploymentFunctionsAccess :one
-INSERT INTO functions_access (
-    project_id
-  , organization_id
-  , deployment_id
-  , function_id
-  , encryption_key
-  , bearer_format
-) VALUES (
-    $1
-  , (
-      SELECT p.organization_id
-      FROM projects AS p
-      JOIN organization_metadata AS om ON om.id = p.organization_id
-      WHERE p.id = $1
-    )
-  , $2
-  , $3
-  , $4
-  , $5
-)
-RETURNING id
-`
-
-type CreateDeploymentFunctionsAccessParams struct {
-	ProjectID     uuid.UUID
-	DeploymentID  uuid.UUID
-	FunctionID    uuid.UUID
-	EncryptionKey conv.Secret
-	BearerFormat  pgtype.Text
-}
-
-// organization_id is the project's organization. The lookup joins
-// organization_metadata, which the column references, so a project whose
-// organization has no metadata row stores NULL instead of failing the deploy.
-func (q *Queries) CreateDeploymentFunctionsAccess(ctx context.Context, arg CreateDeploymentFunctionsAccessParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, createDeploymentFunctionsAccess,
-		arg.ProjectID,
-		arg.DeploymentID,
-		arg.FunctionID,
-		arg.EncryptionKey,
-		arg.BearerFormat,
-	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const createDeploymentStatus = `-- name: CreateDeploymentStatus :exec
 INSERT INTO deployment_statuses (deployment_id, status)
 VALUES ($1, $2)
@@ -1461,7 +1413,9 @@ const getFunctionCredentialsBatch = `-- name: GetFunctionCredentialsBatch :many
 SELECT DISTINCT ON (function_id)
   id,
   function_id,
+  organization_id,
   encryption_key,
+  encryption_key_org_encrypted,
   bearer_format
 FROM functions_access
 WHERE project_id = $1
@@ -1478,10 +1432,12 @@ type GetFunctionCredentialsBatchParams struct {
 }
 
 type GetFunctionCredentialsBatchRow struct {
-	ID            uuid.UUID
-	FunctionID    uuid.UUID
-	EncryptionKey conv.Secret
-	BearerFormat  pgtype.Text
+	ID                        uuid.UUID
+	FunctionID                uuid.UUID
+	OrganizationID            pgtype.Text
+	EncryptionKey             conv.Secret
+	EncryptionKeyOrgEncrypted pgtype.Text
+	BearerFormat              pgtype.Text
 }
 
 func (q *Queries) GetFunctionCredentialsBatch(ctx context.Context, arg GetFunctionCredentialsBatchParams) ([]GetFunctionCredentialsBatchRow, error) {
@@ -1496,7 +1452,9 @@ func (q *Queries) GetFunctionCredentialsBatch(ctx context.Context, arg GetFuncti
 		if err := rows.Scan(
 			&i.ID,
 			&i.FunctionID,
+			&i.OrganizationID,
 			&i.EncryptionKey,
+			&i.EncryptionKeyOrgEncrypted,
 			&i.BearerFormat,
 		); err != nil {
 			return nil, err

@@ -270,7 +270,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("create tigris asset store: %w", err)
 	}
 	shutdown.funcs = append(shutdown.funcs, stop)
-	functionsOrchestrator, stop, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, enc)
+	functionsOrchestrator, stop, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, orgEncryption.RunnerKeys(logger, enc))
 	if err != nil {
 		return fmt.Errorf("create functions orchestrator: %w", err)
 	}

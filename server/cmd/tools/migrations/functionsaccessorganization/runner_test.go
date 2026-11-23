@@ -29,7 +29,6 @@ func TestRunFillsRunnerKeysFromTheirProjectOrganization(t *testing.T) {
 	otherProject := seedProject(t, ctx, pool, otherOrg)
 
 	first := seedRunnerKey(t, ctx, pool, org, project)
-	require.Equal(t, conv.ToPGText(org), runnerKeyOrganization(t, ctx, pool, first).OrganizationID, "the deploy path stores the project's organization")
 	second := seedRunnerKey(t, ctx, pool, org, project)
 	other := seedRunnerKey(t, ctx, pool, otherOrg, otherProject)
 	deleted := seedRunnerKey(t, ctx, pool, org, project)
@@ -114,8 +113,8 @@ func seedProject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, organiza
 }
 
 // seedRunnerKey writes a function runner key for a new deployment of the
-// project through the production writer. The function's asset is stored under
-// assetOrganizationID.
+// project, with the organization the deploy path stores. The function's asset
+// is stored under assetOrganizationID.
 func seedRunnerKey(t *testing.T, ctx context.Context, pool *pgxpool.Pool, assetOrganizationID string, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 
@@ -142,7 +141,7 @@ func seedRunnerKey(t *testing.T, ctx context.Context, pool *pgxpool.Pool, assetO
 	})
 	require.NoError(t, err)
 
-	accessID, err := deployments.CreateDeploymentFunctionsAccess(ctx, deploymentsrepo.CreateDeploymentFunctionsAccessParams{
+	accessID, err := testrepo.New(pool).CreateFunctionsAccessFixture(ctx, testrepo.CreateFunctionsAccessFixtureParams{
 		ProjectID: projectID, DeploymentID: deploymentID, FunctionID: function.ID,
 		EncryptionKey: conv.NewSecret([]byte("fixture-not-a-key")), BearerFormat: conv.ToPGText("v01"),
 	})

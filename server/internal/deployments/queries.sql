@@ -679,7 +679,9 @@ WHERE
 SELECT DISTINCT ON (function_id)
   id,
   function_id,
+  organization_id,
   encryption_key,
+  encryption_key_org_encrypted,
   bearer_format
 FROM functions_access
 WHERE project_id = @project_id
@@ -697,32 +699,6 @@ WHERE df.deployment_id = @deployment_id
     SELECT id FROM deployments d WHERE d.project_id = @project_id
   )
   AND fm.function_id IS NULL;
-
--- name: CreateDeploymentFunctionsAccess :one
--- organization_id is the project's organization. The lookup joins
--- organization_metadata, which the column references, so a project whose
--- organization has no metadata row stores NULL instead of failing the deploy.
-INSERT INTO functions_access (
-    project_id
-  , organization_id
-  , deployment_id
-  , function_id
-  , encryption_key
-  , bearer_format
-) VALUES (
-    @project_id
-  , (
-      SELECT p.organization_id
-      FROM projects AS p
-      JOIN organization_metadata AS om ON om.id = p.organization_id
-      WHERE p.id = @project_id
-    )
-  , @deployment_id
-  , @function_id
-  , @encryption_key
-  , @bearer_format
-)
-RETURNING id;
 
 -- name: InsertDeployment :one
 -- Inserts a minimal deployment row and returns its ID without the conflict

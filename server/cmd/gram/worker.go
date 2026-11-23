@@ -615,7 +615,8 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, encryptionClient)
+			runnerKeys := orgEncryption.RunnerKeys(logger, encryptionClient)
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, runnerKeys)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
@@ -915,6 +916,7 @@ func newWorkerCommand() *cli.Command {
 				ClientSecrets:                  orgEncryption.ClientSecrets(logger, encryptionClient),
 				UpstreamTokens:                 orgEncryption.UpstreamTokens(logger, encryptionClient),
 				AIProviderKeys:                 aiProviderKeys,
+				RunnerKeys:                     runnerKeys,
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,

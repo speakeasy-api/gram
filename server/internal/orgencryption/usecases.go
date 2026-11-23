@@ -39,6 +39,10 @@ const (
 	// UseCaseMarketplaceTokens is the use case for the plugin marketplace
 	// tokens, the URL-as-secret credentials of marketplace install URLs.
 	UseCaseMarketplaceTokens UseCase = "marketplace-tokens"
+
+	// UseCaseFunctionRunnerKeys is the use case for the per-function keys
+	// Speakeasy Functions runners and the server authenticate each other with.
+	UseCaseFunctionRunnerKeys UseCase = "function-runner-keys"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -50,6 +54,7 @@ var registeredUseCases = []UseCase{
 	UseCaseChatTranscripts,
 	UseCaseAIProviderKeys,
 	UseCaseMarketplaceTokens,
+	UseCaseFunctionRunnerKeys,
 }
 
 // ParseUseCase returns the registered use case named value.
