@@ -1586,6 +1586,23 @@ export function CredentialsWizard({
   const assignConnection = async (serverId: string): Promise<void> => {
     const server = connectionReach().find((entry) => entry.id === serverId);
     if (!agent || !server || assigning.has(serverId)) return;
+    // A working connection already assigned stays, someone else's included:
+    // replacing it would take the agent's grant away from its owner unasked.
+    // Say so rather than report an assignment that did not happen.
+    const assigned = connections.assignedByServer?.get(serverId);
+    if (assigned?.status === "ready") {
+      const mine = assigned.sessions.every(
+        (session) => session.subjectUrn === `user:${user.id}`,
+      );
+      if (mine) {
+        toast.success(`${agent.name} uses your connection to ${server.name}`);
+        return;
+      }
+      toast.info(
+        `${agent.name} already uses another member's working connection to ${server.name}, so yours was not assigned.`,
+      );
+      return;
+    }
     setAssigning((current) => new Set(current).add(serverId));
     try {
       await attachOwnerConnections(

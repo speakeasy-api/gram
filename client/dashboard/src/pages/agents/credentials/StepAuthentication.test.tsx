@@ -166,6 +166,17 @@ describe("authentication assignment warnings", () => {
     ).toBeNull();
   });
 
+  it("shows an ended assignment while the editor's own connection is still being checked", () => {
+    assignedNone("checking", "ended", vi.fn<(serverId: string) => void>());
+    expect(screen.queryByText("Checking connection…")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Example server.*Expired/ }),
+    );
+    expect(
+      screen.getByText("Another member's connection has expired"),
+    ).toBeTruthy();
+  });
+
   it("offers nothing to assign where the page cannot assign it", () => {
     assignedNone("ready", "missing");
     fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
