@@ -151,6 +151,9 @@ const (
 	// verdict — an intermediary's JSON, a captive portal, a skewed server.
 	causeUnreadable failureCause = "unreadable-response"
 	causeUnknown    failureCause = "unknown"
+	// causeCredential is a token command that produced no usable token: the
+	// box's identity could not be presented, so no verdict was obtainable.
+	causeCredential failureCause = "credential-unavailable"
 )
 
 // classifyTransportError names the failure behind an error that produced no
@@ -237,6 +240,10 @@ type ingestResult struct {
 	// blockEffect carries the structured requestable-block metadata from the
 	// response's "block" effects; nil when the server sent none.
 	blockEffect *wire.BlockEffect
+	// versionStatus is the server's rating of this binary's version from the
+	// hooks_version effect: current, behind or unsupported. Empty when the
+	// server sent none. Advisory only; it never gates.
+	versionStatus string
 	// cause names why statusCode is 0. Empty for any definitive exchange.
 	cause failureCause
 	// causeDetail is the underlying error text. Debug log only — it carries
@@ -373,6 +380,13 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		XGramReplayed:  nil,
 		Body:           body,
 	}
+	var opts []operations.Option
+	if c.Source == credToken {
+		// A token credential authenticates with the device-agent bearer
+		// alone; a Gram-Key beside it would be a second identity.
+		req.GramKey = nil
+		opts = append(opts, operations.WithSetHeaders(map[string]string{"Authorization": "Bearer " + c.Bearer}))
+	}
 	if cl.replayed {
 		req.XGramReplayed = new(true)
 	}
@@ -386,7 +400,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		// Bounded per attempt so a stalled connection costs one attempt
 		// rather than the whole send.
 		attemptCtx, cancelAttempt := context.WithTimeout(ctx, attemptTimeout(ctx))
-		res, err = cl.sdk.Hooks.Ingest(attemptCtx, req)
+		res, err = cl.sdk.Hooks.Ingest(attemptCtx, req, opts...)
 		cancelAttempt()
 		if err == nil {
 			break
@@ -402,7 +416,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		}
 	}
 
-	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, versionStatus: "", cause: causeNone, causeDetail: ""}
 	if res.IngestHookResult != nil {
 		out.decision = decision{
 			Decision: string(res.IngestHookResult.Decision),
@@ -422,6 +436,9 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 			}
 		}
 		out.blockEffect = decodeBlockEffect(res.IngestHookResult.Effects["block"])
+		if version, ok := res.IngestHookResult.Effects["hooks_version"].(map[string]any); ok {
+			out.versionStatus, _ = version["status"].(string)
+		}
 	}
 	return out
 }
@@ -435,14 +452,15 @@ func interpretError(err error) ingestResult {
 	if errors.As(err, &svcErr) && svcErr.RawResponse != nil {
 		status := svcErr.RawResponse.StatusCode
 		return ingestResult{
-			statusCode:   status,
-			decision:     decision{Decision: "", Reason: svcErr.Name, Message: svcErr.Message},
-			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
-			failOpen:     nil,
-			skillCapture: nil,
-			blockEffect:  nil,
-			cause:        causeNone,
-			causeDetail:  "",
+			statusCode:    status,
+			decision:      decision{Decision: "", Reason: svcErr.Name, Message: svcErr.Message},
+			authRejected:  status == http.StatusUnauthorized || status == http.StatusForbidden,
+			failOpen:      nil,
+			skillCapture:  nil,
+			blockEffect:   nil,
+			versionStatus: "",
+			cause:         causeNone,
+			causeDetail:   "",
 		}
 	}
 	var apiErr *apierrors.APIError
@@ -459,32 +477,34 @@ func interpretError(err error) ingestResult {
 			// unparseable body, which is exactly the untrusted content that
 			// must not reach the debug log.
 			return ingestResult{
-				statusCode:   0,
-				decision:     decision{Decision: "", Reason: "", Message: ""},
-				authRejected: false,
-				failOpen:     nil,
-				skillCapture: nil,
-				blockEffect:  nil,
-				cause:        causeUnreadable,
-				causeDetail:  fmt.Sprintf("unparseable %d response", apiErr.StatusCode),
+				statusCode:    0,
+				decision:      decision{Decision: "", Reason: "", Message: ""},
+				authRejected:  false,
+				failOpen:      nil,
+				skillCapture:  nil,
+				blockEffect:   nil,
+				versionStatus: "",
+				cause:         causeUnreadable,
+				causeDetail:   fmt.Sprintf("unparseable %d response", apiErr.StatusCode),
 			}
 		}
 		return ingestResult{
-			statusCode:   apiErr.StatusCode,
-			decision:     decision{Decision: "", Reason: "", Message: ""},
-			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
-			failOpen:     nil,
-			skillCapture: nil,
-			blockEffect:  nil,
-			cause:        causeNone,
-			causeDetail:  "",
+			statusCode:    apiErr.StatusCode,
+			decision:      decision{Decision: "", Reason: "", Message: ""},
+			authRejected:  apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
+			failOpen:      nil,
+			skillCapture:  nil,
+			blockEffect:   nil,
+			versionStatus: "",
+			cause:         causeNone,
+			causeDetail:   "",
 		}
 	}
 	detail := ""
 	if err != nil {
 		detail = sanitizeCauseDetail(err.Error())
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: classifyTransportError(err), causeDetail: detail}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, versionStatus: "", cause: classifyTransportError(err), causeDetail: detail}
 }
 
 func validRawSHA256(value string) bool {
@@ -539,6 +559,8 @@ func causeMessage(cause failureCause) string {
 		return "Speakeasy hooks could not connect to the Speakeasy AI Control Plane (connection)."
 	case causeUnreadable:
 		return "Speakeasy hooks could not read the server's verdict (unreadable-response)."
+	case causeCredential:
+		return "Speakeasy hooks could not obtain this device's credential from the device agent (credential-unavailable)."
 	default:
 		return "Speakeasy hooks could not reach the Speakeasy AI Control Plane (unknown)."
 	}

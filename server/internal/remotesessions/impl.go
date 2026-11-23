@@ -52,25 +52,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 )
 
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	sessions     *sessions.Manager
-	authz        *authz.Engine
-	enc          *encryption.Client
-	environments *environments.EnvironmentEntries
-	policy       *guardian.Policy
-	tunnels      *tunnelrouting.HTTPClient
-	auditLogger  *audit.Logger
-	identity     *IdentityCommitter
-	refresher    *RefreshService
-	revoker      *UpstreamRevoker
-	jwksResolver *jwks.Resolver
+	connectionTester ServerConnectionTester
+	tracer           trace.Tracer
+	logger           *slog.Logger
+	db               *pgxpool.Pool
+	auth             *auth.Auth
+	sessions         *sessions.Manager
+	authz            *authz.Engine
+	enc              *encryption.Client
+	secrets          *clientsecrets.Secrets
+	environments     *environments.EnvironmentEntries
+	policy           *guardian.Policy
+	tunnels          *tunnelrouting.HTTPClient
+	auditLogger      *audit.Logger
+	identity         *IdentityCommitter
+	refresher        *RefreshService
+	revoker          *UpstreamRevoker
+	jwksResolver     *jwks.Resolver
 	// rotator backs the administrator's rotate action with the same
 	// re-registration the authorize path runs automatically.
 	rotator *ClientRotator
@@ -89,7 +92,8 @@ type Service struct {
 	// not become so: a set is always backed by a customer-provisioned KMS key,
 	// which is what ties this one link to customer_managed_encryption_keys.
 	productFeatures   *productfeatures.Client
-	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID) error
+	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID, bool) error
+	bindingRefresh    *BindingRefreshAttempts
 
 	// featureFlags gates rollouts; nil reads every flag as off.
 	featureFlags feature.Provider
@@ -118,13 +122,15 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client, protectedResources *protectedresource.Prober) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, secrets *clientsecrets.Secrets, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client, protectedResources *protectedresource.Prober) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
-	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
+	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, secrets, refresher.tokens, policy, tunnels, refresher.assertions)
 	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
 
 	return &Service{
+		connectionTester:  nil,
 		bindingAuthorizer: nil,
+		bindingRefresh:    nil,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		logger:            logger,
 		db:                db,
@@ -132,6 +138,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		sessions:          sessionManager,
 		authz:             authzEngine,
 		enc:               enc,
+		secrets:           secrets,
 		environments:      env,
 		policy:            policy,
 		tunnels:           tunnels,
@@ -142,7 +149,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		revoker:           revoker,
 		// The refresher's lease cache single-flights rotations the same way it
 		// single-flights refreshes, so the two never race on one client.
-		rotator:   NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger, registrationTelemetry),
+		rotator:   NewClientRotator(logger, db, enc, secrets, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger, registrationTelemetry),
 		resources: protectedResources,
 
 		registrationTelemetry: registrationTelemetry,

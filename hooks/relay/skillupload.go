@@ -21,6 +21,11 @@ type skillUploadTask struct {
 }
 
 func requestedSkillUploadTask(c creds, res ingestResult, skill *resolvedSkill) (skillUploadTask, bool, error) {
+	// The upload endpoint authenticates hooks keys only; a token box skips it
+	// and the server re-requests the content on the skill's next activation.
+	if c.Source == credToken {
+		return skillUploadTask{}, false, nil
+	}
 	if !res.accepted() || res.skillCapture == nil || !res.skillCapture.contentRequired || skill == nil ||
 		!skill.captureReady || res.skillCapture.rawSHA256 != skill.rawSHA256 {
 		return skillUploadTask{}, false, nil

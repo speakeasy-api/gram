@@ -7,6 +7,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,8 +42,7 @@ func TestStoreAlignsEqualTimestampMessagesBySequence(t *testing.T) {
 	saveFrame(t, store, config, frame, userID)
 	// Assign tied timestamps and UUIDs in reverse transcript order, so UUID
 	// ordering cannot accidentally produce the expected alignment.
-	//nolint:glint // notestingrawsql: Deliberately rewrite immutable row IDs and timestamps to exercise ordering; not an application query.
-	_, err = db.Exec(t.Context(), `UPDATE chat_messages SET created_at = '2026-01-01', id = CASE content WHEN 'EXAMPLE prompt' THEN 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid WHEN 'reply' THEN 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid ELSE 'dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid END WHERE chat_id = $1 AND project_id = $2`, conversationID(config, frame), config.ProjectID)
+	err = testrepo.New(db).ReorderInferenceTranscriptFixture(t.Context(), testrepo.ReorderInferenceTranscriptFixtureParams{ChatID: conversationID(config, frame), ProjectID: conv.ToNullUUID(config.ProjectID)})
 	require.NoError(t, err)
 	require.Equal(t, len(frame.Messages), saveFrame(t, store, config, frame, userID))
 	count, err := chatrepo.New(db).CountInferenceMessages(t.Context(), chatrepo.CountInferenceMessagesParams{ChatID: conversationID(config, frame), ProjectID: conv.ToNullUUID(config.ProjectID)})

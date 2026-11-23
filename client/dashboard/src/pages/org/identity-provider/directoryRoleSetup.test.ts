@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import type { DirectoryRoleSetupPreviewItem } from "@gram/client/models/components/directoryrolesetuppreviewitem.js";

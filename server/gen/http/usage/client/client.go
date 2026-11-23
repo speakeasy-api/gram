@@ -61,9 +61,9 @@ type Client struct {
 	// createCustomerSession endpoint.
 	CreateCustomerSessionDoer goahttp.Doer
 
-	// CreateCheckout Doer is the HTTP client used to make requests to the
-	// createCheckout endpoint.
-	CreateCheckoutDoer goahttp.Doer
+	// GetStripeCheckoutStatus Doer is the HTTP client used to make requests to the
+	// getStripeCheckoutStatus endpoint.
+	GetStripeCheckoutStatusDoer goahttp.Doer
 
 	// CreateStripeCheckout Doer is the HTTP client used to make requests to the
 	// createStripeCheckout endpoint.
@@ -124,7 +124,7 @@ func NewClient(
 		GetInferenceSpendCapsDoer:     doer,
 		GetUsageTiersDoer:             doer,
 		CreateCustomerSessionDoer:     doer,
-		CreateCheckoutDoer:            doer,
+		GetStripeCheckoutStatusDoer:   doer,
 		CreateStripeCheckoutDoer:      doer,
 		GetStripeSubscriptionDoer:     doer,
 		GetPaygBillingSummaryDoer:     doer,
@@ -399,15 +399,15 @@ func (c *Client) CreateCustomerSession() goa.Endpoint {
 	}
 }
 
-// CreateCheckout returns an endpoint that makes HTTP requests to the usage
-// service createCheckout server.
-func (c *Client) CreateCheckout() goa.Endpoint {
+// GetStripeCheckoutStatus returns an endpoint that makes HTTP requests to the
+// usage service getStripeCheckoutStatus server.
+func (c *Client) GetStripeCheckoutStatus() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeCreateCheckoutRequest(c.encoder)
-		decodeResponse = DecodeCreateCheckoutResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeGetStripeCheckoutStatusRequest(c.encoder)
+		decodeResponse = DecodeGetStripeCheckoutStatusResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildCreateCheckoutRequest(ctx, v)
+		req, err := c.BuildGetStripeCheckoutStatusRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -415,9 +415,9 @@ func (c *Client) CreateCheckout() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.CreateCheckoutDoer.Do(req)
+		resp, err := c.GetStripeCheckoutStatusDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("usage", "createCheckout", err)
+			return nil, goahttp.ErrRequestError("usage", "getStripeCheckoutStatus", err)
 		}
 		return decodeResponse(resp)
 	}

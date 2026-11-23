@@ -37,6 +37,10 @@ export type ListChallengesRequest = {
    */
   scope?: string | undefined;
   /**
+   * Leave out checks of these scopes, from the rows and from the total.
+   */
+  excludeScopes?: Array<string> | undefined;
+  /**
    * Filter to a specific project.
    */
   projectId?: string | undefined;
@@ -115,6 +119,7 @@ export type ListChallengesRequest$Outbound = {
   outcome?: string | undefined;
   principal_urn?: string | undefined;
   scope?: string | undefined;
+  exclude_scopes?: Array<string> | undefined;
   project_id?: string | undefined;
   resolved?: boolean | undefined;
   ids?: Array<string> | undefined;
@@ -135,6 +140,7 @@ export const ListChallengesRequest$outboundSchema: z.ZodMiniType<
     outcome: z.optional(QueryParamOutcome$outboundSchema),
     principalUrn: z.optional(z.string()),
     scope: z.optional(z.string()),
+    excludeScopes: z.optional(z.array(z.string())),
     projectId: z.optional(z.string()),
     resolved: z.optional(z.boolean()),
     ids: z.optional(z.array(z.string())),
@@ -148,6 +154,7 @@ export const ListChallengesRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       principalUrn: "principal_urn",
+      excludeScopes: "exclude_scopes",
       projectId: "project_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",

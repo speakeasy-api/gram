@@ -2,6 +2,8 @@ package identitychaining
 
 import (
 	"bytes"
+	"context"
+	"log/slog"
 	"net/url"
 	"testing"
 	"time"
@@ -11,14 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -34,6 +40,9 @@ type chainStoreFixture struct {
 	sel        selection
 	sessionID  uuid.UUID
 	configHash string
+
+	// enc is the platform key the fixture's rows are sealed with.
+	enc *encryption.Client
 }
 
 func newChainStoreFixture(t *testing.T) chainStoreFixture {
@@ -64,12 +73,12 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
 	require.NoError(t, err)
 	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, testResourceIssuer, testResourceIssuer+"/token", testResourceClient, "resource-secret")
-	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://api.resource.example.test"}
+	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: testResource}
 	binding, generation := bindResource(t, db, req, resourceIssuer, resourceClient, testResource, remotesessions.PreparationStateReady)
 	trusted, err := repo.New(db).GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: org, IssuerID: idpIssuer, ClientID: idpClient})
 	require.NoError(t, err)
 	configHash := remotesessions.FederatedDelegationConfigurationHash(org, trusted.RemoteSessionIssuer, trusted.RemoteSessionClient)
-	session, err := repo.New(db).UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
+	session, err := repo.New(db).UpsertTrustedDelegationCredentialFixture(ctx, repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: org, ClientID: idpClient, IssuerID: idpIssuer, SubjectUrn: urn.NewUserSubject(human).String(), ExpectedGeneration: 0,
 		CredentialConfigHash: pgtype.Text{String: configHash, Valid: true},
 		ObservationStatus:    pgtype.Text{String: "assertion_only", Valid: true},
@@ -83,10 +92,11 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), db, enc, policy, nil, nil, serverURL)
-	delegation := remotesessions.NewDelegationService(db, enc, challenges)
-	chainer := &Chainer{Governor: Governor{logger: logger, db: db, enc: enc, delegation: delegation, now: time.Now}, challenges: nil, keys: nil, locks: nil}
+	delegation := remotesessions.NewDelegationService(db, challenges)
+	chainer := &Chainer{Governor: Governor{logger: logger, db: db, tokens: upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), delegation: delegation, now: time.Now}, challenges: nil, keys: nil, locks: nil}
 	return chainStoreFixture{
 		db:         db,
+		enc:        enc,
 		chainer:    chainer,
 		configHash: configHash,
 		req:        req,
@@ -120,7 +130,7 @@ func prepareResourceClient(t *testing.T, db *pgxpool.Pool, enc *encryption.Clien
 	require.NoError(t, err)
 	encrypted, err := enc.Encrypt([]byte(secret))
 	require.NoError(t, err)
-	client, err := q.CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: org, Valid: true}, RemoteSessionIssuerID: issuer.ID, ClientID: clientID,
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretPost, Valid: true},
@@ -165,11 +175,18 @@ func bindResourceScopes(t *testing.T, db *pgxpool.Pool, req Request, remoteIssue
 	return updated.ID, updated.Generation
 }
 
-// addSlashVariantBinding adds or updates a second binding for the same upstream
-// under its no-trailing-slash resource spelling.
+// addSlashVariantBinding adds a distinct resource without the trailing slash.
 func (f chainStoreFixture) addSlashVariantBinding(t *testing.T, state string) {
 	t.Helper()
 	bindResource(t, f.db, f.req, f.sel.remoteIssuerID, f.sel.clientID, "https://api.resource.example.test", state)
+}
+
+// addAmbiguousBinding names the same exact resource under another issuer.
+func (f chainStoreFixture) addAmbiguousBinding(t *testing.T) {
+	t.Helper()
+	issuerURL := "https://other-resource-issuer.example.test"
+	issuer, client := prepareResourceClient(t, f.db, f.enc, f.req.OrganizationID, issuerURL, issuerURL+"/token", "other-client", "other-secret")
+	bindResource(t, f.db, f.req, issuer, client, f.sel.resource, remotesessions.PreparationStateReady)
 }
 
 func (f chainStoreFixture) credential(token string) credential {
@@ -208,7 +225,7 @@ func (f chainStoreFixture) signIn(t *testing.T, at time.Time, status string) {
 	if !at.IsZero() {
 		obtained = pgtype.Timestamptz{Time: at, Valid: true, InfinityModifier: pgtype.Finite}
 	}
-	_, err = q.UpsertTrustedDelegationCredential(t.Context(), repo.UpsertTrustedDelegationCredentialParams{
+	_, err = q.UpsertTrustedDelegationCredentialFixture(t.Context(), repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject, ExpectedGeneration: current.CredentialGeneration.Int64,
 		CredentialConfigHash: pgtype.Text{String: f.configHash, Valid: true},
 		ObservationStatus:    pgtype.Text{String: status, Valid: true}, CredentialObtainedAt: obtained,
@@ -397,7 +414,7 @@ func TestStore_SelectBinding(t *testing.T) {
 	t.Run("ambiguous bindings require configuration", func(t *testing.T) {
 		t.Parallel()
 		f := newChainStoreFixture(t)
-		f.addSlashVariantBinding(t, remotesessions.PreparationStateReady)
+		f.addAmbiguousBinding(t)
 		_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
 		require.Equal(t, ReasonConfigurationRequired, outcome.Reason)
 		require.True(t, outcome.Applicable())
@@ -427,7 +444,7 @@ func TestStore_GovernsOnlyBoundUpstreams(t *testing.T) {
 	require.True(t, f.chainer.Governs(t.Context(), f.req), "an unlinked leftover binding does not displace the ready one")
 
 	f.addSlashVariantBinding(t, remotesessions.PreparationStateReady)
-	require.True(t, f.chainer.Governs(t.Context(), f.req), "ambiguous ready bindings still claim the upstream")
+	require.True(t, f.chainer.Governs(t.Context(), f.req), "another exact resource does not displace this binding")
 }
 
 func TestStore_BindingFailingReadinessDoesNotGovern(t *testing.T) {
@@ -603,7 +620,7 @@ func TestStore_SelectBindingCountsOnlyTheChosenClientsBindings(t *testing.T) {
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
 	require.NoError(t, err)
 	otherIssuer, otherClient := prepareResourceClient(t, f.db, enc, f.req.OrganizationID, "https://as.other.example.test", "https://as.other.example.test/token", "other-client", "other-secret")
-	bindResource(t, f.db, f.req, otherIssuer, otherClient, "https://api.resource.example.test", remotesessions.PreparationStateReady)
+	bindResource(t, f.db, f.req, otherIssuer, otherClient, f.sel.resource, remotesessions.PreparationStateReady)
 
 	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
 	require.Equal(t, ReasonConfigurationRequired, outcome.Reason, "without a chosen client both bindings compete")
@@ -647,7 +664,7 @@ func TestStore_RequestsTheScopesRecordedAtTurnOn(t *testing.T) {
 	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
 	_, err := q.UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
 		Scope: []string{"openid", "read", "write"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
-		ClientSecretEncrypted: pgtype.Text{}, TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
+		TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
 	})
 	require.NoError(t, err)
 
@@ -666,7 +683,7 @@ func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
 	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: f.sel.clientID, UserSessionIssuerID: f.req.UserSessionIssuerID}))
 	_, err := q.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		Scope: []string{"openid", "email"}, ID: f.sel.clientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
-		ClientSecretEncrypted: pgtype.Text{}, TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
+		TokenEndpointAuthMethod: pgtype.Text{}, TokenEndpointAuthAudienceFormat: pgtype.Text{}, Audience: pgtype.Text{}, LegacyCallbackUrl: pgtype.Bool{},
 	})
 	require.NoError(t, err)
 	remote, err := remotemcprepo.New(f.db).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: f.req.ProjectID, TransportType: "streamable-http", Url: testResource})
@@ -708,4 +725,123 @@ func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
 		}
 		require.Equal(t, ReasonMalformedAssertion, outcome.Reason, "scope %v exceeds the recorded set", tc.scope)
 	}
+}
+
+// A binding serves only requests signed in through its own user session
+// issuer in its own project: a server gated directly by another issuer, or a
+// gateway member in another project, never borrows it, however the auth
+// client backfill offers its EMA client.
+func TestStore_SelectBindingRestrictedToInboundIssuerAndProject(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	direct := f.req
+	direct.UserSessionIssuerID = uuid.New()
+	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), direct)
+	require.Equal(t, notApplicable, outcome, "a request through another inbound issuer selects nothing")
+
+	foreign := f.req
+	foreign.ProjectID = uuid.New()
+	_, outcome = f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), foreign)
+	require.Equal(t, notApplicable, outcome, "a request in another project selects nothing")
+
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+	require.Equal(t, success, outcome, "the binding's own issuer and project select it")
+	require.Equal(t, f.sel.bindingID, sel.bindingID)
+}
+
+func TestStore_PublishSealsUnderTheOrganizationKey(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	fixture := orgencryptiontest.New(t, f.db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), f.db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	f.chainer.tokens = upstreamtokens.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), f.enc, fixture.Service, transitions), f.enc)
+	_, err := transitions.Enroll(t.Context(), f.req.OrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
+	rows := f.credentials(t)
+	require.Len(t, rows, 1)
+	require.True(t, rows[0].AccessTokenEncrypted.Valid, "dual_write keeps the platform-key copy for a rollback")
+	require.True(t, rows[0].AccessTokenOrgEncrypted.Valid, "dual_write seals the credential under the organization's key")
+
+	token, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
+	require.True(t, ok)
+	require.Equal(t, "downstream-token", token.Value())
+
+	require.NoError(t, fixture.Provisioner.Suspend(t.Context(), f.req.OrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+	_, ok = f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
+	require.False(t, ok, "nothing falls back to the platform-key copy")
+	require.Error(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("renewed-token")), "a credential the key cannot seal is not stored")
+	require.Equal(t, rows[0].AccessTokenOrgEncrypted, f.credentials(t)[0].AccessTokenOrgEncrypted, "the failed publish rolled back")
+}
+
+func TestStore_RetirementErasesBothCopies(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	fixture := orgencryptiontest.New(t, f.db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), f.db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	f.chainer.tokens = upstreamtokens.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), f.enc, fixture.Service, transitions), f.enc)
+	_, err := transitions.Enroll(t.Context(), f.req.OrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
+	f.setBinding(t, remotesessions.PreparationStateReady)
+
+	_, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
+	require.False(t, ok)
+	rows := f.credentials(t)
+	require.True(t, rows[0].Deleted)
+	require.False(t, rows[0].AccessTokenEncrypted.Valid)
+	require.False(t, rows[0].AccessTokenOrgEncrypted.Valid, "a retired credential cannot come back from the organization-key copy")
+}
+
+// refusingSource fails its test if anything asks it to issue an ID-JAG.
+type refusingSource struct{ t *testing.T }
+
+func (s refusingSource) kind() remotesessions.EMAProviderKind {
+	return remotesessions.EMAProviderExternal
+}
+func (s refusingSource) available() bool { return true }
+func (s refusingSource) authorize(context.Context, *slog.Logger, Request, *selection) Outcome {
+	return success
+}
+func (s refusingSource) checkReuse(context.Context, Request, selection) Outcome { return success }
+func (s refusingSource) issue(context.Context, *slog.Logger, Request, selection, func() Outcome) (issuedGrant, Outcome) {
+	s.t.Error("an ID-JAG must not be issued for a credential that could not be stored")
+	return issuedGrant{}, success
+}
+
+func TestAcquire_UnusableOrganizationKeyAsksNoProvider(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	fixture := orgencryptiontest.New(t, f.db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), f.db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	f.chainer.tokens = upstreamtokens.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), f.enc, fixture.Service, transitions), f.enc)
+	_, err := transitions.Enroll(t.Context(), f.req.OrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+	require.NoError(t, fixture.Provisioner.Suspend(t.Context(), f.req.OrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+
+	_, outcome, issued := f.chainer.acquire(t.Context(), testenv.NewLogger(t), f.req, f.sel, refusingSource{t: t})
+	require.False(t, issued)
+	require.Equal(t, ReasonTransientFailure, outcome.Reason, "a key that cannot be used right now is retryable")
+	require.True(t, outcome.Retryable)
+	require.Empty(t, f.credentials(t), "nothing was stored")
+}
+
+func TestGovernor_RefreshUnconfirmedWhileTheOrganizationKeyIsUnusable(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	f.retainRefreshableDelegation(t, "durable_credential_present")
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.tokens, f.chainer.delegation)
+	require.Equal(t, RefreshServed, g.RefreshDecision(t.Context(), f.req).Decision, "a refresh grant renews the delegation")
+
+	fixture := orgencryptiontest.New(t, f.db)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), f.db, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	g.tokens = upstreamtokens.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), f.enc, fixture.Service, transitions), f.enc)
+	_, err := transitions.Enroll(t.Context(), f.req.OrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+	require.NoError(t, fixture.Provisioner.Suspend(t.Context(), f.req.OrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+
+	verdict := g.RefreshDecision(t.Context(), f.req)
+	require.Equal(t, RefreshUnconfirmed, verdict.Decision, "acquisition could not store a new credential, so the refresh is not served, and nobody is asked to reconnect")
+	require.Equal(t, ReasonTransientFailure, verdict.Reason)
 }

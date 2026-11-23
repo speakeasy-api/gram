@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"go.opentelemetry.io/otel/metric"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -95,7 +97,31 @@ func ObserveNetworkIngressProvisioner(provider string, provisioner NetworkIngres
 	if logger != nil {
 		logger = logger.With(attr.SlogComponent("network_ingress_provisioner"))
 	}
-	return &observedNetworkIngressProvisioner{provider: provider, provisioner: provisioner, logger: logger, metrics: metrics}
+	observed := &observedNetworkIngressProvisioner{provider: provider, provisioner: provisioner, logger: logger, metrics: metrics}
+	if deleter, ok := provisioner.(NetworkIngressCredentialedDeleter); ok {
+		return &observedCredentialedNetworkIngressProvisioner{observedNetworkIngressProvisioner: observed, deleter: deleter}
+	}
+	return observed
+}
+
+// observedCredentialedNetworkIngressProvisioner wraps providers whose teardown
+// needs credentials, so the executor's interface check keeps its meaning.
+type observedCredentialedNetworkIngressProvisioner struct {
+	*observedNetworkIngressProvisioner
+	deleter NetworkIngressCredentialedDeleter
+}
+
+var _ NetworkIngressCredentialedDeleter = (*observedCredentialedNetworkIngressProvisioner)(nil)
+
+func (p *observedCredentialedNetworkIngressProvisioner) DeleteWithCredentials(ctx context.Context, resources NetworkIngressResourceNames, credentials []byte) (err error) {
+	started := time.Now()
+	defer func() {
+		p.record(ctx, networkIngressOperationDelete, NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, err, time.Since(started))
+	}()
+	if err = p.deleter.DeleteWithCredentials(ctx, resources, credentials); err != nil {
+		return fmt.Errorf("delete network ingress resources: %w", err)
+	}
+	return nil
 }
 
 func (p *observedNetworkIngressProvisioner) Apply(ctx context.Context, desired NetworkIngressDesired) (observation NetworkIngressObservation, err error) {
@@ -158,6 +184,7 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		// Provider errors can contain Kubernetes request data. Only bounded
 		// classifications may leave the provider boundary through telemetry.
 		attrs = append(attrs, attr.SlogError(fmt.Errorf("network ingress provider: %s", errorCode)))
+		attrs = append(attrs, kubernetesStatusAttrs(err)...)
 		p.logger.ErrorContext(ctx, "network ingress provisioner operation failed", attrs...)
 		return
 	}
@@ -168,10 +195,86 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 	p.logger.InfoContext(ctx, "network ingress provisioner operation completed", attrs...)
 }
 
+// kubernetesStatusAttrs describes a failed Kubernetes API call by its reason,
+// HTTP status and resource type: enough to tell which teardown or apply step
+// failed and why. The status message and object name are omitted because they
+// can carry request data, and the reason and resource are only logged when they
+// have the shape the API server gives them, since an admission webhook or a
+// non-standard server can put anything in a Status.
+func kubernetesStatusAttrs(err error) []any {
+	apiErr, ok := errors.AsType[interface {
+		error
+		k8serrors.APIStatus
+	}](err)
+	if !ok {
+		return nil
+	}
+	status := apiErr.Status()
+	reason := metav1.StatusReasonUnknown
+	if _, known := kubernetesStatusReasons[status.Reason]; known {
+		reason = status.Reason
+	}
+	attrs := []any{
+		attr.SlogNetworkIngressKubernetesReason(reason),
+		attr.SlogNetworkIngressKubernetesStatusCode(status.Code),
+	}
+	if status.Details == nil || status.Details.Kind == "" {
+		return attrs
+	}
+	resource := status.Details.Kind
+	if status.Details.Group != "" {
+		resource += "." + status.Details.Group
+	}
+	if len(resource) <= maxKubernetesResourceLength && kubernetesResourcePattern.MatchString(resource) {
+		attrs = append(attrs, attr.SlogNetworkIngressKubernetesResource(resource))
+	}
+	return attrs
+}
+
+// kubernetesStatusReasons are the reasons the API server reports. Anything
+// else is logged as StatusReasonUnknown.
+var kubernetesStatusReasons = map[metav1.StatusReason]struct{}{
+	metav1.StatusReasonUnknown:               {},
+	metav1.StatusReasonUnauthorized:          {},
+	metav1.StatusReasonForbidden:             {},
+	metav1.StatusReasonNotFound:              {},
+	metav1.StatusReasonAlreadyExists:         {},
+	metav1.StatusReasonConflict:              {},
+	metav1.StatusReasonGone:                  {},
+	metav1.StatusReasonInvalid:               {},
+	metav1.StatusReasonServerTimeout:         {},
+	metav1.StatusReasonStoreReadError:        {},
+	metav1.StatusReasonTimeout:               {},
+	metav1.StatusReasonTooManyRequests:       {},
+	metav1.StatusReasonBadRequest:            {},
+	metav1.StatusReasonMethodNotAllowed:      {},
+	metav1.StatusReasonNotAcceptable:         {},
+	metav1.StatusReasonRequestEntityTooLarge: {},
+	metav1.StatusReasonUnsupportedMediaType:  {},
+	metav1.StatusReasonInternalError:         {},
+	metav1.StatusReasonExpired:               {},
+	metav1.StatusReasonServiceUnavailable:    {},
+}
+
+// kubernetesResourcePattern matches a plural resource or a CamelCase Kind,
+// optionally qualified by its API group of DNS-1123 labels
+// ("tailnets.tailscale.com", "ProxyGroup.tailscale.com", "secrets").
+var kubernetesResourcePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
+
+// maxKubernetesResourceLength is the DNS-1123 subdomain limit that resource,
+// kind and group names stay within.
+const maxKubernetesResourceLength = 253
+
 func classifyNetworkIngressError(err error, observationCode string) string {
 	switch {
+	case errors.Is(err, ErrNetworkIngressProviderForbidden):
+		return NetworkIngressErrorProviderForbidden
 	case errors.Is(err, ErrNetworkIngressProviderCredentialsRejected):
 		return NetworkIngressErrorProviderCredentialsRejected
+	case errors.Is(err, ErrNetworkIngressProviderRateLimited):
+		return NetworkIngressErrorProviderRateLimited
+	case errors.Is(err, ErrNetworkIngressProviderAPIUnavailable):
+		return NetworkIngressErrorProviderAPIUnavailable
 	case errors.Is(err, ErrNetworkIngressInvalidDesiredState):
 		return NetworkIngressErrorInvalidDesiredState
 	case errors.Is(err, ErrNetworkIngressUnsupportedProvider):
@@ -192,7 +295,10 @@ func classifyNetworkIngressError(err error, observationCode string) string {
 	switch observationCode {
 	case NetworkIngressErrorInvalidDesiredState, NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials, NetworkIngressErrorKubernetes,
-		NetworkIngressErrorProviderCredentialsRejected:
+		NetworkIngressErrorProviderCredentialsRejected, NetworkIngressErrorProviderForbidden,
+		NetworkIngressErrorProviderRateLimited, NetworkIngressErrorProviderAPIUnavailable,
+		NetworkIngressErrorProviderServiceNotApproved, NetworkIngressErrorProviderCertificateUnavailable,
+		NetworkIngressErrorEncryptionKeyUnavailable:
 		return observationCode
 	default:
 		return networkIngressErrorCodeInternal
@@ -234,7 +340,12 @@ func clampNetworkIngressErrorCode(value string) string {
 		NetworkIngressErrorInvalidDesiredState,
 		NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials,
-		NetworkIngressErrorKubernetes:
+		NetworkIngressErrorKubernetes,
+		NetworkIngressErrorProviderForbidden,
+		NetworkIngressErrorProviderRateLimited,
+		NetworkIngressErrorProviderAPIUnavailable,
+		NetworkIngressErrorProviderServiceNotApproved, NetworkIngressErrorProviderCertificateUnavailable,
+		NetworkIngressErrorEncryptionKeyUnavailable:
 		return value
 	default:
 		return networkIngressErrorCodeInternal

@@ -30,6 +30,11 @@ const maxDescriptionLength = 2000
 // found the widget changed since. It is wrapped in a conflict error.
 var ErrVersionChanged = errors.New("widget changed since it was read")
 
+// ErrDatasetRestricted marks a save over a dataset the caller may not read,
+// such as one only organization administrators may read. It is wrapped in a
+// forbidden error.
+var ErrDatasetRestricted = errors.New("dataset is restricted")
+
 // Input is a widget as a caller wants it saved.
 type Input struct {
 	// Name is the display name, 1 to 200 characters.
@@ -81,7 +86,7 @@ type Change struct {
 
 // Authorize admits the request's caller to its project's widgets.
 func (s *Service) Authorize(ctx context.Context) (Caller, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return Caller{}, err
 	}
@@ -124,7 +129,7 @@ func (c Caller) admitted() (*contextvalues.AuthContext, error) {
 // Read returns one widget of the request's project, validated as it is read,
 // with its dashboards and version.
 func (s *Service) Read(ctx context.Context, id string) (Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -156,7 +161,7 @@ func (s *Service) read(ctx context.Context, authCtx *contextvalues.AuthContext, 
 // a caller who may not change it, so a preview never shows a change
 // that would be refused.
 func (s *Service) ReadForChange(ctx context.Context, id string) (Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -183,7 +188,7 @@ func (s *Service) ReadRecent(ctx context.Context, limit int32) ([]Snapshot, erro
 }
 
 func (s *Service) list(ctx context.Context, limit pgtype.Int4) ([]Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +222,7 @@ func (s *Service) list(ctx context.Context, limit pgtype.Int4) ([]Snapshot, erro
 // Check validates a widget as a save would, without writing it: the query
 // against the catalog and the visualization against the query.
 func (s *Service) Check(ctx context.Context, input Input) error {
-	if _, err := s.authorize(ctx, authz.ScopeProjectRead); err != nil {
+	if _, err := s.authorize(ctx, authz.ProjectRef.Read); err != nil {
 		return err
 	}
 	_, _, err := s.checkInput(ctx, input)
@@ -265,6 +270,11 @@ func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, caller Caller, i
 	source, err := s.sourceWidget(ctx, repo.New(tx), *authCtx.ProjectID, widgetID, expectedVersion)
 	if err != nil {
 		return Snapshot{}, err
+	}
+	if ds, ok := s.catalog.Dataset(source.Dataset); ok {
+		if err := s.requireDataset(ctx, ds); err != nil {
+			return Snapshot{}, err
+		}
 	}
 	reason, err := s.problem(ctx, source.Dataset, source.Query, source.Visualization)
 	if err != nil {

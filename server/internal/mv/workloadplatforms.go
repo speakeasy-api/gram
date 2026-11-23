@@ -29,6 +29,16 @@ func buildWorkloadPlatformView(p catalog.Platform) *gen.WorkloadPlatform {
 		})
 	}
 
+	alternatives := make([]*gen.WorkloadPlatformSubjectAlternative, 0, len(p.Subject.Alternatives))
+	for _, a := range p.Subject.Alternatives {
+		alternatives = append(alternatives, &gen.WorkloadPlatformSubjectAlternative{
+			Key:      a.Key,
+			Label:    a.Label,
+			Template: a.Template,
+			Wildcard: a.Wildcard,
+		})
+	}
+
 	return &gen.WorkloadPlatform{
 		Key:         p.Key,
 		DisplayName: p.DisplayName,
@@ -39,8 +49,10 @@ func buildWorkloadPlatformView(p catalog.Platform) *gen.WorkloadPlatform {
 		JwksURI:     buildWorkloadPlatformConstantView(p.JWKSURI),
 		Variables:   variables,
 		Subject: &gen.WorkloadPlatformSubject{
-			Template: p.Subject.Template,
-			Wildcard: p.Subject.Wildcard,
+			Template:     p.Subject.Template,
+			Wildcard:     p.Subject.Wildcard,
+			Label:        p.Subject.Label,
+			Alternatives: alternatives,
 		},
 	}
 }

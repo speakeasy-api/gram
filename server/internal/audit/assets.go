@@ -39,6 +39,7 @@ func (l *Logger) LogAssetCreate(ctx context.Context, dbtx repo.DBTX, event LogAs
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

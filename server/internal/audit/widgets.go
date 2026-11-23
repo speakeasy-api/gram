@@ -52,6 +52,7 @@ type LogWidgetDeleteEvent struct {
 
 func widgetEntry(base WidgetEventBase, action Action, metadata, before, after []byte) repo.InsertAuditLogParams {
 	return repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     base.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: base.ProjectID, Valid: base.ProjectID != uuid.Nil},
 		ActorID:            base.Actor.ID,

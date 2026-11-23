@@ -33,6 +33,7 @@ type LogSigintSignalCreateEvent struct {
 
 func (l *Logger) LogSigintSignalCreate(ctx context.Context, dbtx repo.DBTX, event LogSigintSignalCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -82,6 +83,7 @@ func (l *Logger) LogSigintSignalUpdate(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -119,6 +121,7 @@ type LogSigintSignalDeleteEvent struct {
 
 func (l *Logger) LogSigintSignalDelete(ctx context.Context, dbtx repo.DBTX, event LogSigintSignalDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

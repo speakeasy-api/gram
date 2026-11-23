@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router";
 import type { ReactNode } from "react";
@@ -25,6 +26,15 @@ const mocks = vi.hoisted(() => ({
   pending: false,
   error: null as Error | null,
   refetch: vi.fn(),
+  toolApprovals: false,
+  missingScopes: [] as string[],
+  setDefaultProject: vi.fn(),
+  defaultProjectId: undefined as string | undefined,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({
+    status: mocks.toolApprovals ? "enabled" : "disabled",
+  }),
 }));
 vi.mock("./SlackDirectory", () => ({
   SlackDirectory: () => <div>Directory table</div>,
@@ -56,16 +66,16 @@ vi.mock("nuqs", async (original) => {
   };
 });
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ slug: mocks.organizationSlug }),
+  useOrganization: () => ({
+    slug: mocks.organizationSlug,
+    projects: [
+      { id: "project-beta", name: "Beta", slug: "beta" },
+      { id: "project-alpha", name: "Alpha", slug: "alpha" },
+    ],
+  }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({
-    scope,
-    children,
-  }: {
-    scope: string;
-    children: ReactNode;
-  }) =>
+  RequireScope: ({ scope, children }: { scope: string; children: ReactNode }) =>
     mocks.admin && scope === "org:admin" ? children : <div>Unauthorized</div>,
 }));
 vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
@@ -87,6 +97,8 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
                   status: "connected",
                   generation: mocks.generation,
                   grantedScopes: [],
+                  missingScopes: mocks.missingScopes,
+                  defaultProjectId: mocks.defaultProjectId,
                   updatedAt: "2026-01-01T00:00:00Z",
                   memberCount: 0,
                   directoryStatus: "never_synced",
@@ -99,6 +111,7 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
                   status: "disconnected",
                   generation: "generation-retired",
                   grantedScopes: [],
+                  missingScopes: ["chat:write"],
                   updatedAt: "2026-01-01T00:00:00Z",
                   memberCount: 0,
                   directoryStatus: "stale",
@@ -131,6 +144,13 @@ vi.mock(
     }),
   }),
 );
+vi.mock("@gram/client/react-query/setSlackDirectoryDefaultProject.js", () => ({
+  useSetSlackDirectoryDefaultProjectMutation: () => ({
+    mutate: mocks.setDefaultProject,
+    isPending: false,
+    error: null,
+  }),
+}));
 
 vi.mock("@gram/client/react-query/syncSlackDirectory.js", () => ({
   useSyncSlackDirectoryMutation: () => ({
@@ -160,17 +180,36 @@ function show(search = "") {
   return { ...view, refresh: () => view.rerender(tree()) };
 }
 
+// Radix scrolls the selected option into view in browsers; jsdom lacks it.
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  Element.prototype,
+  "scrollIntoView",
+);
+
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn<() => void>();
   mocks.admin = true;
   mocks.organizationSlug = "example";
   mocks.configured = true;
   mocks.pending = false;
   mocks.error = null;
   mocks.generation = "generation-one";
+  mocks.toolApprovals = false;
+  mocks.missingScopes = [];
+  mocks.defaultProjectId = undefined;
 });
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  if (originalScrollIntoView) {
+    Object.defineProperty(
+      Element.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    );
+  } else {
+    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+  }
 });
 
 it("does not fetch workspace data for a non-admin", () => {
@@ -230,6 +269,56 @@ it.each([
   expect(mocks.invalidate).toHaveBeenCalled();
   expect(screen.getByText(message)).toBeTruthy();
   expect(screen.getByRole("button", { name: /dismiss|close/i })).toBeTruthy();
+});
+
+it("shows the workspace default project with a None option", () => {
+  mocks.defaultProjectId = "project-alpha";
+  show();
+  const trigger = screen.getByRole("combobox", { name: "Default project" });
+  expect(trigger.textContent).toContain("Alpha");
+  expect(
+    screen.getByText(
+      "Project whose assistant answers @Speakeasy mentions and DMs in this workspace.",
+    ),
+  ).toBeTruthy();
+});
+it("shows None when no default project is set", () => {
+  show();
+  expect(
+    screen.getByRole("combobox", { name: "Default project" }).textContent,
+  ).toContain("None");
+});
+
+it("saves the chosen default project for the workspace", async () => {
+  const user = userEvent.setup();
+  show();
+  await user.click(screen.getByRole("combobox", { name: "Default project" }));
+  await user.click(screen.getByRole("option", { name: "Beta" }));
+  expect(mocks.setDefaultProject).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        setSlackDirectoryDefaultProjectRequestBody: {
+          id: "connection-one",
+          projectId: "project-beta",
+        },
+      },
+    }),
+  );
+});
+
+it("clears the default project when None is chosen", async () => {
+  mocks.defaultProjectId = "project-alpha";
+  const user = userEvent.setup();
+  show();
+  await user.click(screen.getByRole("combobox", { name: "Default project" }));
+  await user.click(screen.getByRole("option", { name: "None" }));
+  expect(mocks.setDefaultProject).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        setSlackDirectoryDefaultProjectRequestBody: { id: "connection-one" },
+      },
+    }),
+  );
 });
 
 it("disconnects the generation the administrator confirmed", () => {
@@ -318,6 +407,39 @@ it.each([true, false])(
   },
 );
 
+it("asks to reinstall a workspace that cannot send approval messages", () => {
+  mocks.toolApprovals = true;
+  mocks.missingScopes = ["chat:write"];
+  show();
+  expect(screen.getByText(/Reinstall the Slack app so approvers/)).toBeTruthy();
+  // A disconnected workspace is not offered.
+  expect(
+    screen.queryByRole("button", { name: "Reinstall in Retired workspace" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reinstall in Example workspace" }),
+  );
+  expect(mocks.begin).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        beginSlackDirectoryConnectionRequestBody: {
+          connectionId: "connection-one",
+        },
+      },
+    }),
+    expect.anything(),
+  );
+});
+it("does not ask to reinstall without tool approvals or once granted", () => {
+  mocks.missingScopes = ["chat:write"];
+  const { unmount } = show();
+  expect(screen.queryByText(/Reinstall the Slack app so approvers/)).toBeNull();
+  unmount();
+  mocks.toolApprovals = true;
+  mocks.missingScopes = [];
+  show();
+  expect(screen.queryByText(/Reinstall the Slack app so approvers/)).toBeNull();
+});
 it("has no per-workspace Reconnect button", () => {
   show();
   expect(screen.getByText("Example workspace")).toBeTruthy();
@@ -326,7 +448,9 @@ it("has no per-workspace Reconnect button", () => {
 it("waits for workspace loading before rendering members", () => {
   mocks.pending = true;
   show("?tab=slack-workspaces&slack_view=members");
-  expect(screen.getByText("Loading workspaces…")).toBeTruthy();
+  expect(
+    screen.getByRole("status", { name: "Loading workspaces" }),
+  ).toBeTruthy();
   expect(screen.queryByText("Directory table")).toBeNull();
 });
 it("lets the members view retry a failed workspace request", () => {

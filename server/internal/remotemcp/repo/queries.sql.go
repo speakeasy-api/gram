@@ -481,6 +481,58 @@ func (q *Queries) ListHeadersByServerID(ctx context.Context, remoteMcpServerID u
 	return items, nil
 }
 
+const listLiveRemoteBackedMcpServers = `-- name: ListLiveRemoteBackedMcpServers :many
+SELECT
+    m.id AS mcp_server_id,
+    m.name AS mcp_server_name,
+    m.slug AS mcp_server_slug,
+    rms.name AS remote_name,
+    rms.url AS remote_url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.project_id = $1
+    AND m.deleted IS FALSE
+    AND m.visibility <> 'disabled'
+ORDER BY m.created_at, m.id
+`
+
+type ListLiveRemoteBackedMcpServersRow struct {
+	McpServerID   uuid.UUID
+	McpServerName pgtype.Text
+	McpServerSlug pgtype.Text
+	RemoteName    pgtype.Text
+	RemoteUrl     string
+}
+
+// Every live, enabled MCP server in the project that proxies to a remote URL.
+// Shadow MCP reads this to tell a directly-used server URL that the project
+// already serves through Speakeasy from one it does not.
+func (q *Queries) ListLiveRemoteBackedMcpServers(ctx context.Context, projectID uuid.UUID) ([]ListLiveRemoteBackedMcpServersRow, error) {
+	rows, err := q.db.Query(ctx, listLiveRemoteBackedMcpServers, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveRemoteBackedMcpServersRow
+	for rows.Next() {
+		var i ListLiveRemoteBackedMcpServersRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpServerName,
+			&i.McpServerSlug,
+			&i.RemoteName,
+			&i.RemoteUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMcpServerIDsByRemoteURL = `-- name: ListMcpServerIDsByRemoteURL :many
 SELECT m.id
 FROM mcp_servers AS m
@@ -510,6 +562,60 @@ func (q *Queries) ListMcpServerIDsByRemoteURL(ctx context.Context, arg ListMcpSe
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerHeaderMetadata = `-- name: ListServerHeaderMetadata :many
+SELECT h.remote_mcp_server_id, h.name, h.is_required, h.is_secret, h.value_from_request_header,
+       (h.value IS NOT NULL)::boolean AS has_stored_value
+FROM remote_mcp_server_headers AS h
+JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
+JOIN projects AS p ON p.id = r.project_id AND p.deleted IS FALSE
+WHERE h.remote_mcp_server_id = ANY($1::uuid[])
+  AND p.organization_id = $2
+  AND h.deleted IS FALSE
+ORDER BY h.name
+`
+
+type ListServerHeaderMetadataParams struct {
+	RemoteMcpServerIds []uuid.UUID
+	OrganizationID     string
+}
+
+type ListServerHeaderMetadataRow struct {
+	RemoteMcpServerID      uuid.UUID
+	Name                   string
+	IsRequired             bool
+	IsSecret               bool
+	ValueFromRequestHeader pgtype.Text
+	HasStoredValue         bool
+}
+
+// Discovery checks header sources without reading credential values.
+func (q *Queries) ListServerHeaderMetadata(ctx context.Context, arg ListServerHeaderMetadataParams) ([]ListServerHeaderMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listServerHeaderMetadata, arg.RemoteMcpServerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerHeaderMetadataRow
+	for rows.Next() {
+		var i ListServerHeaderMetadataRow
+		if err := rows.Scan(
+			&i.RemoteMcpServerID,
+			&i.Name,
+			&i.IsRequired,
+			&i.IsSecret,
+			&i.ValueFromRequestHeader,
+			&i.HasStoredValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -603,6 +709,27 @@ func (q *Queries) ListServersByProjectID(ctx context.Context, projectID uuid.UUI
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockLiveProjectForRemoteMCPProvisioning = `-- name: LockLiveProjectForRemoteMCPProvisioning :one
+SELECT id
+FROM projects
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockLiveProjectForRemoteMCPProvisioningParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockLiveProjectForRemoteMCPProvisioning(ctx context.Context, arg LockLiveProjectForRemoteMCPProvisioningParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLiveProjectForRemoteMCPProvisioning, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const recordRemoteProtectedResourceChallengeScopes = `-- name: RecordRemoteProtectedResourceChallengeScopes :execrows

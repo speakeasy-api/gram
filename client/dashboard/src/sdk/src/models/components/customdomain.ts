@@ -40,6 +40,26 @@ export type CustomDomain = {
    */
   createdAt: Date;
   /**
+   * When DNS configuration was observed. Infrastructure health belongs to the same observation only when this matches health_checked_at.
+   */
+  dnsCheckedAt?: Date | undefined;
+  /**
+   * Advisory public DNS configuration: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish ownership or public availability.
+   */
+  dnsConfigurationStatus?: string | undefined;
+  /**
+   * How the latest health check observed this domain's DNS routing traffic to Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME, ALIAS and ANAME records, which resolve to addresses), unknown. Absent until the first health check.
+   */
+  dnsRoutingMethod?: string | undefined;
+  /**
+   * The designated CNAME target for this domain (<dns_target_token>.<suffix>). Pointing the domain here lets Speakeasy move it without DNS changes. Absent when per-domain targets are not configured or the token is not yet assigned.
+   */
+  dnsTarget?: string | undefined;
+  /**
+   * The random DNS label identifying this domain's designated CNAME target. Assigned when the domain is registered and unchanged for its lifetime. Absent until assigned.
+   */
+  dnsTargetToken?: string | undefined;
+  /**
    * The custom domain name
    */
   domain: string;
@@ -64,6 +84,10 @@ export type CustomDomain = {
    */
   ipAllowlist: Array<string>;
   /**
+   * The custom domain ingress configuration is being applied
+   */
+  isReconciling: boolean;
+  /**
    * The custom domain is actively being registered
    */
   isUpdating: boolean;
@@ -75,6 +99,10 @@ export type CustomDomain = {
    * The ID of the organization this domain belongs to
    */
   organizationId: string;
+  /**
+   * The latest domain ingress reconciliation state. One of: not_started, applying, reconciled, failed.
+   */
+  reconciliationStatus: string;
   /**
    * The MCP endpoint currently mapped to the domain root, if any
    */
@@ -116,6 +144,13 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      dns_checked_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
+      dns_configuration_status: z.optional(z.string()),
+      dns_routing_method: z.optional(z.string()),
+      dns_target: z.optional(z.string()),
+      dns_target_token: z.optional(z.string()),
       domain: z.string(),
       health_checked_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -124,9 +159,11 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
       health_status: z.optional(z.string()),
       id: z.string(),
       ip_allowlist: z.array(z.string()),
+      is_reconciling: z.boolean(),
       is_updating: z.boolean(),
       openai_apps_challenge_token: z.optional(z.string()),
       organization_id: z.string(),
+      reconciliation_status: z.string(),
       root_mcp_endpoint_id: z.optional(z.string()),
       suggested_record_type: SuggestedRecordType$inboundSchema,
       unhealthy_since: z.optional(
@@ -143,13 +180,20 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
         "certificate_expires_at": "certificateExpiresAt",
         "consecutive_failures": "consecutiveFailures",
         "created_at": "createdAt",
+        "dns_checked_at": "dnsCheckedAt",
+        "dns_configuration_status": "dnsConfigurationStatus",
+        "dns_routing_method": "dnsRoutingMethod",
+        "dns_target": "dnsTarget",
+        "dns_target_token": "dnsTargetToken",
         "health_checked_at": "healthCheckedAt",
         "health_issue": "healthIssue",
         "health_status": "healthStatus",
         "ip_allowlist": "ipAllowlist",
+        "is_reconciling": "isReconciling",
         "is_updating": "isUpdating",
         "openai_apps_challenge_token": "openaiAppsChallengeToken",
         "organization_id": "organizationId",
+        "reconciliation_status": "reconciliationStatus",
         "root_mcp_endpoint_id": "rootMcpEndpointId",
         "suggested_record_type": "suggestedRecordType",
         "unhealthy_since": "unhealthySince",

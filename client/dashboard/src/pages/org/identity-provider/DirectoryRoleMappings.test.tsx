@@ -32,8 +32,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("sonner", () => ({
   toast: { error: mocks.toastError, success: vi.fn() },
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ createRole: { href: () => "/roles/new" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: undefined }),
 }));
 vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
   useDirectoryRoleMappings: () => ({

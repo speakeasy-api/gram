@@ -118,6 +118,10 @@ func outcomeEvent(subject *sigintv1.Reading_Event) *sigintv1.Outcome_Event {
 			// The role enums mirror each other value for value.
 			context.SetRole(sigintv1.Outcome_ConversationMessage_Role(message.GetRole()))
 		}
+		context.SetGeneration(message.GetGeneration())
+		context.SetSequence(message.GetSequence())
+		context.SetCaptureKind(message.GetCaptureKind())
+		context.SetOriginalMessageId(message.GetOriginalMessageId())
 		e.SetConversationMessage(context)
 	}
 	if call := subject.GetToolCall(); call != nil {

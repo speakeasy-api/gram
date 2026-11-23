@@ -203,12 +203,12 @@ func newFakeProvisioningClient(t *testing.T, kmsServer kmspb.KeyManagementServic
 	return &kmsSigningClient{kms: raw, keyGenerationPoll: 0}
 }
 
-func TestNewSigningKeyID_IsRandomAndValid(t *testing.T) {
+func TestNewKeyID_IsRandomAndValid(t *testing.T) {
 	t.Parallel()
 
-	a, err := NewSigningKeyID("okta")
+	a, err := NewKeyID("okta")
 	require.NoError(t, err)
-	b, err := NewSigningKeyID("okta")
+	b, err := NewKeyID("okta")
 	require.NoError(t, err)
 
 	require.NotEqual(t, a, b)
@@ -305,7 +305,7 @@ func TestCreateSigningKey_ReportsExistingKey(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = client.CreateSigningKey(t.Context(), params)
-	require.ErrorIs(t, err, ErrSigningKeyExists)
+	require.ErrorIs(t, err, ErrKeyExists)
 }
 
 // A version that ends in any state but ENABLED can never sign, so the create

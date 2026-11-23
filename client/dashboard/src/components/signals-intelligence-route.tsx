@@ -30,14 +30,14 @@ function SignalsIntelligenceAccess() {
   if (features.isPending || features.isError || !features.data) {
     return (
       <ResourceListPage
-        title="Signals intelligence"
+        title="Signals Intelligence"
         stage="preview"
         isLoading={features.isPending}
       >
         <InlineEmptyState
           icon="triangle-alert"
           heading="Could not check feature access"
-          description="Retry to check whether Signals intelligence is available to your organization."
+          description="Retry to check whether Signals Intelligence is available to your organization."
           action={
             <Button variant="secondary" onClick={() => void features.refetch()}>
               Try again

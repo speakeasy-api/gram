@@ -30,3 +30,5 @@ value := components.TypeSessionStarted
 | `TypeUsageReported`        | usage.reported             |
 | `TypeSkillActivated`       | skill.activated            |
 | `TypeNotificationReported` | notification.reported      |
+| `TypeClientDeliveryFailed` | client.delivery_failed     |
+| `TypeClientInstallFailed`  | client.install_failed      |

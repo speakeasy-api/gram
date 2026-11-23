@@ -44,7 +44,7 @@ the sidebar.
     <tr><td>a fullbleed analytics surface (sticky filters, big table)</td><td><code>WorkbenchPage</code></td><td>log explorer</td></tr>
     <tr><td>a multi-step flow</td><td><code>WizardPage</code></td><td>state machine</td></tr>
     <tr><td>auth / standalone, outside the app shell</td><td><code>CenteredPage</code></td><td>—</td></tr>
-    <tr><td>a genuinely bespoke canvas (chat, playground, builder)</td><td><code>FullBleedPage</code>*</td><td>—</td></tr>
+    <tr><td>a genuinely bespoke canvas (chat, inspector, builder)</td><td><code>FullBleedPage</code>*</td><td>—</td></tr>
   </tbody>
 </table>
 
@@ -153,8 +153,11 @@ function WidgetsInner(): JSX.Element {
 ```
 
 That's the entire page. Title styling, breadcrumbs, the loading skeleton, the
-empty state, spacing — all owned by the template. Wire the page into
-`src/routes.tsx` (copy an existing entry) and it appears in the nav.
+empty state, spacing — all owned by the template. Add its path to
+`src/routes.tsx` and its component to `src/route-pages.tsx` (copy an existing
+entry in each) and the page is routable. To list it in the sidebar and the
+command palette, also add it to `src/hooks/useProjectNavRoutes.ts` and
+`src/components/app-sidebar.tsx`.
 
 ## Step 5 — verify
 

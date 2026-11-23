@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -22,12 +23,15 @@ import (
 // [ProxyManager.BuildTarget].
 //
 // The check carries both the tool-name and `disposition` dimensions. The
-// disposition is resolved from admin-authored tool metadata via the injected
-// [ToolDispositionResolver]; a tool with no recorded metadata resolves to the
-// empty disposition, leaving the check as a pure tool-name match.
+// disposition comes from the tool catalog via the injected
+// [ToolDispositionResolver]. With a [toolCatalogSync] attached, a tool missing
+// from the catalog is looked up on the upstream and recorded before the check
+// runs. Without one, it resolves to the empty disposition, leaving the check as
+// a pure tool-name match.
 type ToolsCallAuthzInterceptor struct {
 	authz       *authz.Engine
 	resolver    ToolDispositionResolver
+	catalog     *toolCatalogSync
 	mcpServerID string
 	projectID   string
 	logger      *slog.Logger
@@ -48,6 +52,7 @@ func NewToolsCallAuthzInterceptor(authzEngine *authz.Engine, resolver ToolDispos
 	return &ToolsCallAuthzInterceptor{
 		authz:       authzEngine,
 		resolver:    resolver,
+		catalog:     nil,
 		mcpServerID: mcpServerID,
 		projectID:   projectID,
 		logger:      logger,
@@ -67,12 +72,11 @@ func (i *ToolsCallAuthzInterceptor) Name() string {
 // silent-omission semantics are reserved for tools/list parity, which is
 // gated on payload mutation support).
 //
-// [authz.MCPToolCallCheck] names its first parameter `toolsetID` for legacy
-// reasons, but the helper only stores it as the opaque `ResourceID` on the
-// returned [authz.Check]; passing the mcp_servers UUID is semantically
-// correct. It is the same resource id the handler runs the upfront
-// server-level `mcp:connect` check against, so per-tool and server-level
-// enforcement agree on what they are authorizing.
+// The [authz.MCPServerRef] is built from the mcp_servers UUID, which becomes
+// the opaque `ResourceID` on the returned [authz.Check]. It is the same
+// resource id the handler runs the upfront server-level `mcp:connect` check
+// against, so per-tool and server-level enforcement agree on what they are
+// authorizing.
 func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Context, call *proxy.ToolsCallRequest) error {
 	// Defensive: the proxy's typed dispatch (toolsCallRequestFromUserRequest)
 	// only constructs a ToolsCallRequest with non-nil Params, so this branch
@@ -87,19 +91,27 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 	// grant exactly when the metadata store is unavailable. This is an internal
 	// failure, not a permission denial, so it surfaces as-is (any interceptor
 	// error aborts the call) rather than through the "you lack access" message.
-	dispositions, err := i.resolver.Dispositions(ctx, i.mcpServerID, i.projectID)
+	disposition, err := i.resolveDisposition(ctx, call)
 	if err != nil {
 		return fmt.Errorf("resolve remote MCP tool disposition: %w", err)
 	}
 
-	err = i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-		Tool:        call.Params.Name,
-		Disposition: dispositions[call.Params.Name],
-		ProjectID:   i.projectID,
-	}))
+	err = i.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID)).ToolCall(strings.TrimSpace(call.Params.Name), disposition))
 	if err != nil {
 		return fmt.Errorf("authorize remote MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 	}
 
 	return nil
+}
+
+func (i *ToolsCallAuthzInterceptor) resolveDisposition(ctx context.Context, call *proxy.ToolsCallRequest) (string, error) {
+	if i.catalog != nil {
+		return i.catalog.callDisposition(ctx, call)
+	}
+
+	dispositions, err := i.resolver.Dispositions(ctx, i.mcpServerID, i.projectID)
+	if err != nil {
+		return "", fmt.Errorf("list dispositions: %w", err)
+	}
+	return dispositions[strings.TrimSpace(call.Params.Name)], nil
 }

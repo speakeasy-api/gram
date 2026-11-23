@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -24,6 +25,7 @@ import {
   parseLimit,
   queryBodyFromSpec,
   specForDataset,
+  specProblem,
   textCell,
   windowRange,
   type ExploreSpec,
@@ -396,5 +398,37 @@ describe("longestWindow", () => {
   it("is undefined when nothing is a window", () => {
     expect(longestWindow([])).toBeUndefined();
     expect(longestWindow([undefined, "2h"])).toBeUndefined();
+  });
+});
+
+describe("a metric dataset", () => {
+  const findings: AnalyticsDataset = {
+    ...sessions,
+    name: "findings",
+    kind: "metric",
+  };
+
+  it("opens on a count, never on rows", () => {
+    expect(specForDataset(findings).measures).toEqual([
+      { op: "count", field: "" },
+    ]);
+  });
+
+  it("names a question with nothing measured as one it cannot answer", () => {
+    const spec = { ...specForDataset(findings), measures: [] };
+    expect(specProblem([findings], spec)).toBe(
+      "findings answers counts and other aggregates, never its rows",
+    );
+    expect(specProblem([sessions], { ...spec, dataset: "sessions" })).toBe("");
+  });
+
+  it("does not count a measure still waiting for its field", () => {
+    const spec = {
+      ...specForDataset(findings),
+      measures: [{ op: "count_distinct" as const, field: "" }],
+    };
+    expect(specProblem([findings], spec)).toBe(
+      "findings answers counts and other aggregates, never its rows",
+    );
   });
 });

@@ -1,7 +1,7 @@
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
-import { FC } from "react";
+import type { FC } from "react";
 
 import { Button } from "@/elements/components/ui/button";
 import { useDensity } from "@/elements/hooks/useDensity";

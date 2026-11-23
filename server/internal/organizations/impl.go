@@ -47,6 +47,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -71,7 +73,7 @@ const (
 // *workos.Client implements it.
 type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
-	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
@@ -203,7 +205,7 @@ func (s *Service) Get(ctx context.Context, _ *gen.GetPayload) (res *gen.Organiza
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -234,7 +236,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -460,7 +462,7 @@ func (s *Service) RevokeInvite(ctx context.Context, payload *gen.RevokeInvitePay
 		attr.SlogUserID(ac.UserID),
 		attr.SlogOrganizationInviteID(payload.InvitationID),
 	)
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -545,7 +547,7 @@ func (s *Service) UpdateInviteRole(ctx context.Context, payload *gen.UpdateInvit
 		attr.SlogOrganizationInviteID(payload.InvitationID),
 		attr.SlogAccessRoleID(payload.RoleID),
 	)
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -638,7 +640,7 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 		attr.SlogUserID(ac.UserID),
 	)
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -669,7 +671,7 @@ func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -700,7 +702,7 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		attr.SlogOrganizationID(ac.ActiveOrganizationID),
 		attr.SlogUserID(ac.UserID),
 	)
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -790,7 +792,7 @@ func (s *Service) EnableWebhooks(ctx context.Context, payload *gen.EnableWebhook
 		return oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -879,7 +881,7 @@ func (s *Service) DisableWebhooks(ctx context.Context, payload *gen.DisableWebho
 		return oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -943,8 +945,8 @@ func (s *Service) CreatePortalSession(ctx context.Context, payload *gen.CreatePo
 	// The empty/zero-value of this slice is harmful because it grants all
 	// capabilities in svix.
 	var caps *[]models.AppPortalCapability
-	readCheckErr := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err == nil {
+	readCheckErr := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read())
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err == nil {
 		caps = new(fullSvixAppPortalCapabilities())
 	} else if readCheckErr == nil {
 		caps = new(minimumSvixAppPortalCapabilities())
@@ -993,7 +995,7 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1064,7 +1066,7 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1156,7 +1158,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	intent := r.URL.Query().Get("intent")
 	if intent == "" {
 		span.SetStatus(codes.Error, "missing intent")
-		http.Error(w, "missing intent parameter", http.StatusBadRequest)
+		s.writeSetupCallbackError(w, r, "missing intent parameter", http.StatusBadRequest)
 		return
 	}
 	originTask := r.URL.Query().Get("task")
@@ -1164,7 +1166,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 		((intent == "domain_verification" || intent == "sso" || intent == "dsync") && originTask == "identity-provider")
 	if !validOrigin {
 		span.SetStatus(codes.Error, "invalid originating task")
-		http.Error(w, "invalid originating task", http.StatusBadRequest)
+		s.writeSetupCallbackError(w, r, "invalid originating task", http.StatusBadRequest)
 		return
 	}
 
@@ -1190,13 +1192,13 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		span.SetStatus(codes.Error, "missing auth context")
-		http.Error(w, "missing auth context", http.StatusUnauthorized)
+		s.writeSetupCallbackError(w, r, "missing auth context", http.StatusUnauthorized)
 		return
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		span.SetStatus(codes.Error, "forbidden")
-		http.Error(w, "forbidden", http.StatusForbidden)
+		s.writeSetupCallbackError(w, r, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -1204,7 +1206,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
 		span.SetStatus(codes.Error, "read org failed")
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		s.writeSetupCallbackError(w, r, "internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -1215,7 +1217,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.ErrorContext(ctx, "setup callback: project setup tasks", attr.SlogError(err))
 		span.SetStatus(codes.Error, "project setup tasks failed")
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		s.writeSetupCallbackError(w, r, "internal error", http.StatusInternalServerError)
 		return
 	}
 	visible := make(map[string]bool, len(tasks))
@@ -1242,13 +1244,33 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
 }
 
+func (s *Service) writeSetupCallbackError(w http.ResponseWriter, r *http.Request, description string, status int) {
+	page := oauthui.AuthorizationError{
+		Recovery: &oauthui.RecoveryLink{URL: strings.TrimRight(s.siteURL, "/") + "/@self/setup", Label: "Open organization setup"},
+		Setup:    true, Status: status, Reason: oauthui.ReasonDefault,
+		ErrorID: "", Code: oautherr.CodeInvalidRequest, Description: description,
+		ProviderName: "",
+		AdminDetail:  "",
+		CallbackURL:  "", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: "",
+	}
+	switch {
+	case status >= http.StatusInternalServerError:
+		page.Code = oautherr.CodeServerError
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		page.Code = oautherr.CodeAccessDenied
+	}
+	if err := oauthui.WriteAuthorizationError(r.Context(), w, page); err != nil {
+		s.logger.ErrorContext(r.Context(), "render setup callback error", attr.SlogError(err))
+	}
+}
+
 func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payload *gen.SendEnterpriseAdminOnboardingEmailPayload) (*gen.SendEnterpriseAdminOnboardingEmailResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1289,7 +1311,7 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1739,12 +1761,12 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 		return
 	}
 
-	workosRoleSlugs := []string{invite.RoleSlug.String}
-	membershipID, err := s.orgs.CreateOrganizationMembership(ctx, workosUserID, org.WorkosID.String, invite.RoleSlug.String)
+	member, err := s.orgs.CreateOrganizationMembership(ctx, workosUserID, org.WorkosID.String, invite.RoleSlug.String)
 	if err != nil {
 		s.logger.WarnContext(ctx, "invite callback: failed to create WorkOS membership; checking for an existing membership", attr.SlogError(err))
 
-		member, lookupErr := s.orgs.GetOrgMembership(ctx, workosUserID, org.WorkosID.String)
+		var lookupErr error
+		member, lookupErr = s.orgs.GetOrgMembership(ctx, workosUserID, org.WorkosID.String)
 		if lookupErr != nil {
 			s.logger.WarnContext(ctx, "invite callback: failed to look up WorkOS membership", attr.SlogError(lookupErr))
 			return
@@ -1753,7 +1775,7 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 			return
 		}
 
-		workosRoleSlugs = append([]string(nil), member.RoleSlugs...)
+		workosRoleSlugs := append([]string(nil), member.RoleSlugs...)
 		if !slices.Contains(workosRoleSlugs, invite.RoleSlug.String) {
 			workosRoleSlugs = append(workosRoleSlugs, invite.RoleSlug.String)
 		}
@@ -1762,18 +1784,15 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 			s.logger.WarnContext(ctx, "invite callback: failed to update WorkOS membership role", attr.SlogError(updateErr))
 			return
 		}
-		membershipID = member.ID
-		if updated != nil && updated.ID != "" {
-			membershipID = updated.ID
-		}
+		member = updated
 	}
 
 	if err := orgrepo.New(s.db).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
 		OrganizationID:     invite.OrganizationID,
 		WorkosUserID:       workosUserID,
-		WorkosRoleSlugs:    workosRoleSlugs,
+		WorkosRoleSlugs:    member.RoleSlugs,
 		UserID:             conv.ToPGText(gramUserID),
-		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosMembershipID: conv.ToPGText(member.ID),
 		WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 		WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
 	}); err != nil {
@@ -1934,10 +1953,11 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
 		Evidence: signins.Evidence{
-			HostedDomain:       idpUser.Evidence.HostedDomain,
-			TenantID:           idpUser.Evidence.TenantID,
-			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
-			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+			HostedDomain:        idpUser.Evidence.HostedDomain,
+			HostedDomainChecked: idpUser.Evidence.HostedDomainChecked,
+			TenantID:            idpUser.Evidence.TenantID,
+			VerifiedEmail:       idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt:  idpUser.Evidence.AuthenticatedAt,
 		},
 		Impersonated:    idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt: authenticatedAt,
@@ -1976,7 +1996,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		s.logger.WarnContext(ctx, "invite callback: failed to invalidate user info cache", attr.SlogError(err))
 	}
 
-	//nolint:exhaustruct // only desired fields — avoid unexpected zero-value behavior
+	//nolint:exhaustruct_v5 // only desired fields — avoid unexpected zero-value behavior
 	http.SetCookie(w, &http.Cookie{
 		Name:     constants.SessionCookie,
 		Value:    sessionID,

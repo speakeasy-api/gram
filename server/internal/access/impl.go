@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -31,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -43,18 +45,25 @@ import (
 var errConnectedUserNotFound = errors.New("connected user not found")
 
 // CanonicalFoldGate reports the organization id an identity-folded query
-// should run under: the org id when the canonical identity fold is rolled out
-// to it, "" when it is not. Injected rather than reimplemented so the rollout
-// flag stays one switch across every service that folds.
+// should run under, or "" for no fold.
 type CanonicalFoldGate interface {
 	CanonicalOrgFor(ctx context.Context, orgID string) string
 }
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	chConn   driver.Conn
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+
+	// chConn is the read-write ClickHouse connection. The shadow MCP inventory
+	// catalog stays on it: renaming a server inserts a row that the next list
+	// must already see.
+	chConn driver.Conn
+
+	// chReadConn is the read replica. It serves the AI detection and challenge
+	// aggregates, which background workers write and this service only reads.
+	chReadConn driver.Conn
+
 	auth     *auth.Auth
 	authz    *authz.Engine
 	roleMgr  *RoleManager
@@ -62,10 +71,22 @@ type Service struct {
 	email    *email.Service
 	orgHosts *orghost.Resolver
 	foldGate CanonicalFoldGate
+	// serverURL is the deployment's API base URL, which MCP endpoint
+	// addresses are built on. Nil leaves official-server addresses on the
+	// platform domain empty.
+	serverURL *url.URL
+	features  feature.Provider
 }
 
-// canonicalFoldOrg resolves the org id to fold under. A nil gate means no
-// caller wired the rollout flag in, which fails closed: no fold.
+// WithServerURL sets the base URL that platform MCP endpoint addresses are
+// built on, so the Shadow MCP inventory can say where an official server is
+// served.
+func (s *Service) WithServerURL(serverURL *url.URL) *Service {
+	s.serverURL = serverURL
+	return s
+}
+
+// canonicalFoldOrg resolves the org id to fold under. A nil gate means no fold.
 func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
 	if s.foldGate == nil {
 		return ""
@@ -81,6 +102,7 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
 	chConn driver.Conn,
+	chReadConn driver.Conn,
 	sessions *sessions.Manager,
 	roleMgr *RoleManager,
 	authz *authz.Engine,
@@ -92,17 +114,20 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:   logger,
-		db:       db,
-		chConn:   chConn,
-		auth:     auth.New(logger, db, sessions, authz),
-		authz:    authz,
-		roleMgr:  roleMgr,
-		audit:    auditLogger,
-		email:    emailService,
-		orgHosts: orgHosts,
-		foldGate: foldGate,
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:     logger,
+		db:         db,
+		chConn:     chConn,
+		chReadConn: chReadConn,
+		auth:       auth.New(logger, db, sessions, authz),
+		authz:      authz,
+		roleMgr:    roleMgr,
+		audit:      auditLogger,
+		email:      emailService,
+		orgHosts:   orgHosts,
+		foldGate:   foldGate,
+		serverURL:  nil,
+		features:   nil,
 	}
 }
 
@@ -140,19 +165,9 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	checks := []authz.Check{{
-		Scope:        authz.ScopeOrgRead,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}}
+	checks := []authz.Check{authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()}
 	if ac.ProjectID != nil {
-		checks = append(checks, authz.Check{
-			Scope:        authz.ScopeProjectRead,
-			ResourceKind: "",
-			ResourceID:   ac.ProjectID.String(),
-			Dimensions:   nil,
-		})
+		checks = append(checks, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read())
 	}
 	if err := s.authz.RequireAny(ctx, checks...); err != nil {
 		return nil, err
@@ -177,7 +192,7 @@ func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*ge
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -194,7 +209,7 @@ func (s *Service) CreateRole(ctx context.Context, payload *gen.CreateRolePayload
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -219,7 +234,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -245,7 +260,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	if err != nil {
 		return err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -274,7 +289,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -282,71 +297,73 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		attr.UserID(ac.UserID),
 	)
 
-	scopes := []scopeDefinitionInput{
-		{scope: authz.ScopeOrgRead, description: "Read organization metadata and members.", resourceType: "org"},
-		{scope: authz.ScopeOrgBlockedRead, description: "Store exceptions for organization read access.", resourceType: "org"},
-		{scope: authz.ScopeOrgAdmin, description: "Manage organization access and settings.", resourceType: "org"},
-		{scope: authz.ScopeOrgBlockedAdmin, description: "Store exceptions for organization admin access.", resourceType: "org"},
-		{scope: authz.ScopeProjectRead, description: "View projects and project-related resources.", resourceType: "project"},
-		{scope: authz.ScopeProjectBlockedRead, description: "Store exceptions for project read access.", resourceType: "project"},
-		{scope: authz.ScopeProjectWrite, description: "Create and modify projects and project-related resources.", resourceType: "project"},
-		{scope: authz.ScopeProjectBlockedWrite, description: "Store exceptions for project write access.", resourceType: "project"},
-		{scope: authz.ScopeMCPRead, description: "View MCP servers and configuration.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedRead, description: "Store exceptions for MCP read access.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPWrite, description: "Create and modify MCP servers and configuration.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedWrite, description: "Store exceptions for MCP write access.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPConnect, description: "Connect to and use MCP servers.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedConnect, description: "Store exceptions for MCP connect access.", resourceType: "mcp"},
-		{scope: authz.ScopeEnvironmentRead, description: "View environments and their entries within the project.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
-		{scope: authz.ScopeSkillRead, description: "View skills within the project.", resourceType: "skill"},
-		{scope: authz.ScopeSkillBlockedRead, description: "Store exceptions for skill read access.", resourceType: "skill"},
-		{scope: authz.ScopeSkillWrite, description: "Create and modify skills within the project.", resourceType: "skill"},
-		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
-		{scope: authz.ScopePluginWrite, description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", resourceType: "project"},
-		{scope: authz.ScopePluginBlockedWrite, description: "Store exceptions for plugin write access.", resourceType: "project"},
-		{scope: authz.ScopeAssistantRead, description: "View and interact with assistants within the project.", resourceType: "assistant"},
-		{scope: authz.ScopeAssistantBlockedRead, description: "Store exceptions for assistant read access.", resourceType: "assistant"},
-		{scope: authz.ScopeAssistantWrite, description: "Create and modify assistants within the project.", resourceType: "assistant"},
-		{scope: authz.ScopeAssistantBlockedWrite, description: "Store exceptions for assistant write access.", resourceType: "assistant"},
-		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
-		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
-		{scope: authz.ScopeLogRead, description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.", resourceType: "project"},
-		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
-		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
-		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
-		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
-		{scope: authz.ScopeWorkloadRead, description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.", resourceType: "workload"},
-		{scope: authz.ScopeWorkloadWrite, description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.", resourceType: "workload"},
-		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
-		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
-	}
-	result := make([]*gen.ScopeDefinition, 0, len(scopes))
-	for _, scope := range scopes {
-		result = append(result, scopeDefinition(scope))
-	}
-
-	return &gen.ListScopesResult{Scopes: result}, nil
+	return scopeCatalogueResult(), nil
 }
 
-type scopeDefinitionInput struct {
-	scope        authz.Scope
-	description  string
-	resourceType string
+// scopeCatalogueResult is the catalogue as access.listScopes serves it. It is
+// the same for every caller, so the dashboard's tests read a fixture of it.
+func scopeCatalogueResult() *gen.ListScopesResult {
+	catalog := authz.ScopeCatalog()
+	result := make([]*gen.ScopeDefinition, 0, len(catalog))
+	for _, entry := range catalog {
+		result = append(result, scopeDefinition(entry))
+	}
+
+	tasks := authz.Tasks()
+	taskModels := make([]*gen.ScopeTask, 0, len(tasks))
+	for _, task := range tasks {
+		scopes := make([]string, 0, len(task.Scopes))
+		for _, scope := range task.Scopes {
+			scopes = append(scopes, string(scope))
+		}
+		taskModels = append(taskModels, &gen.ScopeTask{
+			Slug:   task.Slug,
+			Label:  task.Label,
+			Scopes: scopes,
+		})
+	}
+
+	return &gen.ListScopesResult{Scopes: result, Tasks: taskModels}
 }
 
-func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
+// ListAgentPolicyScopes lists the catalogue scopes an agent policy may hold.
+// It needs a session and no organization grant: an owner configuring their
+// own agent holds no RBAC grant, and the list is product configuration that
+// names nothing about the organization. The dashboard's agent permission
+// editor reads it instead of keeping a copy of the runtime-safe set.
+func (s *Service) ListAgentPolicyScopes(ctx context.Context, _ *gen.ListAgentPolicyScopesPayload) (*gen.ListAgentPolicyScopesResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	catalog := authz.ScopeCatalog()
+	result := make([]*gen.ScopeDefinition, 0, len(catalog))
+	for _, entry := range catalog {
+		definition := scopeDefinition(entry)
+		// Only what a person could also tick in a role: the runtime registry
+		// decides eligibility, exception scopes are not a choice, and shared
+		// auth-client access is provisioned by the auth client editor rather
+		// than chosen as a permission.
+		if !definition.AgentEligible || definition.Visibility != authz.ScopeVisibilityUserVisible || entry.Category == authz.ScopeCategoryMCPAuthClient {
+			continue
+		}
+		result = append(result, definition)
+	}
+	return &gen.ListAgentPolicyScopesResult{Scopes: result}, nil
+}
+
+func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {
 	var exclusionScope *string
-	if exclusion, ok := authz.ExclusionScopeFor(input.scope); ok {
+	if exclusion, ok := authz.ExclusionScopeFor(entry.Scope); ok {
 		exclusionScopeValue := string(exclusion)
 		exclusionScope = &exclusionScopeValue
 	}
-	visibility, ok := authz.ScopeVisibilityFor(input.scope)
+	visibility, ok := authz.ScopeVisibilityFor(entry.Scope)
 	if !ok {
 		visibility = authz.ScopeVisibilityInternal
 	}
@@ -354,16 +371,31 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 	// A role may hold scopes its agent members cannot. Agent policy is filtered
 	// against the runtime registry every time it is loaded, so those scopes are
 	// dropped rather than granted; reporting eligibility here lets the role
-	// editor say so instead of leaving the difference invisible.
-	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, input.scope)
+	// editor say so instead of leaving the difference invisible. Scopes kept
+	// only for managed assistants are not eligible through a role.
+	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, entry.Scope) && !runtimepolicy.IsManagedAssistantOnlyScope(entry.Scope)
+
+	var sensitivity *string
+	if entry.Sensitive() {
+		reason := string(entry.Sensitivity)
+		sensitivity = &reason
+	}
 
 	return &gen.ScopeDefinition{
-		Slug:           string(input.scope),
-		Description:    input.description,
-		ResourceType:   input.resourceType,
-		Visibility:     visibility,
-		AgentEligible:  agentEligible,
-		ExclusionScope: exclusionScope,
+		Slug:          string(entry.Scope),
+		Label:         entry.Label,
+		Description:   entry.Description,
+		ResourceType:  entry.ResourceType,
+		Category:      string(entry.Category),
+		Visibility:    visibility,
+		AgentEligible: agentEligible,
+		// Mirrors createTemporaryGrant's own check, so the dashboard offers
+		// temporary access only where the API accepts it.
+		TemporaryGrantable: ValidateTemporaryGrantScope(entry.Scope) == nil,
+		ExclusionScope:     exclusionScope,
+		Sensitive:          entry.Sensitive(),
+		Sensitivity:        sensitivity,
+		SubScopes:          entry.SubScopes(),
 	}
 }
 
@@ -389,19 +421,9 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	checks := []authz.Check{{
-		Scope:        authz.ScopeOrgRead,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}}
+	checks := []authz.Check{authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()}
 	if ac.ProjectID != nil {
-		checks = append(checks, authz.Check{
-			Scope:        authz.ScopeProjectRead,
-			ResourceKind: "",
-			ResourceID:   ac.ProjectID.String(),
-			Dimensions:   nil,
-		})
+		checks = append(checks, authz.Project(authz.ProjectIDOf(*ac.ProjectID)).Read())
 	}
 	if err := s.authz.RequireAny(ctx, checks...); err != nil {
 		return nil, err
@@ -510,7 +532,7 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	if len(payload.RoleIds) == 0 {
@@ -663,17 +685,29 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ServerURL != nil {
 		sel["server_url"] = *s.ServerURL
 	}
+	if s.ClientType != nil {
+		sel[authz.SelectorKeyClientType] = *s.ClientType
+	}
+	if s.ConnectionOwner != nil {
+		sel[authz.SelectorKeyConnectionOwner] = *s.ConnectionOwner
+	}
+	if s.UpstreamClient != nil {
+		sel[authz.SelectorKeyUpstreamClient] = *s.UpstreamClient
+	}
 	return sel
 }
 
 func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	s := &gen.Selector{
-		ResourceKind: sel["resource_kind"],
-		ResourceID:   sel["resource_id"],
-		Disposition:  nil,
-		Tool:         nil,
-		ProjectID:    nil,
-		ServerURL:    nil,
+		ResourceKind:    sel["resource_kind"],
+		ResourceID:      sel["resource_id"],
+		Disposition:     nil,
+		Tool:            nil,
+		ProjectID:       nil,
+		ServerURL:       nil,
+		ClientType:      nil,
+		ConnectionOwner: nil,
+		UpstreamClient:  nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -686,6 +720,15 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel["server_url"]; ok {
 		s.ServerURL = &v
+	}
+	if v, ok := sel[authz.SelectorKeyClientType]; ok {
+		s.ClientType = &v
+	}
+	if v, ok := sel[authz.SelectorKeyConnectionOwner]; ok {
+		s.ConnectionOwner = &v
+	}
+	if v, ok := sel[authz.SelectorKeyUpstreamClient]; ok {
+		s.UpstreamClient = &v
 	}
 	return s
 }
@@ -702,44 +745,50 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 // permission scope. Used when RBAC is not enforced or for admin impersonation.
 func userVisibleScopeGrants() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
-		{Scope: string(authz.ScopeOrgRead), Selectors: nil},
-		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},
-		{Scope: string(authz.ScopeProjectRead), Selectors: nil},
-		{Scope: string(authz.ScopeProjectWrite), Selectors: nil},
-		{Scope: string(authz.ScopeMCPRead), Selectors: nil},
-		{Scope: string(authz.ScopeMCPWrite), Selectors: nil},
-		{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
-		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil},
-		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
-		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
-		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
-		{Scope: string(authz.ScopePluginWrite), Selectors: nil},
-		{Scope: string(authz.ScopeAssistantRead), Selectors: nil},
-		{Scope: string(authz.ScopeAssistantWrite), Selectors: nil},
-		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
-		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
-		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
-		{Scope: string(authz.ScopeChatRead), Selectors: nil},
-		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
-		{Scope: string(authz.ScopeLogRead), Selectors: nil},
-		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
-		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
-		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
-		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
-		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil},
-		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil},
-		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
-		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
+		{Scope: string(authz.ScopeOrgRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeProjectRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeProjectWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMCPRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMCPWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMCPConnect), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeEnvironmentRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeSkillRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeSkillWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopePluginWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAssistantRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAssistantWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeInferenceExecute), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChatRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChatWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeLogRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMemoryRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeMemoryWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAgentRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAgentWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChannelsConnect), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChannelsAdmin), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
+		{Scope: string(authz.ScopeChannelsReadAll), Selectors: nil, SubScopes: nil, DirectSelectors: nil},
 	}
 }
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
-	// Direct selectors let clients apply principal precedence: a direct grant
-	// naming a resource outranks a block inherited from a role or everyone.
 	direct := make(map[string][]*gen.Selector)
-	for _, grant := range authz.DirectOverrideGrants(grants) {
-		direct[string(grant.Scope)] = append(direct[string(grant.Scope)], authzSelectorToGen(grant.Selector))
+	for scope, selectors := range authz.DirectSelectorsByScope(grants) {
+		for _, sel := range selectors {
+			direct[string(scope)] = append(direct[string(scope)], authzSelectorToGen(sel))
+		}
 	}
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
@@ -847,7 +896,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -855,7 +904,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		attr.UserID(authCtx.UserID),
 	)
 
-	chQueries := chrepo.New(s.chConn)
+	chQueries := chrepo.New(s.chReadConn)
 
 	// Fast path: fetch specific challenges by ID (used for bucket expansion).
 	if len(payload.Ids) > 0 {
@@ -892,6 +941,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			Outcome:        payload.Outcome,
 			PrincipalURN:   payload.PrincipalUrn,
 			Scope:          payload.Scope,
+			ExcludeScopes:  payload.ExcludeScopes,
 			MemberUserIDs:  memberIDs,
 		},
 		From:           from,
@@ -972,6 +1022,58 @@ func (s *Service) lookupResolutions(ctx context.Context, orgID string, challenge
 	return m, nil
 }
 
+// lookupResolutionTemporaryGrants batch-fetches the temporary grants that
+// resolved challenges point at, keyed by grant ID. A grant missing from the
+// result was revoked.
+func (s *Service) lookupResolutionTemporaryGrants(ctx context.Context, orgID string, resolutions []repo.AuthzChallengeResolution) (map[uuid.UUID]repo.ListChallengeResolutionTemporaryGrantsRow, error) {
+	ids := make([]uuid.UUID, 0, len(resolutions))
+	for _, r := range resolutions {
+		if r.TemporaryGrantID.Valid {
+			ids = append(ids, r.TemporaryGrantID.UUID)
+		}
+	}
+	if len(ids) == 0 {
+		return map[uuid.UUID]repo.ListChallengeResolutionTemporaryGrantsRow{}, nil
+	}
+	rows, err := repo.New(s.db).ListChallengeResolutionTemporaryGrants(ctx, repo.ListChallengeResolutionTemporaryGrantsParams{
+		OrganizationID: orgID,
+		Ids:            ids,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolution temporary grants").LogError(ctx, s.logger)
+	}
+	m := make(map[uuid.UUID]repo.ListChallengeResolutionTemporaryGrantsRow, len(rows))
+	for _, row := range rows {
+		m[row.ID] = row
+	}
+	return m, nil
+}
+
+// resolutionTemporaryGrantView describes the temporary grant a resolution
+// points at: active until its deadline by the database clock, then expired,
+// or revoked once the row is gone. A grant restarted after the resolution was
+// written is a later grant on the same row, so the resolution's own grant is
+// reported as expired, without the later grant's deadline.
+func resolutionTemporaryGrantView(r repo.AuthzChallengeResolution, grants map[uuid.UUID]repo.ListChallengeResolutionTemporaryGrantsRow) *gen.ChallengeTemporaryGrant {
+	if !r.TemporaryGrantID.Valid {
+		return nil
+	}
+	id := r.TemporaryGrantID.UUID
+	grant, ok := grants[id]
+	if !ok {
+		return &gen.ChallengeTemporaryGrant{ID: id.String(), Status: temporaryGrantStatusRevoked, ExpiresAt: nil}
+	}
+	if grant.CreatedAt.Time.After(r.CreatedAt.Time) {
+		return &gen.ChallengeTemporaryGrant{ID: id.String(), Status: temporaryGrantStatusExpired, ExpiresAt: nil}
+	}
+	status := temporaryGrantStatusExpired
+	if grant.Active {
+		status = temporaryGrantStatusActive
+	}
+	expiresAt := grant.ExpiresAt.Time.UTC().Format(time.RFC3339)
+	return &gen.ChallengeTemporaryGrant{ID: id.String(), Status: status, ExpiresAt: &expiresAt}
+}
+
 // buildChallengeResult enriches CH challenge summaries with PG resolution + user data and builds the API response.
 func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalues.AuthContext, challenges []chrepo.ChallengeSummary, total int) (*gen.ListChallengesResult, error) {
 	if len(challenges) == 0 {
@@ -979,6 +1081,14 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 	}
 
 	resolutionMap, err := s.lookupResolutions(ctx, authCtx.ActiveOrganizationID, challenges)
+	if err != nil {
+		return nil, err
+	}
+	resolved := make([]repo.AuthzChallengeResolution, 0, len(resolutionMap))
+	for _, r := range resolutionMap {
+		resolved = append(resolved, r)
+	}
+	resolutionGrants, err := s.lookupResolutionTemporaryGrants(ctx, authCtx.ActiveOrganizationID, resolved)
 	if err != nil {
 		return nil, err
 	}
@@ -1013,6 +1123,7 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 			pResolutionType *string
 			pResolvedBy     *string
 			pResolutionSlug *string
+			pResolutionTG   *gen.ChallengeTemporaryGrant
 		)
 
 		if c.ProjectID != "" {
@@ -1052,31 +1163,33 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 			if r.RoleSlug.Valid {
 				pResolutionSlug = &r.RoleSlug.String
 			}
+			pResolutionTG = resolutionTemporaryGrantView(r, resolutionGrants)
 		}
 
 		result = append(result, &gen.AuthzChallenge{
-			ID:                  c.ID,
-			Timestamp:           c.Timestamp,
-			OrganizationID:      c.OrganizationID,
-			ProjectID:           pProjectID,
-			PrincipalUrn:        c.PrincipalURN,
-			PrincipalType:       c.PrincipalType,
-			UserEmail:           pUserEmail,
-			PhotoURL:            pPhotoURL,
-			Operation:           c.Operation,
-			Outcome:             c.Outcome,
-			Reason:              c.Reason,
-			Scope:               c.Scope,
-			ResourceKind:        pResourceKind,
-			ResourceID:          pResourceID,
-			Selector:            selector,
-			RoleSlugs:           roleSlugs,
-			EvaluatedGrantCount: int(c.EvaluatedGrantCount),
-			MatchedGrantCount:   int(c.MatchedGrantCount), //nolint:gosec // small number
-			ResolvedAt:          pResolvedAt,
-			ResolutionType:      pResolutionType,
-			ResolvedBy:          pResolvedBy,
-			ResolutionRoleSlug:  pResolutionSlug,
+			ID:                       c.ID,
+			Timestamp:                c.Timestamp,
+			OrganizationID:           c.OrganizationID,
+			ProjectID:                pProjectID,
+			PrincipalUrn:             c.PrincipalURN,
+			PrincipalType:            c.PrincipalType,
+			UserEmail:                pUserEmail,
+			PhotoURL:                 pPhotoURL,
+			Operation:                c.Operation,
+			Outcome:                  c.Outcome,
+			Reason:                   c.Reason,
+			Scope:                    c.Scope,
+			ResourceKind:             pResourceKind,
+			ResourceID:               pResourceID,
+			Selector:                 selector,
+			RoleSlugs:                roleSlugs,
+			EvaluatedGrantCount:      int(c.EvaluatedGrantCount),
+			MatchedGrantCount:        int(c.MatchedGrantCount), //nolint:gosec // small number
+			ResolvedAt:               pResolvedAt,
+			ResolutionType:           pResolutionType,
+			ResolvedBy:               pResolvedBy,
+			ResolutionRoleSlug:       pResolutionSlug,
+			ResolutionTemporaryGrant: pResolutionTG,
 		})
 	}
 
@@ -1091,7 +1204,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -1125,6 +1238,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 			Outcome:        payload.Outcome,
 			PrincipalURN:   payload.PrincipalUrn,
 			Scope:          payload.Scope,
+			ExcludeScopes:  nil,
 			MemberUserIDs:  memberIDs,
 		},
 		Resolved:             payload.Resolved,
@@ -1133,7 +1247,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		Offset:               uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 	}
 
-	chQueries := chrepo.New(s.chConn)
+	chQueries := chrepo.New(s.chReadConn)
 
 	buckets, total, err := chQueries.ListChallengeBuckets(ctx, filters)
 	if err != nil {
@@ -1163,6 +1277,10 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	resolutionMap := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
 	for _, r := range resolutions {
 		resolutionMap[r.ChallengeID] = r
+	}
+	resolutionGrants, err := s.lookupResolutionTemporaryGrants(ctx, authCtx.ActiveOrganizationID, resolutions)
+	if err != nil {
+		return nil, err
 	}
 
 	// Batch-lookup user photos from PG.
@@ -1198,6 +1316,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 			pResolutionType *string
 			pResolvedBy     *string
 			pResolutionSlug *string
+			pResolutionTG   *gen.ChallengeTemporaryGrant
 		)
 
 		if b.ProjectID != "" {
@@ -1230,33 +1349,35 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 			if r.RoleSlug.Valid {
 				pResolutionSlug = &r.RoleSlug.String
 			}
+			pResolutionTG = resolutionTemporaryGrantView(r, resolutionGrants)
 		}
 
 		result = append(result, &gen.ChallengeBucket{
-			ID:                  b.ID,
-			LastSeen:            b.LastSeen,
-			FirstSeen:           b.FirstSeen,
-			OrganizationID:      b.OrganizationID,
-			ProjectID:           pProjectID,
-			PrincipalUrn:        b.PrincipalURN,
-			PrincipalType:       b.PrincipalType,
-			UserEmail:           pUserEmail,
-			PhotoURL:            pPhotoURL,
-			Operation:           b.Operation,
-			Outcome:             b.Outcome,
-			Reason:              b.Reason,
-			Scope:               b.Scope,
-			ResourceKind:        pResourceKind,
-			ResourceID:          pResourceID,
-			RoleSlugs:           roleSlugs,
-			EvaluatedGrantCount: int(b.EvaluatedGrantCount),
-			MatchedGrantCount:   int(b.MatchedGrantCount), //nolint:gosec // small number
-			ChallengeCount:      int(b.ChallengeCount),    //nolint:gosec // small number
-			ChallengeIds:        challengeIDs,
-			ResolvedAt:          pResolvedAt,
-			ResolutionType:      pResolutionType,
-			ResolvedBy:          pResolvedBy,
-			ResolutionRoleSlug:  pResolutionSlug,
+			ID:                       b.ID,
+			LastSeen:                 b.LastSeen,
+			FirstSeen:                b.FirstSeen,
+			OrganizationID:           b.OrganizationID,
+			ProjectID:                pProjectID,
+			PrincipalUrn:             b.PrincipalURN,
+			PrincipalType:            b.PrincipalType,
+			UserEmail:                pUserEmail,
+			PhotoURL:                 pPhotoURL,
+			Operation:                b.Operation,
+			Outcome:                  b.Outcome,
+			Reason:                   b.Reason,
+			Scope:                    b.Scope,
+			ResourceKind:             pResourceKind,
+			ResourceID:               pResourceID,
+			RoleSlugs:                roleSlugs,
+			EvaluatedGrantCount:      int(b.EvaluatedGrantCount),
+			MatchedGrantCount:        int(b.MatchedGrantCount), //nolint:gosec // small number
+			ChallengeCount:           int(b.ChallengeCount),    //nolint:gosec // small number
+			ChallengeIds:             challengeIDs,
+			ResolvedAt:               pResolvedAt,
+			ResolutionType:           pResolutionType,
+			ResolvedBy:               pResolvedBy,
+			ResolutionRoleSlug:       pResolutionSlug,
+			ResolutionTemporaryGrant: pResolutionTG,
 		})
 	}
 
@@ -1271,7 +1392,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -1362,7 +1483,9 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		ResourceID:     resourceID,
 		ResolutionType: payload.ResolutionType,
 		RoleSlug:       conv.PtrToPGText(roleSlug),
-		ResolvedBy:     resolvedBy,
+		// Only createTemporaryGrant resolves a challenge with a grant.
+		TemporaryGrantID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ResolvedBy:       resolvedBy,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").LogError(ctx, s.logger)
@@ -1440,7 +1563,7 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 	// organization-qualified read below validates caller-supplied IDs and the
 	// complete selector before any PostgreSQL role mutation is attempted. A row
 	// that has not reached ClickHouse yet remains unresolved and can be retried.
-	challenges, err := chrepo.New(s.chConn).ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, challengeIDs)
+	challenges, err := chrepo.New(s.chReadConn).ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, challengeIDs)
 	if err != nil {
 		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnavailable, err, "denied challenges could not be verified yet").LogError(ctx, s.logger)
 	}
@@ -1491,20 +1614,15 @@ func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *c
 					dimensions[key] = value
 				}
 			}
-			check := authz.Check{
-				Scope:        authz.Scope(challenge.Scope),
-				ResourceKind: challenge.ResourceKind,
-				ResourceID:   challenge.ResourceID,
-				Dimensions:   dimensions,
-			}
-			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
+			check := authz.RecordedCheck(authz.Scope(challenge.Scope), challenge.ResourceKind, challenge.ResourceID, dimensions)
+			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check)
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "challenge cannot be granted through this role").LogError(ctx, s.logger)
 			}
 			if !roleAllows {
 				return oops.E(oops.CodeBadRequest, nil, "selected role does not grant the challenged access").LogError(ctx, s.logger)
 			}
-			resultAllows, authorizeErr := authz.GrantsAuthorize(resultingGrants, check.WithStrictSelectorMatch())
+			resultAllows, authorizeErr := authz.GrantsAuthorize(resultingGrants, check)
 			if authorizeErr != nil {
 				return oops.E(oops.CodeBadRequest, authorizeErr, "resulting access cannot be evaluated").LogError(ctx, s.logger)
 			}
@@ -1554,7 +1672,10 @@ func validateChallengeAssignmentInput(challenges []chrepo.ChallengeSummary, chal
 }
 
 // RequestAccess sends email notifications to organization administrators when a user
-// requests access to a scope they don't have permission for.
+// requests access to a scope they don't have permission for. With the access
+// requests rollout on, it also stores the request so an administrator can
+// approve it as a temporary grant or deny it; asking again while that request
+// is pending returns it without notifying anyone again.
 func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessPayload) (*gen.RequestAccessResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -1582,6 +1703,18 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
 	}
 
+	stored, err := s.recordAccessRequest(ctx, ac, payload)
+	if err != nil {
+		return nil, err
+	}
+	var storedView *gen.AccessRequest
+	if stored != nil {
+		storedView = stored.view
+		if !stored.created {
+			return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
+		}
+	}
+
 	// Get active organization administrators.
 	admins, err := repo.New(s.db).ListActiveOrganizationAdmins(ctx, ac.ActiveOrganizationID)
 	if err != nil {
@@ -1590,7 +1723,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 
 	if len(admins) == 0 {
 		logger.WarnContext(ctx, "no org admins found to notify for access request")
-		return &gen.RequestAccessResult{SentToCount: 0}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
 	// Build the manage access link. The query params let the dashboard open a
@@ -1603,6 +1736,9 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)
+		if storedView != nil {
+			q.Set("request", storedView.ID)
+		}
 		if payload.ResourceID != nil && *payload.ResourceID != "" {
 			q.Set("resource_id", *payload.ResourceID)
 			if strings.HasPrefix(payload.Scope, "mcp:") {
@@ -1620,10 +1756,22 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		manageAccessLink = accessURL.String()
 	}
 
+	// Name the permission the way the role editor does, so the admin reads
+	// "View tool logs" rather than a slug. An unknown slug is sent as is.
+	permissionLabel := payload.Scope
+	permissionDescription := ""
+	if entry, ok := authz.ScopeEntryFor(authz.Scope(payload.Scope)); ok {
+		permissionLabel = entry.Label
+		permissionDescription = entry.Description
+	}
+
 	tmpl := email.AccessRequest{
-		RequesterName:    conv.Default(requester.DisplayName, requester.Email),
-		OrganizationName: org.Name,
-		ManageAccessLink: manageAccessLink,
+		RequesterName:         conv.Default(requester.DisplayName, requester.Email),
+		OrganizationName:      org.Name,
+		ManageAccessLink:      manageAccessLink,
+		PermissionLabel:       permissionLabel,
+		PermissionScope:       payload.Scope,
+		PermissionDescription: permissionDescription,
 	}
 
 	// Send emails to all admins
@@ -1648,7 +1796,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 			attr.SlogAccessRequestAdminCount(len(admins)),
 			attr.SlogAccessRequestScope(payload.Scope),
 		)
-		return &gen.RequestAccessResult{SentToCount: 0}, nil
+		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
 	logger.InfoContext(ctx, "access request emails sent",
@@ -1657,7 +1805,7 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		attr.SlogAccessRequestScope(payload.Scope),
 	)
 
-	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
+	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, nil
 }
 
 // ListIdentityAccess returns the MCP servers and skills accessible to a user
@@ -1668,7 +1816,7 @@ func (s *Service) ListIdentityAccess(ctx context.Context, payload *gen.ListIdent
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 

@@ -49,6 +49,8 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/storage"
 	"github.com/speakeasy-api/gram/infra/pkg/storagebindings"
+	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -73,6 +75,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -83,6 +86,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/presidiostub"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
@@ -121,6 +125,16 @@ const (
 	// is being inserted and acknowledged by the Pub/Sub service.
 	spanEventWriterOutstandingBatches = 2
 )
+
+// checkPystreamsStub enforces that the pystreams stub only runs in local
+// development. Elsewhere it would silently skip Presidio scanning and answer
+// enforcement requests with no findings.
+func checkPystreamsStub(environment string, enabled bool) error {
+	if enabled && environment != "local" {
+		return fmt.Errorf("--pystreams-stub is only allowed in the local environment, not %q", environment)
+	}
+	return nil
+}
 
 func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
@@ -308,6 +322,11 @@ func newStreamsCommand() *cli.Command {
 			Value:   "local/lake",
 		},
 		&cli.BoolFlag{
+			Name:    "pystreams-stub",
+			Usage:   "Consume the pystreams subscriptions here with no-op stubs instead of running pystreams: acknowledge Presidio analysis and Python ping messages, and answer Presidio enforcement with no findings. For local development only",
+			EnvVars: []string{"GRAM_PYSTREAMS_STUB"},
+		},
+		&cli.BoolFlag{
 			Name:    "sigint-ack-only",
 			Usage:   "Temporarily drain the sensor evaluation subscription: acknowledge all messages without evaluation or reading publication",
 			EnvVars: []string{"GRAM_SIGINT_ACK_ONLY"},
@@ -332,6 +351,7 @@ func newStreamsCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, staffFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
@@ -350,6 +370,13 @@ func newStreamsCommand() *cli.Command {
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-streams"
 			serviceEnv := c.String("environment")
+			if err := checkPystreamsStub(serviceEnv, c.Bool("pystreams-stub")); err != nil {
+				return err
+			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
+			}
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "streams"
 			logger := PullLogger(c.Context).With(
@@ -369,6 +396,7 @@ func newStreamsCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -408,6 +436,9 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
@@ -437,7 +468,6 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{assetsBackend: c.String("assets-backend"), assetsURI: c.String("assets-uri")})
@@ -462,18 +492,23 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
+			// Streams does not configure organization encryption: organizations
+			// still on the platform key work, and enrolled ones fail closed.
+			// TODO(DNO-1571): wire organization encryption before enrolling an
+			// organization in ai-provider-keys.
+			aiProviderKeys := aiproviderkeys.WithoutOrganizationEncryption(logger, db, encryptionClient)
 			var openRouter openrouter.Provisioner
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg, openrouter.WithAIProviderKeys(aiProviderKeys))
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
-				modelkeys.NewResolver(db, encryptionClient, openRouter),
+				modelkeys.NewResolver(db, aiProviderKeys, openRouter),
 				nil,
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				nil,
@@ -597,18 +632,38 @@ func newStreamsCommand() *cli.Command {
 					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
 					return risk.EncodeFingerprint(sum), fingerprintErr
 				},
-				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge, MaxContentBytes: 0},
 				riskRecorder,
 			)
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
 			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
-			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, riskRecorder)
+			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, findingsPub, riskRecorder)
+			promptInjectionEnforceHandler, err := promptinjection.NewEnforceHandler(
+				logger,
+				meterProvider,
+				promptInjectionScanner,
+				replyWriter,
+				riskRecorder,
+				promptinjection.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create prompt injection enforcement handler: %w", err)
+			}
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
-			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
-			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, riskRecorder)
+			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, findingsPub, riskRecorder)
+			promptPolicyEnforceHandler, err := promptpolicy.NewEnforceHandler(
+				logger,
+				meterProvider,
+				promptPolicyScanner,
+				replyWriter,
+				riskRecorder,
+				promptpolicy.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create prompt policy enforcement handler: %w", err)
+			}
 
 			// Fine-tuned risk model analyzer: both its lanes run here. Without a
 			// model URL the analyzer is disabled and its handlers ack untouched.
@@ -634,6 +689,17 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
 			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub, riskRecorder)
+			customRulesEnforceHandler, err := customruleanalyzer.NewEnforceHandler(
+				logger,
+				meterProvider,
+				scanner,
+				replyWriter,
+				riskRecorder,
+				customruleanalyzer.EnforceHandlerConfig{MaxRequestAge: 0, MaxContentBytes: 0},
+			)
+			if err != nil {
+				return fmt.Errorf("create custom rules enforcement handler: %w", err)
+			}
 
 			{
 				controlServer := control.Server{
@@ -687,6 +753,8 @@ func newStreamsCommand() *cli.Command {
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
 			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
+			approvalSlackHandler := slackapproval.NewEventHandler(logger, &background.TemporalRiskApprovalSlackScheduler{TemporalEnv: temporalEnv})
+			accessRequestSlackHandler := slackrequests.NewEventHandler(logger, &background.TemporalAccessRequestSlackScheduler{TemporalEnv: temporalEnv})
 
 			var siteURL *url.URL
 			if raw := c.String("site-url"); raw != "" {
@@ -720,6 +788,12 @@ func newStreamsCommand() *cli.Command {
 				}
 				if err := growthSignalHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("report growth activity: %w", err))
+				}
+				if err := approvalSlackHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("send approval requests to Slack: %w", err))
+				}
+				if err := accessRequestSlackHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("send access requests to Slack: %w", err))
 				}
 				return errors.Join(handlerErrors...)
 			})
@@ -813,7 +887,7 @@ func newStreamsCommand() *cli.Command {
 				})
 				mustReceive(rg, &roledistributionv1.RoleDistributionSetupRequestedV1{}, &roledistributionv1.RoleDistributionSetupHandler{}, streams.HandlerFunc[*roledistributionv1.RoleDistributionSetupRequestedV1](roleDistributionHandler.HandleRoleDistributionSetupRequested))
 				if c.Bool(pluginPublicationConsumeFlagName) {
-					publicationHandler := plugins.NewPublicationHandler(logger, db, (&background.TemporalPluginPublisher{TemporalEnv: temporalEnv}).SignalPluginPublish)
+					publicationHandler := plugins.NewPublicationHandler(logger, db, &background.TemporalPluginPublisher{TemporalEnv: temporalEnv})
 					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)
 					settings := gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0}
 					mustReceiveBatchWithResult(rg, &pluginsv1.PublicationRequested{}, &pluginsv1.PublicationScheduler{}, publicationHandler, settings)
@@ -824,9 +898,21 @@ func newStreamsCommand() *cli.Command {
 					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 
+				if c.Bool("pystreams-stub") {
+					// Stand in for pystreams. Running both would split each
+					// subscription's messages between real and stubbed consumers.
+					logger.WarnContext(ctx, "pystreams stubbed: Presidio scans are skipped")
+					mustReceive(rg, &pingv2.Message{}, &pingv2.PyProcessor{}, new(subscribers.NoopHandler[*pingv2.Message]))
+					mustReceive(rg, &riskv1.PresidioAnalysis{}, &riskv1.PresidioAnalyzer{}, new(subscribers.NoopHandler[*riskv1.PresidioAnalysis]))
+					mustReceive(rg, &riskv1.PresidioEnforcement{}, &riskv1.PresidioEnforcer{}, presidiostub.NewEnforceHandler(logger, replyWriter))
+				}
+
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
 				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, llmanalyzer.WithRiskRecorder(riskRecorder)))
+				mustReceive(rg, &riskv1.PromptInjectionEnforcement{}, &riskv1.PromptInjectionEnforcer{}, promptInjectionEnforceHandler)
+				mustReceive(rg, &riskv1.CustomRulesEnforcement{}, &riskv1.CustomRulesEnforcer{}, customRulesEnforceHandler)
+				mustReceive(rg, &riskv1.PromptPolicyEnforcement{}, &riskv1.PromptPolicyEnforcer{}, promptPolicyEnforceHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
@@ -902,7 +988,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.AgentEventSpanCHWriter{}, otelsvc.NewAgentEventSpanCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				if enableCHRiskWrites {
-					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter, builtinPresets, risk.NewOutboxRiskFindingCreatedEmitter(logger, db, featureFlags)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter, builtinPresets, risk.NewOutboxRiskFindingCreatedEmitter(db)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 			}
 

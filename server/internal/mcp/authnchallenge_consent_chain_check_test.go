@@ -45,7 +45,11 @@ func chainCheckResult(t *testing.T, w *httptest.ResponseRecorder) map[string]str
 	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Len(t, body, 2, "only status and message leave the server")
+	extra := 0
+	if _, ok := body["action"]; ok {
+		extra = 1
+	}
+	require.Len(t, body, 2+extra, "only status, message and an offered action leave the server")
 	return body
 }
 
@@ -105,7 +109,7 @@ func TestConsentChainCheck_RejectionsAreGeneric(t *testing.T) {
 		body := chainCheckResult(t, w)
 		require.Equal(t, "rejected", body["status"], tc.reason)
 		require.Contains(t, body["message"], tc.want, tc.reason)
-		require.Contains(t, body["message"], "use a separate sign-in", tc.reason)
+		require.Contains(t, body["message"], "use your own ", tc.reason)
 		require.NotContains(t, body["message"], string(tc.reason), "provider codes stay in logs")
 	}
 }
@@ -158,8 +162,8 @@ func TestConsentChainCheck_RejectsBadRequests(t *testing.T) {
 		edit func(url.Values)
 		code oops.Code
 	}{
-		{"bad csrf", func(f url.Values) { f.Set("csrf_token", "forged") }, oops.CodeUnauthorized},
-		{"unknown state", func(f url.Values) { f.Set("state", uuid.NewString()) }, oops.CodeUnauthorized},
+		{"bad csrf", func(f url.Values) { f.Set("csrf_token", "forged") }, oops.CodeBadRequest},
+		{"unknown state", func(f url.Values) { f.Set("state", uuid.NewString()) }, oops.CodeBadRequest},
 		{"malformed client", func(f url.Values) { f.Set("client_id", "nope") }, oops.CodeBadRequest},
 		{"foreign client", func(f url.Values) { f.Set("client_id", uuid.NewString()) }, oops.CodeBadRequest},
 	} {
@@ -181,7 +185,7 @@ func TestConsentChainCheck_UnresolvedSubjectIsRejected(t *testing.T) {
 	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 
 	_, err = postChainCheck(t, fx, func(f url.Values) { f.Set("state", state.ID) })
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestConsentChainCheck_UnchainedServiceIsRejected(t *testing.T) {
@@ -217,7 +221,7 @@ func TestConsentPage_CachedChainedCredentialRendersConnected(t *testing.T) {
 	require.Contains(t, page, "Service connected through your identity provider")
 	require.Contains(t, page, `data-chain-check="connected"`)
 	require.Contains(t, page, "1 of 1 connected")
-	require.Contains(t, page, "Use a separate sign-in instead")
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
 	require.Empty(t, g.acquired, "rendering reads stored credentials only")
 }
 
@@ -235,8 +239,8 @@ func TestConsentChainCheck_UnknownAllowsAuthorizationWithoutPersonalOAuth(t *tes
 	require.Equal(t, http.StatusOK, code)
 	require.Nil(t, redirect, "must not redirect to personal upstream OAuth")
 	require.Contains(t, page, `data-consent-enabled="true"`)
-	require.Contains(t, page, "Use a separate sign-in instead")
-	require.NotContains(t, page, "Connect a service above to enable access.")
+	require.Contains(t, page, "data-connect-fallback > Use your own account </button>")
+	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

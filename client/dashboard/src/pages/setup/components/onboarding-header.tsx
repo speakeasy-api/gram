@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { GramLogo } from "@/components/gram-logo";
 import { cn } from "@/lib/utils";
@@ -7,11 +8,13 @@ import { showPylonChat } from "@/lib/pylon";
 import { SETUP_CONTAINER } from "./setup-container";
 
 interface OnboardingHeaderProps {
+  homeHref: string;
   onLeave?: () => void;
   children?: ReactNode;
 }
 
 export function OnboardingHeader({
+  homeHref,
   onLeave,
   children,
 }: OnboardingHeaderProps): JSX.Element {
@@ -24,7 +27,13 @@ export function OnboardingHeader({
         )}
       >
         <div className="flex items-center gap-3">
-          <GramLogo variant="horizontal" className="w-32" />
+          <Link
+            to={homeHref}
+            aria-label="Speakeasy home"
+            className="flex items-center hover:no-underline"
+          >
+            <GramLogo variant="horizontal" className="w-32" />
+          </Link>
           <div className="bg-border hidden h-5 w-px sm:block" />
           <span className="text-foreground hidden text-sm font-medium sm:block">
             Setup organization

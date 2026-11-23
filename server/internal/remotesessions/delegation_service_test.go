@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/delegation"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -28,14 +29,16 @@ var DelegationTestDatabase testenv.PostgresDBCloneFunc
 type delegationAdapterFixture struct {
 	db              *pgxpool.Pool
 	enc             *encryption.Client
+	tokens          *upstreamtokens.Tokens
 	now             func() time.Time
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)
 	refreshIdentity func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error)
+	refreshPaused   func(context.Context, *FederatedProvider) bool
 }
 
 func (s *delegationAdapterFixture) service() *DelegationService {
-	return &DelegationService{service: delegation.New(s.db, s.enc, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, func() time.Time { return s.now() }))}
+	return &DelegationService{service: delegation.New(s.db, s.tokens, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, s.refreshPaused, func() time.Time { return s.now() }))}
 }
 func (s *delegationAdapterFixture) RetainVerifiedLogin(ctx context.Context, p *FederatedProvider, human string, i *FederatedIdentity, requested bool) error {
 	return s.service().RetainVerifiedLogin(ctx, p, human, i, requested)
@@ -88,13 +91,14 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	require.NoError(t, fixtures.SeedDelegationLoaderClientFixture(ctx, testrepo.SeedDelegationLoaderClientFixtureParams{
 		ID: b.ClientID, OrganizationID: b.OrganizationID, RemoteSessionIssuerID: b.IssuerID, ClientID: "test-client", Scope: nil,
 	}))
-	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
-	_, err = db.Exec(ctx, `INSERT INTO user_session_issuers (organization_id,slug,authn_challenge_mode,session_duration,trusted_remote_session_issuer_id,trusted_remote_session_client_id) VALUES ($1,'delegation-adapter','interactive',interval '1 hour',$2,$3)`, b.OrganizationID, b.IssuerID, b.ClientID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedDelegationUserSessionIssuerFixture(ctx, testrepo.SeedDelegationUserSessionIssuerFixtureParams{
+		OrganizationID: pgtype.Text{String: b.OrganizationID, Valid: true}, Slug: "delegation-adapter",
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: b.IssuerID, Valid: true}, TrustedRemoteSessionClientID: uuid.NullUUID{UUID: b.ClientID, Valid: true},
+	}))
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
 	require.NoError(t, err)
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	s := &delegationAdapterFixture{db: db, enc: enc, now: func() time.Time { return now }}
+	s := &delegationAdapterFixture{db: db, enc: enc, tokens: upstreamtokens.WithoutOrganizationEncryption(testenv.NewLogger(t), db, enc), now: func() time.Time { return now }}
 	s.loadProvider = func(_ context.Context, org string, issuer, client uuid.UUID) (*FederatedProvider, error) {
 		if org != p.organizationID || issuer != p.issuer.ID || client != p.client.ID {
 			return nil, ErrFederatedConfiguration
@@ -105,6 +109,7 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	s.refreshIdentity = func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error) {
 		return nil, errors.New("unexpected refresh")
 	}
+	s.refreshPaused = func(context.Context, *FederatedProvider) bool { return false }
 	allow := delegationTestAuthority(func(_ context.Context, got DelegationBinding) error {
 		if got != b {
 			return errors.New("not authorized")
@@ -129,4 +134,30 @@ func delegationPlain(t *testing.T, s *delegationAdapterFixture, ciphertext strin
 	plain, err := s.decrypt(ciphertext)
 	require.NoError(t, err)
 	return plain
+}
+
+func TestDelegationRetentionStoresSealedSecrets(t *testing.T) {
+	t.Parallel()
+	s, _, p, b, _ := newDelegationUnitFixture(t)
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "secret-id", "secret-refresh", time.Hour), true))
+
+	row, err := repo.New(s.db).GetTrustedDelegationCredential(t.Context(), repo.GetTrustedDelegationCredentialParams{OrganizationID: b.OrganizationID, ClientID: b.ClientID, IssuerID: b.IssuerID, SubjectUrn: urn.NewUserSubject(b.HumanID).String()})
+	require.NoError(t, err)
+	for _, value := range []struct {
+		name          string
+		platform, org pgtype.Text
+		plain         string
+	}{
+		{name: "identity assertion", platform: row.IdentityAssertionEncrypted, org: row.IdentityAssertionOrgEncrypted, plain: "secret-id"},
+		{name: "refresh token", platform: row.RefreshTokenEncrypted, org: row.RefreshTokenOrgEncrypted, plain: "secret-refresh"},
+		{name: "upstream subject", platform: row.UpstreamSubjectEncrypted, org: row.UpstreamSubjectOrgEncrypted, plain: "secret-subject"},
+		{name: "nonce", platform: row.NonceEncrypted, org: row.NonceOrgEncrypted, plain: "secret-nonce"},
+	} {
+		require.True(t, value.platform.Valid, value.name)
+		require.NotContains(t, value.platform.String, value.plain, "%s is stored sealed", value.name)
+		opened, err := s.enc.Decrypt(value.platform.String)
+		require.NoError(t, err, value.name)
+		require.Equal(t, value.plain, opened, value.name)
+		require.False(t, value.org.Valid, "%s: an organization in platform_key stores no organization-key copy", value.name)
+	}
 }

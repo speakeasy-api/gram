@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { isKnownEnumValue } from "@/lib/enum";
 import {
   WindowKind,
@@ -26,7 +27,7 @@ import {
 } from "@/components/ui/Sheet";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
-import { Archive, Check, Loader2, Search, Users } from "lucide-react";
+import { Archive, Check, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import {
   WINDOW_LABELS,
@@ -420,7 +421,10 @@ function RuleForm({
                   : "Usage preview unavailable"}
             </Text>
             {(previewLoading || attributesLoading) && (
-              <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
+              <Spinner
+                label="Loading usage preview"
+                className="text-muted-foreground mr-0 size-3.5"
+              />
             )}
           </div>
           {!preview ? (

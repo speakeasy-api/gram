@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	ActionSlackDirectoryConnectionAuthorize  Action = "slack-directory-connection:authorize"
-	ActionSlackDirectoryConnectionDisconnect Action = "slack-directory-connection:disconnect"
-	ActionSlackDirectoryConnectionSync       Action = "slack-directory-connection:sync"
+	ActionSlackDirectoryConnectionAuthorize      Action = "slack-directory-connection:authorize"
+	ActionSlackDirectoryConnectionDisconnect     Action = "slack-directory-connection:disconnect"
+	ActionSlackDirectoryConnectionSync           Action = "slack-directory-connection:sync"
+	ActionSlackDirectoryConnectionDefaultProject Action = "slack-directory-connection:set-default-project"
 )
 
 type LogSlackDirectoryConnectionEvent struct {
@@ -31,6 +32,10 @@ func (l *Logger) LogSlackDirectoryConnectionAuthorize(ctx context.Context, dbtx 
 }
 func (l *Logger) LogSlackDirectoryConnectionDisconnect(ctx context.Context, dbtx repo.DBTX, event LogSlackDirectoryConnectionEvent) error {
 	return l.logSlackDirectoryConnection(ctx, dbtx, ActionSlackDirectoryConnectionDisconnect, event, nil)
+}
+
+func (l *Logger) LogSlackDirectoryConnectionDefaultProject(ctx context.Context, dbtx repo.DBTX, event LogSlackDirectoryConnectionEvent) error {
+	return l.logSlackDirectoryConnection(ctx, dbtx, ActionSlackDirectoryConnectionDefaultProject, event, nil)
 }
 
 type SlackDirectorySyncSummary struct {
@@ -56,6 +61,7 @@ func (l *Logger) logSlackDirectoryConnection(ctx context.Context, dbtx repo.DBTX
 		return fmt.Errorf("marshal Slack sync summary: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(action), SubjectID: event.ConnectionURN.ID.String(), SubjectType: string(subjectTypeSlackDirectoryConnection), SubjectDisplayName: conv.ToPGTextEmpty(event.ConnectionSnapshotAfter.WorkspaceName), SubjectSlug: conv.ToPGTextEmpty(""),

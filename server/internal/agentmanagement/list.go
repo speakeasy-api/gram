@@ -11,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -31,9 +32,10 @@ const (
 	maxAgentRowsScanned = 20_000
 )
 
-// List uses the same independent grant-or-ownership decisions as selected-agent
-// reads. Runtime eligibility is not a management filter: suspended and revoked
-// agents must remain visible so humans can inspect and manage them.
+// List uses live read grants or ownership for visibility. Scope overrides narrow
+// the returned management permissions, without hiding agents from the roster.
+// Runtime eligibility is not a management filter: suspended and revoked agents
+// remain visible so humans can inspect and manage them.
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListAgentsResult, error) {
 	human, err := s.authorizer.RequireHuman(ctx, s.db)
 	if err != nil {
@@ -54,6 +56,15 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	// whole of its sort. The cursor is keyed to it: a page taken in one
 	// direction cannot be resumed in the other.
 	descending := payload != nil && payload.NameOrder == "desc"
+
+	var projectID uuid.NullUUID
+	if payload != nil && payload.ProjectID != nil {
+		id, err := uuid.Parse(*payload.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid project_id")
+		}
+		projectID = uuid.NullUUID{UUID: id, Valid: true}
+	}
 
 	search := pgtype.Text{String: "", Valid: false}
 	if payload != nil && payload.Search != nil {
@@ -116,6 +127,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	for len(readable) <= limit {
 		rows, err := queries.ListManagedAgents(ctx, repo.ListManagedAgentsParams{
 			OrganizationID:   human.Auth.ActiveOrganizationID,
+			ProjectID:        projectID,
 			Search:           search,
 			Lifecycles:       lifecycles,
 			OwnerUserIds:     owners,
@@ -139,7 +151,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			if err != nil {
 				return nil, s.serviceError(ctx, err, "evaluate agent permissions")
 			}
-			if !permissions.Read {
+			if !ownsUnblockedAgent(human, agent) && !authz.GrantsSatisfy(human.grants, agentCheck(authz.AgentRef.Read, agent.ID)) {
 				continue
 			}
 			readable = append(readable, agent)
@@ -198,6 +210,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	items := make([]*gen.ManagedAgent, 0, len(readable))
 	for _, agent := range readable {
 		items = append(items, managedAgentView(agent, permissionsByID[agent.ID.String()], ownerProfiles[agent.OwnerUserID]))
+	}
+	if err := s.addConnectionHealth(ctx, s.db, human.Auth.ActiveOrganizationID, items); err != nil {
+		return nil, s.serviceError(ctx, err, "load agent connection health")
 	}
 	return &gen.ListAgentsResult{Items: items, NextCursor: nextCursor}, nil
 }

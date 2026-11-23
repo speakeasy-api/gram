@@ -112,7 +112,7 @@ var ManagedDevice = Type("ManagedDevice", func() {
 	Attribute("mdm_last_check_in_at", String, "Last device check-in as reported by the MDM.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("agent_last_seen_at", String, "The device-agent heartbeat that classified this device: the machine's own under device-level matching, otherwise its assigned user's. Omitted when no agent has ever synced.", func() {
+	Attribute("agent_last_seen_at", String, "The latest sign of life that classified this device, a policy poll or a state report: the machine's own under device-level matching, otherwise its assigned user's. Omitted when no agent has ever synced.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("coverage_bucket", String, "Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.", func() {
@@ -121,12 +121,78 @@ var ManagedDevice = Type("ManagedDevice", func() {
 	Attribute("missing_since", String, "When the device went absent from the MDM inventory. Omitted while present.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("policy_state", String, policyStateDescription, func() {
+		Enum(policyStates...)
+	})
+	Attribute("agent_state", ManagedDeviceAgentState, "The latest state report that classified this device. Omitted when its agent has never reported.")
 	Attribute("first_seen_at", String, func() {
 		Format(FormatDateTime)
 	})
 	Attribute("last_seen_at", String, func() {
 		Format(FormatDateTime)
 	})
+})
+
+// policyStates refine agent_active by what the device's agent reports it
+// enforces (ADR-0029 in the device agent). They never apply to another bucket.
+var policyStates = []any{"attested", "outdated", "unreported", "halted"}
+
+const policyStateDescription = "Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket."
+
+// Shared by both coverage reads so the SDK generates one attestation enum.
+const coverageAttestationDescription = "The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. \"device\": every active device was matched on its own hardware serial, so each one ran the agent. \"user\": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere."
+
+var ManagedDeviceAgentState = Type("ManagedDeviceAgentState", func() {
+	Description("What a device's agent last reported it enforces. Carries no error text or user-facing message.")
+	Required("reported_at", "attestation", "enforcement_halted", "current_blocked", "tools")
+	Attribute("reported_at", String, "When the control plane received the report.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("attestation", String, "device when this machine's own agent sent the report, matched by serial. user when the assigned user's agent sent it, which may run on another machine.", func() {
+		Enum("device", "user")
+	})
+	Attribute("applied_etag", String, "Etag of the policy the agent last applied.")
+	Attribute("applied_at", String, "When the agent first applied that etag.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("enforcement_halted", Boolean, "True when the kill switch has halted policy enforcement.")
+	Attribute("current_blocked", Boolean, "True when the agent build is in blocked_versions.")
+	Attribute("speakeasyd_version", String, "Version of the speakeasyd daemon.")
+	Attribute("speakeasy_version", String, "Version of the speakeasy CLI.")
+	Attribute("speakeasy_ui_version", String, "Version of the menu bar app.")
+	Attribute("os", String, "Operating system, e.g. darwin.")
+	Attribute("arch", String, "CPU architecture, e.g. arm64.")
+	Attribute("tools", ArrayOf(ManagedDeviceTool), "Each managed tool's outcome from the agent's last reconcile.")
+	Attribute("drift_counting_since", String, "Start of the window tools[].drift_corrections counts over. Omitted when no tool measures drift.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("auto_update", String, "Resolved update mode: automatic, notify, or disabled.")
+	Attribute("update_channel", String, "Update channel the agent follows, e.g. stable.")
+	Attribute("pinned_target", String, "Version the organization pinned the fleet to, when set.")
+	Attribute("last_rollback", ManagedDeviceRollback, "The agent's most recent self-rollback after a failed update.")
+})
+
+var ManagedDeviceRollback = Type("ManagedDeviceRollback", func() {
+	Description("A self-rollback: the updated build failed to start, so the agent restored the previous one.")
+	Required("at")
+	Attribute("at", String, "When the rollback happened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("from", String, "Version the agent rolled back from.")
+	Attribute("to", String, "Version the agent rolled back to.")
+})
+
+var ManagedDeviceTool = Type("ManagedDeviceTool", func() {
+	Description("One managed tool's enforcement state on a device.")
+	Required("tool", "layer", "outcome", "restart_required", "action_required")
+	Attribute("tool", String, "Stable tool id, e.g. claude_code.")
+	Attribute("layer", String, "Enforcement layer: user, managed, off, or unknown.")
+	Attribute("outcome", String, "Reconcile outcome: armed, pending, skipped (tool not installed), error, unmanaged, or unknown.")
+	Attribute("pending_reason", String, "Why a pending tool is not enforcing yet: privileged_writer_not_ready, plugin_bundle_not_cloned, or unknown.")
+	Attribute("error_kind", String, "Class of a reconcile error: permission_denied, not_found, invalid_config, or unknown.")
+	Attribute("restart_required", Boolean, "True when the tool loads the agent's changes only after it restarts.")
+	Attribute("action_required", Boolean, "True when a problem the user can fix is blocking this tool.")
+	Attribute("drift_corrections", Int, "Times the agent restored what it owns in this tool since drift_counting_since. Omitted when not measured.")
 })
 
 var ListManagedDevicesResult = Type("ListManagedDevicesResult", func() {
@@ -137,18 +203,18 @@ var ListManagedDevicesResult = Type("ListManagedDevicesResult", func() {
 
 var Coverage = Type("DeviceIntegrationCoverage", func() {
 	Description("Agent-coverage summary across the org's connected MDM inventories. What a bucket attests depends on the org's matching mode: under device-level matching (hardware serial) agent_active means THIS machine reported in, while under user-level matching it means only that the device's assigned user has a fresh heartbeat somewhere.")
-	Required("organization_id", "active_window_minutes", "attestation", "agent_active", "agent_active_device_attested", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing", "total_devices", "unmanaged_agent_users")
+	Required("organization_id", "active_window_minutes", "attestation", "agent_active", "agent_active_device_attested", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing", "total_devices", "unmanaged_agent_users", "policy_attested", "policy_outdated", "policy_unreported", "enforcement_halted")
 	Attribute("organization_id", String, "Organization the coverage describes.")
 	Attribute("active_window_minutes", Int, "Freshness window: an agent counts as active when its heartbeat is within this many minutes.")
 	// Clients render the coverage percentage as a sentence, and the sentence
 	// that is true depends on the matching mode. Without this they would have
 	// to infer it (agent_other_device > 0 only implies device-level, never
 	// rules it out) and would eventually claim more than the data supports.
-	Attribute("attestation", String, "The strongest claim that holds for EVERY active device in this response — not merely the org's matching mode. \"device\": every active device was matched on its own hardware serial, so each one ran the agent. \"user\": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.", func() {
+	Attribute("attestation", String, coverageAttestationDescription, func() {
 		Enum("device", "user")
 	})
-	Attribute("agent_active", Int64, "Devices with an agent heartbeat within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.")
-	Attribute("agent_active_device_attested", Int64, "How many of agent_active are backed by that machine's OWN heartbeat (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.")
+	Attribute("agent_active", Int64, "Devices with an agent heartbeat or state report within the window. What that attests depends on the matching mode and, per device, on whether the match was by serial or by email — compare against agent_active_device_attested.")
+	Attribute("agent_active_device_attested", Int64, "How many of agent_active are backed by that machine's OWN heartbeat or state report (serial match). Under user-level matching this is 0; under device-level matching a value below agent_active means some devices fell back to the assigned-user email, which is the weaker claim.")
 	Attribute("agent_stale", Int64, "Devices with a known agent that went quiet — the drift/disable case.")
 	Attribute("agent_other_device", Int64, "Device-level matching only: devices whose assigned user runs the agent, but not on this machine. Always 0 under user-level matching, which cannot distinguish this from agent_active.")
 	Attribute("no_agent", Int64, "Devices whose assigned email resolves to an org member with no agent at all.")
@@ -157,6 +223,80 @@ var Coverage = Type("DeviceIntegrationCoverage", func() {
 	Attribute("missing", Int64, "Devices absent from the latest completed MDM snapshot.")
 	Attribute("total_devices", Int64, "All synced devices, including missing ones.")
 	Attribute("unmanaged_agent_users", Int64, "Agent users with no matching device in any connected MDM inventory — shadow devices or fleets outside MDM.")
+	// The four policy counts partition agent_active, so they sum to it.
+	Attribute("policy_attested", Int64, "agent_active devices whose latest report applies the policy last served to the reporting user.")
+	Attribute("policy_outdated", Int64, "agent_active devices that report a different policy, or none.")
+	Attribute("policy_unreported", Int64, "agent_active devices with no state report within the window, typically an agent that predates reporting.")
+	Attribute("enforcement_halted", Int64, "agent_active devices whose latest state report says the kill switch halted enforcement, because the reporting agent's build was blocked when it reported.")
+})
+
+var FleetDevice = Type("FleetDevice", func() {
+	Description("One device the organization can see: a device from a connected MDM's inventory, or a machine running the Speakeasy device agent that no connected inventory holds. MDM devices carry the same coverage bucket as listManagedDevices; agent-only devices are only ever agent_active or agent_stale, classified by their own heartbeat and state reports.")
+	Required("id", "in_inventory", "coverage_bucket", "first_seen_at", "last_seen_at")
+	Attribute("id", String, "Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an agent-only machine.")
+	Attribute("in_inventory", Boolean, "True when a connected MDM's inventory holds this device. False for a machine only its agent reports.")
+	Attribute("provider", String, "Provider the device was synced from. Omitted for an agent-only machine.")
+	Attribute("external_id", String, "The MDM's identifier for the device. Omitted for an agent-only machine.")
+	Attribute("serial_number", String, "Hardware serial number, from the MDM or the agent. Omitted when neither reported one.")
+	Attribute("hostname", String, "Device hostname, from the MDM or the agent.")
+	Attribute("os_name", String, "Operating system name as the MDM reports it. Omitted for an agent-only machine; agent_state.os carries the agent's.")
+	Attribute("os_version", String, "Operating system version as the MDM reports it. Omitted for an agent-only machine.")
+	Attribute("user_email", String, "The MDM's assigned user, or for an agent-only machine the user its agent runs as.")
+	Attribute("user_id", String, "Resolved Speakeasy user for user_email. Omitted when it does not resolve to an org member.")
+	Attribute("mdm_last_check_in_at", String, "Last device check-in as reported by the MDM.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("agent_last_seen_at", String, "The latest sign of life that classified this device, a policy poll or a state report. Omitted when no agent has ever synced.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("coverage_bucket", String, "Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.", func() {
+		Enum("agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing")
+	})
+	Attribute("missing_since", String, "When the device went absent from the MDM inventory. Omitted while present, and for an agent-only machine.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("policy_state", String, policyStateDescription, func() {
+		Enum(policyStates...)
+	})
+	Attribute("agent_state", ManagedDeviceAgentState, "The latest state report that classified this device. Omitted when its agent has never reported.")
+	Attribute("first_seen_at", String, "When the MDM or the agent first reported this device.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen_at", String, "When the MDM or the agent last reported this device.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListFleetDevicesResult = Type("ListFleetDevicesResult", func() {
+	Required("devices")
+	Attribute("devices", ArrayOf(FleetDevice), "Devices, newest first.")
+	Attribute("next_cursor", String, "Cursor for the next page. Omitted on the last page.")
+})
+
+var FleetCoverage = Type("FleetCoverage", func() {
+	Description("Agent coverage and policy enforcement across every device the organization can see: its MDM inventories plus the agent machines no inventory holds. Works with no MDM connected, when every device is an agent-only machine.")
+	Required("organization_id", "active_window_minutes", "mdm_connected", "attestation", "agent_active", "agent_active_device_attested", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing", "agent_only_devices", "total_devices", "policy_attested", "policy_outdated", "policy_unreported", "enforcement_halted")
+	Attribute("organization_id", String, "Organization the coverage describes.")
+	Attribute("active_window_minutes", Int, "Freshness window: an agent counts as active when its heartbeat or state report is within this many minutes.")
+	Attribute("mdm_connected", Boolean, "True when the organization has a connected MDM integration (the one named by provider, when set). Without one, the gap buckets are always 0 because nothing lists the devices that lack the agent.")
+	Attribute("attestation", String, coverageAttestationDescription, func() {
+		Enum("device", "user")
+	})
+	Attribute("agent_active", Int64, "Devices with an agent heartbeat or state report within the window, agent-only machines included.")
+	Attribute("agent_active_device_attested", Int64, "How many of agent_active are backed by that machine's own heartbeat or state report.")
+	Attribute("agent_stale", Int64, "Devices with a known agent that went quiet.")
+	Attribute("agent_other_device", Int64, "MDM devices whose assigned user runs the agent, but not on this machine. Device-level matching only.")
+	Attribute("no_agent", Int64, "MDM devices whose assigned email resolves to an org member with no agent at all.")
+	Attribute("no_email", Int64, "MDM devices with no assigned-user email.")
+	Attribute("unresolved_email", Int64, "MDM devices whose assigned email matches neither an agent user nor an org member.")
+	Attribute("missing", Int64, "MDM devices absent from the latest completed inventory snapshot.")
+	Attribute("agent_only_devices", Int64, "Machines running the agent that no connected MDM inventory holds. Always 0 when provider is set.")
+	Attribute("total_devices", Int64, "Every device counted here, missing and agent-only ones included.")
+	// The four policy counts partition agent_active, so they sum to it.
+	Attribute("policy_attested", Int64, "agent_active devices whose latest report applies the policy last served to the reporting user.")
+	Attribute("policy_outdated", Int64, "agent_active devices that report a different policy, or none.")
+	Attribute("policy_unreported", Int64, "agent_active devices with no state report within the window.")
+	Attribute("enforcement_halted", Int64, "agent_active devices whose latest state report says the kill switch halted enforcement.")
 })
 
 var _ = Service("deviceIntegrations", func() {
@@ -417,6 +557,9 @@ var _ = Service("deviceIntegrations", func() {
 			Attribute("coverage_bucket", String, "Only devices in this coverage bucket.", func() {
 				Enum("agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing")
 			})
+			Attribute("policy_state", String, "Only agent_active devices in this policy state.", func() {
+				Enum(policyStates...)
+			})
 			Attribute("user_ids", ArrayOf(String), "Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.")
 			Attribute("user_emails", ArrayOf(String), "Only devices whose MDM-reported assigned email is one of these, matched case-insensitively.")
 			Attribute("cursor", String, "Pagination cursor from a previous page.")
@@ -433,6 +576,7 @@ var _ = Service("deviceIntegrations", func() {
 			GET("/rpc/deviceIntegrations.listManagedDevices")
 			Param("provider")
 			Param("coverage_bucket")
+			Param("policy_state")
 			Param("user_ids")
 			Param("user_emails")
 			Param("cursor")
@@ -475,5 +619,86 @@ var _ = Service("deviceIntegrations", func() {
 		Meta("openapi:operationId", "getDeviceIntegrationCoverage")
 		Meta("openapi:extension:x-speakeasy-name-override", "getCoverage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeviceIntegrationCoverage"}`)
+	})
+
+	Method("listFleetDevices", func() {
+		Description("Page through every device the org can see, newest first: its connected MDM inventories plus the machines running the agent that no inventory holds, each with its coverage bucket and policy state.")
+
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			Attribute("provider", String, "Only devices synced from this provider. Excludes agent-only machines.")
+			Attribute("in_inventory", Boolean, "true for devices a connected MDM holds, false for agent-only machines.")
+			Attribute("coverage_bucket", String, "Only devices in this coverage bucket.", func() {
+				Enum("agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing")
+			})
+			Attribute("policy_state", String, "Only agent_active devices in this policy state.", func() {
+				Enum(policyStates...)
+			})
+			Attribute("user_ids", ArrayOf(String), "Only devices of these Speakeasy users. Combined with user_emails as an OR.")
+			Attribute("user_emails", ArrayOf(String), "Only devices whose user_email is one of these, matched case-insensitively.")
+			Attribute("cursor", String, "Pagination cursor from a previous page.")
+			Attribute("limit", Int, "Page size. Defaults to 50, maximum 200.", func() {
+				Minimum(1)
+				Maximum(200)
+				Default(50)
+			})
+		})
+
+		Result(ListFleetDevicesResult)
+
+		HTTP(func() {
+			GET("/rpc/deviceIntegrations.listFleetDevices")
+			Param("provider")
+			Param("in_inventory")
+			Param("coverage_bucket")
+			Param("policy_state")
+			Param("user_ids")
+			Param("user_emails")
+			Param("cursor")
+			Param("limit")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listFleetDevices")
+		Meta("openapi:extension:x-speakeasy-name-override", "listFleetDevices")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FleetDevices"}`)
+	})
+
+	Method("getFleetCoverage", func() {
+		Description("Summarize agent coverage and policy enforcement across every device the org can see, with or without a connected MDM, optionally scoped to one provider's inventory.")
+
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			Attribute("provider", String, "Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.")
+		})
+
+		Result(FleetCoverage)
+
+		HTTP(func() {
+			GET("/rpc/deviceIntegrations.getFleetCoverage")
+			Param("provider")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getFleetCoverage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getFleetCoverage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FleetCoverage"}`)
 	})
 })

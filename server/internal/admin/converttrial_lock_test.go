@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -218,7 +219,10 @@ func TestMarkEnterpriseTrialConverted_CancellationDuringPostCommitCacheRefreshDo
 		require.FailNow(t, "conversion never attempted its post-commit cache refresh")
 	}
 	select {
-	case <-converted:
+	case callErr := <-converted:
+		if callErr != nil {
+			require.ErrorIs(t, callErr, context.Canceled)
+		}
 	case <-time.After(3 * time.Second):
 		require.FailNow(t, "conversion did not return after request cancellation")
 	}
@@ -269,7 +273,10 @@ func TestMarkEnterpriseTrialConverted_RetryCancellationDuringCacheRefreshDoesNot
 		require.FailNow(t, "conversion retry never attempted its cache refresh")
 	}
 	select {
-	case <-retried:
+	case callErr := <-retried:
+		if callErr != nil {
+			require.ErrorIs(t, callErr, context.Canceled)
+		}
 	case <-time.After(3 * time.Second):
 		require.FailNow(t, "conversion retry did not return after request cancellation")
 	}
@@ -330,7 +337,7 @@ func TestMarkEnterpriseTrialConverted_MissingKeyWaitsForProvisioningAndReReads(t
 	}
 
 	key := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
-	floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
+	floor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, orgID, "enterprise", false)
 	require.True(t, ok)
 	require.GreaterOrEqual(t, key.MonthlyCredits, int64(floor), "conversion must re-read and promote the newly provisioned key")
 }

@@ -17,12 +17,12 @@ import {
   Wrench,
 } from "lucide-react";
 
+import type { ImageMessagePartProps } from "@assistant-ui/react";
 import {
   ActionBarPrimitive,
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
-  ImageMessagePartProps,
   MessagePrimitive,
   TextMessagePartProvider,
   ThreadPrimitive,

@@ -5,6 +5,12 @@ info:
   description: Internal operations API for the Acme demo organization.
 servers:
   - url: https://api.internal.acme.example
+# Callers authenticate with an OAuth token from the API's own authorization
+# server (the demo MCP fixture's; the seed fills in the deployment's URL) or
+# an API key. The OpenAPI Server uses the OAuth one.
+security:
+  - oauth: []
+  - apiKey: []
 paths:
   /logs/search:
     get:
@@ -92,3 +98,18 @@ paths:
       summary: Check service health
       responses:
         "200": { description: Health status }
+components:
+  securitySchemes:
+    oauth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://speakeasy.example.com/rpc/demoseed/oauth/authorize
+          tokenUrl: https://speakeasy.example.com/rpc/demoseed/oauth/token
+          scopes:
+            notes:read: Read notes
+            notes:write: Write notes
+    apiKey:
+      type: apiKey
+      in: header
+      name: Authorization

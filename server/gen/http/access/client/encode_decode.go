@@ -4264,6 +4264,237 @@ func DecodeListScopesResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildListAgentPolicyScopesRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listAgentPolicyScopes"
+// endpoint
+func (c *Client) BuildListAgentPolicyScopesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAgentPolicyScopesAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listAgentPolicyScopes", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAgentPolicyScopesRequest returns an encoder for requests sent to
+// the access listAgentPolicyScopes server.
+func EncodeListAgentPolicyScopesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListAgentPolicyScopesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listAgentPolicyScopes", "*access.ListAgentPolicyScopesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListAgentPolicyScopesResponse returns a decoder for responses returned
+// by the access listAgentPolicyScopes endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListAgentPolicyScopesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAgentPolicyScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAgentPolicyScopesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			res := NewListAgentPolicyScopesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAgentPolicyScopesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAgentPolicyScopesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAgentPolicyScopesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAgentPolicyScopesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAgentPolicyScopesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAgentPolicyScopesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAgentPolicyScopesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAgentPolicyScopesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+				}
+				err = ValidateListAgentPolicyScopesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+				}
+				return nil, NewListAgentPolicyScopesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAgentPolicyScopesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+				}
+				err = ValidateListAgentPolicyScopesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+				}
+				return nil, NewListAgentPolicyScopesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listAgentPolicyScopes", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAgentPolicyScopesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listAgentPolicyScopes", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListMembersRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "listMembers" endpoint
 func (c *Client) BuildListMembersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -5443,6 +5674,243 @@ func DecodeGetShadowMCPInventoryServerResponse(decoder func(*http.Response) goah
 	}
 }
 
+// BuildFindShadowMCPInventoryServersRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "findShadowMCPInventoryServers" endpoint
+func (c *Client) BuildFindShadowMCPInventoryServersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FindShadowMCPInventoryServersAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "findShadowMCPInventoryServers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeFindShadowMCPInventoryServersRequest returns an encoder for requests
+// sent to the access findShadowMCPInventoryServers server.
+func EncodeFindShadowMCPInventoryServersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.FindShadowMCPInventoryServersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "findShadowMCPInventoryServers", "*access.FindShadowMCPInventoryServersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("project_id", p.ProjectID)
+		for _, value := range p.ServerUrls {
+			values.Add("server_urls", value)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeFindShadowMCPInventoryServersResponse returns a decoder for responses
+// returned by the access findShadowMCPInventoryServers endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeFindShadowMCPInventoryServersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeFindShadowMCPInventoryServersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body FindShadowMCPInventoryServersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			res := NewFindShadowMCPInventoryServersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body FindShadowMCPInventoryServersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body FindShadowMCPInventoryServersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body FindShadowMCPInventoryServersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body FindShadowMCPInventoryServersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body FindShadowMCPInventoryServersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body FindShadowMCPInventoryServersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body FindShadowMCPInventoryServersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body FindShadowMCPInventoryServersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+				}
+				err = ValidateFindShadowMCPInventoryServersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+				}
+				return nil, NewFindShadowMCPInventoryServersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body FindShadowMCPInventoryServersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+				}
+				err = ValidateFindShadowMCPInventoryServersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+				}
+				return nil, NewFindShadowMCPInventoryServersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "findShadowMCPInventoryServers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body FindShadowMCPInventoryServersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "findShadowMCPInventoryServers", err)
+			}
+			err = ValidateFindShadowMCPInventoryServersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "findShadowMCPInventoryServers", err)
+			}
+			return nil, NewFindShadowMCPInventoryServersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "findShadowMCPInventoryServers", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildUpdateShadowMCPInventoryServerNameRequest instantiates a HTTP request
 // object with method and path set to call the "access" service
 // "updateShadowMCPInventoryServerName" endpoint
@@ -5663,6 +6131,228 @@ func DecodeUpdateShadowMCPInventoryServerNameResponse(decoder func(*http.Respons
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("access", "updateShadowMCPInventoryServerName", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetShadowMCPOfficialServerRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "setShadowMCPOfficialServer" endpoint
+func (c *Client) BuildSetShadowMCPOfficialServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetShadowMCPOfficialServerAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "setShadowMCPOfficialServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetShadowMCPOfficialServerRequest returns an encoder for requests sent
+// to the access setShadowMCPOfficialServer server.
+func EncodeSetShadowMCPOfficialServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.SetShadowMCPOfficialServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "setShadowMCPOfficialServer", "*access.SetShadowMCPOfficialServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetShadowMCPOfficialServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "setShadowMCPOfficialServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetShadowMCPOfficialServerResponse returns a decoder for responses
+// returned by the access setShadowMCPOfficialServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetShadowMCPOfficialServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetShadowMCPOfficialServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetShadowMCPOfficialServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetShadowMCPOfficialServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetShadowMCPOfficialServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetShadowMCPOfficialServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetShadowMCPOfficialServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetShadowMCPOfficialServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetShadowMCPOfficialServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetShadowMCPOfficialServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+				}
+				err = ValidateSetShadowMCPOfficialServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+				}
+				return nil, NewSetShadowMCPOfficialServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetShadowMCPOfficialServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+				}
+				err = ValidateSetShadowMCPOfficialServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+				}
+				return nil, NewSetShadowMCPOfficialServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "setShadowMCPOfficialServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetShadowMCPOfficialServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setShadowMCPOfficialServer", err)
+			}
+			err = ValidateSetShadowMCPOfficialServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setShadowMCPOfficialServer", err)
+			}
+			return nil, NewSetShadowMCPOfficialServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "setShadowMCPOfficialServer", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -8561,6 +9251,9 @@ func EncodeListChallengesRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.Scope != nil {
 			values.Add("scope", *p.Scope)
 		}
+		for _, value := range p.ExcludeScopes {
+			values.Add("exclude_scopes", value)
+		}
 		if p.ProjectID != nil {
 			values.Add("project_id", *p.ProjectID)
 		}
@@ -9508,6 +10201,1653 @@ func DecodeListIdentityAccessResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildCreateTemporaryGrantRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "createTemporaryGrant"
+// endpoint
+func (c *Client) BuildCreateTemporaryGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateTemporaryGrantAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "createTemporaryGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateTemporaryGrantRequest returns an encoder for requests sent to
+// the access createTemporaryGrant server.
+func EncodeCreateTemporaryGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.CreateTemporaryGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "createTemporaryGrant", "*access.CreateTemporaryGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewCreateTemporaryGrantRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "createTemporaryGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateTemporaryGrantResponse returns a decoder for responses returned
+// by the access createTemporaryGrant endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeCreateTemporaryGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateTemporaryGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateTemporaryGrantResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			res := NewCreateTemporaryGrantTemporaryGrantOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateTemporaryGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateTemporaryGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateTemporaryGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateTemporaryGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateTemporaryGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateTemporaryGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateTemporaryGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateTemporaryGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+				}
+				err = ValidateCreateTemporaryGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+				}
+				return nil, NewCreateTemporaryGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateTemporaryGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+				}
+				err = ValidateCreateTemporaryGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+				}
+				return nil, NewCreateTemporaryGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "createTemporaryGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateTemporaryGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "createTemporaryGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListTemporaryGrantsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listTemporaryGrants"
+// endpoint
+func (c *Client) BuildListTemporaryGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTemporaryGrantsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listTemporaryGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTemporaryGrantsRequest returns an encoder for requests sent to the
+// access listTemporaryGrants server.
+func EncodeListTemporaryGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListTemporaryGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listTemporaryGrants", "*access.ListTemporaryGrantsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("principal_urn", p.PrincipalUrn)
+		values.Add("include_expired", fmt.Sprintf("%v", p.IncludeExpired))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListTemporaryGrantsResponse returns a decoder for responses returned
+// by the access listTemporaryGrants endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListTemporaryGrantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTemporaryGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTemporaryGrantsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			res := NewListTemporaryGrantsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTemporaryGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTemporaryGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTemporaryGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTemporaryGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTemporaryGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTemporaryGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTemporaryGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTemporaryGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+				}
+				err = ValidateListTemporaryGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+				}
+				return nil, NewListTemporaryGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTemporaryGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+				}
+				err = ValidateListTemporaryGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+				}
+				return nil, NewListTemporaryGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listTemporaryGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTemporaryGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listTemporaryGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRenewTemporaryGrantRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "renewTemporaryGrant"
+// endpoint
+func (c *Client) BuildRenewTemporaryGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RenewTemporaryGrantAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "renewTemporaryGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRenewTemporaryGrantRequest returns an encoder for requests sent to the
+// access renewTemporaryGrant server.
+func EncodeRenewTemporaryGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.RenewTemporaryGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "renewTemporaryGrant", "*access.RenewTemporaryGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRenewTemporaryGrantRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "renewTemporaryGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRenewTemporaryGrantResponse returns a decoder for responses returned
+// by the access renewTemporaryGrant endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRenewTemporaryGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRenewTemporaryGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RenewTemporaryGrantResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			res := NewRenewTemporaryGrantTemporaryGrantOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RenewTemporaryGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RenewTemporaryGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RenewTemporaryGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RenewTemporaryGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RenewTemporaryGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RenewTemporaryGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RenewTemporaryGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RenewTemporaryGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+				}
+				err = ValidateRenewTemporaryGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+				}
+				return nil, NewRenewTemporaryGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RenewTemporaryGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+				}
+				err = ValidateRenewTemporaryGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+				}
+				return nil, NewRenewTemporaryGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "renewTemporaryGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RenewTemporaryGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "renewTemporaryGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRevokeTemporaryGrantRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "revokeTemporaryGrant"
+// endpoint
+func (c *Client) BuildRevokeTemporaryGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeTemporaryGrantAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "revokeTemporaryGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRevokeTemporaryGrantRequest returns an encoder for requests sent to
+// the access revokeTemporaryGrant server.
+func EncodeRevokeTemporaryGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.RevokeTemporaryGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "revokeTemporaryGrant", "*access.RevokeTemporaryGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRevokeTemporaryGrantRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "revokeTemporaryGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRevokeTemporaryGrantResponse returns a decoder for responses returned
+// by the access revokeTemporaryGrant endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeRevokeTemporaryGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRevokeTemporaryGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RevokeTemporaryGrantResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			res := NewRevokeTemporaryGrantTemporaryGrantOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RevokeTemporaryGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RevokeTemporaryGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RevokeTemporaryGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RevokeTemporaryGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RevokeTemporaryGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RevokeTemporaryGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RevokeTemporaryGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RevokeTemporaryGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+				}
+				err = ValidateRevokeTemporaryGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+				}
+				return nil, NewRevokeTemporaryGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RevokeTemporaryGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+				}
+				err = ValidateRevokeTemporaryGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+				}
+				return nil, NewRevokeTemporaryGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "revokeTemporaryGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RevokeTemporaryGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "revokeTemporaryGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListAccessRequestsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listAccessRequests"
+// endpoint
+func (c *Client) BuildListAccessRequestsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAccessRequestsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listAccessRequests", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAccessRequestsRequest returns an encoder for requests sent to the
+// access listAccessRequests server.
+func EncodeListAccessRequestsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListAccessRequestsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listAccessRequests", "*access.ListAccessRequestsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.Status != nil {
+			values.Add("status", *p.Status)
+		}
+		values.Add("mine", fmt.Sprintf("%v", p.Mine))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListAccessRequestsResponse returns a decoder for responses returned by
+// the access listAccessRequests endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListAccessRequestsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAccessRequestsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAccessRequestsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			res := NewListAccessRequestsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAccessRequestsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			return nil, NewListAccessRequestsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAccessRequestsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			return nil, NewListAccessRequestsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAccessRequestsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			return nil, NewListAccessRequestsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAccessRequestsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			return nil, NewListAccessRequestsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAccessRequestsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			return nil, NewListAccessRequestsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAccessRequestsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			return nil, NewListAccessRequestsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAccessRequestsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			return nil, NewListAccessRequestsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAccessRequestsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+				}
+				err = ValidateListAccessRequestsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+				}
+				return nil, NewListAccessRequestsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAccessRequestsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+				}
+				err = ValidateListAccessRequestsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+				}
+				return nil, NewListAccessRequestsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listAccessRequests", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAccessRequestsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAccessRequests", err)
+			}
+			err = ValidateListAccessRequestsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAccessRequests", err)
+			}
+			return nil, NewListAccessRequestsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listAccessRequests", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDecideAccessRequestRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "decideAccessRequest"
+// endpoint
+func (c *Client) BuildDecideAccessRequestRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DecideAccessRequestAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "decideAccessRequest", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDecideAccessRequestRequest returns an encoder for requests sent to the
+// access decideAccessRequest server.
+func EncodeDecideAccessRequestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.DecideAccessRequestPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "decideAccessRequest", "*access.DecideAccessRequestPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewDecideAccessRequestRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "decideAccessRequest", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDecideAccessRequestResponse returns a decoder for responses returned
+// by the access decideAccessRequest endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDecideAccessRequestResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDecideAccessRequestResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DecideAccessRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			res := NewDecideAccessRequestAccessRequestOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DecideAccessRequestUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			return nil, NewDecideAccessRequestUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DecideAccessRequestForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			return nil, NewDecideAccessRequestForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DecideAccessRequestBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			return nil, NewDecideAccessRequestBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DecideAccessRequestNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			return nil, NewDecideAccessRequestNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DecideAccessRequestConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			return nil, NewDecideAccessRequestConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DecideAccessRequestUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			return nil, NewDecideAccessRequestUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DecideAccessRequestInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			return nil, NewDecideAccessRequestInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DecideAccessRequestInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+				}
+				err = ValidateDecideAccessRequestInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+				}
+				return nil, NewDecideAccessRequestInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DecideAccessRequestUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+				}
+				err = ValidateDecideAccessRequestUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+				}
+				return nil, NewDecideAccessRequestUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "decideAccessRequest", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DecideAccessRequestGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "decideAccessRequest", err)
+			}
+			err = ValidateDecideAccessRequestGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "decideAccessRequest", err)
+			}
+			return nil, NewDecideAccessRequestGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "decideAccessRequest", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildWithdrawAccessRequestRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "withdrawAccessRequest"
+// endpoint
+func (c *Client) BuildWithdrawAccessRequestRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: WithdrawAccessRequestAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "withdrawAccessRequest", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeWithdrawAccessRequestRequest returns an encoder for requests sent to
+// the access withdrawAccessRequest server.
+func EncodeWithdrawAccessRequestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.WithdrawAccessRequestPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "withdrawAccessRequest", "*access.WithdrawAccessRequestPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewWithdrawAccessRequestRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "withdrawAccessRequest", err)
+		}
+		return nil
+	}
+}
+
+// DecodeWithdrawAccessRequestResponse returns a decoder for responses returned
+// by the access withdrawAccessRequest endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeWithdrawAccessRequestResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeWithdrawAccessRequestResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body WithdrawAccessRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			res := NewWithdrawAccessRequestAccessRequestOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body WithdrawAccessRequestUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			return nil, NewWithdrawAccessRequestUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body WithdrawAccessRequestForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			return nil, NewWithdrawAccessRequestForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body WithdrawAccessRequestBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			return nil, NewWithdrawAccessRequestBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body WithdrawAccessRequestNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			return nil, NewWithdrawAccessRequestNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body WithdrawAccessRequestConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			return nil, NewWithdrawAccessRequestConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body WithdrawAccessRequestUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			return nil, NewWithdrawAccessRequestUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body WithdrawAccessRequestInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			return nil, NewWithdrawAccessRequestInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body WithdrawAccessRequestInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+				}
+				err = ValidateWithdrawAccessRequestInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+				}
+				return nil, NewWithdrawAccessRequestInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body WithdrawAccessRequestUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+				}
+				err = ValidateWithdrawAccessRequestUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+				}
+				return nil, NewWithdrawAccessRequestUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "withdrawAccessRequest", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body WithdrawAccessRequestGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "withdrawAccessRequest", err)
+			}
+			err = ValidateWithdrawAccessRequestGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "withdrawAccessRequest", err)
+			}
+			return nil, NewWithdrawAccessRequestGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "withdrawAccessRequest", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalRoleResponseBodyToAccessRole builds a value of type *access.Role
 // from a value of type *RoleResponseBody.
 func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
@@ -9567,12 +11907,15 @@ func unmarshalSelectorResponseBodyToAccessSelector(v *SelectorResponseBody) *acc
 		return nil
 	}
 	res := &access.Selector{
-		ResourceKind: *v.ResourceKind,
-		ResourceID:   *v.ResourceID,
-		Disposition:  v.Disposition,
-		Tool:         v.Tool,
-		ProjectID:    v.ProjectID,
-		ServerURL:    v.ServerURL,
+		ResourceKind:    *v.ResourceKind,
+		ResourceID:      *v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
 	}
 
 	return res
@@ -9605,12 +11948,15 @@ func marshalAccessSelectorToSelectorRequestBody(v *access.Selector) *SelectorReq
 		return nil
 	}
 	res := &SelectorRequestBody{
-		ResourceKind: v.ResourceKind,
-		ResourceID:   v.ResourceID,
-		Disposition:  v.Disposition,
-		Tool:         v.Tool,
-		ProjectID:    v.ProjectID,
-		ServerURL:    v.ServerURL,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
 	}
 
 	return res
@@ -9643,12 +11989,15 @@ func marshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *access.
 		return nil
 	}
 	res := &access.Selector{
-		ResourceKind: v.ResourceKind,
-		ResourceID:   v.ResourceID,
-		Disposition:  v.Disposition,
-		Tool:         v.Tool,
-		ProjectID:    v.ProjectID,
-		ServerURL:    v.ServerURL,
+		ResourceKind:    v.ResourceKind,
+		ResourceID:      v.ResourceID,
+		ClientType:      v.ClientType,
+		ConnectionOwner: v.ConnectionOwner,
+		UpstreamClient:  v.UpstreamClient,
+		Disposition:     v.Disposition,
+		Tool:            v.Tool,
+		ProjectID:       v.ProjectID,
+		ServerURL:       v.ServerURL,
 	}
 
 	return res
@@ -9981,12 +12330,36 @@ func unmarshalDirectoryReviewItemResponseBodyToAccessDirectoryReviewItem(v *Dire
 // *ScopeDefinitionResponseBody.
 func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinitionResponseBody) *access.ScopeDefinition {
 	res := &access.ScopeDefinition{
-		Slug:           *v.Slug,
-		Description:    *v.Description,
-		ResourceType:   *v.ResourceType,
-		Visibility:     *v.Visibility,
-		AgentEligible:  *v.AgentEligible,
-		ExclusionScope: v.ExclusionScope,
+		Slug:               *v.Slug,
+		Label:              *v.Label,
+		Description:        *v.Description,
+		ResourceType:       *v.ResourceType,
+		Category:           *v.Category,
+		Sensitive:          *v.Sensitive,
+		Sensitivity:        v.Sensitivity,
+		Visibility:         *v.Visibility,
+		AgentEligible:      *v.AgentEligible,
+		TemporaryGrantable: *v.TemporaryGrantable,
+		ExclusionScope:     v.ExclusionScope,
+	}
+	res.SubScopes = make([]string, len(v.SubScopes))
+	for i, val := range v.SubScopes {
+		res.SubScopes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalScopeTaskResponseBodyToAccessScopeTask builds a value of type
+// *access.ScopeTask from a value of type *ScopeTaskResponseBody.
+func unmarshalScopeTaskResponseBodyToAccessScopeTask(v *ScopeTaskResponseBody) *access.ScopeTask {
+	res := &access.ScopeTask{
+		Slug:  *v.Slug,
+		Label: *v.Label,
+	}
+	res.Scopes = make([]string, len(v.Scopes))
+	for i, val := range v.Scopes {
+		res.Scopes[i] = val
 	}
 
 	return res
@@ -10116,18 +12489,25 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 // *ShadowMCPInventoryServerResponseBody.
 func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServer(v *ShadowMCPInventoryServerResponseBody) *access.ShadowMCPInventoryServer {
 	res := &access.ShadowMCPInventoryServer{
-		CanonicalServerURL: *v.CanonicalServerURL,
-		ServerSlug:         *v.ServerSlug,
-		URLHost:            *v.URLHost,
-		TargetKind:         v.TargetKind,
-		ServerName:         v.ServerName,
-		FirstSeen:          *v.FirstSeen,
-		LastSeen:           *v.LastSeen,
-		LastCalled:         v.LastCalled,
-		ObservedUseCount:   *v.ObservedUseCount,
-		UserCount:          *v.UserCount,
-		Access:             *v.Access,
-		RequestCount:       *v.RequestCount,
+		CanonicalServerURL:     *v.CanonicalServerURL,
+		ServerSlug:             *v.ServerSlug,
+		URLHost:                *v.URLHost,
+		TargetKind:             v.TargetKind,
+		ServerName:             v.ServerName,
+		FirstSeen:              *v.FirstSeen,
+		LastSeen:               *v.LastSeen,
+		LastCalled:             v.LastCalled,
+		ObservedUseCount:       *v.ObservedUseCount,
+		UserCount:              *v.UserCount,
+		Access:                 *v.Access,
+		RequestCount:           *v.RequestCount,
+		OfficialServerDeclined: v.OfficialServerDeclined,
+	}
+	if v.BlockedCallCount != nil {
+		res.BlockedCallCount = *v.BlockedCallCount
+	}
+	if v.BlockedCallCount == nil {
+		res.BlockedCallCount = 0
 	}
 	res.TopUsers = make([]string, len(v.TopUsers))
 	for i, val := range v.TopUsers {
@@ -10149,6 +12529,12 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 	res.BlockedPolicyIds = make([]string, len(v.BlockedPolicyIds))
 	for i, val := range v.BlockedPolicyIds {
 		res.BlockedPolicyIds[i] = val
+	}
+	if v.OfficialServer != nil {
+		res.OfficialServer = unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(v.OfficialServer)
+	}
+	if v.SuggestedOfficialServer != nil {
+		res.SuggestedOfficialServer = unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSuggestedOfficialServer(v.SuggestedOfficialServer)
 	}
 
 	return res
@@ -10205,6 +12591,54 @@ func unmarshalShadowMCPInventoryApprovalRequestResponseBodyToAccessShadowMCPInve
 		RequesterCount:    *v.RequesterCount,
 		EvidenceChangedAt: v.EvidenceChangedAt,
 	}
+
+	return res
+}
+
+// unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer
+// builds a value of type *access.ShadowMCPOfficialServer from a value of type
+// *ShadowMCPOfficialServerResponseBody.
+func unmarshalShadowMCPOfficialServerResponseBodyToAccessShadowMCPOfficialServer(v *ShadowMCPOfficialServerResponseBody) *access.ShadowMCPOfficialServer {
+	if v == nil {
+		return nil
+	}
+	res := &access.ShadowMCPOfficialServer{
+		McpServerID:         *v.McpServerID,
+		Name:                *v.Name,
+		Slug:                v.Slug,
+		URL:                 v.URL,
+		GatewayName:         v.GatewayName,
+		Automatic:           v.Automatic,
+		DirectAccessAllowed: v.DirectAccessAllowed,
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSuggestedOfficialServer
+// builds a value of type *access.ShadowMCPSuggestedOfficialServer from a value
+// of type *ShadowMCPSuggestedOfficialServerResponseBody.
+func unmarshalShadowMCPSuggestedOfficialServerResponseBodyToAccessShadowMCPSuggestedOfficialServer(v *ShadowMCPSuggestedOfficialServerResponseBody) *access.ShadowMCPSuggestedOfficialServer {
+	if v == nil {
+		return nil
+	}
+	res := &access.ShadowMCPSuggestedOfficialServer{
+		McpServerID: *v.McpServerID,
+		Name:        *v.Name,
+		Slug:        v.Slug,
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPInventoryServerMatchResponseBodyToAccessShadowMCPInventoryServerMatch
+// builds a value of type *access.ShadowMCPInventoryServerMatch from a value of
+// type *ShadowMCPInventoryServerMatchResponseBody.
+func unmarshalShadowMCPInventoryServerMatchResponseBodyToAccessShadowMCPInventoryServerMatch(v *ShadowMCPInventoryServerMatchResponseBody) *access.ShadowMCPInventoryServerMatch {
+	res := &access.ShadowMCPInventoryServerMatch{
+		ServerURL: *v.ServerURL,
+	}
+	res.Server = unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServer(v.Server)
 
 	return res
 }
@@ -10513,6 +12947,76 @@ func unmarshalExplainedAccessDirectorySourceResponseBodyToAccessExplainedAccessD
 	return res
 }
 
+// unmarshalExplainedCredentialAccessResponseBodyToAccessExplainedCredentialAccess
+// builds a value of type *access.ExplainedCredentialAccess from a value of
+// type *ExplainedCredentialAccessResponseBody.
+func unmarshalExplainedCredentialAccessResponseBodyToAccessExplainedCredentialAccess(v *ExplainedCredentialAccessResponseBody) *access.ExplainedCredentialAccess {
+	res := &access.ExplainedCredentialAccess{
+		AuthClientID: *v.AuthClientID,
+		Name:         *v.Name,
+		ClientType:   *v.ClientType,
+		Enabled:      *v.Enabled,
+		Allowed:      *v.Allowed,
+	}
+	res.Rules = make([]*access.ExplainedCredentialRule, len(v.Rules))
+	for i, val := range v.Rules {
+		if val == nil {
+			res.Rules[i] = nil
+			continue
+		}
+		res.Rules[i] = unmarshalExplainedCredentialRuleResponseBodyToAccessExplainedCredentialRule(val)
+	}
+
+	return res
+}
+
+// unmarshalExplainedCredentialRuleResponseBodyToAccessExplainedCredentialRule
+// builds a value of type *access.ExplainedCredentialRule from a value of type
+// *ExplainedCredentialRuleResponseBody.
+func unmarshalExplainedCredentialRuleResponseBodyToAccessExplainedCredentialRule(v *ExplainedCredentialRuleResponseBody) *access.ExplainedCredentialRule {
+	res := &access.ExplainedCredentialRule{
+		PrincipalUrn:        *v.PrincipalUrn,
+		Kind:                *v.Kind,
+		DisplayName:         *v.DisplayName,
+		AppliesTo:           *v.AppliesTo,
+		ProjectBound:        v.ProjectBound,
+		Effect:              *v.Effect,
+		Reason:              v.Reason,
+		ViaDirectoryMapping: *v.ViaDirectoryMapping,
+	}
+
+	return res
+}
+
+// unmarshalAccessRequestResponseBodyToAccessAccessRequest builds a value of
+// type *access.AccessRequest from a value of type *AccessRequestResponseBody.
+func unmarshalAccessRequestResponseBodyToAccessAccessRequest(v *AccessRequestResponseBody) *access.AccessRequest {
+	if v == nil {
+		return nil
+	}
+	res := &access.AccessRequest{
+		ID:               *v.ID,
+		RequesterUserID:  *v.RequesterUserID,
+		RequesterName:    *v.RequesterName,
+		Scope:            *v.Scope,
+		ResourceName:     v.ResourceName,
+		Message:          v.Message,
+		Status:           *v.Status,
+		DecidedByUserID:  v.DecidedByUserID,
+		DecidedByName:    v.DecidedByName,
+		DecidedVia:       v.DecidedVia,
+		DecidedAt:        v.DecidedAt,
+		TemporaryGrantID: v.TemporaryGrantID,
+		GrantExpiresAt:   v.GrantExpiresAt,
+		ExpiresAt:        *v.ExpiresAt,
+		CreatedAt:        *v.CreatedAt,
+		UpdatedAt:        *v.UpdatedAt,
+	}
+	res.Selector = unmarshalSelectorResponseBodyToAccessSelector(v.Selector)
+
+	return res
+}
+
 // unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge builds a value of
 // type *access.AuthzChallenge from a value of type *AuthzChallengeResponseBody.
 func unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge(v *AuthzChallengeResponseBody) *access.AuthzChallenge {
@@ -10549,6 +13053,25 @@ func unmarshalAuthzChallengeResponseBodyToAccessAuthzChallenge(v *AuthzChallenge
 	res.RoleSlugs = make([]string, len(v.RoleSlugs))
 	for i, val := range v.RoleSlugs {
 		res.RoleSlugs[i] = val
+	}
+	if v.ResolutionTemporaryGrant != nil {
+		res.ResolutionTemporaryGrant = unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v.ResolutionTemporaryGrant)
+	}
+
+	return res
+}
+
+// unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant
+// builds a value of type *access.ChallengeTemporaryGrant from a value of type
+// *ChallengeTemporaryGrantResponseBody.
+func unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v *ChallengeTemporaryGrantResponseBody) *access.ChallengeTemporaryGrant {
+	if v == nil {
+		return nil
+	}
+	res := &access.ChallengeTemporaryGrant{
+		ID:        *v.ID,
+		Status:    *v.Status,
+		ExpiresAt: v.ExpiresAt,
 	}
 
 	return res
@@ -10589,6 +13112,9 @@ func unmarshalChallengeBucketResponseBodyToAccessChallengeBucket(v *ChallengeBuc
 	res.ChallengeIds = make([]string, len(v.ChallengeIds))
 	for i, val := range v.ChallengeIds {
 		res.ChallengeIds[i] = val
+	}
+	if v.ResolutionTemporaryGrant != nil {
+		res.ResolutionTemporaryGrant = unmarshalChallengeTemporaryGrantResponseBodyToAccessChallengeTemporaryGrant(v.ResolutionTemporaryGrant)
 	}
 
 	return res
@@ -10640,6 +13166,28 @@ func unmarshalAccessibleSkillResponseBodyToAccessAccessibleSkill(v *AccessibleSk
 		DisplayName: v.DisplayName,
 		ProjectID:   *v.ProjectID,
 		ProjectSlug: *v.ProjectSlug,
+	}
+
+	return res
+}
+
+// unmarshalTemporaryGrantResponseBodyToAccessTemporaryGrant builds a value of
+// type *access.TemporaryGrant from a value of type *TemporaryGrantResponseBody.
+func unmarshalTemporaryGrantResponseBodyToAccessTemporaryGrant(v *TemporaryGrantResponseBody) *access.TemporaryGrant {
+	res := &access.TemporaryGrant{
+		ID:               *v.ID,
+		PrincipalUrn:     *v.PrincipalUrn,
+		Scope:            *v.Scope,
+		ExpiresAt:        *v.ExpiresAt,
+		Status:           *v.Status,
+		RemainingSeconds: *v.RemainingSeconds,
+		CreatedAt:        *v.CreatedAt,
+		UpdatedAt:        *v.UpdatedAt,
+	}
+	res.Selector = unmarshalSelectorResponseBodyToAccessSelector(v.Selector)
+	res.OtherAccess = make([]string, len(v.OtherAccess))
+	for i, val := range v.OtherAccess {
+		res.OtherAccess[i] = val
 	}
 
 	return res

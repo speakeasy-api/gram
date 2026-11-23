@@ -50,24 +50,15 @@ export function LogsFacetRail({
   groups,
   onToggle,
   onClearGroup,
-  header,
   className,
 }: {
   groups: FacetGroup[];
   onToggle: (groupId: string, value: string, nextSelected: boolean) => void;
   onClearGroup: (groupId: string) => void;
-  /** Rendered above the groups — the window the facets narrow within. */
-  header?: ReactNode;
   className?: string;
 }): JSX.Element {
   return (
     <div className={cn("flex flex-col gap-0.5 overflow-y-auto", className)}>
-      {header && (
-        <div className="border-border/60 flex flex-col gap-2 border-b pb-3">
-          <span className="text-eyebrow">Time range</span>
-          {header}
-        </div>
-      )}
       {groups.map((group) => (
         <FacetSection
           key={group.id}

@@ -107,9 +107,9 @@ func Ceiling(organizationID string) []authz.Grant {
 	}
 }
 
-// EncodeCeiling encodes Ceiling with the current delegated policy version.
+// EncodeCeiling encodes Ceiling with the issued delegated policy version.
 func EncodeCeiling(organizationID string) ([]byte, int32, error) {
-	version := runtimepolicy.CurrentDelegatedPolicyVersion
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	policy, err := runtimepolicy.NewDelegatedPolicy(version, Ceiling(organizationID))
 	if err != nil {
 		return nil, 0, fmt.Errorf("build device-agent token policy: %w", err)

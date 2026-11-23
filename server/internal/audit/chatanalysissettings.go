@@ -49,6 +49,7 @@ func (l *Logger) LogChatAnalysisSettingsUpsert(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

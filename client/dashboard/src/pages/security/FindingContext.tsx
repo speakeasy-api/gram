@@ -1,3 +1,5 @@
+import { RiskContentNotice } from "./RiskContentNotice";
+import { useRiskContentRestricted } from "./use-risk-content-restricted";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
@@ -30,6 +32,7 @@ import {
   DRAWER_CELL_LABEL,
   DRAWER_FOOTNOTE,
   DrawerSection,
+  ChatReadAccess,
   NoRevealAccessNote,
   RevealFailedNote,
   RevealingNote,
@@ -40,7 +43,12 @@ import { redactionChipLabel } from "./payload-spans";
 import { RedactionChip, RevealedSpan } from "./risk-ui";
 import { SEVERITY_EDGE, SEVERITY_TEXT } from "./risk-severity";
 import type { SeverityRating } from "./risk-utils";
-import { TRANSCRIPT_DENIED_REASON, useUnmaskedMatch } from "./unmask";
+import { ActiveTemporaryAccess } from "@/components/temporary-access";
+import {
+  REVEAL_SCOPE,
+  TRANSCRIPT_DENIED_NOTE,
+  useUnmaskedMatch,
+} from "./unmask";
 
 // Same initial window the transcript sheet loads around risk findings.
 const CONTEXT_WINDOW_LIMIT = 200;
@@ -210,7 +218,7 @@ export function FindingContext({
   chatResults,
   chatResultsComplete,
   revealed,
-  canReveal,
+  canReveal: permittedToReveal,
   rating,
   onToggleReveal,
   onRequestReveal,
@@ -228,11 +236,13 @@ export function FindingContext({
   onToggleReveal: () => void;
   onRequestReveal: () => void;
 }): JSX.Element {
+  const restricted = useRiskContentRestricted();
+  const canReveal = permittedToReveal && !restricted;
   const chatId = result.chatId ?? "";
   const chatQuery = useLoadChat(
     { id: chatId, limit: CONTEXT_WINDOW_LIMIT, riskOnly: true },
     undefined,
-    { enabled: Boolean(chatId), throwOnError: false },
+    { enabled: Boolean(chatId) && !restricted, throwOnError: false },
   );
   // Each audited reveal is recorded against this finding; the transcript text
   // itself already follows transcript access.
@@ -319,7 +329,9 @@ export function FindingContext({
     chatQuery.error instanceof GramError && chatQuery.error.statusCode === 403;
 
   let body: ReactNode;
-  if (!chatId) {
+  if (restricted) {
+    body = <RiskContentNotice />;
+  } else if (!chatId) {
     body = (
       <p className="text-muted-foreground text-sm">
         This finding is not linked to a session.
@@ -337,9 +349,12 @@ export function FindingContext({
     );
   } else if (forbidden) {
     body = (
-      <p className="text-muted-foreground text-sm">
-        {TRANSCRIPT_DENIED_REASON}
-      </p>
+      <div className="flex flex-col items-start gap-3">
+        <p className="text-muted-foreground text-sm">
+          {TRANSCRIPT_DENIED_NOTE}
+        </p>
+        <ChatReadAccess chatId={chatId} />
+      </div>
     );
   } else if (chatQuery.isError) {
     body = (
@@ -430,8 +445,13 @@ export function FindingContext({
       {revealed && canReveal && auditedReveal && unmask.isError && (
         <RevealFailedNote onRetry={reveal} />
       )}
-      {maskable && !canReveal && <NoRevealAccessNote />}
-      {maskable && (
+      {maskable && !canReveal && !restricted && !forbidden && (
+        <NoRevealAccessNote chatId={chatId || undefined} />
+      )}
+      {canReveal && chatId && (
+        <ActiveTemporaryAccess scope={REVEAL_SCOPE} resourceId={chatId} />
+      )}
+      {maskable && !restricted && (
         <span className={DRAWER_FOOTNOTE}>
           Reveals are audited · Surrounding messages follow transcript access
         </span>

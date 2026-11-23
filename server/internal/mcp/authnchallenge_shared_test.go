@@ -17,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -97,8 +98,6 @@ func seedPublicServerOnIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 		Slug:                   slug,
 		Description:            conv.ToPGText("MCP server behind a shared authorization server"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(slug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 	createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, issuerID)
@@ -227,7 +226,7 @@ func TestSharedAuthorizationServer_ServesMetadataAtBothLocations(t *testing.T) {
 		require.Equal(t, f.issuerURL+"/token", meta["token_endpoint"])
 		require.Equal(t, f.issuerURL+"/register", meta["registration_endpoint"])
 		require.Equal(t, f.issuerURL+"/revoke", meta["revocation_endpoint"])
-		require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "client_credentials", "urn:ietf:params:oauth:grant-type:jwt-bearer"}, meta["grant_types_supported"])
+		require.ElementsMatch(t, []any{"authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"}, meta["grant_types_supported"])
 		require.Equal(t, true, meta["authorization_response_iss_parameter_supported"])
 	}
 }
@@ -442,6 +441,43 @@ func TestSharedAuthorizationServer_AuthorizeRefusesMissingOrForeignResource(t *t
 	}
 }
 
+func TestSharedAuthorizationServer_DashboardRefusalUsesCurrentCallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := seedSharedIssuer(t, ctx, ti)
+	const clientID = "speakeasy-dashboard-inspect"
+	const callback = "https://dashboard.example.test/inspect/oauth/callback"
+	const previousCallback = "https://previous.example.test/inspect/oauth/callback"
+	ti.service.SetPlatformHosts(map[string]string{"dashboard.example.test": "https://dashboard.example.test"})
+	var noText pgtype.Text
+	var noExpiry pgtype.Timestamptz
+	client, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     f.issuer.ID,
+		ClientID:                clientID,
+		ClientName:              "Dashboard Inspect test client",
+		RedirectUris:            []string{previousCallback},
+		TokenEndpointAuthMethod: "none",
+		ClientSecretHash:        noText, ClientSecretExpiresAt: noExpiry, ClientJwks: nil, ClientJwksUri: noText,
+	})
+	require.NoError(t, err)
+	f.client = client
+	challenge := pkceChallenge(pkceVerifier(t))
+
+	old := sharedAuthorize(t, ctx, ti, f, challenge)
+	require.Equal(t, http.StatusBadRequest, old.Code)
+	require.Equal(t, "invalid_target", oauthtest.RequireAuthorizationErrorPage(t, old, http.StatusBadRequest).Code)
+
+	f.client.RedirectUris = []string{callback}
+	current := sharedAuthorize(t, ctx, ti, f, challenge)
+	// The HTTPS callback is linked, not automatically followed before sign-in.
+	redirect := oauthtest.RequireAuthorizationErrorCallback(t, current, http.StatusBadRequest)
+	require.Equal(t, "invalid_target", redirect.Query().Get("error"))
+	require.Equal(t, "client-state", redirect.Query().Get("state"))
+	redirect.RawQuery = ""
+	require.Equal(t, callback, redirect.String())
+}
+
 func TestSharedAuthorizationServer_AuthorizeRendersRefusalForUnknownClient(t *testing.T) {
 	t.Parallel()
 
@@ -451,7 +487,7 @@ func TestSharedAuthorizationServer_AuthorizeRendersRefusalForUnknownClient(t *te
 
 	w := sharedAuthorize(t, ctx, ti, f, pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+	require.Equal(t, "invalid_target", oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusBadRequest).Code)
 }
 
 // A per-endpoint authorization server stays in service for the servers of a
@@ -489,7 +525,7 @@ func TestSharedAuthorizationServer_PerEndpointAuthorizationServerStillServes(t *
 
 	// Its challenge does not continue on the shared consent page.
 	err = ti.service.HandleSharedConsent(httptest.NewRecorder(), sharedRequest(ctx, http.MethodGet, "/oauth/usi/"+f.issuer.ID.String()+"/connect?state="+stored.ID, f.issuer.ID.String(), nil))
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 // A pinned issuer the deployment does not serve leaves the issuer's servers on
@@ -779,7 +815,7 @@ func TestSharedAuthorizationServer_ModeSwitchClosesInFlightFlows(t *testing.T) {
 	routeCtx.URLParams.Add("mcpSlug", f.slugA)
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
 	err = ti.service.HandleConsent(httptest.NewRecorder(), req)
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 // A remote session connect from the shared consent page returns there, while

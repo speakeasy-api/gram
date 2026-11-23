@@ -17,10 +17,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Check, ChevronsUpDown, Link, Plus, Unlink } from "lucide-react";
 import { useState } from "react";
-import {
-  EnvironmentVariable,
-  environmentHasAllRequiredVariables,
-} from "./environmentVariableUtils";
+import type { EnvironmentVariable } from "./environmentVariableUtils";
+import { environmentHasAllRequiredVariables } from "./environmentVariableUtils";
 
 interface Environment {
   id: string;
@@ -204,9 +202,7 @@ export function EnvironmentSwitcher({
 
             {/* Save button */}
             <Button onClick={onSaveAll} variant="primary" size="xs">
-              <Button.Text>
-                {hasExistingConfigs ? "Save" : "Save Configuration"}
-              </Button.Text>
+              <Button.Text>Save</Button.Text>
             </Button>
           </>
         ) : (

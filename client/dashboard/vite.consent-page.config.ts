@@ -4,8 +4,8 @@ import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 
 // Standalone stylesheet build for the server-rendered authorization pages (the
-// MCP consent page and the Platform MCP OAuth page). The
-// output is embedded in the Go server binary (go:embed), so it must land under
+// MCP consent page, the Platform MCP OAuth page and the shared authorization
+// error page). The output is embedded in the Go server binary (go:embed), so it must land under
 // deterministic names with no JS entry of its own.
 //
 // `base` makes Vite rewrite the @font-face urls to the absolute path the Go

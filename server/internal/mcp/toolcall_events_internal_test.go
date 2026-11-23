@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -20,7 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 // publishedToolCallRecord publishes record for call and returns what reached
@@ -104,6 +107,9 @@ func TestToolCallRecordIsASemconvToolCallUnderTheCallID(t *testing.T) {
 	require.False(t, recordHasAttribute(record, "gram.chat.id"), "an unknown value leaves its attribute off")
 	require.False(t, recordHasAttribute(record, "error.type"))
 	require.False(t, recordHasAttribute(record, "error.message"))
+	require.False(t, recordHasAttribute(record, "gram.authorization.actor.type"), "a person made the call, so no agent is named")
+	require.False(t, recordHasAttribute(record, "gram.authorization.actor.id"))
+	require.Equal(t, enrich.InternalProvenanceSource, record.GetProvenance().GetSource(), "Speakeasy emitted the record itself")
 	for _, kv := range record.GetAttributes() {
 		switch kv.GetKey() {
 		case "http.response.status_code":
@@ -115,6 +121,16 @@ func TestToolCallRecordIsASemconvToolCallUnderTheCallID(t *testing.T) {
 	require.True(t, recordHasAttribute(record, "gram.tool_call.duration"))
 }
 
+func TestToolCallRecordNamesTheAgentTheCallRanAs(t *testing.T) {
+	t.Parallel()
+
+	call := toolCall{id: "call-5", start: time.Unix(1_700_000_000, 0), organizationID: "org-1", projectID: "project-1", agentID: "agent-1"}
+
+	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusOK, false, nil))
+	require.Equal(t, "agent", recordStringAttribute(record, "gram.authorization.actor.type"))
+	require.Equal(t, "agent-1", recordStringAttribute(record, "gram.authorization.actor.id"))
+}
+
 func TestToolCallRecordCarriesTheGatewaysOwnFailure(t *testing.T) {
 	t.Parallel()
 
@@ -124,6 +140,39 @@ func TestToolCallRecordCarriesTheGatewaysOwnFailure(t *testing.T) {
 	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusForbidden, false, failure))
 	require.Equal(t, string(oops.CodeForbidden), recordStringAttribute(record, "error.type"))
 	require.Equal(t, "blocked by policy", recordStringAttribute(record, "error.message"), "the client's message, never the cause")
+}
+
+// A wrapped failure records its most specific client-safe message, never the
+// generic wrapper. The Tool logs row pins the same literal in
+// TestServePublic_MetaEndpoint_ExecuteDispatchFailureRowCarriesError.
+func TestToolCallRecordCarriesTheInnermostClientSafeMessage(t *testing.T) {
+	t.Parallel()
+
+	call := toolCall{id: "call-3", start: time.Unix(1_700_000_000, 0), organizationID: "org-1", projectID: "project-1"}
+	inner := oops.E(oops.CodeInvalid, errors.New("dial: no url"), "no server URL provided for tool")
+	failure := oops.E(oops.CodeInvalid, inner, "failed to execute tool call")
+
+	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusBadRequest, false, failure))
+	require.Equal(t, "no server URL provided for tool", recordStringAttribute(record, "error.message"))
+}
+
+func TestToolCallRecordNamesAShutdownInterrupt(t *testing.T) {
+	t.Parallel()
+
+	call := toolCall{id: "call-6", start: time.Unix(1_700_000_000, 0), organizationID: "org-1", projectID: "project-1"}
+	failure := oops.E(oops.CodeUnavailable, fmt.Errorf("%w: execute request: context canceled", shutdowndrain.ErrInterrupted), "interrupted by server shutdown")
+
+	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusServiceUnavailable, false, failure))
+	var statusCode int64
+	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == "http.response.status_code" {
+			statusCode = kv.GetValue().GetIntValue()
+		}
+	}
+	require.Equal(t, int64(http.StatusServiceUnavailable), statusCode)
+	require.Equal(t, string(oops.CodeUnavailable), recordStringAttribute(record, "error.type"))
+	require.Equal(t, "interrupted by server shutdown", recordStringAttribute(record, "error.message"))
+	require.Equal(t, "server_shutdown", recordStringAttribute(record, "gram.tool_call.interrupt_reason"), "a deploy, not the tool, ended the call")
 }
 
 func TestToolCallRecordFollowsAPassthroughResultsOwnVerdict(t *testing.T) {
@@ -170,27 +219,6 @@ func TestToolCallErrorTypeIsEmptyOnlyForASuccess(t *testing.T) {
 	require.Equal(t, "502", toolCallErrorType(http.StatusBadGateway, false, nil))
 	require.Equal(t, "tool_error", toolCallErrorType(http.StatusOK, true, nil))
 	require.Equal(t, string(oops.CodeUnexpected), toolCallErrorType(http.StatusInternalServerError, false, oops.E(oops.CodeUnexpected, nil, "boom")))
-}
-
-func TestToolCallOutcomeFollowsTheIsErrorRule(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, dialect.OutcomeOK, toolCallOutcome(http.StatusOK, false))
-	require.Equal(t, dialect.OutcomeOK, toolCallOutcome(http.StatusNoContent, false))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusBadRequest, false))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusBadGateway, false))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusFound, false), "a redirect is not a tool result, so the client sees isError and so does the row")
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusOK, true), "a passthrough result's own isError is the verdict the client reads")
-}
-
-func TestMCPResultIsErrorReadsOnlyAResultDocument(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, mcpResultIsError([]byte(`{"content":[{"type":"text","text":"boom"}],"isError":true}`)))
-	require.False(t, mcpResultIsError([]byte(`{"content":[{"type":"text","text":"ok"}]}`)))
-	require.False(t, mcpResultIsError([]byte(`{"content":[],"isError":false}`)))
-	require.False(t, mcpResultIsError([]byte(`not json`)))
-	require.False(t, mcpResultIsError(nil))
 }
 
 func TestToolCallCallerIsNamedOnlyInsideTheToolsOrganization(t *testing.T) {

@@ -37,12 +37,15 @@ func newApp() *cli.App {
 				Usage:   "Enable pretty logging",
 				EnvVars: []string{"GRAM_LOG_PRETTY"},
 			},
+			partitionCLIFlag(),
 		},
 		Commands: []*cli.Command{
 			newStartCommand(),
 			newMCPCommand(),
 			newNetworkIngressServerCommand(),
 			newNetingressAttestorCommand(),
+			newTailnetGatewayCommand(),
+			newNetingressLocalTokenCommand(),
 			newNetworkIngressWorkerCommand(),
 			newWorkerCommand(),
 			newAdminCommand(),
@@ -55,9 +58,15 @@ func newApp() *cli.App {
 			newAdminSeedCommand(),
 			newCustomerUsageSeedCommand(),
 			newAccountStateCommand(),
+			newCodeRuntimeSmokeCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {
+			p, err := partitionFromCLI(c)
+			if err != nil {
+				return err
+			}
+
 			c.Context = o11y.PushAppInfo(c.Context, &o11y.AppInfo{
 				Name:    "gram",
 				Command: "",
@@ -72,6 +81,12 @@ func newApp() *cli.App {
 				attr.SlogDataDogGitCommitSHA(GitSHA),
 				attr.SlogDataDogGitRepoURL("github.com/speakeasy-api/gram"),
 			)
+			// Help and version run without a partition; every other command
+			// has one and carries it on every log line.
+			if p != "" {
+				c.Context = PushPartition(c.Context, p)
+				logger = logger.With(attr.SlogPartition(p))
+			}
 
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
 			// Cgroups are Linux-only. Keep all real Linux errors visible.

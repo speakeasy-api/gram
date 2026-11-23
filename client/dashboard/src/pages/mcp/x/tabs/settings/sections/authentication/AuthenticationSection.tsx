@@ -1,11 +1,12 @@
 import { Badge } from "@/components/ui/Badge";
+import { GatewayAuthorizationServersField } from "@/pages/mcp/gateway/GatewayMemberSignInField";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
 } from "@/components/ui/Field";
-import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
@@ -28,6 +29,7 @@ import {
   useRemoteSessionIssuersByIds,
 } from "@/lib/remote-identity";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
+import { SetupStepBanner } from "./SetupStepBanner";
 
 export const MCP_AUTHENTICATION_SECTION_ID = "authentication";
 
@@ -65,9 +67,7 @@ export function AuthenticationSection({
   return (
     <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>
-          {isRemoteMcp ? "Identity" : "Authentication"}
-        </SettingsSection.Title>
+        <SettingsSection.Title>Sign-in method</SettingsSection.Title>
         <SettingsSection.Description>
           {authenticationSectionDescription(
             isUnproxied,
@@ -76,6 +76,7 @@ export function AuthenticationSection({
           )}
         </SettingsSection.Description>
       </SettingsSection.Header>
+      {isUnproxied ? null : <SetupStepBanner mcpServer={mcpServer} />}
       {isUnproxied ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
@@ -92,7 +93,7 @@ export function AuthenticationSection({
 function UnproxiedAuthenticationNotice(): JSX.Element {
   return (
     <Field>
-      <FieldLabel>Authentication</FieldLabel>
+      <FieldLabel>Sign-in</FieldLabel>
       <div>
         <Badge variant="success">Not applicable</Badge>
       </div>
@@ -165,6 +166,12 @@ function StandardAuthenticationSectionBody({
     { enabled: issuerConfigured },
   );
 
+  const gatewayId = target.attachImpactTarget.metaMcpServerId;
+  const linkedClientIds = useMemo(
+    () => new Set(allClients.map((client) => client.id)),
+    [allClients],
+  );
+
   const attachedIssuerIds = useMemo(
     () => [
       ...new Set(allClients.map((client) => client.remoteSessionIssuerId)),
@@ -221,22 +228,40 @@ function StandardAuthenticationSectionBody({
   } else {
     authenticationFields = (
       <>
-        <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
         <SharedAuthorizationServerField
           userSessionIssuer={userSessionIssuer}
           mcpUrl={target.mcpUrl}
         />
-        <RemoteIdentityProvidersField
-          associatedIssuers={associatedIssuers}
-          allowAdditionalProviders={!!target.multipleProviders}
-          projectId={target.projectId}
-          isLoading={isLoadingClients || isLoadingAssociatedIssuers}
-          isError={isClientsError || isAssociatedIssuersError}
-          onAdd={() => setSheetOpen(true)}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          readOnly={userSessionIssuer.projectId === ""}
-        />
+        {gatewayId ? (
+          <GatewayAuthorizationServersField
+            metaMcpServerId={gatewayId}
+            userSessionIssuerId={userSessionIssuer.id}
+            linkedClientIds={linkedClientIds}
+            associatedIssuers={associatedIssuers}
+            allowAdditionalProviders={!!target.multipleProviders}
+            projectId={target.projectId}
+            isLoading={isLoadingClients || isLoadingAssociatedIssuers}
+            isError={isClientsError || isAssociatedIssuersError}
+            onAdd={() => setSheetOpen(true)}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            readOnly={userSessionIssuer.projectId === ""}
+          />
+        ) : (
+          <RemoteIdentityProvidersField
+            associatedIssuers={associatedIssuers}
+            allowAdditionalProviders={!!target.multipleProviders}
+            projectId={target.projectId}
+            isLoading={isLoadingClients || isLoadingAssociatedIssuers}
+            isError={isClientsError || isAssociatedIssuersError}
+            onAdd={() => setSheetOpen(true)}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            readOnly={userSessionIssuer.projectId === ""}
+          />
+        )}
+        {/* Last: its footer Save closes the panel. */}
+        <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
       </>
     );
   }
@@ -271,6 +296,7 @@ function StandardAuthenticationSectionBody({
           onOpenChange={setDeleteOpen}
           userSessionIssuerId={userSessionIssuerId}
           issuer={deleteTarget}
+          mcpServerId={target.mcpServerId}
         />
       )}
 
@@ -316,20 +342,17 @@ function IdentityProviderSetupField({
 
 function AuthenticationLoadingField() {
   return (
-    <AuthRow label="Authentication">
-      <Text muted small>
-        Loading…
-      </Text>
+    <AuthRow label="Sign-in">
+      <Skeleton label="Loading sign-in settings" className="h-5 w-48" />
     </AuthRow>
   );
 }
 
 function AuthenticationLoadErrorField() {
   return (
-    <AuthRow label="Authentication">
+    <AuthRow label="Sign-in">
       <FieldError>
-        Failed to load the authentication configuration. Refresh the page to try
-        again.
+        Failed to load the sign-in settings. Refresh the page to try again.
       </FieldError>
     </AuthRow>
   );

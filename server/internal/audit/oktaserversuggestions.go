@@ -58,6 +58,7 @@ func (l *Logger) logOktaServerSuggestion(ctx context.Context, dbtx repo.DBTX, ac
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

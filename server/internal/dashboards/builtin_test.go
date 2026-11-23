@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/dashboards"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
@@ -92,11 +93,37 @@ func TestMCPToolsCards(t *testing.T) {
 	}, names)
 
 	views := builtInViews()
-	require.Len(t, views, 1)
+	require.Len(t, views, 2)
 	require.Equal(t, "mcp-tools", views[0].Slug)
 	require.Len(t, views[0].Cards, len(mcpTools.Cards))
 	require.Equal(t, "number", views[0].Cards[0].Visualization["type"])
 	require.Equal(t, "7d", views[0].Cards[0].Query["window"])
 	require.Nil(t, views[0].Cards[0].Description, "a card with nothing more to say has no description")
 	require.NotNil(t, views[0].Cards[1].Description)
+}
+
+// The Security & risk page's cards, in order, and the one dataset they all
+// ask: it is the dataset's admin-only rule that hides the page from members.
+func TestSecurityRiskCards(t *testing.T) {
+	t.Parallel()
+	names := make([]string, 0, len(securityRisk.Cards))
+	for _, card := range securityRisk.Cards {
+		names = append(names, card.Name)
+		require.Equal(t, "risk_findings", card.Dataset, card.Name)
+		require.NotContains(t, string(card.Query), `"ungrouped":true`, "%s: the dataset answers aggregates only", card.Name)
+	}
+	require.Equal(t, []string{
+		"Findings",
+		"High and critical",
+		"People affected",
+		"Findings over time",
+		"Top rules",
+		"Findings by agent",
+		"People with the most findings",
+		"Findings by policy",
+	}, names)
+
+	checks := securityRisk.accessChecks(analytics.Default, "org-1")
+	require.Equal(t, []authz.Check{{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: "org-1", Dimensions: nil}}, checks, "one check however many cards ask the dataset")
+	require.Empty(t, mcpTools.accessChecks(analytics.Default, "org-1"), "MCP & Tools is for anyone who can read the project")
 }

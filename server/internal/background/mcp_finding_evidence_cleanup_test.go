@@ -135,7 +135,7 @@ func TestCleanupMCPEvidenceReportsPayloadFailure(t *testing.T) {
 
 func TestMCPFindingEvidenceCleanupRunTimeout(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, 40*time.Minute, mcpFindingEvidenceCleanupRunTimeout())
+	require.Equal(t, 40*time.Minute, mcpFindingEvidenceCleanup.runTimeout())
 }
 
 func TestMCPFindingEvidenceCleanupSchedule(t *testing.T) {

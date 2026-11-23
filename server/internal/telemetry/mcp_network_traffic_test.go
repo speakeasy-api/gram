@@ -10,7 +10,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -33,7 +32,7 @@ func logNetworkRequest(t *testing.T, ctx context.Context, ti *testInstance, proj
 		},
 		UserInfo: telemetry.UserInfoByID(""),
 		Attributes: telemetry.HTTPLogAttributes{
-			attr.EventURNKey:       mcp.MCPNetworkRequestEventURN,
+			attr.EventURNKey:       telemetry.MCPNetworkRequestEventURN,
 			attr.NetworkSurfaceKey: surface,
 			serverKey:              serverID,
 		},

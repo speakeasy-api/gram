@@ -35,8 +35,10 @@ import {
 
 const POLICY_ACTION_MESSAGE_FIELD_ID = "policy-action-message";
 
+// An approval policy shows the agent how to request approval, not a message
+// of its own.
 const POLICY_ACTION_MESSAGE: Record<
-  Exclude<PolicyAction, "flag">,
+  Exclude<PolicyAction, "flag" | "require_approval">,
   { label: string; description: string; placeholder: string }
 > = {
   warn: {
@@ -235,6 +237,7 @@ export function PolicyHeader({
     label: kindLabel,
     placeholder,
     createHint,
+    inactiveNote,
   } = POLICY_EDITOR_KIND_META[kind];
   const isCreate = policy === null;
   const routes = useRoutes();
@@ -308,9 +311,7 @@ export function PolicyHeader({
         {policy ? (
           <Text small muted>
             Version {policy.version} · {kindLabel}
-            {policy.enabled
-              ? null
-              : " · Inactive — new messages are not scanned"}
+            {policy.enabled ? null : ` · Inactive: ${inactiveNote}`}
           </Text>
         ) : (
           <Text small muted>
@@ -502,7 +503,7 @@ export function ActionStep({
             selectedAudiencePrincipalUrns={audiencePrincipalUrns}
             setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
           />
-          {action !== "flag" && (
+          {action !== "flag" && action !== "require_approval" && (
             <ActionMessageField
               action={action}
               userMessage={userMessage}
@@ -524,7 +525,7 @@ export function ActionMessageField({
   label = POLICY_ACTION_MESSAGE[action].label,
   description = POLICY_ACTION_MESSAGE[action].description,
 }: {
-  action: Exclude<PolicyAction, "flag">;
+  action: Exclude<PolicyAction, "flag" | "require_approval">;
   userMessage: string;
   setUserMessage: React.Dispatch<React.SetStateAction<string>>;
   label?: string;

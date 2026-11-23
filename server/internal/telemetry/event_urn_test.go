@@ -155,6 +155,15 @@ func TestDeriveEventURN_ClassifiesKnownProducers(t *testing.T) {
 			want: "urn:telemetry:agent_hook:log:skill.activated",
 		},
 		{
+			name:      "it classifies hook delivery failure reports as agent_hook diagnostics",
+			legacyURN: "",
+			attrs: map[attr.Key]any{
+				attr.EventSourceKey: string(EventSourceHookDiagnostic),
+				attr.HookEventKey:   "client.delivery_failed",
+			},
+			want: "urn:telemetry:agent_hook:log:client.delivery_failed",
+		},
+		{
 			name:      "it marks hook rows without an event name as unknown",
 			legacyURN: "",
 			attrs:     map[attr.Key]any{attr.EventSourceKey: string(EventSourceHook)},

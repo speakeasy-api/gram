@@ -206,7 +206,7 @@ func seedRevocableSession(
 		secretPG = conv.ToPGText(ciphertext)
 	}
 
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -238,7 +238,7 @@ func seedRevocableSession(
 	}
 
 	subject := urn.NewUserSubject("revoke-subject-" + slug)
-	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuer,
 		RemoteSessionClientID: client.ID,
@@ -311,7 +311,7 @@ func seedRevocableClient(
 	secretCiphertext, err := enc.Encrypt([]byte("s3cret"))
 	require.NoError(t, err)
 
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -340,7 +340,7 @@ func seedRevocableClient(
 		require.NoError(t, encErr)
 
 		subject := urn.NewUserSubject("revoke-subject-" + suffix)
-		session, sessErr := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		session, sessErr := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn:            subject,
 			UserSessionIssuerID:   userIssuer,
 			RemoteSessionClientID: client.ID,
@@ -804,6 +804,47 @@ func TestDisconnectRemoteSession_UpstreamErrorStillDisconnects(t *testing.T) {
 	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.userIssuerID, fx.clientID)
 	require.NoError(t, err, "an upstream failure must not surface to the consent screen")
 	require.Equal(t, int64(1), n)
+
+	requireSessionRevoked(t, ctx, ti, fx)
+}
+
+// Correcting a client ID revokes the client's sessions, but their tokens were
+// issued to the old ID (and secret), so revocation has to authenticate as the
+// client from before the edit rather than reading the row it just changed.
+func TestUpdateRemoteSessionClient_CorrectedClientIDRevokesAsIssuingClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{}
+	upstream := newRevocationUpstream(t, spy)
+
+	fx := seedRevocableSession(t, ctx, ti, "revoke-corrected-id", upstream.URL+"/revoke", "s3cret", true)
+
+	corrected := fx.externalCID + "-corrected"
+	newSecret := "rotated-s3cret"
+	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
+		SessionToken:                    nil,
+		ApikeyToken:                     nil,
+		ProjectSlugInput:                nil,
+		ID:                              fx.clientID.String(),
+		ClientID:                        &corrected,
+		DisplayName:                     nil,
+		ClientSecret:                    &newSecret,
+		TokenEndpointAuthMethod:         nil,
+		TokenEndpointAuthAudienceFormat: nil,
+		Scope:                           nil,
+		Audience:                        nil,
+		LegacyCallbackURL:               nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, corrected, updated.ClientID)
+
+	calls, form, authHdr := spy.snapshot()
+	require.Equal(t, 1, calls)
+	require.Equal(t, fx.refreshToken, form.Get("token"))
+	require.Equal(t, fx.externalCID, form.Get("client_id"))
+	require.Equal(t, "s3cret", form.Get("client_secret"))
+	require.Empty(t, authHdr)
 
 	requireSessionRevoked(t, ctx, ti, fx)
 }

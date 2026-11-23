@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { SkillEditSuggestionChange } from "@gram/client/models/components/skilleditsuggestionchange.js";
 import { describe, expect, it } from "vitest";
 import { changeAnchor } from "./skill-diff-anchors";

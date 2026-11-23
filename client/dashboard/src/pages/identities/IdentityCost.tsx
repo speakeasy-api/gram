@@ -9,6 +9,10 @@ import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { ShareBar } from "@/components/chart/ShareBar";
+import {
+  isCostUnknown,
+  UNKNOWN_COST_EXPLANATION,
+} from "@/pages/chatLogs/claudeUsage";
 import { peerStanding, standingLabel } from "./identityPeers";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
@@ -46,6 +50,10 @@ export default function IdentityCost(): JSX.Element {
   const unsupported = !hasMetricsSubject(identity);
   const metricsUnavailable = unsupported || metricsQuery.isError;
   const tileValue = metricsUnavailable ? "—" : undefined;
+  // Tokens with no cost: this identity's agents do not report cost, and $0
+  // would read as a free period.
+  const spendUnknown =
+    !metricsUnavailable && metrics !== undefined && isCostUnknown(metrics);
   const tileTooltip = unsupported
     ? "This identity carries no identifier the usage endpoint can key on."
     : metricsQuery.isError
@@ -96,6 +104,7 @@ export default function IdentityCost(): JSX.Element {
   return (
     <IdentitySection
       title="Cost"
+      timeRange
       meta={sectionMeta([{ count: models.length, singular: "model" }])}
     >
       <div className="flex flex-col gap-6">
@@ -111,10 +120,12 @@ export default function IdentityCost(): JSX.Element {
             <>
               <StatTile
                 title="Spend"
-                subtext={metricsUnavailable ? undefined : costStanding}
+                subtext={
+                  metricsUnavailable || spendUnknown ? undefined : costStanding
+                }
                 value={metrics?.totalCost ?? 0}
-                displayValue={tileValue}
-                tooltip={tileTooltip}
+                displayValue={spendUnknown ? "—" : tileValue}
+                tooltip={spendUnknown ? UNKNOWN_COST_EXPLANATION : tileTooltip}
                 format="currency"
                 tone="neutral"
                 icon="credit-card"

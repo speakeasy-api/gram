@@ -20,6 +20,7 @@ func TestChallengeWhereWindow(t *testing.T) {
 		Outcome:        nil,
 		PrincipalURN:   nil,
 		Scope:          nil,
+		ExcludeScopes:  nil,
 		MemberUserIDs:  nil,
 	}
 	from := time.Date(2026, 3, 1, 12, 0, 0, 123456789, time.UTC)
@@ -60,4 +61,35 @@ func TestChallengeWhereWindow(t *testing.T) {
 	// Nanosecond precision survives the round trip; truncating here would move
 	// the boundary off the instant the caller asked for.
 	require.Equal(t, int64(123456789), from.UnixNano()%int64(time.Second))
+}
+
+func TestChallengeWhereExcludeScopes(t *testing.T) {
+	t.Parallel()
+
+	filters := ChallengeListFilters{
+		ChallengeFilters: ChallengeFilters{
+			OrganizationID: "org-id",
+			ProjectID:      nil,
+			Outcome:        nil,
+			PrincipalURN:   nil,
+			Scope:          nil,
+			ExcludeScopes:  nil,
+			MemberUserIDs:  nil,
+		},
+		From:           nil,
+		To:             nil,
+		Limit:          50,
+		Offset:         0,
+		SkipPagination: false,
+	}
+
+	query, _, err := challengeWhere(sq.Select("1").From("authz_challenges"), filters).ToSql()
+	require.NoError(t, err)
+	require.NotContains(t, query, "scope", "no exclusion is no filter")
+
+	filters.ExcludeScopes = []string{"org:hooks_ingest"}
+	query, args, err := challengeWhere(sq.Select("1").From("authz_challenges"), filters).ToSql()
+	require.NoError(t, err)
+	require.Contains(t, query, "scope NOT IN (?)")
+	require.Equal(t, []any{"org-id", "org:hooks_ingest"}, args)
 }

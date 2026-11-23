@@ -55,10 +55,6 @@ func newTestRiskServiceWithRealIntake(t *testing.T) (context.Context, *testInsta
 		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler, nil)
 	})
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	flags.SetFlag(feature.FlagMCPApproval, authCtx.ActiveOrganizationID, true)
-
 	return ctx, instance
 }
 
@@ -193,6 +189,28 @@ func TestCreateRiskPolicy_AllowAllRejectsNarrowStandingApprovals(t *testing.T) {
 		ShadowMcpDisposition: new("allow_all"),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Contains(t, err.Error(), narrowURL, "the rejection names the offending server")
+}
+
+// A block-by-default policy for everyone blocks a denied server for
+// everyone, so creating one against a standing denial scoped to specific
+// people fails with the servers named, the same way decision-time
+// enforcement refuses that denial.
+func TestCreateRiskPolicy_EveryoneBlockAllRejectsNarrowStandingDenials(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskServiceWithRealIntake(t)
+
+	narrowURL := "https://mcp.example.com/narrow-denial-blocks-block-all"
+	person := urn.NewPrincipal(urn.PrincipalTypeUser, "user_narrow_denial_reject").String()
+	seedStandingDecision(t, ctx, ti, narrowURL, "denied", []string{person})
+
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Sources: []string{"shadow_mcp"},
+		Action:  "block",
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorIs(t, err, mcpapproval.ErrNarrowDenialUnderEveryoneBlockAll)
 	require.Contains(t, err.Error(), narrowURL, "the rejection names the offending server")
 }
 

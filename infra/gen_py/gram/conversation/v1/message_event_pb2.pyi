@@ -9,7 +9,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class MessageEvent(_message.Message):
-    __slots__ = ("id", "type", "organization_id", "project_id", "conversation_id", "message_id", "role", "occurred_at", "message_created_at", "ingestion", "attachment_ids")
+    __slots__ = ("id", "type", "organization_id", "project_id", "conversation_id", "message_id", "role", "occurred_at", "message_created_at", "ingestion", "attachment_ids", "generation", "sequence", "capture_kind", "original_message_id")
     class Type(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = ()
         TYPE_UNSPECIFIED: _ClassVar[MessageEvent.Type]
@@ -77,6 +77,10 @@ class MessageEvent(_message.Message):
     MESSAGE_CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     INGESTION_FIELD_NUMBER: _ClassVar[int]
     ATTACHMENT_IDS_FIELD_NUMBER: _ClassVar[int]
+    GENERATION_FIELD_NUMBER: _ClassVar[int]
+    SEQUENCE_FIELD_NUMBER: _ClassVar[int]
+    CAPTURE_KIND_FIELD_NUMBER: _ClassVar[int]
+    ORIGINAL_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     id: str
     type: MessageEvent.Type
     organization_id: str
@@ -88,4 +92,8 @@ class MessageEvent(_message.Message):
     message_created_at: str
     ingestion: MessageEvent.IngestionContext
     attachment_ids: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., type: _Optional[_Union[MessageEvent.Type, str]] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., conversation_id: _Optional[str] = ..., message_id: _Optional[str] = ..., role: _Optional[_Union[MessageEvent.Role, str]] = ..., occurred_at: _Optional[str] = ..., message_created_at: _Optional[str] = ..., ingestion: _Optional[_Union[MessageEvent.IngestionContext, _Mapping]] = ..., attachment_ids: _Optional[_Iterable[str]] = ...) -> None: ...
+    generation: int
+    sequence: int
+    capture_kind: str
+    original_message_id: str
+    def __init__(self, id: _Optional[str] = ..., type: _Optional[_Union[MessageEvent.Type, str]] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., conversation_id: _Optional[str] = ..., message_id: _Optional[str] = ..., role: _Optional[_Union[MessageEvent.Role, str]] = ..., occurred_at: _Optional[str] = ..., message_created_at: _Optional[str] = ..., ingestion: _Optional[_Union[MessageEvent.IngestionContext, _Mapping]] = ..., attachment_ids: _Optional[_Iterable[str]] = ..., generation: _Optional[int] = ..., sequence: _Optional[int] = ..., capture_kind: _Optional[str] = ..., original_message_id: _Optional[str] = ...) -> None: ...

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { UserSession } from "@gram/client/models/components/usersession.js";
 import { groupConnections } from "@/components/connections/groupConnections";

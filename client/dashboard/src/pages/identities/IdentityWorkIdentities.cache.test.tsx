@@ -18,8 +18,8 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => false, isLoading: false }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/example/identity" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),

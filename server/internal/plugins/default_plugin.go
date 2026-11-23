@@ -155,8 +155,8 @@ var (
 )
 
 // AttachToDefaultPluginParams identifies the server to attach — exactly one
-// of ToolsetID / McpServerID must be Valid, mirroring the plugin_servers
-// backend-exclusivity constraint.
+// of ToolsetID / McpServerID must be Valid; a toolset resolves to its
+// canonical MCP server.
 type AttachToDefaultPluginParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -173,6 +173,9 @@ type AttachToDefaultPluginResult struct {
 	PluginSlug    string
 	PluginCreated bool
 	Server        repo.PluginServer
+
+	// Plugin is the Default plugin's row, for the creation audit entry.
+	Plugin repo.Plugin
 }
 
 // AttachToDefaultPlugin idempotently adds a server (toolset- or mcp_server-
@@ -314,9 +317,9 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		return nil, fmt.Errorf("check existing default plugin server: %w", err)
 	}
 
-	// A different attached server (a same-named toolset row, or a stale row
-	// from a deleted server) may already hold the display name, which the
-	// (plugin_id, display_name) unique index spans across backends. Blocking
+	// A different attached server (a stale row from a deleted server) may
+	// already hold the display name, which the (plugin_id, display_name)
+	// unique index spans across backends. Blocking
 	// the attach — and with it the triggering action, e.g. enabling a server —
 	// over a marketplace display name is disproportionate, so uniquify instead.
 	displayName, err := availableDisplayName(ctx, q, plugin.ID, params)
@@ -358,6 +361,7 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		PluginSlug:    plugin.Slug,
 		PluginCreated: pluginCreated,
 		Server:        server,
+		Plugin:        plugin,
 	}, nil
 }
 
@@ -507,27 +511,21 @@ func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, a
 
 	if attached.PluginCreated {
 		if err := auditLogger.LogPluginCreate(ctx, dbtx, audit.LogPluginCreateEvent{
-			OrganizationID:   params.OrganizationID,
-			ProjectID:        params.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			PluginID:         attached.PluginID,
-			PluginName:       attached.PluginName,
-			PluginSlug:       attached.PluginSlug,
+			OrganizationID:      params.OrganizationID,
+			ProjectID:           params.ProjectID,
+			Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:    authCtx.Email,
+			ActorSlug:           nil,
+			PluginID:            attached.PluginID,
+			PluginName:          attached.PluginName,
+			PluginSlug:          attached.PluginSlug,
+			PluginSnapshotAfter: PluginAuditSnapshot(attached.Plugin),
 		}); err != nil {
 			return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin create: %w", err)
 		}
 	}
 
-	// Exactly one of the URNs is set, mirroring the stored row's toolset_id XOR
-	// mcp_server_id contract.
-	var toolsetURN *urn.Toolset
 	var mcpServerURN *urn.McpServer
-	if attached.Server.ToolsetID.Valid {
-		u := urn.NewToolset(attached.Server.ToolsetID.UUID)
-		toolsetURN = &u
-	}
 	if attached.Server.McpServerID.Valid {
 		u := urn.NewMcpServer(attached.Server.McpServerID.UUID)
 		mcpServerURN = &u
@@ -546,7 +544,7 @@ func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, a
 		ServerDisplayName: attached.Server.DisplayName,
 		ServerPolicy:      attached.Server.Policy,
 		ServerSortOrder:   attached.Server.SortOrder,
-		ToolsetURN:        toolsetURN,
+		ToolsetURN:        nil,
 		McpServerURN:      mcpServerURN,
 		MetaMcpServerURN:  nil,
 	}); err != nil {

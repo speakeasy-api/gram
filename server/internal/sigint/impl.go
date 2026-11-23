@@ -127,7 +127,7 @@ func (s *Service) CreateSignalWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -188,7 +188,7 @@ func (s *Service) GetSignal(ctx context.Context, payload *gen.GetSignalPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -214,7 +214,7 @@ func (s *Service) ListSignals(ctx context.Context, payload *gen.ListSignalsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -263,7 +263,7 @@ func (s *Service) UpdateSignalWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -347,7 +347,7 @@ func (s *Service) DeleteSignal(ctx context.Context, payload *gen.DeleteSignalPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -475,7 +475,7 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -563,6 +563,7 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
 		SensorURN: urn.NewSigintSensor(created.ID), SensorName: created.Name,
+		SensorSnapshotAfter: mv.BuildSigintSensorView(viewRow),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor create").LogError(ctx, s.logger)
 	}
@@ -576,7 +577,7 @@ func (s *Service) GetSensor(ctx context.Context, payload *gen.GetSensorPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -602,7 +603,7 @@ func (s *Service) ListSensors(ctx context.Context, payload *gen.ListSensorsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -651,7 +652,7 @@ func (s *Service) UpdateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -782,7 +783,7 @@ func (s *Service) DeleteSensor(ctx context.Context, payload *gen.DeleteSensorPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -824,6 +825,7 @@ func (s *Service) DeleteSensor(ctx context.Context, payload *gen.DeleteSensorPay
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
 		SensorURN: urn.NewSigintSensor(deleted.ID), SensorName: deleted.Name,
+		SensorSnapshotBefore: mv.BuildSigintSensorView(before),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor delete").LogError(ctx, s.logger)
 	}

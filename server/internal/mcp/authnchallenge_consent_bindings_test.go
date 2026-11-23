@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -45,8 +46,8 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	require.NoError(t, policyErr)
 	meterProvider := testenv.NewMeterProvider(t)
 	refresher := remotesessions.NewRefreshService(ti.logger, meterProvider, ti.conn, ti.enc, policy, nil, ti.cacheAdapter)
-	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
-	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	bindings := remotesessions.NewService(ti.logger, ti.tracerProvider, meterProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), nil, policy, nil, ti.audit, ti.serverURL, remotesessions.NewIdentityCommitter(ti.logger, ti.conn, ti.enc, clientsecretstest.New(t, ti.conn, ti.enc), ti.audit, ti.serverURL, policy, nil, nil), refresher, nil, nil)
+	bindings.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 		require.False(t, contextvalues.HasValidatedGramSession(ctx))
 		auth, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
@@ -57,7 +58,11 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, id, scope.AgentID)
 		require.Equal(t, fx.target.UserSessionIssuerID, scope.IssuerID)
-		_, _, err := agentmanagement.NewAuthorizer(ti.authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := agentmanagement.NewAuthorizer(ti.authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
 		if err != nil {
 			return fmt.Errorf("authorize attachment owner: %w", err)
 		}
@@ -70,7 +75,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 	cipher, err := ti.enc.Encrypt([]byte("upstream-placeholder"))
 	require.NoError(t, err)
 	createSession := func(subject urn.SessionSubject) uuid.UUID {
-		session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn: subject, UserSessionIssuerID: fx.target.UserSessionIssuerID,
 			RemoteSessionClientID: clientID, AccessTokenEncrypted: cipher,
 			AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{},
@@ -149,7 +154,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 			require.ErrorAs(t, err, &denied, "%s: %s", name, action)
 			want := oops.CodeForbidden
 			if name == "missing browser proof" {
-				want = oops.CodeUnauthorized
+				want = oops.CodeBadRequest
 			}
 			require.Equal(t, want, denied.Code, "%s: %s", name, action)
 		}

@@ -29,9 +29,9 @@ import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   Classifications,
+  ListSkillsQueryParamSort,
   ListSkillsRequest,
   ListSkillsSecurity,
-  Sort,
   SourceKinds,
 } from "../models/operations/listskills.js";
 import { useGramContext } from "./_context.js";
@@ -204,7 +204,7 @@ export function setSkillsData(
       classifications?: Array<Classifications> | undefined;
       tags?: Array<string> | undefined;
       accessibleBy?: Array<string> | undefined;
-      sort?: Sort | undefined;
+      sort?: ListSkillsQueryParamSort | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -228,7 +228,7 @@ export function invalidateSkills(
       classifications?: Array<Classifications> | undefined;
       tags?: Array<string> | undefined;
       accessibleBy?: Array<string> | undefined;
-      sort?: Sort | undefined;
+      sort?: ListSkillsQueryParamSort | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

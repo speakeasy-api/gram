@@ -49,8 +49,8 @@ func routeRow(t *testing.T, ctx context.Context, ti *testInstance, organizationI
 	rows, err := repo.New(ti.conn).ListDataExportRoutes(ctx, repo.ListDataExportRoutesParams{OrganizationID: organizationID, ProjectID: projectID})
 	require.NoError(t, err)
 	for _, row := range rows {
-		if row.ID == routeID {
-			return row
+		if row.DataExportRoute.ID == routeID {
+			return row.DataExportRoute
 		}
 	}
 	require.FailNow(t, "route not found")

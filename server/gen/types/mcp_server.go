@@ -21,6 +21,8 @@ type McpServer struct {
 	// The slug of this server's primary platform endpoint, the oldest one. Absent
 	// when no platform endpoint exists; never a custom-domain slug.
 	PlatformEndpointSlug *string
+	// Deprecated: always absent.
+	LegacyPlatformSlug *string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -56,6 +58,9 @@ type McpServer struct {
 	// Whether any endpoint routes to this server, including one on a custom domain
 	// that is not live yet. Absent when it could not be read.
 	HasEndpoint *bool
+	// When an admin marked the upstream provider's manual setup guide as done.
+	// Absent while it is not done.
+	SetupGuideCompletedAt *string
 	// When the MCP server was created
 	CreatedAt string
 	// When the MCP server was last updated

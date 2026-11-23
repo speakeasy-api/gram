@@ -5,6 +5,11 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToolFilteringSection } from "./ToolFilteringSection";
 
+const followRenamedServer = vi.hoisted(() => vi.fn());
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => followRenamedServer,
+}));
+
 const mocks = vi.hoisted(() => ({
   groups: [] as { id: string; name: string }[],
   create: vi.fn(),

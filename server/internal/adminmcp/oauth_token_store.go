@@ -212,8 +212,16 @@ func (s postgresStaffGrantStore) RotateRefresh(ctx context.Context, refreshHash,
 		}
 		return errStaffRefreshReuse
 	}
-	if row.ClientRevokedAt.Valid || (row.ClientSecretExpiresAt.Valid && !now.Before(row.ClientSecretExpiresAt.Time)) || row.AdminMcpConnection.RevokedAt.Valid || row.AdminMcpConnection.ReauthorizationRequiredAt.Valid || row.SessionRevokedAt.Valid || !now.Before(row.RefreshExpiresAt.Time) || !now.Before(connection.AuthorizedTil) || connection.ID != expected.ID || connection.Generation != expected.Generation || connection.Generation != row.SessionGeneration || connection.Subject != expected.Subject || connection.ResourceURI != expected.ResourceURI || connection.SessionEnc != expected.SessionEnc || !validStaffIssuedSession(replacement, connection, now) {
+	if row.ClientRevokedAt.Valid || (row.ClientSecretExpiresAt.Valid && !now.Before(row.ClientSecretExpiresAt.Time)) || row.AdminMcpConnection.RevokedAt.Valid || row.AdminMcpConnection.ReauthorizationRequiredAt.Valid || row.SessionRevokedAt.Valid || !now.Before(row.RefreshExpiresAt.Time) || !now.Before(connection.AuthorizedTil) || connection.ID != expected.ID || connection.Generation != expected.Generation || connection.Generation != row.SessionGeneration || connection.Subject != expected.Subject || connection.ResourceURI != expected.ResourceURI || connection.SessionEnc != expected.SessionEnc {
 		return errStaffGrant
+	}
+	connection.AuthorizedTil = now.Add(staffInactivityTimeout)
+	if !validStaffIssuedSession(replacement, connection, now) {
+		return errStaffGrant
+	}
+	err = q.ExtendStaffConnection(ctx, repo.ExtendStaffConnectionParams{AuthorizationExpiresAt: conv.ToPGTimestamptz(connection.AuthorizedTil), ID: connection.ID, Generation: connection.Generation})
+	if err != nil {
+		return fmt.Errorf("extend staff connection: %w", err)
 	}
 	if err := insertStaffSession(ctx, q, connection, replacement); err != nil {
 		return err

@@ -9,8 +9,9 @@ type DescribedTool struct {
 }
 
 // DescribeServerResult is the structuredContent payload of a describe_server
-// call: one member's identity plus its tool catalog.
+// call: one member's identity, instructions when available, and tool catalog.
 type DescribeServerResult struct {
-	Server ListedServer    `json:"server"`
-	Tools  []DescribedTool `json:"tools"`
+	Server       ListedServer    `json:"server"`
+	Instructions string          `json:"instructions,omitempty"`
+	Tools        []DescribedTool `json:"tools"`
 }

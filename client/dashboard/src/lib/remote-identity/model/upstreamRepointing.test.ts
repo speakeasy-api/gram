@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { ServerIdentityImpactServer } from "@gram/client/models/components/serveridentityimpactserver.js";
 import { describe, expect, it } from "vitest";
 

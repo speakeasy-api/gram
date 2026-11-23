@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { reconcileDraft, seedDraft, type DraftError } from "./draft";
 

@@ -16,6 +16,7 @@ package remotesessions_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -38,9 +39,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -68,7 +72,7 @@ func TestRemoteLoginCallback_NoExpiresIn_NoRefresh_NonExpiring(t *testing.T) {
 	// The gate treats NULL-with-no-refresh as non-expiring and keeps returning
 	// the token, rather than rejecting it as ErrNoValidToken once a synthetic
 	// hour lapses.
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, upstreamAccessToken, resolved, "non-expiring token must keep resolving")
 }
@@ -101,7 +105,7 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh(t *test
 	require.True(t, env.session.RefreshTokenEncrypted.Valid, "refresh token must be persisted")
 
 	// The stored token is served and no refresh is attempted.
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
 	require.Equal(t, int64(0), refreshCount.Load())
@@ -113,7 +117,7 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh(t *test
 		ProjectID: conv.ToNullUUID(env.projectID),
 		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-48 * time.Hour)),
 	}))
-	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
 	require.Equal(t, int64(0), refreshCount.Load(), "unknown access expiry must not force a refresh")
@@ -164,6 +168,10 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 // against a mock upstream token endpoint.
 type syntheticExpiryEnv struct {
 	mgr *remotesessions.ChallengeManager
+
+	// service exposes the management API over the same database as the callback.
+	service *remotesessions.Service
+
 	// refresher shares the manager's database, encryption key, and Redis lock
 	// cache, standing in for the scheduled sweep's caller in concurrency tests.
 	refresher *remotesessions.RefreshService
@@ -185,6 +193,8 @@ type syntheticExpiryEnv struct {
 	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
 	// for the login, so a test can assert on its query parameters.
 	authURL string
+	// parentID is the original consent challenge to resume after callback.
+	parentID string
 	// issuerMetadata and issuerMetadataReader are set by withIssuerMetadataRefresh.
 	issuerMetadata       *remotesessions.IssuerMetadataRefresher
 	issuerMetadataReader *sdkmetric.ManualReader
@@ -192,6 +202,18 @@ type syntheticExpiryEnv struct {
 	// the meter the manager (and the rotator it builds) records registration
 	// failures on.
 	registrationTelemetryReader *sdkmetric.ManualReader
+
+	// orgEncryption is set by withOrganizationEncryption: the organization's
+	// keys and the transition state the manager and refresher seal under.
+	orgEncryption *syntheticOrgEncryption
+}
+
+// syntheticOrgEncryption is the organization encryption a synthetic login
+// seals its tokens under.
+type syntheticOrgEncryption struct {
+	fixture     *orgencryptiontest.Fixture
+	transitions *orgencryption.Transitions
+	tokens      *upstreamtokens.Tokens
 }
 
 // callback drives HandleRemoteLoginCallback with the given query string, as
@@ -210,10 +232,14 @@ func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest
 // syntheticLoginOptions shapes the issuer, client, and callback of a
 // synthetic login; the zero value is the plain AIS-115 fixture.
 type syntheticLoginOptions struct {
-	legacyCallbackURL bool
-	issuerScopes      []string
-	clientScope       []string
-	scopeOverride     []string
+	forwardClientName bool
+	parentClientName  string
+	// tokenResponseIssuer sets the provider identifier used to interpret returned scopes.
+	tokenResponseIssuer string
+	legacyCallbackURL   bool
+	issuerScopes        []string
+	clientScope         []string
+	scopeOverride       []string
 	// omitScopeFallback sets the issuer to send no scope where its catalogue is the last resort.
 	omitScopeFallback bool
 	// authorizeQuery is appended to the issuer's authorization endpoint, e.g. a baked-in scope.
@@ -236,6 +262,10 @@ type syntheticLoginOptions struct {
 	// registrationTelemetry gives the manager a readable meter so a test can
 	// assert on recorded client-registration failures.
 	registrationTelemetry bool
+	// orgEncryption seals tokens under organization encryption in dual_write.
+	orgEncryption bool
+	// suspendOrganizationKey suspends the organization's key before the callback.
+	suspendOrganizationKey bool
 	// keyCache, when set, backs the key resolver so a test can seed key-set state.
 	keyCache jwks.Cache
 	// signingAlgs is the issuer row's id_token_signing_alg_values_supported.
@@ -274,6 +304,8 @@ type syntheticLoginOptions struct {
 	protectedResource *protectedResourceSeed
 	// prober wires a fresh protected resource prober into the manager.
 	prober bool
+	// logger, when set, replaces the fixture's logger so a test can assert on log output.
+	logger *slog.Logger
 }
 
 // protectedResourceSeed is a remote_protected_resources row as a login finds it.
@@ -300,6 +332,10 @@ func withProtectedResource(seed protectedResourceSeed) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.protectedResource = &seed }
 }
 
+func withLogger(logger *slog.Logger) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.logger = logger }
+}
+
 func withProber() syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.prober = true }
 }
@@ -316,8 +352,29 @@ func withRegistrationTelemetry() syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.registrationTelemetry = true }
 }
 
+// withOrganizationEncryption gives the manager and refresher organization
+// encryption, and moves the test organization's session tokens to dual_write
+// before the sign-in.
+func withOrganizationEncryption() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.orgEncryption = true }
+}
+
+// withSuspendedOrganizationKey is withOrganizationEncryption with the
+// organization's key suspended before the callback.
+func withSuspendedOrganizationKey() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.orgEncryption, o.suspendOrganizationKey = true, true }
+}
+
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.issuerScopes = scopes }
+}
+
+func withForwardClientName() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.forwardClientName = true }
+}
+
+func withParentClientName(name string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.parentClientName = name }
 }
 
 func withClientScope(scopes ...string) syntheticLoginOption {
@@ -452,8 +509,14 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 	enc := testenv.NewEncryptionClient(t)
 	logger := testenv.NewLogger(t)
+	if options.logger != nil {
+		logger = options.logger
+	}
 	tracerProvider := testenv.NewTracerProvider(t)
 	issuerURL, jwksURI := "https://idp.example.com", ""
+	if options.tokenResponseIssuer != "" {
+		issuerURL = options.tokenResponseIssuer
+	}
 	// Every httptest TLS server presents the package's test certificate, so the issuer discovery server is trusted too.
 	trusted := testIssuerTLSRootCAs.Clone()
 	if options.idTokenIssuer != nil {
@@ -513,6 +576,20 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		enricher := remotesessions.NewSessionEnricher(logger, enc, policy, keys, enrichmentLimiter, options.tunnels, issuerMetadata)
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
+	}
+	var orgEncryption *syntheticOrgEncryption
+	if options.orgEncryption {
+		fixture := orgencryptiontest.New(t, ti.conn)
+		transitions := orgencryption.NewTransitions(logger, ti.conn, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+		tokens := upstreamtokens.New(logger, orgencryption.NewCipher(logger, enc, fixture.Service, transitions), enc)
+		_, err := transitions.Enroll(ctx, authCtx.ActiveOrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+		require.NoError(t, err)
+		if options.suspendOrganizationKey {
+			require.NoError(t, fixture.Provisioner.Suspend(ctx, authCtx.ActiveOrganizationID, "customer disabled the key", orgencryption.SystemActor()))
+		}
+		orgEncryption = &syntheticOrgEncryption{fixture: fixture, transitions: transitions, tokens: tokens}
+		managerOptions = append(managerOptions, remotesessions.WithUpstreamTokens(tokens))
+		refreshOptions = append(refreshOptions, remotesessions.WithRefreshUpstreamTokens(tokens))
 	}
 	managerMeterProvider := testenv.NewMeterProvider(t)
 	var registrationTelemetryReader *sdkmetric.ManualReader
@@ -597,7 +674,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		}
 	}
 
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -608,6 +685,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		TokenEndpointAuthMethod: conv.ToPGText("none"),
 		Scope:                   options.clientScope,
 		LegacyCallbackUrl:       options.legacyCallbackURL,
+		ForwardClientName:       options.forwardClientName,
 		CallbackBaseUrl:         conv.ToPGTextEmpty(options.clientCallbackBaseURL),
 	})
 	require.NoError(t, err)
@@ -636,6 +714,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		McpServerID:         mcpServerID,
 		FinalRedirectURI:    "",
 		Resource:            options.resource,
+		ClientName:          options.parentClientName,
 	}
 	if options.gatewayMember {
 		parent.McpServerID, parent.ResourceMcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID
@@ -660,7 +739,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		options.callbackQuery(cbQuery)
 	}
 	env := syntheticExpiryEnv{
+		parentID:  parent.ID,
 		mgr:       mgr,
+		service:   ti.service,
 		refresher: refresher,
 		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
 			r := remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, options.tunnels, locks, refreshOptions...)
@@ -683,6 +764,8 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		issuerMetadataReader: issuerMetadataReader,
 
 		registrationTelemetryReader: registrationTelemetryReader,
+
+		orgEncryption: orgEncryption,
 	}
 	cbW, callbackErr := env.callback(t, cbQuery.Encode())
 

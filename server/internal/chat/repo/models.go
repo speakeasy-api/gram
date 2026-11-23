@@ -71,6 +71,12 @@ type ChatMessage struct {
 	ContentHash []byte
 	// @access: confidential
 	Generation int32
+	// Original utterance, exact transcript reobservation, synthetic summary, or unknown lineage.
+	// @access: confidential
+	CaptureKind pgtype.Text
+	// Original source-message identity for an exact transcript copy. A logical reference retained independently of source-row lifetime.
+	// @access: confidential
+	OriginalMessageID uuid.NullUUID
 	// @access: confidential
 	Replayed bool
 	// @access: confidential

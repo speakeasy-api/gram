@@ -1,6 +1,8 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import {
+  selectorsAfterAnnotationToggle,
   selectorsAfterToolBatch,
   selectorsAfterToolToggle,
 } from "./toolSelectionTransition";
@@ -63,6 +65,44 @@ describe("selectorsAfterToolBatch", () => {
     );
     expect(next).toEqual([
       { resourceKind: "mcp", resourceId: "server-1", tool: "keep" },
+    ]);
+  });
+});
+
+describe("selectorsAfterAnnotationToggle", () => {
+  const unannotatedOnServer = {
+    resourceKind: "mcp" as const,
+    resourceId: "server-1",
+    projectId: "project-1",
+    disposition: "unannotated" as const,
+  };
+
+  it("keeps an unannotated rule when another annotation is ticked", () => {
+    const next = selectorsAfterAnnotationToggle(
+      [readOnlyEverywhere, unannotatedOnServer],
+      ["read_only", "destructive"],
+    );
+    expect(next).toEqual([
+      readOnlyEverywhere,
+      { resourceKind: "mcp", resourceId: "*", disposition: "destructive" },
+      unannotatedOnServer,
+    ]);
+  });
+
+  it("keeps an unannotated rule when every annotation is unticked", () => {
+    expect(
+      selectorsAfterAnnotationToggle(
+        [readOnlyEverywhere, unannotatedOnServer],
+        [],
+      ),
+    ).toEqual([unannotatedOnServer]);
+  });
+
+  it("drops an annotation the panel shows when it is unticked", () => {
+    expect(
+      selectorsAfterAnnotationToggle([readOnlyEverywhere], ["idempotent"]),
+    ).toEqual([
+      { resourceKind: "mcp", resourceId: "*", disposition: "idempotent" },
     ]);
   });
 });

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -21,7 +22,7 @@ import (
 // startupSeeds lists the reference data every worker keeps applied. To ship
 // new data, change the seed's source in code: its Version moves and the next
 // deploy applies it. To add a kind of seed, append one here.
-func startupSeeds(logger *slog.Logger, db *pgxpool.Pool) []activities.StartupSeed {
+func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) []activities.StartupSeed {
 	return []activities.StartupSeed{
 		{
 			Name:    "registry-okta",
@@ -31,7 +32,7 @@ func startupSeeds(logger *slog.Logger, db *pgxpool.Pool) []activities.StartupSee
 				if err != nil {
 					return fmt.Errorf("load registry validator: %w", err)
 				}
-				if _, err := oktaseed.Apply(ctx, logger, mcpregistry.New(db, validator)); err != nil {
+				if _, err := oktaseed.Apply(ctx, logger, mcpregistry.New(db, validator).WithAssetBaseURL(assetBaseURL)); err != nil {
 					return fmt.Errorf("apply okta catalog seed: %w", err)
 				}
 				return nil
@@ -57,6 +58,7 @@ func newAppSeedCommand() *cli.Command {
 		Name:  "app-seed",
 		Usage: "Apply the reference data that workers keep applied when they start (idempotent)",
 		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "site-url", EnvVars: []string{"GRAM_SITE_URL"}, Required: true},
 			&cli.StringFlag{
 				Name:     "database-url",
 				Usage:    "Database URL",
@@ -69,6 +71,10 @@ func newAppSeedCommand() *cli.Command {
 			},
 		},
 		Action: func(c *cli.Context) error {
+			assetBaseURL, err := parseSiteURL(c.String("site-url"))
+			if err != nil {
+				return fmt.Errorf("parse asset base URL: %w", err)
+			}
 			ctx := c.Context
 			logger := PullLogger(ctx)
 
@@ -80,7 +86,7 @@ func newAppSeedCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			seeds, err := selectStartupSeeds(startupSeeds(logger, db), c.StringSlice("name"))
+			seeds, err := selectStartupSeeds(startupSeeds(logger, db, assetBaseURL), c.StringSlice("name"))
 			if err != nil {
 				return err
 			}

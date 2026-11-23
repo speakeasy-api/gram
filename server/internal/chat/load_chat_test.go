@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -90,25 +89,20 @@ func seedTypedMessage(t *testing.T, ctx context.Context, ti *chatTestInstance, c
 	}))
 }
 
-// attachRiskTo creates a risk policy (once) and attaches an active finding to
-// each of the given message ids.
-func attachRiskTo(t *testing.T, ctx context.Context, ti *chatTestInstance, msgIDs ...uuid.UUID) {
+// attachRiskTo creates a risk policy (once) and records a live ClickHouse
+// finding on each of the given messages of chatID.
+func attachRiskTo(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID, msgIDs ...uuid.UUID) {
 	t.Helper()
-	r := repo.New(ti.conn)
-	policyID, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{
+	policyID, err := repo.New(ti.conn).SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
 	})
 	require.NoError(t, err)
+	rows := make([]riskchrepo.RiskFindingRow, 0, len(msgIDs))
 	for _, msgID := range msgIDs {
-		require.NoError(t, r.SeedRiskResult(ctx, repo.SeedRiskResultParams{
-			ProjectID:      ti.projectID,
-			OrganizationID: ti.orgID,
-			RiskPolicyID:   policyID,
-			ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
-			Found:          true,
-		}))
+		rows = append(rows, seedClickHouseFinding(t, ti, uuid.New(), chatID, msgID, policyID))
 	}
+	require.NoError(t, riskchrepo.New(ti.chConn).InsertRiskFindings(ctx, rows))
 }
 
 // allSeqs loads the whole chat ascending and returns the seq for each position
@@ -458,7 +452,7 @@ func TestLoadChat_RiskOnly_Window(t *testing.T) {
 	seqs := allSeqs(t, ctx, ti, chatID, ids)
 
 	// Risk on position 13 (index 12) → window covers positions 8..18.
-	attachRiskTo(t, ctx, ti, ids[12])
+	attachRiskTo(t, ctx, ti, chatID, ids[12])
 
 	p := loadPayload(chatID.String())
 	p.RiskOnly = true
@@ -488,7 +482,7 @@ func TestLoadChat_RiskOnly_MultipleSegments(t *testing.T) {
 	seqs := allSeqs(t, ctx, ti, chatID, ids)
 
 	// Findings on positions 13 and 25 → windows 8..18 and 20..30 (disjoint).
-	attachRiskTo(t, ctx, ti, ids[12], ids[24])
+	attachRiskTo(t, ctx, ti, chatID, ids[12], ids[24])
 
 	p := loadPayload(chatID.String())
 	p.RiskOnly = true
@@ -521,7 +515,7 @@ func TestLoadChat_RiskOnly_OverlapMerges(t *testing.T) {
 	seqs := allSeqs(t, ctx, ti, chatID, ids)
 
 	// Findings on positions 13 and 16 → windows 8..18 and 11..21 overlap → 8..21.
-	attachRiskTo(t, ctx, ti, ids[12], ids[15])
+	attachRiskTo(t, ctx, ti, chatID, ids[12], ids[15])
 
 	p := loadPayload(chatID.String())
 	p.RiskOnly = true
@@ -574,76 +568,6 @@ func TestLoadChat_RiskOnly_AttachmentFinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, parts, 1)
 
-	policyID, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{
-		ProjectID:      ti.projectID,
-		OrganizationID: ti.orgID,
-	})
-	require.NoError(t, err)
-	require.NoError(t, r.SeedContentPartRiskResult(ctx, repo.SeedContentPartRiskResultParams{
-		ProjectID:         ti.projectID,
-		OrganizationID:    ti.orgID,
-		RiskPolicyID:      policyID,
-		ChatContentPartID: uuid.NullUUID{UUID: parts[0].ID, Valid: true},
-	}))
-
-	p := loadPayload(chatID.String())
-	p.RiskOnly = true
-	res, err := ti.service.LoadChat(ctx, p)
-	require.NoError(t, err)
-	require.Len(t, res.Messages, 11)
-	require.Equal(t, seqs[7], res.Messages[0].Seq)
-	require.Equal(t, seqs[17], res.Messages[10].Seq)
-	require.True(t, isRiskAt(res.Messages, seqs[12]), "the attachment's prompt is the flagged message")
-	require.Len(t, res.RiskSegments, 1)
-
-	require.Len(t, res.ContentParts, 1)
-	require.Equal(t, parts[0].ID.String(), res.ContentParts[0].ID)
-	require.True(t, res.ContentParts[0].IsRisk)
-	require.Equal(t, ids[12].String(), conv.PtrValOr(res.ContentParts[0].ParentChatMessageID, ""))
-
-	full, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
-	require.NoError(t, err)
-	require.Equal(t, int64(1), full.Totals.RiskOnly, "the risky-only count includes the attachment's prompt")
-}
-
-func TestLoadChat_ClickHouseCutover_AttachmentFinding(t *testing.T) {
-	t.Parallel()
-	ti := newTestChatService(t)
-	ctx := initSessionCtx(t, ti)
-	ti.flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, ti.orgID, true)
-
-	chatID := seedChat(t, ctx, ti, "u", "", "ClickHouse attachment risk chat")
-	ids := seedNMessages(t, ctx, ti, chatID, 30)
-	seqs := allSeqs(t, ctx, ti, chatID, ids)
-
-	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
-	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	assetURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte("attachment body"))
-	require.NoError(t, err)
-
-	r := repo.New(ti.conn)
-	_, err = r.CreateChatContentPart(ctx, []repo.CreateChatContentPartParams{{
-		ChatID:              chatID,
-		ProjectID:           ti.projectID,
-		Kind:                message.PromptAttachment,
-		ContentAssetUrl:     assetURL,
-		ExternalID:          pgtype.Text{String: "attachment", Valid: true},
-		ParentChatMessageID: uuid.NullUUID{UUID: ids[12], Valid: true},
-		Version:             pgtype.Int4{},
-		Source:              pgtype.Text{},
-		Metadata:            []byte(`{"display_path":"data.csv","kind":"file"}`),
-		RiskAnalyzedAt:      pgtype.Timestamptz{},
-		CreatedAt:           pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
-	}})
-	require.NoError(t, err)
-	parts, err := r.ListChatContentPartsByChatID(ctx, repo.ListChatContentPartsByChatIDParams{
-		ChatID:               chatID,
-		ProjectID:            ti.projectID,
-		ParentChatMessageIds: []uuid.UUID{ids[12]},
-	})
-	require.NoError(t, err)
-	require.Len(t, parts, 1)
-
 	policyID, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{ProjectID: ti.projectID, OrganizationID: ti.orgID})
 	require.NoError(t, err)
 	finding := seedClickHouseFinding(t, ti, uuid.New(), chatID, ids[12], policyID)
@@ -663,6 +587,7 @@ func TestLoadChat_ClickHouseCutover_AttachmentFinding(t *testing.T) {
 	require.Len(t, result.ContentParts, 1)
 	require.Equal(t, parts[0].ID.String(), result.ContentParts[0].ID)
 	require.True(t, result.ContentParts[0].IsRisk)
+	require.Equal(t, ids[12].String(), conv.PtrValOr(result.ContentParts[0].ParentChatMessageID, ""))
 
 	full, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)
@@ -861,7 +786,7 @@ func TestLoadChat_Totals_GenerationScoped(t *testing.T) {
 
 	// Generation 0: 5 user messages, two carrying an active risk finding.
 	gen0 := seedNMessages(t, ctx, ti, chatID, 5) // SeedChatMessage → role=user, generation=0
-	attachRiskTo(t, ctx, ti, gen0[0], gen0[1])
+	attachRiskTo(t, ctx, ti, chatID, gen0[0], gen0[1])
 
 	// Generation 1 (the latest): 3 user messages, no findings.
 	for range 3 {
@@ -904,7 +829,7 @@ func TestLoadChat_RiskOnly_FlagsFindings(t *testing.T) {
 	seqs := allSeqs(t, ctx, ti, chatID, ids)
 
 	// Findings on positions 13 and 25 (indexes 12, 24) → disjoint ±5 windows.
-	attachRiskTo(t, ctx, ti, ids[12], ids[24])
+	attachRiskTo(t, ctx, ti, chatID, ids[12], ids[24])
 
 	p := loadPayload(chatID.String())
 	p.RiskOnly = true
@@ -998,7 +923,7 @@ func TestLoadChat_RiskAndSearch_SameThread(t *testing.T) {
 		ids[i-1] = seedMessageContent(t, ctx, ti, chatID, content)
 	}
 	seqs := allSeqs(t, ctx, ti, chatID, ids)
-	attachRiskTo(t, ctx, ti, ids[14]) // finding on position 15
+	attachRiskTo(t, ctx, ti, chatID, ids[14]) // finding on position 15
 
 	// risk_only returns the finding and nothing search-related.
 	riskP := loadPayload(chatID.String())

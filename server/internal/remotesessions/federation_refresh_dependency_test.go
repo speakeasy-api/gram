@@ -92,7 +92,7 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 				// verifier before the exact mapper used by RefreshFederatedIdentity.
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.metadata.TokenEndpoint, nil)
 				require.NoError(t, err)
-				tok, receivedAt, err := postFederatedRefresh(doer, req)
+				tok, receivedAt, err := postFederatedRefresh(testenv.NewLogger(t), doer, req)
 				require.NoError(t, err)
 				require.Equal(t, "secret-rotated", tok.RefreshToken)
 				result, mapped := manager.verifyFederatedRefresh(ctx, p, tok, receivedAt, subject, nonce, doer)
@@ -124,14 +124,14 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 				later := s.now().Add(24 * time.Hour)
 				s.now = func() time.Time { return later }
 				_, err = s.Resolve(t.Context(), b, allow)
-				require.ErrorIs(t, err, ErrDelegationTemporary)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 			} else {
-				require.ErrorIs(t, err, ErrDelegationConfiguration)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 				require.Empty(t, after.RefreshTokenEncrypted.String)
 				require.Empty(t, after.IdentityAssertionEncrypted.String)
 				require.Empty(t, after.UpstreamSubjectEncrypted.String)
 				_, err = s.Resolve(t.Context(), b, allow)
-				require.ErrorIs(t, err, ErrDelegationConfiguration)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 			}
 			require.Equal(t, 1, posts)
 		})

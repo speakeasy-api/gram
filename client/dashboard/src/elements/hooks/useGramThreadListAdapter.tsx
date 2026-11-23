@@ -1,21 +1,21 @@
+import type { ThreadMessage, ThreadHistoryAdapter } from "@assistant-ui/react";
 import {
   type RemoteThreadListAdapter,
-  ThreadMessage,
   RuntimeAdapterProvider,
-  ThreadHistoryAdapter,
   useAui,
   type AssistantClient,
 } from "@assistant-ui/react";
 import { createAssistantStream, type AssistantStream } from "assistant-stream";
-import {
+import type {
   GramChatOverview,
   GramChat,
   GramChatMessage,
+} from "@/elements/lib/messageConverter";
+import {
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from "@/elements/lib/messageConverter";
 import { sleep } from "@/lib/utils";
-import { trackError } from "@/elements/lib/errorTracking";
 import {
   ThreadMetaContext,
   type ThreadMeta,
@@ -542,10 +542,7 @@ export function useGramThreadListAdapter(
             throw new Error(`Failed to rename chat: ${response.status}`);
           }
         } catch (error) {
-          trackError(error, {
-            source: "custom",
-            context: "useGramThreadListAdapter.rename",
-          });
+          console.error("Failed to rename chat:", error);
           throw error;
         }
       },

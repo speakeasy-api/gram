@@ -50,7 +50,7 @@ function starred(subject: string): boolean {
  * them up. Here the reader supplies them, which is the whole difference —
  * everything after is the same two rows and the same token exchange.
  */
-export function customSetupInstructions(): PlatformSetup {
+export function customSetupInstructions(inference = false): PlatformSetup {
   return {
     connection: (values): Connection | null => {
       const name = (values["name"] ?? "").trim();
@@ -184,7 +184,9 @@ export function customSetupInstructions(): PlatformSetup {
                 {agentName || "this agent"}
               </Text>
               <Text muted small>
-                Limited to the servers you selected.
+                {inference
+                  ? "Limited to inference in the selected project. No MCP access is granted."
+                  : "Limited to the servers you selected."}
               </Text>
             </div>
             {ruleConflict !== null && (

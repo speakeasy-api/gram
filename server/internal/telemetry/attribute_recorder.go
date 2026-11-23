@@ -160,6 +160,27 @@ func truncateBody(body []byte) string {
 	return string(body[:maxBodyContentBytes]) + fmt.Sprintf("...[truncated, original size: %d bytes]", len(body))
 }
 
+// RecordUpstreamCredential records which auth client signed a proxied call in
+// to its upstream, and whose connection it was. Like RecordAuthenticatedActor
+// it overwrites: the values come from the gateway's own resolution, never from
+// caller input, so any caller-supplied value is dropped.
+func (h HTTPLogAttributes) RecordUpstreamCredential(ctx context.Context) {
+	delete(h, attr.AuthClientIDKey)
+	delete(h, attr.AuthClientTypeKey)
+	delete(h, attr.AuthClientConnectionOwnerUserIDKey)
+	credential, ok := contextvalues.GetUpstreamCredential(ctx)
+	if !ok {
+		return
+	}
+	h[attr.AuthClientTypeKey] = credential.AuthClientType
+	if credential.AuthClientID != "" {
+		h[attr.AuthClientIDKey] = credential.AuthClientID
+	}
+	if credential.ConnectionOwnerUserID != "" {
+		h[attr.AuthClientConnectionOwnerUserIDKey] = credential.ConnectionOwnerUserID
+	}
+}
+
 // RecordAuthenticatedActor overwrites reserved attribution at server-generated
 // request sinks. It must not be applied to bulk ingested telemetry.
 func (h HTTPLogAttributes) RecordAuthenticatedActor(ctx context.Context) {

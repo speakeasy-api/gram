@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
 import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
@@ -5,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import {
   deriveRemoteSessionIssuerNameFromUrl,
+  readableServiceNameFromUrl,
   mcpServerRouteParam,
   validateMcpServerUrl,
 } from "@/lib/sources";
@@ -15,11 +17,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
 import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { AlertCircle, Loader2, Plug } from "lucide-react";
+import { AlertCircle, Plug } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
+import { SHADOW_MCP_SETUP_PARAMS } from "@/components/shadow-mcp/shadowMCPOfficialServer";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
 import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
@@ -64,8 +67,25 @@ function CreateRemoteMcpForm() {
   const issuerQuery = useEffectiveUserSessionIssuers();
   const newGuardrail = useNewServerGuardrail();
 
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
+  // A link can open the form with the server's URL and name already filled
+  // in; the admin still verifies and saves.
+  const [searchParams] = useSearchParams();
+  const [name, setName] = useState(
+    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.name)?.trim() ?? "",
+  );
+  const [url, setUrl] = useState(
+    () => searchParams.get(SHADOW_MCP_SETUP_PARAMS.url)?.trim() ?? "",
+  );
+  // Opened from a Shadow MCP server's "Set it up myself": saving goes back to
+  // its page to link the new server.
+  const shadowServerSlug =
+    searchParams.get(SHADOW_MCP_SETUP_PARAMS.shadowServer)?.trim() || null;
+  const shadowServerName =
+    searchParams.get(SHADOW_MCP_SETUP_PARAMS.name)?.trim() ||
+    "this Shadow MCP server";
+  // Whether a name was given, typed or by the link. Until one is, each
+  // successful check fills it in; once it is, it is kept.
+  const [nameEdited, setNameEdited] = useState(() => name !== "");
   const [mode, setMode] = useState<ProxyMode>("proxied");
   const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   const [identityMode, setIdentityMode] =
@@ -103,8 +123,11 @@ function CreateRemoteMcpForm() {
   // Unproxied servers are often only reachable from the customer's network,
   // so our infrastructure failing to reach one says nothing about whether it
   // works. Verification only gates saving when we sit in the request path.
-  // Gateway members are always proxied, whatever the Connection choice says.
-  const requiresVerification = mode === "proxied" || !!flow.gatewayId;
+  // Gateway members and official versions of Shadow MCP servers are always
+  // proxied, whatever the Connection choice says: Speakeasy must sit in the
+  // request path for either to work.
+  const proxyRequired = !!flow.gatewayId || !!shadowServerSlug;
+  const requiresVerification = mode === "proxied" || proxyRequired;
   const readyToSave = isVerified || !requiresVerification;
   const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
     issuerQuery.organizationIssuers,
@@ -134,6 +157,18 @@ function CreateRemoteMcpForm() {
     }
   }, [identityChoiceTouched, verify.result]);
 
+  // Once the URL checks out, the name is filled in: with the name the
+  // server reports for itself, or else one read from the address that was
+  // checked.
+  useEffect(() => {
+    if (nameEdited || !verify.result?.verified) return;
+    const suggestion =
+      verify.result.serverName?.trim() ||
+      (verify.result.url && readableServiceNameFromUrl(verify.result.url)) ||
+      "";
+    if (suggestion) setName(suggestion);
+  }, [nameEdited, verify.result]);
+
   const handleVerify = () => {
     setTouched(true);
     if (!urlUsable) return;
@@ -159,13 +194,13 @@ function CreateRemoteMcpForm() {
     const trimmedName = name.trim();
     setSubmitting(true);
     try {
-      if (mode === "unproxied" && !flow.gatewayId) {
+      if (mode === "unproxied" && !proxyRequired) {
         const { mcpServer } = await createUnproxied.mutateAsync({
           name: trimmedName === "" ? undefined : trimmedName,
           url: url.trim(),
         });
         toast.success("MCP server added");
-        routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
         return;
       }
 
@@ -177,8 +212,6 @@ function CreateRemoteMcpForm() {
             selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
               ? undefined
               : selectedIssuer,
-          organizationOwnedUserSessionIssuer:
-            selectedIssuer !== PROJECT_SPECIFIC_ISSUER_VALUE,
           identityMode,
           agentAuthorization:
             identityMode === "agent"
@@ -199,10 +232,12 @@ function CreateRemoteMcpForm() {
       }
       if (identityConfiguration.status === "setup-required") {
         toast.warning(
-          `MCP server added but kept disabled. ${identityConfiguration.message}`,
+          shadowServerSlug
+            ? `MCP server added but kept disabled. ${identityConfiguration.message} Turn it on, then make it official from its Shadow MCP page.`
+            : `MCP server added but kept disabled. ${identityConfiguration.message}`,
         );
         void navigate(
-          `${routes.mcp.x.settings.href(mcpServerRouteParam(mcpServer))}#${MCP_AUTHENTICATION_SECTION_ID}`,
+          `${routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer))}#${MCP_AUTHENTICATION_SECTION_ID}`,
         );
         return;
       }
@@ -214,9 +249,11 @@ function CreateRemoteMcpForm() {
       if (flow.gatewayId) {
         await flow.complete(mcpServer.id);
       } else if (guardrailFailed) {
-        routes.mcp.x.guardrails.goTo(mcpServerRouteParam(mcpServer));
+        routes.mcp.details.guardrails.goTo(mcpServerRouteParam(mcpServer));
+      } else if (shadowServerSlug) {
+        routes.shadowAI.mcps.detail.goTo(shadowServerSlug);
       } else {
-        routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+        routes.mcp.details.overview.goTo(mcpServerRouteParam(mcpServer));
       }
     } catch (error) {
       const message =
@@ -240,6 +277,13 @@ function CreateRemoteMcpForm() {
         noValidate
       >
         <Stack gap={4}>
+          {shadowServerSlug ? (
+            <Alert variant="info" dismissible={false}>
+              This server becomes the official version of {shadowServerName}.
+              After you save it, you go back to its Shadow MCP page to make it
+              official.
+            </Alert>
+          ) : null}
           <fieldset disabled={creationLocked} className="contents">
             <Stack gap={1}>
               <label
@@ -253,7 +297,10 @@ function CreateRemoteMcpForm() {
                 autoFocus
                 placeholder="My MCP server"
                 value={name}
-                onChange={setName}
+                onChange={(value) => {
+                  setNameEdited(true);
+                  setName(value);
+                }}
               />
             </Stack>
 
@@ -314,7 +361,7 @@ function CreateRemoteMcpForm() {
                     <RadioGroupItem
                       value="unproxied"
                       className="mt-0.5"
-                      disabled={!!flow.gatewayId}
+                      disabled={proxyRequired}
                     />
                     <span className="flex flex-col gap-0.5">
                       <span className="text-sm">
@@ -334,6 +381,12 @@ function CreateRemoteMcpForm() {
                 {flow.gatewayId && (
                   <Text muted small>
                     Gateway members must proxy through Speakeasy; direct
+                    connections are not supported.
+                  </Text>
+                )}
+                {!flow.gatewayId && shadowServerSlug && (
+                  <Text muted small>
+                    An official server must proxy through Speakeasy; direct
                     connections are not supported.
                   </Text>
                 )}
@@ -428,7 +481,7 @@ function CreateRemoteMcpForm() {
             >
               {verify.isPending || isPending ? (
                 <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               ) : !readyToSave ? (
                 <Button.LeftIcon>
@@ -460,7 +513,12 @@ function CreateRemoteMcpForm() {
               variant="secondary"
               disabled={isPending || flow.isAttaching}
               onClick={() => {
-                if (!flow.cancel()) routes.mcp.add.goTo();
+                if (flow.cancel()) return;
+                if (shadowServerSlug) {
+                  routes.shadowAI.mcps.detail.goTo(shadowServerSlug);
+                  return;
+                }
+                routes.mcp.add.goTo();
               }}
             >
               <Button.Text>Cancel</Button.Text>

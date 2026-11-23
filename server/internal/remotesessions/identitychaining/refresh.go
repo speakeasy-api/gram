@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -185,12 +187,11 @@ func unavailableForNow(reason remotesessions.EMAProviderUnavailableReason) bool 
 // Speakeasy source's authority already checks the grant's sign-in.
 //
 // A retained delegation that predates the current trusted registration reads
-// as needing reauthentication. The runtime reports it as configuration, but
-// the human's next sign-in retains a delegation under the current
-// registration, so a reconnect is exactly what repairs it. Every other
-// configuration failure, such as a renewal the provider refused for the
-// configured client or a retained secret that no longer decrypts, stays
-// configuration: signing in again cannot repair it. A sign-in decrypts the
+// as needing reauthentication: the human's next sign-in retains a delegation
+// under the current registration, so a reconnect is exactly what repairs it.
+// A renewal the provider refused for the configured client or a retained
+// secret that no longer decrypts stays configuration: signing in again cannot
+// repair it. A sign-in decrypts the
 // retained subject before replacing anything and refuses when it cannot.
 func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider) Outcome {
 	src := g.source(p)
@@ -219,9 +220,6 @@ func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Req
 		}
 		err = g.delegation.CheckResolvable(ctx, binding, auth)
 	}
-	if errors.Is(err, remotesessions.ErrDelegationStaleRegistration) {
-		return newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
-	}
 	if outcome := delegationOutcome(err); !outcome.Succeeded() {
 		return outcome
 	}
@@ -230,14 +228,14 @@ func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Req
 
 // refusedWithoutCredential is the provider's recent definitive refusal of sel
 // when no stored credential would serve instead, as acquisition answers it;
-// success otherwise.
+// otherwise whether acquisition could store what it issues.
 func (g *Governor) refusedWithoutCredential(ctx context.Context, logger *slog.Logger, req Request, sel selection) Outcome {
 	if g.recentRefusal == nil {
-		return success
+		return g.storable(ctx, logger, req)
 	}
 	refused, ok := g.recentRefusal(ctx, req, sel)
 	if !ok {
-		return success
+		return g.storable(ctx, logger, req)
 	}
 	usable, err := g.storedCredentialUsable(ctx, req, sel)
 	switch {
@@ -250,9 +248,25 @@ func (g *Governor) refusedWithoutCredential(ctx context.Context, logger *slog.Lo
 	return refused
 }
 
+// storable is success when the organization's key can seal a credential
+// acquisition would issue, as acquisition checks before asking a provider. A
+// key that cannot right now is a retryable outcome, so the refresh stays
+// unconfirmed instead of reading as served.
+func (g *Governor) storable(ctx context.Context, logger *slog.Logger, req Request) Outcome {
+	if g.tokens == nil {
+		return success
+	}
+	if err := g.tokens.RequireUsable(ctx, nil, conv.ToPGText(req.OrganizationID)); err != nil {
+		logger.WarnContext(ctx, "identity chaining credential could not be stored right now", attr.SlogError(err))
+		return newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceUnknown, true)
+	}
+	return success
+}
+
 // storedCredentialUsable reports whether sel's stored credential is usable now
 // and still decrypts, as the runtime requires before releasing it. A missing
-// or undecryptable credential is unusable; a failed read is an error.
+// or undecryptable credential is unusable; a failed read, or an organization
+// key that cannot open it right now, is an error.
 func (g *Governor) storedCredentialUsable(ctx context.Context, req Request, sel selection) (bool, error) {
 	row, err := readCredential(ctx, repo.New(g.db), req, sel, g.now())
 	switch {
@@ -260,9 +274,17 @@ func (g *Governor) storedCredentialUsable(ctx context.Context, req Request, sel 
 		return false, nil
 	case err != nil:
 		return false, err
-	case !row.Usable || g.enc == nil:
+	case !row.Usable || g.tokens == nil:
 		return false, nil
 	}
-	value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
-	return err == nil && value != "", nil
+	value, err := openCredential(ctx, g.tokens, row)
+	switch {
+	case err != nil && !orgencryption.IsUnreadable(err):
+		// The organization's key could not open it right now, which says
+		// nothing about whether the credential is usable.
+		return false, err
+	case err != nil:
+		return false, nil
+	}
+	return value != "", nil
 }

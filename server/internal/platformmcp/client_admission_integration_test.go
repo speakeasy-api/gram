@@ -6,16 +6,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -97,7 +94,7 @@ func TestClientAdmissionRoundTripsWithoutAConnection(t *testing.T) {
 	require.Equal(t, "presets", issuer.ClientIDMetadataAdmissionMode.String, "the rejected writes left the stored mode alone")
 }
 
-func TestClientAdmissionProtectsActiveEMABindings(t *testing.T) {
+func TestClientAdmissionAllowedWithActiveEMABindings(t *testing.T) {
 	t.Parallel()
 	for _, concurrentPreparation := range []bool{false, true} {
 		name := "existing binding"
@@ -158,34 +155,16 @@ func TestClientAdmissionProtectsActiveEMABindings(t *testing.T) {
 					t.Fatal("mode change did not finish after preparation committed")
 				}
 			} else {
-				// A legacy NULL resolves to open; comparing raw storage would
-				// incorrectly reject the same effective mode with a binding.
-				require.NoError(t, testrepo.New(conn).SetUserSessionIssuerCIMDAdmissionMode(ctx, testrepo.SetUserSessionIssuerCIMDAdmissionModeParams{
-					ID: issuerID, ProjectID: project.ID, ClientIDMetadataAdmissionMode: pgtype.Text{String: "", Valid: false},
-				}))
 				require.NoError(t, q.EnsureEMABinding(ctx, bindingParams))
 				_, err = service.Set(ctx, principal, project, registrationID, "disabled")
 			}
-			var shared *oops.ShareableError
-			require.ErrorAs(t, err, &shared)
-			require.Equal(t, oops.CodeConflict, shared.Code)
+			require.NoError(t, err, "admission mode does not affect identity-chaining bindings")
 			stored, err := service.Get(ctx, principal, project, registrationID)
 			require.NoError(t, err)
-			require.Equal(t, "open", stored.Mode, "rejected mode change preserves admission")
-			unchanged, err := service.Set(ctx, principal, project, registrationID, "open")
-			require.NoError(t, err, "same-mode writes are allowed with active bindings")
-			require.Equal(t, "open", unchanged.Mode)
+			require.Equal(t, "disabled", stored.Mode)
 			binding, err := q.GetEMABinding(ctx, remoterepo.GetEMABindingParams(bindingParams))
 			require.NoError(t, err)
-			_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{
-				ID: binding.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID,
-				ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1,
-				State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{},
-			})
-			require.NoError(t, err)
-			updated, err := service.Set(ctx, principal, project, registrationID, "disabled")
-			require.NoError(t, err, "explicitly unlinking permits mode changes")
-			require.Equal(t, "disabled", updated.Mode)
+			require.False(t, binding.State.Valid && binding.State.String == "unlinked", "the binding stays active")
 		})
 	}
 }

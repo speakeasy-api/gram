@@ -51,14 +51,14 @@ func (s *Service) authenticatePrincipalCredential(ctx context.Context, token str
 func (s *Service) authenticateIssuerGatePrincipalCredential(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	authed, err := s.authenticatePrincipalCredential(ctx, token)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("%w: %w", errCredentialRejected, err)
+		return ctx, nil, markCredentialDenial(err)
 	}
 	if err := requirePrincipalCredentialProject(authed, endpoint.ProjectID); err != nil {
 		return ctx, nil, fmt.Errorf("%w: %w", errCredentialRejected, err)
 	}
 	authed, err = s.requireAgentSessionAuthorization(authed, endpoint)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("%w: %w", errCredentialRejected, err)
+		return ctx, nil, markCredentialDenial(err)
 	}
 	credential, _ := principalcredential.FromContext(authed)
 	principal := credential.Credential.Principal

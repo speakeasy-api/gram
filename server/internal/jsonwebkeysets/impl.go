@@ -23,8 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -96,7 +96,7 @@ func NewService(
 // behind the same entitlement as the external keys and credentials beneath
 // them — gating only the lower layers would leave the sets reachable by an
 // organization that was never sold the feature.
-func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireOrgAccess(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -104,7 +104,7 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, logger, err
 	}
 
@@ -134,7 +134,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +220,7 @@ func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayloa
 }
 
 func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +261,7 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading key set").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(current.IdentityProviderConnectionID, "this key set"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(current.IdentityProviderConnectionID, "this key set"); err != nil {
 		return nil, err
 	}
 
@@ -311,7 +311,7 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 }
 
 func (s *Service) ListSets(ctx context.Context, payload *gensvc.ListSetsPayload) (*gensvc.ListJSONWebKeySetsResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (s *Service) ListSets(ctx context.Context, payload *gensvc.ListSetsPayload)
 }
 
 func (s *Service) GetSet(ctx context.Context, payload *gensvc.GetSetPayload) (*gensvc.JSONWebKeySet, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +361,7 @@ func (s *Service) GetSet(ctx context.Context, payload *gensvc.GetSetPayload) (*g
 // client_count here is exactly the condition that returns a conflict there. A missing set reports zero rather
 // than 404, matching DeleteSet's own idempotent treatment of an absent id.
 func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.GetSetDeletePreflightPayload) (*gensvc.JSONWebKeySetDeletePreflight, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +390,7 @@ func (s *Service) GetSetDeletePreflight(ctx context.Context, payload *gensvc.Get
 // transaction, emitting one audit event per withdrawn key before the set's own
 // deletion event. A missing id is a no-op so deletes stay idempotent.
 func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayload) error {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -422,7 +422,7 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 		return oops.E(oops.CodeUnexpected, err, "error deleting key set").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this key set"); err != nil {
+	if err := idpmanagedresources.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this key set"); err != nil {
 		return err
 	}
 
@@ -490,7 +490,7 @@ func (s *Service) DeleteSet(ctx context.Context, payload *gensvc.DeleteSetPayloa
 }
 
 func (s *Service) ListKeys(ctx context.Context, payload *gensvc.ListKeysPayload) (*gensvc.ListJSONWebKeysResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +554,7 @@ func (s *Service) lockBackingKey(ctx context.Context, logger *slog.Logger, q *re
 		return oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
 	}
 
-	if err := managedrows.RequireUnmanaged(key.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(key.IdentityProviderConnectionID, "this external key"); err != nil {
 		return err
 	}
 

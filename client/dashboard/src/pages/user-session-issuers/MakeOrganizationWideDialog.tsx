@@ -42,7 +42,7 @@ export function MakeOrganizationWideDialog({
       error={
         move.isError
           ? move.error instanceof GramError && move.error.statusCode === 409
-            ? "Speakeasy manages this authorization server, or it changed while saving, so it can't be made organization-wide. Reload the page to check it."
+            ? "Speakeasy manages this MCP Authentication Provider, or it changed while saving, so it can't be made organization-wide. Reload the page to check it."
             : "Couldn't make it organization-wide. Try again."
           : undefined
       }

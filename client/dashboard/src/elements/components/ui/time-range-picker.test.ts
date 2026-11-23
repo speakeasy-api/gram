@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Capture the options passed to createOpenRouter so we can assert on the
@@ -23,9 +24,6 @@ vi.mock("ai", () => ({
     object: vi.fn((opts: unknown) => opts),
   },
 }));
-
-// Avoid pulling Datadog RUM (and its window access) into the Node test env.
-vi.mock("@/elements/lib/errorTracking", () => ({ trackError: vi.fn() }));
 
 import {
   getPresetRange,

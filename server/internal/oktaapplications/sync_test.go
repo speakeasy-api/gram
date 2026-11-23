@@ -18,6 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
@@ -85,18 +87,16 @@ func newBasicConnection(t *testing.T, ctx context.Context) *basicConnection {
 	})
 	require.NoError(t, err)
 
-	enc := testenv.NewEncryptionClient(t)
-	encrypted, err := enc.Encrypt([]byte(clientSecret))
-	require.NoError(t, err)
-
 	_, err = q.SetManagedClientID(ctx, idprepo.SetManagedClientIDParams{
 		ClientID:                     "0oabasicclient000001",
-		ClientSecretEncrypted:        conv.ToPGText(encrypted),
 		ID:                           client.ClientRowID,
 		OrganizationID:               conv.ToPGText(orgID),
 		IdentityProviderConnectionID: conv.ToNullUUID(connectionID),
 		PlaceholderClientID:          client.ClientID,
 	})
+	require.NoError(t, err)
+	enc := testenv.NewEncryptionClient(t)
+	_, err = clientsecretstest.New(t, conn, enc).Set(ctx, conn, client.ClientRowID, clientsecrets.OwnerOf(conv.ToPGText(orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}), []byte(clientSecret), pgtype.Timestamptz{})
 	require.NoError(t, err)
 
 	_, err = q.UpdateIdentityProviderConnectionVerification(ctx, idprepo.UpdateIdentityProviderConnectionVerificationParams{
@@ -114,11 +114,9 @@ func newBasicConnection(t *testing.T, ctx context.Context) *basicConnection {
 func basicFakes() *okta.FakeFactory {
 	return okta.NewFakeFactory(map[string]okta.Fixtures{
 		basicOrgURL: {
-			Users:         nil,
 			Apps:          []okta.App{{ID: "0oaappa0000000000001", Label: "Notion MCP", Name: "oidc_client", SignOnMode: "OPENID_CONNECT", Status: "ACTIVE", Features: nil, Created: time.Time{}, LastUpdated: time.Time{}}},
 			AppUsers:      nil,
 			AppGroups:     nil,
-			Groups:        nil,
 			GrantedScopes: []string{"okta.apps.read"},
 		},
 	})
@@ -130,9 +128,9 @@ func TestSyncerRunsClientSecretBasicConnection(t *testing.T) {
 
 	bc := newBasicConnection(t, ctx)
 	fakes := basicFakes()
-	fakes.Fake(basicOrgURL).RequireClientSecret(clientSecret, bc.enc)
+	fakes.Fake(basicOrgURL).RequireClientSecret(clientSecret)
 
-	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes)
+	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes, clientsecretstest.New(t, bc.conn, bc.enc))
 	require.NoError(t, syncer.Run(ctx, bc.connectionID, false))
 
 	run, err := oktaapplications.LatestRun(ctx, bc.conn, bc.orgID, bc.connectionID)
@@ -152,9 +150,9 @@ func TestSyncerRecordsRejectedClientSecret(t *testing.T) {
 
 	bc := newBasicConnection(t, ctx)
 	fakes := basicFakes()
-	fakes.Fake(basicOrgURL).RequireClientSecret("a-different-secret", bc.enc)
+	fakes.Fake(basicOrgURL).RequireClientSecret("a-different-secret")
 
-	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes)
+	syncer := oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), bc.conn, fakes, clientsecretstest.New(t, bc.conn, bc.enc))
 	require.NoError(t, syncer.Run(ctx, bc.connectionID, false))
 
 	run, err := oktaapplications.LatestRun(ctx, bc.conn, bc.orgID, bc.connectionID)

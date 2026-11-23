@@ -30,7 +30,7 @@ import (
 // tools: reader (readOnlyHint true), writer and eraser (unannotated). Public
 // keeps RBAC out of the way and exercises the anonymous-subject path — the
 // one that early-returns before AuthContext is stamped.
-func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer) {
+func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (hostedToolset, usersessions_repo.UserSessionIssuer) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -38,7 +38,7 @@ func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (
 	require.NotNil(t, authCtx.ProjectID)
 
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "selection-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "selection-"+uuid.NewString()[:8])
 
 	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      toolset.ProjectID,
@@ -103,26 +103,21 @@ func seedSelectionToolset(t *testing.T, ctx context.Context, ti *testInstance) (
 		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Valid: true},
 	})
 	require.NoError(t, err)
-	toolset, err = toolsetsRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, issuer.ID)
 
 	return toolset, issuer
 }
 
 // mintSelectionSession signs a session JWT with the test signer and persists
 // its user_sessions row carrying the given raw tool_selection (nil = NULL).
-func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, issuer usersessions_repo.UserSessionIssuer, selection []byte) string {
+func mintSelectionSession(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, issuer usersessions_repo.UserSessionIssuer, selection []byte) string {
 	t.Helper()
 
 	signer := usersessions.NewSigner("test-jwt-secret")
 	subject := urn.NewAnonymousSubject(uuid.NewString())
 	access, jti, err := signer.Mint(usersessions.MintParams{
 		Subject:  subject,
-		Audience: urn.NewToolset(toolset.ID).String(),
+		Audience: urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:   "https://test.example",
 		Lifetime: time.Hour,
 		ClientID: "test-client",
@@ -159,12 +154,27 @@ func TestToolSelection_NullSelectionServesAllTools(t *testing.T) {
 	require.ElementsMatch(t, []string{"reader", "writer", "eraser"}, names)
 }
 
-func TestToolSelection_NameSnapshotNarrowsListAndCall(t *testing.T) {
+// A session whose selection was stored against the toolset resource still serves its server.
+func TestToolSelection_StoredToolsetResourceStillServes(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
 	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"tool","name":"writer"}]}`, toolset.ID, uuid.NewString())
+	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, []string{"writer"}, toolNames(parseToolsListResponse(t, w.Body.Bytes())))
+}
+
+func TestToolSelection_NameSnapshotNarrowsListAndCall(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, issuer := seedSelectionToolset(t, ctx, ti)
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[{"type":"tool","name":"writer"}]}`, toolset.ID, uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -199,7 +209,7 @@ func TestToolSelection_LegacyFlatDocumentFailsClosed(t *testing.T) {
 	// fails closed into reauthorization, never into all tools.
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
-	selection := fmt.Appendf(nil, `{"annotations":["read_only"],"tools":["eraser"],"resource":"toolset:%s"}`, toolset.ID)
+	selection := fmt.Appendf(nil, `{"annotations":["read_only"],"tools":["eraser"],"resource":"mcp_server:%s"}`, toolset.ID)
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	_, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -214,7 +224,7 @@ func TestToolSelection_LiveAnnotationGrantTracksHints(t *testing.T) {
 	// grant document names no tools at all.
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
-	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"annotation","name":"read_only","mode":"live"}]}`, toolset.ID, uuid.NewString())
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[{"type":"annotation","name":"read_only","mode":"live"}]}`, toolset.ID, uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -231,7 +241,7 @@ func TestToolSelection_SnapshotAnnotationGrantIsFrozen(t *testing.T) {
 	// reader stays out unless its NAME is in the frozen list.
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
-	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"annotation","name":"read_only","mode":"snapshot","tools":["eraser"]}]}`, toolset.ID, uuid.NewString())
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[{"type":"annotation","name":"read_only","mode":"snapshot","tools":["eraser"]}]}`, toolset.ID, uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -246,7 +256,7 @@ func TestToolSelection_EmptyPolicyMeansZeroTools(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
-	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[]}`, toolset.ID, uuid.NewString())
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[]}`, toolset.ID, uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -262,7 +272,7 @@ func TestToolSelection_ResourceMismatchRejects(t *testing.T) {
 	toolset, issuer := seedSelectionToolset(t, ctx, ti)
 	// Bound to a different endpoint sharing the issuer: must 401 into
 	// reauth, never be reinterpreted against this endpoint's inventory.
-	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"tool","name":"writer"}]}`, uuid.NewString(), uuid.NewString())
+	selection := fmt.Appendf(nil, `{"resource":"mcp_server:%s","grant_id":"%s","allow":[{"type":"tool","name":"writer"}]}`, uuid.NewString(), uuid.NewString())
 	access := mintSelectionSession(t, ctx, ti, toolset, issuer, selection)
 
 	_, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsListBody(), access, nil)
@@ -294,7 +304,7 @@ func TestToolSelection_MissingSessionRowRejects(t *testing.T) {
 	signer := usersessions.NewSigner("test-jwt-secret")
 	access, _, err := signer.Mint(usersessions.MintParams{
 		Subject:  urn.NewAnonymousSubject(uuid.NewString()),
-		Audience: urn.NewToolset(toolset.ID).String(),
+		Audience: urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:   "https://test.example",
 		Lifetime: time.Hour,
 		ClientID: "test-client",

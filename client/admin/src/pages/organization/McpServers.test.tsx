@@ -55,6 +55,7 @@ const LINEAR: AdminMcpServer = {
   url: "https://gram.example.test/mcp/linear",
   visibility: "public",
   source: "remote",
+  upstream_url: "https://mcp.example.test/remote",
   created_at: "2026-02-03T12:00:00Z",
 };
 const LEGACY: AdminMcpServer = {
@@ -146,8 +147,9 @@ describe("McpServers", () => {
     ).toEqual([
       "Name",
       "Server URL",
-      "Visibility",
       "Source",
+      "Visibility",
+      "Type",
       "Created",
       "Open",
     ]);
@@ -160,6 +162,7 @@ describe("McpServers", () => {
     ).toEqual([
       "Linear",
       LINEAR.url,
+      LINEAR.upstream_url,
       "Public",
       "Remote",
       shortDate(LINEAR.created_at),
@@ -172,6 +175,7 @@ describe("McpServers", () => {
         .map((cell) => cell.textContent),
     ).toEqual([
       "Legacy",
+      "-",
       "-",
       "Private",
       "Legacy toolset",
@@ -202,6 +206,26 @@ describe("McpServers", () => {
     expect(router.state.location.pathname).toBe(
       `/organizations/${ORG.slug}/mcp-servers`,
     );
+  });
+
+  it("copies the upstream source without leaving the list", async () => {
+    const { router } = await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/mcp-servers?project=${OLDEST.id}`,
+    });
+    const copy = await screen.findByRole("button", {
+      name: "Copy Linear source URL",
+    });
+    await act(async () => {
+      fireEvent.click(copy);
+      await Promise.resolve();
+    });
+    expect(writeText).toHaveBeenCalledWith(LINEAR.upstream_url);
+    expect(router.state.location.pathname).toBe(
+      `/organizations/${ORG.slug}/mcp-servers`,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Copy Legacy source URL" }),
+    ).toBeNull();
   });
 
   it("links each server to its health page in the selected project", async () => {

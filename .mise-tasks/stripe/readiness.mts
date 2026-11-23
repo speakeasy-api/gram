@@ -69,14 +69,21 @@ export async function getSetupReadiness(
   const secretOK = /^whsec_[A-Za-z0-9]+$/.test(
     local.STRIPE_WEBHOOK_SECRET ?? "",
   );
+  const publishableKeyOK = /^pk_test_[A-Za-z0-9_]+$/.test(
+    local.STRIPE_PUBLISHABLE_KEY ?? "",
+  );
   add(
     "credentials",
-    keyOK && secretOK,
-    keyOK && secretOK
+    keyOK && secretOK && publishableKeyOK,
+    keyOK && secretOK && publishableKeyOK
       ? "Test credentials saved. Expiry is not checked offline; CLI-created keys expire (typically 90 days)."
-      : "Save a test API key and signing secret with stripe:setup.",
+      : "Save a test API key, matching publishable key, and signing secret with stripe:setup.",
   );
-  const same = ["STRIPE_API_KEY", "STRIPE_WEBHOOK_SECRET"].every(
+  const same = [
+    "STRIPE_API_KEY",
+    "STRIPE_PUBLISHABLE_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+  ].every(
     (name) => !env[name] || env[name] === "unset" || env[name] === local[name],
   );
   add(

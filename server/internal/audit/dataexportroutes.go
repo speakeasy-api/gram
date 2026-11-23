@@ -18,12 +18,14 @@ const (
 	ActionDataExportRouteDelete Action = "data_export_route:delete"
 	ActionDataExportRoutePause  Action = "data_export_route:pause"
 	ActionDataExportRouteResume Action = "data_export_route:resume"
+	ActionDataExportRouteTest   Action = "data_export_route:test"
 )
 
 type DataExportRouteSnapshot struct {
 	DataSource        string  `json:"data_source"`
 	Enabled           bool    `json:"enabled"`
 	OtelDestinationID *string `json:"otel_destination_id,omitempty"`
+	MinSeverity       *string `json:"min_severity,omitempty"`
 }
 
 type LogDataExportRouteCreateEvent struct {
@@ -34,13 +36,19 @@ type LogDataExportRouteCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RouteURN   urn.DataExportRoute
-	DataSource string
+	RouteURN      urn.DataExportRoute
+	DataSource    string
+	RouteSnapshot *DataExportRouteSnapshot
 }
 
 func (l *Logger) LogDataExportRouteCreate(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteCreateEvent) error {
 	action := ActionDataExportRouteCreate
+	afterSnapshot, err := marshalAuditPayload(event.RouteSnapshot)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -57,7 +65,7 @@ func (l *Logger) LogDataExportRouteCreate(ctx context.Context, dbtx repo.DBTX, e
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 
@@ -108,6 +116,7 @@ func (l *Logger) logDataExportRouteChange(ctx context.Context, dbtx repo.DBTX, a
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -146,6 +155,7 @@ type LogDataExportRouteDeleteEvent struct {
 func (l *Logger) LogDataExportRouteDelete(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteDeleteEvent) error {
 	action := ActionDataExportRouteDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -167,4 +177,74 @@ func (l *Logger) LogDataExportRouteDelete(ctx context.Context, dbtx repo.DBTX, e
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DataExportRouteV1})
+}
+
+// LogDataExportRouteTestEvent records one test event sent to a route's
+// destination and what it got back. It never carries headers or the response body.
+type LogDataExportRouteTestEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RouteURN       urn.DataExportRoute
+	DataSource     string
+	DestinationURN urn.OtelDestination
+	Outcome        string
+	// StatusCode is zero when no response came back.
+	StatusCode int
+	// Signals is each signal's own outcome, one per OTLP request the test sent.
+	Signals []DataExportRouteTestSignal
+	// TestEventMarker is the speakeasy.test_event_id on this test's logs and spans; metrics carry only the marker.
+	// It names no stored resource, so it is not a URN.
+	TestEventMarker string
+}
+
+// DataExportRouteTestSignal is what one signal's test request got back.
+type DataExportRouteTestSignal struct {
+	Signal     string `json:"signal"`
+	Outcome    string `json:"outcome"`
+	StatusCode int    `json:"status_code,omitempty"`
+}
+
+type dataExportRouteTestMetadata struct {
+	DestinationID string                      `json:"otel_destination_id"`
+	Outcome       string                      `json:"outcome"`
+	StatusCode    int                         `json:"status_code,omitempty"`
+	Signals       []DataExportRouteTestSignal `json:"signals,omitempty"`
+	TestEventID   string                      `json:"test_event_id,omitempty"`
+}
+
+func (l *Logger) LogDataExportRouteTest(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteTestEvent) error {
+	action := ActionDataExportRouteTest
+	metadata, err := marshalAuditPayload(dataExportRouteTestMetadata{DestinationID: event.DestinationURN.ID.String(), Outcome: event.Outcome, StatusCode: event.StatusCode, Signals: event.Signals, TestEventID: event.TestEventMarker})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RouteURN.ID.String(),
+		SubjectType:        string(subjectTypeDataExportRoute),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.DataSource),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	// A test changes no configuration, so it publishes no config-change webhook.
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: nil})
 }

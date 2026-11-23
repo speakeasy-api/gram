@@ -1,3 +1,4 @@
+import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 
@@ -9,12 +10,14 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { identityProvidersHref } from "@/pages/org/identity-provider/tabs";
 import { useOrgRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
+import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 
 import { MCP_SESSIONS_SECTION_ID } from "../RemoteMcpSessionsSection";
@@ -28,6 +31,9 @@ import { useSpeakeasyIssuerStatus } from "./useSpeakeasyIssuerStatus";
 
 export const IDENTITY_CHAINING_SECTION_ID = "identity-chaining";
 
+// Chaining signs each person in, so a shared service account never applies.
+const PER_PERSON_CREDENTIALS = new Set<string>(["remote_session", "ema"]);
+
 // Speakeasy could vouch once an admin sets its issuer up.
 const SPEAKEASY_SETUP = new Set(["setup_required", "verified_domain_required"]);
 
@@ -40,9 +46,8 @@ function useScrollWhenReady(ready: boolean) {
     if (location.hash !== `#${IDENTITY_CHAINING_SECTION_ID}`) return;
     done.current = true;
     const frame = window.requestAnimationFrame(() => {
-      document
-        .getElementById(IDENTITY_CHAINING_SECTION_ID)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const target = document.getElementById(IDENTITY_CHAINING_SECTION_ID);
+      if (target) scrollWithinPage(target);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [ready, location.hash]);
@@ -106,17 +111,68 @@ export function IdentityChainingSection({
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
   const userSessionIssuer = issuerQuery.data;
-  const clientsQuery = useAllRemoteSessionClients(
-    { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
+  // Enforcing organizations attach registrations to the server as
+  // credentials, and those decide which one a call signs in through. The
+  // issuer can be shared across the organization and binds one registration,
+  // which may belong to another server, so it is read only where it still
+  // routes calls: without enforcement, or while the server's credentials do
+  // not record the upstream yet (setup is incomplete, or a per-person
+  // credential names no registration).
+  const upstreamAuth = useUpstreamAuthEnforcement();
+  const enforced = upstreamAuth === "enforced";
+  const credentialsQuery = useMcpServerAuthentication(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    { enabled: enforced, throwOnError: false },
   );
-  const clients = clientsQuery.items;
+  const credentials = enforced ? credentialsQuery.data : undefined;
+  const unresolved =
+    !!credentials &&
+    (credentials.status === "setup_incomplete" ||
+      credentials.clients.some(
+        (client) =>
+          client.enabled &&
+          PER_PERSON_CREDENTIALS.has(client.clientType) &&
+          !client.remoteSessionClientId,
+      ));
+  // Whether the issuer's registrations count. When they do not, a failed or
+  // pending earlier read of them neither blocks nor holds the section.
+  const linkedUsed =
+    !!userSessionIssuerId &&
+    upstreamAuth !== "loading" &&
+    (!enforced || unresolved || credentialsQuery.isError);
+  const linkedQuery = useAllRemoteSessionClients(
+    { userSessionIssuerId },
+    { enabled: linkedUsed },
+  );
+  const credentialRegistrationIds = new Set(
+    (enforced ? (credentialsQuery.data?.clients ?? []) : []).flatMap((client) =>
+      client.remoteSessionClientId &&
+      PER_PERSON_CREDENTIALS.has(client.clientType)
+        ? [client.remoteSessionClientId]
+        : [],
+    ),
+  );
+  const registrationsQuery = useAllRemoteSessionClients(
+    {},
+    {
+      enabled: !!userSessionIssuerId && credentialRegistrationIds.size > 0,
+    },
+  );
+  const linked = linkedUsed ? linkedQuery.items : [];
+  const clients = [
+    ...linked,
+    ...registrationsQuery.items.filter(
+      (client) =>
+        credentialRegistrationIds.has(client.id) &&
+        !linked.some((other) => other.id === client.id),
+    ),
+  ];
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
     { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
-  const externalFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const emaProvidersFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
   const speakeasyIssuer = useSpeakeasyIssuerStatus();
   const orgRoutes = useOrgRoutes();
@@ -134,7 +190,6 @@ export function IdentityChainingSection({
   const speakeasyUnreadable =
     speakeasyIssuer.isPending && speakeasyIssuer.fetchStatus === "idle";
   const rollouts = {
-    externalRollout: externalFlag.status === "enabled",
     speakeasyRollout,
     speakeasyIssuer: speakeasyIssuer.data,
   };
@@ -163,27 +218,23 @@ export function IdentityChainingSection({
     userSessionIssuer.projectId !== "" &&
     !!chainingVouchers(userSessionIssuer, rollouts);
 
-  // With neither rollout on nothing can vouch, so stay off the page entirely.
-  const rolloutsOff =
-    externalFlag.status !== "loading" &&
-    emaProvidersFlag.status !== "loading" &&
-    !speakeasyIssuer.isLoading &&
-    !rollouts.externalRollout &&
-    !speakeasyRollout;
-  const applies =
-    !!userSessionIssuerId && remoteMcpServerId !== "" && !rolloutsOff;
+  const applies = !!userSessionIssuerId && remoteMcpServerId !== "";
   const failed =
     issuerQuery.isError ||
     sourceQuery.isError ||
-    clientsQuery.isError ||
+    (linkedUsed && linkedQuery.isError) ||
+    registrationsQuery.isError ||
+    (enforced && credentialsQuery.isError) ||
     // Only when Speakeasy's issuer decides whether anyone can vouch.
     (speakeasyRollout && speakeasyIssuer.isError && !known);
   const loading =
     !failed &&
     (issuerQuery.isLoading ||
       sourceQuery.isLoading ||
-      clientsQuery.isLoading ||
-      externalFlag.status === "loading" ||
+      (linkedUsed && linkedQuery.isLoading) ||
+      registrationsQuery.isLoading ||
+      upstreamAuth === "loading" ||
+      (enforced && credentialsQuery.isLoading) ||
       emaProvidersFlag.status === "loading" ||
       speakeasyIssuer.isLoading);
   const shown =
@@ -230,7 +281,9 @@ export function IdentityChainingSection({
               onClick={() => {
                 void issuerQuery.refetch();
                 void sourceQuery.refetch();
-                clientsQuery.refetch();
+                if (linkedUsed) linkedQuery.refetch();
+                registrationsQuery.refetch();
+                if (credentialsQuery.isError) void credentialsQuery.refetch();
                 if (speakeasyIssuer.isError) void speakeasyIssuer.refetch();
               }}
             >

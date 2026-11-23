@@ -19,12 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/externalmcptest"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/functionstest"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -57,7 +55,6 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service        *deployments.Service
-	feature        *feature.InMemory
 	assets         *assets.Service
 	packages       *packages.Service
 	conn           *pgxpool.Pool
@@ -66,6 +63,16 @@ type testInstance struct {
 }
 
 func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestDeploymentServiceWithFunctions(t, assetStorage, functionstest.NewOrchestrator(t, assetStorage), true)
+}
+
+// newTestDeploymentServiceWithFunctions runs deployments against the given
+// Functions orchestrator. functionsAvailable is what the deployments and
+// assets services are told, so a test can pair an available API with a
+// disabled orchestrator to model functions carried into a disabled deployment.
+func newTestDeploymentServiceWithFunctions(t *testing.T, assetStorage assets.BlobStore, funcs functions.Orchestrator, functionsAvailable bool) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -80,13 +87,11 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	require.NoError(t, err)
 
 	enc := testenv.NewEncryptionClient(t)
-	funcs := functionstest.NewOrchestrator(t, assetStorage)
-	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 	auditLogger := audit.NewLogger()
 	f := &feature.InMemory{}
 
-	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger))
+	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, auditLogger))
 	t.Cleanup(func() {
 		worker.Stop()
 	})
@@ -99,23 +104,19 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret", sessionManager)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	validator, err := mcpregistry.LoadValidator()
-	require.NoError(t, err)
-	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, validator)), f)
-	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger, catalog)
-	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
+	svc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), authzEngine, auditLogger, functionsAvailable)
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger, functionsAvailable)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
 
 	return ctx, &testInstance{
 		service:        svc,
-		feature:        f,
 		assets:         assetsSvc,
 		packages:       packagesSvc,
 		conn:           conn,

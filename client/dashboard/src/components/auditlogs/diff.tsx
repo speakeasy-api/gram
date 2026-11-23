@@ -1,5 +1,5 @@
-import { AuditLog } from "@gram/client/models/components/auditlog.js";
-import { FileDiffOptions, ThemeTypes } from "@pierre/diffs";
+import type { AuditLog } from "@gram/client/models/components/auditlog.js";
+import type { FileDiffOptions, ThemeTypes } from "@pierre/diffs";
 import { MultiFileDiff } from "@pierre/diffs/react";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import React from "react";

@@ -435,10 +435,6 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 	candidates := make([]embeddingCandidate, 0, len(tools))
 
 	for _, tool := range tools {
-		if conv.IsProxyTool(tool) {
-			return nil, fmt.Errorf("index proxy tool for vector search: %s", tool.ExternalMcpToolDefinition.Name)
-		}
-
 		baseTool, err := conv.ToBaseTool(tool)
 		if err != nil {
 			continue

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { ExplainedAccessLevel } from "@gram/client/models/components/explainedaccesslevel.js";
 import type { ExplainedAccessRule } from "@gram/client/models/components/explainedaccessrule.js";
 import type { ExplainResourceAccessResult } from "@gram/client/models/components/explainresourceaccessresult.js";

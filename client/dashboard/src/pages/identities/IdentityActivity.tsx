@@ -92,6 +92,7 @@ export default function IdentityActivity(): JSX.Element {
   return (
     <IdentitySection
       title="Activity"
+      timeRange
       meta={sectionMeta([
         { count: logs.length, singular: "change" },
         { count: chats.length, singular: "session" },

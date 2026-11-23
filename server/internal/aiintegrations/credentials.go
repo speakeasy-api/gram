@@ -225,6 +225,7 @@ func listLogsProbe(ctx context.Context, client *codexapi.Client, eventType strin
 // key is not entitled to. Unlike the poll path (pollRejectedByProvider), 400
 // and 422 do not count — a probe sends a fixed minimal request, so a
 // request-shaped complaint is about the probe, not the credentials.
+// gemini_compliance verifies its own setup (prepareGemini) and has no probe.
 func providerRejectedCredentials(err error) (int, bool) {
 	status := 0
 	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](err); ok {

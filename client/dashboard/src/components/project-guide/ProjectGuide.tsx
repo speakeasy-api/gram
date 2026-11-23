@@ -553,14 +553,10 @@ function primaryActionFor(
       return { label: "Retry", onClick: () => send({ type: "RETRY" }) };
     case "complete":
       if (journey.id === "third-party-mcp") {
-        // Tool Logs needs log:read, which no role holds by default; without
-        // it the server's overview shows the call that was just counted.
-        return mcpOperations.toolLogsHref
-          ? {
-              label: journey.completion.primaryAction,
-              href: mcpOperations.toolLogsHref,
-            }
-          : { label: "Open MCP server", href: mcpOperations.mcpServerHref };
+        return {
+          label: journey.completion.primaryAction,
+          href: mcpOperations.toolLogsHref,
+        };
       }
       return {
         label: journey.completion.primaryAction,
@@ -1027,9 +1023,6 @@ function McpCatalogSelection({
             >
               <span aria-hidden="true" className="bg-foreground size-1.5" />
               <span className="text-sm">{name}</span>
-              <span className="text-muted-foreground ml-auto font-mono text-xs">
-                {server.toolCount} tools
-              </span>
             </button>
           );
         })}

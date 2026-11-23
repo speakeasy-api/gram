@@ -139,10 +139,28 @@ func TestFederatedFingerprint(t *testing.T) {
 	same, err := newFederatedProvider(p.organizationID, p.issuer, p.client, p.metadata)
 	require.NoError(t, err)
 	require.Equal(t, p.Fingerprint(), same.Fingerprint())
-	for _, mutate := range []func(*FederatedProvider){
+	for _, reseal := range []func(*FederatedProvider){
+		// The same secret sealed again, as backfill and key rotation do.
 		func(p *FederatedProvider) {
-			p.client.ClientSecretEncrypted = pgtype.Text{String: "encrypted-secret", Valid: true}
+			p.client.ClientSecretEncrypted = pgtype.Text{String: "resealed-secret", Valid: true}
 		},
+		func(p *FederatedProvider) {
+			p.client.ClientSecretOrgEncrypted = pgtype.Text{String: "organization-copy", Valid: true}
+		},
+		// Finalize clears the platform-key copy.
+		func(p *FederatedProvider) {
+			p.client.ClientSecretEncrypted = pgtype.Text{}
+			p.client.ClientSecretOrgEncrypted = pgtype.Text{String: "organization-copy", Valid: true}
+		},
+	} {
+		resealed := *p
+		reseal(&resealed)
+		next, err := newFederatedProvider(resealed.organizationID, resealed.issuer, resealed.client, resealed.metadata)
+		require.NoError(t, err)
+		require.Equal(t, p.Fingerprint(), next.Fingerprint(), "sealing the same secret again keeps logins in progress")
+	}
+	for _, mutate := range []func(*FederatedProvider){
+		func(p *FederatedProvider) { p.client.ClientSecretGeneration++ },
 		func(p *FederatedProvider) { p.metadata.TokenEndpoint += "/new" },
 		func(p *FederatedProvider) { p.client.Scope = append(p.client.Scope, "extra") },
 		func(p *FederatedProvider) { p.organizationID = "other-org" },
@@ -282,8 +300,15 @@ func TestFederatedSignerPreflightAndExchange(t *testing.T) {
 	for _, signer := range []TokenEndpointAssertionSigner{nil, unavailableTokenEndpointAssertionSigner{}} {
 		m := &ChallengeManager{assertions: signer}
 		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedUnavailable)
+		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedSigning)
+		_, refreshErr := m.RefreshFederatedIdentity(t.Context(), p, "refresh", "subject", "")
+		require.ErrorIs(t, refreshErr, ErrFederatedSigning)
+		var setup *FederatedRefreshError
+		require.ErrorAs(t, refreshErr, &setup)
+		require.Equal(t, FederatedRefreshSetupRetryable, setup.Kind)
 		_, err := NewTokenEndpointRequest(t.Context(), p.metadata.TokenEndpoint, url.Values{}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer})
 		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedUnavailable)
+		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedSigning)
 	}
 	calls := 0
 	signer := federatedAssertionSignerFunc(func(context.Context, ClientAssertionRequest) (string, error) { calls++; return "signed-assertion", nil })

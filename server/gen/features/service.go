@@ -114,10 +114,24 @@ type ProductFeatures struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled bool
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
+	// Whether this deployment can run assistants. A deployment-wide setting, not
+	// an organization entitlement: false when the deployment runs with the
+	// disabled assistant runtime provider. Absent from staff admin responses.
+	AssistantsAvailable *bool
+	// Whether this deployment can run Speakeasy Functions. A deployment-wide
+	// setting, not an organization entitlement: false when the deployment runs
+	// with the disabled Functions provider. Absent from staff admin responses.
+	FunctionsAvailable *bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 // SetProductFeaturePayload is the payload type of the features service
@@ -208,7 +222,11 @@ func NewViewedProductFeatures(res *ProductFeatures, view string) *featuresviews.
 // newProductFeatures converts projected type ProductFeatures to service type
 // ProductFeatures.
 func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeatures {
-	res := &ProductFeatures{}
+	res := &ProductFeatures{
+		AssistantsAvailable:  vres.AssistantsAvailable,
+		FunctionsAvailable:   vres.FunctionsAvailable,
+		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
+	}
 	if vres.LogsEnabled != nil {
 		res.LogsEnabled = *vres.LogsEnabled
 	}
@@ -269,6 +287,9 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.OrganizationGatewayDisabled != nil {
 		res.OrganizationGatewayDisabled = *vres.OrganizationGatewayDisabled
 	}
+	if vres.CodeModeEnabled != nil {
+		res.CodeModeEnabled = *vres.CodeModeEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -299,7 +320,11 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
+		AssistantsAvailable:                     res.AssistantsAvailable,
+		FunctionsAvailable:                      res.FunctionsAvailable,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return vres
 }

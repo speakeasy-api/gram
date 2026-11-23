@@ -25,6 +25,7 @@ type Server struct {
 	GetConfig                      http.Handler
 	UpsertConfig                   http.Handler
 	DeleteConfig                   http.Handler
+	ListOrgUnits                   http.Handler
 	ListSchedules                  http.Handler
 	SetScheduleEnabled             http.Handler
 	RetrySchedule                  http.Handler
@@ -63,6 +64,7 @@ func New(
 			{"GetConfig", "GET", "/rpc/aiIntegrations.getConfig"},
 			{"UpsertConfig", "POST", "/rpc/aiIntegrations.upsertConfig"},
 			{"DeleteConfig", "POST", "/rpc/aiIntegrations.deleteConfig"},
+			{"ListOrgUnits", "GET", "/rpc/aiIntegrations.listOrgUnits"},
 			{"ListSchedules", "GET", "/rpc/aiIntegrations.listSchedules"},
 			{"SetScheduleEnabled", "POST", "/rpc/aiIntegrations.setScheduleEnabled"},
 			{"RetrySchedule", "POST", "/rpc/aiIntegrations.retrySchedule"},
@@ -73,6 +75,7 @@ func New(
 		GetConfig:                      NewGetConfigHandler(e.GetConfig, mux, decoder, encoder, errhandler, formatter),
 		UpsertConfig:                   NewUpsertConfigHandler(e.UpsertConfig, mux, decoder, encoder, errhandler, formatter),
 		DeleteConfig:                   NewDeleteConfigHandler(e.DeleteConfig, mux, decoder, encoder, errhandler, formatter),
+		ListOrgUnits:                   NewListOrgUnitsHandler(e.ListOrgUnits, mux, decoder, encoder, errhandler, formatter),
 		ListSchedules:                  NewListSchedulesHandler(e.ListSchedules, mux, decoder, encoder, errhandler, formatter),
 		SetScheduleEnabled:             NewSetScheduleEnabledHandler(e.SetScheduleEnabled, mux, decoder, encoder, errhandler, formatter),
 		RetrySchedule:                  NewRetryScheduleHandler(e.RetrySchedule, mux, decoder, encoder, errhandler, formatter),
@@ -90,6 +93,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetConfig = m(s.GetConfig)
 	s.UpsertConfig = m(s.UpsertConfig)
 	s.DeleteConfig = m(s.DeleteConfig)
+	s.ListOrgUnits = m(s.ListOrgUnits)
 	s.ListSchedules = m(s.ListSchedules)
 	s.SetScheduleEnabled = m(s.SetScheduleEnabled)
 	s.RetrySchedule = m(s.RetrySchedule)
@@ -106,6 +110,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetConfigHandler(mux, h.GetConfig)
 	MountUpsertConfigHandler(mux, h.UpsertConfig)
 	MountDeleteConfigHandler(mux, h.DeleteConfig)
+	MountListOrgUnitsHandler(mux, h.ListOrgUnits)
 	MountListSchedulesHandler(mux, h.ListSchedules)
 	MountSetScheduleEnabledHandler(mux, h.SetScheduleEnabled)
 	MountRetryScheduleHandler(mux, h.RetrySchedule)
@@ -414,6 +419,59 @@ func NewDeleteConfigHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteConfig")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListOrgUnitsHandler configures the mux to serve the "aiIntegrations"
+// service "listOrgUnits" endpoint.
+func MountListOrgUnitsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/aiIntegrations.listOrgUnits", f)
+}
+
+// NewListOrgUnitsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "aiIntegrations" service "listOrgUnits" endpoint.
+func NewListOrgUnitsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListOrgUnitsRequest(mux, decoder)
+		encodeResponse = EncodeListOrgUnitsResponse(encoder)
+		encodeError    = EncodeListOrgUnitsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listOrgUnits")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "aiIntegrations")
 		payload, err := decodeRequest(r)
 		if err != nil {

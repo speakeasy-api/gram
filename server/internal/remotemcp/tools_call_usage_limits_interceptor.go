@@ -31,6 +31,9 @@ type ToolsCallUsageLimitsInterceptor struct {
 	logger  *slog.Logger
 }
 
+// ErrToolUsageLimitReached marks a tool call refused by the free-tier cap.
+var ErrToolUsageLimitReached = errors.New("tool usage limit reached")
+
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallUsageLimitsInterceptor)(nil)
 
 // NewToolsCallUsageLimitsInterceptor constructs an interceptor bound to the given
@@ -83,7 +86,7 @@ func (i *ToolsCallUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").LogWarn(ctx, i.logger, attr.SlogOrganizationID(serverCtx.OrganizationID))
+		return oops.E(oops.CodeForbidden, ErrToolUsageLimitReached, "tool usage limit reached").LogWarn(ctx, i.logger, attr.SlogOrganizationID(serverCtx.OrganizationID))
 	}
 
 	return nil

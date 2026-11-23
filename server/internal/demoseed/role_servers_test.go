@@ -41,7 +41,11 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 		memberships := map[string][]string{}
 		audiences := map[string][]string{}
 		stableAudiences := map[string][]string{}
+		pausedSlugs := []string{}
 		for _, plugin := range plugins {
+			if plugin.AutoSyncEnabled.Valid && !plugin.AutoSyncEnabled.Bool {
+				pausedSlugs = append(pausedSlugs, plugin.Slug)
+			}
 			// Seeded role plugins must remain role-only, beyond the content samples below.
 			if !plugin.IsDefault.Bool {
 				assignments, err := q.ListPluginAssignments(ctx, pluginrepo.ListPluginAssignmentsParams{
@@ -65,7 +69,6 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 			memberships[plugin.Slug] = []string{}
 			for _, server := range servers {
 				require.True(t, server.McpServerID.Valid)
-				require.False(t, server.ToolsetID.Valid)
 				require.False(t, server.MetaMcpServerID.Valid)
 				backend, err := q.GetMcpServerForPluginServer(ctx, pluginrepo.GetMcpServerForPluginServerParams{
 					McpServerID: server.McpServerID.UUID, ProjectID: projectID,
@@ -80,11 +83,12 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 			slices.Sort(stableAudiences[plugin.Slug])
 
 		}
+		require.Equal(t, []string{"engineering-essentials"}, pausedSlugs, "the demo shows one paused plugin while the others keep automatic sync")
 		// Representative build and read-only audiences must receive usable content.
 		for _, slug := range []string{"engineer", "read-only-tools"} {
 			require.NotEmpty(t, memberships[slug], "role plugin %s must deliver servers", slug)
 		}
-		require.Equal(t, []string{"github"}, memberships["engineering-essentials"])
+		require.Equal(t, []string{"example-shared-credential"}, memberships["engineering-essentials"])
 		require.Len(t, audiences["engineering-essentials"], 1)
 		require.Equal(t, audiences["engineer"], audiences["engineering-essentials"])
 		// Exact role audiences plus server content drive Team Access links.
@@ -92,11 +96,11 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 			require.Len(t, audiences[role], 1)
 			matches := 0
 			for slug, audience := range audiences {
-				if slices.Contains(audience, audiences[role][0]) && slices.Contains(memberships[slug], "github") {
+				if slices.Contains(audience, audiences[role][0]) && slices.Contains(memberships[slug], "example-shared-credential") {
 					matches++
 				}
 			}
-			require.Equal(t, expected, matches, "GitHub plugin matches for %s", role)
+			require.Equal(t, expected, matches, "Example Shared Credential plugin matches for %s", role)
 		}
 		if iteration == 0 {
 			firstMemberships = memberships

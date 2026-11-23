@@ -95,7 +95,7 @@ var CreateGcpIamCredentialForm = Type("CreateGcpIamCredentialForm", func() {
 
 // ListExternalCredentialsResult wraps the generic, supertype-only list items.
 var ListExternalCredentialsResult = Type("ListExternalCredentialsResult", func() {
-	Attribute("credentials", ArrayOf(ExternalCredentialSummary), "The organization's external credentials.")
+	Attribute("credentials", ArrayOf(ExternalCredentialSummary), "The external credentials.")
 	Required("credentials")
 })
 

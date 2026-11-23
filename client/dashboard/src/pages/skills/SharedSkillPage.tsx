@@ -6,6 +6,7 @@ import { dateTimeFormatters } from "@/lib/dates";
 import type { SharedSkill2 } from "@gram/client/models/components/sharedskill2.js";
 import { useSharedSkill } from "@gram/client/react-query/sharedSkill.js";
 import { Icon } from "@/components/ui/Icon";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Stack } from "@/components/ui/Stack";
 import { useParams } from "react-router";
 import { toast } from "sonner";
@@ -55,19 +56,7 @@ function SharedSkillBody({ token }: { token: string | undefined }) {
     return <SharedSkillUnavailable />;
   }
   if (query.isPending) {
-    return (
-      <Stack
-        direction="horizontal"
-        gap={2}
-        align="center"
-        className="justify-center py-24"
-      >
-        <Icon name="loader-circle" className="size-4 animate-spin" />
-        <Text muted small>
-          Loading skill…
-        </Text>
-      </Stack>
-    );
+    return <SplashScreen />;
   }
   if (query.error || !query.data) {
     return <SharedSkillUnavailable />;

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -135,7 +136,7 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return nil, err
 	}
-	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: target.Scheme + "://" + target.Host}
+	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: target.Scheme + "://" + target.Host, ConsentOrigin: "", Handoff: "", BoundAt: time.Time{}}
 	phase, callbackHash := "bootstrap", ""
 	if origin.Scheme == target.Scheme && origin.Host == target.Host {
 		phase, callbackHash = "ready", state.Browser.OriginHash
@@ -356,11 +357,14 @@ func federatedCallbackURL(callback string) (*url.URL, error) {
 
 // Never retain arbitrary upstream error strings: they may contain credentials.
 func federatedFailure(cause error) (oops.Code, error) {
+	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
+		if errors.Is(cause, remotesessions.ErrFederatedSigning) {
+			return oops.CodeUnavailable, errors.Join(remotesessions.ErrFederatedUnavailable, remotesessions.ErrFederatedSigning)
+		}
+		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
+	}
 	if errors.Is(cause, remotesessions.ErrFederatedSigning) {
 		return oops.CodeUnexpected, remotesessions.ErrFederatedSigning
-	}
-	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
-		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
 	}
 	if errors.Is(cause, remotesessions.ErrFederatedConfiguration) {
 		return oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration
@@ -399,12 +403,21 @@ func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request,
 	} else {
 		s.metrics.RecordOAuthFlowFailed(ctx, state.UserSessionIssuerID.String(), endpoint.Slug, stage)
 	}
-	failure := oops.E(code, cause, "%s", message).LogError(ctx, s.logger)
+	// Keep the OAuth redirect classification above while rendering browser
+	// request failures inline as 400 rather than an HTTP authentication challenge.
+	inlineCode := code
+	if state.FirstParty && inlineCode == oops.CodeUnauthorized {
+		inlineCode = oops.CodeBadRequest
+	}
+	failure := oops.E(inlineCode, cause, "%s", message).LogError(ctx, s.logger)
 	if responseErr != nil {
 		return responseErr
 	}
 	if state.FirstParty {
-		return failure
+		if declined {
+			return fmt.Errorf("complete identity login: %w", s.firstPartyBrowserError(oops.WithBrowserReason(failure, oauthui.ReasonCanceled)))
+		}
+		return s.firstPartyBrowserError(failure)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -461,7 +474,7 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeFailedPrecondition, nil, "Delegation retry is unavailable")
 	}
 	if state.Subject == nil || state.Subject.Kind != urn.SessionSubjectKindUser || state.AuthorizerUserID == "" || state.Subject.ID != state.AuthorizerUserID || state.Federation != nil || state.CreatedAt.IsZero() || time.Since(state.CreatedAt) > state.TTL() || state.CreatedAt.After(time.Now().Add(time.Minute)) {
-		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry requires a resolved human login")
+		return oops.E(oops.CodeBadRequest, nil, "Delegation retry requires a resolved human login")
 	}
 	if state.AuthorizerImpersonated == nil || *state.AuthorizerImpersonated {
 		return oops.E(oops.CodeForbidden, nil, "Delegation retry requires a non-impersonated login")
@@ -495,10 +508,10 @@ func (s *Service) retryFederatedDelegation(w http.ResponseWriter, r *http.Reques
 	}
 	consumed, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+state.ID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry state was already consumed or expired")
+		return oops.E(oops.CodeBadRequest, nil, "Delegation retry state was already consumed or expired")
 	}
 	if consumed.Subject == nil || consumed.Subject.Kind != urn.SessionSubjectKindUser || consumed.Subject.ID != humanID || consumed.AuthorizerUserID != humanID || consumed.CSRFToken != state.CSRFToken || consumed.Federation != nil || consumed.AuthorizerImpersonated == nil || *consumed.AuthorizerImpersonated || consumed.DelegationRetryUsed || !consumed.FederatedBinding.matches(issuerID, clientID, provider) {
-		return oops.E(oops.CodeUnauthorized, nil, "Delegation retry identity changed")
+		return oops.E(oops.CodeBadRequest, nil, "Delegation retry identity changed")
 	}
 	if err := endpoint.ValidateChallenge(ctx, consumed.Endpoint, consumed.UserSessionIssuerID); err != nil {
 		return oauthAuthorityError(err)

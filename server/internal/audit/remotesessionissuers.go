@@ -40,6 +40,7 @@ type LogRemoteSessionIssuerCreateEvent struct {
 func (l *Logger) LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerCreateEvent) error {
 	action := ActionRemoteSessionIssuerCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -106,6 +107,7 @@ func (l *Logger) LogRemoteSessionIssuerUpdate(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -182,6 +184,7 @@ func (l *Logger) LogRemoteSessionIssuerMigrate(ctx context.Context, dbtx repo.DB
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -222,6 +225,7 @@ type LogRemoteSessionIssuerDeleteEvent struct {
 func (l *Logger) LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerDeleteEvent) error {
 	action := ActionRemoteSessionIssuerDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -292,6 +296,7 @@ func (l *Logger) LogRemoteSessionIssuerUpdateEMAProviders(ctx context.Context, d
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

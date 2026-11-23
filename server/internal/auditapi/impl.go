@@ -16,12 +16,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
 	srv "github.com/speakeasy-api/gram/server/gen/http/auditlogs/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -31,14 +33,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 )
 
 const listAuditLogsPageSize = 50
-
-// Speakeasy staff actions in customer orgs (e.g. via the dev-tools org
-// override) are shown under a collective label instead of the staff member's
-// email. Logs viewed within the Speakeasy org itself are not masked.
-const speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 
 type Service struct {
 	tracer trace.Tracer
@@ -46,20 +44,27 @@ type Service struct {
 	db     *pgxpool.Pool
 	auth   *auth.Auth
 	authz  *authz.Engine
+
+	// staffOrg is the deployment's Speakeasy staff organization. Its members'
+	// actions in customer orgs (e.g. via the dev-tools org override) are shown
+	// under a collective label instead of the staff member's email. Logs viewed
+	// within the staff organization itself are not masked.
+	staffOrg staff.Organization
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, staffOrg staff.Organization) *Service {
 	logger = logger.With(attr.SlogComponent("audit"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/audit"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/audit"),
+		logger:   logger,
+		db:       db,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		staffOrg: staffOrg,
 	}
 }
 
@@ -82,7 +87,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, fmt.Errorf("require org read: %w", err)
 	}
 
@@ -104,7 +109,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		SubjectID:              conv.PtrToPGTextEmpty(payload.SubjectID),
 		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
 		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
+		Origin:                 conv.PtrToPGTextEmpty(payload.Origin),
 		IncludeAssistantEvents: false,
+		IncludeInternalEvents:  false,
 		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	}
@@ -119,22 +126,33 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	params.CreatedFrom = conv.PtrToPGTimestamptz(createdFrom)
 	params.CreatedTo = conv.PtrToPGTimestamptz(createdTo)
 
+	category := categoryOrDefault(payload.Category)
 	if payload.Cursor != nil && *payload.Cursor != "" {
-		seq, err := audit.DecodeCursor(*payload.Cursor)
+		cursor, err := audit.DecodeCursor(*payload.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
-		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
+		// The two logs number their rows from different ranges, so a cursor
+		// from the other log would page from the wrong place without error.
+		if cursor.Category != category {
+			return nil, oops.E(oops.CodeBadRequest, nil, "cursor was issued for the %s log, not the %s log", cursor.Category, category).LogError(ctx, s.logger)
+		}
+		params.CursorSeq = pgtype.Int8{Int64: cursor.Seq, Valid: true}
 	}
 
-	rows, err := repo.New(s.db).ListAuditLogs(ctx, params)
+	var rows []repo.ListAuditLogsRow
+	if category == audit.CategorySecurity {
+		rows, err = securityevent.List(ctx, s.db, params)
+	} else {
+		rows, err = repo.New(s.db).ListAuditLogs(ctx, params)
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit logs").LogError(ctx, s.logger)
 	}
 
 	logs := make([]*gen.AuditLog, 0, min(len(rows), listAuditLogsPageSize))
 	for _, row := range rows[:min(len(rows), listAuditLogsPageSize)] {
-		log, err := toAuditLog(row)
+		log, err := toAuditLog(row, category)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error building audit log response").LogError(ctx, s.logger)
 		}
@@ -143,7 +161,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 
 	var nextCursor *string
 	if len(rows) > listAuditLogsPageSize {
-		cursor := audit.EncodeCursor(rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
+		cursor := audit.EncodeCursor(category, rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
 		nextCursor = &cursor
 		logs = logs[:listAuditLogsPageSize]
 	}
@@ -181,15 +199,16 @@ func shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor bool) bool {
 }
 
 // speakeasyActorIDs returns which of the given user actor IDs belong to the
-// Speakeasy org, so their identities can be masked in customer-facing feeds.
-// It returns nil when the viewer is the Speakeasy org itself.
+// staff organization, so their identities can be masked in customer-facing
+// feeds. It returns nil when the viewer is the staff organization itself or the
+// deployment has no staff organization.
 func (s *Service) speakeasyActorIDs(ctx context.Context, viewerOrganizationID string, actorIDs []string) (map[string]bool, error) {
-	if viewerOrganizationID == speakeasyTeamOrganizationID || len(actorIDs) == 0 {
+	if !s.staffOrg.Configured() || s.staffOrg.Is(viewerOrganizationID) || len(actorIDs) == 0 {
 		return nil, nil
 	}
 
 	memberIDs, err := orgrepo.New(s.db).FilterOrganizationMemberUserIDs(ctx, orgrepo.FilterOrganizationMemberUserIDsParams{
-		OrganizationID: speakeasyTeamOrganizationID,
+		OrganizationID: s.staffOrg.ID(),
 		UserIds:        actorIDs,
 	})
 	if err != nil {
@@ -209,7 +228,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, fmt.Errorf("require org read: %w", err)
 	}
 
@@ -218,29 +237,9 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, err
 	}
 
-	queries := repo.New(s.db)
-	actorRows, err := queries.ListAuditActorFacets(ctx, repo.ListAuditActorFacetsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-	})
+	actorRows, actionRows, surfaceRows, err := s.listFacetRows(ctx, categoryOrDefault(payload.Category), authCtx.ActiveOrganizationID, projectID, conv.PtrToPGTextEmpty(payload.Origin))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit actor facets").LogError(ctx, s.logger)
-	}
-
-	actionRows, err := queries.ListAuditActionFacets(ctx, repo.ListAuditActionFacetsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
-	}
-
-	surfaceRows, err := queries.ListAuditSurfaceFacets(ctx, repo.ListAuditSurfaceFacetsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      projectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	// Staff actor IDs are not usable as customer-facing filters. Omit those
@@ -293,7 +292,7 @@ func (s *Service) resolveProjectID(ctx context.Context, organizationID string, p
 	}
 }
 
-func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
+func toAuditLog(row repo.ListAuditLogsRow, category audit.Category) (*gen.AuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		metadata = make(map[string]any)
@@ -327,8 +326,74 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		Metadata:           metadata,
 		ActingSurface:      actingSurfaceOrUnknown(row.ActingSurface),
 		ActingClientID:     customerFacingActingClientID(row.ActingSurface, row.ActingClientID),
+		Category:           new(string(category)),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
+}
+
+// categoryOrDefault returns the category a request asked for. Goa validates the
+// value against the enum and fills the default over HTTP; in-process callers
+// that leave it blank get the audit log page's category.
+func categoryOrDefault(category string) audit.Category {
+	if category == "" {
+		return audit.CategoryConfiguration
+	}
+	return audit.Category(category)
+}
+
+// listFacetRows reads the facet values of one category's log.
+func (s *Service) listFacetRows(ctx context.Context, category audit.Category, organizationID string, projectID uuid.NullUUID, origin pgtype.Text) ([]repo.ListAuditActorFacetsRow, []repo.ListAuditActionFacetsRow, []repo.ListAuditSurfaceFacetsRow, error) {
+	actorParams := repo.ListAuditActorFacetsParams{OrganizationID: organizationID, ProjectID: projectID, Origin: origin}
+	actionParams := repo.ListAuditActionFacetsParams{OrganizationID: organizationID, ProjectID: projectID, Origin: origin}
+	surfaceParams := repo.ListAuditSurfaceFacetsParams{OrganizationID: organizationID, ProjectID: projectID, Origin: origin}
+
+	var (
+		actors   []repo.ListAuditActorFacetsRow
+		actions  []repo.ListAuditActionFacetsRow
+		surfaces []repo.ListAuditSurfaceFacetsRow
+	)
+	security := category == audit.CategorySecurity
+	// The three facets are independent reads, so they run together: a page
+	// load waits for the slowest one rather than for all three in turn, which
+	// matters most for the security log, the faster-growing of the two.
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() (err error) {
+		if security {
+			actors, err = securityevent.ActorFacets(groupCtx, s.db, actorParams)
+		} else {
+			actors, err = repo.New(s.db).ListAuditActorFacets(groupCtx, actorParams)
+		}
+		if err != nil {
+			return fmt.Errorf("list audit actor facets: %w", err)
+		}
+		return nil
+	})
+	group.Go(func() (err error) {
+		if security {
+			actions, err = securityevent.ActionFacets(groupCtx, s.db, actionParams)
+		} else {
+			actions, err = repo.New(s.db).ListAuditActionFacets(groupCtx, actionParams)
+		}
+		if err != nil {
+			return fmt.Errorf("list audit action facets: %w", err)
+		}
+		return nil
+	})
+	group.Go(func() (err error) {
+		if security {
+			surfaces, err = securityevent.SurfaceFacets(groupCtx, s.db, surfaceParams)
+		} else {
+			surfaces, err = repo.New(s.db).ListAuditSurfaceFacets(groupCtx, surfaceParams)
+		}
+		if err != nil {
+			return fmt.Errorf("list audit surface facets: %w", err)
+		}
+		return nil
+	})
+	if err := group.Wait(); err != nil {
+		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "error listing audit facets").LogError(ctx, s.logger)
+	}
+	return actors, actions, surfaces, nil
 }
 
 // customerFacingActingClientID omits the registered OAuth client identifier

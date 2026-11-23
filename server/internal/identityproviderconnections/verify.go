@@ -24,12 +24,13 @@ const (
 
 // Typed verification reasons, stored comma-joined in last_error.
 const (
-	ReasonMissingScope    = "missing_scope"
-	ReasonMissingRole     = "missing_role"
-	ReasonDPoPNotBound    = "dpop_not_bound"
-	ReasonKeyNotFetched   = "key_not_fetched"
-	ReasonSecretRejected  = "secret_rejected"
-	ReasonReadFailedApps  = "read_failed:okta.apps.read"
+	ReasonMissingScope   = "missing_scope"
+	ReasonMissingRole    = "missing_role"
+	ReasonDPoPNotBound   = "dpop_not_bound"
+	ReasonKeyNotFetched  = "key_not_fetched"
+	ReasonSecretRejected = "secret_rejected"
+	ReasonReadFailedApps = "read_failed:okta.apps.read"
+	// Retired with their scopes; kept so stored last_error values still parse.
 	ReasonReadFailedUsers = "read_failed:okta.users.read"
 	ReasonReadFailedGroup = "read_failed:okta.groups.read"
 )
@@ -64,8 +65,8 @@ func (o *verificationOutcome) lastError() string {
 	return strings.Join(o.Reasons, ",")
 }
 
-// verifyConnection mints a token for the required scopes and confirms each
-// granted scope with one cheap read. A credential rejection surfaces
+// verifyConnection mints a token for the required scopes and, when
+// okta.apps.read is granted, confirms it with one cheap apps read. A credential rejection surfaces
 // as ErrCredentialRejected; any other transport failure is returned as-is.
 // DPoP binding is required of private_key_jwt connections, and of
 // client_secret_basic connections only once dpopPinned: an installed Okta
@@ -111,10 +112,9 @@ func verifyConnection(ctx context.Context, client okta.Client, method remotesess
 	return outcome, nil
 }
 
-// confirmReads performs one bounded read per granted scope and returns the
-// per-scope reason for each read that failed. A page cap of one still proves
-// the read was authorized, so hitting it is not a failure. The users read
-// targets the directory independently of application IDs or apps access.
+// confirmReads performs one bounded apps read when okta.apps.read is granted
+// and returns the reasons if it failed. A page cap of one still proves
+// the read was authorized, so hitting it is not a failure.
 // Only a credential rejection is returned as an error.
 func confirmReads(ctx context.Context, client okta.Client, granted []string) ([]string, error) {
 	failed := []string{}
@@ -125,32 +125,6 @@ func confirmReads(ctx context.Context, client okta.Client, granted []string) ([]
 			return nil, ErrCredentialRejected
 		case err != nil && !errors.Is(err, okta.ErrTooManyPages):
 			failed = append(failed, ReasonReadFailedApps)
-			var apiErr *okta.APIError
-			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusForbidden && !slices.Contains(failed, ReasonMissingRole) {
-				failed = append(failed, ReasonMissingRole)
-			}
-		}
-	}
-	if slices.Contains(granted, "okta.users.read") {
-		_, err := client.ListUsers(ctx, okta.ListUsersRequest{Limit: 1})
-		switch {
-		case isCredentialRejection(err):
-			return nil, ErrCredentialRejected
-		case err != nil && !errors.Is(err, okta.ErrTooManyPages):
-			failed = append(failed, ReasonReadFailedUsers)
-			var apiErr *okta.APIError
-			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusForbidden && !slices.Contains(failed, ReasonMissingRole) {
-				failed = append(failed, ReasonMissingRole)
-			}
-		}
-	}
-	if slices.Contains(granted, "okta.groups.read") {
-		_, err := client.ListGroups(ctx, okta.ListGroupsRequest{Search: "", Limit: 1})
-		switch {
-		case isCredentialRejection(err):
-			return nil, ErrCredentialRejected
-		case err != nil && !errors.Is(err, okta.ErrTooManyPages):
-			failed = append(failed, ReasonReadFailedGroup)
 			var apiErr *okta.APIError
 			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusForbidden && !slices.Contains(failed, ReasonMissingRole) {
 				failed = append(failed, ReasonMissingRole)

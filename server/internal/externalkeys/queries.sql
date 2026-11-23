@@ -57,6 +57,7 @@ JOIN aws_kms_keys AS aws ON aws.external_key_id = ek.id
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'aws_kms'
+  AND ek.purpose = 'sign'
   AND ek.deleted IS FALSE;
 
 -- name: GetGcpKmsKey :one
@@ -66,6 +67,7 @@ JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'gcp_kms'
+  AND ek.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE;
 
@@ -111,15 +113,20 @@ LEFT JOIN gcp_iam_credentials AS gic
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'gcp_kms'
+  AND ek.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE;
 
 -- Keys left behind by a tombstoned identity provider connection are hidden;
--- they stay reachable by id so the organization can delete them.
+-- they stay reachable by id so the organization can delete them. Like every
+-- external_keys read and write in this file, it is scoped to purpose 'sign':
+-- encryption keys protect organization data and are managed only through the
+-- organization encryption service, which refuses to drop one still in use.
 -- name: ListExternalKeys :many
 SELECT *
 FROM external_keys AS ek
 WHERE ek.organization_id = @organization_id
+  AND ek.purpose = 'sign'
   AND ek.deleted IS FALSE
   AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND (sqlc.narg('provider')::text IS NULL OR ek.provider = sqlc.narg('provider')::text)
@@ -147,6 +154,7 @@ SET external_credential_id = @external_credential_id,
     updated_at = clock_timestamp()
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
+  AND external_keys.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 RETURNING *;
@@ -165,6 +173,7 @@ FROM external_keys
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
   AND external_keys.provider = @provider
+  AND external_keys.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 FOR UPDATE OF external_keys;
@@ -215,6 +224,7 @@ SET deleted_at = clock_timestamp()
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
   AND external_keys.provider = @provider
+  AND external_keys.purpose = 'sign'
   AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 RETURNING *;

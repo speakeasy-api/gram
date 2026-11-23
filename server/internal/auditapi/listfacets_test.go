@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 )
 
 func TestAuditService_ListFacets_Success(t *testing.T) {
@@ -207,4 +208,95 @@ func TestAuditService_ListFacets_ExcludesAssistantEvents(t *testing.T) {
 	require.Equal(t, "user:alice", result.Actors[0].Value)
 	require.Len(t, result.Actions, 1, "assistant tool call actions must not appear in facets")
 	require.Equal(t, "project:update", result.Actions[0].Value)
+}
+
+func TestAuditService_ListFacets_CountsOnlyConfigurationEntries(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        "kit-runtime",
+		actorType:      "system",
+		actingSurface:  new("system"),
+		action:         string(audit.ActionWorkloadAdmissionWithdraw),
+		subjectID:      uuid.NewString(),
+		subjectType:    "workload_admission",
+		category:       audit.CategorySecurity,
+	})
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        projectID,
+		actorID:          "user:alice",
+		actorType:        "user",
+		actorDisplayName: new("Alice"),
+		actingSurface:    new("dashboard"),
+		action:           "project:update",
+		subjectID:        uuid.NewString(),
+		subjectType:      "project",
+	})
+
+	result, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		ProjectSlug:  nil,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, result.Actors, 1, "security entry actors must not appear in facets")
+	require.Equal(t, "user:alice", result.Actors[0].Value)
+	require.Len(t, result.Actions, 1, "security entry actions must not appear in facets")
+	require.Equal(t, "project:update", result.Actions[0].Value)
+	require.Len(t, result.Surfaces, 1, "security entry surfaces must not appear in facets")
+	require.Equal(t, "dashboard", result.Surfaces[0].Value)
+}
+
+func TestAuditService_ListFacets_CoversTheRequestedCategory(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+
+	agent := "agent:" + uuid.NewString()
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID: authCtx.ActiveOrganizationID,
+		projectID:      projectID,
+		actorID:        agent,
+		actorType:      "agent",
+		actingSurface:  new("system"),
+		action:         string(audit.ActionWorkloadAdmissionAdmit),
+		subjectID:      uuid.NewString(),
+		subjectType:    "workload_admission",
+		category:       audit.CategorySecurity,
+	})
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        projectID,
+		actorID:          "user:alice",
+		actorType:        "user",
+		actorDisplayName: new("Alice"),
+		actingSurface:    new("dashboard"),
+		action:           "project:update",
+		subjectID:        uuid.NewString(),
+		subjectType:      "project",
+	})
+
+	result, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		ProjectSlug:  nil,
+		Category:     string(audit.CategorySecurity),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Actors, 1)
+	require.Equal(t, agent, result.Actors[0].Value)
+	require.Len(t, result.Actions, 1)
+	require.Equal(t, string(audit.ActionWorkloadAdmissionAdmit), result.Actions[0].Value)
+	require.Len(t, result.Surfaces, 1)
+	require.Equal(t, "system", result.Surfaces[0].Value)
 }

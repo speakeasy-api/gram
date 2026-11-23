@@ -374,11 +374,13 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	presented := r.Header.Get(wire.HeaderTunnelForwardToken)
 	if g.cfg.ForwardToken == "" {
 		g.logger.ErrorContext(r.Context(), "tunnel forward rejected", slog.String("reason", "missing-forward-token-config"))
+		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorForwardRejected)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	if !wire.ConstantTimeEqual(presented, g.cfg.ForwardToken) {
 		g.logger.WarnContext(r.Context(), "tunnel forward rejected", slog.String("reason", "forward-token"))
+		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorForwardRejected)
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

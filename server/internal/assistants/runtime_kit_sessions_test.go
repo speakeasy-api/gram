@@ -39,6 +39,12 @@ func TestKitSessionPersistenceAndCanonicalChat(t *testing.T) {
 	require.False(t, found)
 	require.Equal(t, chatID, missing.ChatID)
 	require.False(t, missing.HasPriorTranscript)
+	// Pending user input is the current turn, not earlier history.
+	_, err = testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: key.ProjectID, Valid: true}, Role: "user", Content: "current input"})
+	require.NoError(t, err)
+	pending, _, err := core.LoadKitRuntimeSession(t.Context(), key)
+	require.NoError(t, err)
+	require.False(t, pending.HasPriorTranscript)
 	// Store only existence evidence; old content is never part of the returned binding.
 	_, err = testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{ChatID: chatID, ProjectID: uuid.NullUUID{UUID: key.ProjectID, Valid: true}, Role: "assistant", Content: "Prior transcript must not be replayed"})
 	require.NoError(t, err)

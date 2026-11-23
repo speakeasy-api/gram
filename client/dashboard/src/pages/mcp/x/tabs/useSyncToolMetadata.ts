@@ -15,6 +15,8 @@ export interface UseSyncToolMetadataResult {
   /** Make the stored set mirror the session, removing tools it dropped. */
   sync: () => void;
   isSyncing: boolean;
+  /** This viewer can change the stored metadata (`mcp:write`). */
+  canWrite: boolean;
 }
 
 /**
@@ -22,7 +24,9 @@ export interface UseSyncToolMetadataResult {
  *
  * The session is only the source the annotations are read FROM — what gets
  * written is persisted against the MCP server for the whole project, so a sync
- * changes what every caller of that server sees, not just this viewer.
+ * changes what every caller of that server sees, not just this viewer. `live`
+ * must therefore be the server's whole catalog, not this viewer's filtered
+ * view of it (see useProxiedMcpTools).
  *
  * Tools the session advertises for the first time are recorded automatically —
  * there is no stored value to disagree with, so nothing needs confirming.
@@ -119,5 +123,6 @@ export function useSyncToolMetadata({
       });
     },
     isSyncing: set.isPending,
+    canWrite,
   };
 }

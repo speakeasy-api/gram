@@ -3,6 +3,7 @@ package widgets
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -91,15 +92,15 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// authorize resolves the project a request runs in and checks a scope on it.
-// Membership is project:read, which every member holds: saving a chart is
-// not an administrative act.
-func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+// authorize resolves the project a request runs in and requires the check
+// that permission builds for it. Callers pass authz.ProjectRef.Read, which
+// every member holds: saving a chart is not an administrative act.
+func (s *Service) authorize(ctx context.Context, permission func(authz.ProjectRef) authz.Check) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)))); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -236,7 +237,7 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 	if creator != nil && *creator == authCtx.UserID {
 		return nil
 	}
-	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	return s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write())
 }
 
 // checkWidget validates a widget's query against the catalog and its
@@ -245,8 +246,12 @@ func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalue
 // is stored, not a re-encoding of the decoded query, which would add zero
 // values the client reads as a different query.
 func (s *Service) checkWidget(ctx context.Context, dataset string, query, visualization map[string]any) ([]byte, []byte, error) {
-	if _, ok := s.catalog.Dataset(dataset); !ok {
+	ds, ok := s.catalog.Dataset(dataset)
+	if !ok {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown_dataset: dataset %q does not exist", dataset)
+	}
+	if err := s.requireDataset(ctx, ds); err != nil {
+		return nil, nil, err
 	}
 	encodedQuery, err := json.Marshal(query)
 	if err != nil {
@@ -264,6 +269,32 @@ func (s *Service) checkWidget(ctx context.Context, dataset string, query, visual
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
 	return encodedQuery, encodedVisualization, nil
+}
+
+// requireDataset holds a save to what the dataset asks of its readers, so a
+// widget over a dataset only organization administrators may read is saved
+// by them alone; anyone else could save it but never see it answer.
+func (s *Service) requireDataset(ctx context.Context, ds *analytics.Dataset) error {
+	return RequireDataset(ctx, s.authz, ds)
+}
+
+// RequireDataset refuses the caller a widget over ds unless they may read ds.
+// A refusal is a forbidden error wrapping ErrDatasetRestricted. Anything that
+// creates widgets, including a dashboard copy, checks this first.
+func RequireDataset(ctx context.Context, engine *authz.Engine, ds *analytics.Dataset) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	check, restricted := ds.AccessCheck(authCtx.ActiveOrganizationID)
+	if !restricted {
+		return nil
+	}
+	err := engine.Require(ctx, check)
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+		return oops.E(oops.CodeForbidden, errors.Join(ErrDatasetRestricted, err), "only organization administrators can save widgets over %s", ds.Name)
+	}
+	return err
 }
 
 // lowercaseChartType returns visualization with a string type lowercased, so

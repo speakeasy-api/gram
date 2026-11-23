@@ -75,6 +75,18 @@ func RequestAccessURL(siteURL *url.URL, organizationSlug string, params RequestA
 	return u.String()
 }
 
+// IsServerPermissionDenied reports a denial from ServerPermissionDenied.
+func IsServerPermissionDenied(err error) bool {
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	return ok && shareable.Code == oops.CodeForbidden && strings.HasPrefix(shareable.Error(), ServerPermissionDeniedMessage)
+}
+
+// IsToolPermissionDenied reports a denial from ToolPermissionDenied.
+func IsToolPermissionDenied(err error) bool {
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	return ok && shareable.Code == oops.CodeForbidden && shareable.Error() == ToolPermissionDeniedMessage
+}
+
 func permissionDenied(err error, message string) error {
 	var shareableErr *oops.ShareableError
 	if !errors.As(err, &shareableErr) || shareableErr.Code != oops.CodeForbidden {

@@ -1,8 +1,8 @@
-import {
+import type {
   CodeHeaderProps,
   SyntaxHighlighterProps,
 } from "@assistant-ui/react-markdown";
-import { ComponentType } from "react";
+import type { ComponentType } from "react";
 
 /**
  * A plugin enables addition of custom rendering capabilities to the Elements library.

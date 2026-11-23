@@ -268,7 +268,10 @@ func TestDeleteDomain_CheckpointsDerivedNamesWhenApplyNeverPersisted(t *testing.
 	// Apply never persisted names; the tombstone must checkpoint derived ones
 	// so the pending-cleanup retry path can rediscover it.
 	require.Error(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
-	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.True(t, pending.Deleted)
 	require.Equal(t, "delete-checkpoint-example-com", pending.IngressName.String)
@@ -285,7 +288,10 @@ func TestDeleteDomain_CheckpointsDerivedNamesWhenApplyNeverPersisted(t *testing.
 	require.Equal(t, "delete-checkpoint-example-com", calls[0].ResourceName)
 	require.Equal(t, "delete-checkpoint-example-com-tls", calls[0].SecretName)
 
-	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, cleaned.IngressName.Valid)
 	require.False(t, cleaned.CertSecretName.Valid)
@@ -319,7 +325,10 @@ func TestEnsureCustomDomainResourceNames_NeverRepopulatesTombstone(t *testing.T)
 	})
 	require.NoError(t, err)
 	require.Zero(t, rows)
-	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, route.IngressName.Valid)
 	require.False(t, route.CertSecretName.Valid)
@@ -357,7 +366,10 @@ func TestDeleteDomain_RetryCompletesPendingCleanup(t *testing.T) {
 	})
 
 	require.Error(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
-	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	pending, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.True(t, pending.IngressName.Valid)
 
@@ -372,7 +384,10 @@ func TestDeleteDomain_RetryCompletesPendingCleanup(t *testing.T) {
 	require.Equal(t, "retry-ingress", calls[0].ResourceName)
 	require.Equal(t, "retry-secret", calls[0].SecretName)
 
-	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	cleaned, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.False(t, cleaned.IngressName.Valid)
 	require.False(t, cleaned.CertSecretName.Valid)
@@ -382,4 +397,49 @@ func TestDeleteDomain_RetryCompletesPendingCleanup(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	require.Equal(t, 2, ti.temporal.reconcileCalls)
+}
+
+func TestDeleteDomain_AuditSnapshotKeepsDNSTargetToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "delete-token.example.com",
+		IngressName:     pgTextValid("ingress-token"),
+		CertSecretName:  pgTextValid("cert-token"),
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	_, err = ti.repo.AssignCustomDomainDNSTargetToken(ctx, cdrepo.AssignCustomDomainDNSTargetTokenParams{
+		DnsTargetToken: "abcdefgh23",
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	require.NoError(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
+
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionCustomDomainsDelete, domain.ID.String())
+	require.NoError(t, err)
+	require.Nil(t, record.AfterSnapshot)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "delete-token.example.com", beforeSnapshot["Domain"])
+	require.Equal(t, "abcdefgh23", beforeSnapshot["DNSTargetToken"])
+	require.Equal(t, "abcdefgh23."+testDNSTargetSuffix, beforeSnapshot["DNSTarget"])
+
+	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, cdrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
+	require.NoError(t, err)
+	require.True(t, tombstone.Deleted)
+	require.False(t, tombstone.DnsTargetToken.Valid, "a deleted domain releases its token")
 }

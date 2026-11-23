@@ -13,8 +13,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -101,6 +104,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	if err := authclientbackfill.LockEMAPreparationScope(ctx, tx, org, project, in.RemoteSessionIssuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock identity chaining sources")
+	}
 	q := repo.New(tx)
 	// Lock the project before parents, including wholly inherited configurations.
 	if _, err = q.LockEMAProject(ctx, repo.LockEMAProjectParams{ProjectID: project, OrganizationID: org}); err != nil {
@@ -164,6 +170,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	if err := s.recheckPreparationTenant(ctx, project, org, true); err != nil {
 		return nil, err
 	}
+	oldRegistration := b.RemoteSessionClientID.UUID
 	previous := b.Generation
 	if unlink {
 		if in.ExpectedGeneration != b.Generation {
@@ -183,6 +190,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 		if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
 			return nil, err
+		}
+		if err := authclientbackfill.SyncEMARegistrations(ctx, tx, org, []uuid.UUID{oldRegistration}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile unlinked identity chaining auth client")
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -208,7 +218,25 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	// Registration evidence is durable; readiness is not. Recompute completed
 	// provider registrations without replaying DCR or replacing effective scopes.
 	if (in.Mechanism == PreparationMechanismDCR && in.ClientID == uuid.Nil) && b.RemoteSessionClientID.Valid && preparationBindingGrantSource(b.GrantSource) == PreparationGrantSourceProviderReturned {
-		return preparationResult(b, issuer, client, preparationRegistrationReadiness(ctx, q, client, issuer, org)), nil
+		state := preparationRegistrationReadiness(ctx, q, client, issuer, org)
+		if state != preparationBindingState(b.State) {
+			before := b
+			b.State = conv.ToPGText(state)
+			b, err = setPreparationBinding(ctx, q, b, b.Generation)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "persist identity chaining readiness")
+			}
+			if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
+				return nil, err
+			}
+		}
+		if err := authclientbackfill.SyncEMARegistrations(ctx, tx, org, []uuid.UUID{oldRegistration, b.RemoteSessionClientID.UUID}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "synchronize identity chaining auth client")
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+		}
+		return preparationResult(b, issuer, client, state), nil
 	}
 	// Record explicit manual setup independently of automatic readiness.
 	manual := selected != uuid.Nil && (in.Mechanism == PreparationMechanismManual || in.Mechanism == "")
@@ -235,7 +263,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	// always ask for the request's scopes.
 	var connection *ScopeResolution
 	if selected != uuid.Nil {
-		connection, err = ConnectionScopes(ctx, tx, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, ClientID: selected, Resource: in.Resource, Discover: s.resources != nil})
+		connection, err = ConnectionScopes(ctx, tx, BindingConnection{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, ClientID: selected, Resource: in.Resource, Discover: s.resources != nil, FromAssociations: feature.UpstreamIssuerFromAssociations(ctx, s.featureFlags, org)})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve identity chaining scopes").LogError(ctx, s.logger)
 		}
@@ -255,6 +283,13 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 		if !urls.IsAbsoluteHTTPSOrLoopback(issuer.RegistrationEndpoint.String) {
 			return preparationResult(b, issuer, client, PreparationStateManualSetupRequired), nil
+		}
+		// A registration cannot be undone, so confirm the returned secret can be
+		// stored before claiming the binding and asking the provider for one. A
+		// claim recorded first would read back as indeterminate after a key
+		// outage, though nothing was registered.
+		if err := s.secrets.RequireUsable(ctx, tx, clientsecrets.OwnerOf(conv.ToPGText(b.OrganizationID), conv.ToNullUUID(b.ProjectID))); err != nil {
+			return nil, oops.E(oops.CodeUnavailable, err, "the client secret could not be stored right now; try again shortly")
 		}
 		// Only mutate the returned binding once the request can be persisted.
 		before := b
@@ -345,7 +380,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		// Publishing/modifying inherited registrations affects other projects and
 		// therefore requires organization-level authority in addition to project write.
 		if !client.ProjectID.Valid {
-			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
+			if err = s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(org)).Admin()); err != nil {
 				return nil, err
 			}
 		}
@@ -400,6 +435,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
 		return nil, err
+	}
+	if err := authclientbackfill.SyncEMARegistrations(ctx, tx, org, []uuid.UUID{oldRegistration, b.RemoteSessionClientID.UUID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "synchronize identity chaining auth client")
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")

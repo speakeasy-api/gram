@@ -8,16 +8,23 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Delegation errors are deliberately stable and contain no provider payloads.
 var (
-	ErrTemporary        = errors.New("delegation temporarily unavailable")
-	ErrReauthentication = errors.New("delegation reauthentication required")
-	ErrConfiguration    = errors.New("delegation configuration requires remediation")
+	ErrTemporary = errors.New("delegation temporarily unavailable")
+	// ErrProviderUnavailable marks a failed provider dependency, not local storage or signing.
+	ErrProviderUnavailable = errors.New("delegation provider temporarily unavailable")
+	ErrReauthentication    = errors.New("delegation reauthentication required")
+	ErrConfiguration       = errors.New("delegation configuration requires remediation")
 
 	// ErrStaleRegistration is the ErrConfiguration a retained delegation
 	// reports when it predates the current trusted registration. Unlike other
@@ -26,7 +33,15 @@ var (
 	// ErrConfiguration and reads the same, so callers that do not need the
 	// distinction see no change.
 	ErrStaleRegistration error = staleRegistrationError{}
+
+	// ErrRetainedConfiguration identifies a saved sign-in paused for automatic retry.
+	ErrRetainedConfiguration error = retainedConfigurationError{}
 )
+
+type retainedConfigurationError struct{}
+
+func (retainedConfigurationError) Error() string { return ErrConfiguration.Error() }
+func (retainedConfigurationError) Unwrap() error { return ErrConfiguration }
 
 // staleRegistrationError is ErrStaleRegistration's type.
 type staleRegistrationError struct{}
@@ -88,12 +103,12 @@ type delegationCredential struct {
 	id              uuid.UUID
 	generation      int64
 	claim           uuid.UUID
-	assertion       string
+	assertion       secret
 	assertionExpiry time.Time
-	refresh         string
+	refresh         secret
 	refreshExpiry   time.Time
-	subject         string
-	nonce           string
+	subject         secret
+	nonce           secret
 	config          string
 	refusedAt       time.Time
 	requestConfig   string
@@ -102,6 +117,7 @@ type delegationCredential struct {
 	obtainedAt      time.Time
 	refreshedAt     time.Time
 	retryAfter      time.Time
+	updatedAt       time.Time
 }
 
 func (c delegationCredential) String() string               { return "[encrypted delegation credential]" }
@@ -119,24 +135,34 @@ type delegationStore interface {
 	clearExpired(context.Context, Binding, time.Time) error
 }
 
+// secretKeys opens a credential's stored secrets and checks, before a
+// refresh, that the organization's key can store what it returns.
+// *upstreamtokens.Tokens implements it.
+type secretKeys interface {
+	Open(ctx context.Context, db repo.DBTX, organizationID pgtype.Text, columns orgencryption.CopyColumns, stored orgencryption.Copies) (string, error)
+	RequireUsable(ctx context.Context, db repo.DBTX, organizationID pgtype.Text) error
+}
+
 // Service lazily renews upstream credentials. A durable claim is never
 // stolen after a lease timeout: an ambiguous rotating POST cannot be replayed.
 // A new validated login is the recovery path for an abandoned claim.
 type Service struct {
 	store           delegationStore
-	enc             *encryption.Client
+	tokens          secretKeys
 	now             func() time.Time
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	refreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
+	connections     *mcpconnectionattempts.Recorder
+	refreshPaused   func(context.Context, Provider) bool
 }
 
-func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *Service {
+func New(db *pgxpool.Pool, tokens *upstreamtokens.Tokens, dependencies Dependencies) *Service {
 	now := dependencies.Now
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity}
+	return &Service{store: &delegationRepository{db: db, tokens: tokens}, tokens: tokens, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, refreshPaused: dependencies.RefreshPaused, connections: dependencies.Connections}
 }
 func delegationBinding(p Provider, humanID string) Binding { return p.Binding(humanID) }
 func validDelegationBinding(b Binding) bool {
@@ -146,28 +172,76 @@ func validDelegationBinding(b Binding) bool {
 	subject, err := urn.ParseSessionSubject(urn.NewUserSubject(b.HumanID).String())
 	return err == nil && subject.String() == urn.NewUserSubject(b.HumanID).String()
 }
-func (s *Service) encrypt(value string) (string, error) {
-	if value == "" {
+
+// errCredentialDecryption marks a Speakeasy key or ciphertext fault without exposing encrypted values.
+var errCredentialDecryption = errors.New("stored credential could not be decrypted")
+
+// open decrypts a value with the key its organization's transition state
+// reads. A value that does not decrypt is a Speakeasy key or ciphertext fault,
+// ErrConfiguration; a key that cannot open it right now is ErrTemporary, which
+// never asks anyone to sign in again.
+func (s *Service) open(ctx context.Context, b Binding, columns orgencryption.CopyColumns, value secret) (string, error) {
+	if value.stored == nil {
+		return value.plain, nil
+	}
+	if !upstreamtokens.Has(*value.stored) {
 		return "", nil
 	}
-	encrypted, err := s.enc.Encrypt([]byte(value))
-	if err != nil {
+	plain, err := s.tokens.Open(ctx, nil, conv.ToPGText(b.OrganizationID), columns, *value.stored)
+	switch {
+	case err == nil:
+		return plain, nil
+	case orgencryption.IsUnreadable(err):
+		return "", errors.Join(ErrConfiguration, errCredentialDecryption)
+	default:
 		return "", ErrTemporary
 	}
-	return encrypted, nil
 }
-func (s *Service) decrypt(value string) (string, error) {
-	if value == "" {
-		return "", nil
-	}
-	decrypted, err := s.enc.Decrypt(value)
-	if err != nil {
-		return "", ErrConfiguration
-	}
-	return decrypted, nil
+
+// configurationRetryDelay paces renewal while an administrator fixes a refusal that kept the token.
+const configurationRetryDelay = 5 * time.Minute
+
+// maxRetryableDelay caps a provider's Retry-After.
+const maxRetryableDelay = 5 * time.Minute
+
+// retryableDelay waits at least a minute, longer when the provider asks.
+func retryableDelay(retryAfter time.Duration) time.Duration {
+	return min(max(retryAfter, time.Minute), maxRetryableDelay)
 }
+
+// configurationRetryLimit gives an administrator a weekend to fix the provider; past it a person signs in once.
+const configurationRetryLimit = 72 * time.Hour
+
+// refreshClaimLimit outlasts one renewal: identity chaining's 25 second attempt plus the 5 second write after it.
+const refreshClaimLimit = 30 * time.Second
+
+// A claim past the limit has nothing running behind it, and only a sign-in clears it.
+func claimError(c delegationCredential, now time.Time) error {
+	if c.updatedAt.Add(refreshClaimLimit).After(now) {
+		return ErrTemporary
+	}
+	return ErrReauthentication
+}
+
+// A zero retryAfter means an erased credential; an old erased row with a stale one has no token, so it reads as needing sign-in.
+func configurationFailureRetained(c delegationCredential) bool {
+	return c.status == "configuration_failure" && !c.retryAfter.IsZero()
+}
+
+func configurationFailureBlocks(c delegationCredential, now time.Time) bool {
+	return c.status == "configuration_failure" && (c.retryAfter.IsZero() || c.retryAfter.After(now))
+}
+
+// An erased row holds nothing an administrator could fix, and a sign-in replaces it.
+func configurationFailureError(c delegationCredential) error {
+	if c.retryAfter.IsZero() {
+		return ErrReauthentication
+	}
+	return ErrRetainedConfiguration
+}
+
 func usableRefresh(c delegationCredential, now time.Time) bool {
-	return (c.status == "durable_credential_present" || c.status == "temporary_failure") && c.refresh != "" && (c.refreshExpiry.IsZero() || c.refreshExpiry.After(now)) && c.claim == uuid.Nil
+	return (c.status == "durable_credential_present" || c.status == "temporary_failure" || configurationFailureRetained(c)) && c.refresh.present() && (c.refreshExpiry.IsZero() || c.refreshExpiry.After(now)) && c.claim == uuid.Nil
 }
 func (s *Service) OfflineStatus(ctx context.Context, p Provider, humanID string) (OfflineStatus, error) {
 	if p == nil || !validDelegationBinding(delegationBinding(p, humanID)) {
@@ -188,7 +262,8 @@ func (s *Service) OfflineStatus(ctx context.Context, p Provider, humanID string)
 	if err != nil {
 		return OfflineStatus{}, ErrTemporary
 	}
-	return OfflineStatus{UsableRefresh: c.config == p.DelegationConfigurationHash() && usableRefresh(c, s.now()), Refused: c.requestConfig == hash && !c.refusedAt.IsZero()}, nil
+	// A sign-in must be able to replace a kept token that may be dead.
+	return OfflineStatus{UsableRefresh: c.config == p.DelegationConfigurationHash() && usableRefresh(c, s.now()) && !configurationFailureRetained(c), Refused: c.requestConfig == hash && !c.refusedAt.IsZero()}, nil
 }
 
 // RetainVerifiedLogin is only called synchronously from AIM-70's authorized
@@ -206,26 +281,13 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 		if hash == "" || requestHash == "" {
 			return ErrConfiguration
 		}
-		assertion := ""
-		var err error
+		var assertion secret
 		if identity.Expiration().After(now) {
-			assertion, err = s.encrypt(tokens.IDToken())
-			if err != nil {
-				return err
-			}
+			assertion = newSecret(tokens.IDToken())
 		}
-		refresh, err := s.encrypt(tokens.RefreshToken())
-		if err != nil {
-			return err
-		}
-		subject, err := s.encrypt(identity.SubjectID())
-		if err != nil {
-			return err
-		}
-		nonce, err := s.encrypt(identity.NonceValue())
-		if err != nil {
-			return err
-		}
+		refresh := newSecret(tokens.RefreshToken())
+		subject := newSecret(identity.SubjectID())
+		nonce := newSecret(identity.NonceValue())
 		expiry := time.Time{}
 		expiryKnown := false
 		if reported := tokens.RefreshExpiresAt(); reported != nil {
@@ -237,7 +299,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 		}
 		refreshExpired := expiryKnown && !expiry.After(now)
 		if refreshExpired {
-			refresh = ""
+			refresh = erasedSecret()
 			expiry = time.Time{}
 		}
 		for range 3 {
@@ -246,27 +308,33 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 				return ErrTemporary
 			}
 			next := current
+			retained := configurationFailureRetained(current)
 			// A callback installs a new generation; a late refresh cannot overwrite it.
 			next.claim = uuid.Nil
 			next.retryAfter = time.Time{}
-			sameIdentity := current.config == hash && current.subject == "" && current.refresh == ""
-			if current.config == hash && current.subject != "" {
-				plain, e := s.decrypt(current.subject)
+			sameIdentity := current.config == hash && !current.subject.present() && !current.refresh.present()
+			if current.config == hash && current.subject.present() {
+				plain, e := s.open(ctx, b, upstreamtokens.TrustedIssuerSessionUpstreamSubject, current.subject)
 				if e != nil {
 					return e
 				}
-				if plain != identity.SubjectID() {
+				// A kept token may be dead, so its subject must not block a new one.
+				if plain != identity.SubjectID() && !retained {
 					return ErrConfiguration
 				}
-				sameIdentity = true
+				sameIdentity = plain == identity.SubjectID()
 			}
 			if !sameIdentity {
 				var empty delegationCredential
 				next = empty
+				// A reset must not reopen downstream tokens an earlier sign-in invalidated.
+				if current.config != "" {
+					next.obtainedAt = now
+				}
 			}
 			next.assertion = assertion
 			next.assertionExpiry = identity.Expiration()
-			if assertion == "" {
+			if !assertion.present() {
 				next.assertionExpiry = time.Time{}
 			}
 			next.subject = subject
@@ -274,25 +342,25 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 			next.config = hash
 			next.observedAt = now
 			// A preserved refresh family remains bound to its original login nonce.
-			if refresh == "" && sameIdentity && current.claim == uuid.Nil {
+			if !refresh.present() && sameIdentity && current.claim == uuid.Nil && !retained {
 				next.nonce = current.nonce
 			}
 			// Do not resurrect a possibly spent refresh token from an in-flight claim.
-			if refresh != "" {
+			if refresh.present() {
 				next.refresh = refresh
 				next.refreshExpiry = expiry
 				next.obtainedAt = now
-			} else if refreshExpired || !sameIdentity || current.claim != uuid.Nil {
-				next.refresh = ""
+			} else if refreshExpired || !sameIdentity || current.claim != uuid.Nil || retained {
+				next.refresh = erasedSecret()
 				next.refreshExpiry = time.Time{}
 			}
 			if !next.refreshExpiry.IsZero() && !next.refreshExpiry.After(now) {
-				next.refresh = ""
+				next.refresh = erasedSecret()
 				next.refreshExpiry = time.Time{}
 			}
-			if next.assertion == "" && next.refresh == "" {
-				next.subject = ""
-				next.nonce = ""
+			if !next.assertion.present() && !next.refresh.present() {
+				next.subject = erasedSecret()
+				next.nonce = erasedSecret()
 			}
 			next.status = "assertion_only"
 			if !offlineRequested {
@@ -302,7 +370,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 					next.status = "offline_unsupported"
 				}
 			}
-			if next.refresh != "" {
+			if next.refresh.present() {
 				next.status = "durable_credential_present"
 				next.refusedAt = time.Time{}
 				next.requestConfig = requestHash
@@ -311,7 +379,7 @@ func (s *Service) RetainVerifiedLogin(ctx context.Context, p Provider, humanID s
 				next.requestConfig = requestHash
 				next.status = "refused"
 			}
-			if !next.refusedAt.IsZero() && next.requestConfig == requestHash && next.refresh == "" {
+			if !next.refusedAt.IsZero() && next.requestConfig == requestHash && !next.refresh.present() {
 				next.status = "refused"
 			}
 			next = eraseExpiredDelegationSecrets(next, s.now())
@@ -362,6 +430,7 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 			return ErrTemporary
 		}
 		if ok {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRefused)
 			return nil
 		}
 	}
@@ -382,7 +451,9 @@ func (s *Service) Check(ctx context.Context, b Binding, authority Authorizer) er
 // CheckResolvable is Check plus whether Resolve could return an assertion now
 // without the human signing in again: a retained assertion still outside
 // Resolve's one-minute safety window, or a refresh grant it may renew with. A
-// renewal in flight or backing off is ErrTemporary. Secrets Resolve would
+// renewal in flight or backing off is ErrTemporary; a claim nothing is running
+// behind is ErrReauthentication; one paused after a configuration failure is
+// ErrConfiguration. Secrets Resolve would
 // need that no longer decrypt are ErrConfiguration, as in Resolve. Like Check
 // it never renews, claims or rewrites the credential and never contacts the
 // provider.
@@ -394,9 +465,9 @@ func (s *Service) CheckResolvable(ctx context.Context, b Binding, authority Auth
 	now := s.now()
 	switch {
 	case c.claim != uuid.Nil:
-		return ErrTemporary
-	case c.assertion != "" && c.assertionExpiry.After(now.Add(time.Minute)):
-		_, err := s.assertion(c)
+		return claimError(c, now)
+	case c.assertion.present() && c.assertionExpiry.After(now.Add(time.Minute)):
+		_, err := s.assertion(ctx, b, c)
 		return err
 	case c.status == "reauthentication_required":
 		return ErrReauthentication
@@ -405,7 +476,7 @@ func (s *Service) CheckResolvable(ctx context.Context, b Binding, authority Auth
 	case !usableRefresh(c, now):
 		return ErrReauthentication
 	}
-	_, _, _, err = s.refreshSecrets(c)
+	_, _, _, err = s.refreshSecrets(ctx, b, c)
 	return err
 }
 
@@ -441,8 +512,8 @@ func (s *Service) check(ctx context.Context, b Binding, authority Authorizer) (d
 	if c.config != p.DelegationConfigurationHash() {
 		return none, ErrStaleRegistration
 	}
-	if c.status == "configuration_failure" {
-		return none, ErrConfiguration
+	if configurationFailureBlocks(c, s.now()) {
+		return none, configurationFailureError(c)
 	}
 	return c, nil
 }
@@ -462,11 +533,13 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
 		if definitiveDelegationFailure(err) {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
 		return Assertion{}, ErrTemporary
 	}
 	if p == nil || p.DelegationConfigurationHash() == "" {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	now := s.now()
@@ -481,16 +554,17 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if c.config != p.DelegationConfigurationHash() {
-		return Assertion{}, ErrConfiguration
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
+		return Assertion{}, ErrStaleRegistration
 	}
-	if c.status == "configuration_failure" {
-		return Assertion{}, ErrConfiguration
+	if configurationFailureBlocks(c, now) {
+		return Assertion{}, configurationFailureError(c)
 	}
 	if c.claim != uuid.Nil {
-		return Assertion{}, ErrTemporary
+		return Assertion{}, claimError(c, now)
 	}
-	if c.assertion != "" && c.assertionExpiry.After(now.Add(time.Minute)) {
-		return s.assertion(c)
+	if c.assertion.present() && c.assertionExpiry.After(now.Add(time.Minute)) {
+		return s.assertion(ctx, b, c)
 	}
 	// A successful refresh without an ID token cannot renew the portable path.
 	// Keep its rotation, but do not spin through more grants on every tool call.
@@ -502,6 +576,10 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	if !usableRefresh(c, now) {
 		return Assertion{}, ErrReauthentication
+	}
+	// This says nothing about this person's token, so it leaves their credential state alone.
+	if s.refreshPaused != nil && s.refreshPaused(ctx, p) {
+		return Assertion{}, ErrConfiguration
 	}
 	claim := uuid.New()
 	acquired, err := s.store.claim(ctx, b, c.generation, claim, now)
@@ -524,29 +602,81 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}()
 	// Re-read after durable ownership. A concurrent callback can supersede us.
 	c, err = s.store.load(ctx, b)
-	if err != nil || c.claim != claim {
+	if err != nil {
+		s.recordLocalFault(ctx, b, err)
+		return Assertion{}, ErrTemporary
+	}
+	if c.claim != claim {
 		return Assertion{}, ErrTemporary
 	}
 	// Load full discovery and credentials only after obtaining durable ownership.
 	p, err = s.loadProvider(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return Assertion{}, ErrTemporary
+		}
 		if definitiveDelegationFailure(err) {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
+		code := mcpconnectionattempts.CodeInternalError
+		if errors.Is(err, ErrProviderUnavailable) {
+			// A retained failure keeps its own pacing, and a backoff on it would answer as misconfigured.
+			if !configurationFailureRetained(c) {
+				persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshSetupRetryable, SigningFailure: false, RetryAfter: 0})
+			}
+			code = mcpconnectionattempts.CodeRenewalRetryable
+		}
+		s.recordRenewal(ctx, b, code)
 		return Assertion{}, ErrTemporary
 	}
-	if p == nil || p.DelegationConfigurationHash() != c.config {
+	if p == nil {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
-	refresh, subject, nonce, err := s.refreshSecrets(c)
+	if p.DelegationConfigurationHash() != c.config {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
+		return Assertion{}, ErrStaleRegistration
+	}
+	refresh, subject, nonce, err := s.refreshSecrets(ctx, b, c)
 	if err != nil {
+		code := mcpconnectionattempts.CodeReauthenticationRequired
+		switch {
+		case errors.Is(err, errCredentialDecryption):
+			code = mcpconnectionattempts.CodeInternalError
+		case errors.Is(err, ErrTemporary):
+			// The organization's key could not open the secrets right now;
+			// nobody needs to sign in again.
+			code = mcpconnectionattempts.CodeRenewalRetryable
+		}
+		s.recordRenewal(ctx, b, code)
 		return Assertion{}, err
 	}
+	// A refresh may rotate the refresh token, and the only copy of the new one
+	// is what the provider answers, so it must be storable before it is asked.
+	if err := s.tokens.RequireUsable(ctx, nil, conv.ToPGText(b.OrganizationID)); err != nil {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRetryable)
+		return Assertion{}, ErrTemporary
+	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
-	if err != nil || !marked {
+	if err != nil {
+		s.recordLocalFault(ctx, b, err)
+		return Assertion{}, ErrTemporary
+	}
+	if !marked {
 		return Assertion{}, ErrTemporary
 	}
 	refreshStarted = true
+	// From the POST onward, even a panic or local persistence failure is a
+	// renewal outcome. Keep the spent claim held; recording must not retry it.
+	renewalDecided := false
+	defer func() {
+		if !renewalDecided {
+			s.recordRenewal(context.WithoutCancel(ctx), b, mcpconnectionattempts.CodeInternalError)
+		}
+	}()
 	result, refreshErr := s.refreshIdentity(ctx, p, refresh, subject, nonce)
 	// The caller's timeout must not prevent recording rotation or quarantining
 	// an ambiguous generation. This bounded write is still CAS protected.
@@ -554,29 +684,32 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	defer cancel()
 	if refreshErr != nil {
 		var failure *RefreshError
-		// A successful exchange followed by unavailable verification may have
-		// spent the old token. Preserve rotation only behind the held claim;
-		// never admit its unverified assertion or automatically replay it.
-		if result != nil && result.Credentials != nil && errors.As(refreshErr, &failure) && failure.Kind == RefreshAmbiguous {
-			c.assertion = ""
+		// A successful exchange followed by a failure may have spent the old
+		// token. Preserve rotation only behind the held claim; never admit its
+		// unverified assertion or automatically replay it. An invalid identity
+		// erases the credential instead.
+		invalidIdentity := errors.As(refreshErr, &failure) && failure.Kind == RefreshInvalidIdentity
+		if result != nil && result.Credentials != nil && !invalidIdentity {
+			refreshErr = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
+			c.assertion = erasedSecret()
 			c.assertionExpiry = time.Time{}
-			if rotation := result.Credentials.RefreshToken(); rotation != "" {
-				c.refresh, err = s.encrypt(rotation)
-				if err != nil {
-					return Assertion{}, err
-				}
+			// An echoed refresh token keeps its stored copies.
+			if rotation := result.Credentials.RefreshToken(); rotation != "" && rotation != refresh {
+				c.refresh = newSecret(rotation)
 			}
 			if expiry := result.Credentials.RefreshExpiresAt(); expiry != nil {
 				c.refreshExpiry = *expiry
 				if !expiry.After(s.now()) {
-					c.refresh = ""
+					c.refresh = erasedSecret()
 				}
 			}
 		}
+		renewalDecided = true
 		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, refreshErr)
 	}
 	if result == nil || result.Credentials == nil {
-		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous})
+		renewalDecided = true
+		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0})
 	}
 	next := c
 	next.observedAt = s.now()
@@ -584,40 +717,36 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	next.status = "reauthentication_required"
 	next.claim = uuid.Nil
 	next.retryAfter = time.Time{}
-	next.assertion = ""
+	next.assertion = erasedSecret()
 	next.assertionExpiry = time.Time{}
-	if rotation := result.Credentials.RefreshToken(); rotation != "" {
-		next.refresh, err = s.encrypt(rotation)
-		if err != nil {
-			return Assertion{}, err
-		}
+	// An echoed refresh token is not a rotation: its stored copies are kept
+	// rather than sealed again.
+	if rotation := result.Credentials.RefreshToken(); rotation != "" && rotation != refresh {
+		next.refresh = newSecret(rotation)
 	}
-	// Lifetime updates are independent of token rotation. An explicit zero
-	// expires the retained token; omission cannot remove a previously known bound.
+	// Lifetime updates are independent of token rotation. Omission cannot
+	// remove a previously known bound.
 	if expiry := result.Credentials.RefreshExpiresAt(); expiry != nil {
 		next.refreshExpiry = *expiry
-		// A present zero is an expired bound, not the omitted/unknown sentinel.
 		if !expiry.After(s.now()) {
-			next.refresh = ""
+			next.refresh = erasedSecret()
 		}
 	}
 	if !next.refreshExpiry.IsZero() && !next.refreshExpiry.After(s.now()) {
-		next.refresh = ""
+		next.refresh = erasedSecret()
 		next.refreshExpiry = time.Time{}
 	}
 	if identity := result.Identity; identity != nil {
 		defer identity.DiscardCredentials()
 		if identity.SubjectID() != subject || identity.IssuerURL() != p.IssuerURL() {
-			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity})
+			renewalDecided = true
+			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity, SigningFailure: false, RetryAfter: 0})
 		}
 		if identity.Expiration().After(s.now()) {
-			next.assertion, err = s.encrypt(result.Credentials.IDToken())
-			if err != nil {
-				return Assertion{}, err
-			}
+			next.assertion = newSecret(result.Credentials.IDToken())
 			next.assertionExpiry = identity.Expiration()
 			next.status = "assertion_only"
-			if next.refresh != "" {
+			if next.refresh.present() {
 				next.status = "durable_credential_present"
 			}
 		}
@@ -635,11 +764,16 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		// Preserve rotation, but do not expose it or replay this generation when
 		// verification dependencies cannot establish current authority.
 		next.claim = claim
-		next.status = "temporary_failure"
-		next.retryAfter = s.now().Add(time.Minute)
+		if configurationFailureRetained(c) {
+			next.status = c.status
+			next.retryAfter = c.retryAfter
+		} else {
+			next.status = "temporary_failure"
+			next.retryAfter = s.now().Add(time.Minute)
+		}
 	}
 	next = eraseExpiredDelegationSecrets(next, s.now())
-	if (next.assertion == "" || !next.assertionExpiry.After(s.now().Add(time.Minute))) && next.status != "configuration_failure" && !quarantined {
+	if (!next.assertion.present() || !next.assertionExpiry.After(s.now().Add(time.Minute))) && next.status != "configuration_failure" && !quarantined {
 		next.status = "reauthentication_required"
 	}
 	ok, err := s.store.finish(persistCtx, b, c.generation, claim, next)
@@ -647,18 +781,36 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if !ok {
+		renewalDecided = true // A newer callback or revocation owns the outcome.
 		return Assertion{}, ErrTemporary
 	}
 	if quarantined {
+		renewalDecided = true
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalAmbiguous)
 		return Assertion{}, ErrTemporary
 	}
+	if liveErr == nil && live != nil && live.DelegationConfigurationHash() != c.config {
+		renewalDecided = true
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
+		return Assertion{}, ErrStaleRegistration
+	}
 	if next.status == "configuration_failure" {
+		renewalDecided = true
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
-	if next.assertion == "" || !next.assertionExpiry.After(s.now().Add(time.Minute)) {
+	if !next.assertion.present() || !next.assertionExpiry.After(s.now().Add(time.Minute)) {
+		renewalDecided = true
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrReauthentication
 	}
-	return s.assertion(next)
+	assertion, err := s.assertion(ctx, b, next)
+	if err != nil {
+		return Assertion{}, err
+	}
+	renewalDecided = true
+	s.recordRenewal(persistCtx, b, mcpconnectionattempts.ResultRenewed)
+	return assertion, nil
 }
 
 // Authorizers must use a stable configuration/reauthentication error for a
@@ -667,15 +819,15 @@ func definitiveDelegationFailure(err error) bool {
 	return errors.Is(err, ErrConfiguration) || errors.Is(err, ErrReauthentication) || errors.Is(err, pgx.ErrNoRows)
 }
 
-func (s *Service) assertion(c delegationCredential) (Assertion, error) {
-	if c.assertion == "" || !c.assertionExpiry.After(s.now().Add(time.Minute)) {
+func (s *Service) assertion(ctx context.Context, b Binding, c delegationCredential) (Assertion, error) {
+	if !c.assertion.present() || !c.assertionExpiry.After(s.now().Add(time.Minute)) {
 		return Assertion{}, ErrReauthentication
 	}
-	value, err := s.decrypt(c.assertion)
+	value, err := s.open(ctx, b, upstreamtokens.TrustedIssuerSessionIdentityAssertion, c.assertion)
 	if err != nil {
 		return Assertion{}, err
 	}
-	subject, err := s.decrypt(c.subject)
+	subject, err := s.open(ctx, b, upstreamtokens.TrustedIssuerSessionUpstreamSubject, c.subject)
 	if err != nil {
 		return Assertion{}, err
 	}
@@ -684,14 +836,14 @@ func (s *Service) assertion(c delegationCredential) (Assertion, error) {
 
 // refreshSecrets decrypts what a renewal of c sends. A secret that does not
 // decrypt, or a missing refresh token or subject, is ErrConfiguration.
-func (s *Service) refreshSecrets(c delegationCredential) (refresh, subject, nonce string, err error) {
-	if refresh, err = s.decrypt(c.refresh); err != nil {
+func (s *Service) refreshSecrets(ctx context.Context, b Binding, c delegationCredential) (refresh, subject, nonce string, err error) {
+	if refresh, err = s.open(ctx, b, upstreamtokens.TrustedIssuerSessionRefreshToken, c.refresh); err != nil {
 		return "", "", "", err
 	}
-	if subject, err = s.decrypt(c.subject); err != nil {
+	if subject, err = s.open(ctx, b, upstreamtokens.TrustedIssuerSessionUpstreamSubject, c.subject); err != nil {
 		return "", "", "", err
 	}
-	if nonce, err = s.decrypt(c.nonce); err != nil {
+	if nonce, err = s.open(ctx, b, upstreamtokens.TrustedIssuerSessionNonce, c.nonce); err != nil {
 		return "", "", "", err
 	}
 	if refresh == "" || subject == "" {
@@ -700,60 +852,133 @@ func (s *Service) refreshSecrets(c delegationCredential) (refresh, subject, nonc
 	return refresh, subject, nonce, nil
 }
 func clearDelegationSecrets(c delegationCredential) delegationCredential {
-	c.assertion = ""
+	c.assertion = erasedSecret()
 	c.assertionExpiry = time.Time{}
-	c.refresh = ""
+	c.refresh = erasedSecret()
 	c.refreshExpiry = time.Time{}
-	c.subject = ""
-	c.nonce = ""
+	c.subject = erasedSecret()
+	c.nonce = erasedSecret()
 	c.claim = uuid.Nil
 	return c
 }
 func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegationCredential, claim uuid.UUID, cause error) error {
+	decided := false
+	defer func() {
+		if !decided {
+			s.recordRenewal(context.WithoutCancel(ctx), b, mcpconnectionattempts.CodeInternalError)
+		}
+	}()
 	var failure *RefreshError
 	if !errors.As(cause, &failure) {
-		failure = &RefreshError{Kind: RefreshAmbiguous}
+		failure = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
 	}
 	next := c
 	next.observedAt = s.now()
 	next.claim = uuid.Nil
+	next.retryAfter = time.Time{}
 	outcome := ErrTemporary
-	switch failure.Kind {
+	retained := configurationFailureRetained(c)
+	kind := failure.Kind
+	// A token refused this long may be dead. A client rejection or a local setup fault says nothing about it.
+	if (kind == RefreshConfiguration || kind == RefreshRetryable) && retained && !c.observedAt.IsZero() && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
+		kind = RefreshInvalidGrant
+	}
+	switch kind {
 	case RefreshInvalidGrant:
-		next.refresh = ""
+		next.refresh = erasedSecret()
 		next.refreshExpiry = time.Time{}
 		next.status = "reauthentication_required"
 		if !next.assertionExpiry.After(s.now()) {
-			next.assertion = ""
+			next.assertion = erasedSecret()
 			next.assertionExpiry = time.Time{}
-			next.subject = ""
-			next.nonce = ""
+			next.subject = erasedSecret()
+			next.nonce = erasedSecret()
 		}
 		outcome = ErrReauthentication
-	case RefreshConfiguration:
-		next = clearDelegationSecrets(next)
+	case RefreshConfiguration, RefreshClientRejected, RefreshSetup:
+		// Nothing here says the refresh token is invalid.
+		next.assertion = erasedSecret()
+		next.assertionExpiry = time.Time{}
 		next.status = "configuration_failure"
-		outcome = ErrConfiguration
+		next.retryAfter = s.now().Add(configurationRetryDelay)
+		// Only token-shaped refusals start the clock; client/setup failures reset it.
+		if kind != RefreshConfiguration {
+			next.observedAt = time.Time{}
+		} else if retained && !c.observedAt.IsZero() {
+			next.observedAt = c.observedAt
+		}
+		outcome = ErrRetainedConfiguration
 	case RefreshInvalidIdentity:
 		next = clearDelegationSecrets(next)
 		next.status = "configuration_failure"
-		outcome = ErrConfiguration
-	case RefreshRetryable:
-		next.status = "temporary_failure"
-		next.retryAfter = s.now().Add(time.Minute)
+		outcome = ErrReauthentication
+	case RefreshRetryable, RefreshSetupRetryable:
+		next.retryAfter = s.now().Add(retryableDelay(failure.RetryAfter))
+		if retained {
+			if !c.observedAt.IsZero() || kind == RefreshSetupRetryable {
+				next.observedAt = c.observedAt
+			}
+			outcome = ErrRetainedConfiguration
+		} else {
+			next.status = "temporary_failure"
+		}
 	default:
 		// The upstream may have rotated its token. Never clear/expire this claim;
 		// reauthentication, not automatic replay, is the safe recovery path.
 		next.claim = claim
-		next.status = "temporary_failure"
-		next.retryAfter = s.now().Add(time.Minute)
+		if retained {
+			next.retryAfter = c.retryAfter
+		} else {
+			next.retryAfter = s.now().Add(time.Minute)
+			next.status = "temporary_failure"
+		}
 	}
 	next = eraseExpiredDelegationSecrets(next, s.now())
 	ok, err := s.store.finish(ctx, b, c.generation, claim, next)
-	if err != nil || !ok {
+	if err != nil {
 		return ErrTemporary
 	}
+	if !ok {
+		decided = true
+		return ErrTemporary
+	}
+	decided = true
+	code := renewalHappened(kind)
+	if failure.SigningFailure {
+		code = mcpconnectionattempts.CodeInternalError
+	}
+	s.recordRenewal(ctx, b, code)
 	return outcome
+}
+
+// recordRenewal records a renewal's outcome, or a setup that stops one. A tool call served from the held assertion writes nothing.
+func (s *Service) recordRenewal(ctx context.Context, b Binding, what mcpconnectionattempts.Happened) {
+	human := urn.NewUserSubject(b.HumanID)
+	s.connections.Once(ctx, mcpconnectionattempts.IdentityProviderScope(b.OrganizationID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepSignInRenewal, what,
+		mcpconnectionattempts.RemoteSessionIssuer(b.IssuerID), mcpconnectionattempts.RemoteSessionClient(b.ClientID), mcpconnectionattempts.Subject(&human))
+}
+
+// recordLocalFault blames Speakeasy for a local failure, unless the caller disconnected.
+func (s *Service) recordLocalFault(ctx context.Context, b Binding, err error) {
+	if !errors.Is(err, context.Canceled) {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeInternalError)
+	}
+}
+
+func renewalHappened(kind RefreshFailure) mcpconnectionattempts.Code {
+	switch kind {
+	case RefreshInvalidGrant:
+		return mcpconnectionattempts.CodeReauthenticationRequired
+	case RefreshConfiguration, RefreshClientRejected, RefreshSetup:
+		return mcpconnectionattempts.CodeRenewalMisconfigured
+	case RefreshInvalidIdentity:
+		return mcpconnectionattempts.CodeInvalidIdentity
+	case RefreshRetryable, RefreshSetupRetryable:
+		return mcpconnectionattempts.CodeRenewalRetryable
+	case RefreshAmbiguous:
+		return mcpconnectionattempts.CodeRenewalAmbiguous
+	}
+	return mcpconnectionattempts.CodeRenewalAmbiguous
 }
 
 // Revoke explicitly erases secrets. The caller must authorize administrative
@@ -778,16 +1003,16 @@ func (s *Service) Revoke(ctx context.Context, b Binding, authority Authorizer) e
 // provider/configuration reads. Unknown refresh expiry remains unknown.
 func eraseExpiredDelegationSecrets(c delegationCredential, now time.Time) delegationCredential {
 	if !c.assertionExpiry.After(now) {
-		c.assertion = ""
+		c.assertion = erasedSecret()
 		c.assertionExpiry = time.Time{}
 	}
 	if !c.refreshExpiry.IsZero() && !c.refreshExpiry.After(now) {
-		c.refresh = ""
+		c.refresh = erasedSecret()
 		c.refreshExpiry = time.Time{}
 	}
-	if c.assertion == "" && c.refresh == "" {
-		c.subject = ""
-		c.nonce = ""
+	if !c.assertion.present() && !c.refresh.present() {
+		c.subject = erasedSecret()
+		c.nonce = erasedSecret()
 	}
 	return c
 }

@@ -296,8 +296,9 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 		{name: "rejected session wins over usable credential", serves: true, usable: true, statuses: rejected, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect", consulted: false},
 		{name: "rejected session not chained", statuses: rejected, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect", consulted: false},
 		{name: "interactive session wins", serves: true, usable: true, statuses: active, state: MCPConnectionStateActive, nextAction: "use_mcp", consulted: false},
-		{name: "no client chaining configured", noClient: true, serves: true, usable: true, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator", consulted: false},
-		{name: "no client not chained", noClient: true, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator", consulted: false},
+		// The column alone names no provider: only associations do.
+		{name: "column without association chaining configured", noClient: true, serves: true, usable: true, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp", consulted: false},
+		{name: "column without association not chained", noClient: true, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp", consulted: false},
 		{name: "multiple clients chaining configured", multi: true, serves: true, usable: true, state: MCPConnectionStateSetupRequired, reason: "multiple_authorization_clients", nextAction: "ask_administrator", consulted: false},
 		{name: "multiple clients not chained", multi: true, state: MCPConnectionStateSetupRequired, reason: "multiple_authorization_clients", nextAction: "ask_administrator", consulted: false},
 	} {

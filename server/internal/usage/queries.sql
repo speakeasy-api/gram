@@ -1,15 +1,15 @@
 -- name: GetEnabledServerCount :one
--- Hosted servers count via their canonical wrapper; unwrapped enabled toolsets by flag.
+-- Hosted servers count via their canonical wrapper.
 SELECT COUNT(*)
 FROM toolsets t
-LEFT JOIN mcp_servers w
+JOIN mcp_servers w
   ON w.id = t.id
  AND w.toolset_id = t.id
  AND w.project_id = t.project_id
  AND w.deleted IS FALSE
 WHERE t.organization_id = @organization_id
   AND t.deleted IS FALSE
-  AND CASE WHEN w.id IS NULL THEN t.mcp_enabled ELSE w.visibility <> 'disabled' END;
+  AND w.visibility IN ('public', 'private');
 
 -- name: GetBillingMetadata :one
 SELECT *

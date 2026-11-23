@@ -3,10 +3,16 @@
  */
 
 import {
+  InfiniteData,
   InvalidateQueryFilters,
   QueryClient,
+  QueryKey,
+  useInfiniteQuery,
+  UseInfiniteQueryResult,
   useQuery,
   UseQueryResult,
+  useSuspenseInfiniteQuery,
+  UseSuspenseInfiniteQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
@@ -27,20 +33,32 @@ import {
 } from "../models/operations/listshadowmcpinventory.js";
 import { useGramContext } from "./_context.js";
 import {
+  InfiniteQueryHookOptions,
   QueryHookOptions,
+  SuspenseInfiniteQueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
 import {
+  buildShadowMCPInventoryInfiniteQuery,
   buildShadowMCPInventoryQuery,
   prefetchShadowMCPInventory,
+  prefetchShadowMCPInventoryInfinite,
   queryKeyShadowMCPInventory,
+  queryKeyShadowMCPInventoryInfinite,
+  ShadowMCPInventoryInfiniteQueryData,
+  ShadowMCPInventoryPageParams,
   ShadowMCPInventoryQueryData,
 } from "./shadowMCPInventory.core.js";
 export {
+  buildShadowMCPInventoryInfiniteQuery,
   buildShadowMCPInventoryQuery,
   prefetchShadowMCPInventory,
+  prefetchShadowMCPInventoryInfinite,
   queryKeyShadowMCPInventory,
+  queryKeyShadowMCPInventoryInfinite,
+  type ShadowMCPInventoryInfiniteQueryData,
+  type ShadowMCPInventoryPageParams,
   type ShadowMCPInventoryQueryData,
 };
 
@@ -106,6 +124,92 @@ export function useShadowMCPInventorySuspense(
       security,
       options,
     ),
+    ...options,
+  });
+}
+
+/**
+ * listShadowMCPInventory access
+ *
+ * @remarks
+ * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
+ */
+export function useShadowMCPInventoryInfinite(
+  request: ListShadowMCPInventoryRequest,
+  security?: ListShadowMCPInventorySecurity | undefined,
+  options?: InfiniteQueryHookOptions<
+    ShadowMCPInventoryInfiniteQueryData,
+    ShadowMCPInventoryQueryError
+  >,
+): UseInfiniteQueryResult<
+  InfiniteData<
+    ShadowMCPInventoryInfiniteQueryData,
+    ShadowMCPInventoryPageParams
+  >,
+  ShadowMCPInventoryQueryError
+> {
+  const client = useGramContext();
+  return useInfiniteQuery<
+    ShadowMCPInventoryInfiniteQueryData,
+    ShadowMCPInventoryQueryError,
+    InfiniteData<
+      ShadowMCPInventoryInfiniteQueryData,
+      ShadowMCPInventoryPageParams
+    >,
+    QueryKey,
+    ShadowMCPInventoryPageParams
+  >({
+    ...buildShadowMCPInventoryInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
+    ...options,
+  });
+}
+
+/**
+ * listShadowMCPInventory access
+ *
+ * @remarks
+ * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
+ */
+export function useShadowMCPInventoryInfiniteSuspense(
+  request: ListShadowMCPInventoryRequest,
+  security?: ListShadowMCPInventorySecurity | undefined,
+  options?: SuspenseInfiniteQueryHookOptions<
+    ShadowMCPInventoryInfiniteQueryData,
+    ShadowMCPInventoryQueryError
+  >,
+): UseSuspenseInfiniteQueryResult<
+  InfiniteData<
+    ShadowMCPInventoryInfiniteQueryData,
+    ShadowMCPInventoryPageParams
+  >,
+  ShadowMCPInventoryQueryError
+> {
+  const client = useGramContext();
+  return useSuspenseInfiniteQuery<
+    ShadowMCPInventoryInfiniteQueryData,
+    ShadowMCPInventoryQueryError,
+    InfiniteData<
+      ShadowMCPInventoryInfiniteQueryData,
+      ShadowMCPInventoryPageParams
+    >,
+    QueryKey,
+    ShadowMCPInventoryPageParams
+  >({
+    ...buildShadowMCPInventoryInfiniteQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
+    initialPageParam: options?.initialPageParam,
+    getNextPageParam: (previousPage) => previousPage["~next"],
     ...options,
   });
 }

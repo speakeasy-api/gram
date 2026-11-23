@@ -3,10 +3,10 @@ import { EmptyState } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Cards } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
-import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
-import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
+import type { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
+import type { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { useState } from "react";
@@ -68,7 +68,7 @@ export function PromptsTabContent({
           <RequireScope scope="mcp:write" level="component">
             <Stack gap={2} direction="horizontal">
               <routes.prompts.newPrompt.Link>
-                <Button size="sm">Create Prompt</Button>
+                <Button size="sm">Create prompt</Button>
               </routes.prompts.newPrompt.Link>
             </Stack>
           </RequireScope>

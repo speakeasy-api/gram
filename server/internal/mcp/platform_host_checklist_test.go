@@ -288,7 +288,7 @@ func TestPlatformHostMountsPerClientIDPCallback(t *testing.T) {
 	missing := serveOnHost(t, handler, http.MethodGet, canonical.host, path, nil, crossSite)
 	require.Equal(t, http.StatusBadRequest, missing.Code, "the handler, not the router, rejects a stateless callback")
 	unknown := serveOnHost(t, handler, http.MethodGet, canonical.host, path+"?"+url.Values{"state": {uuid.NewString()}, "code": {"idp-code"}}.Encode(), nil, crossSite)
-	require.Equal(t, http.StatusUnauthorized, unknown.Code)
+	require.Equal(t, http.StatusBadRequest, unknown.Code)
 	nested := serveOnHost(t, handler, http.MethodGet, canonical.host, path+"/extra", nil, crossSite)
 	require.Equal(t, http.StatusNotFound, nested.Code)
 }

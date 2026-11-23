@@ -44,6 +44,19 @@
 @source inline("{,sm:,md:,lg:,xl:,2xl:}size-{8,12,16,24,32}");
 
 @theme {
+  /* A slow rise and fall, so the agent wizard's sign-in path shows which hop
+     a step sets without anything moving across the page. */
+  --animate-sign-in-breathe: sign-in-breathe 3.2s ease-in-out infinite;
+  @keyframes sign-in-breathe {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
   --font-sans: var(--font-diatype);
   --font-mono: var(--font-diatype-mono);
   --font-display: var(--font-tobias);

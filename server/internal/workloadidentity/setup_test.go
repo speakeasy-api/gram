@@ -17,6 +17,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	wirepo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
 var infra *testenv.Environment
@@ -73,23 +74,20 @@ func newProject(t *testing.T, conn *pgxpool.Pool, organizationID string) uuid.UU
 	return project.ID
 }
 
-// seedIssuer writes one workload_issuers row directly.
-//
-// Raw SQL because there is no create query yet: writes are the management API's
-// job and land in a later milestone, while this package is read-only by design.
-// createdAt is explicit so the oldest-first tie-break can be asserted rather
+// seedIssuer writes one workload_issuers row through a fixture: writes are the
+// management API's job, while this package is read-only by design. createdAt is explicit so the oldest-first tie-break can be asserted rather
 // than raced.
 func seedIssuer(t *testing.T, conn *pgxpool.Pool, organizationID string, projectID uuid.NullUUID, name, issuer string, createdAt time.Time) uuid.UUID {
 	t.Helper()
 
-	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		t.Context(), `
-		INSERT INTO workload_issuers
-		  (organization_id, project_id, name, issuer, jwks_uri, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id
-	`, organizationID, projectID, name, issuer, issuer+"/.well-known/jwks.json", createdAt).Scan(&id)
+	id, err := wirepo.New(conn).SeedWorkloadIssuerFixture(t.Context(), wirepo.SeedWorkloadIssuerFixtureParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Name:           name,
+		Issuer:         issuer,
+		JwksUri:        issuer + "/.well-known/jwks.json",
+		CreatedAt:      pgtype.Timestamptz{Time: createdAt, Valid: true, InfinityModifier: pgtype.Finite},
+	})
 	require.NoError(t, err)
 
 	return id

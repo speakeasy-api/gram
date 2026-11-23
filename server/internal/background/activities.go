@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -41,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/chat/summaryjudge"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -60,6 +62,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -69,18 +73,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -118,6 +121,7 @@ type expiredTrialDemoter interface {
 type Activities struct {
 	trialFixtureHandler              activities.TrialFixtureHandler
 	db                               *pgxpool.Pool
+	logger                           *slog.Logger
 	temporalEnv                      *tenv.Environment
 	collectOpenRouterCreditsMetrics  *activities.CollectOpenRouterCreditsMetrics
 	collectOpenRouterDailySpend      *activities.CollectOpenRouterDailySpend
@@ -138,7 +142,9 @@ type Activities struct {
 	syncTenantDimensions             *activities.SyncTenantDimensions
 	promoteStagedTelemetry           *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects      *activities.ListStagedTelemetryProjects
+	mcpConnectionOutcomesDaily       *activities.MCPConnectionOutcomesDaily
 	generateChatTitle                *activities.GenerateChatTitle
+	memoryDigests                    *activities.MemoryDigests
 	processDeployment                *activities.ProcessDeployment
 	provisionFunctionsAccess         *activities.ProvisionFunctionsAccess
 	deployFunctionRunners            *activities.DeployFunctionRunners
@@ -195,6 +201,7 @@ type Activities struct {
 	demoteExpiredTrials              expiredTrialDemoter
 	trialEmails                      *trialemails.Service
 	mcpResearch                      *activities.McpResearch
+	memoryEvalRunner                 MemoryEvalRunner
 	mcpApprovalRecheck               *activities.McpApprovalRecheck
 	billingNotifications             *billingnotifications.Service
 }
@@ -207,6 +214,9 @@ func NewActivities(
 	tunnelHTTPClient *tunnelrouting.HTTPClient,
 	db *pgxpool.Pool,
 	encryption *encryption.Client,
+	clientSecrets *clientsecrets.Secrets,
+	upstreamTokens *upstreamtokens.Tokens,
+	aiProviderKeys *aiproviderkeys.Keys,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
@@ -216,6 +226,7 @@ func NewActivities(
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
 	expectedARecords []netip.Addr,
+	customDomainTargetSuffix string,
 	siteURL *url.URL,
 	orgHosts *orghost.Resolver,
 	billingTracker billing.Tracker,
@@ -225,7 +236,6 @@ func NewActivities(
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
-	mcpRegistryClient *externalmcp.RegistryClient,
 	mcpCatalog *externalmcp.CatalogService,
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
@@ -236,10 +246,7 @@ func NewActivities(
 	cacheAdapter cache.Cache,
 	emailService *email.Service,
 	assistantsCore *assistants.ServiceCore,
-	piiScanner risk_analysis.PIIScanner,
 	piScanner *promptinjection.Scanner,
-	customRuleScanner *customruleanalyzer.Scanner,
-	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	workosClient activities.WorkOSClient,
 	productFeatures *productfeatures.Client,
@@ -248,7 +255,6 @@ func NewActivities(
 	publishers *Publishers,
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
-	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
 	trialFixtureHandler activities.TrialFixtureHandler,
 	githubEvidenceToken string,
@@ -259,8 +265,11 @@ func NewActivities(
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
+	connections *mcpconnectionattempts.Recorder,
 	startupSeeds []activities.StartupSeed,
 	signInEpochs signins.EpochRaiser,
+	serverURL *url.URL,
+	staffOrg staff.Organization,
 ) *Activities {
 	spendRulesCH := spendrulesch.New(chConn)
 	riskFindingsCH := riskchrepo.New(chConn)
@@ -273,11 +282,6 @@ func NewActivities(
 		meterProvider,
 		db,
 		assetStorage,
-		piiScanner,
-		piScanner,
-		shadowMCPClient,
-		telemetryRepo,
-		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
 		features,
 		publishers.PresidioAnalysis,
 		publishers.GitleaksAnalysis,
@@ -287,11 +291,7 @@ func NewActivities(
 		publishers.LLMAnalysis,
 		publishers.ToolCallAnalysis,
 		publishers.AccountIdentityAnalysis,
-		customRuleScanner,
 		celEng,
-		builtinPresets,
-		NewShadowMCPPolicyBypassChecker(logger, db),
-		riskRecorder,
 		llmAnalyzerEnabled,
 	)
 	if err != nil {
@@ -313,9 +313,19 @@ func NewActivities(
 	chatAnalysisJudges, err := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
 		businessmemory.NewJudge(logger, tracerProvider, db, chatClient, judgeRateLimiter),
+		summaryjudge.NewJudge(logger, db, chatClient, judgeRateLimiter),
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
+	}
+
+	// Workers wired without the process's client secret seam (test workers)
+	// open client secrets as a process without organization encryption.
+	if clientSecrets == nil {
+		clientSecrets = clientsecrets.WithoutOrganizationEncryption(logger, db, encryption)
+	}
+	if upstreamTokens == nil {
+		upstreamTokens = upstreamtokens.WithoutOrganizationEncryption(logger, db, encryption)
 	}
 
 	// The scheduled refresh shares the remotesessions single-flight primitive,
@@ -332,6 +342,10 @@ func NewActivities(
 				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
 				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
 				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
+				remotesessions.WithRefreshConnectionRecorder(connections),
+				remotesessions.WithRefreshFeatureFlags(features),
+				remotesessions.WithRefreshClientSecrets(clientSecrets),
+				remotesessions.WithRefreshUpstreamTokens(upstreamTokens),
 			),
 		)
 	}
@@ -363,7 +377,7 @@ func NewActivities(
 	// worker's own clients; workers wired without the full ingredient set
 	// (test workers) get a nil activity and no schedule.
 	var mcpApprovalRecheck *activities.McpApprovalRecheck
-	if db != nil && guardianPolicy != nil && mcpCatalog != nil && features != nil && auditLogger != nil {
+	if db != nil && guardianPolicy != nil && mcpCatalog != nil && auditLogger != nil {
 		recheckProber := remoteprobe.New(logger, guardianPolicy)
 		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
 			packagemeta.NewClient(guardianPolicy.PooledClient()),
@@ -374,7 +388,7 @@ func NewActivities(
 			recheckProber,
 			recheckProber,
 			mcpapprovalcatalog.New(logger, db, mcpCatalog),
-		), features, auditLogger)
+		), auditLogger)
 	}
 
 	var skillSuggestionSignaler efficacy.SuggestionSignaler
@@ -406,25 +420,26 @@ func NewActivities(
 	// build their client and their applications sync is recorded as failed.
 	var oktaClients okta.ClientFactory
 	if guardianPolicy != nil {
-		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner, encryption)
+		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner)
 	}
-	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, oktaClients)
+	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, oktaClients, clientSecrets)
 
 	return &Activities{
 		db:                               db,
+		logger:                           logger,
 		temporalEnv:                      temporalEnv,
-		collectOpenRouterCreditsMetrics:  activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
+		collectOpenRouterCreditsMetrics:  activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, aiProviderKeys),
 		collectOpenRouterDailySpend:      activities.NewCollectOpenRouterDailySpend(logger, db, openrouterSpendClient),
 		settleStripeInvoiceAllocations:   activities.NewSettleStripeInvoiceAllocations(logger, db, stripeClient),
 		collectPlatformUsageMetrics:      activities.NewCollectPlatformUsageMetrics(logger, db),
-		getAIIntegrationsCandidates:      activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
-		pollAIData:                       activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
-		getDeviceIntegrationCandidates:   activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
-		runDeviceIntegrationSync:         activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
+		getAIIntegrationsCandidates:      activities.NewGetAIIntegrationsCandidates(logger, db, aiProviderKeys),
+		pollAIData:                       activities.NewPollAIData(logger, db, aiProviderKeys, telemetryLogger, guardianPolicy, chatWriter),
+		getDeviceIntegrationCandidates:   activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter, serverURL),
+		runDeviceIntegrationSync:         activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter, serverURL),
 		getOktaApplicationSyncCandidates: activities.NewGetOktaApplicationSyncCandidates(oktaApplicationSyncer),
 		runOktaApplicationSync:           activities.NewRunOktaApplicationSync(oktaApplicationSyncer),
 		customDomainIngress:              activities.NewCustomDomainIngress(logger, db, k8sClient),
-		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, orgHosts, guardianPolicy),
+		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, customDomainTargetSuffix, emailService, orgHosts),
 		fireOpenRouterCreditsMetrics:     activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:      activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:         activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -432,8 +447,10 @@ func NewActivities(
 		syncTenantDimensions:             activities.NewSyncTenantDimensions(logger, db, chConn, cacheAdapter),
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
+		mcpConnectionOutcomesDaily:       activities.NewMCPConnectionOutcomesDaily(logger, meterProvider, db, chConn, staffOrg),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
-		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
+		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient),
+		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
@@ -445,7 +462,7 @@ func NewActivities(
 		reconcileTrialConversionKeys:     activities.NewReconcileEnterpriseTrialConversionKeys(logger, conversionPolicyReconciler),
 		transitionDeployment:             activities.NewTransitionDeployment(logger, db),
 		validateDeployment:               activities.NewValidateDeployment(logger, db, billingRepo),
-		verifyCustomDomain:               activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
+		verifyCustomDomain:               activities.NewVerifyCustomDomain(logger, db, auditLogger),
 		generateToolsetEmbeddings:        activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		listToolsetsForIndexing:          activities.NewListToolsetsForIndexing(db),
 		dispatchTrigger:                  activities.NewDispatchTrigger(triggerApp),
@@ -507,8 +524,9 @@ func NewActivities(
 		trialEmails:             trialEmailsService,
 		trialFixtureHandler:     trialFixtureHandler,
 		mcpResearch:             mcpResearch,
+		memoryEvalRunner:        nil,
 		mcpApprovalRecheck:      mcpApprovalRecheck,
-		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, orgHosts),
+		billingNotifications:    billingnotifications.NewService(logger, db, emailService, orgHosts),
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -826,6 +844,21 @@ func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyApps
 	return a.reapFlyApps.Do(ctx, req)
 }
 
+func (a *Activities) BuildMemoryDigests(ctx context.Context, args activities.BuildMemoryDigestsArgs) (activities.BuildMemoryDigestsResult, error) {
+	result, err := a.memoryDigests.Build(ctx, args)
+	if err != nil {
+		return result, fmt.Errorf("build memory digests: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) InvalidateMemoryDigests(ctx context.Context) error {
+	if err := a.memoryDigests.Invalidate(ctx); err != nil {
+		return fmt.Errorf("invalidate memory digests: %w", err)
+	}
+	return nil
+}
+
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
 	return a.generateChatTitle.Do(ctx, input)
 }
@@ -844,6 +877,14 @@ func (a *Activities) PromoteStagedTelemetry(ctx context.Context, input activitie
 
 func (a *Activities) ListStagedTelemetryProjects(ctx context.Context) ([]activities.PromoteStagedTelemetryArgs, error) {
 	return a.listStagedTelemetryProjects.Do(ctx)
+}
+
+func (a *Activities) PlanMCPConnectionOutcomeDays(ctx context.Context, args activities.PlanMCPConnectionOutcomeDaysArgs) ([]time.Time, error) {
+	return a.mcpConnectionOutcomesDaily.Plan(ctx, args) //nolint:wrapcheck // wrapped by the activity
+}
+
+func (a *Activities) BuildMCPConnectionOutcomesDay(ctx context.Context, args activities.BuildMCPConnectionOutcomesDayArgs) (*dailyoutcomes.Result, error) {
+	return a.mcpConnectionOutcomesDaily.Build(ctx, args) //nolint:wrapcheck // wrapped by the activity, and a non-retryable error must keep its type
 }
 
 func (a *Activities) SegmentChat(ctx context.Context, input resolution_activities.SegmentChatArgs) (*resolution_activities.SegmentChatOutput, error) {

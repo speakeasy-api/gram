@@ -22,6 +22,26 @@ const (
 	ActionAccessChallengeResolve    Action = "access_challenge:resolve"
 )
 
+// accessGrantMetadata is the metadata of a role or membership change that
+// gave someone sensitive access. It names the scopes by slug; the dashboard
+// maps them to the catalogue.
+type accessGrantMetadata struct {
+	SensitiveScopesAdded []string `json:"sensitive_scopes_added"`
+}
+
+// accessGrantMetadataPayload is nil when nothing sensitive was added, so a
+// plain change reads like one written before the field existed.
+func accessGrantMetadataPayload(action Action, sensitiveScopesAdded []string) ([]byte, error) {
+	if len(sensitiveScopesAdded) == 0 {
+		return nil, nil
+	}
+	metadata, err := marshalAuditPayload(accessGrantMetadata{SensitiveScopesAdded: sensitiveScopesAdded})
+	if err != nil {
+		return nil, fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	return metadata, nil
+}
+
 type LogAccessRoleCreateEvent struct {
 	OrganizationID string
 
@@ -32,12 +52,21 @@ type LogAccessRoleCreateEvent struct {
 	RoleID   string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC role identifiers; pending team discussion
 	RoleName string
 	RoleSlug string
+
+	// SensitiveScopesAdded names the sensitive scopes the new role grants.
+	SensitiveScopesAdded []string
 }
 
 func (l *Logger) LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleCreateEvent) error {
 	action := ActionAccessRoleCreate
 
+	metadata, err := accessGrantMetadataPayload(action, event.SensitiveScopesAdded)
+	if err != nil {
+		return err
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -55,7 +84,7 @@ func (l *Logger) LogAccessRoleCreate(ctx context.Context, dbtx repo.DBTX, event 
 
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
-		Metadata:       nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRoleV1})
@@ -74,6 +103,10 @@ type LogAccessRoleUpdateEvent struct {
 
 	RoleSnapshotBefore *accessgen.Role
 	RoleSnapshotAfter  *accessgen.Role
+
+	// SensitiveScopesAdded names the sensitive scopes the role grants after
+	// the change and did not before.
+	SensitiveScopesAdded []string
 }
 
 func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleUpdateEvent) error {
@@ -89,7 +122,13 @@ func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event 
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 
+	metadata, err := accessGrantMetadataPayload(action, event.SensitiveScopesAdded)
+	if err != nil {
+		return err
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -107,7 +146,7 @@ func (l *Logger) LogAccessRoleUpdate(ctx context.Context, dbtx repo.DBTX, event 
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
-		Metadata:       nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRoleV1})
@@ -128,6 +167,7 @@ type LogAccessRoleDeleteEvent struct {
 func (l *Logger) LogAccessRoleDelete(ctx context.Context, dbtx repo.DBTX, event LogAccessRoleDeleteEvent) error {
 	action := ActionAccessRoleDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -164,6 +204,10 @@ type LogAccessMemberRoleUpdateEvent struct {
 
 	MemberSnapshotBefore *accessgen.AccessMember
 	MemberSnapshotAfter  *accessgen.AccessMember
+
+	// SensitiveScopesAdded names the sensitive scopes the member's roles
+	// grant after the change and did not before.
+	SensitiveScopesAdded []string
 }
 
 func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberRoleUpdateEvent) error {
@@ -179,7 +223,13 @@ func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, 
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 
+	metadata, err := accessGrantMetadataPayload(action, event.SensitiveScopesAdded)
+	if err != nil {
+		return err
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -197,7 +247,7 @@ func (l *Logger) LogAccessMemberRoleUpdate(ctx context.Context, dbtx repo.DBTX, 
 
 		BeforeSnapshot: beforeSnapshot,
 		AfterSnapshot:  afterSnapshot,
-		Metadata:       nil,
+		Metadata:       metadata,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessMemberV1})
@@ -220,6 +270,7 @@ func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, 
 	action := ActionAccessChallengeResolve
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -276,6 +327,7 @@ func (l *Logger) LogAccessMemberSignInsRevoke(ctx context.Context, dbtx repo.DBT
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

@@ -12,6 +12,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const orgCountCustomDomainDiagnostics = `-- name: OrgCountCustomDomainDiagnostics :one
+SELECT count(*) FROM custom_domains WHERE organization_id = $1
+ AND domain = $2 AND dns_configuration_status = 'unconfirmed' AND health_status = 'healthy'
+ AND dns_target_token IS NOT NULL AND dns_checked_at = health_checked_at
+`
+
+type OrgCountCustomDomainDiagnosticsParams struct {
+	OrgID  string
+	Domain string
+}
+
+func (q *Queries) OrgCountCustomDomainDiagnostics(ctx context.Context, arg OrgCountCustomDomainDiagnosticsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, orgCountCustomDomainDiagnostics, arg.OrgID, arg.Domain)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const orgCountSigintDefinitionSnapshots = `-- name: OrgCountSigintDefinitionSnapshots :one
+SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = $1::uuid
+`
+
+func (q *Queries) OrgCountSigintDefinitionSnapshots(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, orgCountSigintDefinitionSnapshots, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const orgDeleteAPIKeys = `-- name: OrgDeleteAPIKeys :exec
 DELETE FROM api_keys WHERE organization_id = $1::text
 `
@@ -77,6 +106,23 @@ func (q *Queries) OrgDeleteAssistantMCPServers(ctx context.Context, orgID string
 	return err
 }
 
+const orgDeleteAuthPermissionProvisions = `-- name: OrgDeleteAuthPermissionProvisions :exec
+DELETE FROM auth_permission_provisions
+WHERE organization_id = $1::text
+  AND (principal_urn LIKE 'agent:%' OR principal_urn LIKE 'role:organization:%')
+`
+
+// The default auth permission ledger keeps every grant the backfill ever
+// provisioned, so it never re-grants one an admin removed. The seed deletes
+// and recreates agent and custom role grants, so it resets their ledger rows
+// with them; otherwise a reseed would leave the recreated principals without
+// their default mcp:auth grants. Human grants survive a reseed, and so do
+// their ledger rows.
+func (q *Queries) OrgDeleteAuthPermissionProvisions(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteAuthPermissionProvisions, orgID)
+	return err
+}
+
 const orgDeleteBusinessMemories = `-- name: OrgDeleteBusinessMemories :exec
 DELETE FROM business_memories WHERE organization_id = $1::text
 `
@@ -92,6 +138,15 @@ DELETE FROM chat_message_participants WHERE project_id IN (SELECT id FROM projec
 
 func (q *Queries) OrgDeleteChatMessageParticipants(ctx context.Context, orgID string) error {
 	_, err := q.db.Exec(ctx, orgDeleteChatMessageParticipants, orgID)
+	return err
+}
+
+const orgDeleteCustomDomains = `-- name: OrgDeleteCustomDomains :exec
+DELETE FROM custom_domains WHERE organization_id = $1
+`
+
+func (q *Queries) OrgDeleteCustomDomains(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteCustomDomains, orgID)
 	return err
 }
 
@@ -393,6 +448,15 @@ func (q *Queries) OrgDeleteProjects(ctx context.Context, orgID string) error {
 	return err
 }
 
+const orgDeleteRegistryPromotionCandidates = `-- name: OrgDeleteRegistryPromotionCandidates :exec
+DELETE FROM registry_promotion_candidates WHERE organization_id = $1::text
+`
+
+func (q *Queries) OrgDeleteRegistryPromotionCandidates(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteRegistryPromotionCandidates, orgID)
+	return err
+}
+
 const orgDeleteRemoteProtectedResources = `-- name: OrgDeleteRemoteProtectedResources :exec
 DELETE FROM remote_protected_resources WHERE project_id = $1::uuid
 `
@@ -506,6 +570,19 @@ func (q *Queries) OrgDeleteSigintCustomSignals(ctx context.Context, orgID string
 	return err
 }
 
+const orgDeleteSigintDefinitionSnapshots = `-- name: OrgDeleteSigintDefinitionSnapshots :exec
+
+DELETE FROM sigint_definition_snapshots
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
+`
+
+// Preflight isolation asserts, org metadata and onboarding, the scoped purge,
+// the project, features, users, and memberships.
+func (q *Queries) OrgDeleteSigintDefinitionSnapshots(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteSigintDefinitionSnapshots, orgID)
+	return err
+}
+
 const orgDeleteSigintSensorSignals = `-- name: OrgDeleteSigintSensorSignals :exec
 DELETE FROM sigint_sensor_signals
 WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
@@ -610,7 +687,6 @@ func (q *Queries) OrgDeleteWorkloadIssuers(ctx context.Context, orgID string) er
 }
 
 const orgForeignOrgExists = `-- name: OrgForeignOrgExists :one
-
 SELECT EXISTS (
   SELECT 1 FROM organization_metadata
   WHERE id = $1::text
@@ -624,8 +700,6 @@ type OrgForeignOrgExistsParams struct {
 	OrgSlug  string
 }
 
-// Preflight isolation asserts, org metadata and onboarding, the scoped purge,
-// the project, features, users, and memberships.
 // workos_id is compared against this tenant's expected link rather than merely
 // tested for NULL: the shared demo org never links to WorkOS (its constant is
 // an inert placeholder that matches nothing), but the local development tenant
@@ -733,8 +807,10 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   ($6::uuid, $2::text, $7::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  ($8::uuid, $2::text, $3::text,
-   'Release notes assistant', NULL, NULL)
+  ($8::uuid, $2::text, $5::text,
+   'Release notes assistant', NULL, NULL),
+  ($9::uuid, $2::text, $10::text,
+   'Deploy watcher', NULL, NULL)
 `
 
 type OrgInsertManagedAgentsParams struct {
@@ -746,6 +822,8 @@ type OrgInsertManagedAgentsParams struct {
 	Agent3 uuid.UUID
 	Owner3 string
 	Agent4 uuid.UUID
+	Agent5 uuid.UUID
+	Owner5 string
 }
 
 // Managed identities are distinct from OAuth client registrations. Existing
@@ -762,6 +840,8 @@ func (q *Queries) OrgInsertManagedAgents(ctx context.Context, arg OrgInsertManag
 		arg.Agent3,
 		arg.Owner3,
 		arg.Agent4,
+		arg.Agent5,
+		arg.Owner5,
 	)
 	return err
 }
@@ -854,7 +934,6 @@ INSERT INTO organization_setup_tasks
   (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
 VALUES
   ($1::text, 'identity-provider', 'todo', NULL, NULL, NULL),
-  ($1::text, 'create-marketplace', 'todo', NULL, NULL, NULL),
   ($1::text, 'distribute-servers', 'todo', NULL, NULL, NULL),
   ($1::text, 'enable-logging', 'todo', NULL, NULL, NULL),
   ($1::text, 'anthropic-observability', 'todo', NULL, NULL, NULL),
@@ -905,6 +984,28 @@ func (q *Queries) OrgInsertSigintCustomSignal(ctx context.Context, arg OrgInsert
 		arg.Slug,
 		arg.Description,
 		arg.ClassifierCriteria,
+	)
+	return err
+}
+
+const orgInsertSigintDefinitionSnapshot = `-- name: OrgInsertSigintDefinitionSnapshot :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+VALUES ($1::uuid, $2::uuid, $3, $4::jsonb)
+`
+
+type OrgInsertSigintDefinitionSnapshotParams struct {
+	ProjectID      uuid.UUID
+	SensorID       uuid.UUID
+	DefinitionHash string
+	Definition     []byte
+}
+
+func (q *Queries) OrgInsertSigintDefinitionSnapshot(ctx context.Context, arg OrgInsertSigintDefinitionSnapshotParams) error {
+	_, err := q.db.Exec(ctx, orgInsertSigintDefinitionSnapshot,
+		arg.ProjectID,
+		arg.SensorID,
+		arg.DefinitionHash,
+		arg.Definition,
 	)
 	return err
 }
@@ -969,6 +1070,58 @@ func (q *Queries) OrgInsertSigintSensorSignal(ctx context.Context, arg OrgInsert
 		arg.SensorID,
 		arg.SignalID,
 		arg.SortOrder,
+	)
+	return err
+}
+
+const orgPlantCustomDomainDependents = `-- name: OrgPlantCustomDomainDependents :one
+WITH target AS MATERIALIZED (
+  SELECT d.id AS domain_id, m.id AS meta_id, m.project_id, d.organization_id
+  FROM custom_domains d
+  JOIN meta_mcp_servers m ON m.organization_id = d.organization_id
+  WHERE d.organization_id = $1::text AND d.deleted IS FALSE
+    AND m.project_id = $2::uuid AND m.deleted IS FALSE
+  ORDER BY m.id LIMIT 1
+), endpoint AS (
+  INSERT INTO mcp_endpoints (project_id, custom_domain_id, meta_mcp_server_id, slug, is_domain_root)
+  SELECT project_id, domain_id, meta_id, 'reseed-domain-root', TRUE FROM target
+  RETURNING id
+)
+SELECT (SELECT count(*) FROM endpoint)::integer AS planted
+`
+
+type OrgPlantCustomDomainDependentsParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+// Test fixture: the SET NULL reference must disappear before domain deletion.
+func (q *Queries) OrgPlantCustomDomainDependents(ctx context.Context, arg OrgPlantCustomDomainDependentsParams) (int32, error) {
+	row := q.db.QueryRow(ctx, orgPlantCustomDomainDependents, arg.OrgID, arg.ProjectID)
+	var planted int32
+	err := row.Scan(&planted)
+	return planted, err
+}
+
+const orgSeedCustomDomain = `-- name: OrgSeedCustomDomain :exec
+INSERT INTO custom_domains (id, organization_id, domain, verified, activated, provisioner_kind,
+ dns_target_token, dns_configuration_status, dns_routing_method, dns_checked_at, health_status, health_checked_at)
+VALUES ($1, $2, $3, TRUE, FALSE, 'local', $4, 'unconfirmed', 'unknown', statement_timestamp(), 'healthy', statement_timestamp())
+`
+
+type OrgSeedCustomDomainParams struct {
+	ID             uuid.UUID
+	OrgID          string
+	Domain         string
+	DnsTargetToken pgtype.Text
+}
+
+func (q *Queries) OrgSeedCustomDomain(ctx context.Context, arg OrgSeedCustomDomainParams) error {
+	_, err := q.db.Exec(ctx, orgSeedCustomDomain,
+		arg.ID,
+		arg.OrgID,
+		arg.Domain,
+		arg.DnsTargetToken,
 	)
 	return err
 }

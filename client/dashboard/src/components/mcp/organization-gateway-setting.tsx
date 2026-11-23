@@ -2,6 +2,8 @@ import { RequireScope } from "@/components/require-scope";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import type { OrganizationGateway } from "@gram/client/models/components/organizationgateway.js";
 import { useState } from "react";
@@ -9,9 +11,9 @@ import type { OrganizationGatewaySetting } from "./useOrganizationGatewaySetting
 import { Link } from "react-router";
 
 /**
- * The on/off switch. The page starts an access review when turning on;
- * turning off asks first, because
- * it cuts off every connected client at once. Members see it disabled with the
+ * The on/off switch. Turning on asks first and recommends reviewing MCP
+ * assignments; turning off asks first, because it cuts off every connected
+ * client at once. Members see it disabled with the
  * admin-only reason.
  */
 export function OrganizationGatewaySwitch({
@@ -21,7 +23,10 @@ export function OrganizationGatewaySwitch({
 }: Pick<OrganizationGatewaySetting, "setOn" | "isPending"> & {
   on: boolean;
 }): JSX.Element {
-  const [confirming, setConfirming] = useState(false);
+  const [confirming, setConfirming] = useState<"on" | "off" | null>(null);
+  const onOpenChange = (open: boolean) => {
+    if (!open) setConfirming(null);
+  };
   return (
     <>
       <RequireScope
@@ -31,34 +36,51 @@ export function OrganizationGatewaySwitch({
       >
         <Switch
           checked={on}
-          onCheckedChange={(checked) =>
-            checked ? setOn(true) : setConfirming(true)
-          }
+          onCheckedChange={(checked) => setConfirming(checked ? "on" : "off")}
           disabled={isPending}
           aria-label="Organization Gateway"
         />
       </RequireScope>
       <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title="Turn off Organization Gateway?"
+        open={confirming === "on"}
+        onOpenChange={onOpenChange}
+        title="Turn on gateways?"
         description={
           <>
-            This removes your team&apos;s access to their servers through the
-            Organization Gateway. Clients connected to it stop working right
-            away.
+            This turns on every project&apos;s Project Gateway and the
+            Organization Gateway. Through them, each person gets every MCP
+            server they can access, including access inherited from broad roles.
+            <br />
+            <br />
+            We recommend reviewing MCP assignments first and removing any that
+            people no longer need.
+          </>
+        }
+        confirmLabel="Turn on"
+        pendingLabel="Turning on…"
+        confirmVariant="primary"
+        isPending={isPending}
+        onConfirm={() => setOn(true, { onSuccess: () => setConfirming(null) })}
+      />
+      <ConfirmDialog
+        open={confirming === "off"}
+        onOpenChange={onOpenChange}
+        title="Turn off gateways?"
+        description={
+          <>
+            This turns off every project&apos;s Project Gateway and the
+            Organization Gateway. Clients connected to any of them stop working
+            right away.
             <br />
             <br />
             Each MCP server keeps working at its own URL. You can turn the
-            gateway back on at any time.
+            gateways back on at any time.
           </>
         }
         confirmLabel="Turn off"
         pendingLabel="Turning off…"
         isPending={isPending}
-        onConfirm={() =>
-          setOn(false, { onSuccess: () => setConfirming(false) })
-        }
+        onConfirm={() => setOn(false, { onSuccess: () => setConfirming(null) })}
       />
     </>
   );
@@ -74,27 +96,50 @@ export function GatewayNotServed({
   reason: OrganizationGateway["unavailableReason"];
 }): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const canManage = hasScope("org:admin", organization.id);
+  // The MCP Authentication page can make a project's server
+  // organization-wide and consolidate one server into another (removing the
+  // source). Its actions need org:admin; without it, point to an admin or
+  // support instead.
+  const issuersPage = canManage ? (
+    <Link to={orgRoutes.userSessionIssuers.href()} className="underline">
+      MCP Authentication
+    </Link>
+  ) : null;
+  const askFor = canManage
+    ? "Contact support"
+    : "Ask an organization admin or contact support";
   switch (reason) {
+    // No organization gets one automatically.
     case "no_organization_issuer":
       return (
         <Text small className="text-warning mt-3">
-          Not available yet: it needs an organization-wide sign-in. Set one up
-          in{" "}
-          <Link to={orgRoutes.identity.href()} className="underline">
-            IDP and SSO
-          </Link>
-          .
+          Not available: it needs an organization-wide sign-in, and your
+          organization doesn&apos;t have one.{" "}
+          {issuersPage ? (
+            <>
+              Make a project&apos;s authorization server organization-wide in{" "}
+              {issuersPage}, or contact support.
+            </>
+          ) : (
+            `${askFor} to set one up.`
+          )}
         </Text>
       );
     case "multiple_organization_issuers":
       return (
         <Text small className="text-warning mt-3">
           Not available: the organization has more than one organization-wide
-          sign-in. Keep one in{" "}
-          <Link to={orgRoutes.identity.href()} className="underline">
-            IDP and SSO
-          </Link>
-          .
+          sign-in, and the gateway needs exactly one.{" "}
+          {issuersPage ? (
+            <>
+              In {issuersPage}, use Consolidate into another until one is left.
+            </>
+          ) : (
+            `${askFor} to resolve this.`
+          )}
         </Text>
       );
     case "custom_domain_only":

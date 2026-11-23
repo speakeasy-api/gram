@@ -204,3 +204,26 @@ AND (sqlc.arg(version)::text = 'latest' OR data #>> '{server,version}' = sqlc.ar
 
 -- name: SetRegistryEntryPublishedFixture :exec
 UPDATE mcp_registry_entries SET published = @published WHERE id = @id;
+
+-- name: IsCatalogSVGAsset :one
+SELECT EXISTS (
+    SELECT 1 FROM assets
+    WHERE id = @id AND project_id IS NULL AND organization_id IS NULL
+      AND kind = 'image' AND content_type = 'image/svg+xml' AND deleted IS FALSE
+);
+
+-- name: SetAssetContentTypeFixture :exec
+-- Test fixture: puts a catalog icon asset into an invalid association state.
+UPDATE assets SET content_type = @content_type WHERE id = @id;
+
+-- name: SetAssetProjectFixture :exec
+-- Test fixture: puts a catalog icon asset into an invalid association state.
+UPDATE assets SET project_id = @project_id WHERE id = @id;
+
+-- name: SoftDeleteAssetFixture :exec
+-- Test fixture: puts a catalog icon asset into an invalid association state.
+UPDATE assets SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: RestorePlatformIconAssetFixture :exec
+-- Test fixture: restores a catalog icon asset after an invalid association.
+UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, deleted_at = NULL WHERE id = @id;

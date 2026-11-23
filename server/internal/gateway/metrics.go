@@ -18,17 +18,15 @@ type metrics struct {
 }
 
 // toolCallOutcome classifies how a tool execution ended, on the gram.outcome
-// dimension of the tool.call counter. The status code cannot carry this on its
-// own: an external MCP server reports failure in-band, as a result flagged
-// isError on an otherwise successful HTTP 200 response.
+// dimension of the tool.call counter.
 type toolCallOutcome string
 
 const (
 	// toolCallOutcomeSuccess is a tool that ran and reported no failure.
 	toolCallOutcomeSuccess toolCallOutcome = "success"
 
-	// toolCallOutcomeToolError is a tool that ran and reported a failure,
-	// whether through its status code or in-band in its result.
+	// toolCallOutcomeToolError is a tool that ran and reported a failure
+	// through its status code.
 	toolCallOutcomeToolError toolCallOutcome = "tool_error"
 
 	// toolCallOutcomeNoResponse is a tool that produced no response at all: a

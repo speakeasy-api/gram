@@ -100,23 +100,6 @@ func TestBuildDescribeToolsTool(t *testing.T) {
 		require.Equal(t, describeToolsToolName, entry.Name)
 	})
 
-	t.Run("returns_error_for_proxy_tool", func(t *testing.T) {
-		t.Parallel()
-		proxyType := "proxy"
-		tools := []*types.Tool{
-			{
-				ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{
-					Name: "proxy-tool",
-					Type: &proxyType,
-				},
-			},
-		}
-
-		_, err := buildDescribeToolsTool(tools)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "external mcp proxy")
-	})
-
 	t.Run("schema_includes_tool_name_examples", func(t *testing.T) {
 		t.Parallel()
 		tools := []*types.Tool{
@@ -272,26 +255,6 @@ func TestHandleDescribeToolsCall(t *testing.T) {
 		require.NotNil(t, response)
 		// Should return empty tools list (JSON escaped in response)
 		require.Contains(t, string(response), `\"tools\":[]`)
-	})
-
-	t.Run("returns_error_for_proxy_tools", func(t *testing.T) {
-		t.Parallel()
-		ctx := t.Context()
-		logger := testenv.NewLogger(t)
-
-		proxyType := "proxy"
-		toolset := &types.Toolset{
-			Tools: []*types.Tool{
-				{ExternalMcpToolDefinition: &types.ExternalMCPToolDefinition{Name: "proxy-tool", Type: &proxyType}},
-			},
-		}
-
-		argsRaw := json.RawMessage(`{"tool_names": ["proxy-tool"]}`)
-		reqID := mcpjsonrpc.NumberID(1)
-
-		_, err := handleDescribeToolsCall(ctx, logger, reqID, argsRaw, toolset)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "external mcp proxy")
 	})
 
 	t.Run("handles_multiple_tool_names", func(t *testing.T) {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { ALL_POLICY_MESSAGE_TYPES } from "./policy-data";
 import {

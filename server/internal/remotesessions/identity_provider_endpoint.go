@@ -24,7 +24,8 @@ type IdentityProviderEndpoint struct {
 // LoadIdentityProviderEndpoint resolves an organization's trusted identity
 // provider registration with live discovery and host validation. keys verifies
 // what the provider signs. Configuration failures are ErrFederatedConfiguration
-// or ErrFederatedSigning; other errors are transient.
+// or ErrFederatedSigning alone; anything joined with ErrFederatedUnavailable,
+// including a signer outage, and other errors are transient.
 func (m *ChallengeManager) LoadIdentityProviderEndpoint(ctx context.Context, keys *jwks.KeyResolver, organizationID string, issuerID, clientID uuid.UUID) (*IdentityProviderEndpoint, error) {
 	p, err := m.LoadFederatedProvider(ctx, organizationID, issuerID, clientID)
 	if err != nil {
@@ -33,12 +34,12 @@ func (m *ChallengeManager) LoadIdentityProviderEndpoint(ctx context.Context, key
 	if err := m.validateFederatedMetadataHosts(ctx, p.issuer, p.metadata); err != nil {
 		return nil, err
 	}
-	doer, auth, err := m.federatedTokenClient(p)
+	doer, auth, err := m.federatedTokenClient(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 	return &IdentityProviderEndpoint{
-		TokenEndpoint: &TokenEndpoint{endpoint: p.metadata.TokenEndpoint, issuer: p.issuer.Issuer, issuerID: p.issuer.ID, doer: doer, auth: auth},
+		TokenEndpoint: &TokenEndpoint{endpoint: p.metadata.TokenEndpoint, issuer: p.issuer.Issuer, issuerID: p.issuer.ID, doer: doer, auth: auth, tunneled: p.issuer.TunneledMcpServerID.Valid},
 		keys:          keys,
 		jwksURI:       p.metadata.JwksURI,
 		fetchScope:    p.issuer.ID.String(),

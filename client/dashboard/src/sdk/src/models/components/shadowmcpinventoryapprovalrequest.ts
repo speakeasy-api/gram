@@ -25,7 +25,7 @@ export type StandingDecision = OpenEnum<typeof StandingDecision>;
 /**
  * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
  */
-export const Status = {
+export const ShadowMCPInventoryApprovalRequestStatus = {
   Unreviewed: "unreviewed",
   Requested: "requested",
   Approved: "approved",
@@ -35,7 +35,9 @@ export const Status = {
 /**
  * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
  */
-export type Status = OpenEnum<typeof Status>;
+export type ShadowMCPInventoryApprovalRequestStatus = OpenEnum<
+  typeof ShadowMCPInventoryApprovalRequestStatus
+>;
 
 /**
  * The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
@@ -57,7 +59,7 @@ export type ShadowMCPInventoryApprovalRequest = {
   /**
    * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
    */
-  status: Status;
+  status: ShadowMCPInventoryApprovalRequestStatus;
 };
 
 /** @internal */
@@ -67,8 +69,9 @@ export const StandingDecision$inboundSchema: z.ZodMiniType<
 > = openEnums.inboundSchema(StandingDecision);
 
 /** @internal */
-export const Status$inboundSchema: z.ZodMiniType<Status, unknown> = openEnums
-  .inboundSchema(Status);
+export const ShadowMCPInventoryApprovalRequestStatus$inboundSchema:
+  z.ZodMiniType<ShadowMCPInventoryApprovalRequestStatus, unknown> = openEnums
+    .inboundSchema(ShadowMCPInventoryApprovalRequestStatus);
 
 /** @internal */
 export const ShadowMCPInventoryApprovalRequest$inboundSchema: z.ZodMiniType<
@@ -82,7 +85,7 @@ export const ShadowMCPInventoryApprovalRequest$inboundSchema: z.ZodMiniType<
     id: z.string(),
     requester_count: z.int(),
     standing_decision: z.optional(StandingDecision$inboundSchema),
-    status: Status$inboundSchema,
+    status: ShadowMCPInventoryApprovalRequestStatus$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

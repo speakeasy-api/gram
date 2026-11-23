@@ -17,7 +17,7 @@ import type {
   ThreadAssistantMessagePart,
   TextMessagePart,
 } from "@assistant-ui/react";
-import { UIMessage } from "ai";
+import type { UIMessage } from "ai";
 
 import {
   isMachineAttachmentPart,

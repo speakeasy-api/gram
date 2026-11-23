@@ -73,6 +73,10 @@ export type ListToolUsageTracesPayload = {
    */
   accountType?: string | undefined;
   /**
+   * Agent identities to include. Combined with user_filters by AND, so an agent and a person select the calls that agent made on that person's behalf.
+   */
+  agentIds?: Array<string> | undefined;
+  /**
    * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include
    */
   clientKeys?: Array<string> | undefined;
@@ -93,13 +97,17 @@ export type ListToolUsageTracesPayload = {
    */
   hookSources?: Array<string> | undefined;
   /**
-   * Hosted MCP toolset slugs to include
+   * Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
    */
   hostedToolsetSlugs?: Array<string> | undefined;
   /**
    * Number of traces to return
    */
   limit?: number | undefined;
+  /**
+   * MCP server ids to include. Matches calls served by the server, including calls recorded before they carried a server id.
+   */
+  mcpServerIds?: Array<string> | undefined;
   /**
    * Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself
    */
@@ -129,7 +137,7 @@ export type ListToolUsageTracesPayload = {
    */
   to: Date;
   /**
-   * Typed user identities to include
+   * Typed user identities to include. An email also matches the calls an agent made on that person's behalf.
    */
   userFilters?: Array<ToolUsageUserFilter> | undefined;
 };
@@ -153,6 +161,7 @@ export const ListToolUsageTracesPayloadTargetTypes$outboundSchema:
 /** @internal */
 export type ListToolUsageTracesPayload$Outbound = {
   account_type?: string | undefined;
+  agent_ids?: Array<string> | undefined;
   client_keys?: Array<string> | undefined;
   cursor?: string | undefined;
   filters?: Array<LogFilter$Outbound> | undefined;
@@ -160,6 +169,7 @@ export type ListToolUsageTracesPayload$Outbound = {
   hook_sources?: Array<string> | undefined;
   hosted_toolset_slugs?: Array<string> | undefined;
   limit: number;
+  mcp_server_ids?: Array<string> | undefined;
   meta_mcp_server_ids?: Array<string> | undefined;
   query?: string | undefined;
   shadow_server_names?: Array<string> | undefined;
@@ -177,6 +187,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     accountType: z.optional(z.string()),
+    agentIds: z.optional(z.array(z.string())),
     clientKeys: z.optional(z.array(z.string())),
     cursor: z.optional(z.string()),
     filters: z.optional(z.array(LogFilter$outboundSchema)),
@@ -184,6 +195,7 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
     hookSources: z.optional(z.array(z.string())),
     hostedToolsetSlugs: z.optional(z.array(z.string())),
     limit: z._default(z.int(), 100),
+    mcpServerIds: z.optional(z.array(z.string())),
     metaMcpServerIds: z.optional(z.array(z.string())),
     query: z.optional(z.string()),
     shadowServerNames: z.optional(z.array(z.string())),
@@ -200,9 +212,11 @@ export const ListToolUsageTracesPayload$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       accountType: "account_type",
+      agentIds: "agent_ids",
       clientKeys: "client_keys",
       hookSources: "hook_sources",
       hostedToolsetSlugs: "hosted_toolset_slugs",
+      mcpServerIds: "mcp_server_ids",
       metaMcpServerIds: "meta_mcp_server_ids",
       shadowServerNames: "shadow_server_names",
       targetTypes: "target_types",

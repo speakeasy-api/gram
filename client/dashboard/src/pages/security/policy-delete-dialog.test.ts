@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { DETECTION_RULES, type DetectionRule } from "./policy-data";

@@ -121,12 +121,13 @@ func TestOktaChecklist_Completion(t *testing.T) {
 		},
 		{
 			name:   "degraded reports what verification saw",
-			signal: idpc.ChecklistSignal{Checked: true, ClientIDSubmitted: true, MissingScopes: []string{"okta.users.read"}},
+			signal: idpc.ChecklistSignal{Checked: true, ClientIDSubmitted: true, MissingScopes: []string{}, Reasons: []string{idpc.ReasonDPoPNotBound, idpc.ReasonReadFailedApps}},
 			want: map[string]bool{
 				idpc.ChecklistKeyCreateAPIServicesApp: true,
 				idpc.ChecklistKeyPublicKeyAuth:        true,
 				idpc.ChecklistKeyDPoP:                 false,
-				idpc.ChecklistKeyGrantScopes:          false,
+				idpc.ChecklistKeyGrantScopes:          true,
+				idpc.ChecklistKeyAssignAdminRoles:     false,
 				idpc.ChecklistKeySubmitClientID:       true,
 			},
 		},

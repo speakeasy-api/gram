@@ -19,9 +19,7 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
-	adminecgen "github.com/speakeasy-api/gram/server/gen/admin_external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_credentials"
-	adminecsrv "github.com/speakeasy-api/gram/server/gen/http/admin_external_credentials/server"
 	srv "github.com/speakeasy-api/gram/server/gen/http/external_credentials/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -62,16 +60,13 @@ type Service struct {
 	authz           *authz.Engine
 	audit           *audit.Logger
 	gcpIdentity     *gcpauth.Identity
-	sessions        auth.PlatformAdminEntitlementReader
 	productFeatures *productfeatures.Client
 	verifyLimiter   *ratelimit.Limiter
 }
 
 var (
-	_ gen.Service        = (*Service)(nil)
-	_ gen.Auther         = (*Service)(nil)
-	_ adminecgen.Service = (*Service)(nil)
-	_ adminecgen.Auther  = (*Service)(nil)
+	_ gen.Service = (*Service)(nil)
+	_ gen.Auther  = (*Service)(nil)
 )
 
 func NewService(
@@ -93,7 +88,6 @@ func NewService(
 		logger:          logger,
 		db:              db,
 		auth:            auth.New(logger, db, sessions, authzEngine),
-		sessions:        sessions,
 		authz:           authzEngine,
 		audit:           auditLogger,
 		gcpIdentity:     gcpIdentity,
@@ -108,7 +102,7 @@ func NewService(
 // organization-tier handler needs: the RBAC scope and the customer-managed-keys
 // entitlement. Routing all of them through one function keeps the entitlement
 // from being reachable by an endpoint that simply forgot to check it.
-func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireOrgAccess(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -116,7 +110,7 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, logger, err
 	}
 
@@ -257,14 +251,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	}
 	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
-	// The platform-admin (adminExternalCredentials) surface shares this Service
-	// struct; its handlers live in adminhandlers.go and gate on the platform-admin
-	// flag rather than an org RBAC scope.
-	adminEndpoints := adminecgen.NewEndpoints(service)
-	for _, m := range mw {
-		adminEndpoints.Use(m)
-	}
-	adminecsrv.Mount(mux, adminecsrv.New(adminEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -272,7 +258,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) CreateAwsIamCredential(ctx context.Context, payload *gen.CreateAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +327,7 @@ func (s *Service) CreateAwsIamCredential(ctx context.Context, payload *gen.Creat
 }
 
 func (s *Service) UpdateAwsIamCredential(ctx context.Context, payload *gen.UpdateAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +417,7 @@ func (s *Service) UpdateAwsIamCredential(ctx context.Context, payload *gen.Updat
 }
 
 func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.CreateGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -442,8 +428,7 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 	}
 
 	// The organization tier is impersonation-only, so the WIF columns are never
-	// written here and resolveGcpColumns (which infers between all three modes)
-	// does not apply.
+	// written here.
 	decision, err := s.resolveOrgImpersonationTarget(ctx, logger, payload.ImpersonateServiceAccount, authCtx.IsAdmin, priorTarget{
 		ImpersonateServiceAccount: "",
 		SkipProjectVerification:   false,
@@ -505,7 +490,7 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 }
 
 func (s *Service) UpdateGcpIamCredential(ctx context.Context, payload *gen.UpdateGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -631,7 +616,7 @@ func (s *Service) ListGcpIamCredentials(ctx context.Context, payload *gen.ListGc
 // listCredentials returns the org's credential summaries, optionally filtered to
 // a single provider (invalid pgtype.Text = no filter).
 func (s *Service) listCredentials(ctx context.Context, provider pgtype.Text) (*gen.ListExternalCredentialsResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -650,7 +635,7 @@ func (s *Service) listCredentials(ctx context.Context, provider pgtype.Text) (*g
 }
 
 func (s *Service) GetAwsIamCredential(ctx context.Context, payload *gen.GetAwsIamCredentialPayload) (*gen.AwsIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -675,7 +660,7 @@ func (s *Service) GetAwsIamCredential(ctx context.Context, payload *gen.GetAwsIa
 }
 
 func (s *Service) GetGcpIamCredential(ctx context.Context, payload *gen.GetGcpIamCredentialPayload) (*gen.GcpIamCredential, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +691,7 @@ func (s *Service) GetGcpIamCredential(ctx context.Context, payload *gen.GetGcpIa
 // target. The probe is ephemeral — nothing is persisted — and a resolution
 // failure is a reportable outcome (verified=false), not a request error.
 func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.VerifyGcpIamCredentialPayload) (*gen.VerifyCredentialResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -807,7 +792,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 // rights to. It is deliberately readable before any credential exists, because
 // making that grant is a precondition of creating one at all.
 func (s *Service) GetGcpSetupInfo(ctx context.Context, payload *gen.GetGcpSetupInfoPayload) (*gen.GcpSetupInfo, error) {
-	_, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	_, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -845,14 +830,15 @@ func (s *Service) DeleteGcpIamCredential(ctx context.Context, payload *gen.Delet
 // pointing at a tombstone — the key still lists and still looks healthy, but
 // nothing can reach it, and the failure only surfaces at signing time.
 //
-// The platform tier has its own delete path in adminhandlers.go and no such
-// guard. That is sound rather than an oversight: an external key is written with
-// a non-NULL organization_id and validated against a credential in that same
-// organization, while platform credentials carry organization_id IS NULL, so no
-// key can name one. Giving the platform tier keys of its own (AGE-3069) would
-// end that, and would need this guard mirrored there.
+// Platform credentials are deleted through the admin service
+// (server/internal/admin/externalcredentials.go), not here. A customer-managed
+// external key is validated against a credential in its own organization, so it
+// can never name a platform credential (organization_id IS NULL). The keys
+// Speakeasy provisions itself do name one — managed signing keys, issuer keys
+// and managed organization encryption keys — and the admin delete refuses
+// while any of them still depend on it.
 func (s *Service) deleteExternalCredential(ctx context.Context, provider, rawID string) error {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -999,53 +985,6 @@ func (s *Service) resolveAwsColumns(ctx context.Context, logger *slog.Logger, in
 	// key-policy grant approach (no assume_role_arn).
 	if region.Valid && !arn.Valid {
 		return cols, oops.E(oops.CodeBadRequest, nil, "sts_region requires assume_role_arn").LogError(ctx, logger)
-	}
-
-	return cols, nil
-}
-
-type gcpCredentialInput struct {
-	impersonateServiceAccount *string
-	wifPoolID                 *string
-	wifProviderID             *string
-	wifProjectNumber          *string
-}
-
-type gcpColumns struct {
-	ImpersonateServiceAccount pgtype.Text
-	WifPoolID                 pgtype.Text
-	WifProviderID             pgtype.Text
-	WifProjectNumber          pgtype.Text
-}
-
-// resolveGcpColumns validates the GCP form and produces the subtype column
-// values. The wif_* fields must be provided together; the approach (Workload
-// Identity Federation, impersonation, or ambient) follows from which fields are
-// set.
-func (s *Service) resolveGcpColumns(ctx context.Context, logger *slog.Logger, in gcpCredentialInput) (gcpColumns, error) {
-	// Service account emails are case-insensitive; store one form so IAM
-	// members built from it always match.
-	impersonate := conv.PtrToPGTextTrimmed(in.impersonateServiceAccount)
-	impersonate.String = strings.ToLower(impersonate.String)
-	poolID := conv.PtrToPGTextTrimmed(in.wifPoolID)
-	providerID := conv.PtrToPGTextTrimmed(in.wifProviderID)
-	projectNumber := conv.PtrToPGTextTrimmed(in.wifProjectNumber)
-
-	cols := gcpColumns{
-		ImpersonateServiceAccount: impersonate,
-		WifPoolID:                 poolID,
-		WifProviderID:             providerID,
-		WifProjectNumber:          projectNumber,
-	}
-
-	wifSet := 0
-	for _, f := range []pgtype.Text{poolID, providerID, projectNumber} {
-		if f.Valid {
-			wifSet++
-		}
-	}
-	if wifSet != 0 && wifSet != 3 {
-		return cols, oops.E(oops.CodeBadRequest, nil, "wif_pool_id, wif_provider_id, and wif_project_number must be set together").LogError(ctx, logger)
 	}
 
 	return cols, nil

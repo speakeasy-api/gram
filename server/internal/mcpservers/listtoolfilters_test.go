@@ -32,8 +32,6 @@ func seedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organiza
 		Slug:                   slug,
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 

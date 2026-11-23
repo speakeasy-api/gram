@@ -1,5 +1,6 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { useEffect, useState } from "react";
-import { AlertCircle, Check, Copy, Download, Loader2 } from "lucide-react";
+import { AlertCircle, Check, Copy, Download } from "lucide-react";
 import { codeToHtml, type BundledLanguage } from "shiki";
 import { Button } from "@/components/ui/Button";
 import { Link } from "@/components/ui/Link";
@@ -154,7 +155,7 @@ function ObservabilityDownloadButton({
     >
       <Button.LeftIcon>
         {isDownloading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Spinner className="mr-0" />
         ) : (
           <Download className="h-4 w-4" />
         )}
@@ -283,7 +284,7 @@ export function PlatformSetupStepBody({
 
       {step.requiresApiKey && apiKeyPending && (
         <div className="text-muted-foreground flex items-center gap-2 text-xs">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <Spinner className="mr-0 h-3.5 w-3.5" />
           Generating API key…
         </div>
       )}

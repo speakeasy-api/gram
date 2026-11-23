@@ -21,6 +21,10 @@ const (
 	// McpSessionIDHeader is the session header defined by the MCP Streamable
 	// HTTP transport.
 	McpSessionIDHeader = "Mcp-Session-Id"
+
+	// lastEventIDHeader is the SSE header a client sends to resume a stream
+	// after the last event id it received.
+	lastEventIDHeader = "Last-Event-ID"
 )
 
 // HeaderPolicy selects how strictly a proxy treats operator-configured headers
@@ -424,7 +428,12 @@ func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.
 		value, err := resolveRemoteHeader(h, userReq)
 		if err != nil {
 			if h.IsRequired {
-				return oops.E(oops.CodeBadRequest, err, "%s", remoteHeaderFailureMessage(h, err)).LogWarn(ctx, p.Logger)
+				kind := ForwardSetupConfiguration
+				// Only a valid stored definition can fail because of its inbound value.
+				if h.ValueFromRequestHeader != "" && checkStoredRemoteHeader(h) == nil {
+					kind = ForwardSetupCaller
+				}
+				return &ForwardSetupError{Err: oops.E(oops.CodeBadRequest, err, "%s", remoteHeaderFailureMessage(h, err)).LogWarn(ctx, p.Logger), Kind: kind}
 			}
 			p.logWithIdentity(ctx, slog.LevelWarn, "skip invalid configured header for remote mcp server", attr.SlogRemoteMCPConfiguredHeaderName(h.Name), attr.SlogError(err))
 		}

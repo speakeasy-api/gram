@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -397,14 +396,12 @@ func CheckGatewayNetworkMode(ctx context.Context, tx pgx.Tx, organizationID stri
 	if mode != networkaccess.ModePrivateOnly {
 		return nil
 	}
-	var distributed bool
-	err := tx.QueryRow(ctx, `
-SELECT EXISTS (
-  SELECT 1 FROM plugin_servers ps
-  JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
-  JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id AND pa.principal_urn = $4
-  WHERE ps.meta_mcp_server_id = $3 AND ps.deleted IS FALSE
-)`, organizationID, projectID, gatewayID, urn.PrincipalWildcard).Scan(&distributed)
+	distributed, err := pluginsrepo.New(tx).GatewayDistributedToPrincipal(ctx, pluginsrepo.GatewayDistributedToPrincipalParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		PrincipalUrn:   urn.PrincipalWildcard,
+		GatewayID:      uuid.NullUUID{UUID: gatewayID, Valid: true},
+	})
 	if err != nil {
 		return unavailable(fmt.Errorf("check gateway plugin audience: %w", err))
 	}
@@ -418,12 +415,12 @@ func checkPrivateGatewayAudience(ctx context.Context, tx pgx.Tx, organizationID 
 	if !containsEveryone(desired) {
 		return nil
 	}
-	var storedMode pgtype.Text
-	err := tx.QueryRow(ctx, `
-SELECT g.network_access_mode
-FROM meta_mcp_servers g
-JOIN plugins p ON p.organization_id = g.organization_id AND p.project_id = g.project_id AND p.deleted IS FALSE
-WHERE p.id = $1 AND g.id = $2 AND g.organization_id = $3 AND g.project_id = $4 AND g.deleted IS FALSE`, pluginID, gatewayID, organizationID, projectID).Scan(&storedMode)
+	storedMode, err := pluginsrepo.New(tx).GetPluginGatewayNetworkAccessMode(ctx, pluginsrepo.GetPluginGatewayNetworkAccessModeParams{
+		PluginID:       pluginID,
+		GatewayID:      gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
 	if err != nil {
 		return unavailable(fmt.Errorf("resolve plugin gateway network access: %w", err))
 	}
@@ -441,21 +438,15 @@ func checkPluginPrivateGateways(ctx context.Context, tx pgx.Tx, organizationID s
 	if !containsEveryone(desired) {
 		return nil
 	}
-	rows, err := tx.Query(ctx, `
-SELECT g.network_access_mode
-FROM plugin_servers ps
-JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
-JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id AND g.organization_id = p.organization_id AND g.project_id = p.project_id AND g.deleted IS FALSE
-WHERE ps.plugin_id = $3 AND ps.deleted IS FALSE AND g.visibility <> 'disabled'`, organizationID, projectID, pluginID)
+	storedModes, err := pluginsrepo.New(tx).ListPluginGatewayNetworkAccessModes(ctx, pluginsrepo.ListPluginGatewayNetworkAccessModesParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		PluginID:       pluginID,
+	})
 	if err != nil {
 		return unavailable(fmt.Errorf("list plugin gateway network access: %w", err))
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var storedMode pgtype.Text
-		if err := rows.Scan(&storedMode); err != nil {
-			return unavailable(fmt.Errorf("scan plugin gateway network access: %w", err))
-		}
+	for _, storedMode := range storedModes {
 		mode, err := networkaccess.Effective(storedMode)
 		if err != nil {
 			return unavailable(fmt.Errorf("resolve plugin gateway network access: %w", err))
@@ -463,9 +454,6 @@ WHERE ps.plugin_id = $3 AND ps.deleted IS FALSE AND g.visibility <> 'disabled'`,
 		if mode == networkaccess.ModePrivateOnly {
 			return ErrPrivateGatewayAudience
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return unavailable(fmt.Errorf("iterate plugin gateway network access: %w", err))
 	}
 	return nil
 }
@@ -475,31 +463,13 @@ func containsEveryone(principals []string) bool {
 }
 
 func listPluginAssignments(ctx context.Context, tx pgx.Tx, organizationID string, projectID, pluginID uuid.UUID) ([]string, error) {
-	rows, err := tx.Query(ctx, `
-SELECT assignment.principal_urn
-FROM plugin_assignments AS assignment
-JOIN plugins AS plugin
-  ON plugin.id = assignment.plugin_id
- AND plugin.organization_id = assignment.organization_id
- AND plugin.deleted IS FALSE
-WHERE assignment.plugin_id = $1
-  AND assignment.organization_id = $2
-  AND plugin.project_id = $3
-ORDER BY assignment.principal_urn`, pluginID, organizationID, projectID)
+	result, err := pluginsrepo.New(tx).ListCompletePluginAudience(ctx, pluginsrepo.ListCompletePluginAudienceParams{
+		PluginID:       pluginID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list complete plugin audience: %w", err)
-	}
-	defer rows.Close()
-	var result []string
-	for rows.Next() {
-		var principal string
-		if err := rows.Scan(&principal); err != nil {
-			return nil, fmt.Errorf("scan plugin audience: %w", err)
-		}
-		result = append(result, principal)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate plugin audience: %w", err)
 	}
 	return result, nil
 }

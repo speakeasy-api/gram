@@ -249,6 +249,7 @@ func onboardingPlaybookMethods() {
 		Payload(func() {
 			security.AdminAuthPayload()
 			Attribute("playbook_id", String)
+			Attribute("organization_id", String, "When provided, require the playbook to belong to this organization. Omit for global library edits.")
 			Attribute("name", String)
 			Attribute("description", String)
 			Attribute("is_default", Boolean)

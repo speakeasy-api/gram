@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -42,7 +43,7 @@ func TestResolveAccessToken_InvalidGrantClearsRefreshGrant(t *testing.T) {
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 	}))
 
-	token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	token, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Empty(t, token)
 
@@ -55,7 +56,7 @@ func TestResolveAccessToken_InvalidGrantClearsRefreshGrant(t *testing.T) {
 	require.False(t, active.RefreshExpiresAt.Valid)
 
 	// A second MCP request no longer retries the dead upstream token.
-	token, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	token, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Empty(t, token)
 	require.EqualValues(t, 1, refreshAttempts.Load())
@@ -64,7 +65,7 @@ func TestResolveAccessToken_InvalidGrantClearsRefreshGrant(t *testing.T) {
 	// preserves its per-session preferences.
 	freshAccess, err := testenv.NewEncryptionClient(t).Encrypt([]byte("fresh-access"))
 	require.NoError(t, err)
-	fresh, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	fresh, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            env.subject,
 		UserSessionIssuerID:   env.session.UserSessionIssuerID,
 		RemoteSessionClientID: env.clientID,
@@ -131,7 +132,7 @@ func TestResolveAccessToken_InvalidGrantAdoptsConcurrentRelink(t *testing.T) {
 	}
 	resolved := make(chan resolveResult, 1)
 	go func() {
-		tok, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+		tok, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 		resolved <- resolveResult{token: tok, err: err}
 	}()
 
@@ -144,7 +145,7 @@ func TestResolveAccessToken_InvalidGrantAdoptsConcurrentRelink(t *testing.T) {
 	require.NoError(t, err)
 	relinkedRefresh, err := enc.Encrypt([]byte("refresh-relinked"))
 	require.NoError(t, err)
-	winner, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	winner, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            env.subject,
 		UserSessionIssuerID:   env.session.UserSessionIssuerID,
 		RemoteSessionClientID: env.clientID,

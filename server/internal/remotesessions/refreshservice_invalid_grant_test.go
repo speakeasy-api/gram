@@ -54,7 +54,7 @@ func TestRefreshNow_InvalidGrant_ClearsRefreshGrantWhenCacheUnavailable(t *testi
 	})
 	require.NoError(t, err)
 
-	result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.Error(t, err)
 	require.Empty(t, result.Outcome)
 	require.Empty(t, result.AccessToken)
@@ -78,7 +78,7 @@ func TestRefreshNow_InvalidGrant_ClearsRefreshGrantWhenCacheUnavailable(t *testi
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[env.clientID].Status)
 	require.False(t, statuses[env.clientID].CanRefresh)
 
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, "expired-access", resolved, "unknown-expiry access remains usable")
 	require.EqualValues(t, 1, refreshAttempts.Load(), "cache failure must not prevent the upstream attempt")
@@ -209,7 +209,7 @@ func refreshNowAgainstUpstreamError(t *testing.T, slugSuffix string, status int,
 	})
 	require.NoError(t, err)
 
-	result, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	result, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.Error(t, refreshErr)
 	require.Empty(t, result.Outcome)
 	require.Empty(t, result.AccessToken)

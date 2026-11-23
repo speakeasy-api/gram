@@ -68,6 +68,9 @@ type CreateUserSessionIssuerPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Authorization-server topology. Shared mode supports standalone workload
+	// token exchange without an MCP server.
+	AuthorizationServerMode string
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string

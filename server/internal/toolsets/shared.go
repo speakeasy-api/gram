@@ -8,11 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ettle/strcase"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	externalmcpRepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
@@ -33,7 +31,6 @@ type Toolsets struct {
 	templatesRepo   *templatesRepo.Queries
 	resourcesRepo   *resourcesRepo.Queries
 	projects        *projectsRepo.Queries
-	externalmcpRepo *externalmcpRepo.Queries
 	deploymentsRepo *deploymentsRepo.Queries
 	platformExtras  []platformtools.ExternalTool
 }
@@ -45,7 +42,6 @@ func NewToolsets(tx repo.DBTX, platformExtras ...platformtools.ExternalTool) *To
 		templatesRepo:   templatesRepo.New(tx),
 		resourcesRepo:   resourcesRepo.New(tx),
 		projects:        projectsRepo.New(tx),
-		externalmcpRepo: externalmcpRepo.New(tx),
 		deploymentsRepo: deploymentsRepo.New(tx),
 		platformExtras:  platformExtras,
 	}
@@ -90,22 +86,13 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 		}
 		return t.extractPlatformToolCallPlan(ctx, projectID, tool)
 
-	case urn.ToolKindExternalMCP:
-		tool, err := t.externalmcpRepo.GetExternalMCPToolDefinitionByURN(ctx, externalmcpRepo.GetExternalMCPToolDefinitionByURNParams{
-			ToolUrn:   toolUrn.String(),
-			ProjectID: projectID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("get external mcp tool definition by urn: %w", err)
-		}
-		return t.extractExternalMCPToolCallPlan(ctx, tool, toolUrn, projectID)
-
 	default:
 		return nil, fmt.Errorf("unsupported tool kind: %s", toolUrn.Kind)
 	}
 }
 
 func (t *Toolsets) extractPlatformToolCallPlan(ctx context.Context, projectID uuid.UUID, tool platformtools.ToolDescriptor) (*gateway.ToolCallPlan, error) {
+	tool = platformtools.DescriptorForContext(ctx, tool)
 	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
@@ -327,68 +314,6 @@ func (t *Toolsets) extractPromptToolCallPlan(ctx context.Context, tool templates
 		Kind:       tool.Kind.String,
 	}
 	return gateway.NewPromptToolCallPlan(descriptor, plan), nil
-}
-
-func (t *Toolsets) extractExternalMCPToolCallPlan(ctx context.Context, tool externalmcpRepo.GetExternalMCPToolDefinitionByURNRow, toolUrn urn.Tool, projectID uuid.UUID) (*gateway.ToolCallPlan, error) {
-	// Get organization metadata
-	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("get project with organization metadata: %w", err)
-	}
-
-	description := fmt.Sprintf("External MCP proxy tool for %s", tool.Name.String)
-
-	descriptor := &gateway.ToolDescriptor{
-		ID:               tool.ID.String(),
-		Name:             tool.Slug, // Use slug as name since this is the proxy identifier
-		Description:      &description,
-		DeploymentID:     tool.DeploymentID.String(),
-		ProjectID:        projectID.String(),
-		ProjectSlug:      orgData.ProjectSlug,
-		OrganizationID:   orgData.ID,
-		OrganizationSlug: orgData.Slug,
-		URN:              toolUrn,
-	}
-
-	// Parse header definitions from JSON
-	var headerDefs []gateway.ExternalMCPHeaderDef
-	if len(tool.HeaderDefinitions) > 0 {
-		var headers []externalMCPHeaderJSON
-		if err := json.Unmarshal(tool.HeaderDefinitions, &headers); err != nil {
-			return nil, fmt.Errorf("parse external mcp header definitions: %w", err)
-		}
-		headerDefs = make([]gateway.ExternalMCPHeaderDef, 0, len(headers))
-		for _, h := range headers {
-			headerDefs = append(headerDefs, gateway.ExternalMCPHeaderDef{
-				Name:       strcase.ToSNAKE(tool.Slug + "_" + h.Name),
-				HeaderName: h.Name,
-			})
-		}
-	}
-
-	inputSchema := json.RawMessage(tool.Schema)
-	if tool.Type == "proxy" {
-		inputSchema = nil // A server-level placeholder is not upstream tool metadata.
-	}
-
-	// Note: The ToolName field is "proxy" for proxy tools. Actual external tool names
-	// are resolved at runtime when the tool is called (e.g., "notion--search" -> ToolName="search").
-	plan := &gateway.ExternalMCPToolCallPlan{
-		RemoteURL:         tool.RemoteUrl,
-		InputSchema:       inputSchema,
-		TransportType:     tool.TransportType,
-		ToolName:          toolUrn.Name, // "proxy" for proxy tools, actual tool name for direct calls
-		Slug:              tool.Slug,
-		RequiresOAuth:     tool.RequiresOauth,
-		HeaderDefinitions: headerDefs,
-	}
-
-	return gateway.NewExternalMCPToolCallPlan(descriptor, plan), nil
-}
-
-// externalMCPHeaderJSON is used to parse the JSON header definitions from the database.
-type externalMCPHeaderJSON struct {
-	Name string `json:"name"`
 }
 
 func UnmarshalParameterSettings(settings []byte) (map[string]*gateway.HTTPParameter, error) {

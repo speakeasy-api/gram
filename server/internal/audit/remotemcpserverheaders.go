@@ -56,6 +56,7 @@ func (l *Logger) LogRemoteMcpServerHeaderCreate(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -117,6 +118,7 @@ func (l *Logger) LogRemoteMcpServerHeaderUpdate(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -170,6 +172,7 @@ func (l *Logger) LogRemoteMcpServerHeaderDelete(ctx context.Context, dbtx repo.D
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

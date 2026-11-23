@@ -12,7 +12,6 @@ import (
 
 const (
 	AsyncScanEngineReal = "real"
-	AsyncScanEngineStub = "stub"
 
 	AsyncScanOutcomeOK           = "ok"
 	AsyncScanOutcomeScanError    = "scan_error"
@@ -33,19 +32,8 @@ const (
 type AsyncScanEngineSelectionReason string
 
 const (
-	AsyncScanEngineSelectionRequestReal      AsyncScanEngineSelectionReason = "request_real"
-	AsyncScanEngineSelectionRequestStub      AsyncScanEngineSelectionReason = "request_stub"
 	AsyncScanEngineSelectionUpstreamSelected AsyncScanEngineSelectionReason = "upstream_selected"
 )
-
-func (r AsyncScanEngineSelectionReason) Engine() string {
-	switch r {
-	case AsyncScanEngineSelectionRequestReal, AsyncScanEngineSelectionUpstreamSelected:
-		return AsyncScanEngineReal
-	default:
-		return AsyncScanEngineStub
-	}
-}
 
 type AsyncScanHandlerMetrics struct {
 	handledMessages metric.Int64Counter
@@ -70,7 +58,9 @@ func NewAsyncScanHandlerMetrics(meterProvider metric.MeterProvider, logger *slog
 	return &AsyncScanHandlerMetrics{handledMessages: handledMessages}
 }
 
-func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scanner, engine, outcome string, selectionReason AsyncScanEngineSelectionReason) {
+// RecordHandled counts one handled message. Every async handler runs the real
+// engine on the scan the publisher selected, so those labels are fixed.
+func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scanner, outcome string) {
 	if m == nil || m.handledMessages == nil {
 		return
 	}
@@ -78,8 +68,8 @@ func (m *AsyncScanHandlerMetrics) RecordHandled(ctx context.Context, orgID, scan
 	m.handledMessages.Add(ctx, 1, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attribute.String("scanner", scanner),
-		attribute.String("engine", engine),
+		attribute.String("engine", AsyncScanEngineReal),
 		attr.Outcome(outcome),
-		attribute.String("selection_reason", string(selectionReason)),
+		attribute.String("selection_reason", string(AsyncScanEngineSelectionUpstreamSelected)),
 	))
 }

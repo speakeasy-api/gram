@@ -209,7 +209,7 @@ func TestCIMDAuthorize_LoopbackRedirectPortMayVary(t *testing.T) {
 
 	// Every other component still has to match.
 	response = doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:51099/other")
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 
@@ -231,7 +231,7 @@ func TestCIMDAuthorize_NonLoopbackRedirectStaysExact(t *testing.T) {
 	otherPort.Path = "/callback"
 
 	response := doCIMDAuthorize(t, service, ds.clientID, otherPort.String())
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 
@@ -260,7 +260,7 @@ func TestCIMDAuthorize_OversizedClientIDDeniedBeforeAnyLookup(t *testing.T) {
 	oversized := ds.srv.URL + "/oauth/" + strings.Repeat("x", admission.MaxClientIDLength) + ".json"
 
 	response := doCIMDAuthorize(t, service, oversized, "http://127.0.0.1:33418/callback")
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 	require.Zero(t, ds.requests.Load(), "an oversized client_id must not reach the document host")
 }
@@ -274,6 +274,7 @@ func TestCIMDAuthorize_DocumentClientIDMismatchRejected(t *testing.T) {
 	response := doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:33418/callback")
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
+	require.Contains(t, response.Body.String(), "or its return address")
 }
 
 func TestCIMDAuthorize_ConfidentialDocumentRejected(t *testing.T) {
@@ -287,6 +288,7 @@ func TestCIMDAuthorize_ConfidentialDocumentRejected(t *testing.T) {
 	response := doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:33418/callback")
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
+	require.Contains(t, response.Body.String(), "or its return address")
 }
 
 func TestCIMDToken_ClientPresentingSecretRejected(t *testing.T) {
@@ -309,7 +311,7 @@ func TestCIMDToken_ClientPresentingSecretRejected(t *testing.T) {
 	response := httptest.NewRecorder()
 	service.TokenHandler().ServeHTTP(response, request)
 
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_client"`)
 }
 

@@ -177,7 +177,7 @@ func TestResolveAuthClientAccessTokens_WorkloadServesItsOwnersConsent(t *testing
 	require.NoError(t, err)
 	require.Equal(t, "p2-token", tokens[issuerID].Token, "so does an organization registration's consent from another project")
 
-	_, err = f.mgr.ResolveClientAccessTokens(workloadCtx, f.projectID, f.organizationID, f.signInB, caller, f.clientID, false)
+	_, err = f.mgr.ResolveClientAccessTokens(workloadCtx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInB, caller, f.clientID, false)
 	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound, "the legacy path still requires the sign-in link")
 }
 
@@ -206,6 +206,34 @@ func TestResolveAuthClientAccessTokens_PrincipalCredentialServesTheAuthorizersCo
 	reconnect, err = f.mgr.AuthClientNeedsReconnect(credentialCtx, f.request(caller, clientID))
 	require.NoError(t, err)
 	require.True(t, reconnect)
+}
+
+// A principal-backed agent key that the typed auth client check let use its
+// authorizer's connection reads exactly that user's consent.
+func TestResolveAuthClientAccessTokens_PrincipalAPIKeyServesTheAuthorizersConsent(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "ac-agent-key")
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	keyCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, auth, agent, contextvalues.PrincipalCredential{AuthorizerUserID: auth.UserID, DelegatedGrants: []byte("[]"), DelegatedGrantsVersion: 1, DerivesPolicyAtAdmission: false})
+	authorizer := f.member(t, ctx)
+
+	session := f.consent(t, authorizer, f.signInA, f.clientID, "authorizer-token")
+	tokens, err := f.mgr.ResolveAuthClientAccessTokens(keyCtx, f.request(authorizer, f.clientID))
+	require.NoError(t, err)
+	require.Equal(t, "authorizer-token", tokens[f.issuerID].Token, "the key reads its authorizer's own consent")
+	require.Equal(t, session.ID, tokens[f.issuerID].RemoteSessionID)
+	reconnect, err := f.mgr.AuthClientNeedsReconnect(keyCtx, f.request(authorizer, f.clientID))
+	require.NoError(t, err)
+	require.False(t, reconnect)
+
+	signIn, err := f.mgr.ResolveClientAccessTokens(keyCtx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInA, authorizer, f.clientID, false)
+	require.NoError(t, err)
+	require.Equal(t, "authorizer-token", signIn[f.issuerID].Token, "a handback to the upstream client choice reads the same connection")
+
+	_, err = f.mgr.ResolveAuthClientAccessTokens(keyCtx, f.request(urn.NewAgentSubject(uuid.MustParse(agent.ID)), f.clientID))
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "the agent's own subject keeps the attachment path, which has none")
 }
 
 func TestResolveAuthClientAccessTokens_GlobalRegistrationStaysInItsOrganization(t *testing.T) {
@@ -322,7 +350,7 @@ func TestResolveAuthClientAccessTokens_RefreshesAConsentFromAnotherSignIn(t *tes
 	require.NoError(t, err)
 	refreshEnc, err := env.enc.Encrypt([]byte("owner-refresh"))
 	require.NoError(t, err)
-	expired, err := repo.New(env.db).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: conv.ToPGText(refreshEnc), Scopes: []string{}})
+	expired, err := repo.New(env.db).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: conv.ToPGText(refreshEnc), Scopes: []string{}})
 	require.NoError(t, err)
 
 	tokens, err = env.mgr.ResolveAuthClientAccessTokens(workloadCtx, request(caller))
@@ -341,7 +369,7 @@ func TestAuthClientNeedsReconnect_ExpiredTokenWithoutARefreshGrant(t *testing.T)
 	refreshEnc, err := f.enc.Encrypt([]byte("refresh-token"))
 	require.NoError(t, err)
 	upsert := func(refresh pgtype.Text) {
-		_, err := repo.New(f.ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: refresh, Scopes: []string{}})
+		_, err := repo.New(f.ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{SubjectUrn: subject, UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)), RefreshTokenEncrypted: refresh, Scopes: []string{}})
 		require.NoError(t, err)
 	}
 
@@ -370,6 +398,23 @@ func TestResolveAuthClientAccessTokens_ServesAServiceAccountWithoutTheSignInLink
 	require.Equal(t, "self-token", tokens[fx.remoteIssuerID].Token)
 	require.Equal(t, remotesessions.CredentialOwnerSelf, tokens[fx.remoteIssuerID].CredentialOwner)
 
-	_, err = mgr.ResolveClientAccessTokens(ctx, fx.projectID, fx.organizationID, otherSignIn, subject, fx.clientID, false)
+	_, err = mgr.ResolveClientAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, otherSignIn, subject, fx.clientID, false)
 	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
+}
+
+// An agent key's caller resolves people's connections through attachments,
+// but a service account's token belongs to nobody, so it is served the same
+// way to an agent as to anyone.
+func TestResolveAuthClientAccessTokens_ServesAServiceAccountToAnAgent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	source := &fakeClientCredentials{answers: []clientCredentialAnswer{{token: "self-token"}}}
+	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
+	fx := seedSelfClient(t, ctx, ti.conn, "ac-self-agent")
+	agentID := uuid.New()
+	agentCtx := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: fx.organizationID}, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
+
+	tokens, err := mgr.ResolveAuthClientAccessTokens(agentCtx, remotesessions.AuthClientTokenRequest{ProjectID: fx.projectID, OrganizationID: fx.organizationID, UserSessionIssuerID: uuid.Nil, Subject: urn.NewAgentSubject(agentID), RegistrationID: fx.clientID, SkipUnusable: false})
+	require.NoError(t, err)
+	require.Equal(t, "self-token", tokens[fx.remoteIssuerID].Token)
 }

@@ -1,8 +1,12 @@
 package clientcredentials
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
@@ -15,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -122,7 +127,7 @@ func TestCredential_SendsClientAudience(t *testing.T) {
 	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
 	require.NoError(t, err)
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "gram-client",
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretPost, Valid: true},
@@ -295,6 +300,50 @@ func TestCredential_CachesRejectionUntilCredentialsChange(t *testing.T) {
 	require.Len(t, f.tokens.received(), 2)
 }
 
+func TestRememberFailure_LogsProviderDescription(t *testing.T) {
+	t.Parallel()
+
+	rejection := func(status int, description string) error {
+		return fmt.Errorf("client credentials grant: %w", &remotesessions.TokenEndpointError{
+			StatusCode:  status,
+			Code:        oautherr.CodeInvalidClient,
+			Description: description,
+			Transport:   false,
+			Signing:     false,
+		})
+	}
+
+	tests := []struct {
+		name        string
+		err         error
+		wantMessage string
+		wantLogged  any
+	}{
+		{name: "rejection", err: rejection(http.StatusUnauthorized, "provider says why"), wantMessage: "client credentials grant rejected", wantLogged: "provider says why"},
+		{name: "server failure", err: rejection(http.StatusServiceUnavailable, "provider says why"), wantMessage: "client credentials grant failed", wantLogged: "provider says why"},
+		{name: "no description", err: rejection(http.StatusUnauthorized, ""), wantMessage: "client credentials grant rejected", wantLogged: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, func(int) tokenResponse { return bearerToken("unused") })
+			clientID := f.secretClient(t, oauthwire.AuthMethodClientSecretBasic, []string{})
+
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, nil))
+
+			f.newMinter(t).rememberFailure(t.Context(), logger, f.cacheKeys(t, clientID, ""), tt.err)
+
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(logs.Bytes(), &entry))
+			require.Equal(t, tt.wantMessage, entry["msg"])
+			require.Equal(t, tt.wantLogged, entry[string(attr.OAuthErrorDescriptionKey)])
+		})
+	}
+}
+
 func TestCredential_MarksClientRejectedByIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -427,7 +476,7 @@ func TestCredential_RejectsPublicClient(t *testing.T) {
 
 	f := newFixture(t, func(int) tokenResponse { return bearerToken("token") })
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "public-client",
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodNone, Valid: true},
 		Scope:                   []string{},
@@ -447,7 +496,7 @@ func TestCredential_RejectsExpiredClientSecret(t *testing.T) {
 	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
 	require.NoError(t, err)
 
-	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(f.db).CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: f.issuerID, ClientID: "gram-client",
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true, InfinityModifier: pgtype.Finite},
@@ -550,7 +599,7 @@ func TestCredential_DoesNotFindGlobalClient(t *testing.T) {
 	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
 	require.NoError(t, err)
 
-	client, err := q.CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(t.Context(), repo.CreateRemoteSessionClientFixtureParams{
 		RemoteSessionIssuerID: issuer.ID, ClientID: "global-client",
 		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
 		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretBasic, Valid: true},
@@ -883,4 +932,19 @@ func TestServedUntil(t *testing.T) {
 			require.Equal(t, tc.want, servedUntil(now, tc.reported))
 		})
 	}
+}
+
+func TestNewCacheKeys_FollowSecretGeneration(t *testing.T) {
+	t.Parallel()
+
+	client := repo.GetClientCredentialsGrantClientRow{ClientID: uuid.New(), ClientSecretEncrypted: pgtype.Text{String: "platform-copy", Valid: true}, ClientSecretGeneration: 3}
+
+	resealed := client
+	resealed.ClientSecretEncrypted = pgtype.Text{}
+	resealed.ClientSecretOrgEncrypted = pgtype.Text{String: "organization-copy", Valid: true}
+	require.Equal(t, newCacheKeys(client, ""), newCacheKeys(resealed, ""), "sealing the same secret again keeps cached credentials")
+
+	replaced := client
+	replaced.ClientSecretGeneration++
+	require.NotEqual(t, newCacheKeys(client, ""), newCacheKeys(replaced, ""), "a replaced secret mints again")
 }

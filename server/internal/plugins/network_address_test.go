@@ -23,7 +23,6 @@ func TestRemoteServerURL(t *testing.T) {
 		{name: "custom domain endpoint wins", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", EndpointCustomDomain: pgtype.Text{String: "mcp.acme.example", Valid: true}}, want: "https://mcp.acme.example/mcp/remote"},
 		{name: "unproxied URL is the vendor's", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", UnproxiedUrl: vendor}, want: "https://vendor.example/mcp", wantUnproxied: true},
 		{name: "unproxied server cannot be private", row: repo.ListPluginsWithMcpServersForProjectRow{UnproxiedUrl: vendor, NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true}}, wantUnproxied: true, wantError: true},
-		{name: "server address overrides the endpoint", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", EndpointCustomDomain: pgtype.Text{String: "old.example", Valid: true}, AddressSlug: pgtype.Text{String: "renamed", Valid: true}, AddressCustomDomain: pgtype.Text{String: "mcp.acme.example", Valid: true}}, want: "https://mcp.acme.example/mcp/renamed"},
 		{name: "no endpoint fails closed", row: repo.ListPluginsWithMcpServersForProjectRow{}, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

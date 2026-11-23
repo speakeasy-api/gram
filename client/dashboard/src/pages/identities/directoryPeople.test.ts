@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Employee } from "@/components/observe/insightsEmployeesData";
 import type { DirectoryPerson } from "@gram/client/models/components/directoryperson.js";
 import { describe, expect, it } from "vitest";

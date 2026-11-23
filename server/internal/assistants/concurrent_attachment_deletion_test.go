@@ -33,11 +33,10 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 				ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 					OrganizationID: "org-test", ProjectID: projectID, Name: "Example tools", Slug: "example-tools",
-					McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
 				})
 				require.NoError(t, err)
 				if kind == "toolset" {
-					syncCanonicalWrapper(t, conn, ts)
+					createCanonicalWrapper(t, conn, ts, "example-tools-endpoint", "private")
 				}
 				payload := &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"}
 				targetID := ts.ID
@@ -61,11 +60,10 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				if mutation == "update" {
 					live, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 						OrganizationID: "org-test", ProjectID: projectID, Name: "Live tools", Slug: "live-tools",
-						McpSlug: pgtype.Text{String: "live-tools-endpoint", Valid: true}, McpEnabled: true,
 					})
 					require.NoError(t, err)
 					if kind == "toolset" {
-						syncCanonicalWrapper(t, conn, live)
+						createCanonicalWrapper(t, conn, live, "live-tools-endpoint", "private")
 					}
 					original := &gen.CreateAssistantPayload{Name: "Original", Model: payload.Model}
 					if kind == "toolset" {
@@ -111,9 +109,6 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					if kind == "toolset" {
 						queries := toolsetsrepo.New(deletionTx)
 						_, err = queries.DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{ProjectID: projectID, Slug: ts.Slug})
-						if err == nil {
-							err = queries.DeleteAssistantToolsetsByToolset(ctx, toolsetsrepo.DeleteAssistantToolsetsByToolsetParams{ProjectID: projectID, ToolsetID: targetID})
-						}
 						// The toolset's canonical wrapper goes with it.
 						servers := mcpserversrepo.New(deletionTx)
 						if err == nil {
@@ -164,8 +159,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					ProjectID: projectID, AssistantID: id,
 				})
 				require.NoError(t, err)
-				require.Zero(t, counts.Toolsets)
-				require.EqualValues(t, 1, counts.McpServers)
+				require.EqualValues(t, 1, counts)
 				require.NoError(t, tx.Commit(ctx))
 				select {
 				case err := <-finished:
@@ -179,8 +173,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					ProjectID: projectID, AssistantID: id,
 				})
 				require.NoError(t, err)
-				require.Zero(t, counts.Toolsets)
-				require.Zero(t, counts.McpServers)
+				require.Zero(t, counts)
 				listed, err := svc.ListAssistants(ctx, &gen.ListAssistantsPayload{})
 				require.NoError(t, err)
 				require.Len(t, listed.Assistants, 1)

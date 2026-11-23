@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { NotApplicableReason$inboundSchema } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 import { describe, expect, it } from "vitest";
 

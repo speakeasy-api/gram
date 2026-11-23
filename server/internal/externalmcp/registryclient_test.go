@@ -23,18 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-type PassthroughBackend struct{}
-
-var _ RegistryBackend = (*PassthroughBackend)(nil)
-
-func (p *PassthroughBackend) Authorize(req *http.Request) error {
-	return nil
-}
-
-func (p *PassthroughBackend) Match(req *http.Request) bool {
-	return false
-}
-
 func TestListServers_FiltersDeletedServers(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -52,7 +40,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 						Description: "An active server",
 						Version:     "1.0.0",
 					},
-					Meta: pulseMCPServerMeta{
+					Meta: catalogServerMeta{
 						Version: serverMetaVersion{
 							Status: "active",
 						},
@@ -64,7 +52,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 						Description: "A deleted server",
 						Version:     "1.0.0",
 					},
-					Meta: pulseMCPServerMeta{
+					Meta: catalogServerMeta{
 						Version: serverMetaVersion{
 							Status: "deleted",
 						},
@@ -76,7 +64,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 						Description: "Another active server",
 						Version:     "2.0.0",
 					},
-					Meta: pulseMCPServerMeta{
+					Meta: catalogServerMeta{
 						Version: serverMetaVersion{
 							Status: "active",
 						},
@@ -92,7 +80,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -105,93 +93,6 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	require.Len(t, result.Servers, 2)
 	require.Equal(t, "active-server", result.Servers[0].RegistrySpecifier)
 	require.Equal(t, "another-active", result.Servers[1].RegistrySpecifier)
-}
-
-func TestListServers_OmitsToolsAndComputesScalars(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
-	inputSchema := json.RawMessage(`{"type":"object","properties":{"q":{"type":"string"}}}`)
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := listResponse{
-			Servers: []serverEntry{
-				{
-					Server: serverJSON{
-						Name:        "readonly-server",
-						Description: "Every tool is read-only",
-						Version:     "1.0.0",
-					},
-					Meta: pulseMCPServerMeta{
-						Version: serverMetaVersion{
-							Status: "active",
-							FirstRemote: serverRemoteMeta{
-								Tools: []serverTool{
-									{Name: "search", Description: "Search things", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
-									{Name: "list", Description: "List things", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
-								},
-							},
-						},
-					},
-				},
-				{
-					Server: serverJSON{
-						Name:        "writer-server",
-						Description: "Has a write tool",
-						Version:     "1.0.0",
-					},
-					Meta: pulseMCPServerMeta{
-						Version: serverMetaVersion{
-							Status: "active",
-							FirstRemote: serverRemoteMeta{
-								Tools: []serverTool{
-									{Name: "read", InputSchema: inputSchema, Annotations: map[string]any{"readOnlyHint": true}},
-									{Name: "write", InputSchema: inputSchema},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(response)
-		assert.NoError(t, err)
-	}))
-	defer srv.Close()
-
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
-	client.httpClient = srv.Client()
-	registry := Registry{
-		ID:  uuid.New(),
-		URL: srv.URL,
-	}
-
-	result, err := client.ListServers(ctx, registry, ListServersParams{})
-	require.NoError(t, err)
-	require.Len(t, result.Servers, 2)
-
-	// Scalars are precomputed; all tools read-only -> is_read_only true.
-	readonly := result.Servers[0]
-	require.Equal(t, 2, readonly.ToolCount)
-	require.True(t, readonly.IsReadOnly)
-
-	// One non-read-only tool -> is_read_only false.
-	writer := result.Servers[1]
-	require.Equal(t, 2, writer.ToolCount)
-	require.False(t, writer.IsReadOnly)
-
-	// The _meta blob must not carry tool definitions (schemas/descriptions).
-	metaJSON, err := json.Marshal(readonly.Meta)
-	require.NoError(t, err)
-	require.NotContains(t, string(metaJSON), "properties")
-	require.NotContains(t, string(metaJSON), "Search things")
 }
 
 func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
@@ -239,7 +140,7 @@ func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 							},
 						},
 					},
-					Meta: pulseMCPServerMeta{
+					Meta: catalogServerMeta{
 						Version: serverMetaVersion{
 							Status: "active",
 						},
@@ -255,7 +156,7 @@ func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -327,7 +228,7 @@ func TestListServers_FetchesAllPagesAndDeduplicates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -364,7 +265,7 @@ func TestListServers_FiltersBySearchInMemory(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -405,7 +306,7 @@ func TestListServers_CachesResultAndClearCacheRefetches(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, newRegistryTestCache())
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, newRegistryTestCache())
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -454,7 +355,7 @@ func TestListServers_CachesPerRegistryIDForSharedURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, newRegistryTestCache())
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, newRegistryTestCache())
 	client.httpClient = server.Client()
 
 	// Two registries sharing a URL (e.g. one recreated under the same endpoint)
@@ -518,7 +419,7 @@ func TestListServers_DoesNotCacheTruncatedCatalog(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, newRegistryTestCache())
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, newRegistryTestCache())
 	client.httpClient = server.Client()
 	registry := Registry{ID: uuid.New(), URL: server.URL}
 
@@ -568,7 +469,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -616,7 +517,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -665,7 +566,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -715,7 +616,7 @@ func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -766,7 +667,7 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -810,7 +711,7 @@ func activeServerEntry(name string) serverEntry {
 			Description: "Test server",
 			Version:     "1.0.0",
 		},
-		Meta: pulseMCPServerMeta{
+		Meta: catalogServerMeta{
 			Version: serverMetaVersion{
 				Status: "active",
 			},
@@ -943,80 +844,6 @@ func (c *registryTestCache) DeleteByPrefix(_ context.Context, prefix string) err
 	return nil
 }
 
-// TestListServers_ComputesSupportsDcr exercises the raw PulseMCP wire format so
-// the JSON tags for detail.authorizationServerMetadata.registration_endpoint
-// stay faithful to the upstream schema. A non-empty registration endpoint on
-// any remote's OAuth auth option marks the server as DCR-capable; OAuth without
-// a registration endpoint and API-key servers are not.
-func TestListServers_ComputesSupportsDcr(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
-	require.NoError(t, err)
-
-	// Raw body matching PulseMCP's documented _meta shape.
-	body := `{
-		"servers": [
-			{
-				"server": {"name": "dcr-oauth", "description": "OAuth with DCR", "version": "1.0.0"},
-				"_meta": {"com.pulsemcp/server-version": {"status": "active", "remotes[0]": {"authOptions": [
-					{"type": "oauth", "detail": {"authorizationServerMetadata": {"registration_endpoint": "https://idp.example/oauth/register"}}}
-				]}}}
-			},
-			{
-				"server": {"name": "oauth-no-dcr", "description": "OAuth without DCR", "version": "1.0.0"},
-				"_meta": {"com.pulsemcp/server-version": {"status": "active", "remotes[0]": {"authOptions": [
-					{"type": "oauth", "detail": {"authorizationServerMetadata": {"registration_endpoint": ""}}}
-				]}}}
-			},
-			{
-				"server": {"name": "apikey", "description": "API key auth", "version": "1.0.0"},
-				"_meta": {"com.pulsemcp/server-version": {"status": "active", "remotes[0]": {"authOptions": [
-					{"type": "api_key", "detail": {"sources": [{"location": "header", "name": "Authorization"}]}}
-				]}}}
-			},
-			{
-				"server": {"name": "dcr-secondary-remote", "description": "DCR on a non-first remote", "version": "1.0.0"},
-				"_meta": {"com.pulsemcp/server-version": {"status": "active", "remotes[1]": {"authOptions": [
-					{"type": "oauth", "detail": {"authorizationServerMetadata": {"registration_endpoint": "https://idp.example/oauth/register"}}}
-				]}}}
-			}
-		],
-		"metadata": {}
-	}`
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, writeErr := w.Write([]byte(body))
-		assert.NoError(t, writeErr)
-	}))
-	defer srv.Close()
-
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, nil)
-	client.httpClient = srv.Client()
-	registry := Registry{
-		ID:  uuid.New(),
-		URL: srv.URL,
-	}
-
-	result, err := client.ListServers(ctx, registry, ListServersParams{})
-	require.NoError(t, err)
-	require.Len(t, result.Servers, 4)
-
-	byName := make(map[string]bool, len(result.Servers))
-	for _, s := range result.Servers {
-		byName[s.RegistrySpecifier] = s.SupportsDcr
-	}
-
-	require.True(t, byName["dcr-oauth"], "oauth with a registration endpoint supports DCR")
-	require.False(t, byName["oauth-no-dcr"], "oauth without a registration endpoint does not support DCR")
-	require.False(t, byName["apikey"], "api-key servers do not support DCR")
-	require.True(t, byName["dcr-secondary-remote"], "a registration endpoint on any remote slot counts")
-}
-
 func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1063,7 +890,7 @@ func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 							{RegistryType: "npm"},
 						},
 					},
-					Meta: pulseMCPServerMeta{
+					Meta: catalogServerMeta{
 						Version: serverMetaVersion{Status: "active"},
 					},
 				},
@@ -1083,7 +910,7 @@ func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{ID: uuid.New(), URL: server.URL}
 
@@ -1148,14 +975,35 @@ func TestProjectServerDetailsRemoteSelection(t *testing.T) {
 			require.Equal(t, "1", details.Version)
 			require.Equal(t, tc.url, details.RemoteURL)
 			if tc.emptySlices {
-				require.NotNil(t, details.Tools)
-				require.Empty(t, details.Tools)
 				require.NotNil(t, details.Headers)
 				require.Empty(t, details.Headers)
 			} else {
-				require.Nil(t, details.Tools)
 				require.Nil(t, details.Headers)
 			}
 		})
 	}
+}
+
+func TestProjectListServer_PreservesOpaqueMetadata(t *testing.T) {
+	t.Parallel()
+	const metadata = `{
+		"io.modelcontextprotocol.registry/official": {
+			"status": "active",
+			"publishedAt": "2026-01-01T00:00:00Z",
+			"updatedAt": "2026-02-01T00:00:00Z"
+		},
+		"example.com/extension": {"nested": ["opaque", 42, true]},
+		"com.pulsemcp/server-version": {"supportsDcr": true, "isReadOnly": true, "toolCount": 12}
+	}`
+	var entry serverEntry
+	require.NoError(t, json.Unmarshal([]byte(`{"server":{"name":"example/server"},"_meta":`+metadata+`}`), &entry))
+	server, err := projectListServer(uuid.New(), entry)
+	require.NoError(t, err)
+	encoded, err := json.Marshal(server.Meta)
+	require.NoError(t, err)
+	require.JSONEq(t, metadata, string(encoded))
+	require.False(t, server.SupportsDcr)
+	require.Equal(t, "unknown", *server.AuthSetup)
+	require.Nil(t, server.IsReadOnly)
+	require.Nil(t, server.ToolCount)
 }

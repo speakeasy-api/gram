@@ -11,7 +11,6 @@ const {
   useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
-  useGetRemoteMcpServerScopes,
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
   remoteIdentitySection: vi.fn(),
@@ -19,13 +18,6 @@ const {
   useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
-  useGetRemoteMcpServerScopes: vi.fn(),
-}));
-
-vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
-  useGetRemoteMcpServerScopes: (...args: unknown[]) =>
-    useGetRemoteMcpServerScopes(...args),
-  invalidateAllGetRemoteMcpServerScopes: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -120,6 +112,35 @@ vi.mock("./ModifyRemoteIdentityProviderSheet", () => ({
 vi.mock("./UserSessionDurationField", () => ({
   UserSessionDurationField: ({ readOnly }: { readOnly?: boolean }) => (
     <output>duration-{readOnly ? "read-only" : "editable"}</output>
+  ),
+}));
+
+// The session controls own the footer Save; these cases cover what renders.
+vi.mock("@gram/client/react-query/updateUserSessionIssuer.js", () => ({
+  useUpdateUserSessionIssuerMutation: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({
+    children,
+  }: {
+    children: ReactNode | ((props: { disabled: boolean }) => ReactNode);
+  }) => (
+    <>
+      {typeof children === "function"
+        ? children({ disabled: false })
+        : children}
+    </>
   ),
 }));
 
@@ -224,9 +245,6 @@ describe("AuthenticationSectionBody", () => {
       { enabled: true },
     );
     expect(screen.getByText("attached-issuer-far")).toBeDefined();
-    // The scope pin is a Remote MCP control only.
-    expect(useGetRemoteMcpServerScopes).not.toHaveBeenCalled();
-    expect(screen.queryByText("Pinned scopes")).toBeNull();
   });
 
   it("reports a failed provider lookup instead of an empty provider list", () => {

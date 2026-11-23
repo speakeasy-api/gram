@@ -17,7 +17,6 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
@@ -146,13 +145,12 @@ func TestMintUserSessionIssuerSkipsUnservedCustomDomain(t *testing.T) {
 func TestMintUserSessionForToolsetWrapperOnUnservedDomain(t *testing.T) {
 	t.Parallel()
 
-	tests := map[string]string{
-		"toolset issuer absent":    "absent",
-		"toolset issuer matching":  "matching",
-		"toolset issuer differing": "differing",
+	tests := map[string]bool{
+		"member wrapper of an unhosted toolset": false,
+		"canonical wrapper":                     true,
 	}
 
-	for name, toolsetIssuer := range tests {
+	for name, canonical := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
@@ -173,25 +171,14 @@ func TestMintUserSessionForToolsetWrapperOnUnservedDomain(t *testing.T) {
 			require.NoError(t, err)
 			wrapperIssuerID := uuid.MustParse(wrapperIssuer.ID)
 
-			var toolset toolsetsrepo.Toolset
-			switch toolsetIssuer {
-			case "absent":
-				toolset = createBackingToolset(t, ctx, ti, slug)
-			case "matching":
-				toolset = createBackingToolset(t, ctx, ti, slug)
-				toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-					UserSessionIssuerID: uuid.NullUUID{UUID: wrapperIssuerID, Valid: true},
-					Slug:                toolset.Slug,
-					ProjectID:           toolset.ProjectID,
-				})
-				require.NoError(t, err)
-			default:
-				toolset = createIssuerGatedMintToolset(t, ctx, ti, slug)
-				require.NotEqual(t, wrapperIssuerID, toolset.UserSessionIssuerID.UUID)
+			toolset := createBackingToolset(t, ctx, ti, slug)
+			wrapperID := uuid.New()
+			if canonical {
+				wrapperID = toolset.ID
 			}
 
 			wrapper, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-				ID:                    uuid.New(),
+				ID:                    wrapperID,
 				ProjectID:             *authCtx.ProjectID,
 				Name:                  pgtype.Text{String: slug + "-srv", Valid: true},
 				Slug:                  pgtype.Text{String: slug + "-srv", Valid: true},

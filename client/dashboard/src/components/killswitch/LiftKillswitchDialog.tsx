@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { capitalize } from "@/lib/utils";
 import type { KillswitchOverlap } from "@gram/client/models/components/killswitchoverlap.js";
 import { useEffect, useRef, useState } from "react";
@@ -83,9 +84,9 @@ export function LiftKillswitchDialog({
           </Dialog.Description>
         </Dialog.Header>
         {previewStatus === "loading" ? (
-          <p role="status" className="text-muted-foreground text-sm">
-            Refreshing overlaps…
-          </p>
+          <div role="status" aria-label="Refreshing overlaps">
+            <Skeleton className="h-14 w-full" />
+          </div>
         ) : previewStatus === "error" ? (
           <Alert variant="error">
             <AlertTitle>Overlap check failed</AlertTitle>

@@ -32,6 +32,11 @@ func UpdateMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.update"
 }
 
+// SetSetupGuideCompletedMcpServersPath returns the URL path to the mcpServers service setSetupGuideCompleted HTTP endpoint.
+func SetSetupGuideCompletedMcpServersPath() string {
+	return "/rpc/mcpServers.setSetupGuideCompleted"
+}
+
 // ListToolFiltersMcpServersPath returns the URL path to the mcpServers service listToolFilters HTTP endpoint.
 func ListToolFiltersMcpServersPath() string {
 	return "/rpc/mcpServers.listToolFilters"
@@ -65,4 +70,9 @@ func DeleteToolMetadataMcpServersPath() string {
 // DeleteMcpServerMcpServersPath returns the URL path to the mcpServers service deleteMcpServer HTTP endpoint.
 func DeleteMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.delete"
+}
+
+// GetMcpServerUsageImpactMcpServersPath returns the URL path to the mcpServers service getMcpServerUsageImpact HTTP endpoint.
+func GetMcpServerUsageImpactMcpServersPath() string {
+	return "/rpc/mcpServers.getUsageImpact"
 }

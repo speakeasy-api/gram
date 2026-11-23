@@ -117,8 +117,8 @@ export function CreateConnectionForm(): JSX.Element {
             />
             <FieldDescription id="okta-org-url-help">
               Use your organization’s address starting with https:// and ending
-              in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. You
-              can also paste your Okta Admin Console address.
+              in .okta.com, .oktapreview.com, .okta-emea.com, .okta-gov.com, or
+              .okta.mil. You can also paste your Okta Admin Console address.
             </FieldDescription>
             {invalid && (
               <p

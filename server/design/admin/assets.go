@@ -8,9 +8,9 @@ import (
 
 func platformAssetMethods() {
 	Method("uploadPlatformImage", func() {
-		Description("Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.")
+		Description("Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.")
 		Payload(func() { security.AdminAuthPayload(); Attribute("content_type", String); Required("content_type") })
-		Result(assetsdesign.UploadImageResult)
+		Result(AdminUploadImageResult)
 		declareUnavailable()
 		HTTP(func() {
 			POST("/admin/assets.uploadImage")
@@ -38,6 +38,8 @@ func platformAssetMethods() {
 				Header("last_modified:Last-Modified")
 				Header("access_control_allow_origin:Access-Control-Allow-Origin")
 				Header("cross_origin_resource_policy:Cross-Origin-Resource-Policy")
+				Header("content_security_policy:Content-Security-Policy")
+				Header("x_content_type_options:X-Content-Type-Options")
 			})
 			SkipResponseBodyEncodeDecode()
 		})
@@ -45,3 +47,9 @@ func platformAssetMethods() {
 		Meta("openapi:extension:x-speakeasy-name-override", "serveImage")
 	})
 }
+
+var AdminUploadImageResult = Type("AdminUploadImageResult", func() {
+	Attribute("asset", assetsdesign.Asset, "The uploaded platform image asset")
+	Attribute("url", String, "Canonical public URL for the uploaded image")
+	Required("asset", "url")
+})

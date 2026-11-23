@@ -30,22 +30,26 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 	issuer, err := url.Parse("https://mcp.example/oauth/issuer")
 	require.NoError(t, err)
 	valid := KitGKECompositionConfig{
+		KitGKEIdentityConfig: testKitGKEIdentityConfig(),
 		KitLocalCompositionConfig: KitLocalCompositionConfig{
 			Environment: "production", Image: "registry.example/kit:0.2.17", Origin: origin,
 			MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(),
-			TurnStream: new(chat.TurnStream),
-			ProvisionMCP: func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error) {
-				return KitMCPProvisionResult{}, nil
-			},
+			TurnStream:      new(chat.TurnStream),
+			WorkloadJWKSURL: "https://external.example/keys", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example",
 		},
 		GKE: GKERuntimeConfig{Dynamic: fake.NewSimpleDynamicClient(runtime.NewScheme()), Namespace: "assistants", RunnerCIDRBlocks: []string{"10.0.0.0/16"}},
 	}
+	valid = kitGKENativeIssuerConfig(valid)
+	require.Equal(t, valid.issuer(), valid.WorkloadIssuerURL, "external issuer settings are replaced")
+	require.Equal(t, valid.issuer()+"/openid/jwks", valid.WorkloadJWKSURL)
 	require.NoError(t, validateKitGKEComposition(valid))
 	for _, tc := range []struct {
 		name   string
 		mutate func(*KitGKECompositionConfig)
 	}{
 		{"local", func(c *KitGKECompositionConfig) { c.Environment = "local" }},
+		{"missing JWKS", func(c *KitGKECompositionConfig) { c.WorkloadJWKSURL = "" }},
+		{"insecure JWKS", func(c *KitGKECompositionConfig) { c.WorkloadJWKSURL = "http://external.example/keys" }},
 		{"missing environment", func(c *KitGKECompositionConfig) { c.Environment = "" }},
 		{"local network", func(c *KitGKECompositionConfig) { c.Network = "local-relay" }},
 		{"local CA", func(c *KitGKECompositionConfig) { c.ExtraCACertFile = "ca.pem" }},
@@ -55,7 +59,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		{"invalid network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = []string{"10.0.0.0/16", "garbage"} }},
 		{"missing network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = nil }},
 		{"missing issuer", func(c *KitGKECompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil }},
-		{"missing provisioner", func(c *KitGKECompositionConfig) { c.ProvisionMCP = nil }},
+		{"missing workload issuer", func(c *KitGKECompositionConfig) { c.WorkloadIssuerURL = "" }},
 		{"missing transcript", func(c *KitGKECompositionConfig) { c.TurnStream = nil }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -63,6 +67,23 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 			c := valid
 			tc.mutate(&c)
 			require.Error(t, validateKitGKEComposition(c))
+		})
+	}
+	for _, tc := range []struct {
+		name      string
+		mutate    func(*KitGKECompositionConfig)
+		wantError string
+	}{
+		{"missing project", func(c *KitGKECompositionConfig) { c.ProjectNumber = "" }, "numeric project number"},
+		{"missing organization", func(c *KitGKECompositionConfig) { c.OrganizationID = "" }, "numeric project number"},
+		{"invalid project", func(c *KitGKECompositionConfig) { c.ProjectNumber = "invalid/project" }, "numeric project number"},
+		{"invalid cluster", func(c *KitGKECompositionConfig) { c.ClusterName = "invalid/cluster" }, "valid cluster location"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := valid
+			tc.mutate(&c)
+			require.ErrorContains(t, validateKitGKEComposition(c), tc.wantError)
 		})
 	}
 	core := new(ServiceCore)
@@ -92,6 +113,11 @@ func TestKitGKEFencePreservesCanonicalSession(t *testing.T) {
 		ProjectID: key.ProjectID, RuntimeID: key.RuntimeID, State: runtimeStateStopped,
 		StartingState: runtimeStateStarting, ActiveState: runtimeStateActive, ExpiringState: runtimeStateExpiring,
 	}))
+	// Retirement must not bypass validation of supplied workload authority.
+	r.BackendMetadataJSON = []byte(`{"workload":{"subject":"retired-binding"}}`)
+	require.ErrorIs(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r), ErrKitRuntimeBinding)
+	// This fixture has no workload binding; use its persisted metadata instead.
+	r.BackendMetadataJSON = nil
 	require.NoError(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r), "permanent cleanup must not resurrect retired gateway authority")
 	_, err = core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
 	require.Error(t, err)
@@ -127,10 +153,7 @@ func TestKitGKERejectsMalformedOCIReferences(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
-	in := kitGKEInput()
-	in.MCPFiles = map[string][]byte{"speakeasy.json": []byte("must-not-shadow-inference")}
-	_, err := RenderKitGKEProvision(in)
-	require.Error(t, err)
+
 }
 
 func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {
@@ -207,5 +230,16 @@ func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
 	check(true)
 	err = assistantrepo.New(f.db).DisableAttachedMCPServerForTest(t.Context(), assistantrepo.DisableAttachedMCPServerForTestParams{ID: f.remote.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	check(false)
+	check(true) // Existing shared issuer still permits inference without attached tools.
+	connections, selectedIssuer, err := f.core.kitPersistedMCPConnections(t.Context(), f.db, a)
+	require.NoError(t, err)
+	require.Empty(t, connections)
+	require.Equal(t, issuer.ID, selectedIssuer)
+	// Repeated selection is stable and remains project-scoped, even with no tools.
+	for range 3 {
+		_, repeated, err := f.core.kitPersistedMCPConnections(t.Context(), f.db, a)
+		require.NoError(t, err)
+		require.Equal(t, selectedIssuer, repeated)
+	}
+
 }

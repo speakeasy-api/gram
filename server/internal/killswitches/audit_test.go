@@ -74,11 +74,8 @@ func listOutboxMessages(t *testing.T, conn *pgxpool.Pool, orgID string) [][]byte
 
 func requireNoSentinelLeak(t *testing.T, conn *pgxpool.Pool, orgID string) {
 	t.Helper()
-	var leaked int
-	//nolint:glint // notestingrawsql: scans full audit_logs rows to prove the internal note never leaks into any column
-	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT count(*) FROM audit_logs WHERE organization_id = $1 AND audit_logs::text LIKE '%' || $2 || '%'
-	`, orgID, sentinelInternalNote).Scan(&leaked))
+	leaked, err := repo.New(conn).CountAuditLogsContainingFixture(t.Context(), repo.CountAuditLogsContainingFixtureParams{OrganizationID: orgID, Needle: sentinelInternalNote})
+	require.NoError(t, err)
 	require.Zero(t, leaked, "internal note must not appear in any audit column")
 	for _, message := range listOutboxMessages(t, conn, orgID) {
 		require.False(t, bytes.Contains(message, []byte(sentinelInternalNote)), "internal note must not appear in outbox payloads")

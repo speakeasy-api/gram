@@ -1,6 +1,8 @@
 import { useState, type JSX } from "react";
 import { ExternalLinkIcon, PlugZapIcon } from "lucide-react";
 
+import { AdminMcpTools } from "./AdminMcpTools";
+
 import { CopyValue } from "@/components/CopyValue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -80,6 +82,8 @@ export function AdminMcpSetup(): JSX.Element {
           />
         </div>
       </section>
+
+      <AdminMcpTools />
 
       <section className="space-y-4">
         <div>

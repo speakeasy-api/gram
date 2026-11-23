@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Employee } from "@/components/observe/insightsEmployeesData";
 import { describe, expect, it } from "vitest";
 import {

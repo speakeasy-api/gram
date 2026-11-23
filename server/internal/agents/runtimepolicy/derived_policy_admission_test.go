@@ -113,3 +113,51 @@ func TestPrincipalAPIKeyNeverDerivesPolicy(t *testing.T) {
 	_, err := AdmitPrincipalCredential(ctx, f.db)
 	requireUnauthorized(t, err)
 }
+
+// A project assistant's directory ceiling never lends the owner's org access to
+// a different sender. Every request rechecks the represented user's live grants.
+func TestDerivedOrganizationReadIsCappedByInvokingUser(t *testing.T) {
+	t.Parallel()
+	f := newCredentialAdmissionFixture(t)
+	check := authz.Check{Scope: authz.ScopeOrgRead, ResourceID: f.organizationID}
+	seedManagedAssistantAgent(t, t.Context(), f.db, f.organizationID, f.agentID)
+	seedGrant(t, t.Context(), f.db, f.organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()), check.Scope, f.organizationID)
+	seedGrant(t, t.Context(), f.db, f.organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, f.ownerUserID), check.Scope, f.organizationID)
+	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
+	ownerCtx := withDerivedPolicy(t, f, actor, f.ownerUserID)
+	prepared, err := f.engine.PrepareContext(ownerCtx)
+	require.NoError(t, err)
+	require.NoError(t, f.engine.Require(prepared, check))
+
+	sender := urn.NewPrincipal(urn.PrincipalTypeUser, f.authorizerUserID)
+	senderCtx := withDerivedPolicy(t, f, actor, f.authorizerUserID)
+	prepared, err = f.engine.PrepareContext(senderCtx)
+	require.NoError(t, err)
+	requireRuntimeForbidden(t, f.engine, prepared, check)
+
+	seedGrant(t, t.Context(), f.db, f.organizationID, sender, check.Scope, f.organizationID)
+	prepared, err = f.engine.PrepareContext(senderCtx)
+	require.NoError(t, err)
+	require.NoError(t, f.engine.Require(prepared, check))
+	selectors, err := authz.NewSelector(check.Scope, check.ResourceID).MarshalJSON()
+	require.NoError(t, err)
+	removed, err := accessrepo.New(f.db).DeletePrincipalGrantByIdentity(t.Context(), accessrepo.DeletePrincipalGrantByIdentityParams{OrganizationID: f.organizationID, PrincipalUrn: sender, Scope: string(check.Scope), Selectors: selectors})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, removed)
+	prepared, err = f.engine.PrepareContext(prepared)
+	require.NoError(t, err)
+	requireRuntimeForbidden(t, f.engine, prepared, check)
+	// An explicit user exclusion still wins over an allow.
+	seedGrant(t, t.Context(), f.db, f.organizationID, sender, check.Scope, f.organizationID)
+	seedGrant(t, t.Context(), f.db, f.organizationID, sender, authz.ScopeOrgBlockedRead, f.organizationID)
+	prepared, err = f.engine.PrepareContext(senderCtx)
+	require.NoError(t, err)
+	requireRuntimeForbidden(t, f.engine, prepared, check)
+	// The owner's policy remains a ceiling too, even when the owner invokes.
+	_, err = accessrepo.New(f.db).DeletePrincipalGrantByIdentity(t.Context(), accessrepo.DeletePrincipalGrantByIdentityParams{OrganizationID: f.organizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, f.ownerUserID), Scope: string(check.Scope), Selectors: selectors})
+	require.NoError(t, err)
+	prepared, err = f.engine.PrepareContext(ownerCtx)
+	require.NoError(t, err)
+	requireRuntimeForbidden(t, f.engine, prepared, check)
+
+}

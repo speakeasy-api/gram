@@ -2,23 +2,19 @@ package agent
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
-	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -26,35 +22,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 )
 
-// handoffRoutePrefix is the public serving path. Links are minted against
-// serverURL (the primary app domain). That host splits traffic: the
-// dashboard SPA is the default backend, so this prefix must appear on the
-// gram-infra helm ingress path list and on the dashboard vite dev proxy.
-// It is deliberately absent from the custom-domain ingress allowlist in
-// k8s/ingress_provisioner.go — customer domains serve skill share pages,
-// not handoff documents. Must stay in lockstep with the route attached in
-// Attach and with the token-redaction prefixes in middleware.logSafeURL.
-const handoffRoutePrefix = "/shared/handoffs/"
-
-const (
-	// maxHandoffContentBytes caps the uploaded document in BYTES. The design's
-	// MaxLength counts runes, so a multi-byte document could pass Goa
-	// validation while exceeding the intended storage bound without this.
-	maxHandoffContentBytes = 262144
-
-	// TTL bounds. The default keeps a leaked link's window to minutes; the
-	// max exists so a caller cannot mint an effectively permanent link.
-	minHandoffTTL     = time.Minute
-	defaultHandoffTTL = 15 * time.Minute
-	maxHandoffTTL     = time.Hour
-
-	// handoffTokenBytes of entropy, hex-encoded, make the token the
-	// capability: 32 bytes is far beyond guessable at any request rate.
-	handoffTokenBytes = 32
-)
+// maxHandoffContentBytes caps uploaded documents in bytes.
+const maxHandoffContentBytes = 262144
 
 // CreateSessionHandoff mints a burn-after-read capability URL for an uploaded
 // handoff document. This is the one place session CONTENT transits the server
@@ -88,120 +60,25 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		return nil, oops.E(oops.CodeBadRequest, nil, "content exceeds the handoff size limit")
 	}
 
-	ttl := defaultHandoffTTL
-	if payload.TTLSeconds != nil {
-		// Clamp in seconds, before widening to a Duration: converting first
-		// lets an absurd request overflow the nanosecond multiplication and
-		// wrap past the floor, so a hostile -1e10 would mint an hour-long link
-		// instead of the one-minute minimum.
-		seconds := min(max(*payload.TTLSeconds, int(minHandoffTTL/time.Second)), int(maxHandoffTTL/time.Second))
-		ttl = time.Duration(seconds) * time.Second
-	}
-
-	tokenBytes := make([]byte, handoffTokenBytes)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "mint handoff token").LogError(ctx, s.logger)
-	}
-	token := hex.EncodeToString(tokenBytes)
-	expiresAt := time.Now().Add(ttl)
-
-	createdBy := conv.PtrValOr(authCtx.Email, "")
-	if createdBy == "" {
-		createdBy = authCtx.UserID
-	}
-
-	chatID := chat.SessionIDToChatID(sessionID)
-
-	// The document goes to object storage, never the row: the row keeps the
-	// capability token, tenancy, and the atomic consume claim. Written before
-	// the transaction so a failed insert can only leak an unreferenced blob
-	// (cleaned up below; bucket lifecycle is the backstop) — never a live
-	// capability with no document behind it.
-	blobW, blobURL, err := s.blobStore.Write(ctx, "session-handoffs/"+token+".md", "text/markdown", int64(len(payload.Content)))
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
-	}
-	// The blob URL is a second capability: it must reach the database and
-	// nothing else — never the response, the audit trail, or a log line.
-	// Defined the moment the URL exists, so every failure from here down can
-	// undo the upload, including one that only partly materialized.
-	cleanupBlob := func() {
-		if err := s.blobStore.Delete(context.WithoutCancel(ctx), blobURL); err != nil {
-			s.logger.WarnContext(ctx, "orphaned handoff blob not deleted", attr.SlogError(err))
-		}
-	}
-	if _, err := io.WriteString(blobW, payload.Content); err != nil {
-		_ = blobW.Close()
-		cleanupBlob()
-		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
-	}
-	if err := blobW.Close(); err != nil {
-		cleanupBlob()
-		return nil, oops.E(oops.CodeUnexpected, err, "store handoff document").LogError(ctx, s.logger)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		cleanupBlob()
-		return nil, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	row, err := repo.New(dbtx).InsertSessionHandoffLink(ctx, repo.InsertSessionHandoffLinkParams{
-		ProjectID:      *authCtx.ProjectID,
+	ttlSeconds := payload.TTLSeconds
+	result, err := sessionhandoff.NewSessionHandoffMinter(s.logger, s.db, s.blobStore, s.serverURL, s.audit).Mint(ctx, sessionhandoff.SessionHandoffMintInput{
 		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		UserID:         authCtx.UserID,
+		ActorEmail:     authCtx.Email,
+		ChatID:         chat.SessionIDToChatID(sessionID),
 		SessionID:      sessionID,
-		Token:          token,
-		BlobUrl:        blobURL.String(),
-		CreatedByEmail: createdBy,
-		ExpiresAt:      conv.ToPGTimestamptz(expiresAt),
+		ChatTitle:      "",
+		Content:        payload.Content,
+		TTLSeconds:     ttlSeconds,
+		SourceSurface:  strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, "")),
+		DeviceSerial:   deviceidentity.NormalizeSerial(payload.SerialNumber),
+		DeviceHostname: strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		// The insert selects through the tenant-qualified project, so no row
-		// means the key's project and organization disagree or the project is
-		// soft-deleted. Unreachable from a well-formed auth context.
-		cleanupBlob()
-		return nil, oops.E(oops.CodeNotFound, err, "project not found")
-	case err != nil:
-		cleanupBlob()
-		return nil, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, s.logger)
+	if err != nil {
+		return nil, fmt.Errorf("mint session handoff: %w", err)
 	}
-
-	event := audit.LogChatSessionHandoffExportEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		ChatSessionURN:   urn.NewChatSession(chatID),
-		ChatTitle:        "",
-		SourceSurface:    strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, "")),
-		ContentBytes:     len(payload.Content),
-		TTLSeconds:       int(ttl / time.Second),
-		ExpiresAt:        expiresAt,
-		DeviceSerial:     deviceidentity.NormalizeSerial(payload.SerialNumber),
-		DeviceHostname:   strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),
-	}
-	if err := s.audit.LogChatSessionHandoffExport(ctx, dbtx, event); err != nil {
-		// The deferred rollback discards the row, so the blob would outlive
-		// every reference to it.
-		cleanupBlob()
-		return nil, oops.E(oops.CodeUnexpected, err, "record handoff export").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		// Deliberately no cleanup here: an errored commit may still have
-		// landed server-side, and deleting the blob under a row that did
-		// commit would leave a live link serving nothing. An orphaned blob is
-		// the better failure, and bucket lifecycle collects it.
-		return nil, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, s.logger)
-	}
-
-	return &gen.CreateSessionHandoffResult{
-		URL:       strings.TrimRight(s.serverURL, "/") + handoffRoutePrefix + token,
-		ExpiresAt: row.ExpiresAt.Time.UTC().Format(time.RFC3339),
-	}, nil
+	return &gen.CreateSessionHandoffResult{URL: result.URL, ExpiresAt: result.ExpiresAt}, nil
 }
 
 // ServeSessionHandoff serves a minted handoff document at
@@ -215,11 +92,7 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 	// segment is rejected before hex.DecodeString allocates for it, then the
 	// now-fixed-size decode. Only hex of exactly the minted length can name a
 	// link, so malformed probes never reach Postgres.
-	if len(token) != hex.EncodedLen(handoffTokenBytes) {
-		http.NotFound(w, r)
-		return nil
-	}
-	if _, err := hex.DecodeString(token); err != nil {
+	if !sessionhandoff.ValidToken(token) {
 		http.NotFound(w, r)
 		return nil
 	}

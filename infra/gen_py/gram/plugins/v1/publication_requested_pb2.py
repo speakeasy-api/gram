@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n+gram/plugins/v1/publication_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x97\x01\n\x14PublicationRequested\x12\'\n\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12\x1d\n\nproject_id\x18\x02 \x01(\tR\tprojectId\x12+\n\x12\x63reated_by_user_id\x18\x03 \x01(\tR\x0f\x63reatedByUserId:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xf5$BCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n+gram/plugins/v1/publication_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xcd\x01\n\x14PublicationRequested\x12\'\n\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12\x1d\n\nproject_id\x18\x02 \x01(\tR\tprojectId\x12+\n\x12\x63reated_by_user_id\x18\x03 \x01(\tR\x0f\x63reatedByUserId\x12\x34\n\x16include_paused_plugins\x18\x04 \x01(\x08R\x14includePausedPlugins:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\xf5$BCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,5 +36,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PUBLICATIONREQUESTED']._loaded_options = None
   _globals['_PUBLICATIONREQUESTED']._serialized_options = b'\212\265\030\006\022\004\010\200\365$'
   _globals['_PUBLICATIONREQUESTED']._serialized_start=94
-  _globals['_PUBLICATIONREQUESTED']._serialized_end=245
+  _globals['_PUBLICATIONREQUESTED']._serialized_end=299
 # @@protoc_insertion_point(module_scope)

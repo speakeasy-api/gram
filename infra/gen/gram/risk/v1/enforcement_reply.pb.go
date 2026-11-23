@@ -29,6 +29,7 @@ const (
 	EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION EnforcementScanner = 3
 	EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE            EnforcementScanner = 4
 	EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER     EnforcementScanner = 5
+	EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES     EnforcementScanner = 6
 )
 
 // Enum value maps for EnforcementScanner.
@@ -40,6 +41,7 @@ var (
 		3: "ENFORCEMENT_SCANNER_PROMPT_INJECTION",
 		4: "ENFORCEMENT_SCANNER_JUDGE",
 		5: "ENFORCEMENT_SCANNER_LLM_ANALYZER",
+		6: "ENFORCEMENT_SCANNER_CUSTOM_RULES",
 	}
 	EnforcementScanner_value = map[string]int32{
 		"ENFORCEMENT_SCANNER_UNSPECIFIED":      0,
@@ -48,6 +50,7 @@ var (
 		"ENFORCEMENT_SCANNER_PROMPT_INJECTION": 3,
 		"ENFORCEMENT_SCANNER_JUDGE":            4,
 		"ENFORCEMENT_SCANNER_LLM_ANALYZER":     5,
+		"ENFORCEMENT_SCANNER_CUSTOM_RULES":     6,
 	}
 )
 
@@ -494,9 +497,9 @@ type EnforcementFinding_builder struct {
 	ToolCallId    *string
 	MaskedPreview *string
 	Fingerprint   *string
-	// Model rationale for the finding, limited to 500 Unicode characters. Set
-	// only by the LLM analyzer lane. It may paraphrase the flagged content, so
-	// it is treated with the same care as masked_preview.
+	// Human-readable scanner description or model rationale, limited to 500
+	// Unicode characters. It may paraphrase flagged content, so it is treated
+	// with the same care as masked_preview.
 	Description *string
 }
 
@@ -695,18 +698,20 @@ func (b0 EnforcementDiagnostics_builder) Build() *EnforcementDiagnostics {
 
 // EnforcementReply transits Redis only and never contains raw matched text.
 type EnforcementReply struct {
-	state                    protoimpl.MessageState  `protogen:"opaque.v1"`
-	xxx_hidden_CorrelationId *string                 `protobuf:"bytes,1,opt,name=correlation_id,json=correlationId"`
-	xxx_hidden_Scanner       EnforcementScanner      `protobuf:"varint,2,opt,name=scanner,enum=gram.risk.v1.EnforcementScanner"`
-	xxx_hidden_Status        EnforcementStatus       `protobuf:"varint,3,opt,name=status,enum=gram.risk.v1.EnforcementStatus"`
-	xxx_hidden_Reason        *string                 `protobuf:"bytes,4,opt,name=reason"`
-	xxx_hidden_Findings      *[]*EnforcementFinding  `protobuf:"bytes,5,rep,name=findings"`
-	xxx_hidden_Diagnostics   *EnforcementDiagnostics `protobuf:"bytes,6,opt,name=diagnostics"`
-	xxx_hidden_PolicyId      *string                 `protobuf:"bytes,7,opt,name=policy_id,json=policyId"`
-	XXX_raceDetectHookData   protoimpl.RaceDetectHookData
-	XXX_presence             [1]uint32
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	state                       protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_CorrelationId    *string                 `protobuf:"bytes,1,opt,name=correlation_id,json=correlationId"`
+	xxx_hidden_Scanner          EnforcementScanner      `protobuf:"varint,2,opt,name=scanner,enum=gram.risk.v1.EnforcementScanner"`
+	xxx_hidden_Status           EnforcementStatus       `protobuf:"varint,3,opt,name=status,enum=gram.risk.v1.EnforcementStatus"`
+	xxx_hidden_Reason           *string                 `protobuf:"bytes,4,opt,name=reason"`
+	xxx_hidden_Findings         *[]*EnforcementFinding  `protobuf:"bytes,5,rep,name=findings"`
+	xxx_hidden_Diagnostics      *EnforcementDiagnostics `protobuf:"bytes,6,opt,name=diagnostics"`
+	xxx_hidden_PolicyId         *string                 `protobuf:"bytes,7,opt,name=policy_id,json=policyId"`
+	xxx_hidden_ContentTruncated bool                    `protobuf:"varint,8,opt,name=content_truncated,json=contentTruncated"`
+	xxx_hidden_Incomplete       bool                    `protobuf:"varint,9,opt,name=incomplete"`
+	XXX_raceDetectHookData      protoimpl.RaceDetectHookData
+	XXX_presence                [1]uint32
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *EnforcementReply) Reset() {
@@ -798,24 +803,38 @@ func (x *EnforcementReply) GetPolicyId() string {
 	return ""
 }
 
+func (x *EnforcementReply) GetContentTruncated() bool {
+	if x != nil {
+		return x.xxx_hidden_ContentTruncated
+	}
+	return false
+}
+
+func (x *EnforcementReply) GetIncomplete() bool {
+	if x != nil {
+		return x.xxx_hidden_Incomplete
+	}
+	return false
+}
+
 func (x *EnforcementReply) SetCorrelationId(v string) {
 	x.xxx_hidden_CorrelationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 7)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 9)
 }
 
 func (x *EnforcementReply) SetScanner(v EnforcementScanner) {
 	x.xxx_hidden_Scanner = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 7)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 9)
 }
 
 func (x *EnforcementReply) SetStatus(v EnforcementStatus) {
 	x.xxx_hidden_Status = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 7)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 9)
 }
 
 func (x *EnforcementReply) SetReason(v string) {
 	x.xxx_hidden_Reason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 7)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 9)
 }
 
 func (x *EnforcementReply) SetFindings(v []*EnforcementFinding) {
@@ -828,7 +847,17 @@ func (x *EnforcementReply) SetDiagnostics(v *EnforcementDiagnostics) {
 
 func (x *EnforcementReply) SetPolicyId(v string) {
 	x.xxx_hidden_PolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 7)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 9)
+}
+
+func (x *EnforcementReply) SetContentTruncated(v bool) {
+	x.xxx_hidden_ContentTruncated = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 9)
+}
+
+func (x *EnforcementReply) SetIncomplete(v bool) {
+	x.xxx_hidden_Incomplete = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 9)
 }
 
 func (x *EnforcementReply) HasCorrelationId() bool {
@@ -873,6 +902,20 @@ func (x *EnforcementReply) HasPolicyId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
 }
 
+func (x *EnforcementReply) HasContentTruncated() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
+}
+
+func (x *EnforcementReply) HasIncomplete() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
+}
+
 func (x *EnforcementReply) ClearCorrelationId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_CorrelationId = nil
@@ -902,6 +945,16 @@ func (x *EnforcementReply) ClearPolicyId() {
 	x.xxx_hidden_PolicyId = nil
 }
 
+func (x *EnforcementReply) ClearContentTruncated() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 7)
+	x.xxx_hidden_ContentTruncated = false
+}
+
+func (x *EnforcementReply) ClearIncomplete() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
+	x.xxx_hidden_Incomplete = false
+}
+
 type EnforcementReply_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -912,6 +965,11 @@ type EnforcementReply_builder struct {
 	Findings      []*EnforcementFinding
 	Diagnostics   *EnforcementDiagnostics
 	PolicyId      *string
+	// True when the consumer scanned only a bounded prefix of the request.
+	ContentTruncated *bool
+	// True when an attempted scanner execution did not produce a valid complete
+	// result. Deliberate content bounding is reported by content_truncated.
+	Incomplete *bool
 }
 
 func (b0 EnforcementReply_builder) Build() *EnforcementReply {
@@ -919,26 +977,34 @@ func (b0 EnforcementReply_builder) Build() *EnforcementReply {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.CorrelationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 7)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 9)
 		x.xxx_hidden_CorrelationId = b.CorrelationId
 	}
 	if b.Scanner != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 7)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 9)
 		x.xxx_hidden_Scanner = *b.Scanner
 	}
 	if b.Status != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 7)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 9)
 		x.xxx_hidden_Status = *b.Status
 	}
 	if b.Reason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 7)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 9)
 		x.xxx_hidden_Reason = b.Reason
 	}
 	x.xxx_hidden_Findings = &b.Findings
 	x.xxx_hidden_Diagnostics = b.Diagnostics
 	if b.PolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 7)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 9)
 		x.xxx_hidden_PolicyId = b.PolicyId
+	}
+	if b.ContentTruncated != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 9)
+		x.xxx_hidden_ContentTruncated = *b.ContentTruncated
+	}
+	if b.Incomplete != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 9)
+		x.xxx_hidden_Incomplete = *b.Incomplete
 	}
 	return m0
 }
@@ -967,7 +1033,7 @@ const file_gram_risk_v1_enforcement_reply_proto_rawDesc = "" +
 	"\x10scan_duration_ms\x18\x01 \x01(\x03R\x0escanDurationMs\x12\x1f\n" +
 	"\vconsumer_id\x18\x02 \x01(\tR\n" +
 	"consumerId\x12)\n" +
-	"\x10delivery_attempt\x18\x03 \x01(\x05R\x0fdeliveryAttempt\"\xe9\x02\n" +
+	"\x10delivery_attempt\x18\x03 \x01(\x05R\x0fdeliveryAttempt\"\xb6\x03\n" +
 	"\x10EnforcementReply\x12%\n" +
 	"\x0ecorrelation_id\x18\x01 \x01(\tR\rcorrelationId\x12:\n" +
 	"\ascanner\x18\x02 \x01(\x0e2 .gram.risk.v1.EnforcementScannerR\ascanner\x127\n" +
@@ -975,14 +1041,19 @@ const file_gram_risk_v1_enforcement_reply_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12<\n" +
 	"\bfindings\x18\x05 \x03(\v2 .gram.risk.v1.EnforcementFindingR\bfindings\x12F\n" +
 	"\vdiagnostics\x18\x06 \x01(\v2$.gram.risk.v1.EnforcementDiagnosticsR\vdiagnostics\x12\x1b\n" +
-	"\tpolicy_id\x18\a \x01(\tR\bpolicyId*\xec\x01\n" +
+	"\tpolicy_id\x18\a \x01(\tR\bpolicyId\x12+\n" +
+	"\x11content_truncated\x18\b \x01(\bR\x10contentTruncated\x12\x1e\n" +
+	"\n" +
+	"incomplete\x18\t \x01(\bR\n" +
+	"incomplete*\x92\x02\n" +
 	"\x12EnforcementScanner\x12#\n" +
 	"\x1fENFORCEMENT_SCANNER_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cENFORCEMENT_SCANNER_GITLEAKS\x10\x01\x12 \n" +
 	"\x1cENFORCEMENT_SCANNER_PRESIDIO\x10\x02\x12(\n" +
 	"$ENFORCEMENT_SCANNER_PROMPT_INJECTION\x10\x03\x12\x1d\n" +
 	"\x19ENFORCEMENT_SCANNER_JUDGE\x10\x04\x12$\n" +
-	" ENFORCEMENT_SCANNER_LLM_ANALYZER\x10\x05*\x94\x01\n" +
+	" ENFORCEMENT_SCANNER_LLM_ANALYZER\x10\x05\x12$\n" +
+	" ENFORCEMENT_SCANNER_CUSTOM_RULES\x10\x06*\x94\x01\n" +
 	"\x11EnforcementStatus\x12\"\n" +
 	"\x1eENFORCEMENT_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ENFORCEMENT_STATUS_OK\x10\x01\x12\x1c\n" +

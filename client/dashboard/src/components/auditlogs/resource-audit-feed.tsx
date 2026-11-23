@@ -11,8 +11,8 @@ import {
 } from "@/components/auditlogs/feed";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import { Link as TextLink } from "@/components/ui/Link";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -79,12 +79,11 @@ export function ResourceAuditFeed({
 
   if (!enabled || isPending) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2 py-6">
-        <Icon name="loader-circle" className="size-4 animate-spin" />
-        <Text small muted>
-          Loading activity…
-        </Text>
-      </div>
+      <Skeleton label="Loading activity">
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+      </Skeleton>
     );
   }
 

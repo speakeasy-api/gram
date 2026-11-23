@@ -206,16 +206,17 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					)
 					blockReason = fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 					userReason = s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-						OrganizationID:  orgID,
-						ProjectID:       projectID,
-						RequesterUserID: metadata.UserID,
-						UserMessage:     policy.UserMessage,
-						AuditReason:     blockReason,
-						Evidence:        evidence,
-						ToolName:        toolName,
-						ToolInput:       ev.ToolInput,
-						RiskPolicyID:    policy.ID,
-						PolicyName:      policy.Name,
+						OrganizationID:    orgID,
+						ProjectID:         projectID,
+						RequesterUserID:   metadata.UserID,
+						UserMessage:       policy.UserMessage,
+						AuditReason:       blockReason,
+						Evidence:          evidence,
+						ToolName:          toolName,
+						ToolInput:         ev.ToolInput,
+						RiskPolicyID:      policy.ID,
+						SessionMCPServers: s.sessionMCPServers(ctx, metadata.SessionID),
+						PolicyName:        policy.Name,
 					})
 					isToolCallBlock = true
 					blockToolName = toolName
@@ -510,6 +511,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),

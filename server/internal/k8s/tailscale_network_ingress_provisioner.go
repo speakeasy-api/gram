@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	appsv1 "k8s.io/api/apps/v1"
@@ -76,7 +77,26 @@ type TailscaleNetworkIngressConfig struct {
 	KubernetesAPICIDR string
 	KubernetesAPIPort int32
 	ClusterCIDRs      []string
+
+	// DeletionWait is how long one Delete call keeps re-checking a teardown
+	// step that is still deleting before it reports
+	// ErrNetworkIngressDeletionPending. Zero checks each step once.
+	DeletionWait time.Duration
 }
+
+const (
+	// DefaultNetworkIngressDeletionWait bounds how long one Delete call waits
+	// for Kubernetes to finish deleting. Each teardown step usually settles
+	// within seconds and the namespace in about a minute, so a minute lets
+	// most teardowns finish in one or two calls while staying well inside the
+	// executor's two-minute call deadline.
+	DefaultNetworkIngressDeletionWait = time.Minute
+
+	// networkIngressDeletionPollInterval is how often a waiting Delete call
+	// re-checks a step. Each check is a handful of GETs per resource in the
+	// step.
+	networkIngressDeletionPollInterval = time.Second
+)
 
 type TailscaleNetworkIngressProvisioner struct {
 	clientset kubernetes.Interface
@@ -114,7 +134,7 @@ func (config TailscaleNetworkIngressConfig) validateApply() error {
 	return nil
 }
 
-//nolint:exhaustruct // observations intentionally populate only known current state.
+//nolint:exhaustruct_v5 // observations intentionally populate only known current state.
 func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired NetworkIngressDesired) (NetworkIngressObservation, error) {
 	if err := p.config.validateApply(); err != nil {
 		return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: NetworkIngressErrorInvalidDesiredState}, err
@@ -125,7 +145,7 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 	if desired.Provider != NetworkIngressProviderTailscale {
 		return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: NetworkIngressErrorUnsupportedProvider}, ErrNetworkIngressUnsupportedProvider
 	}
-	credentials, err := parseTailscaleCredentials(desired.Credentials)
+	credentials, err := ParseTailscaleCredentials(desired.Credentials)
 	if err != nil {
 		return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: NetworkIngressErrorInvalidCredentials}, err
 	}
@@ -182,7 +202,7 @@ func (p *TailscaleNetworkIngressProvisioner) Apply(ctx context.Context, desired 
 	return p.observe(ctx, desired.Resources, desired.Hostname)
 }
 
-//nolint:exhaustruct // observations intentionally populate only known current state.
+//nolint:exhaustruct_v5 // observations intentionally populate only known current state.
 func (p *TailscaleNetworkIngressProvisioner) observe(ctx context.Context, resources NetworkIngressResourceNames, desiredHostname string) (NetworkIngressObservation, error) {
 	if err := resources.Validate(); err != nil {
 		return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: NetworkIngressErrorInvalidDesiredState}, err
@@ -294,8 +314,18 @@ func deleteOwnedDynamic(ctx context.Context, client dynamic.ResourceInterface, n
 	)
 }
 
+// deleteWithoutReadConfirmation deletes an object the caller cannot read. It
+// sends DELETE at most twice and reports the object gone only when one of them
+// answers NotFound; if both succeed, the object still exists and it returns
+// ErrNetworkIngressDeletionPending so a later reconcile tries again.
+//
+// It uses background propagation: the object has no dependents, and a
+// foreground delete would leave it briefly in place carrying the
+// foregroundDeletion finalizer, which the OAuth Secret admission policy refuses
+// on the second DELETE (422 Invalid) because those Secrets may not carry
+// finalizers.
 func deleteWithoutReadConfirmation(ctx context.Context, name, kind string, remove func(context.Context, string, metav1.DeleteOptions) error) error {
-	propagation := metav1.DeletePropagationForeground
+	propagation := metav1.DeletePropagationBackground
 	options := metav1.DeleteOptions{PropagationPolicy: &propagation}
 	for range 2 {
 		err := remove(ctx, name, options)
@@ -501,30 +531,57 @@ func (p *TailscaleNetworkIngressProvisioner) teardown(ctx context.Context, resou
 
 	// Initiate all independent deletions in each named phase, but do not cross a
 	// dependency barrier until every resource in the preceding phase is absent.
-	workloadPhase := []func() error{deleteIngress, deleteAttestorService, deleteAttestorDeployment}
-	if err := runNetworkIngressDeletionPhase(workloadPhase...); err != nil {
-		return err
-	}
-	if err := runNetworkIngressDeletionPhase(deleteProxyGroupPolicy); err != nil {
-		return err
-	}
-	if err := runNetworkIngressDeletionPhase(deleteProxyGroup); err != nil {
-		return err
-	}
-	if err := waitForPods(); err != nil {
-		return err
-	}
-	if err := runNetworkIngressDeletionPhase(deleteTailnet); err != nil {
-		return err
+	// Each phase is re-checked until it settles or the call's wait budget ends.
+	deadline := time.Now().Add(p.config.DeletionWait)
+	// The operator cannot release its finalizers with rejected credentials,
+	// so waiting for them would only delay Delete reporting that blocker.
+	credentialsRejected := func() bool { return p.tailnetCredentialsRejected(ctx, resources) }
+	phase := func(deletes ...func() error) func() error {
+		return func() error { return runNetworkIngressDeletionPhase(deletes...) }
 	}
 	securityPhase := []func() error{deleteCredentialsSecret, deleteAttestorCASecret, deleteAttestorServiceAccount, deleteAttestorNetworkPolicy, deleteProxyNetworkPolicy}
-	if err := runNetworkIngressDeletionPhase(securityPhase...); err != nil {
-		return err
+	for _, step := range []func() error{
+		phase(deleteIngress, deleteAttestorService, deleteAttestorDeployment),
+		phase(deleteProxyGroupPolicy),
+		phase(deleteProxyGroup),
+		waitForPods,
+		phase(deleteTailnet),
+		phase(securityPhase...),
+		phase(deleteNamespace),
+	} {
+		if err := awaitDeletionPhase(ctx, deadline, step, credentialsRejected); err != nil {
+			return err
+		}
 	}
-	return runNetworkIngressDeletionPhase(deleteNamespace)
+	return nil
 }
 
-func parseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
+// awaitDeletionPhase runs a teardown phase and, while it reports
+// ErrNetworkIngressDeletionPending, runs it again every
+// networkIngressDeletionPollInterval until it settles or deadline passes. It
+// stops early when blocked reports that the phase cannot settle without
+// outside help. On cancellation, at the deadline or when blocked it returns the
+// phase's last result, so a caller still sees the step as pending rather than
+// as a failure.
+func awaitDeletionPhase(ctx context.Context, deadline time.Time, phase func() error, blocked func() bool) error {
+	for {
+		err := phase()
+		if !errors.Is(err, ErrNetworkIngressDeletionPending) || time.Now().Add(networkIngressDeletionPollInterval).After(deadline) || blocked() {
+			return err
+		}
+		timer := time.NewTimer(networkIngressDeletionPollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return err
+		case <-timer.C:
+		}
+	}
+}
+
+// ParseTailscaleCredentials decodes the encrypted-at-rest OAuth client document
+// stored for a Tailscale ingress. Unknown fields and trailing data are rejected.
+func ParseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
 	var credentials TailscaleCredentials
 	decoder := json.NewDecoder(bytes.NewReader(encoded))
 	decoder.DisallowUnknownFields()
@@ -540,7 +597,7 @@ func parseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
 	return credentials, nil
 }
 
-//nolint:exhaustruct // error observations intentionally omit unavailable state.
+//nolint:exhaustruct_v5 // error observations intentionally omit unavailable state.
 func (p *TailscaleNetworkIngressProvisioner) applyError(code string, err error) (NetworkIngressObservation, error) {
 	return NetworkIngressObservation{Status: NetworkIngressStatusError, ErrorCode: code}, err
 }
@@ -600,7 +657,7 @@ func unstructuredIngressLabels(desired NetworkIngressDesired) map[string]any {
 	return result
 }
 
-//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+//nolint:exhaustruct_v5 // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyNamespace(ctx context.Context, desired NetworkIngressDesired) error {
 	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Namespace, Labels: resourceOwnerLabels(desired.ID.String())}}
 	client := p.clientset.CoreV1().Namespaces()
@@ -620,7 +677,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyNamespace(ctx context.Context,
 	return wrapKubernetesMutation("update namespace", err)
 }
 
-//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+//nolint:exhaustruct_v5 // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyAttestorManagerBinding(ctx context.Context, desired NetworkIngressDesired) error {
 	binding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{Name: networkIngressAttestorManagerBinding, Namespace: desired.Resources.Namespace, Labels: resourceOwnerLabels(desired.ID.String())},
@@ -655,7 +712,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyAttestorManagerBinding(ctx con
 // replacement shape. Kubernetes Secrets allow an unconditional UPDATE with an
 // empty resourceVersion, which keeps unrelated operator Secrets unreadable.
 //
-//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+//nolint:exhaustruct_v5 // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyCredentialsSecret(ctx context.Context, resources NetworkIngressResourceNames, credentials TailscaleCredentials) error {
 	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: resources.CredentialsSecret, Namespace: p.config.OperatorNamespace, Labels: resourceOwnerLabels(resources.OwnerID.String())}, Type: corev1.SecretTypeOpaque, Data: map[string][]byte{"client_id": []byte(credentials.ClientID), "client_secret": []byte(credentials.ClientSecret)}}
 	client := p.clientset.CoreV1().Secrets(p.config.OperatorNamespace)
@@ -668,7 +725,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyCredentialsSecret(ctx context.
 	return wrapKubernetesMutation("update OAuth Secret", err)
 }
 
-//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+//nolint:exhaustruct_v5 // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyAttestorCASecret(ctx context.Context, desired NetworkIngressDesired) error {
 	source, err := p.clientset.CoreV1().Secrets(p.config.BackendNamespace).Get(ctx, p.config.AttestorCASecret, metav1.GetOptions{})
 	if err != nil {
@@ -700,7 +757,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyAttestorCASecret(ctx context.C
 	return wrapKubernetesMutation("update attestor CA Secret", err)
 }
 
-//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+//nolint:exhaustruct_v5 // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyServiceAccount(ctx context.Context, desired NetworkIngressDesired) error {
 	account := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.AttestorServiceAccount, Namespace: desired.Resources.Namespace, Labels: ingressLabels(desired)}, AutomountServiceAccountToken: new(false)}
 	client := p.clientset.CoreV1().ServiceAccounts(desired.Resources.Namespace)
@@ -720,7 +777,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyServiceAccount(ctx context.Con
 	return wrapKubernetesMutation("update attestor ServiceAccount", err)
 }
 
-//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+//nolint:exhaustruct_v5 // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyDeployment(ctx context.Context, desired NetworkIngressDesired, expectedHost string) error {
 	labels := ingressLabels(desired)
 	deployment := &appsv1.Deployment{
@@ -776,7 +833,7 @@ func (p *TailscaleNetworkIngressProvisioner) applyDeployment(ctx context.Context
 	return wrapKubernetesMutation("update attestor Deployment", err)
 }
 
-//nolint:exhaustruct // Kubernetes desired-state literals omit API-owned defaults and status.
+//nolint:exhaustruct_v5 // Kubernetes desired-state literals omit API-owned defaults and status.
 func (p *TailscaleNetworkIngressProvisioner) applyService(ctx context.Context, desired NetworkIngressDesired) error {
 	labels := ingressLabels(desired)
 	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.AttestorService, Namespace: desired.Resources.Namespace, Labels: labels, Annotations: map[string]string{networkIngressIDLabel: desired.ID.String()}}, Spec: corev1.ServiceSpec{Selector: labels, Ports: []corev1.ServicePort{{Name: "http", Port: 80, TargetPort: intstr.FromString("http")}}}}

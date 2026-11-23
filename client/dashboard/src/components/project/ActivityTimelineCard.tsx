@@ -17,13 +17,17 @@ import {
   getActorLabel,
   renderVerb,
 } from "@/lib/audit-log-format";
-import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { isToday } from "date-fns/isToday";
+import { isYesterday } from "date-fns/isYesterday";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
 type Props = {
   logs: AuditLog[];
   isPending: boolean;
-  viewAllHref: string;
+  /** Omitted when the viewer can't open the org audit log. */
+  viewAllHref?: string;
 };
 
 export function ActivityTimelineCard({
@@ -40,13 +44,15 @@ export function ActivityTimelineCard({
       title="Activity Timeline"
       tooltip="Recent administrative activity in this project — changes to sources, MCP server changes, API key rotations, environment edits, and access role updates. Grouped by day, most recent first."
       action={
-        <Link
-          to={viewAllHref}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline"
-        >
-          View all
-          <ChevronRight className="size-3" />
-        </Link>
+        viewAllHref && (
+          <Link
+            to={viewAllHref}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-0.5 text-xs no-underline"
+          >
+            View all
+            <ChevronRight className="size-3" />
+          </Link>
+        )
       }
     >
       {isPending ? (

@@ -7,11 +7,10 @@ import {
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySession } from "@/contexts/Auth";
-import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 
 const mocks = vi.hoisted(() => ({
   useSession: vi.fn(),
-  flagResult: vi.fn(),
+  useBillingState: vi.fn(),
   hasScope: vi.fn(),
 }));
 
@@ -23,11 +22,13 @@ vi.mock("@/contexts/Auth", async (importOriginal) => {
   };
 });
 
-// The embedded self-serve CTA brings its own gates; stub what it reads so the
-// card's own states stay the subject of these tests.
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
-}));
+vi.mock("@/components/billing/use-billing-state", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("@/components/billing/use-billing-state")
+    >();
+  return { ...actual, useBillingState: mocks.useBillingState };
+});
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.hasScope() as boolean }),
@@ -59,10 +60,13 @@ describe("TrialStatusCard", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-05T00:00:00.000Z"));
-    mocks.useSession.mockReturnValue({ trial: activeTrial });
-    // Off by default so the existing states are asserted without the CTA.
-    mocks.flagResult.mockReturnValue({ status: "disabled" });
-    mocks.hasScope.mockReturnValue(true);
+    mocks.useSession.mockReturnValue({
+      trial: activeTrial,
+      organization: { slug: "test-org" },
+    });
+    // A member by default so the existing states are asserted without the CTA.
+    mocks.hasScope.mockReturnValue(false);
+    mocks.useBillingState.mockReturnValue({ status: "needs-setup" });
   });
 
   afterEach(() => {
@@ -243,8 +247,8 @@ describe("TrialStatusCard", () => {
     ).toBe(true);
   });
 
-  it("offers self-serve checkout beside the sales trigger during the trial", () => {
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
+  it("offers self-serve checkout when the trial has no subscription", () => {
+    mocks.hasScope.mockReturnValue(true);
 
     render(<TrialStatusCard />);
 
@@ -255,8 +259,24 @@ describe("TrialStatusCard", () => {
     expect(screen.getByRole("button", { name: "Talk to sales" })).toBeTruthy();
   });
 
+  it.each(["manage", "loading", "error", "unavailable"])(
+    "hides checkout without replacing it when billing is %s",
+    (status) => {
+      mocks.hasScope.mockReturnValue(true);
+      mocks.useBillingState.mockReturnValue({ status });
+
+      render(<TrialStatusCard />);
+
+      expect(screen.queryByText(/add payment method/i)).toBeNull();
+      expect(screen.queryByText(/manage billing/i)).toBeNull();
+      expect(screen.getByText("14 days left")).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Talk to sales" }),
+      ).toBeTruthy();
+    },
+  );
+
   it("keeps only the sales trigger for a member", () => {
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(false);
 
     render(<TrialStatusCard />);
@@ -268,7 +288,7 @@ describe("TrialStatusCard", () => {
   });
 
   it("keeps only the sales trigger once the trial has ended", () => {
-    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.hasScope.mockReturnValue(true);
     vi.setSystemTime(new Date("2026-08-19T00:00:00.000Z"));
 
     render(<TrialStatusCard />);
@@ -290,3 +310,7 @@ describe("TrialStatusCard", () => {
     expect(salesTrigger.getAttribute("type")).toBe("button");
   });
 });
+
+vi.mock("@/components/ui/hooks/useConfig", () => ({
+  useConfig: () => ({ theme: "light" }),
+}));

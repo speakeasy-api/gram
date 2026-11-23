@@ -15,6 +15,7 @@ import (
 var (
 	_ Cache               = (*RedisCacheAdapter)(nil)
 	_ CompareAndSwapCache = (*RedisCacheAdapter)(nil)
+	_ MarkingConsumeCache = (*RedisCacheAdapter)(nil)
 )
 
 const mutateMaxRetries = 5
@@ -52,6 +53,33 @@ func (r *RedisCacheAdapter) GetAndDelete(ctx context.Context, key string, value 
 		return fmt.Errorf("getdel %s: %w", key, err)
 	}
 	if err := r.cache.Unmarshal(raw, value); err != nil {
+		return fmt.Errorf("unmarshal %s: %w", key, err)
+	}
+	return nil
+}
+
+// GetAndDeleteMarking reads and deletes key and sets marker in one script.
+func (r *RedisCacheAdapter) GetAndDeleteMarking(ctx context.Context, key, marker string, markerTTL time.Duration, value any) error {
+	if markerTTL < time.Millisecond {
+		return fmt.Errorf("marker lifetime must be at least one millisecond")
+	}
+	const consume = `
+local value = redis.call("GET", KEYS[1])
+if not value then
+  return false
+end
+redis.call("DEL", KEYS[1])
+redis.call("SET", KEYS[2], "1", "PX", ARGV[1])
+return value
+`
+	raw, err := r.client.Eval(ctx, consume, []string{key, marker}, markerTTL.Milliseconds()).Text()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return redisCache.ErrCacheMiss
+		}
+		return fmt.Errorf("getdel marking %s: %w", key, err)
+	}
+	if err := r.cache.Unmarshal([]byte(raw), value); err != nil {
 		return fmt.Errorf("unmarshal %s: %w", key, err)
 	}
 	return nil
@@ -101,6 +129,25 @@ func (r *RedisCacheAdapter) Add(ctx context.Context, key string, ttl time.Durati
 		return false, fmt.Errorf("setnx %s: %w", key, err)
 	}
 	return ok, nil
+}
+
+// ClaimLease atomically takes key for owner if it is absent, and reports whether owner holds it.
+func (r *RedisCacheAdapter) ClaimLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	const claim = `
+local current = redis.call("GET", KEYS[1])
+if not current then
+  redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+  return 1
+end
+if current == ARGV[1] then
+  return 1
+end
+return 0`
+	held, err := r.client.Eval(ctx, claim, []string{key}, owner, ttl.Milliseconds()).Int64()
+	if err != nil {
+		return false, fmt.Errorf("claim lease %s: %w", key, err)
+	}
+	return held == 1, nil
 }
 
 // AcquireLease sets a caller-provided ownership token only when key is absent.

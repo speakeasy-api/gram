@@ -37,10 +37,24 @@ func TestIngestCarriesDeviceTelemetryHeaders(t *testing.T) {
 	require.Equal(t, "claude", h.Get("X-Gram-Device-Harness"))
 	require.Equal(t, "cli", h.Get("X-Gram-Device-Harness-Variant"))
 	require.Empty(t, h.Get("X-Gram-Device-Harness-Version"), "claude exposes no version to hook processes")
+	require.Empty(t, h.Get("X-Gram-Device-Install-Route"), "configs without an install route send none")
 
 	elapsed, err := strconv.ParseInt(h.Get("X-Gram-Device-Elapsed-Ms"), 10, 64)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, elapsed, int64(0))
+}
+
+func TestIngestCarriesInstallRouteHeader(t *testing.T) {
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+	cfg.InstallRoute = "marketplace"
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.GreaterOrEqual(t, fs.count(), 1)
+	require.Equal(t, "marketplace", fs.headers[0].Get("X-Gram-Device-Install-Route"))
 }
 
 func TestSanitizeHeaderValueRejectsUnsafeEnvValues(t *testing.T) {

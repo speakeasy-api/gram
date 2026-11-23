@@ -13,10 +13,15 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -25,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -34,6 +40,10 @@ type bindingOwnerOnlyEngine struct{}
 
 func (bindingOwnerOnlyEngine) EvaluateLoadedGrants(context.Context, []authz.Grant, ...authz.Check) error {
 	return oops.C(oops.CodeForbidden)
+}
+
+func (bindingOwnerOnlyEngine) GetScopeOverrides(context.Context) ([]authz.RoleGrant, bool) {
+	return nil, false
 }
 
 func TestBindingsRequireOrdinaryHuman(t *testing.T) {
@@ -65,6 +75,10 @@ func TestBindingsRequireOrdinaryHuman(t *testing.T) {
 			require.Error(t, err)
 			_, err = svc.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: uuid.NewString(), UserSessionIssuerID: uuid.NewString(), RemoteSessionID: uuid.NewString()})
 			require.Error(t, err)
+			_, err = svc.BeginBindingRefresh(ctx, &gen.BeginBindingRefreshPayload{PrincipalID: uuid.NewString(), UserSessionIssuerID: uuid.NewString(), BindingID: uuid.NewString()})
+			require.Error(t, err)
+			_, err = svc.CompleteBindingRefresh(ctx, &gen.CompleteBindingRefreshPayload{PrincipalID: uuid.NewString(), UserSessionIssuerID: uuid.NewString(), AttemptID: uuid.NewString()})
+			require.Error(t, err)
 			require.Error(t, svc.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: uuid.NewString(), UserSessionIssuerID: uuid.NewString(), ID: uuid.NewString()}))
 		})
 	}
@@ -77,8 +91,12 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	require.True(t, ok)
 	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
 	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
-	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
-		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
 		if err != nil {
 			return fmt.Errorf("authorize attachment owner: %w", err)
 		}
@@ -98,17 +116,6 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	_, err = testrepo.New(ti.conn).SetAttachmentSourceIdentityFixture(ctx, testrepo.SetAttachmentSourceIdentityFixtureParams{ID: mine.ID, UpstreamEmail: mine.UpstreamEmail, UpstreamDisplayName: mine.UpstreamDisplayName, IdentitySource: mine.IdentitySource, UserSessionIssuerID: sourceConfig})
 	require.NoError(t, err)
 	theirs := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("another-user"), sourceConfig.String(), client)
-
-	// A reachable client does not make a sibling issuer's session attachable.
-	siblingConfig := createUserSessionIssuer(t, ctx, ti.conn, "binding-sibling-config")
-	siblingIssuer := createRemoteIssuer(t, ctx, ti, "binding-sibling-provider", "")
-	siblingClient := createRemoteClient(t, ctx, ti, siblingIssuer, config.String(), "binding-sibling-client")
-	sibling := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), siblingConfig.String(), siblingClient)
-	_, err = repo.New(ti.conn).AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{
-		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID,
-		UserSessionIssuerID: config, SubjectUrn: sibling.SubjectUrn.String(), RemoteSessionID: sibling.ID,
-	})
-	require.ErrorIs(t, err, pgx.ErrNoRows, "reject a mismatched issuer before the exact-session FK")
 
 	candidates, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
 	require.NoError(t, err)
@@ -179,11 +186,32 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	attach := &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: mine.ID.String()}
+	sessionAttachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionAttach)
+	require.NoError(t, err)
+	agentAttachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionAttach)
+	require.NoError(t, err)
 	binding, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	again, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.Equal(t, binding.ID, again.ID)
+	// The agent's own history records each attachment the connection's does.
+	sessionAttachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionAttach)
+	require.NoError(t, err)
+	agentAttachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionAttach)
+	require.NoError(t, err)
+	require.Positive(t, sessionAttachesAfter-sessionAttachesBefore)
+	require.Equal(t, sessionAttachesAfter-sessionAttachesBefore, agentAttachesAfter-agentAttachesBefore)
+	agentAttach, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionAttach, agent.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "agent", agentAttach.SubjectType)
+	require.Equal(t, agent.Name, agentAttach.SubjectDisplay)
+	require.Equal(t, auth.UserID, agentAttach.ActorID)
+	attachMetadata, err := audittest.DecodeAuditData(agentAttach.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, mine.ID.String(), attachMetadata["remote_session_id"])
+	require.Equal(t, binding.ID, attachMetadata["binding_id"])
+	require.Equal(t, "existing-account@example.com", attachMetadata["upstream_account"])
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	locked, err := repo.New(tx).LockPrincipalRemoteSessionBindings(ctx, repo.LockPrincipalRemoteSessionBindingsParams{
 		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config,
@@ -196,7 +224,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	testenv.SetLockTimeout(t, ctx, competingTx, probeTimeout)
 	_, detachErr := repo.New(competingTx).DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{
 		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID,
-		UserSessionIssuerID: config, SubjectUrn: mine.SubjectUrn.String(), ID: uuid.MustParse(binding.ID),
+		UserSessionIssuerID: config, ID: uuid.MustParse(binding.ID),
 	})
 	testenv.RequireLockNotAvailable(t, detachErr)
 	require.NoError(t, competingTx.Rollback(ctx))
@@ -233,7 +261,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	}()
 
 	func() {
-		t.Log("owner transfer hides prior owner bindings")
+		t.Log("owner transfer preserves explicitly delegated connections")
 		nextOwner := "binding-next-owner-" + uuid.NewString()
 		seedUser(t, ctx, ti.conn, nextOwner, "next-owner@example.com", "Next owner")
 		_, err := testrepo.New(ti.conn).CreateAttachmentMembershipFixture(ctx, testrepo.CreateAttachmentMembershipFixtureParams{OrganizationID: auth.ActiveOrganizationID, UserID: pgtype.Text{String: nextOwner, Valid: true}})
@@ -252,7 +280,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 		nextCtx := contextvalues.WithValidatedGramSession(ctx, &nextAuth, false)
 		listed, err := ti.service.ListBindings(nextCtx, payload)
 		require.NoError(t, err)
-		require.Empty(t, listed.Items, "new owners must not see even the old owner's binding identifiers")
+		require.Len(t, listed.Items, 1, "new owners can review and remove existing delegated connections")
 	}()
 
 	func() {
@@ -301,12 +329,238 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 	_, err = ti.service.AttachBinding(ctx, attach)
 	requireOopsCode(t, err, oops.CodeConflict)
 	detach := &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: list.Items[0].ID}
+	agentDetachesBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionDetach)
+	require.NoError(t, err)
 	require.NoError(t, ti.service.DetachBinding(ctx, detach))
 	require.NoError(t, ti.service.DetachBinding(ctx, detach))
+	agentDetachesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentConnectionDetach)
+	require.NoError(t, err)
+	require.Equal(t, agentDetachesBefore+1, agentDetachesAfter, "only the detach that removed the connection is recorded")
 	rebound, err := ti.service.AttachBinding(ctx, attach)
 	require.NoError(t, err)
 	require.NotEqual(t, binding.ID, rebound.ID)
 	require.Equal(t, replacement.ID.String(), rebound.RemoteSessionID)
+}
+
+// A person who signed in through a team gateway attaches that connection to an
+// agent for a member server whose issuer binds the same client. The gateway's
+// issuer is provenance only: the connection stays attachable, and an existing
+// attachment keeps resolving, after the gateway stops binding the client.
+func TestBindingsAttachConnectionMadeThroughGatewayIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Gateway attachment agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "binding-gateway-provider", "")
+	member := createUserSessionIssuer(t, ctx, ti.conn, "binding-gateway-member")
+	gateway := createUserSessionIssuer(t, ctx, ti.conn, "binding-gateway")
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuer,
+		UserSessionIssuerIds:  []string{member.String(), gateway.String()},
+		ClientID:              "binding-gateway-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	viaGateway := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), created.ID)
+
+	// The member's own issuer lists and attaches the gateway-made connection.
+	eligible := &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(member.String())}
+	candidates, err := ti.service.ListRemoteSessions(ctx, eligible)
+	require.NoError(t, err)
+	require.Len(t, candidates.Items, 1)
+	require.Equal(t, viaGateway.ID.String(), candidates.Items[0].ID)
+	attached, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: viaGateway.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, viaGateway.ID.String(), attached.RemoteSessionID)
+
+	// The runtime serves the attachment from the member's issuer.
+	resolved, err := repo.New(ti.conn).GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: member, RemoteSessionClientID: viaGateway.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.Equal(t, viaGateway.ID, resolved.ID)
+
+	// The gateway stops binding the client. Its login is untouched, so the
+	// attachment keeps resolving and the login stays attachable.
+	unlinked, err := repo.New(ti.conn).DetachProjectRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachProjectRemoteSessionClientFromUserSessionIssuerParams{
+		RemoteSessionClientID: viaGateway.RemoteSessionClientID, UserSessionIssuerID: gateway,
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), unlinked)
+	resolved, err = repo.New(ti.conn).GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: member, RemoteSessionClientID: viaGateway.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.Equal(t, viaGateway.ID, resolved.ID)
+	candidates, err = ti.service.ListRemoteSessions(ctx, eligible)
+	require.NoError(t, err)
+	require.Len(t, candidates.Items, 1)
+	require.Equal(t, viaGateway.ID.String(), candidates.Items[0].ID)
+	reattached, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: viaGateway.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, attached.ID, reattached.ID)
+
+	// The member's issuer must still bind the client itself.
+	otherIssuer := createRemoteIssuer(t, ctx, ti, "binding-gateway-other-provider", "")
+	gatewayOnly := createRemoteClient(t, ctx, ti, otherIssuer, gateway.String(), "binding-gateway-only-client")
+	stray := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), gateway.String(), gatewayOnly)
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: member.String(), RemoteSessionID: stray.ID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A detach names the account the connection signed in as, falling back to the
+// upstream display name when the upstream reports no email.
+func TestDetachBindingRecordsUpstreamAccount(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID, Name: "Detach account agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "detach-account-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "detach-account-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "detach-account-client")
+	session := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
+	_, err = testrepo.New(ti.conn).SetAttachmentSourceIdentityFixture(ctx, testrepo.SetAttachmentSourceIdentityFixtureParams{ID: session.ID, UpstreamEmail: pgtype.Text{}, UpstreamDisplayName: conv.ToPGText("Display-only account"), IdentitySource: conv.ToPGText(remotesessions.IdentitySourceIDToken), UserSessionIssuerID: config})
+	require.NoError(t, err)
+
+	binding, err := ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: session.ID.String()})
+	require.NoError(t, err)
+	attached, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionAttach, agent.ID.String())
+	require.NoError(t, err)
+	attachMetadata, err := audittest.DecodeAuditData(attached.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "Display-only account", attachMetadata["upstream_account"])
+
+	require.NoError(t, ti.service.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: binding.ID}))
+	detached, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAgentConnectionDetach, agent.ID.String())
+	require.NoError(t, err)
+	detachMetadata, err := audittest.DecodeAuditData(detached.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, binding.ID, detachMetadata["binding_id"])
+	require.Equal(t, "Display-only account", detachMetadata["upstream_account"])
+}
+
+// Exercise delegated edit and authorize permissions independently.
+type bindingDelegatedEngine struct{ authorizeOnly bool }
+
+func (bindingDelegatedEngine) GetScopeOverrides(context.Context) ([]authz.RoleGrant, bool) {
+	return nil, false
+}
+
+func (e bindingDelegatedEngine) EvaluateLoadedGrants(_ context.Context, _ []authz.Grant, checks ...authz.Check) error {
+	for _, check := range checks {
+		if e.authorizeOnly && check.Scope != authz.ScopeAgentAuthorize {
+			return oops.C(oops.CodeForbidden)
+		}
+	}
+	return nil
+}
+
+func TestEditorsAttachOnlyTheirOwnSessionsAndReplaceAssignments(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = contextvalues.WithValidatedGramSession(ctx, auth, false)
+	authorizer := agentmanagement.NewAuthorizer(bindingDelegatedEngine{})
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+	owner := "binding-delegating-owner-" + uuid.NewString()
+	seedUser(t, ctx, ti.conn, owner, "delegating-owner@example.com", "Delegating owner")
+	_, err := testrepo.New(ti.conn).CreateAttachmentMembershipFixture(ctx, testrepo.CreateAttachmentMembershipFixtureParams{OrganizationID: auth.ActiveOrganizationID, UserID: pgtype.Text{String: owner, Valid: true}})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: owner, Name: "Delegated attachment agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "binding-delegated-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "binding-delegated-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-delegated-client")
+	managers := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(auth.UserID), config.String(), client)
+	owners := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(owner), config.String(), client)
+
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: managers.ID.String()})
+	require.NoError(t, err)
+	resolved, err := repo.New(ti.conn).GetPrincipalRemoteSessionBinding(ctx, repo.GetPrincipalRemoteSessionBindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, PrincipalID: agent.ID, UserSessionIssuerID: config, RemoteSessionClientID: managers.RemoteSessionClientID})
+	require.NoError(t, err)
+	require.Equal(t, managers.ID, resolved.ID)
+
+	ownerAuth := *auth
+	ownerAuth.UserID = owner
+	ownerCtx := contextvalues.WithValidatedGramSession(ctx, &ownerAuth, false)
+	current, err := ti.service.ListBindings(ownerCtx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
+	require.NoError(t, err)
+	require.Len(t, current.Items, 1)
+	ti.service.SetBindingRefreshAttempts(remotesessions.NewBindingRefreshAttempts(testenv.NewLogger(t), ti.redisCache))
+	_, err = ti.service.BeginBindingRefresh(ownerCtx, &gen.BeginBindingRefreshPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), BindingID: current.Items[0].ID})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	refreshAttempt, err := ti.service.BeginBindingRefresh(ctx, &gen.BeginBindingRefreshPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), BindingID: current.Items[0].ID})
+	require.NoError(t, err)
+	_, err = ti.service.CompleteBindingRefresh(ownerCtx, &gen.CompleteBindingRefreshPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), AttemptID: refreshAttempt.AttemptID})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	cancelled, err := ti.service.CompleteBindingRefresh(ctx, &gen.CompleteBindingRefreshPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), AttemptID: refreshAttempt.AttemptID})
+	require.NoError(t, err)
+	require.False(t, cancelled.Completed, "other editor cannot consume the caller's receipt")
+	_, err = ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: owners.ID.String()})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.NoError(t, ti.service.DetachBinding(ownerCtx, &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: current.Items[0].ID}))
+	attached, err := ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: owners.ID.String()})
+	require.NoError(t, err, "a refused attachment leaves the client's slot free for the owner")
+	require.Equal(t, owners.ID.String(), attached.RemoteSessionID)
+
+	listed, err := ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 1, "authorized managers can identify the owner's assignment")
+	require.Equal(t, urn.NewUserSubject(owner).String(), listed.Items[0].RemoteSession.SubjectUrn)
+	_, err = ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: managers.ID.String()})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	authorizer = agentmanagement.NewAuthorizer(bindingDelegatedEngine{authorizeOnly: true})
+	_, err = ti.service.BeginBindingRefresh(ctx, &gen.BeginBindingRefreshPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), BindingID: attached.ID})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.CompleteBindingRefresh(ctx, &gen.CompleteBindingRefreshPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), AttemptID: refreshAttempt.AttemptID})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
+	require.NoError(t, err)
+	_, err = ti.service.AttachBinding(ctx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: managers.ID.String()})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	err = ti.service.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: attached.ID})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestListRemoteSessionsRequiresPairedEligibilityFilters(t *testing.T) {
@@ -326,7 +580,7 @@ func TestListRemoteSessionsRequiresPairedEligibilityFilters(t *testing.T) {
 func TestConsentBindingsRejectDifferentAgentOrIssuer(t *testing.T) {
 	t.Parallel()
 	svc := &remotesessions.Service{}
-	svc.SetBindingAuthorizer(func(context.Context, pgx.Tx, uuid.UUID) error {
+	svc.SetBindingAuthorizer(func(context.Context, pgx.Tx, uuid.UUID, bool) error {
 		t.Fatal("mismatched scope must fail before starting a transaction")
 		return nil
 	})
@@ -339,4 +593,83 @@ func TestConsentBindingsRejectDifferentAgentOrIssuer(t *testing.T) {
 		require.Error(t, err)
 		require.Error(t, svc.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: scope[0], UserSessionIssuerID: scope[1], ID: uuid.NewString()}))
 	}
+}
+
+// A platform admin previewing roles sends a scope override with every
+// dashboard request. Reading an agent's attachments under it must follow the
+// same rule as the rest of the agent's pages: the override narrows the live
+// grants and never refuses outright, nor widens them.
+func TestBindingsReadUnderScopeOverrideNarrowsLiveGrants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	viewer := *auth
+	viewer.IsAdmin = true
+	ctx = contextvalues.WithValidatedGramSession(ctx, &viewer, false)
+	engine := authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authorizer := agentmanagement.NewAuthorizer(engine)
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil && !write {
+			_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
+		}
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+
+	owner := "binding-override-owner-" + uuid.NewString()
+	seedUser(t, ctx, ti.conn, owner, "override-owner@example.com", "Override owner")
+	_, err := testrepo.New(ti.conn).CreateAttachmentMembershipFixture(ctx, testrepo.CreateAttachmentMembershipFixtureParams{OrganizationID: auth.ActiveOrganizationID, UserID: pgtype.Text{String: owner, Valid: true}})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{OrganizationID: auth.ActiveOrganizationID, OwnerUserID: owner, Name: "Override attachment agent"})
+	require.NoError(t, err)
+	issuer := createRemoteIssuer(t, ctx, ti, "binding-override-provider", "")
+	config := createUserSessionIssuer(t, ctx, ti.conn, "binding-override-config")
+	client := createRemoteClient(t, ctx, ti, issuer, config.String(), "binding-override-client")
+	owners := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject(owner), config.String(), client)
+	ownerAuth := *auth
+	ownerAuth.UserID = owner
+	ownerCtx := contextvalues.WithValidatedGramSession(ctx, &ownerAuth, false)
+	_, err = ti.service.AttachBinding(ownerCtx, &gen.AttachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), RemoteSessionID: owners.ID.String()})
+	require.NoError(t, err)
+
+	// The viewer owns neither the agent nor the attached connection; the
+	// live grant to manage agents is what lets them see it.
+	editGrant := authz.NewGrant(authz.ScopeAgentWrite, authz.WildcardResource)
+	selector, err := editGrant.Selector.MarshalJSON()
+	require.NoError(t, err)
+	granted, err := accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: auth.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, viewer.UserID), Scope: string(editGrant.Scope), Selectors: selector})
+	require.NoError(t, err)
+
+	list := func(ctx context.Context) (*gen.ListBindingsResult, error) {
+		return ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
+	}
+	listed, err := list(ctx)
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 1)
+
+	previewing := contextvalues.SetRBACScopeOverride(ctx, "agent:write,mcp:read")
+	listed, err = list(previewing)
+	require.NoError(t, err, "a role preview that keeps agent management still reads the attachments")
+	require.Len(t, listed.Items, 1)
+	require.Equal(t, urn.NewUserSubject(owner).String(), listed.Items[0].RemoteSession.SubjectUrn)
+	_, err = ti.service.ListRemoteSessions(previewing, &gen.ListRemoteSessionsPayload{PrincipalID: conv.PtrEmpty(agent.ID.String()), UserSessionIssuerID: conv.PtrEmpty(config.String())})
+	require.NoError(t, err)
+
+	_, err = list(contextvalues.SetRBACScopeOverride(ctx, "mcp:read"))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	// Nor does an override widen: without the live grant, the same preview
+	// is refused.
+	_, err = accessrepo.New(ti.conn).DeletePrincipalGrant(ctx, accessrepo.DeletePrincipalGrantParams{ID: granted.ID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
+	_, err = list(previewing)
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

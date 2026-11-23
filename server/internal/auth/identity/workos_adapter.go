@@ -2,10 +2,15 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
+
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
 // WorkOSAdapter wraps the WorkOS usermanagement.Client to implement both
@@ -53,6 +58,9 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 		UserAgent:    "",
 	})
 	if err != nil {
+		if providerErr, ok := errors.AsType[workos_errors.HTTPError](err); ok && providerErr.Code == http.StatusBadRequest && providerErr.ErrorCode == oautherr.CodeInvalidGrant {
+			return nil, fmt.Errorf("workos authenticate: %w", errors.Join(ErrCodeRejected, err))
+		}
 		return nil, fmt.Errorf("workos authenticate: %w", err)
 	}
 
@@ -113,7 +121,7 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 		AuthenticationMethod: string(resp.AuthenticationMethod),
 		// The server redeems this code itself, so nothing here was proven by
 		// the user and the sign-in never qualifies.
-		Evidence: SignInEvidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", AuthenticatedAt: time.Time{}},
+		Evidence: SignInEvidence{HostedDomain: "", HostedDomainChecked: false, TenantID: "", VerifiedEmail: "", AuthenticatedAt: time.Time{}},
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,

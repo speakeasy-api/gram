@@ -57,6 +57,10 @@ export type AdminMcpServer = {
    */
   source: AdminMcpServerSource;
   /**
+   * The upstream URL for a remote MCP server. Omitted for other server types.
+   */
+  upstreamUrl?: string | undefined;
+  /**
    * The URL clients connect to. Omitted when the server has no routable address.
    */
   url?: string | undefined;
@@ -89,12 +93,14 @@ export const AdminMcpServer$inboundSchema: z.ZodMiniType<
     id: z.string(),
     name: z.string(),
     source: AdminMcpServerSource$inboundSchema,
+    upstream_url: z.optional(z.string()),
     url: z.optional(z.string()),
     visibility: AdminMcpServerVisibility$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "upstream_url": "upstreamUrl",
     });
   }),
 );

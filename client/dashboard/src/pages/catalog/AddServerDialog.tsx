@@ -1,20 +1,48 @@
-import { catalogLogoClassName } from "./logo";
+import { pendingAccountProvider } from "./account-provider";
+import { effectiveAction } from "@/pages/security/server-guardrails/server-guardrail-policy";
+import { policyNewPrefillQuery } from "@/pages/security/policy-new-prefill";
+import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
+import {
+  catalogServerHasGuidedSetup,
+  providerSetupInstallTarget,
+} from "@/pages/mcp/x/setup/provider-setup";
+import { salesforceSetupInstallServer } from "./provider-setup/salesforce";
+import { useNavigate } from "react-router";
+import { CatalogLogo } from "./CatalogLogo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
+import {
+  ShadowMCPReplacementNotice,
+  ShadowMCPReplacementOption,
+} from "./ShadowMCPReplacement";
+import {
+  shadowMCPReplacementQuestions,
+  useShadowMCPReplacement,
+  type ShadowMCPReplacementState,
+} from "./useShadowMCPReplacement";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
-import { useAgentCredentialFields } from "@/lib/remote-identity";
+import {
+  isOAuthFormat,
+  ServiceAccountPanel,
+  useAgentCredentialFields,
+  useCustomerManagedKeys,
+  useServiceAccountClientDraft,
+  type AgentCredentialFields,
+  type ServiceAccountClientSpec,
+  type ServiceAccountFormat,
+} from "@/lib/remote-identity";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import { Card } from "@/components/ui/Card";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -25,15 +53,13 @@ import {
   ArrowRight,
   Check,
   Circle,
-  Loader2,
   Plug,
   Plus,
   Server as ServerIcon,
-  Settings,
   TriangleAlert,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type CompletePhase,
   type ConfigurePhase,
@@ -50,12 +76,13 @@ import {
   getRemoteDisplayInfo,
   isFigmaCatalogServer,
 } from "./remotes";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 export interface AddServerDialogProps {
-  servers: PulseMCPServer[];
+  servers: CatalogServer[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onServersAdded?: () => void;
   onInstallFinished?: (result: {
     projectSlug?: string;
     status: "succeeded" | "failed";
@@ -70,6 +97,10 @@ export interface AddServerDialogProps {
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
+  /** Catalog-only handoff; headless and plugin callers retain their workflow. */
+  openProviderSetup?: boolean;
+  /** Keep the selected gateway when native Snowflake needs guided setup first. */
+  attachToGatewayId?: string;
   /** When true, starts the install as soon as the default configuration is ready. */
   autoStartInstall?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
@@ -82,10 +113,10 @@ export interface AddServerDialogProps {
  * strip their headers, so the details call is the authoritative source for the
  * endpoint data the install flow needs.
  */
-const EMPTY_SERVERS: PulseMCPServer[] = [];
+const EMPTY_SERVERS: CatalogServer[] = [];
 
 function useEnrichedServers(
-  servers: PulseMCPServer[],
+  servers: CatalogServer[],
   open: boolean,
   targetProjectSlug?: string,
 ) {
@@ -128,11 +159,7 @@ function useEnrichedServers(
                 return current;
               })
             : details.remotes;
-          return filterToHttpRemotes({
-            ...server,
-            tools: details.tools,
-            remotes,
-          });
+          return filterToHttpRemotes({ ...server, remotes });
         }),
       ),
   });
@@ -170,13 +197,18 @@ export function AddServerDialog({
   servers,
   open,
   onOpenChange,
-  onServersAdded,
   onInstallFinished,
   projectSlug,
   bulk,
+  openProviderSetup = false,
+  attachToGatewayId,
   autoStartInstall,
   headless,
 }: AddServerDialogProps): JSX.Element | null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  const setupHandoffRef = useRef(false);
+
   // Fetch server details (including remotes) when dialog opens
   const {
     enrichedServers,
@@ -184,6 +216,52 @@ export function AddServerDialog({
     error: detailsError,
     beforeInstall,
   } = useEnrichedServers(servers, open, projectSlug);
+
+  const [salesforceIdentity, setSalesforceIdentity] = useState<
+    Pick<ServerConfig, "identityMode" | "name"> | undefined
+  >();
+  const salesforceEntry = useMemo(() => {
+    if (
+      !openProviderSetup ||
+      bulk ||
+      headless ||
+      autoStartInstall ||
+      enrichedServers.length !== 1
+    )
+      return null;
+    return salesforceSetupInstallServer(enrichedServers[0]!);
+  }, [openProviderSetup, bulk, headless, autoStartInstall, enrichedServers]);
+  const guidedSalesforce =
+    !!salesforceEntry &&
+    (salesforceIdentity?.identityMode ?? "user") === "user";
+  const installServers = useMemo(
+    () =>
+      guidedSalesforce && salesforceEntry ? [salesforceEntry] : enrichedServers,
+    [guidedSalesforce, salesforceEntry, enrichedServers],
+  );
+  const initialConfiguration = useMemo(() => {
+    if (
+      (!openProviderSetup && !attachToGatewayId) ||
+      bulk ||
+      headless ||
+      autoStartInstall ||
+      enrichedServers.length !== 1
+    )
+      return undefined;
+    const server = enrichedServers[0]!;
+    if (!catalogServerHasGuidedSetup(server)) return undefined;
+    if (salesforceEntry && salesforceIdentity) return salesforceIdentity;
+    return { identityMode: "user" as const };
+  }, [
+    openProviderSetup,
+    attachToGatewayId,
+    bulk,
+    headless,
+    autoStartInstall,
+    enrichedServers,
+    salesforceEntry,
+    salesforceIdentity,
+  ]);
 
   // Use enriched servers (with remotes) for the workflow. Callers that run
   // without a visible dialog can never answer the selectRemotes phase, so
@@ -194,10 +272,31 @@ export function AddServerDialog({
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
-  const releaseState = useRemoteMcpInstallWorkflow({
-    servers: enrichedServers,
-    beforeInstall,
+  // Adding a server people already reach directly offers to replace that
+  // Shadow MCP version. Nobody answers the question in a headless or
+  // auto-started install, so those add the server only.
+  // Unproxied servers (e.g. Figma) never pass through Speakeasy, so they
+  // cannot stand in for a Shadow MCP server.
+  const proxiedServers = useMemo(
+    () => enrichedServers.filter((server) => !isFigmaCatalogServer(server)),
+    [enrichedServers],
+  );
+  const shadowReplacement = useShadowMCPReplacement({
+    servers: proxiedServers,
     projectSlug,
+    enabled: open && !headless && !autoStartInstall,
+  });
+  const workflow = useRemoteMcpInstallWorkflow({
+    servers: installServers,
+    initialConfiguration,
+    beforeInstall,
+    accountSetupEnabled:
+      !!(openProviderSetup || attachToGatewayId) &&
+      !bulk &&
+      !headless &&
+      !autoStartInstall,
+    projectSlug,
+    shadowMCPReplacements: shadowReplacement.selected,
     autoSelectRemotes: !!(autoStartInstall || headless),
     offerGuardrails:
       mcpScoped &&
@@ -207,6 +306,26 @@ export function AddServerDialog({
       // Unproxied servers (e.g. Figma) never pass through Speakeasy.
       enrichedServers.some((server) => !isFigmaCatalogServer(server)),
   });
+  const releaseState = useMemo<RemoteMcpInstallWorkflow>(
+    () =>
+      salesforceEntry && workflow.phase === "configure"
+        ? {
+            ...workflow,
+            updateServerConfig: (index, updates) => {
+              if (
+                updates.identityMode &&
+                (updates.identityMode === "user") !== guidedSalesforce
+              ) {
+                setSalesforceIdentity({
+                  identityMode: updates.identityMode,
+                  name: workflow.serverConfigs[index]!.name,
+                });
+              } else workflow.updateServerConfig(index, updates);
+            },
+          }
+        : workflow,
+    [salesforceEntry, guidedSalesforce, workflow],
+  );
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);
   const finishedRef = useRef(false);
@@ -214,16 +333,86 @@ export function AddServerDialog({
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
+      setSalesforceIdentity(undefined);
+      setupHandoffRef.current = false;
       releaseState.reset();
+      shadowReplacement.reset();
       autoStartRef.current = false;
       finishedRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when dialog open/close state changes, not on every releaseState update
   }, [open]);
 
+  // Signing key clients are made from the configure step, before the server
+  // exists, so their drafts cannot clean them up: a draft unmounts on every
+  // step change. Track them here until an install takes them over, and delete
+  // any the dialog lets go of — a changed choice, Back, or closing.
+  const client = useSdkClient();
+  const pendingSigningClients = useRef(new Set<string>());
+  const deleteSigningClient = useCallback(
+    (id: string) => {
+      void client.remoteSessionClients
+        .delete(
+          { id },
+          undefined,
+          projectSlug
+            ? { headers: { "gram-project": projectSlug } }
+            : undefined,
+        )
+        .catch((error: unknown) =>
+          console.error("Couldn't delete an unused signing key client", error),
+        );
+    },
+    [client, projectSlug],
+  );
+  const referencedSigningClients =
+    releaseState.phase === "configure"
+      ? releaseState.serverConfigs
+          .flatMap((config) =>
+            config.serviceAccountClient?.format === "signing-key"
+              ? [config.serviceAccountClient.clientRowId]
+              : [],
+          )
+          .join(",")
+      : null;
+  useEffect(() => {
+    const pending = pendingSigningClients.current;
+    if (
+      releaseState.phase === "installing" ||
+      releaseState.phase === "complete"
+    ) {
+      // The install binds them, or reports the server for setup.
+      pending.clear();
+      return;
+    }
+    if (referencedSigningClients === null) return;
+    const referenced = new Set(
+      referencedSigningClients ? referencedSigningClients.split(",") : [],
+    );
+    for (const id of pending) {
+      if (!referenced.has(id)) {
+        pending.delete(id);
+        deleteSigningClient(id);
+      }
+    }
+    for (const id of referenced) pending.add(id);
+  }, [releaseState.phase, referencedSigningClients, deleteSigningClient]);
+  useEffect(() => {
+    if (open) return;
+    for (const id of pendingSigningClients.current) deleteSigningClient(id);
+    pendingSigningClients.current.clear();
+  }, [open, deleteSigningClient]);
+  useEffect(
+    () => () => {
+      for (const id of pendingSigningClients.current) deleteSigningClient(id);
+    },
+    [deleteSigningClient],
+  );
+
   useEffect(() => {
     autoStartRef.current = false;
     finishedRef.current = false;
+    setSalesforceIdentity(undefined);
   }, [projectSlug, serversKey]);
 
   useEffect(() => {
@@ -250,23 +439,56 @@ export function AddServerDialog({
     };
   }, []);
 
-  // Notify parent when all installs are done
-  const allInstallsDone =
-    releaseState.phase === "complete" &&
-    releaseState.statuses.length > 0 &&
-    releaseState.statuses.every(
-      (s) => s.status === "completed" || s.status === "failed",
-    );
-  const prevAllDoneRef = useRef(false);
   useEffect(() => {
-    if (allInstallsDone && !prevAllDoneRef.current) {
-      prevAllDoneRef.current = true;
-      onServersAdded?.();
+    if (
+      !open ||
+      headless ||
+      autoStartInstall ||
+      setupHandoffRef.current ||
+      releaseState.phase !== "complete"
+    )
+      return;
+    const target = providerSetupInstallTarget(
+      enrichedServers,
+      releaseState.statuses,
+    );
+    if (!target) return;
+    const status = releaseState.statuses[0]!;
+    const pendingAccount = pendingAccountProvider(status.remoteUrl);
+    if (!openProviderSetup && !(attachToGatewayId && pendingAccount)) return;
+    const params = new URLSearchParams();
+    if (attachToGatewayId && pendingAccount)
+      params.set("attachToGateway", attachToGatewayId);
+    if (status.setupPolicy) {
+      params.set("customizePolicy", "true");
+      const prefill = new URLSearchParams(
+        policyNewPrefillQuery({
+          categories: status.setupPolicy.categories,
+          action: effectiveAction(status.setupPolicy),
+          score: status.setupPolicy.score,
+          mcpServerIds: [status.mcpServerId!],
+          name: `${status.name} guardrail`,
+        }),
+      );
+      for (const [key, value] of prefill) params.set(key, value);
     }
-    if (!allInstallsDone) {
-      prevAllDoneRef.current = false;
-    }
-  }, [allInstallsDone, onServersAdded]);
+    setupHandoffRef.current = true;
+    onOpenChange(false);
+    void navigate(
+      routes.mcp.details.setup.href(target) + (params.size ? `?${params}` : ""),
+    );
+  }, [
+    openProviderSetup,
+    attachToGatewayId,
+    open,
+    headless,
+    autoStartInstall,
+    releaseState,
+    enrichedServers,
+    onOpenChange,
+    navigate,
+    routes,
+  ]);
 
   useEffect(() => {
     if (!open || !onInstallFinished || finishedRef.current) return;
@@ -374,9 +596,12 @@ export function AddServerDialog({
             <Dialog.Title>Loading...</Dialog.Title>
             <Dialog.Description>Fetching server details...</Dialog.Description>
           </Dialog.Header>
-          <div className="flex items-center justify-center gap-2 py-8">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-            <Text muted>Loading server configuration...</Text>
+          <div className="py-4">
+            <Skeleton label="Loading server configuration">
+              <div className="h-5 w-48" />
+              <div className="h-9 w-full" />
+              <div className="h-9 w-full" />
+            </Skeleton>
           </div>
         </Dialog.Content>
       </Dialog>
@@ -420,7 +645,8 @@ export function AddServerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="gap-2">
+      {/* Pin the column to the dialog width so long URLs truncate instead of widening it. */}
+      <Dialog.Content className="grid-cols-[minmax(0,1fr)] gap-2">
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>
@@ -431,6 +657,7 @@ export function AddServerDialog({
           releaseState={releaseState}
           isSingle={isSingle}
           bulk={bulk}
+          shadowReplacement={shadowReplacement}
           onClose={() => onOpenChange(false)}
         />
       </Dialog.Content>
@@ -490,11 +717,13 @@ function PhaseContent({
   releaseState,
   isSingle,
   bulk,
+  shadowReplacement,
   onClose,
 }: {
   releaseState: RemoteMcpInstallWorkflow;
   isSingle: boolean;
   bulk?: boolean;
+  shadowReplacement: ShadowMCPReplacementState;
   onClose: () => void;
 }) {
   switch (releaseState.phase) {
@@ -510,13 +739,12 @@ function PhaseContent({
         <ConfigurePhaseContent
           releaseState={releaseState}
           bulk={bulk}
+          shadowReplacement={shadowReplacement}
           onClose={onClose}
         />
       );
     case "guardrails":
-      return (
-        <CatalogGuardrailsPhase releaseState={releaseState} onClose={onClose} />
-      );
+      return <CatalogGuardrailsPhase releaseState={releaseState} />;
     case "installing":
       return <InstallStatusList statuses={releaseState.statuses} />;
     case "complete":
@@ -586,18 +814,14 @@ function SelectRemotesPhaseContent({
         {/* Server icon and info */}
         <div className="flex items-center gap-3">
           <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center">
-            {currentConfig.server.iconUrl ? (
-              <img
-                src={currentConfig.server.iconUrl}
-                alt=""
-                className={cn(
-                  "h-6 w-6",
-                  catalogLogoClassName(currentConfig.server.registrySpecifier),
-                )}
-              />
-            ) : (
-              <ServerIcon className="text-muted-foreground h-5 w-5" />
-            )}
+            <CatalogLogo
+              server={currentConfig.server}
+              alt=""
+              className={cn("h-6 w-6")}
+              fallback={
+                <ServerIcon className="text-muted-foreground h-5 w-5" />
+              }
+            />
           </div>
           <div className="min-w-0 flex-1">
             <Text className="truncate font-medium">
@@ -716,10 +940,12 @@ function SelectRemotesPhaseContent({
 function ConfigurePhaseContent({
   releaseState,
   bulk,
+  shadowReplacement,
   onClose,
 }: {
   releaseState: ConfigurePhase;
   bulk?: boolean;
+  shadowReplacement: ShadowMCPReplacementState;
   onClose: () => void;
 }) {
   const project = useProject();
@@ -749,16 +975,33 @@ function ConfigurePhaseContent({
       );
   // When every server came through the selectRemotes phase and none needs
   // header values, there is nothing left to configure — install immediately.
+  const shadowQuestions = shadowMCPReplacementQuestions(
+    shadowReplacement.candidates,
+    new Set(
+      releaseState.serverConfigs.flatMap((config) =>
+        config.remotes.map((remote) => remote.url),
+      ),
+    ),
+  );
+  // A matching Shadow MCP server is a question to ask, so the step waits for
+  // the lookup and stays when there is one.
   const nothingToConfigure =
-    singleRemoteConfigs.length === 0 && !hasHeaderInputs && !hasIdentityChoices;
+    singleRemoteConfigs.length === 0 &&
+    !hasHeaderInputs &&
+    !hasIdentityChoices &&
+    !shadowReplacement.isLoading &&
+    shadowQuestions.length === 0;
 
   const userIdentityPermissionBlocked =
     !canCreateIdentity &&
     releaseState.serverConfigs.some((config) => config.identityMode === "user");
+  // Adding before the Shadow MCP lookup answers would skip the replace
+  // question; a failed lookup ends loading and adds the server only.
   const canSubmit =
     releaseState.canInstall &&
     missingRequiredHeaders === 0 &&
-    !userIdentityPermissionBlocked;
+    !userIdentityPermissionBlocked &&
+    !shadowReplacement.isLoading;
 
   // With guardrails on offer, finishing Configure moves to that step; the
   // install itself starts from there.
@@ -791,7 +1034,7 @@ function ConfigurePhaseContent({
   ) {
     return (
       <div className="flex items-center justify-center gap-2 py-4">
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Spinner className="mr-0" />
         <Text small muted>
           Starting install...
         </Text>
@@ -821,6 +1064,10 @@ function ConfigurePhaseContent({
           rbacLoading={rbacLoading}
         />
         {!bulk && <HeaderValueSections releaseState={releaseState} />}
+        <ShadowMCPReplacementOption
+          state={shadowReplacement}
+          questions={shadowQuestions}
+        />
         {releaseState.installBlockedReason && (
           <InstallBlockedWarning reason={releaseState.installBlockedReason} />
         )}
@@ -843,7 +1090,9 @@ function ConfigurePhaseContent({
               // Skipping header values is not a way around the identity
               // permission check: the same install runs either way.
               disabled={
-                !releaseState.canInstall || userIdentityPermissionBlocked
+                !releaseState.canInstall ||
+                userIdentityPermissionBlocked ||
+                shadowReplacement.isLoading
               }
               onClick={() => advance()}
             >
@@ -914,7 +1163,12 @@ function CatalogServerIdentity({
   rbacLoading: boolean;
 }) {
   const credential = useAgentCredentialFields();
-  const authorizationValue = credential.authorizationValue;
+  const [format, setFormat] = useState<ServiceAccountFormat>("bearer");
+  // A static credential and an OAuth client are alternatives: only the one
+  // on screen reaches the install.
+  const authorizationValue = isOAuthFormat(format)
+    ? ""
+    : credential.authorizationValue;
   // releaseState is rebuilt every render; its updater is not, so depend on the
   // updater alone or this re-runs on every parent render.
   const { updateServerConfig } = releaseState;
@@ -946,12 +1200,95 @@ function CatalogServerIdentity({
         }
         credential={credential}
         upstreamName={config.name || "this server"}
-        advertisesOAuth={!!config.server.supportsDcr}
+        advertisesOAuth={supportsAutomaticOAuth(config.server)}
         authenticationRequired={false}
         canCreateIdentity={canCreateIdentity}
         rbacLoading={rbacLoading}
+        serviceAccountPanel={
+          config.identityMode === "agent" ? (
+            <CatalogServiceAccount
+              config={config}
+              index={index}
+              updateServerConfig={updateServerConfig}
+              projectSlug={releaseState.projectSlug}
+              format={format}
+              onFormatChange={setFormat}
+              credential={credential}
+            />
+          ) : null
+        }
       />
     </div>
+  );
+}
+
+/**
+ * The full Service Account choice — static credentials and OAuth clients —
+ * mounted only while Service Account is chosen, so its provider lookups run
+ * only then. The server doesn't exist yet, so the OAuth client is collected
+ * here and bound by the install once the server is created.
+ */
+function CatalogServiceAccount({
+  config,
+  index,
+  updateServerConfig,
+  projectSlug,
+  format,
+  onFormatChange,
+  credential,
+}: {
+  config: ServerConfig;
+  index: number;
+  updateServerConfig: ConfigurePhase["updateServerConfig"];
+  /** The project the server is installed into, which may not be this one. */
+  projectSlug?: string;
+  format: ServiceAccountFormat;
+  onFormatChange: (format: ServiceAccountFormat) => void;
+  credential: AgentCredentialFields;
+}) {
+  const routes = useRoutes(projectSlug ? { projectSlug } : undefined);
+  // This draft unmounts when the dialog moves on, before the install binds
+  // its signing key client, so unmounting must not delete that client.
+  const clientDraft = useServiceAccountClientDraft({
+    boundClient: undefined,
+    deleteCreatedOnUnmount: false,
+  });
+  const { entitled: customerManagedKeys } = useCustomerManagedKeys();
+  const serviceAccountKey = JSON.stringify(
+    isOAuthFormat(format) ? clientDraft.spec(format) : null,
+  );
+
+  // The spec is rebuilt every render, so compare it by value.
+  useEffect(() => {
+    if (JSON.stringify(config.serviceAccountClient) !== serviceAccountKey) {
+      updateServerConfig(index, {
+        serviceAccountClient: JSON.parse(
+          serviceAccountKey,
+        ) as ServiceAccountClientSpec | null,
+      });
+    }
+  }, [
+    serviceAccountKey,
+    config.serviceAccountClient,
+    index,
+    updateServerConfig,
+  ]);
+
+  return (
+    <ServiceAccountPanel
+      compact
+      format={format}
+      onFormatChange={onFormatChange}
+      agentDraft={credential}
+      clientDraft={clientDraft}
+      upstreamName={config.name || "this server"}
+      disabled={false}
+      customerManagedKeys={customerManagedKeys}
+      providersHref={routes.remoteIdentityProviders.href()}
+      clientHref={(issuerId, clientId) =>
+        routes.remoteIdentityProviders.clientDetail.href(issuerId, clientId)
+      }
+    />
   );
 }
 
@@ -1022,18 +1359,14 @@ function BatchServerConfig({
           >
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center">
-                {config.server.iconUrl ? (
-                  <img
-                    src={config.server.iconUrl}
-                    alt=""
-                    className={cn(
-                      "h-4 w-4",
-                      catalogLogoClassName(config.server.registrySpecifier),
-                    )}
-                  />
-                ) : (
-                  <ServerIcon className="text-muted-foreground h-3 w-3" />
-                )}
+                <CatalogLogo
+                  server={config.server}
+                  alt=""
+                  className={cn("h-4 w-4")}
+                  fallback={
+                    <ServerIcon className="text-muted-foreground h-3 w-3" />
+                  }
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <Input
@@ -1321,23 +1654,21 @@ function CompletePhaseContent({
 
   return (
     <div className="space-y-4 pb-2">
-      {/* Success header when all done */}
-      {allSucceeded && (
-        <div className="flex items-center gap-3 border border-emerald-500/20 bg-emerald-500/10 p-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
-            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div>
-            <Text className="font-medium text-emerald-700 dark:text-emerald-300">
-              {successCount === 1
-                ? "Server added successfully"
-                : `${successCount} servers added successfully`}
-            </Text>
-          </div>
-        </div>
-      )}
+      {/* The added server, linking to its page, when all done */}
+      {allSucceeded && firstCompleted ? (
+        <AddedServerCard
+          status={firstCompleted}
+          releaseState={releaseState}
+          moreCount={successCount - 1}
+        />
+      ) : null}
 
       <GuardrailOutcomeNotice outcome={releaseState.guardrail} />
+
+      <ShadowMCPReplacementNotice
+        outcomes={releaseState.shadowReplacements}
+        projectSlug={releaseState.projectSlug}
+      />
 
       {/* Per-server results — only shown if something failed */}
       {!allSucceeded && (
@@ -1422,7 +1753,7 @@ function InstallStatusRow({
     // Created, but held disabled until identity is finished: a next step,
     // not a failure, so it reads in warning tones and says what to do.
     return (
-      <routes.mcp.x.settings.Link
+      <routes.mcp.details.settings.Link
         params={[status.mcpServerParam!]}
         hash="authentication"
         className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
@@ -1442,7 +1773,7 @@ function InstallStatusRow({
             <ArrowRight className="h-3 w-3" />
           </span>
         </div>
-      </routes.mcp.x.settings.Link>
+      </routes.mcp.details.settings.Link>
     );
   }
 
@@ -1469,12 +1800,12 @@ function InstallStatusRow({
 
   if (isCompleted) {
     return (
-      <routes.mcp.x.Link
+      <routes.mcp.details.Link
         params={[status.mcpServerParam!]}
         className="block no-underline transition-opacity hover:no-underline hover:opacity-80"
       >
         {content}
-      </routes.mcp.x.Link>
+      </routes.mcp.details.Link>
     );
   }
 
@@ -1490,14 +1821,81 @@ function InstallStatusIcon({
     case "pending":
       return <Circle className="text-muted-foreground h-4 w-4 shrink-0" />;
     case "creating":
-      return (
-        <Loader2 className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
-      );
+      return <Spinner className="text-muted-foreground mr-0 shrink-0" />;
     case "completed":
       return <Check className="h-4 w-4 shrink-0 text-emerald-500" />;
     case "failed":
       return <X className="text-destructive h-4 w-4 shrink-0" />;
   }
+}
+
+/** The added server as a card that opens its page — the primary next step. */
+function AddedServerCard({
+  status,
+  releaseState,
+  moreCount,
+}: {
+  status: ServerInstallStatus;
+  releaseState: CompletePhase;
+  /** Other servers added alongside this one. */
+  moreCount: number;
+}) {
+  const routes = useTargetRoutes(releaseState);
+  const server = status.server;
+
+  return (
+    <routes.mcp.details.Link
+      params={[status.mcpServerParam!]}
+      className="focus-visible:ring-ring block no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+    >
+      <Card.Entity
+        className="min-h-[128px] cursor-pointer [&_*]:no-underline"
+        iconRailClassName="w-32"
+        icon={
+          server ? (
+            <CatalogLogo
+              server={server}
+              alt=""
+              className={cn("h-10 w-10 object-contain")}
+              fallback={
+                <ServerIcon className="text-muted-foreground h-8 w-8" />
+              }
+            />
+          ) : (
+            <ServerIcon className="text-muted-foreground h-8 w-8" />
+          )
+        }
+        overlay={
+          <div className="absolute top-2 left-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20">
+            <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          </div>
+        }
+      >
+        <div className="flex h-full flex-col gap-1">
+          <Text
+            small
+            className="font-medium text-emerald-700 dark:text-emerald-300"
+          >
+            {moreCount > 0
+              ? `Added to your project, with ${moreCount} more`
+              : "Added to your project"}
+          </Text>
+          <Card.Title className="truncate leading-tight">
+            {status.name}
+          </Card.Title>
+          {status.mcpEndpointUrl ? (
+            <Card.Description className="font-mono text-xs">
+              {status.mcpEndpointUrl}
+            </Card.Description>
+          ) : null}
+          <span className="text-foreground mt-auto flex items-center gap-1 pt-2 text-sm font-medium">
+            View server
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </div>
+      </Card.Entity>
+    </routes.mcp.details.Link>
+  );
 }
 
 function NextSteps({
@@ -1546,22 +1944,6 @@ function NextSteps({
             </div>
           </a>
         )}
-        <routes.mcp.x.Link
-          params={[status.mcpServerParam!]}
-          className="no-underline hover:no-underline"
-        >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-orange-500/10 dark:bg-orange-500/20">
-              <Settings className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-            </div>
-            <div className="flex-1">
-              <Text className="text-sm font-medium no-underline">
-                Configure MCP settings
-              </Text>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
-        </routes.mcp.x.Link>
       </div>
     </div>
   );

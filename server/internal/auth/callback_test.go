@@ -59,7 +59,7 @@ func TestService_Callback(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestService_Callback(t *testing.T) {
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestService_Callback(t *testing.T) {
 		parsedState := nonceStateFromLocation(t, login.Location)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &parsedState,
 		})
 		require.NoError(t, err)
@@ -195,7 +195,7 @@ func TestService_Callback(t *testing.T) {
 		nonce := extractNonceFromState(t, state)
 		require.NoError(t, instance.nonceStore.Delete(ctx, "auth:support_intent:"+nonce))
 
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
 		require.Empty(t, result.SessionCookie)
@@ -226,7 +226,7 @@ func TestService_Callback(t *testing.T) {
 		nonce := extractNonceFromState(t, state)
 		require.NoError(t, instance.nonceStore.Set(ctx, "auth:support_intent:"+nonce, struct{ OrganizationID string }{OrganizationID: userInfo.Organizations[0].ID}, time.Minute))
 
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
 		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
@@ -250,7 +250,7 @@ func TestService_Callback(t *testing.T) {
 		nonce := extractNonceFromState(t, state)
 		require.NoError(t, instance.nonceStore.Set(ctx, "auth:support_intent:"+nonce, struct{ OrganizationID string }{}, time.Minute))
 
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
 		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
@@ -286,7 +286,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		state := nonceStateFromLocation(t, login.Location)
 
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
 		require.Empty(t, result.SessionCookie)
@@ -335,7 +335,7 @@ func TestService_Callback(t *testing.T) {
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -373,7 +373,7 @@ func TestService_Callback(t *testing.T) {
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -396,7 +396,7 @@ func TestService_Callback(t *testing.T) {
 		ctx, stateParam := instance.stateWithNonce(ctx, t, "/?disposition=assistants")
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -417,7 +417,7 @@ func TestService_Callback(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -437,7 +437,7 @@ func TestService_Callback(t *testing.T) {
 		_ = ctx
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code: "",
+			Code: new(""),
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -454,7 +454,7 @@ func TestService_Callback(t *testing.T) {
 		_ = instance
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code: "mock_code",
+			Code: new("mock_code"),
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -474,7 +474,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, instance.nonceStore.Delete(ctx, "auth:login_nonce:"+extractNonceFromState(t, stateParam)))
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -498,7 +498,7 @@ func TestService_Callback(t *testing.T) {
 
 		// First callback succeeds
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -506,11 +506,11 @@ func TestService_Callback(t *testing.T) {
 
 		// Replaying the same state should fail — nonce was consumed
 		result, err = instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
-		require.Contains(t, result.Location, "signin_error=", "replayed nonce should be rejected")
+		require.Contains(t, result.Location, "signin_error=signin_link_invalid", "replayed nonce should be rejected")
 		require.Empty(t, result.SessionToken)
 	})
 
@@ -531,12 +531,12 @@ func TestService_Callback(t *testing.T) {
 		ctx = auth.TestNonceBindingContext(ctx, "wrong-binding-value")
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Contains(t, result.Location, "signin_error=", "mismatched cookie should be rejected")
+		require.Contains(t, result.Location, "signin_error=signin_link_invalid", "mismatched cookie should be rejected")
 		require.Empty(t, result.SessionToken)
 	})
 
@@ -557,12 +557,12 @@ func TestService_Callback(t *testing.T) {
 		// ctx has no nonce binding — simulates missing cookie
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Contains(t, result.Location, "signin_error=", "missing cookie should be rejected")
+		require.Contains(t, result.Location, "signin_error=signin_link_invalid", "missing cookie should be rejected")
 		require.Empty(t, result.SessionToken)
 	})
 
@@ -577,7 +577,7 @@ func TestService_Callback(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "invalid_code",
+			Code:  new("invalid_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -596,7 +596,7 @@ func TestService_Callback(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -627,7 +627,7 @@ func TestService_Callback(t *testing.T) {
 
 			ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 			result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-				Code:  "mock_code",
+				Code:  new("mock_code"),
 				State: &stateParam,
 			})
 			require.NoError(t, err)
@@ -647,7 +647,7 @@ func TestService_Callback(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -679,7 +679,7 @@ func TestService_Callback(t *testing.T) {
 		require.NotEmpty(t, stateFromLogin)
 
 		callbackResult, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateFromLogin,
 		})
 		require.NoError(t, err)
@@ -719,7 +719,7 @@ func TestService_CallbackSupportRequiresCurrentPlatformAdmin(t *testing.T) {
 	require.NoError(t, err)
 	state := nonceStateFromLocation(t, login.Location)
 
-	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	require.Empty(t, result.SessionToken)
 	require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
@@ -737,7 +737,7 @@ func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
 	}
 
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-		Code: "impersonation_code",
+		Code: new("impersonation_code"),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -786,7 +786,7 @@ func TestCallback_ImpersonatedLoginDoesNotArmSelfServeTrial(t *testing.T) {
 
 	ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "impersonation_code",
+		Code:  new("impersonation_code"),
 		State: &stateParam,
 	})
 	require.NoError(t, err)
@@ -872,7 +872,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -919,7 +919,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -938,7 +938,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		nonce := extractNonceFromState(t, stateParam)
 
 		_, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -969,7 +969,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		nonce := extractNonceFromState(t, stateParam)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -993,7 +993,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "/?disposition=assistants", "Acme Inc")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -1015,7 +1015,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 
 		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -1074,7 +1074,7 @@ func TestCallback_SignupAfterWorkOSDeleteWhitelistsActiveOrg(t *testing.T) {
 
 	ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Fresh Signup Corp")
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
+		Code:  new("mock_code"),
 		State: &stateParam,
 	})
 	require.NoError(t, err)
@@ -1415,7 +1415,7 @@ func TestCallback_ReactivatedSignupPrefersExistingWhitelistedOrg(t *testing.T) {
 
 	ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Should Not Create")
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
+		Code:  new("mock_code"),
 		State: &stateParam,
 	})
 	require.NoError(t, err)

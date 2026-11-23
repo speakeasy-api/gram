@@ -7,10 +7,7 @@ export type NavArea =
   | "Security and Policy"
   | "Organization";
 
-// First path segment after /projects/:slug/ → sidebar area. Kept as a plain
-// slug map (rather than deriving from useRoutes) so consumers stay light —
-// routes.tsx imports every page component, which drags the whole app graph
-// into any test that renders a component using this hook.
+// First path segment after /projects/:slug/ → sidebar area.
 const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   // Observability
   costs: "Observability",
@@ -36,12 +33,12 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "detection-rules": "Security and Policy",
   // MCP Gateway
   mcp: "MCP Gateway",
-  playground: "MCP Gateway",
   deployments: "MCP Gateway",
   skills: "MCP Gateway",
   plugins: "MCP Gateway",
   environments: "MCP Gateway",
   assistants: "MCP Gateway",
+  channels: "MCP Gateway",
 };
 
 // Org-level pages that should not read as "Organization" administration.

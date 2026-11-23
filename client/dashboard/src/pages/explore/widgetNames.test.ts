@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { copyName, MAX_NAME_LENGTH } from "./widgetNames";
 

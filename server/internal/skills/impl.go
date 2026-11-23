@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -72,6 +73,9 @@ type Service struct {
 	// is a no-op then.
 	publisher PluginPublishSignaler
 	siteURL   *url.URL
+	// flags gates the skill link methods behind the skills-over-mcp rollout.
+	// Nil refuses them; see WithFeatureProvider.
+	flags feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -102,6 +106,7 @@ func NewService(
 		signaler:  signaler,
 		publisher: publisher,
 		siteURL:   siteURL,
+		flags:     nil,
 	}
 }
 
@@ -136,89 +141,60 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	// and tenant resolution, without also demanding unrelated project:read.
 	switch ctx.Value(goa.MethodKey) {
 	case "list", "listTags", "listSuggestions", "listFeedback", "listSuggestionFeedback",
-		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions":
+		"get", "listUnknownActivations", "listVersions", "distribute", "undistribute", "listDistributions",
+		"link", "unlink", "listLinks":
 		return s.auth.AuthorizeWithHandlerProjectAccess(ctx, key, schema)
 	default:
 		return s.auth.Authorize(ctx, key, schema)
 	}
 }
 
-func (s *Service) requireAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, s.logger, oops.C(oops.CodeUnauthorized)
+// requireAccess checks permission on the project's skills and that skills
+// are enabled for the organization.
+func (s *Service) requireAccess(ctx context.Context, authCtx *contextvalues.AuthContext, permission func(authz.SkillCollection) authz.Check) error {
+	if err := s.authz.Require(ctx, permission(authz.Skills(authz.ProjectIDOf(*authCtx.ProjectID)))); err != nil {
+		return err
 	}
-
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
-		return nil, s.logger, err
-	}
-
-	logger := s.logger.With(
-		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-		attr.SlogProjectID(authCtx.ProjectID.String()),
-	)
-	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
-	if err != nil {
-		return nil, logger, oops.E(oops.CodeUnexpected, err, "check skills feature").LogError(ctx, logger)
-	}
-	if !enabled {
-		return nil, logger, oops.E(oops.CodeForbidden, nil, "skills are not enabled for this organization")
-	}
-
-	return authCtx, logger, nil
+	return s.requireSkillsEnabled(ctx, authCtx)
 }
 
-// requireSkillAccess accepts project-wide grants or grants for one skill. An empty
-// skill ID retains the project-wide requirement for collection endpoints.
-func (s *Service) requireSkillAccess(ctx context.Context, scope authz.Scope, skillID string) (*contextvalues.AuthContext, *slog.Logger, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, s.logger, oops.C(oops.CodeUnauthorized)
+// requireSkillReadAccess accepts project-wide read grants or read grants for
+// one skill. An empty skill ID retains the project-wide requirement for
+// collection endpoints.
+func (s *Service) requireSkillReadAccess(ctx context.Context, authCtx *contextvalues.AuthContext, skillID string) error {
+	if err := s.requireSkillReadGrant(ctx, *authCtx.ProjectID, skillID); err != nil {
+		return err
 	}
-
-	if err := s.requireSkillGrant(ctx, scope, authCtx.ProjectID.String(), skillID); err != nil {
-		return nil, s.logger, err
-	}
-
-	logger := s.logger.With(
-		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-		attr.SlogProjectID(authCtx.ProjectID.String()),
-	)
 	if skillID != "" {
 		_, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
 			ID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return nil, logger, oops.E(oops.CodeForbidden, nil, "project does not belong to the active organization")
+			return oops.E(oops.CodeForbidden, nil, "project does not belong to the active organization")
 		case err != nil:
-			return nil, logger, oops.E(oops.CodeUnexpected, err, "check skill project ownership").LogError(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "check skill project ownership").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 		}
 	}
-	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
-	if err != nil {
-		return nil, logger, oops.E(oops.CodeUnexpected, err, "check skills feature").LogError(ctx, logger)
-	}
-	if !enabled {
-		return nil, logger, oops.E(oops.CodeForbidden, nil, "skills are not enabled for this organization")
-	}
-
-	return authCtx, logger, nil
+	return s.requireSkillsEnabled(ctx, authCtx)
 }
 
-func (s *Service) requireSkillGrant(ctx context.Context, scope authz.Scope, projectID, skillID string) error {
+func (s *Service) requireSkillsEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) error {
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check skills feature").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+	if !enabled {
+		return oops.E(oops.CodeForbidden, nil, "skills are not enabled for this organization")
+	}
+	return nil
+}
+
+func (s *Service) requireSkillReadGrant(ctx context.Context, projectID uuid.UUID, skillID string) error {
 	// Skill grants select either the project resource or an individual skill.
-	checks := []authz.Check{{Scope: scope, ResourceKind: "", ResourceID: projectID, Dimensions: nil}}
+	checks := []authz.Check{authz.Skills(authz.ProjectIDOf(projectID)).Read()}
 	if skillID != "" {
-		checks = append(checks, authz.Check{
-			Scope: scope, ResourceKind: authz.ResourceKindSkill,
-			ResourceID: skillID, Dimensions: nil,
-		})
+		checks = append(checks, authz.Skill(authz.SkillIDFrom(skillID)).Read())
 	}
 	return s.authz.RequireAnyUnblocked(ctx, checks...)
 }
@@ -590,7 +566,7 @@ func (s *Service) recordVersion(
 		}
 
 		return &gen.RecordSkillResult{
-			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}),
 			Version:        matchedView,
 			CreatedSkill:   false,
 			CreatedVersion: false,
@@ -628,7 +604,7 @@ func (s *Service) recordVersion(
 	if err != nil {
 		return nil, false, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
-	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false})
+	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
 	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
 		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -678,8 +654,15 @@ func (s *Service) recordVersion(
 }
 
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return nil, err
 	}
 
@@ -749,6 +732,11 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
+	if contentChanged && !createdSkill {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit create skill transaction").LogError(ctx, logger)
 	}
@@ -762,8 +750,15 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 }
 
 func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return nil, err
 	}
 
@@ -846,6 +841,11 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	if err != nil {
 		return nil, err
 	}
+	if contentChanged {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit add skill version transaction").LogError(ctx, logger)
 	}
@@ -858,8 +858,15 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 }
 
 func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersionPayload) (*gen.RecordSkillResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return nil, err
 	}
 	skillID, err := uuid.Parse(payload.ID)
@@ -945,6 +952,11 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 			return nil, oops.E(oops.CodeUnexpected, err, "log skill version restore").LogError(ctx, logger)
 		}
 	}
+	if restoring {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit restore skill version transaction").LogError(ctx, logger)
 	}
@@ -952,14 +964,21 @@ func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersio
 		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, true)
 	}
 	return &gen.RecordSkillResult{
-		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}),
 		Version: versionView, CreatedSkill: false, CreatedVersion: false,
 	}, nil
 }
 
 func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*types.Skill, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return nil, err
 	}
 	skillID, err := uuid.Parse(payload.ID)
@@ -1021,7 +1040,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		}
 		// Returned before the write so a replay neither advances updated_at nor
 		// records a second update event for an edit that already happened.
-		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}), nil
 	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
@@ -1054,6 +1073,11 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log skill update").LogError(ctx, logger)
 	}
+	if updated.Name != skill.Name {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit update skill transaction").LogError(ctx, logger)
 	}
@@ -1063,7 +1087,7 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 		s.signalPluginPublishForSkills(ctx, authCtx, []uuid.UUID{skill.ID}, false)
 	}
 
-	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}, pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}), nil
 }
 
 // skillMetadataMatches reports whether a skill already carries exactly the
@@ -1090,9 +1114,10 @@ func skillMetadataMatches(skill repo.Skill, name, displayName string, summary *s
 // accessibleSkillIDs returns the skills at least one of these users is
 // authorized to reach across the organization.
 //
-// The rule — a grant on the user or on a role they hold, less any blocking
-// grant withdrawing the same scope — lives in the access service's query, and
-// is read from here rather than restated so the two surfaces cannot drift.
+// The rule — a grant on the user or on a role they hold, less any block that
+// withdraws it, as the header of ListAccessibleSkillsForUser spells out — lives
+// in the access service's query, and is read from here rather than restated so
+// the two surfaces cannot drift.
 // Several users union, matching how the listing filters read: a skill shows if
 // anyone named can reach it.
 //
@@ -1150,8 +1175,15 @@ func (s *Service) accessibleSkillIDs(ctx context.Context, orgID string, userIDs 
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Read); err != nil {
 		return nil, err
 	}
 
@@ -1185,6 +1217,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	// answer "none", and the queries distinguish the two.
 	var skillIDs []uuid.UUID
 	if payload.AccessibleBy != nil {
+		var err error
 		skillIDs, err = s.accessibleSkillIDs(ctx, authCtx.ActiveOrganizationID, payload.AccessibleBy)
 		switch {
 		case errors.Is(err, authz.ErrPrincipalInvalid):
@@ -1252,8 +1285,15 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 }
 
 func (s *Service) ListTags(ctx context.Context, _ *gen.ListTagsPayload) (*gen.ListSkillTagsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Read); err != nil {
 		return nil, err
 	}
 
@@ -1269,8 +1309,15 @@ func (s *Service) ListTags(ctx context.Context, _ *gen.ListTagsPayload) (*gen.Li
 }
 
 func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPayload) (*gen.ListSkillFeedbackResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Read); err != nil {
 		return nil, err
 	}
 	if payload.Limit < 1 || payload.Limit > 50 {
@@ -1359,8 +1406,15 @@ func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPay
 }
 
 func (s *Service) TriggerSuggestion(ctx context.Context, payload *gen.TriggerSuggestionPayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return err
 	}
 	skillID, err := uuid.Parse(payload.ID)
@@ -1380,8 +1434,15 @@ func (s *Service) TriggerSuggestion(ctx context.Context, payload *gen.TriggerSug
 }
 
 func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSkillResult, error) {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, payload.ID)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireSkillReadAccess(ctx, authCtx, payload.ID); err != nil {
 		return nil, err
 	}
 
@@ -1491,7 +1552,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
+		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken, details.LastLoadedOverMcpAt),
 		LatestVersion:           latestView,
 		AssistantCount:          details.AssistantCount,
 		PromptInjectionFindings: promptInjectionFindings,
@@ -1509,8 +1570,15 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 }
 
 func (s *Service) ListUnknownActivations(ctx context.Context, payload *gen.ListUnknownActivationsPayload) (*gen.ListUnknownSkillActivationsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Read); err != nil {
 		return nil, err
 	}
 
@@ -1554,8 +1622,15 @@ func (s *Service) ListUnknownActivations(ctx context.Context, payload *gen.ListU
 }
 
 func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPayload) (*gen.ListSkillVersionsResult, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Read); err != nil {
 		return nil, err
 	}
 
@@ -1619,8 +1694,15 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 }
 
 func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload) (*types.SkillDistribution, error) {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, payload.ID)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireSkillReadAccess(ctx, authCtx, payload.ID); err != nil {
 		return nil, err
 	}
 	target, err := parseDistributionTarget(payload.PluginID, payload.AssistantID)
@@ -1631,7 +1713,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	if target.mutationScope() == authz.ScopePluginWrite {
 		mutationErr = s.authz.RequirePluginWrite(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 	} else {
-		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		mutationErr = s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write())
 	}
 	if err := mutationErr; err != nil {
 		return nil, err
@@ -1713,6 +1795,11 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		resolvedVersionID = version
 	}
 
+	lastLoadedOverMCPAt, err := queries.GetSkillLastLoadedOverMCPAt(ctx, repo.GetSkillLastLoadedOverMCPAtParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve last skill load over mcp").LogError(ctx, logger)
+	}
+
 	existing, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
 		ProjectID: *authCtx.ProjectID, SkillID: skill.ID, PluginID: target.pluginID,
 		AssistantID: target.assistantID, Channel: target.channel,
@@ -1723,7 +1810,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "commit unchanged skill distribution transaction").LogError(ctx, logger)
 			}
-			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 		}
 
 		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
@@ -1752,13 +1839,18 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution update").LogError(ctx, logger)
 		}
+		if target.channel == "plugin" {
+			if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+			}
+		}
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "commit skill distribution update transaction").LogError(ctx, logger)
 		}
 
 		s.signalPluginPublish(ctx, target, authCtx)
 
-		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get active skill distribution").LogError(ctx, logger)
@@ -1789,18 +1881,30 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log skill distribution create").LogError(ctx, logger)
 	}
+	if target.channel == "plugin" {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit distribute skill transaction").LogError(ctx, logger)
 	}
 
 	s.signalPluginPublish(ctx, target, authCtx)
 
-	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 }
 
 func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePayload) error {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, payload.ID)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireSkillReadAccess(ctx, authCtx, payload.ID); err != nil {
 		return err
 	}
 	target, err := parseDistributionTarget(payload.PluginID, payload.AssistantID)
@@ -1811,7 +1915,7 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	if target.mutationScope() == authz.ScopePluginWrite {
 		mutationErr = s.authz.RequirePluginWrite(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 	} else {
-		mutationErr = s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		mutationErr = s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write())
 	}
 	if err := mutationErr; err != nil {
 		return err
@@ -1874,6 +1978,11 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log skill undistribution").LogError(ctx, logger)
 	}
+	if target.channel == "plugin" {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit undistribute skill transaction").LogError(ctx, logger)
 	}
@@ -1884,8 +1993,15 @@ func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePay
 }
 
 func (s *Service) ListDistributions(ctx context.Context, payload *gen.ListDistributionsPayload) (*gen.ListSkillDistributionsResult, error) {
-	authCtx, logger, err := s.requireSkillAccess(ctx, authz.ScopeSkillRead, conv.PtrValOr(payload.SkillID, ""))
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireSkillReadAccess(ctx, authCtx, conv.PtrValOr(payload.SkillID, "")); err != nil {
 		return nil, err
 	}
 
@@ -1950,8 +2066,15 @@ func newShareToken() (string, error) {
 }
 
 func (s *Service) Share(ctx context.Context, payload *gen.SharePayload) (*types.SkillShareLink, error) {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return nil, err
 	}
 	if authCtx.UserID == "" {
@@ -2044,8 +2167,15 @@ func (s *Service) Share(ctx context.Context, payload *gen.SharePayload) (*types.
 }
 
 func (s *Service) Unshare(ctx context.Context, payload *gen.UnsharePayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return err
 	}
 	if authCtx.UserID == "" {
@@ -2134,8 +2264,15 @@ func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) 
 }
 
 func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) error {
-	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
-	if err != nil {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+	)
+	if err := s.requireAccess(ctx, authCtx, authz.SkillCollection.Write); err != nil {
 		return err
 	}
 
@@ -2266,6 +2403,11 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 		SkillSnapshotAfter:  afterSnapshot,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log skill archive").LogError(ctx, logger)
+	}
+	if revokedPluginDistribution {
+		if err := lockPluginPackageContent(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock skill package content").LogError(ctx, logger)
+		}
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit archive skill transaction").LogError(ctx, logger)

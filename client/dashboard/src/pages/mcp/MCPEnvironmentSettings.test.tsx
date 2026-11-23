@@ -2,11 +2,9 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/components/sources/sources-hooks", () => ({
-  useExternalMcpOAuthConfigStatus: () => "configured",
-}));
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ activeOrganizationId: "org-1" }),
 }));
@@ -19,12 +17,8 @@ vi.mock("@/hooks/useMissingEnvironmentVariables", () => ({
 vi.mock("@/hooks/useToolsetUrl", () => ({
   useMcpUrl: () => ({ url: "https://gram.example/mcp/server" }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    environments: {
-      Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/createEnvironment.js", () => ({
   useCreateEnvironmentMutation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -57,10 +51,11 @@ vi.mock("@gram/client/react-query/updateEnvironment.js", () => ({
     isPending: false,
   }),
 }));
+const loadedVars = vi.hoisted(() => ({ current: [] as unknown[] }));
 vi.mock("./useEnvironmentVariables", () => ({
-  useEnvironmentVariables: () => [],
+  useEnvironmentVariables: () => loadedVars.current,
 }));
-vi.mock("./MCPDetails", () => ({
+vi.mock("./PageSection", () => ({
   PageSection: ({
     children,
     action,
@@ -73,6 +68,8 @@ vi.mock("./MCPDetails", () => ({
       {children}
     </section>
   ),
+}));
+vi.mock("./OAuthDetailsModal", () => ({
   OAuthDetailsModal: ({
     isOpen,
     onManageMetadata,
@@ -83,6 +80,8 @@ vi.mock("./MCPDetails", () => ({
     isOpen ? (
       <button onClick={onManageMetadata}>Manage metadata source</button>
     ) : null,
+}));
+vi.mock("./oauth-wizard", () => ({
   ConnectOAuthModal: ({
     isOpen,
     existingConfig,
@@ -104,9 +103,27 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  "./x/tabs/settings/sections/authentication/AuthenticationSection",
+  () => ({
+    AuthenticationSectionBody: ({
+      additionalSetupAction,
+    }: {
+      additionalSetupAction?: ReactNode;
+    }) => (
+      <div data-testid="authentication-section-body">
+        {additionalSetupAction}
+      </div>
+    ),
+  }),
+);
+
 import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  loadedVars.current = [];
+});
 
 describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
   it("renders the eligible recommendation and opens its review entry point", () => {
@@ -128,6 +145,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Review update" }));
@@ -156,6 +174,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     expect(screen.getByRole("button", { name: "Manage" })).toBeTruthy();
@@ -180,6 +199,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
@@ -190,5 +210,39 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
     expect(screen.getByTestId("oauth-review-dialog").textContent).toBe(
       "https://current.example.com",
     );
+  });
+});
+
+describe("environment variables on load", () => {
+  it("reports no unsaved changes before any edit, even for an unmapped required variable", () => {
+    const required = [
+      {
+        id: "var-1",
+        key: "ACME_SERVER_URL",
+        environmentValues: [],
+        state: "system",
+        isRequired: true,
+      },
+    ];
+    loadedVars.current = required;
+    const toolset = {
+      slug: "server",
+      mcpSlug: "server",
+      mcpEnabled: true,
+      mcpIsPublic: true,
+      oauthEnablementMetadata: { oauth2SecurityCount: 0 },
+    } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <MCPAuthenticationTab toolset={toolset} showOAuth={false} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+      { wrapper: MemoryRouter },
+    );
+
+    expect(screen.getByText("ACME_SERVER_URL")).toBeTruthy();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 });

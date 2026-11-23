@@ -52,6 +52,7 @@ export function useProtectedResourceMetadata(
     },
     enabled: enabled && !!remoteMcpServerId,
     retry: false,
+    throwOnError: false,
     staleTime: 5 * 60 * 1000,
   });
 

@@ -3,24 +3,15 @@ import { buildCreateRemoteSessionClientMutation } from "@gram/client/react-query
 import { buildCreateRemoteSessionIssuerMutation } from "@gram/client/react-query/createRemoteSessionIssuer.js";
 import { buildCreateUserSessionIssuerMutation } from "@gram/client/react-query/createUserSessionIssuer.js";
 import { buildFetchRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/fetchRemoteSessionIssuerMetadata.js";
-import { buildSetToolsetUserSessionIssuerMutation } from "@gram/client/react-query/setToolsetUserSessionIssuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { Gram } from "@gram/client";
 import { fromPromise } from "xstate";
 
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
-import {
-  proxyRegisterUpstreamClient,
-  registrationProvenance,
-  type RegistrationProvenance,
-} from "@/lib/proxyRegisterUpstreamClient";
+import { linkToolsetUserSessionIssuer } from "@/lib/linkUserSessionIssuer";
 
-import {
-  authServerOrigin,
-  parseScopes,
-  pickAuthMethodFromList,
-} from "./machine-types";
+import { authServerOrigin, parseScopes } from "./machine-types";
 
 type SignalArg = { signal: AbortSignal };
 
@@ -60,6 +51,7 @@ export type DiscoverExternalOAuthOutput = RemoteSessionIssuerDraft;
 // credentials, then links the toolset — the user-session-backed replacement
 // for the removed oauth_proxy_server creation.
 export type ProvisionUserSessionInput = {
+  toolsetId: string;
   toolsetSlug: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
@@ -68,33 +60,7 @@ export type ProvisionUserSessionInput = {
   clientId: string;
   clientSecret: string;
   audience: string;
-  // Present when registerClient obtained the credentials, so the server
-  // records when the issuer expires them and can re-register them in place.
-  // Absent for credentials the operator typed in.
-  registration?: RegistrationProvenance;
 };
-
-export type RegisterClientInput = {
-  registrationEndpoint: string;
-  // Method derived from the (often empty) discovered metadata. Used as the
-  // fallback when live discovery is skipped or fails.
-  tokenAuthMethod: string;
-  // Origin to run live RFC 8414 discovery against to recover the upstream's
-  // real token_endpoint_auth_methods_supported. Empty disables discovery.
-  issuer: string;
-};
-
-export type RegisterClientOutput = {
-  clientId: string;
-  clientSecret: string;
-  tokenAuthMethod: string | null;
-  registration: RegistrationProvenance;
-};
-
-export type AuthedFetch = (
-  endpoint: string,
-  opts: RequestInit,
-) => Promise<Response>;
 
 export type WizardServices = {
   addExternalOAuth: ReturnType<typeof fromPromise<void, AddExternalOAuthInput>>;
@@ -104,17 +70,11 @@ export type WizardServices = {
   provisionUserSession: ReturnType<
     typeof fromPromise<void, ProvisionUserSessionInput>
   >;
-  registerClient: ReturnType<
-    typeof fromPromise<RegisterClientOutput, RegisterClientInput>
-  >;
 };
 
 export type GramClient = Gram;
 
-export function createWizardServices(
-  client: GramClient,
-  authedFetch: AuthedFetch,
-): WizardServices {
+export function createWizardServices(client: GramClient): WizardServices {
   const discoverExternalOAuth = fromPromise<
     DiscoverExternalOAuthOutput,
     DiscoverExternalOAuthInput
@@ -243,62 +203,17 @@ export function createWizardServices(
               input.tokenAuthMethod,
             ),
             audience: input.audience || undefined,
-            ...input.registration,
           },
         },
         ...opts,
       });
 
-      await buildSetToolsetUserSessionIssuerMutation(client).mutationFn({
-        request: {
-          slug: input.toolsetSlug,
-          setUserSessionIssuerRequestBody: { userSessionIssuerId: issuer.id },
-        },
-        ...opts,
-      });
-    },
-  );
-
-  const registerClient = fromPromise<RegisterClientOutput, RegisterClientInput>(
-    async ({ input, signal }) => {
-      // The synthesized remote-MCP metadata omits the supported-methods list,
-      // so run a live RFC 8414 discovery against the issuer origin to recover
-      // it (e.g. Make advertises only client_secret_post, and rejects DCR that
-      // omits it or sends client_secret_basic). Best-effort: any failure leaves
-      // the metadata-derived fallback method in place.
-      let authMethod = input.tokenAuthMethod;
-      if (input.issuer) {
-        try {
-          const draft = await client.remoteSessionIssuers.fetchMetadata(
-            {
-              fetchIssuerMetadataRequestBody: { issuer: input.issuer },
-            },
-            undefined,
-            { fetchOptions: { signal } },
-          );
-          const supported = draft.tokenEndpointAuthMethodsSupported ?? [];
-          if (supported.length > 0) {
-            authMethod = pickAuthMethodFromList(supported);
-          }
-        } catch {
-          // Keep the fallback method on discovery failure.
-        }
-      }
-
-      const result = await proxyRegisterUpstreamClient(
-        authedFetch,
-        {
-          registrationEndpoint: input.registrationEndpoint,
-          tokenEndpointAuthMethod: authMethod || undefined,
-        },
-        { signal },
+      await linkToolsetUserSessionIssuer(
+        client,
+        { id: input.toolsetId },
+        issuer.id,
+        opts.options,
       );
-      return {
-        clientId: result.clientId,
-        clientSecret: result.clientSecret,
-        tokenAuthMethod: result.tokenEndpointAuthMethod,
-        registration: registrationProvenance(result),
-      };
     },
   );
 
@@ -306,6 +221,5 @@ export function createWizardServices(
     addExternalOAuth,
     discoverExternalOAuth,
     provisionUserSession,
-    registerClient,
   };
 }

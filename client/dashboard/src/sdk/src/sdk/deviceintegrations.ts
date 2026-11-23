@@ -5,6 +5,8 @@
 import { deviceIntegrationsDeleteConfig } from "../funcs/deviceIntegrationsDeleteConfig.js";
 import { deviceIntegrationsGetConfig } from "../funcs/deviceIntegrationsGetConfig.js";
 import { deviceIntegrationsGetCoverage } from "../funcs/deviceIntegrationsGetCoverage.js";
+import { deviceIntegrationsGetFleetCoverage } from "../funcs/deviceIntegrationsGetFleetCoverage.js";
+import { deviceIntegrationsListFleetDevices } from "../funcs/deviceIntegrationsListFleetDevices.js";
 import { deviceIntegrationsListManagedDevices } from "../funcs/deviceIntegrationsListManagedDevices.js";
 import { deviceIntegrationsListProviders } from "../funcs/deviceIntegrationsListProviders.js";
 import { deviceIntegrationsListSchedules } from "../funcs/deviceIntegrationsListSchedules.js";
@@ -17,6 +19,7 @@ import { DeviceIntegrationConfig } from "../models/components/deviceintegrationc
 import { DeviceIntegrationCoverage } from "../models/components/deviceintegrationcoverage.js";
 import { DeviceIntegrationScheduleState } from "../models/components/deviceintegrationschedulestate.js";
 import { DeviceIntegrationTestConnectionResult } from "../models/components/deviceintegrationtestconnectionresult.js";
+import { FleetCoverage } from "../models/components/fleetcoverage.js";
 import { ListDeviceIntegrationProvidersResult } from "../models/components/listdeviceintegrationprovidersresult.js";
 import { ListDeviceIntegrationSchedulesResult } from "../models/components/listdeviceintegrationschedulesresult.js";
 import {
@@ -32,6 +35,10 @@ import {
   GetDeviceIntegrationCoverageSecurity,
 } from "../models/operations/getdeviceintegrationcoverage.js";
 import {
+  GetFleetCoverageRequest,
+  GetFleetCoverageSecurity,
+} from "../models/operations/getfleetcoverage.js";
+import {
   ListDeviceIntegrationProvidersRequest,
   ListDeviceIntegrationProvidersSecurity,
 } from "../models/operations/listdeviceintegrationproviders.js";
@@ -39,6 +46,11 @@ import {
   ListDeviceIntegrationSchedulesRequest,
   ListDeviceIntegrationSchedulesSecurity,
 } from "../models/operations/listdeviceintegrationschedules.js";
+import {
+  ListFleetDevicesRequest,
+  ListFleetDevicesResponse,
+  ListFleetDevicesSecurity,
+} from "../models/operations/listfleetdevices.js";
 import {
   ListManagedDevicesRequest,
   ListManagedDevicesResponse,
@@ -114,6 +126,44 @@ export class DeviceIntegrations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<DeviceIntegrationCoverage> {
     return unwrapAsync(deviceIntegrationsGetCoverage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getFleetCoverage deviceIntegrations
+   *
+   * @remarks
+   * Summarize agent coverage and policy enforcement across every device the org can see, with or without a connected MDM, optionally scoped to one provider's inventory.
+   */
+  async getFleetCoverage(
+    request?: GetFleetCoverageRequest | undefined,
+    security?: GetFleetCoverageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<FleetCoverage> {
+    return unwrapAsync(deviceIntegrationsGetFleetCoverage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listFleetDevices deviceIntegrations
+   *
+   * @remarks
+   * Page through every device the org can see, newest first: its connected MDM inventories plus the machines running the agent that no inventory holds, each with its coverage bucket and policy state.
+   */
+  async listFleetDevices(
+    request?: ListFleetDevicesRequest | undefined,
+    security?: ListFleetDevicesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<PageIterator<ListFleetDevicesResponse, { cursor: string }>> {
+    return unwrapResultIterator(deviceIntegrationsListFleetDevices(
       this,
       request,
       security,

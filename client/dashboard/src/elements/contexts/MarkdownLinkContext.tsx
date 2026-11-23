@@ -21,7 +21,7 @@ export interface MarkdownLinkValue {
   LinkComponent?: MarkdownLinkComponent;
 }
 
-const MarkdownLinkContext = createContext<MarkdownLinkValue>({});
+export const MarkdownLinkContext = createContext<MarkdownLinkValue>({});
 
 export const MarkdownLinkProvider = ({
   value,

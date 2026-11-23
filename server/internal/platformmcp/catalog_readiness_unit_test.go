@@ -2,12 +2,16 @@ package platformmcp
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -143,4 +147,117 @@ func TestRedactProbeErrorRemovesCredentialsAndBoundsLength(t *testing.T) {
 	require.NotContains(t, detail, "query-sentinel")
 	require.Contains(t, detail, "https://mcp.example.test/mcp?[REDACTED]")
 	require.LessOrEqual(t, len(detail), catalogProbeMaxLoggedError+len("…"))
+}
+
+func TestSetupProbeInitializesAndListsWithoutCallingTools(t *testing.T) {
+	t.Parallel()
+	var methods sync.Map
+	server := mcp.NewServer(&mcp.Implementation{Name: "setup-test", Version: "1"}, nil)
+	server.AddTool(&mcp.Tool{Name: "example", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		t.Error("tool was executed")
+		return nil, nil
+	})
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer setup-token" {
+			t.Error("probe sent wrong authorization")
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read MCP request: %v", err)
+			http.Error(w, "read request", http.StatusBadRequest)
+			return
+		}
+		var message struct {
+			Method string `json:"method"`
+		}
+		_ = json.Unmarshal(body, &message)
+		if message.Method != "" {
+			methods.Store(message.Method, true)
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	prober := &RemoteMCPReadinessProber{logger: testenv.NewLogger(t), policy: policy}
+	state, evidence, count := prober.probeTools(t.Context(), upstream.URL, nil, "setup-token")
+	require.Equal(t, ReadinessReady, state)
+	require.Equal(t, "tools_list_ok", evidence)
+	require.Equal(t, 1, count)
+	_, initialized := methods.Load("initialize")
+	require.True(t, initialized)
+	_, listed := methods.Load("tools/list")
+	require.True(t, listed)
+	_, called := methods.Load("tools/call")
+	require.False(t, called)
+}
+
+func TestSetupProbeRequiresEveryToolPage(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, secondPage string
+		status           int
+		wantState        ReadinessState
+		wantCode         string
+		wantCount        int
+	}{
+		{"all pages", `{"tools":[{"name":"second","inputSchema":{"type":"object"}}]}`, http.StatusOK, ReadinessReady, "tools_list_ok", 2},
+		{"later authorization failure", "private provider detail", http.StatusUnauthorized, ReadinessUnauthorized, "upstream_authorization_rejected", 0},
+		{"repeated cursor", `{"tools":[],"nextCursor":"again"}`, http.StatusOK, ReadinessDegraded, "tools_list_cursor_repeated", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := mcp.NewServer(&mcp.Implementation{Name: "pages", Version: "1"}, nil)
+			handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read MCP request: %v", err)
+					http.Error(w, "read request", http.StatusBadRequest)
+					return
+				}
+				var message struct {
+					ID     json.RawMessage `json:"id"`
+					Method string          `json:"method"`
+					Params struct {
+						Cursor string `json:"cursor"`
+					} `json:"params"`
+				}
+				if len(body) > 0 {
+					if err := json.Unmarshal(body, &message); err != nil {
+						t.Errorf("decode MCP request: %v", err)
+						http.Error(w, "bad request", http.StatusBadRequest)
+						return
+					}
+				}
+				if message.Method == "tools/list" {
+					result := `{"tools":[{"name":"first","inputSchema":{"type":"object"}}],"nextCursor":"again"}`
+					if message.Params.Cursor != "" {
+						if tc.status != http.StatusOK {
+							http.Error(w, tc.secondPage, tc.status)
+							return
+						}
+						result = tc.secondPage
+					}
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"result":%s}`, message.ID, result)
+					return
+				}
+				r.Body = io.NopCloser(bytes.NewReader(body))
+				handler.ServeHTTP(w, r)
+			}))
+			t.Cleanup(upstream.Close)
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+			prober := &RemoteMCPReadinessProber{logger: testenv.NewLogger(t), policy: policy}
+			state, code, count := prober.probeTools(t.Context(), upstream.URL, nil, "page-token")
+			require.Equal(t, tc.wantState, state)
+			require.Equal(t, tc.wantCode, code)
+			require.Equal(t, tc.wantCount, count)
+		})
+	}
 }

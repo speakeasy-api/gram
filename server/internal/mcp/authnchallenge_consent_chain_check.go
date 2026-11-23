@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -26,9 +28,12 @@ const (
 )
 
 var (
-	chainCheckConnectedResult = consentChainCheckResult{Status: chainCheckConnected, Message: "Connected through your identity provider"}
-	chainCheckUnknownResult   = consentChainCheckResult{Status: chainCheckUnknown, Message: "Managed by your identity provider"}
+	chainCheckConnectedResult = consentChainCheckResult{Status: chainCheckConnected, Message: "Connected through your identity provider", Action: ""}
+	chainCheckUnknownResult   = consentChainCheckResult{Status: chainCheckUnknown, Message: "Managed by your identity provider", Action: ""}
 )
+
+// unmanagedAgainMessage refuses the account a person switched to.
+const unmanagedAgainMessage = "The account you just signed in with is also personal, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal."
 
 // consentChainCheckTimeout bounds the page's background exchange; a slower
 // provider reads as unknown and the first tool call retries.
@@ -39,19 +44,36 @@ const consentChainCheckTimeout = 5 * time.Second
 type consentChainCheckResult struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
+	// Action names the consent action a rejected card offers besides the own-account sign-in.
+	Action string `json:"action,omitempty"`
 }
 
 // consentSessionRouting loads the subject's connection state and the routing
 // that decides which grants still route. Statuses are empty before the subject
 // is stamped, so every card then reads not connected.
-func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
+func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, typed map[uuid.UUID]uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return nil, routing, nil
 	}
-	statuses, err := s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	var err error
+	enforcedDirect := false
+	if endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
+		enforcedDirect, err = s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return nil, routing, err
+		}
+	}
+	if !enforcedDirect {
+		statuses, err = s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
+		if err != nil {
+			return nil, routing, fmt.Errorf("remote session statuses: %w", err)
+		}
+	}
+	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
 	if err != nil {
-		return nil, routing, fmt.Errorf("remote session statuses: %w", err)
+		return nil, routing, err
 	}
 	if len(statuses) > 0 {
 		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
@@ -73,6 +95,36 @@ func (s *Service) consentChainCheckAtRender(ctx context.Context, requests []iden
 	return chainCheckConnected
 }
 
+// chainedConsentClient resolves a posted client_id to a card this consent
+// renders chained for its own subject, with the requests that card relies on.
+func (s *Service) chainedConsentClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, rawClientID string) (*remotesessions.Client, []identitychaining.Request, error) {
+	clientID, err := uuid.Parse(rawClientID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, logger)
+	}
+	bound, typed, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
+	}
+	clients := s.remoteChallengeMgr.WithCatalogBranding(ctx, subjectConnectedClients(bound))
+	client := findConsentClient(clients, clientID)
+	if client == nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
+	}
+	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve consent routing").LogError(ctx, logger)
+	}
+	if state, ok := statuses[client.ID]; ok && state.Status == remotesessions.RemoteSessionActive {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "service is not managed by identity chaining for this consent").LogError(ctx, logger)
+	}
+	requests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)[client.ID]
+	if len(requests) == 0 {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "service is not managed by identity chaining for this consent").LogError(ctx, logger)
+	}
+	return client, requests, nil
+}
+
 // serveIdentityChainingCheck runs the exchange a chained card relies on, so
 // the page can report it before the first tool call. client_id only selects
 // among the cards this consent renders chained for its own subject.
@@ -80,30 +132,11 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(challengeState.FlowID))
 
-	clientID, err := uuid.Parse(r.PostForm.Get("client_id"))
+	client, requests, err := s.chainedConsentClient(ctx, logger, endpoint, challengeState, r.PostForm.Get("client_id"))
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, logger)
+		return err
 	}
-	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
-	}
-	clients := s.remoteChallengeMgr.WithCatalogBranding(ctx, subjectConnectedClients(bound))
-	client := findConsentClient(clients, clientID)
-	if client == nil {
-		return oops.E(oops.CodeBadRequest, nil, "unknown remote session client for this MCP server").LogError(ctx, logger)
-	}
-	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve consent routing").LogError(ctx, logger)
-	}
-	if state, ok := statuses[client.ID]; ok && state.Status == remotesessions.RemoteSessionActive {
-		return oops.E(oops.CodeBadRequest, nil, "service is not managed by identity chaining for this consent").LogError(ctx, logger)
-	}
-	requests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)[client.ID]
-	if len(requests) == 0 {
-		return oops.E(oops.CodeBadRequest, nil, "service is not managed by identity chaining for this consent").LogError(ctx, logger)
-	}
+	clientID := client.ID
 
 	owner := s.newResourceDisplayOwner(endpoint, challengeState)
 	display, _ := issuerCardBranding(*client, owner.ownsOrFallsBack(ctx, logger, *client), s.serverURL)
@@ -112,30 +145,112 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 		signInID = *challengeState.SignInID
 	}
 	result, outcome := s.checkIdentityChaining(ctx, requests, display, signInID)
+	switchEnabled := result.Status == chainCheckRejected && s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
+	// Off, refusals keep the key they had before the flag.
+	refusedSignIn := uuid.Nil
+	if switchEnabled {
+		refusedSignIn = signInID
+	}
+	if switchEnabled && outcome.Reason == identitychaining.ReasonUnmanagedAccount {
+		if challengeState.AccountSwitches > 0 {
+			result.Message = fmt.Sprintf(unmanagedAgainMessage, display)
+		}
+		offer, oerr := s.accountSwitchOffered(r, endpoint, challengeState, time.Now())
+		if oerr != nil {
+			logger.WarnContext(ctx, "check account switch offer", attr.SlogError(oerr))
+		}
+		if offer == accountSwitchOK {
+			result.Action = consentActionSwitchAccount
+		}
+	}
 	logger.InfoContext(ctx, "identity chaining consent check",
 		attr.SlogOutcome(result.Status),
 		attr.SlogReason(string(outcome.Reason)),
 		attr.SlogIdentityChainingProvider(string(outcome.Provider)),
 	)
 
+	if code, refused := chainingRefusalCode(outcome.Reason); refused && result.Status == chainCheckRejected {
+		s.recordRefusedConsent(ctx, logger, challengeState.connectionAttempt(endpoint), client.ID, refusedSignIn, code,
+			mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject),
+			mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID))
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode identity chaining check").LogError(ctx, logger)
 	}
+	if challengeState.FirstParty && result.Status == chainCheckConnected {
+		s.endChainedFirstParty(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, clientID)
+	}
 	return nil
+}
+
+// consentChainedUpstreamToken exchanges the sign-in under the consent discovery gate.
+func (s *Service) consentChainedUpstreamToken(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clientID uuid.UUID) *remotesessions.UpstreamToken {
+	if s.identityChainer == nil {
+		return nil
+	}
+	bound, typed, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
+	if err != nil {
+		logger.WarnContext(ctx, "list clients for consent identity chaining", attr.SlogError(err))
+		return nil
+	}
+	clients := subjectConnectedClients(bound)
+	_, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve routing for consent identity chaining", attr.SlogError(err))
+		return nil
+	}
+	chained := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
+	var requests []identitychaining.Request
+	switch {
+	case clientID != uuid.Nil:
+		requests = chained[clientID]
+	case len(chained) == 1:
+		for _, r := range chained {
+			requests = r
+		}
+	}
+	if len(requests) != 1 {
+		return nil
+	}
+	sel := requests[0]
+	req, ok := s.identityChainingRequestForKind(ctx, mcpidentity.KindConsentDiscovery, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, sel.UpstreamResource, sel.RemoteSessionIssuerID.Valid, sel.RemoteSessionIssuerID, sel.RemoteSessionClientID)
+	if !ok || req.UserID != sel.UserID {
+		return nil
+	}
+	signInID := uuid.Nil
+	if challengeState.SignInID != nil {
+		signInID = *challengeState.SignInID
+	}
+	acquireCtx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
+	defer cancel()
+	token, outcome := s.identityChainer.AcquireConsent(acquireCtx, req, signInID)
+	if !outcome.Succeeded() {
+		logger.InfoContext(ctx, "consent tool inventory could not use identity chaining",
+			attr.SlogReason(string(outcome.Reason)),
+			attr.SlogIdentityChainingProvider(string(outcome.Provider)),
+		)
+		return nil
+	}
+	upstream := chainedUpstreamToken(token)
+	return &upstream
 }
 
 // retireDeniedConsentCredentials erases the vendor credentials this sign-in's
 // consent pages stored that no grant adopted, as of the denial. An exchange
 // already in flight can still store one afterwards; only another eligible
 // grant of the same sign-in could adopt it, and it expires within the hour.
+// Retirement also clears unadopted credentials from other in-flight consent
+// flows for this issuer, subject and sign-in. Those flows re-exchange on retry;
+// credentials already adopted by a session remain usable.
 func (s *Service) retireDeniedConsentCredentials(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) {
 	subject := challengeState.Subject
 	if s.identityChainer == nil || challengeState.SignInID == nil || subject == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return
 	}
-	if err := s.identityChainer.RetireConsentCredentials(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, *challengeState.SignInID); err != nil {
+	if err := s.identityChainer.RetireConsentCredentials(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject.ID, *challengeState.SignInID); err != nil {
 		logger.WarnContext(ctx, "retire denied consent identity chaining credentials", attr.SlogError(err))
 	}
 }
@@ -174,7 +289,7 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		return chainCheckUnknownResult
 	}
 	rejected := func(format string) consentChainCheckResult {
-		return consentChainCheckResult{Status: chainCheckRejected, Message: fmt.Sprintf(format, service)}
+		return consentChainCheckResult{Status: chainCheckRejected, Message: fmt.Sprintf(format, service), Action: ""}
 	}
 	switch outcome.Reason {
 	case identitychaining.ReasonSuccess:
@@ -183,17 +298,22 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		identitychaining.ReasonInvalidClient, identitychaining.ReasonInvalidTarget, identitychaining.ReasonInsufficientScope:
 		switch outcome.Stage {
 		case identitychaining.StageExchange, identitychaining.StageValidation:
-			return rejected("Your identity provider didn't allow access to %s. Ask your administrator, or use a separate sign-in.")
+			return rejected("Your identity provider didn't allow access to %[1]s. Ask your administrator, or use your own %[1]s account.")
 		case identitychaining.StageSelection, identitychaining.StageAuthorization, identitychaining.StageDelegation,
 			identitychaining.StageRedemption, identitychaining.StagePersistence, identitychaining.StageComplete:
-			return rejected("%s didn't accept your identity provider sign-in. Ask your administrator, or use a separate sign-in.")
+			return rejected("%[1]s didn't accept your identity provider sign-in. Ask your administrator, or use your own %[1]s account.")
 		}
 	case identitychaining.ReasonReauthenticationRequired:
-		return rejected("A current identity provider sign-in for %s is required. Sign in again, or use a separate sign-in.")
+		return rejected("A current identity provider sign-in for %[1]s is required. Close this page and start connecting again, or use your own %[1]s account.")
 	case identitychaining.ReasonConfigurationRequired:
-		return rejected("%s isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.")
+		if outcome.Retained {
+			return rejected("Your saved company sign-in for %[1]s isn't working right now. Speakeasy keeps trying it every few minutes, so it may start working again by itself. If it doesn't, ask your administrator, or use your own %[1]s account.")
+		}
+		return rejected("%[1]s isn't set up for identity provider sign-in yet. Ask your administrator, or use your own %[1]s account.")
 	case identitychaining.ReasonIneligibleIdentity:
-		return rejected("Your organization can't vouch for your account to %s, for example because your email isn't on one of its verified domains. Ask your administrator, or use a separate sign-in.")
+		return rejected("Your organization can't vouch for your account to %[1]s, for example because your email isn't on one of its verified domains. Ask your administrator, or use your own %[1]s account.")
+	case identitychaining.ReasonUnmanagedAccount:
+		return rejected("You're signed in to Speakeasy with a personal account, so Speakeasy can't sign you in to %s. Accounts you created yourself with your work email count as personal.")
 	case identitychaining.ReasonNotApplicable, identitychaining.ReasonBindingNotReady, identitychaining.ReasonMalformedAssertion,
 		identitychaining.ReasonMalformedResponse, identitychaining.ReasonTransientFailure, identitychaining.ReasonUnknownRejection,
 		identitychaining.ReasonStaleConfiguration, identitychaining.ReasonProviderUnavailable:

@@ -20,13 +20,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -185,7 +185,7 @@ func (ds *cimdDocServer) certPool() *x509.CertPool {
 // catalog preset, so "presets" mode would deny every one of them
 // before a document was ever fetched. Admission itself is covered by
 // authnchallenge_cimd_admission_test.go, which seeds modes explicitly.
-func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {
+func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, hostedToolset) {
 	t.Helper()
 
 	return newTestCIMDServiceWithMeterProvider(t, testenv.NewMeterProvider(t))
@@ -193,7 +193,7 @@ func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocS
 
 // newTestCIMDServiceWithMeterProvider is newTestCIMDService over a caller's
 // meter provider, for tests that read the admission counter back.
-func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.MeterProvider) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {
+func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.MeterProvider) (context.Context, *testInstance, *cimdDocServer, hostedToolset) {
 	t.Helper()
 
 	ds := startCIMDDocServer(t)
@@ -201,17 +201,7 @@ func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.Mete
 
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	return ctx, ti, ds, toolset
 }
@@ -238,11 +228,11 @@ func doCIMDAuthorize(t *testing.T, ti *testInstance, mcpSlug, clientID, redirect
 
 func requireAuthorizeOAuthError(t *testing.T, w *httptest.ResponseRecorder, status int, code string) {
 	t.Helper()
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 
 	require.Equal(t, status, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, code, body["error"])
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, status)
+	require.Equal(t, code, body.Code)
 }
 
 // TestOAuthCIMD_FullFlow drives the complete authorize → consent → token
@@ -355,7 +345,7 @@ func TestOAuthCIMD_DisabledAfterResolution_RejectsAtAuthorize(t *testing.T) {
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeDisabled)
 
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 	requireAuthorizeErrorDescription(t, w, "does not accept client ID metadata documents")
 	require.Equal(t, int64(1), ds.requests.Load(), "a denied client_id must not cost an outbound document fetch")
 }
@@ -367,7 +357,7 @@ func TestOAuthCIMD_ConfidentialAuthMethodRejected(t *testing.T) {
 	ds.set(t, func(ds *cimdDocServer) { ds.doc["token_endpoint_auth_method"] = "client_secret_basic" })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 }
 
 func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
@@ -377,7 +367,7 @@ func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
 	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json" })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 }
 
 // TestOAuthCIMD_CrossOriginRedirectURIAccepted: a document may register
@@ -401,6 +391,8 @@ func TestOAuthCIMD_UnregisteredRedirectURIRejected(t *testing.T) {
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/other-path", pkceChallenge(pkceVerifier(t)))
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_request")
+	require.Contains(t, w.Body.String(), "or its return address")
+	require.NotContains(t, w.Body.String(), "started sign-in in a way")
 }
 
 // TestOAuthCIMD_NonLoopbackPortVarianceRejected: the loopback variable-port
@@ -459,7 +451,7 @@ func TestOAuthCIMD_TokenRejectsSecretForCIMDClient(t *testing.T) {
 	tokenReq = tokenReq.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
 	tw := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleToken(tw, tokenReq))
-	require.Equal(t, http.StatusUnauthorized, tw.Code)
+	require.Equal(t, http.StatusBadRequest, tw.Code)
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(tw.Body.Bytes(), &body))
 	require.Equal(t, "invalid_client", body["error"])
@@ -499,7 +491,7 @@ func doCIMDConsentGet(t *testing.T, ti *testInstance, mcpSlug, stateID string) *
 
 // getCIMDClientRow reads the persisted client row for the doc server's
 // client_id, which every cache assertion is made against.
-func getCIMDClientRow(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, clientID string) usersessions_repo.UserSessionClient {
+func getCIMDClientRow(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, clientID string) usersessions_repo.UserSessionClient {
 	t.Helper()
 
 	row, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
@@ -772,7 +764,7 @@ func TestOAuthCIMD_InvalidDocumentOnRefreshDoesNotPoisonCache(t *testing.T) {
 	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_secret"] = "leaked" })
 
 	w = doCIMDAuthorize(t, ti, mcpSlug, ds.clientID, redirectURI, pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	second := getCIMDClientRow(t, ctx, ti, toolset, ds.clientID)
 	require.Equal(t, "CIMD Integration Client", second.ClientName)
@@ -800,7 +792,7 @@ func TestOAuthCIMD_SecretBearingCollisionRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
+	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client")
 
 	row, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
@@ -859,10 +851,9 @@ func TestOAuthCIMD_FetchFailureReturns503(t *testing.T) {
 	missingDocURL := ds.srv.URL + "/missing.json"
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, missingDocURL, "http://127.0.0.1:33418/callback", pkceChallenge(pkceVerifier(t)))
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.Equal(t, "temporarily_unavailable", body["error"])
-	require.Equal(t, "failed to fetch client metadata document", body["error_description"])
+	body := oauthtest.RequireAuthorizationErrorPage(t, w, http.StatusServiceUnavailable)
+	require.Equal(t, "temporarily_unavailable", body.Code)
+	require.Equal(t, "failed to fetch client metadata document", body.Description)
 }
 
 // TestOAuthCIMD_ConsentEscapesHostileClientName: client_name is

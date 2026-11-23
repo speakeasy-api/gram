@@ -133,12 +133,7 @@ func (s *Auth) requireResolvedProjectAccess(ctx context.Context) error {
 		return oops.E(oops.CodeUnauthorized, nil, "no session found")
 	}
 
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	})
+	return s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read())
 }
 
 func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, projectSlug string) (context.Context, error) {
@@ -294,6 +289,8 @@ func (s *Auth) logAuthContext(ctx context.Context, err error, scheme string) {
 		attr.SlogAuthorizationAPIKeyID(actorAttrs[string(attr.AuthorizationAPIKeyIDKey)]),
 		attr.SlogAuthorizationAuthorizerUserID(actorAttrs[string(attr.AuthorizationAuthorizerUserIDKey)]),
 		attr.SlogAuthorizationOwnerUserID(actorAttrs[string(attr.AuthorizationOwnerUserIDKey)]),
+		attr.SlogWorkloadIssuerID(actorAttrs[string(attr.WorkloadIssuerIDKey)]),
+		attr.SlogWorkloadSubject(actorAttrs[string(attr.WorkloadSubjectKey)]),
 	} {
 		if a.Value.String() != "" && !wide.Contains(ctx, a.Key) {
 			attrs = append(attrs, a)

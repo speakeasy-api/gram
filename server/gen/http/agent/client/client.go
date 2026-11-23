@@ -11,6 +11,7 @@ import (
 	"context"
 	"net/http"
 
+	agent "github.com/speakeasy-api/gram/server/gen/agent"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -20,6 +21,22 @@ type Client struct {
 	// GetPlugins Doer is the HTTP client used to make requests to the getPlugins
 	// endpoint.
 	GetPluginsDoer goahttp.Doer
+
+	// GetMyConnections Doer is the HTTP client used to make requests to the
+	// getMyConnections endpoint.
+	GetMyConnectionsDoer goahttp.Doer
+
+	// GetClaudeObservabilityPlugin Doer is the HTTP client used to make requests
+	// to the getClaudeObservabilityPlugin endpoint.
+	GetClaudeObservabilityPluginDoer goahttp.Doer
+
+	// HideMcpServer Doer is the HTTP client used to make requests to the
+	// hideMcpServer endpoint.
+	HideMcpServerDoer goahttp.Doer
+
+	// UnhideMcpServer Doer is the HTTP client used to make requests to the
+	// unhideMcpServer endpoint.
+	UnhideMcpServerDoer goahttp.Doer
 
 	// ListSyncedUsers Doer is the HTTP client used to make requests to the
 	// listSyncedUsers endpoint.
@@ -57,6 +74,14 @@ type Client struct {
 	// reportAIScan endpoint.
 	ReportAIScanDoer goahttp.Doer
 
+	// ReportState Doer is the HTTP client used to make requests to the reportState
+	// endpoint.
+	ReportStateDoer goahttp.Doer
+
+	// ReportCrash Doer is the HTTP client used to make requests to the reportCrash
+	// endpoint.
+	ReportCrashDoer goahttp.Doer
+
 	// CreateSessionHandoff Doer is the HTTP client used to make requests to the
 	// createSessionHandoff endpoint.
 	CreateSessionHandoffDoer goahttp.Doer
@@ -81,22 +106,28 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetPluginsDoer:           doer,
-		ListSyncedUsersDoer:      doer,
-		GetConfigurationDoer:     doer,
-		UpdateConfigurationDoer:  doer,
-		ListAiScanTargetsDoer:    doer,
-		UpsertAiScanTargetDoer:   doer,
-		DeleteAiScanTargetDoer:   doer,
-		GetSessionMetaDoer:       doer,
-		ReportSessionMovedDoer:   doer,
-		ReportAIScanDoer:         doer,
-		CreateSessionHandoffDoer: doer,
-		RestoreResponseBody:      restoreBody,
-		scheme:                   scheme,
-		host:                     host,
-		decoder:                  dec,
-		encoder:                  enc,
+		GetPluginsDoer:                   doer,
+		GetMyConnectionsDoer:             doer,
+		GetClaudeObservabilityPluginDoer: doer,
+		HideMcpServerDoer:                doer,
+		UnhideMcpServerDoer:              doer,
+		ListSyncedUsersDoer:              doer,
+		GetConfigurationDoer:             doer,
+		UpdateConfigurationDoer:          doer,
+		ListAiScanTargetsDoer:            doer,
+		UpsertAiScanTargetDoer:           doer,
+		DeleteAiScanTargetDoer:           doer,
+		GetSessionMetaDoer:               doer,
+		ReportSessionMovedDoer:           doer,
+		ReportAIScanDoer:                 doer,
+		ReportStateDoer:                  doer,
+		ReportCrashDoer:                  doer,
+		CreateSessionHandoffDoer:         doer,
+		RestoreResponseBody:              restoreBody,
+		scheme:                           scheme,
+		host:                             host,
+		decoder:                          dec,
+		encoder:                          enc,
 	}
 }
 
@@ -119,6 +150,107 @@ func (c *Client) GetPlugins() goa.Endpoint {
 		resp, err := c.GetPluginsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "getPlugins", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMyConnections returns an endpoint that makes HTTP requests to the agent
+// service getMyConnections server.
+func (c *Client) GetMyConnections() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMyConnectionsRequest(c.encoder)
+		decodeResponse = DecodeGetMyConnectionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMyConnectionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMyConnectionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "getMyConnections", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetClaudeObservabilityPlugin returns an endpoint that makes HTTP requests to
+// the agent service getClaudeObservabilityPlugin server.
+func (c *Client) GetClaudeObservabilityPlugin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetClaudeObservabilityPluginRequest(c.encoder)
+		decodeResponse = DecodeGetClaudeObservabilityPluginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetClaudeObservabilityPluginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetClaudeObservabilityPluginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "getClaudeObservabilityPlugin", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &agent.GetClaudeObservabilityPluginResponseData{Result: res.(*agent.GetClaudeObservabilityPluginResult), Body: resp.Body}, nil
+	}
+}
+
+// HideMcpServer returns an endpoint that makes HTTP requests to the agent
+// service hideMcpServer server.
+func (c *Client) HideMcpServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeHideMcpServerRequest(c.encoder)
+		decodeResponse = DecodeHideMcpServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildHideMcpServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.HideMcpServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "hideMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UnhideMcpServer returns an endpoint that makes HTTP requests to the agent
+// service unhideMcpServer server.
+func (c *Client) UnhideMcpServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUnhideMcpServerRequest(c.encoder)
+		decodeResponse = DecodeUnhideMcpServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUnhideMcpServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UnhideMcpServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "unhideMcpServer", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -335,6 +467,54 @@ func (c *Client) ReportAIScan() goa.Endpoint {
 		resp, err := c.ReportAIScanDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "reportAIScan", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReportState returns an endpoint that makes HTTP requests to the agent
+// service reportState server.
+func (c *Client) ReportState() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReportStateRequest(c.encoder)
+		decodeResponse = DecodeReportStateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReportStateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReportStateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "reportState", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ReportCrash returns an endpoint that makes HTTP requests to the agent
+// service reportCrash server.
+func (c *Client) ReportCrash() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeReportCrashRequest(c.encoder)
+		decodeResponse = DecodeReportCrashResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildReportCrashRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ReportCrashDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "reportCrash", err)
 		}
 		return decodeResponse(resp)
 	}

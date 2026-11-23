@@ -14,10 +14,9 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    policyCenter: { detail: { href: (id: string) => `/guardrails/${id}` } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+  useProjectSlugForRequests: () => "project",
 }));
 
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
@@ -80,7 +79,7 @@ describe("ShadowAIScratchOption", () => {
     expect(screen.getByText(/already has one/)).toBeTruthy();
     expect(
       screen.getByText("Open Shadow MCP Server Policy").getAttribute("href"),
-    ).toBe("/guardrails/policy-sm");
+    ).toBe("/org/projects/project/risk-policies/policy-sm");
     fireEvent.click(screen.getByText("Shadow AI"));
     expect(mocks.onPick).not.toHaveBeenCalled();
   });

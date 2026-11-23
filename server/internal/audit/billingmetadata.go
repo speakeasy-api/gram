@@ -115,6 +115,7 @@ func (l *Logger) logBillingMetadataAction(
 	action Action,
 ) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: organizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -152,6 +153,7 @@ func (l *Logger) LogBillingMetadataUpdate(ctx context.Context, dbtx repo.DBTX, e
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

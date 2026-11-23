@@ -1,10 +1,11 @@
+import { Spinner } from "@/components/ui/Spinner";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Text } from "@/components/ui/Text";
 import type { AudienceOption } from "@gram/client/models/components/audienceoption.js";
 import { useAudienceOptions } from "@gram/client/react-query/audienceOptions.js";
-import { Loader2 } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
 import { audienceIcon, OPTION_GROUPS } from "./serverAudience";
 
@@ -94,7 +95,7 @@ export function AddAudienceDialog({
 
         <div className="py-2">
           {isLoading ? (
-            <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+            <Skeleton label="Loading audience options" className="h-9 w-full" />
           ) : isError ? (
             <div className="flex flex-col items-start gap-2">
               <Text muted small>
@@ -141,7 +142,7 @@ export function AddAudienceDialog({
           >
             {pending && (
               <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             )}
             <Button.Text>

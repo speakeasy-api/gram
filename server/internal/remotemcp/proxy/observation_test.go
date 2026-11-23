@@ -117,7 +117,7 @@ func TestTunnelObservationIdleStreamIsIncomplete(t *testing.T) {
 	var outcomes []string
 	p.RequestObserver = func(_, _, outcome string, _ time.Duration) { outcomes = append(outcomes, outcome) }
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
-	require.Error(t, p.Post(httptest.NewRecorder(), req))
+	require.NoError(t, p.Post(httptest.NewRecorder(), req), "the stalled request is answered with an SSE error event")
 	require.Equal(t, []string{"attempt", "incomplete"}, outcomes)
 }
 

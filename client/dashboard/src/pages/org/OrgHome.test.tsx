@@ -88,29 +88,6 @@ vi.mock(
     useRecordPlatformMCPDashboardCtaEventMutation: () => ({ mutate: vi.fn() }),
   }),
 );
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    access: {
-      challenges: {
-        Link: ({ children }: { children: ReactNode }) => <>{children}</>,
-      },
-      roles: { goTo: vi.fn() },
-    },
-    auditLogs: {
-      Link: ({ children }: { children: ReactNode }) => <>{children}</>,
-    },
-    team: { goTo: vi.fn() },
-    // Used by the welcome banner's route cards.
-    home: { href: () => "/acme" },
-    setup: { href: () => "/acme/setup" },
-    headless: { href: () => "/acme/headless" },
-  }),
-  useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
-    exploreDemo: { href: () => "/explore-demo" },
-    home: { href: () => `/acme/projects/${projectSlug}` },
-  }),
-}));
-
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
@@ -131,7 +108,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   useQueryClient: () => ({ prefetchQuery: vi.fn() }),
   useQuery: () => ({ data: undefined, isPending: false }),
 }));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   Link: ({ children, ...props }: React.ComponentProps<"a">) => (
     <a {...props}>{children}</a>
   ),

@@ -60,6 +60,7 @@ func (l *Logger) LogJsonWebKeySetCreate(ctx context.Context, dbtx repo.DBTX, eve
 		return fmt.Errorf("marshal %s metadata: %w", ActionJsonWebKeySetCreate, err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -119,6 +120,7 @@ func (l *Logger) LogJsonWebKeySetUpdate(ctx context.Context, dbtx repo.DBTX, eve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -156,6 +158,7 @@ type LogJsonWebKeySetDeleteEvent struct {
 
 func (l *Logger) LogJsonWebKeySetDelete(ctx context.Context, dbtx repo.DBTX, event LogJsonWebKeySetDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

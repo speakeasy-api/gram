@@ -23,10 +23,8 @@ vi.mock("@/hooks/useToolsetUrl", () => ({
   useResolvedMcpServerUrl: resolveEndpoints,
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: { gateway: { overview: { href: (id: string) => `/mcp/g/${id}` } } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 import { GatewayTableRow } from "./mcp-table-rows";
@@ -56,6 +54,16 @@ function renderRow(endpoints: McpEndpoint[]) {
     </MemoryRouter>,
   );
 }
+
+it("links the row to the gateway overview", () => {
+  renderRow([]);
+
+  expect(
+    screen
+      .getByRole("link", { name: "Open gateway Engineering" })
+      .getAttribute("href"),
+  ).toBe("/org/projects/project/mcp/gateway/gateway-id/overview");
+});
 
 it("renders a gateway endpoint address and copy action", () => {
   const endpoint = {

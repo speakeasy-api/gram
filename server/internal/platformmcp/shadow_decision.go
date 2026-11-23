@@ -31,11 +31,13 @@ var (
 )
 
 type DecideShadowMCPAccessInput struct {
-	ProjectID          string   `json:"project_id" jsonschema:"explicit project ID used to inspect the Shadow MCP target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
+	ProjectID          string   `json:"-"`
 	TargetReference    string   `json:"target_reference" jsonschema:"short-lived opaque target reference returned by list_shadow_mcp_inventory or get_shadow_mcp_review"`
 	Decision           string   `json:"decision" jsonschema:"decision to enforce: allow or deny"`
 	Rationale          string   `json:"rationale" jsonschema:"bounded reason for the decision; required and stored in the audit trail"`
-	AudienceReferences []string `json:"audience_references,omitempty" jsonschema:"for allow, one or more opaque role/directory references returned by list_plugin_assignments; use the explicit Everyone reference for organization-wide access; forbidden for deny"`
+	AudienceReferences []string `json:"audience_references,omitempty" jsonschema:"for allow, one or more opaque role/directory references returned by list_plugin_assignments; use the explicit Everyone reference for organization-wide access. For deny, optional: references to block only those roles or groups; omit them to block everyone"`
 	ExpectedVersion    string   `json:"expected_version" jsonschema:"opaque decision version returned by get_shadow_mcp_review immediately before this write"`
 	IdempotencyKey     string   `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact decision"`
 	Confirmed          bool     `json:"confirmed" jsonschema:"set true only after the user confirms the exact project, target, decision, audiences, and rationale"`
@@ -116,9 +118,6 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 	if input.Decision == "allow" && len(references) == 0 {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionInvalid("Allow requires at least one explicit audience reference. Use the Everyone reference for organization-wide access.")
 	}
-	if input.Decision == "deny" && len(references) != 0 {
-		return DecideShadowMCPAccessOutput{}, shadowDecisionInvalid("Deny does not accept audience references.")
-	}
 	if !s.valid() || principal.OrganizationID == "" || principal.UserID == "" {
 		return DecideShadowMCPAccessOutput{}, shadowDecisionUnavailable(nil)
 	}
@@ -144,7 +143,9 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 		}
 		principalURNs := []string{}
 		summaries := []PluginAssignmentSummaryResult{}
-		if input.Decision == "allow" {
+		// An allow always names its audience. A deny names one only when it
+		// blocks some roles or groups rather than everyone.
+		if len(references) > 0 {
 			principalURNs, summaries, err = s.audiences.ResolveAssignmentReferences(ctx, tx, principal, project, references)
 			if err != nil {
 				return ShadowDecisionReceiptResult{}, mapShadowAudienceError(err)
@@ -178,7 +179,7 @@ func (s *ShadowDecisionService) Decide(ctx context.Context, principal Principal,
 		return DecideShadowMCPAccessOutput{}, shadowDecisionUnavailable(err)
 	}
 	output := DecideShadowMCPAccessOutput{Decision: stored.Decision, Audiences: stored.Audiences, State: nil, StateStatus: "pending", Receipt: riskMutationToolReceipt(receipt)}
-	state, stateErr := s.shadow.GetReview(ctx, principal, GetShadowMCPReviewInput{ProjectID: project.ID.String(), TargetReference: input.TargetReference})
+	state, stateErr := s.shadow.GetReview(ctx, principal, GetShadowMCPReviewInput{ProjectSlug: "", ProjectID: project.ID.String(), TargetReference: input.TargetReference})
 	if stateErr == nil {
 		output.State = &state
 		output.StateStatus = "complete"
@@ -192,10 +193,6 @@ func (s *ShadowDecisionService) admit(ctx context.Context, principal Principal, 
 		return shadowDecisionUnavailable(err)
 	}
 	groups := feature.OrgProjectGroups(organizationSlug, project.Slug)
-	base, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagMCPApproval, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, ""))
-	if err != nil || base != feature.EvaluationEnabled {
-		return shadowDecisionUnavailable(err)
-	}
 	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagPlatformMCPShadowAccessDecisions, principal.OrganizationID, groups)
 	if err != nil || evaluation != feature.EvaluationEnabled {
 		return shadowDecisionUnavailable(err)
@@ -221,7 +218,7 @@ func (s *ShadowDecisionService) charge(principal Principal) func(context.Context
 func shadowDecisionAudiences(input []PluginAssignmentSummaryResult) []ShadowDecisionAudience {
 	result := make([]ShadowDecisionAudience, 0, len(input))
 	for _, item := range input {
-		result = append(result, ShadowDecisionAudience(item))
+		result = append(result, ShadowDecisionAudience{Kind: item.Kind, DisplayName: item.DisplayName, MemberCount: item.MemberCount})
 	}
 	return result
 }
@@ -271,6 +268,14 @@ func mapShadowAudienceError(err error) error {
 func mapShadowDecisionCoreError(err error) error {
 	if _, ok := errors.AsType[*ShadowDecisionError](err); ok {
 		return err
+	}
+	// The project's policy cannot express the requested audience. Rereading
+	// the review does not help, so name the decision that can be enforced.
+	if errors.Is(err, mcpapproval.ErrNarrowDenialUnderEveryoneBlockAll) {
+		return shadowDecisionInvalid("This project blocks servers by default for everyone, so a deny blocks the server for everyone. Deny without audience references.")
+	}
+	if errors.Is(err, mcpapproval.ErrNarrowApprovalUnderAllowAll) {
+		return shadowDecisionInvalid("This project allows servers by default, so an allow can only be for everyone. Allow with the Everyone reference, or switch the policy to block-by-default for per-role access.")
 	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		if shareable.Code == oops.CodeBadRequest || shareable.Code == oops.CodeInvalid {

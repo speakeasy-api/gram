@@ -56,6 +56,7 @@ func directRemoteProtocolFixture(t *testing.T, mode string) (*directRemoteHTTPIn
 		return &mcp.CallToolResult{}, nil
 	})
 	modern := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true})
+	sse := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: false, DisableLocalhostProtection: true})
 	inspector := directRemoteHTTPFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" {
 			t.Error("authorization leaked")
@@ -119,14 +120,18 @@ func directRemoteProtocolFixture(t *testing.T, mode string) (*directRemoteHTTPIn
 			w.WriteHeader(status)
 			return
 		}
-		if mode == "modern" || mode == "tools-auth" || mode == "discover-auth" {
+		if mode == "modern" || mode == "sse" || mode == "tools-auth" || mode == "discover-auth" {
 			if request.Method == "initialize" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"error":{"code":-32601,"message":"unknown method"}}`, request.ID)
 				return
 			}
-			modern.ServeHTTP(w, r)
+			if mode == "sse" {
+				sse.ServeHTTP(w, r)
+			} else {
+				modern.ServeHTTP(w, r)
+			}
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -184,15 +189,17 @@ func directRemoteProtocolFixture(t *testing.T, mode string) (*directRemoteHTTPIn
 func TestDirectRemoteSDKProtocolSequence(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		mode    string
-		methods []string
+		mode       string
+		methods    []string
+		serverName string
 	}{
-		{"modern", []string{"server/discover", "tools/list"}},
-		{"legacy", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}},
-		{"legacy-no-content", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}},
-		{"legacy-empty-ok", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}},
-		{"stateful", []string{"server/discover", "initialize", "notifications/initialized", "tools/list", "DELETE"}},
-		{"discover-blocked", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}},
+		{"modern", []string{"server/discover", "tools/list"}, "fixture"},
+		{"sse", []string{"server/discover", "tools/list"}, "fixture"},
+		{"legacy", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, "legacy"},
+		{"legacy-no-content", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, "legacy"},
+		{"legacy-empty-ok", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, "legacy"},
+		{"stateful", []string{"server/discover", "initialize", "notifications/initialized", "tools/list", "DELETE"}, "legacy"},
+		{"discover-blocked", []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, "legacy"},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Parallel()
@@ -201,11 +208,42 @@ func TestDirectRemoteSDKProtocolSequence(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, []string{"example"}, result.ToolNames)
 			require.Equal(t, tc.methods, methods())
+			require.Equal(t, tc.serverName, result.ServerName)
 		})
 	}
 }
 
-func TestDirectRemoteSDKRejectsSSEWithoutFallback(t *testing.T) {
+func TestDirectRemoteSDKAcceptsOpenSSEStream(t *testing.T) {
+	t.Parallel()
+	var requests atomic.Int32
+	inspector := directRemoteHTTPFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		var request struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		result := `{"type":"complete","supportedVersions":["2026-07-28"],"capabilities":{"tools":{}}}`
+		if request.Method == "tools/list" {
+			result = `{"type":"complete","tools":[]}`
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", request.ID, result)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	result, err := inspector.Inspect(t.Context(), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Empty(t, result.ToolNames)
+	require.Equal(t, int32(2), requests.Load())
+}
+
+func TestDirectRemoteSDKRejectsInvalidSSE(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32
 	inspector := directRemoteHTTPFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -335,6 +373,15 @@ func TestDirectRemoteSDKRejectsOversizedBodyWithoutFallback(t *testing.T) {
 	require.Equal(t, int32(1), requests.Load())
 }
 
+func TestDirectRemoteSSEBufferExhaustion(t *testing.T) {
+	t.Parallel()
+	transport := &directRemoteRoundTripper{ctx: t.Context(), budget: directRemoteResponseBudget{remaining: 4}}
+	payload, err := transport.bufferSSEThroughResponse(strings.NewReader("12345"))
+	require.Nil(t, payload)
+	require.Equal(t, SetupCategoryTemporarilyUnavailable, setupCategoryFromError(err))
+	require.Zero(t, transport.budget.remaining)
+}
+
 func TestDirectRemoteSDKRedirectLimitIsTerminal(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32
@@ -460,7 +507,7 @@ func TestDirectRemoteTransportCleanupRedirectPreservesObservation(t *testing.T) 
 	require.NoError(t, failure)
 }
 
-func TestDirectRemoteSDKRejectsRedirectedSSE(t *testing.T) {
+func TestDirectRemoteSDKAcceptsRedirectedSSE(t *testing.T) {
 	t.Parallel()
 	inspector := directRemoteHTTPFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -482,8 +529,9 @@ func TestDirectRemoteSDKRejectsRedirectedSSE(t *testing.T) {
 		}
 		_, _ = fmt.Fprintf(w, "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n\n", r.URL.Query().Get("id"), result)
 	}))
-	_, err := inspector.Inspect(t.Context(), "https://remote.example.test/mcp")
-	require.Equal(t, SetupCategoryInvalidMCPResponse, setupCategoryFromError(err))
+	result, err := inspector.Inspect(t.Context(), "https://remote.example.test/mcp")
+	require.NoError(t, err)
+	require.Empty(t, result.ToolNames)
 }
 
 func TestDirectRemoteSDKRejectedToolsStillClosesSession(t *testing.T) {
@@ -509,7 +557,7 @@ func TestDirectRemoteOAuthDiscoveryRecoversFromMetadataTransportFailure(t *testi
 		}
 	})}
 	client := clientWithDirectRemoteBudget(t, base, directRemoteResponseBudget{remaining: directRemoteProbeMaxBytes, requestsRemaining: directRemoteProbeMaxRequests})
-	discovery, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp")
+	discovery, _, err := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp")
 	require.NoError(t, err)
 	require.Equal(t, "available_dcr", discovery)
 	require.Equal(t, []string{"/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server"}, requests)

@@ -189,6 +189,25 @@ type GetUsageTiersResponseBody struct {
 	Enterprise *TierLimitsResponseBody `form:"enterprise,omitempty" json:"enterprise,omitempty" xml:"enterprise,omitempty"`
 }
 
+// GetStripeCheckoutStatusResponseBody is the type of the "usage" service
+// "getStripeCheckoutStatus" endpoint HTTP response body.
+type GetStripeCheckoutStatusResponseBody struct {
+	Status        *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	PaymentStatus *string `form:"payment_status,omitempty" json:"payment_status,omitempty" xml:"payment_status,omitempty"`
+	// Whether this completed session and its own subscription are ready for
+	// billing activation; local webhook persistence is still required
+	BillingReady *bool `form:"billing_ready,omitempty" json:"billing_ready,omitempty" xml:"billing_ready,omitempty"`
+}
+
+// CreateStripeCheckoutResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body.
+type CreateStripeCheckoutResponseBody struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey *string `form:"publishable_key,omitempty" json:"publishable_key,omitempty" xml:"publishable_key,omitempty"`
+}
+
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
@@ -2331,9 +2350,10 @@ type CreateCustomerSessionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutUnauthorizedResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "unauthorized" error.
-type CreateCheckoutUnauthorizedResponseBody struct {
+// GetStripeCheckoutStatusUnauthorizedResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetStripeCheckoutStatusUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2349,9 +2369,10 @@ type CreateCheckoutUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutForbiddenResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "forbidden" error.
-type CreateCheckoutForbiddenResponseBody struct {
+// GetStripeCheckoutStatusForbiddenResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "forbidden" error.
+type GetStripeCheckoutStatusForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2367,9 +2388,10 @@ type CreateCheckoutForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutBadRequestResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "bad_request" error.
-type CreateCheckoutBadRequestResponseBody struct {
+// GetStripeCheckoutStatusBadRequestResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "bad_request" error.
+type GetStripeCheckoutStatusBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2385,9 +2407,10 @@ type CreateCheckoutBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutNotFoundResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "not_found" error.
-type CreateCheckoutNotFoundResponseBody struct {
+// GetStripeCheckoutStatusNotFoundResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "not_found" error.
+type GetStripeCheckoutStatusNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2403,9 +2426,10 @@ type CreateCheckoutNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutConflictResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "conflict" error.
-type CreateCheckoutConflictResponseBody struct {
+// GetStripeCheckoutStatusConflictResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "conflict" error.
+type GetStripeCheckoutStatusConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2421,10 +2445,10 @@ type CreateCheckoutConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutUnsupportedMediaResponseBody is the type of the "usage"
-// service "createCheckout" endpoint HTTP response body for the
-// "unsupported_media" error.
-type CreateCheckoutUnsupportedMediaResponseBody struct {
+// GetStripeCheckoutStatusUnsupportedMediaResponseBody is the type of the
+// "usage" service "getStripeCheckoutStatus" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetStripeCheckoutStatusUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2440,9 +2464,10 @@ type CreateCheckoutUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutInvalidResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "invalid" error.
-type CreateCheckoutInvalidResponseBody struct {
+// GetStripeCheckoutStatusInvalidResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "invalid" error.
+type GetStripeCheckoutStatusInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2458,10 +2483,10 @@ type CreateCheckoutInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutInvariantViolationResponseBody is the type of the "usage"
-// service "createCheckout" endpoint HTTP response body for the
-// "invariant_violation" error.
-type CreateCheckoutInvariantViolationResponseBody struct {
+// GetStripeCheckoutStatusInvariantViolationResponseBody is the type of the
+// "usage" service "getStripeCheckoutStatus" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetStripeCheckoutStatusInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2477,9 +2502,10 @@ type CreateCheckoutInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutUnexpectedResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "unexpected" error.
-type CreateCheckoutUnexpectedResponseBody struct {
+// GetStripeCheckoutStatusUnexpectedResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "unexpected" error.
+type GetStripeCheckoutStatusUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2495,9 +2521,10 @@ type CreateCheckoutUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateCheckoutGatewayErrorResponseBody is the type of the "usage" service
-// "createCheckout" endpoint HTTP response body for the "gateway_error" error.
-type CreateCheckoutGatewayErrorResponseBody struct {
+// GetStripeCheckoutStatusGatewayErrorResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetStripeCheckoutStatusGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5829,9 +5856,21 @@ func NewCreateCustomerSessionGatewayError(body *CreateCustomerSessionGatewayErro
 	return v
 }
 
-// NewCreateCheckoutUnauthorized builds a usage service createCheckout endpoint
-// unauthorized error.
-func NewCreateCheckoutUnauthorized(body *CreateCheckoutUnauthorizedResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusResultOK builds a "usage" service
+// "getStripeCheckoutStatus" endpoint result from a HTTP "OK" response.
+func NewGetStripeCheckoutStatusResultOK(body *GetStripeCheckoutStatusResponseBody) *usage.GetStripeCheckoutStatusResult {
+	v := &usage.GetStripeCheckoutStatusResult{
+		Status:        *body.Status,
+		PaymentStatus: *body.PaymentStatus,
+		BillingReady:  *body.BillingReady,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusUnauthorized builds a usage service
+// getStripeCheckoutStatus endpoint unauthorized error.
+func NewGetStripeCheckoutStatusUnauthorized(body *GetStripeCheckoutStatusUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5844,9 +5883,9 @@ func NewCreateCheckoutUnauthorized(body *CreateCheckoutUnauthorizedResponseBody)
 	return v
 }
 
-// NewCreateCheckoutForbidden builds a usage service createCheckout endpoint
-// forbidden error.
-func NewCreateCheckoutForbidden(body *CreateCheckoutForbiddenResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusForbidden builds a usage service
+// getStripeCheckoutStatus endpoint forbidden error.
+func NewGetStripeCheckoutStatusForbidden(body *GetStripeCheckoutStatusForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5859,9 +5898,9 @@ func NewCreateCheckoutForbidden(body *CreateCheckoutForbiddenResponseBody) *goa.
 	return v
 }
 
-// NewCreateCheckoutBadRequest builds a usage service createCheckout endpoint
-// bad_request error.
-func NewCreateCheckoutBadRequest(body *CreateCheckoutBadRequestResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusBadRequest builds a usage service
+// getStripeCheckoutStatus endpoint bad_request error.
+func NewGetStripeCheckoutStatusBadRequest(body *GetStripeCheckoutStatusBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5874,9 +5913,9 @@ func NewCreateCheckoutBadRequest(body *CreateCheckoutBadRequestResponseBody) *go
 	return v
 }
 
-// NewCreateCheckoutNotFound builds a usage service createCheckout endpoint
-// not_found error.
-func NewCreateCheckoutNotFound(body *CreateCheckoutNotFoundResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusNotFound builds a usage service
+// getStripeCheckoutStatus endpoint not_found error.
+func NewGetStripeCheckoutStatusNotFound(body *GetStripeCheckoutStatusNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5889,9 +5928,9 @@ func NewCreateCheckoutNotFound(body *CreateCheckoutNotFoundResponseBody) *goa.Se
 	return v
 }
 
-// NewCreateCheckoutConflict builds a usage service createCheckout endpoint
-// conflict error.
-func NewCreateCheckoutConflict(body *CreateCheckoutConflictResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusConflict builds a usage service
+// getStripeCheckoutStatus endpoint conflict error.
+func NewGetStripeCheckoutStatusConflict(body *GetStripeCheckoutStatusConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5904,9 +5943,9 @@ func NewCreateCheckoutConflict(body *CreateCheckoutConflictResponseBody) *goa.Se
 	return v
 }
 
-// NewCreateCheckoutUnsupportedMedia builds a usage service createCheckout
-// endpoint unsupported_media error.
-func NewCreateCheckoutUnsupportedMedia(body *CreateCheckoutUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusUnsupportedMedia builds a usage service
+// getStripeCheckoutStatus endpoint unsupported_media error.
+func NewGetStripeCheckoutStatusUnsupportedMedia(body *GetStripeCheckoutStatusUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5919,9 +5958,9 @@ func NewCreateCheckoutUnsupportedMedia(body *CreateCheckoutUnsupportedMediaRespo
 	return v
 }
 
-// NewCreateCheckoutInvalid builds a usage service createCheckout endpoint
-// invalid error.
-func NewCreateCheckoutInvalid(body *CreateCheckoutInvalidResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusInvalid builds a usage service
+// getStripeCheckoutStatus endpoint invalid error.
+func NewGetStripeCheckoutStatusInvalid(body *GetStripeCheckoutStatusInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5934,9 +5973,9 @@ func NewCreateCheckoutInvalid(body *CreateCheckoutInvalidResponseBody) *goa.Serv
 	return v
 }
 
-// NewCreateCheckoutInvariantViolation builds a usage service createCheckout
-// endpoint invariant_violation error.
-func NewCreateCheckoutInvariantViolation(body *CreateCheckoutInvariantViolationResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusInvariantViolation builds a usage service
+// getStripeCheckoutStatus endpoint invariant_violation error.
+func NewGetStripeCheckoutStatusInvariantViolation(body *GetStripeCheckoutStatusInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5949,9 +5988,9 @@ func NewCreateCheckoutInvariantViolation(body *CreateCheckoutInvariantViolationR
 	return v
 }
 
-// NewCreateCheckoutUnexpected builds a usage service createCheckout endpoint
-// unexpected error.
-func NewCreateCheckoutUnexpected(body *CreateCheckoutUnexpectedResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusUnexpected builds a usage service
+// getStripeCheckoutStatus endpoint unexpected error.
+func NewGetStripeCheckoutStatusUnexpected(body *GetStripeCheckoutStatusUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5964,9 +6003,9 @@ func NewCreateCheckoutUnexpected(body *CreateCheckoutUnexpectedResponseBody) *go
 	return v
 }
 
-// NewCreateCheckoutGatewayError builds a usage service createCheckout endpoint
-// gateway_error error.
-func NewCreateCheckoutGatewayError(body *CreateCheckoutGatewayErrorResponseBody) *goa.ServiceError {
+// NewGetStripeCheckoutStatusGatewayError builds a usage service
+// getStripeCheckoutStatus endpoint gateway_error error.
+func NewGetStripeCheckoutStatusGatewayError(body *GetStripeCheckoutStatusGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5974,6 +6013,17 @@ func NewCreateCheckoutGatewayError(body *CreateCheckoutGatewayErrorResponseBody)
 		Temporary: *body.Temporary,
 		Timeout:   *body.Timeout,
 		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateStripeCheckoutStripeEmbeddedCheckoutOK builds a "usage" service
+// "createStripeCheckout" endpoint result from a HTTP "OK" response.
+func NewCreateStripeCheckoutStripeEmbeddedCheckoutOK(body *CreateStripeCheckoutResponseBody) *usage.StripeEmbeddedCheckout {
+	v := &usage.StripeEmbeddedCheckout{
+		ClientSecret:   *body.ClientSecret,
+		PublishableKey: *body.PublishableKey,
 	}
 
 	return v
@@ -7417,6 +7467,43 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 		if err2 := ValidateTierLimitsResponseBody(body.Enterprise); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusResponseBody runs the validations defined on
+// GetStripeCheckoutStatusResponseBody
+func ValidateGetStripeCheckoutStatusResponseBody(body *GetStripeCheckoutStatusResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.PaymentStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("payment_status", "body"))
+	}
+	if body.BillingReady == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("billing_ready", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "open" || *body.Status == "complete" || *body.Status == "expired") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"open", "complete", "expired"}))
+		}
+	}
+	if body.PaymentStatus != nil {
+		if !(*body.PaymentStatus == "paid" || *body.PaymentStatus == "unpaid" || *body.PaymentStatus == "no_payment_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.payment_status", *body.PaymentStatus, []any{"paid", "unpaid", "no_payment_required"}))
+		}
+	}
+	return
+}
+
+// ValidateCreateStripeCheckoutResponseBody runs the validations defined on
+// CreateStripeCheckoutResponseBody
+func ValidateCreateStripeCheckoutResponseBody(body *CreateStripeCheckoutResponseBody) (err error) {
+	if body.ClientSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
+	}
+	if body.PublishableKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("publishable_key", "body"))
 	}
 	return
 }
@@ -10242,9 +10329,9 @@ func ValidateCreateCustomerSessionGatewayErrorResponseBody(body *CreateCustomerS
 	return
 }
 
-// ValidateCreateCheckoutUnauthorizedResponseBody runs the validations defined
-// on createCheckout_unauthorized_response_body
-func ValidateCreateCheckoutUnauthorizedResponseBody(body *CreateCheckoutUnauthorizedResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusUnauthorizedResponseBody runs the validations
+// defined on getStripeCheckoutStatus_unauthorized_response_body
+func ValidateGetStripeCheckoutStatusUnauthorizedResponseBody(body *GetStripeCheckoutStatusUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10266,9 +10353,9 @@ func ValidateCreateCheckoutUnauthorizedResponseBody(body *CreateCheckoutUnauthor
 	return
 }
 
-// ValidateCreateCheckoutForbiddenResponseBody runs the validations defined on
-// createCheckout_forbidden_response_body
-func ValidateCreateCheckoutForbiddenResponseBody(body *CreateCheckoutForbiddenResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusForbiddenResponseBody runs the validations
+// defined on getStripeCheckoutStatus_forbidden_response_body
+func ValidateGetStripeCheckoutStatusForbiddenResponseBody(body *GetStripeCheckoutStatusForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10290,9 +10377,9 @@ func ValidateCreateCheckoutForbiddenResponseBody(body *CreateCheckoutForbiddenRe
 	return
 }
 
-// ValidateCreateCheckoutBadRequestResponseBody runs the validations defined on
-// createCheckout_bad_request_response_body
-func ValidateCreateCheckoutBadRequestResponseBody(body *CreateCheckoutBadRequestResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusBadRequestResponseBody runs the validations
+// defined on getStripeCheckoutStatus_bad_request_response_body
+func ValidateGetStripeCheckoutStatusBadRequestResponseBody(body *GetStripeCheckoutStatusBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10314,9 +10401,9 @@ func ValidateCreateCheckoutBadRequestResponseBody(body *CreateCheckoutBadRequest
 	return
 }
 
-// ValidateCreateCheckoutNotFoundResponseBody runs the validations defined on
-// createCheckout_not_found_response_body
-func ValidateCreateCheckoutNotFoundResponseBody(body *CreateCheckoutNotFoundResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusNotFoundResponseBody runs the validations
+// defined on getStripeCheckoutStatus_not_found_response_body
+func ValidateGetStripeCheckoutStatusNotFoundResponseBody(body *GetStripeCheckoutStatusNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10338,9 +10425,9 @@ func ValidateCreateCheckoutNotFoundResponseBody(body *CreateCheckoutNotFoundResp
 	return
 }
 
-// ValidateCreateCheckoutConflictResponseBody runs the validations defined on
-// createCheckout_conflict_response_body
-func ValidateCreateCheckoutConflictResponseBody(body *CreateCheckoutConflictResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusConflictResponseBody runs the validations
+// defined on getStripeCheckoutStatus_conflict_response_body
+func ValidateGetStripeCheckoutStatusConflictResponseBody(body *GetStripeCheckoutStatusConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10362,9 +10449,10 @@ func ValidateCreateCheckoutConflictResponseBody(body *CreateCheckoutConflictResp
 	return
 }
 
-// ValidateCreateCheckoutUnsupportedMediaResponseBody runs the validations
-// defined on createCheckout_unsupported_media_response_body
-func ValidateCreateCheckoutUnsupportedMediaResponseBody(body *CreateCheckoutUnsupportedMediaResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusUnsupportedMediaResponseBody runs the
+// validations defined on
+// getStripeCheckoutStatus_unsupported_media_response_body
+func ValidateGetStripeCheckoutStatusUnsupportedMediaResponseBody(body *GetStripeCheckoutStatusUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10386,9 +10474,9 @@ func ValidateCreateCheckoutUnsupportedMediaResponseBody(body *CreateCheckoutUnsu
 	return
 }
 
-// ValidateCreateCheckoutInvalidResponseBody runs the validations defined on
-// createCheckout_invalid_response_body
-func ValidateCreateCheckoutInvalidResponseBody(body *CreateCheckoutInvalidResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusInvalidResponseBody runs the validations
+// defined on getStripeCheckoutStatus_invalid_response_body
+func ValidateGetStripeCheckoutStatusInvalidResponseBody(body *GetStripeCheckoutStatusInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10410,9 +10498,10 @@ func ValidateCreateCheckoutInvalidResponseBody(body *CreateCheckoutInvalidRespon
 	return
 }
 
-// ValidateCreateCheckoutInvariantViolationResponseBody runs the validations
-// defined on createCheckout_invariant_violation_response_body
-func ValidateCreateCheckoutInvariantViolationResponseBody(body *CreateCheckoutInvariantViolationResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusInvariantViolationResponseBody runs the
+// validations defined on
+// getStripeCheckoutStatus_invariant_violation_response_body
+func ValidateGetStripeCheckoutStatusInvariantViolationResponseBody(body *GetStripeCheckoutStatusInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10434,9 +10523,9 @@ func ValidateCreateCheckoutInvariantViolationResponseBody(body *CreateCheckoutIn
 	return
 }
 
-// ValidateCreateCheckoutUnexpectedResponseBody runs the validations defined on
-// createCheckout_unexpected_response_body
-func ValidateCreateCheckoutUnexpectedResponseBody(body *CreateCheckoutUnexpectedResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusUnexpectedResponseBody runs the validations
+// defined on getStripeCheckoutStatus_unexpected_response_body
+func ValidateGetStripeCheckoutStatusUnexpectedResponseBody(body *GetStripeCheckoutStatusUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10458,9 +10547,9 @@ func ValidateCreateCheckoutUnexpectedResponseBody(body *CreateCheckoutUnexpected
 	return
 }
 
-// ValidateCreateCheckoutGatewayErrorResponseBody runs the validations defined
-// on createCheckout_gateway_error_response_body
-func ValidateCreateCheckoutGatewayErrorResponseBody(body *CreateCheckoutGatewayErrorResponseBody) (err error) {
+// ValidateGetStripeCheckoutStatusGatewayErrorResponseBody runs the validations
+// defined on getStripeCheckoutStatus_gateway_error_response_body
+func ValidateGetStripeCheckoutStatusGatewayErrorResponseBody(body *GetStripeCheckoutStatusGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

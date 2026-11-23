@@ -192,6 +192,49 @@ func TestPrepareRiskExclusionCreateRejectsWhitespaceOnlyExactValue(t *testing.T)
 	require.Equal(t, "invalid_request", mutation.Code)
 }
 
+func TestPrepareRiskExclusionCreateEnforcesMatchTypeRules(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := policycatalog.Build()
+	require.NoError(t, err)
+	service := newRiskExclusionMutationService(nil, nil, catalog)
+	rule, source, entity := catalog.DisabledRules[0], catalog.Sources[0], catalog.PresidioEntities[0]
+	for name, test := range map[string]struct {
+		input   createRiskExclusionInput
+		refusal string
+	}{
+		"exact with filters":            {input: createRiskExclusionInput{MatchType: "exact", MatchValue: "sk_test_EXAMPLE", RuleIDFilter: rule, SourceFilter: source}},
+		"rule_id":                       {input: createRiskExclusionInput{MatchType: "rule_id", MatchValue: rule, SourceFilter: source}},
+		"source":                        {input: createRiskExclusionInput{MatchType: "source", MatchValue: source, RuleIDFilter: rule}},
+		"entity_type":                   {input: createRiskExclusionInput{MatchType: "entity_type", MatchValue: entity}},
+		"unknown match type":            {input: createRiskExclusionInput{MatchType: "glob", MatchValue: "x"}, refusal: "match_type must be exact, rule_id, source or entity_type."},
+		"exact with unknown rule":       {input: createRiskExclusionInput{MatchType: "exact", MatchValue: "x", RuleIDFilter: "not-a-rule"}, refusal: "rule_id_filter is not a known detector rule."},
+		"rule_id with unknown rule":     {input: createRiskExclusionInput{MatchType: "rule_id", MatchValue: "not-a-rule"}, refusal: "match_value must be a known detector rule"},
+		"rule_id with rule filter":      {input: createRiskExclusionInput{MatchType: "rule_id", MatchValue: rule, RuleIDFilter: rule}, refusal: "match_type rule_id takes no rule_id_filter."},
+		"source with unknown source":    {input: createRiskExclusionInput{MatchType: "source", MatchValue: "not-a-source"}, refusal: "match_value must be a known detector source"},
+		"source with source filter":     {input: createRiskExclusionInput{MatchType: "source", MatchValue: source, SourceFilter: source}, refusal: "match_type source takes no source_filter."},
+		"entity_type with unknown":      {input: createRiskExclusionInput{MatchType: "entity_type", MatchValue: "NOT_AN_ENTITY"}, refusal: "known Presidio entity type"},
+		"entity_type with rule filter":  {input: createRiskExclusionInput{MatchType: "entity_type", MatchValue: entity, RuleIDFilter: rule}, refusal: "takes no rule_id_filter"},
+		"entity_type with other source": {input: createRiskExclusionInput{MatchType: "entity_type", MatchValue: entity, SourceFilter: "gitleaks"}, refusal: "source_filter presidio or none"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			input := test.input
+			input.ProjectSlug, input.Enabled, input.IdempotencyKey = "project", true, "key"
+			_, err := service.prepareCreate(Principal{OrganizationID: "<ORG_ID>"}, ResolvedProject{ID: uuid.New(), Slug: "project"}, input)
+			if test.refusal == "" {
+				require.NoError(t, err)
+				return
+			}
+			var mutation *RiskMutationError
+			require.ErrorAs(t, err, &mutation)
+			require.Equal(t, "invalid_request", mutation.Code)
+			require.Contains(t, mutation.Message, test.refusal)
+			require.Contains(t, mutation.Message, "No exclusion was created.")
+		})
+	}
+}
+
 func TestRiskMutationInputHashIsCanonicalAndOperationSeparated(t *testing.T) {
 	t.Parallel()
 

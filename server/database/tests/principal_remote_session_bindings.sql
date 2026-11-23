@@ -50,9 +50,14 @@ FROM generate_series(1, 6) AS n;
 INSERT INTO remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id)
 SELECT pg_temp.fixture_id(i), pg_temp.fixture_id(c)
 FROM generate_series(1, 6) AS i CROSS JOIN generate_series(1, 6) AS c;
-INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
+INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted)
 SELECT pg_temp.fixture_id(i * 10 + c), 'fixture-subject-' || i,
-  pg_temp.fixture_id(i), pg_temp.fixture_id(c), 'fixture-ciphertext'
+  pg_temp.fixture_id(i), pg_temp.fixture_id(c),
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = pg_temp.fixture_id(c)),
+  'fixture-ciphertext'
 FROM generate_series(1, 6) AS i CROSS JOIN generate_series(1, 6) AS c;
 
 CREATE FUNCTION pg_temp.attach(p integer, o text, i integer, c integer, s integer DEFAULT NULL, a integer DEFAULT 1)
@@ -99,10 +104,15 @@ SELECT pg_temp.expect_integrity_error(
 FROM unnest(ARRAY[2, 3, 5]) AS c;
 SELECT pg_temp.expect_integrity_error(
   $$SELECT pg_temp.attach(1, 'fixture-org-a', 1, 1, 16)$$,
-  'principal_remote_session_bindings_session_fkey');
-SELECT pg_temp.expect_integrity_error(
-  $$SELECT pg_temp.attach(1, 'fixture-org-a', 1, 1, 41)$$,
-  'principal_remote_session_bindings_session_fkey');
+  'principal_remote_session_bindings_client_session_fkey');
+-- A connection made through another issuer bound to the same client, such as
+-- a team gateway's, may be attached on this one.
+-- Attach as its own statement: a DELETE whose WHERE calls attach never runs it
+-- on an empty table.
+SELECT pg_temp.attach(1, 'fixture-org-a', 1, 1, 41);
+DELETE FROM principal_remote_session_bindings
+WHERE principal_id = pg_temp.fixture_id(1) AND user_session_issuer_id = pg_temp.fixture_id(1)
+  AND remote_session_id = pg_temp.fixture_id(41);
 DELETE FROM remote_session_client_user_session_issuers
 WHERE user_session_issuer_id = pg_temp.fixture_id(1) AND remote_session_client_id = pg_temp.fixture_id(4);
 SELECT pg_temp.expect_integrity_error(

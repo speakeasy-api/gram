@@ -102,6 +102,7 @@ func (l *Logger) logJsonWebKey(ctx context.Context, dbtx repo.DBTX, action Actio
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

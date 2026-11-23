@@ -10,7 +10,7 @@ import {
 import { getTokenExpiry } from "@/elements/lib/token";
 import { getServerURL } from "@/lib/utils";
 import { useCallback, useMemo } from "react";
-import { ApiConfig, GetSessionFn } from "../types";
+import type { ApiConfig, GetSessionFn } from "../types";
 import { getChatSessionQueryKey, useSession } from "./useSession";
 import { useQueryClient } from "@tanstack/react-query";
 

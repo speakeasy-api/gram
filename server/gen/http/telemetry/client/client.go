@@ -61,6 +61,14 @@ type Client struct {
 	// getMetaMcpServerUsage endpoint.
 	GetMetaMcpServerUsageDoer goahttp.Doer
 
+	// GetProjectGatewayOverview Doer is the HTTP client used to make requests to
+	// the getProjectGatewayOverview endpoint.
+	GetProjectGatewayOverviewDoer goahttp.Doer
+
+	// GetProjectGatewayUsage Doer is the HTTP client used to make requests to the
+	// getProjectGatewayUsage endpoint.
+	GetProjectGatewayUsageDoer goahttp.Doer
+
 	// GetProjectOverview Doer is the HTTP client used to make requests to the
 	// getProjectOverview endpoint.
 	GetProjectOverviewDoer goahttp.Doer
@@ -156,6 +164,10 @@ type Client struct {
 	// getMcpServerActivity endpoint.
 	GetMcpServerActivityDoer goahttp.Doer
 
+	// GetOrgMcpServerActivity Doer is the HTTP client used to make requests to the
+	// getOrgMcpServerActivity endpoint.
+	GetOrgMcpServerActivityDoer goahttp.Doer
+
 	// ListHooksTraces Doer is the HTTP client used to make requests to the
 	// listHooksTraces endpoint.
 	ListHooksTracesDoer goahttp.Doer
@@ -191,6 +203,8 @@ func NewClient(
 		GetObservabilityOverviewDoer:         doer,
 		GetMcpNetworkTrafficDoer:             doer,
 		GetMetaMcpServerUsageDoer:            doer,
+		GetProjectGatewayOverviewDoer:        doer,
+		GetProjectGatewayUsageDoer:           doer,
 		GetProjectOverviewDoer:               doer,
 		GetUnproxiedMcpServerUsageDoer:       doer,
 		GetUnproxiedMcpServerToolUsageDoer:   doer,
@@ -215,6 +229,7 @@ func NewClient(
 		ListToolUsageTracesDoer:              doer,
 		GetToolUsageFilterOptionsDoer:        doer,
 		GetMcpServerActivityDoer:             doer,
+		GetOrgMcpServerActivityDoer:          doer,
 		ListHooksTracesDoer:                  doer,
 		RestoreResponseBody:                  restoreBody,
 		scheme:                               scheme,
@@ -483,6 +498,54 @@ func (c *Client) GetMetaMcpServerUsage() goa.Endpoint {
 		resp, err := c.GetMetaMcpServerUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getMetaMcpServerUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetProjectGatewayOverview returns an endpoint that makes HTTP requests to
+// the telemetry service getProjectGatewayOverview server.
+func (c *Client) GetProjectGatewayOverview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetProjectGatewayOverviewRequest(c.encoder)
+		decodeResponse = DecodeGetProjectGatewayOverviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetProjectGatewayOverviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetProjectGatewayOverviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getProjectGatewayOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetProjectGatewayUsage returns an endpoint that makes HTTP requests to the
+// telemetry service getProjectGatewayUsage server.
+func (c *Client) GetProjectGatewayUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetProjectGatewayUsageRequest(c.encoder)
+		decodeResponse = DecodeGetProjectGatewayUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetProjectGatewayUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetProjectGatewayUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getProjectGatewayUsage", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -1059,6 +1122,30 @@ func (c *Client) GetMcpServerActivity() goa.Endpoint {
 		resp, err := c.GetMcpServerActivityDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getMcpServerActivity", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrgMcpServerActivity returns an endpoint that makes HTTP requests to the
+// telemetry service getOrgMcpServerActivity server.
+func (c *Client) GetOrgMcpServerActivity() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrgMcpServerActivityRequest(c.encoder)
+		decodeResponse = DecodeGetOrgMcpServerActivityResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrgMcpServerActivityRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrgMcpServerActivityDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getOrgMcpServerActivity", err)
 		}
 		return decodeResponse(resp)
 	}

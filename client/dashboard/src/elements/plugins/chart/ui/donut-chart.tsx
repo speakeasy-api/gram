@@ -1,14 +1,14 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { FC } from "react";
+import type { FC } from "react";
+import type { TooltipContentProps } from "recharts";
 import {
   PieChart as RechartsPieChart,
   Pie,
   Tooltip,
   Legend,
   ResponsiveContainer,
-  TooltipContentProps,
 } from "recharts";
 
 const CustomTooltip = ({ active, payload }: TooltipContentProps) => {

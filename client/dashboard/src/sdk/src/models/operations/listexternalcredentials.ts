@@ -13,20 +13,20 @@ export type ListExternalCredentialsSecurity = {
 /**
  * Only return credentials for this provider.
  */
-export const QueryParamProvider = {
+export const Provider = {
   AwsIam: "aws_iam",
   GcpIam: "gcp_iam",
 } as const;
 /**
  * Only return credentials for this provider.
  */
-export type QueryParamProvider = ClosedEnum<typeof QueryParamProvider>;
+export type Provider = ClosedEnum<typeof Provider>;
 
 export type ListExternalCredentialsRequest = {
   /**
    * Only return credentials for this provider.
    */
-  provider?: QueryParamProvider | undefined;
+  provider?: Provider | undefined;
   /**
    * Session header
    */
@@ -64,9 +64,9 @@ export function listExternalCredentialsSecurityToJSON(
 }
 
 /** @internal */
-export const QueryParamProvider$outboundSchema: z.ZodMiniEnum<
-  typeof QueryParamProvider
-> = z.enum(QueryParamProvider);
+export const Provider$outboundSchema: z.ZodMiniEnum<typeof Provider> = z.enum(
+  Provider,
+);
 
 /** @internal */
 export type ListExternalCredentialsRequest$Outbound = {
@@ -80,7 +80,7 @@ export const ListExternalCredentialsRequest$outboundSchema: z.ZodMiniType<
   ListExternalCredentialsRequest
 > = z.pipe(
   z.object({
-    provider: z.optional(QueryParamProvider$outboundSchema),
+    provider: z.optional(Provider$outboundSchema),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {

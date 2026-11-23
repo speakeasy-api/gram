@@ -26,6 +26,7 @@ import { Check } from "lucide-react";
 import {
   chipLabel,
   allLabelFor,
+  hidesAllOption,
   type FilterDimension,
   type FilterOption,
 } from "./filter-schema";
@@ -153,7 +154,9 @@ export function SelectFilterChip({
             color={color}
             active={!!value}
             onClick={() => setOpen(!open)}
-            onRemove={value ? () => onChange(null) : undefined}
+            // A required dimension has nothing to clear *to*: clearing it only
+            // resolves back to a value, so hide the × as the toolbar does.
+            onRemove={value && !dim.required ? () => onChange(null) : undefined}
           />
         </span>
       </PopoverAnchor>
@@ -170,14 +173,16 @@ export function SelectFilterChip({
           <CommandList>
             <CommandEmpty>No options match.</CommandEmpty>
             <CommandGroup>
-              <CommandItem
-                value="__all__"
-                keywords={[allLabelFor(dim)]}
-                onSelect={() => select(null)}
-              >
-                {!value && <Check className="size-4" />}
-                {allLabelFor(dim)}
-              </CommandItem>
+              {!hidesAllOption(dim) && (
+                <CommandItem
+                  value="__all__"
+                  keywords={[allLabelFor(dim)]}
+                  onSelect={() => select(null)}
+                >
+                  {!value && <Check className="size-4" />}
+                  {allLabelFor(dim)}
+                </CommandItem>
+              )}
               {options.map((option) => (
                 <CommandItem
                   key={option.value}

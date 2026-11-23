@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	wirepo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
 // A Claude Tag subject: the organization is fixed, the trailing agent id is
@@ -22,19 +23,18 @@ const (
 	otherOrgAgent = "wimse://identity.anthropic.com/org/org-zzz/agent/agent-111"
 )
 
-// seedAdmissionRule writes an admission with a match kind. Raw SQL for the
-// same reason seedAdmission uses it: writes belong to the management API.
+// seedAdmissionRule writes an admission with a match kind, through a fixture
+// for the same reason seedAdmission uses one: writes belong to the management API.
 func seedAdmissionRule(t *testing.T, conn *pgxpool.Pool, organizationID string, projectID uuid.NullUUID, issuerID uuid.UUID, subject string, kind workloadidentity.MatchKind) uuid.UUID {
 	t.Helper()
 
-	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: see seedAdmission
-		t.Context(), `
-		INSERT INTO workload_identity_admissions
-		  (organization_id, project_id, workload_issuer_id, subject, match_kind)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, organizationID, projectID, issuerID, subject, string(kind)).Scan(&id)
+	id, err := wirepo.New(conn).SeedWorkloadAdmissionRuleFixture(t.Context(), wirepo.SeedWorkloadAdmissionRuleFixtureParams{
+		OrganizationID:   organizationID,
+		ProjectID:        projectID,
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+		MatchKind:        string(kind),
+	})
 	require.NoError(t, err)
 
 	return id
@@ -43,14 +43,13 @@ func seedAdmissionRule(t *testing.T, conn *pgxpool.Pool, organizationID string, 
 func seedAssignmentRule(t *testing.T, conn *pgxpool.Pool, organizationID string, issuerID uuid.UUID, subject string, kind workloadidentity.MatchKind, agentID uuid.UUID) uuid.UUID {
 	t.Helper()
 
-	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: see seedAssignment
-		t.Context(), `
-		INSERT INTO workload_agent_assignments
-		  (organization_id, workload_issuer_id, subject, match_kind, agent_id)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, organizationID, issuerID, subject, string(kind), agentID).Scan(&id)
+	id, err := wirepo.New(conn).SeedWorkloadAgentAssignmentRuleFixture(t.Context(), wirepo.SeedWorkloadAgentAssignmentRuleFixtureParams{
+		OrganizationID:   organizationID,
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+		MatchKind:        string(kind),
+		AgentID:          agentID,
+	})
 	require.NoError(t, err)
 
 	return id
@@ -59,9 +58,10 @@ func seedAssignmentRule(t *testing.T, conn *pgxpool.Pool, organizationID string,
 func allowWildcardAdmission(t *testing.T, conn *pgxpool.Pool, issuerID uuid.UUID, allow bool) {
 	t.Helper()
 
-	_, err := conn.Exec( //nolint:glint // notestingrawsql: see seedIssuer
-		t.Context(), `UPDATE workload_issuers SET allow_wildcard_admission = $2 WHERE id = $1`, issuerID, allow)
-	require.NoError(t, err)
+	require.NoError(t, wirepo.New(conn).SetWorkloadIssuerAllowWildcardAdmissionFixture(t.Context(), wirepo.SetWorkloadIssuerAllowWildcardAdmissionFixtureParams{
+		ID:                     issuerID,
+		AllowWildcardAdmission: allow,
+	}))
 }
 
 func TestIsAdmitted_WildcardAdmitsEveryChannelUnderIt(t *testing.T) {
@@ -313,6 +313,55 @@ func TestValidateSubjectRule(t *testing.T) {
 				return
 			}
 			require.ErrorIs(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestValidateSubjectRule_URISubjects(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		kind    workloadidentity.MatchKind
+		subject string
+		wantErr error
+		// wantReason is the part of the message that tells the operator what
+		// to fix.
+		wantReason string
+	}{
+		{name: "a Claude Tag agent subject is accepted", kind: workloadidentity.MatchKindExact, subject: channelOne, wantErr: nil},
+		{name: "the Claude Tag wildcard rule is accepted", kind: workloadidentity.MatchKindWildcard, subject: fleetRule, wantErr: nil},
+		{name: "a SPIFFE ID is accepted", kind: workloadidentity.MatchKindExact, subject: "spiffe://td.example/ns/prod/sa/api", wantErr: nil},
+
+		// A stem is a leading portion of an identifier, so it may stop inside
+		// the trust domain.
+		{name: "a stem that stops inside the trust domain is accepted", kind: workloadidentity.MatchKindWildcard, subject: "wimse://td.exa*", wantErr: nil},
+
+		// Other formats stay opaque.
+		{name: "a Kubernetes subject stays opaque", kind: workloadidentity.MatchKindExact, subject: "system:serviceaccount:pr-review:review-agent", wantErr: nil},
+		{name: "a GitHub Actions subject stays opaque", kind: workloadidentity.MatchKindExact, subject: "repo:acme/deploy:ref:refs/heads/main", wantErr: nil},
+
+		{name: "a query is refused", kind: workloadidentity.MatchKindExact, subject: "wimse://td.example/a?x=1", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "a query or fragment is not allowed"},
+		{name: "an empty query marker is refused", kind: workloadidentity.MatchKindExact, subject: "wimse://td.example/a?", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "a query or fragment is not allowed"},
+		{name: "a fragment is refused", kind: workloadidentity.MatchKindExact, subject: "spiffe://td.example/a#b", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "a query or fragment is not allowed"},
+		{name: "a port is refused", kind: workloadidentity.MatchKindExact, subject: "spiffe://td.example:8443/a", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "a port is not allowed"},
+		{name: "user information is refused", kind: workloadidentity.MatchKindExact, subject: "wimse://admin@td.example/a", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "user information is not allowed"},
+		{name: "an empty trust domain is refused", kind: workloadidentity.MatchKindExact, subject: "wimse:///a", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "a trust domain is required"},
+		{name: "a missing authority is refused", kind: workloadidentity.MatchKindExact, subject: "wimse:td.example/a", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "wimse:// is required"},
+		{name: "the scheme is matched case-insensitively", kind: workloadidentity.MatchKindExact, subject: "SPIFFE://td.example:8443/a", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "a port is not allowed"},
+		{name: "a malformed percent escape is refused", kind: workloadidentity.MatchKindExact, subject: "wimse://td.example/%ZZ", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "invalid URL escape"},
+		{name: "a stem without a trust domain is refused", kind: workloadidentity.MatchKindWildcard, subject: "wimse://*", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "a trust domain is required"},
+		{name: "a stem with a port is refused", kind: workloadidentity.MatchKindWildcard, subject: "spiffe://td.example:*", wantErr: workloadidentity.ErrURISubjectMalformed, wantReason: "a port is not allowed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := workloadidentity.ValidateSubjectRule(tc.kind, tc.subject, true)
+			if tc.wantErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tc.wantErr)
+			require.ErrorContains(t, err, tc.wantReason)
 		})
 	}
 }

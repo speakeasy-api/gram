@@ -38,6 +38,7 @@ func (l *Logger) LogAssistantWorkloadOAuth(ctx context.Context, tx repo.DBTX, e 
 	}
 	var absent pgtype.Text
 	return l.log(ctx, tx, auditEntry{Params: repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: e.OrganizationID, ProjectID: uuid.NullUUID{UUID: e.ProjectID, Valid: true},
 		ActorID: e.Actor.ID, ActorType: string(e.Actor.Type), Action: action,
 		SubjectID: subjectID.String(), SubjectType: subjectType, Metadata: metadata,

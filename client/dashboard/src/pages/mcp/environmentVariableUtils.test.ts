@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { EnvironmentVariable } from "./environmentVariableUtils";
 import {
@@ -118,7 +119,7 @@ describe("isSecretInEnvironment", () => {
       key: "BASE_URL",
       state: "system",
       environmentValues: [
-        { environmentSlug: "prod", value: "sup*****", isSecret: true },
+        { environmentSlug: "prod", value: "***", isSecret: true },
         {
           environmentSlug: "staging",
           value: "https://x.test",

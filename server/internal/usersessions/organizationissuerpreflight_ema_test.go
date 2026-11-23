@@ -33,20 +33,26 @@ func TestOrganizationIssuerPreflightActiveEMABindings(t *testing.T) {
 	updated, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{ID: user.String(), Slug: conv.PtrEmpty("ema-renamed")})
 	require.NoError(t, err)
 	require.Equal(t, "ema-renamed", updated.Slug)
-	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{ID: user.String(), AuthnChallengeMode: conv.PtrEmpty("chain"), SessionDurationHours: conv.PtrEmpty(24)})
-	require.NoError(t, err, "unchanged binding-sensitive fields remain editable")
+	// Settings and trust changes do not orphan bindings: identity chaining
+	// reads the trusted pair live, so none of these are refused.
+	clearValue := ""
+	trustedClient := seedTrustedRemoteSessionClientTarget(t, ctx, ti, remote, "ema-preflight-client", uuid.NullUUID{}, conv.ToPGText(auth.ActiveOrganizationID), []string{"openid", "email", "profile", "offline_access"})
 	for _, patch := range []*orggen.UpdateIssuerPayload{
 		{ID: user.String(), AuthnChallengeMode: conv.PtrEmpty("none")},
 		{ID: user.String(), SessionDurationHours: conv.PtrEmpty(12)},
 		{ID: user.String(), ClientIDMetadataAdmissionMode: conv.PtrEmpty("open")},
 		{ID: user.String(), TrustedRemoteSessionIssuerID: conv.PtrEmpty(remote.String())},
-		{ID: user.String(), TrustedRemoteSessionClientID: conv.PtrEmpty(uuid.NewString())},
+		{ID: user.String(), TrustedRemoteSessionClientID: conv.PtrEmpty(trustedClient.String())},
+		{ID: user.String(), TrustedRemoteSessionIssuerID: &clearValue, TrustedRemoteSessionClientID: &clearValue},
 	} {
 		_, err := ti.service.UpdateIssuer(ctx, patch)
-		var shared *oops.ShareableError
-		require.ErrorAs(t, err, &shared)
-		require.Equal(t, oops.CodeConflict, shared.Code)
+		require.NoError(t, err)
 	}
+	updated, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{ID: user.String(), TrustedRemoteSessionIssuerID: conv.PtrEmpty(remote.String())})
+	require.NoError(t, err, "trusting an issuer without a client is allowed with active bindings")
+	require.NotNil(t, updated.TrustedRemoteSessionIssuerID)
+	require.Equal(t, remote.String(), *updated.TrustedRemoteSessionIssuerID)
+	require.Nil(t, updated.TrustedRemoteSessionClientID)
 	preflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orggen.GetIssuerDeletePreflightPayload{ID: user.String()})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), preflight.EmaBindingCount)
@@ -110,6 +116,10 @@ func TestOrganizationIssuerMutationWaitsForEMAPreparation(t *testing.T) {
 			require.NoError(t, tx.Commit(ctx))
 			select {
 			case err := <-done:
+				if mutation == "update" {
+					require.NoError(t, err, "settings updates do not orphan the committed binding")
+					return
+				}
 				var shared *oops.ShareableError
 				require.ErrorAs(t, err, &shared)
 				require.Equal(t, oops.CodeConflict, shared.Code)
@@ -151,13 +161,12 @@ func TestProjectIssuerUpdateActiveEMABindings(t *testing.T) {
 		{ID: user.ID, ClientIDMetadataAdmissionMode: conv.PtrEmpty("disabled")},
 	} {
 		_, err := ti.service.UpdateUserSessionIssuer(ctx, patch)
-		requireOopsCode(t, err, oops.CodeConflict)
+		require.NoError(t, err, "settings updates do not orphan bindings")
 	}
-	binding, err := q.GetEMABinding(ctx, remoterepo.GetEMABindingParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: uuid.MustParse(user.ID), RemoteSessionIssuerID: remote, Resource: "https://resource.example.com/"})
+	updated, err := ti.service.GetUserSessionIssuer(ctx, &gen.GetUserSessionIssuerPayload{ID: &user.ID})
 	require.NoError(t, err)
-	_, err = q.SetEMABinding(ctx, remoterepo.SetEMABindingParams{ID: binding.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ExpectedGeneration: binding.Generation, Generation: binding.Generation + 1, State: conv.ToPGText("unlinked"), GrantSource: conv.ToPGText("unknown"), RequestedScopes: []string{}})
-	require.NoError(t, err)
-	updated, err := ti.service.UpdateUserSessionIssuer(ctx, &gen.UpdateUserSessionIssuerPayload{ID: user.ID, SessionDurationHours: conv.PtrEmpty(12)})
-	require.NoError(t, err)
+	require.Equal(t, "interactive", updated.AuthnChallengeMode)
 	require.Equal(t, 12, updated.SessionDurationHours)
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{ID: user.ID})
+	requireOopsCode(t, err, oops.CodeConflict)
 }

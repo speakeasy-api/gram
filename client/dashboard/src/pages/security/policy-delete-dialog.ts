@@ -100,6 +100,7 @@ export function getPolicyDeleteRuleActionLabel(policy: RiskPolicy): string {
     warn: "warn",
     block: "block",
     quarantine: "quarantine",
+    require_approval: "require approval",
   };
   return enumPresentation(labels, policy.action, "unknown");
 }

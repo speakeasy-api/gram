@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import CreateFromSource from "./CreateFromSource";
 const api = vi.hoisted(() => ({
@@ -12,6 +13,12 @@ const api = vi.hoisted(() => ({
   update: vi.fn(),
   wrapper: vi.fn(),
   complete: vi.fn(),
+}));
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
 }));
 vi.mock("@/pages/mcp/gateway/useGatewayCreation", () => ({
   useGatewayCreation: () => ({
@@ -28,12 +35,12 @@ vi.mock("@/components/page-templates", () => ({
     <div>{children}</div>
   ),
 }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     toolsets: { create: api.create, updateBySlug: api.update },
     mcpServers: { create: api.wrapper },
   }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/components/side-panel/side-panel-context", () => ({
   useSidePanel: () => ({ openPanel: vi.fn() }),
@@ -56,6 +63,12 @@ vi.mock("@/components/sources/source-list", () => ({
         kind: "openapi",
         documentId: "second",
       },
+      {
+        key: "function",
+        name: "Function source",
+        kind: "function",
+        functionId: "function",
+      },
     ],
   }),
   sourceAssetId: () => "asset",
@@ -70,12 +83,10 @@ vi.mock("@/hooks/toolTypes", () => ({
     },
   }),
 }));
-vi.mock("react-router", () => ({
-  useSearchParams: () => [new URLSearchParams()],
-}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn() } }));
 beforeEach(() => {
   vi.resetAllMocks();
+  functionsAvailability.available = true;
   api.create.mockResolvedValue({
     id: "toolset",
     slug: "toolset",
@@ -90,7 +101,11 @@ afterEach(cleanup);
 it.each(["click", "Enter", " "])(
   "locks the retained source against %s activation during recovery",
   async (activation) => {
-    render(<CreateFromSource />);
+    render(
+      <MemoryRouter>
+        <CreateFromSource />
+      </MemoryRouter>,
+    );
     const first = screen.getByRole("button", { name: /First source/ });
     const second = screen.getByRole("button", { name: /Second source/ });
     fireEvent.click(first);
@@ -112,3 +127,21 @@ it.each(["click", "Enter", " "])(
     });
   },
 );
+it("offers function sources when Functions are available", () => {
+  render(
+    <MemoryRouter>
+      <CreateFromSource />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole("button", { name: /Function source/ })).toBeTruthy();
+});
+it("hides function sources on a deployment without Functions", () => {
+  functionsAvailability.available = false;
+  render(
+    <MemoryRouter>
+      <CreateFromSource />
+    </MemoryRouter>,
+  );
+  expect(screen.queryByRole("button", { name: /Function source/ })).toBeNull();
+  expect(screen.getByRole("button", { name: /First source/ })).toBeTruthy();
+});

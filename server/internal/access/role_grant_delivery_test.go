@@ -20,11 +20,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestService_UpdateRole_DeliversServerToExistingAudiencePlugin(t *testing.T) {
@@ -69,7 +70,7 @@ func TestService_UpdateRole_DeliversServerToExistingAudiencePlugin(t *testing.T)
 	}
 	require.True(t, refreshRequested, "content delivery requests a refresh of the affected marketplace")
 	// Invoke the public publisher directly; this does not exercise outbox consumption.
-	publisher := plugins.NewPublisher(testenv.NewLogger(t), f.ti.conn, f.ti.service.audit, f.githubConfig, "test", "https://example.com", nil)
+	publisher := plugins.NewPublisher(testenv.NewLogger(t), f.ti.conn, f.ti.service.audit, f.githubConfig, "test", "https://example.com", nil, staff.Organization{}, marketplacetokenstest.Tokens(t, f.ti.conn))
 	result, err := publisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: *f.ac.ProjectID, CreatedByUserID: f.ac.UserID, CommitMessage: "Refresh role delivery", SkipIfUnchanged: true})
 	require.NoError(t, err)
 	require.False(t, result.Skipped)
@@ -240,6 +241,7 @@ type roleDeliveryFixture struct {
 	roleID        string
 	toolsetID     uuid.UUID
 	serverID      uuid.UUID
+	signals       *recordingPublishSignaler
 }
 
 func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture) {
@@ -252,7 +254,8 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	toolsetID := uuid.New()
 	_, err := testrepo.New(ti.conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{ID: toolsetID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Delivery server", Slug: "delivery-server"})
 	require.NoError(t, err)
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{ID: toolsetID, ProjectID: *ac.ProjectID, McpEnabled: true}))
+	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: toolsetID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private"})
+	require.NoError(t, err)
 	serverID, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: uuid.New(), ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private"})
 	require.NoError(t, err)
 	_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: "delivery-endpoint"})
@@ -266,14 +269,15 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	github.Test(t)
 	t.Cleanup(func() { github.AssertExpectations(t) })
 	githubConfig := &plugins.GitHubConfig{Client: github, Org: "test-org", InstallationID: 12345}
-	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil)
-	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil)
-	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience"})
+	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, ti.conn))
+	signals := &recordingPublishSignaler{}
+	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil).WithPluginPublisher(signals)
+	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	_, err = pluginService.SetPluginAssignments(ctx, &plugingen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{"role:organization:" + roleID}})
 	require.NoError(t, err)
 
-	return ctx, &roleDeliveryFixture{ti: ti, ac: ac, pluginService: pluginService, plugin: plugin, github: github, githubConfig: githubConfig, roleID: roleID, toolsetID: toolsetID, serverID: serverID}
+	return ctx, &roleDeliveryFixture{ti: ti, ac: ac, pluginService: pluginService, plugin: plugin, github: github, githubConfig: githubConfig, roleID: roleID, toolsetID: toolsetID, serverID: serverID, signals: signals}
 }
 
 func (f *roleDeliveryFixture) patch(t *testing.T, ctx context.Context, id string, add bool) {
@@ -314,10 +318,20 @@ func (g *roleDeliveryGitHub) HasDirectCollaborator(ctx context.Context, installa
 	args := g.Called(ctx, installationID, owner, repo)
 	return args.Bool(0), args.Error(1)
 }
-func (g *roleDeliveryGitHub) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+func (g *roleDeliveryGitHub) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	args := g.Called(ctx, installationID, owner, repo, branch)
 	getFiles, _ := args.Get(0).(func() map[string][]byte)
-	return getFiles(), args.Error(1)
+	all := getFiles()
+	if all == nil {
+		return nil, args.Error(1)
+	}
+	files := make(map[string][]byte, len(all))
+	for path, content := range all {
+		if include == nil || include(path) {
+			files[path] = content
+		}
+	}
+	return files, args.Error(1)
 }
 func (g *roleDeliveryGitHub) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error) {
 	args := g.Called(ctx, installationID, owner, repo, branch, path)

@@ -47,15 +47,16 @@ func (r *NativeRegistryReader) ListServers(ctx context.Context, registry Registr
 			if err != nil {
 				return ListServersResult{}, err
 			}
-			// Preserve extension metadata that the legacy catalog projection cannot
-			// represent, including official lifecycle information.
+			// Preserve arbitrary extension metadata without interpreting it.
 			var full struct {
 				Meta map[string]any `json:"_meta"`
 			}
 			if err := json.Unmarshal(raw, &full); err != nil {
 				return ListServersResult{}, fmt.Errorf("decode native registry metadata: %w", err)
 			}
-			// Keep arbitrary extensions and auth metadata, but not list tool payloads.
+			// List responses drop the tool payloads that older records carry under
+			// remotes[N], so each listing does not ship full tool schemas. Stored
+			// records and every other metadata field are left as they are.
 			if version, ok := full.Meta["com.pulsemcp/server-version"].(map[string]any); ok {
 				for key, value := range version {
 					if !strings.HasPrefix(key, "remotes[") || !strings.HasSuffix(key, "]") {
@@ -64,14 +65,6 @@ func (r *NativeRegistryReader) ListServers(ctx context.Context, registry Registr
 					if remote, ok := value.(map[string]any); ok {
 						delete(remote, "tools")
 					}
-				}
-			}
-			// Native staff-curated capability metadata controls listing eligibility.
-			// An explicit false overrides legacy discovery; absence keeps the fallback.
-			// Installation still validates OAuth readiness against the live server.
-			if catalog, ok := full.Meta["com.speakeasy.ai/catalog"].(map[string]any); ok {
-				if supportsDCR, ok := catalog["supportsDcr"].(bool); ok {
-					server.SupportsDcr = supportsDCR
 				}
 			}
 			server.Meta = full.Meta

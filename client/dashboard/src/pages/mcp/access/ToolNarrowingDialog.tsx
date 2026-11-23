@@ -1,3 +1,5 @@
+import type { ToolSource } from "@/pages/access/useServerTools";
+import { toolSourceUnavailableMessage } from "./toolSourceMessage";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
@@ -9,7 +11,8 @@ import {
   type ToolSelectionToolRef,
 } from "@/components/tool-selection/ToolSelectionPanel";
 import { Check } from "lucide-react";
-import { useState, type JSX } from "react";
+import { useMemo, useState, type JSX } from "react";
+import { toolDisposition } from "./serverAudience";
 
 /**
  * Narrows one rule to particular tools, or to tools carrying an annotation.
@@ -23,6 +26,7 @@ export function ToolNarrowingDialog({
   serverId,
   serverName,
   catalog,
+  toolSource,
   limitedBy,
   tools,
   dispositions,
@@ -34,6 +38,7 @@ export function ToolNarrowingDialog({
   serverName?: string;
   /** The server's tools, when this surface has them. */
   catalog?: ToolSelectionTool[];
+  toolSource?: ToolSource;
   /**
    * The principal whose block keeps the rest of the catalogue out of reach,
    * when the list here is only part of the server.
@@ -52,15 +57,35 @@ export function ToolNarrowingDialog({
     ToolAnnotation[]
   >(() => dispositions as ToolAnnotation[]);
 
+  // A tool is checked under one disposition, so each counts once: counting
+  // every annotation it carries would list an OpenAPI GET under read-only,
+  // idempotent and open-world alike, while a rule naming open-world never
+  // reaches it.
+  const countByDisposition = useMemo(() => {
+    if (!catalog) return undefined;
+    const counts = new Map<ToolAnnotation, number>();
+    for (const tool of catalog) {
+      const disposition = toolDisposition(tool);
+      if (disposition) {
+        counts.set(disposition, (counts.get(disposition) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [catalog]);
+
   const servers: ToolSelectionServer[] = [
     {
       id: serverId,
       name: serverName ?? "This server",
       tools: catalog ?? [],
-      status: catalog ? "ready" : "unavailable",
-      // Remote servers resolve their tools per caller, so this surface may
-      // have no catalogue to list; annotations still work there.
-      unavailableLabel: "Tools are resolved when the server is called",
+      status:
+        toolSource?.status === "loading" || toolSource?.status === "error"
+          ? toolSource.status
+          : catalog
+            ? "ready"
+            : "unavailable",
+      onRetry: toolSource?.status === "error" ? toolSource.retry : undefined,
+      unavailableLabel: toolSourceUnavailableMessage(toolSource),
       emptyLabel: "No tools reported",
     },
   ];
@@ -113,6 +138,7 @@ export function ToolNarrowingDialog({
             mode={selectedTools.length > 0 ? "tools" : "annotations"}
             selectedAnnotations={selectedAnnotations}
             selectedTools={selectedTools}
+            toolCountByAnnotation={countByDisposition}
             onSelectionChange={(change) => {
               setSelectedAnnotations([...change.annotations]);
               setSelectedTools([...change.tools]);

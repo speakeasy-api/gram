@@ -27,6 +27,12 @@ const api = vi.hoisted(() => ({
 }));
 // Generated query hooks, keys and invalidators remain production code.
 // Observe the settlement callback without replacing its reconciliation behavior.
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
+}));
 vi.mock("./useGatewayMemberRows", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./useGatewayMemberRows")>();
@@ -57,6 +63,7 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     mcpServers: { create: api.create, list: api.readServers },
     metaMcp: { addMember: api.attach, listMembers: api.readMembers },
@@ -89,20 +96,6 @@ vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => <span />,
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      catalog: { href: () => "/catalog" },
-      x: { overview: { href: () => "/server" } },
-      add: Object.fromEntries(
-        ["remote", "tunneled", "openapi", "fromSource", "function"].map(
-          (key) => [key, { href: () => "/" + key }],
-        ),
-      ),
-    },
-  }),
-}));
-
 const ok = <T,>(value: T) => ({ ok: true as const, value });
 
 beforeEach(() => {

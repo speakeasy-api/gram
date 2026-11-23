@@ -238,10 +238,10 @@ function rulesSentence(
 
 /**
  * What a rule does, read against the access being explained, e.g.
- * "Connect · All tools". Higher access includes lower (Manage includes View
- * and Connect, View includes Connect), so a grant can decide a level other
- * than its own; it then says which level it includes, e.g. "View · includes
- * Connect". Blocks never span levels, so they always name the level shown.
+ * "Connect · All tools". Manage includes View, so a grant can decide a level
+ * other than its own; it then says which level it includes, e.g. "Manage ·
+ * includes View". Connect is granted on its own. Blocks never span levels, so
+ * they always name the level shown.
  */
 export function ruleAccessLabel(
   rule: ExplainedAccessRule,

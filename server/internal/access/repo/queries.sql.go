@@ -117,6 +117,68 @@ func (q *Queries) CreateOrganizationRoleWithRequests(ctx context.Context, arg Cr
 	return i, err
 }
 
+const decideAccessRequest = `-- name: DecideAccessRequest :one
+UPDATE access_requests
+SET
+  status = $1,
+  decided_by_user_id = $2,
+  decided_via = $3,
+  decided_at = clock_timestamp(),
+  temporary_grant_id = $4,
+  challenge_ids = $5,
+  updated_at = clock_timestamp()
+WHERE organization_id = $6
+  AND id = $7
+  AND status = 'pending'
+  AND deleted IS FALSE
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type DecideAccessRequestParams struct {
+	Status           string
+	DecidedByUserID  pgtype.Text
+	DecidedVia       pgtype.Text
+	TemporaryGrantID uuid.NullUUID
+	ChallengeIds     []string
+	OrganizationID   string
+	ID               uuid.UUID
+}
+
+// Records a decision on a pending request.
+func (q *Queries) DecideAccessRequest(ctx context.Context, arg DecideAccessRequestParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, decideAccessRequest,
+		arg.Status,
+		arg.DecidedByUserID,
+		arg.DecidedVia,
+		arg.TemporaryGrantID,
+		arg.ChallengeIds,
+		arg.OrganizationID,
+		arg.ID,
+	)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const deleteDirectoryRoleMapping = `-- name: DeleteDirectoryRoleMapping :execrows
 UPDATE directory_role_mappings
 SET deleted_at = clock_timestamp(),
@@ -217,6 +279,8 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 `
 
 type DeletePrincipalGrantsByResourceParams struct {
@@ -226,7 +290,9 @@ type DeletePrincipalGrantsByResourceParams struct {
 	ResourceID     string
 }
 
-// Removes grant rows for a single resource selector.
+// Removes permanent grant rows for a single resource selector. Used by
+// audience replacement writes; temporary grants are not part of an audience
+// and survive.
 func (q *Queries) DeletePrincipalGrantsByResource(ctx context.Context, arg DeletePrincipalGrantsByResourceParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByResource,
 		arg.OrganizationID,
@@ -245,6 +311,8 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND scope = $2
   AND selectors = $3
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
@@ -253,14 +321,74 @@ type DeletePrincipalGrantsByTargetParams struct {
 	Selectors      []byte
 }
 
-// Removes every principal row for one exact grant target. Used by audience
-// replacement writes where the caller supplies the full desired principal set.
+// Removes every permanent principal row for one exact grant target. Used by
+// audience replacement writes where the caller supplies the full desired
+// principal set. Temporary grants are not part of an audience and survive.
 func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeletePrincipalGrantsByTargetParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget, arg.OrganizationID, arg.Scope, arg.Selectors)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deletePrincipalWildcardGrants = `-- name: DeletePrincipalWildcardGrants :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND COALESCE(selectors->>'resource_id', '*') = '*'
+  AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb
+`
+
+type DeletePrincipalWildcardGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+}
+
+// Removes a principal's unrestricted rows for one scope: a selector naming at
+// most a resource kind and the wildcard resource ID. Older writers stored the
+// kind as "*" or under another name, or left out resource_id (which the grant
+// matcher reads as "*"), so matching on the kind the scope implies today would
+// leave those rows granting access after an administrator removed them.
+func (q *Queries) DeletePrincipalWildcardGrants(ctx context.Context, arg DeletePrincipalWildcardGrantsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalWildcardGrants, arg.OrganizationID, arg.PrincipalUrn, arg.Scope)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const expireLapsedAccessRequest = `-- name: ExpireLapsedAccessRequest :exec
+UPDATE access_requests
+SET status = 'expired', updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND requester_user_id = $2
+  AND scope = $3
+  AND selector = $4
+  AND status = 'pending'
+  AND expires_at <= clock_timestamp()
+  AND deleted IS FALSE
+`
+
+type ExpireLapsedAccessRequestParams struct {
+	OrganizationID  string
+	RequesterUserID string
+	Scope           string
+	Selector        []byte
+}
+
+// Marks the requester's pending request for this access expired once its
+// window has passed, so a new request for the same access can be stored.
+func (q *Queries) ExpireLapsedAccessRequest(ctx context.Context, arg ExpireLapsedAccessRequestParams) error {
+	_, err := q.db.Exec(ctx, expireLapsedAccessRequest,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Scope,
+		arg.Selector,
+	)
+	return err
 }
 
 const findMCPResourceProject = `-- name: FindMCPResourceProject :one
@@ -310,22 +438,85 @@ func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourc
 	return project_id, err
 }
 
+const findMCPResourceProjects = `-- name: FindMCPResourceProjects :many
+SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (
+  SELECT toolsets.id AS resource_id, toolsets.project_id AS project_id
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = ANY($2::uuid[])
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT mcp_servers.id AS resource_id, mcp_servers.project_id AS project_id
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = ANY($2::uuid[])
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT meta_mcp_servers.id AS resource_id, meta_mcp_servers.project_id AS project_id
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = ANY($2::uuid[])
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+`
+
+type FindMCPResourceProjectsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type FindMCPResourceProjectsRow struct {
+	ResourceID uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+// FindMCPResourceProject for many resources at once; unknown ids are absent.
+func (q *Queries) FindMCPResourceProjects(ctx context.Context, arg FindMCPResourceProjectsParams) ([]FindMCPResourceProjectsRow, error) {
+	rows, err := q.db.Query(ctx, findMCPResourceProjects, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindMCPResourceProjectsRow
+	for rows.Next() {
+		var i FindMCPResourceProjectsRow
+		if err := rows.Scan(&i.ResourceID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
 SELECT resource_type, visibility FROM (
   SELECT
     'toolset'::text AS resource_type,
-    (CASE
-      WHEN NOT toolsets.mcp_enabled THEN 'disabled'
-      WHEN toolsets.mcp_is_public THEN 'public'
-      ELSE 'private'
-    END)::text AS visibility,
+    COALESCE(cw.visibility, 'disabled')::text AS visibility,
     2 AS source_rank
   FROM toolsets
   JOIN projects ON projects.id = toolsets.project_id
+  -- The canonical wrapper owns a hosted toolset's visibility.
+  LEFT JOIN mcp_servers cw ON cw.id = toolsets.id AND cw.toolset_id = toolsets.id AND cw.project_id = toolsets.project_id AND cw.deleted IS FALSE
   WHERE projects.organization_id = $1
     AND toolsets.id = $2::uuid
     AND toolsets.deleted IS FALSE
     AND projects.deleted IS FALSE
+    -- A server that kept the toolset's id after leaving it answers for that id instead.
+    AND NOT EXISTS (
+      SELECT 1 FROM mcp_servers kept
+      WHERE kept.id = toolsets.id AND kept.project_id = toolsets.project_id AND kept.deleted IS FALSE
+        AND kept.toolset_id IS DISTINCT FROM toolsets.id
+    )
   UNION ALL
   SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
   FROM mcp_servers
@@ -360,10 +551,9 @@ type FindMCPResourceVisibilityRow struct {
 // Resolves who may connect to one MCP resource without an access rule, as the
 // same three-valued visibility mcp_servers stores: 'public' endpoints skip the
 // connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
-// A gateway toolset is public when its MCP endpoint is, and serves nobody
-// while its MCP endpoint is switched off. A hosted wrapper can share its
-// toolset's id; when either row serves nobody, nobody can connect, so
-// 'disabled' wins, and otherwise the wrapper's own visibility does. A gateway
+// A hosted toolset reads its canonical wrapper's visibility, and one without
+// a wrapper serves nobody; the wrapper row itself reports the same id, and
+// 'disabled' wins between them. A gateway
 // (meta server) is reported as such: it has no connect check of its own, each
 // member server is checked instead. Resources are found by the same
 // identifiers and tenancy rules as FindMCPResourceProject.
@@ -371,6 +561,147 @@ func (q *Queries) FindMCPResourceVisibility(ctx context.Context, arg FindMCPReso
 	row := q.db.QueryRow(ctx, findMCPResourceVisibility, arg.OrganizationID, arg.ResourceID)
 	var i FindMCPResourceVisibilityRow
 	err := row.Scan(&i.ResourceType, &i.Visibility)
+	return i, err
+}
+
+const getAccessRequest = `-- name: GetAccessRequest :one
+SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
+FROM access_requests
+LEFT JOIN principal_grants
+  ON principal_grants.id = access_requests.temporary_grant_id
+  AND principal_grants.organization_id = access_requests.organization_id
+WHERE access_requests.organization_id = $1
+  AND access_requests.id = $2
+  AND access_requests.deleted IS FALSE
+`
+
+type GetAccessRequestParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetAccessRequestRow struct {
+	AccessRequest  AccessRequest
+	GrantExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetAccessRequest(ctx context.Context, arg GetAccessRequestParams) (GetAccessRequestRow, error) {
+	row := q.db.QueryRow(ctx, getAccessRequest, arg.OrganizationID, arg.ID)
+	var i GetAccessRequestRow
+	err := row.Scan(
+		&i.AccessRequest.ID,
+		&i.AccessRequest.OrganizationID,
+		&i.AccessRequest.RequesterUserID,
+		&i.AccessRequest.Scope,
+		&i.AccessRequest.Selector,
+		&i.AccessRequest.ResourceName,
+		&i.AccessRequest.Message,
+		&i.AccessRequest.Status,
+		&i.AccessRequest.DecidedByUserID,
+		&i.AccessRequest.DecidedVia,
+		&i.AccessRequest.DecidedAt,
+		&i.AccessRequest.TemporaryGrantID,
+		&i.AccessRequest.ChallengeIds,
+		&i.AccessRequest.ExpiresAt,
+		&i.AccessRequest.CreatedAt,
+		&i.AccessRequest.UpdatedAt,
+		&i.AccessRequest.DeletedAt,
+		&i.AccessRequest.Deleted,
+		&i.GrantExpiresAt,
+	)
+	return i, err
+}
+
+const getAccessRequestForUpdate = `-- name: GetAccessRequestForUpdate :one
+SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+FROM access_requests
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetAccessRequestForUpdateParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Locks one request so a decision or withdrawal sees the state it changes.
+func (q *Queries) GetAccessRequestForUpdate(ctx context.Context, arg GetAccessRequestForUpdateParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, getAccessRequestForUpdate, arg.OrganizationID, arg.ID)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getAccessRequestMessageBySlackMessage = `-- name: GetAccessRequestMessageBySlackMessage :one
+SELECT m.id, m.organization_id, m.access_request_id, m.provider, m.kind, m.recipient_user_id, m.slack_team_id, m.slack_user_id, m.slack_channel_id, m.slack_message_ts, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM access_request_messages m
+JOIN slack_directory_connections c
+  ON c.organization_id = m.organization_id
+  AND c.slack_team_id = m.slack_team_id
+  AND c.disconnected_at IS NULL
+WHERE m.provider = 'slack'
+  AND m.slack_team_id = $1
+  AND m.slack_channel_id = $2
+  AND m.slack_message_ts = $3
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+LIMIT 1
+`
+
+type GetAccessRequestMessageBySlackMessageParams struct {
+	SlackTeamID    pgtype.Text
+	SlackChannelID pgtype.Text
+	SlackMessageTs pgtype.Text
+}
+
+type GetAccessRequestMessageBySlackMessageRow struct {
+	AccessRequestMessage AccessRequestMessage
+}
+
+// Resolves a Slack click to the DM it was made on. Slack signs the click, and
+// the click names its workspace, channel and message, so this lookup is not
+// tenant-scoped; the row it returns carries the tenant. A DM in a workspace
+// the organization has since disconnected finds no row.
+func (q *Queries) GetAccessRequestMessageBySlackMessage(ctx context.Context, arg GetAccessRequestMessageBySlackMessageParams) (GetAccessRequestMessageBySlackMessageRow, error) {
+	row := q.db.QueryRow(ctx, getAccessRequestMessageBySlackMessage, arg.SlackTeamID, arg.SlackChannelID, arg.SlackMessageTs)
+	var i GetAccessRequestMessageBySlackMessageRow
+	err := row.Scan(
+		&i.AccessRequestMessage.ID,
+		&i.AccessRequestMessage.OrganizationID,
+		&i.AccessRequestMessage.AccessRequestID,
+		&i.AccessRequestMessage.Provider,
+		&i.AccessRequestMessage.Kind,
+		&i.AccessRequestMessage.RecipientUserID,
+		&i.AccessRequestMessage.SlackTeamID,
+		&i.AccessRequestMessage.SlackUserID,
+		&i.AccessRequestMessage.SlackChannelID,
+		&i.AccessRequestMessage.SlackMessageTs,
+		&i.AccessRequestMessage.CreatedAt,
+		&i.AccessRequestMessage.UpdatedAt,
+		&i.AccessRequestMessage.DeletedAt,
+		&i.AccessRequestMessage.Deleted,
+	)
 	return i, err
 }
 
@@ -781,11 +1112,106 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 	return i, err
 }
 
-const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT principal_urn, scope, selectors
+const getPendingAccessRequest = `-- name: GetPendingAccessRequest :one
+SELECT id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+FROM access_requests
+WHERE organization_id = $1
+  AND requester_user_id = $2
+  AND scope = $3
+  AND selector = $4
+  AND status = 'pending'
+  AND deleted IS FALSE
+`
+
+type GetPendingAccessRequestParams struct {
+	OrganizationID  string
+	RequesterUserID string
+	Scope           string
+	Selector        []byte
+}
+
+func (q *Queries) GetPendingAccessRequest(ctx context.Context, arg GetPendingAccessRequestParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, getPendingAccessRequest,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Scope,
+		arg.Selector,
+	)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPrincipalGrantByIdentity = `-- name: GetPrincipalGrantByIdentity :one
+SELECT id, expires_at, clock_timestamp()::timestamptz AS observed_at
 FROM principal_grants
 WHERE organization_id = $1
-  AND principal_urn = ANY($2::text[])
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+`
+
+type GetPrincipalGrantByIdentityParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+type GetPrincipalGrantByIdentityRow struct {
+	ID         uuid.UUID
+	ExpiresAt  pgtype.Timestamptz
+	ObservedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetPrincipalGrantByIdentity(ctx context.Context, arg GetPrincipalGrantByIdentityParams) (GetPrincipalGrantByIdentityRow, error) {
+	row := q.db.QueryRow(ctx, getPrincipalGrantByIdentity,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var i GetPrincipalGrantByIdentityRow
+	err := row.Scan(&i.ID, &i.ExpiresAt, &i.ObservedAt)
+	return i, err
+}
+
+const getPrincipalGrants = `-- name: GetPrincipalGrants :many
+SELECT g.principal_urn, g.scope, g.selectors,
+  EXISTS (
+    SELECT 1
+    FROM auth_permission_provisions p
+    WHERE p.organization_id = g.organization_id
+      AND p.principal_urn = g.principal_urn
+      AND p.scope = g.scope
+      AND p.selectors = g.selectors
+      AND p.taken_over_at IS NULL
+  )::boolean AS inferred
+FROM principal_grants g
+WHERE g.organization_id = $1
+  AND g.principal_urn = ANY($2::text[])
+  -- Grants are loaded per request, so an expired temporary grant stops
+  -- authorizing the next request without a sign-out or role change.
+  AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp())
 `
 
 type GetPrincipalGrantsParams struct {
@@ -797,10 +1223,13 @@ type GetPrincipalGrantsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
 	Selectors    []byte
+	Inferred     bool
 }
 
 // Returns all grant rows matching a set of principal URNs within an org.
 // Used by the access resolver to load grants for a user+role in a single query.
+// inferred marks a grant the default auth permission backfill wrote that no
+// explicit write has taken over, so it never outranks an inherited block.
 func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrantsParams) ([]GetPrincipalGrantsRow, error) {
 	rows, err := q.db.Query(ctx, getPrincipalGrants, arg.OrganizationID, arg.PrincipalUrns)
 	if err != nil {
@@ -810,7 +1239,12 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.Inferred,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -821,28 +1255,241 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	return items, nil
 }
 
+const getRemoteSessionRowDigestFixture = `-- name: GetRemoteSessionRowDigestFixture :one
+SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = $1
+`
+
+// Test fixture: a digest of the whole stored row, so a test can prove it was
+// not touched without reading any credential value.
+func (q *Queries) GetRemoteSessionRowDigestFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionRowDigestFixture, id)
+	var row_digest string
+	err := row.Scan(&row_digest)
+	return row_digest, err
+}
+
+const getTemporaryGrantForUpdate = `-- name: GetTemporaryGrantForUpdate :one
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE id = $1
+  AND organization_id = $2
+  AND expires_at IS NOT NULL
+FOR UPDATE
+`
+
+type GetTemporaryGrantForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetTemporaryGrantForUpdateRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Locks one temporary grant so a renewal or revocation sees the state it
+// changes. Permanent rows are never returned.
+func (q *Queries) GetTemporaryGrantForUpdate(ctx context.Context, arg GetTemporaryGrantForUpdateParams) (GetTemporaryGrantForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getTemporaryGrantForUpdate, arg.ID, arg.OrganizationID)
+	var i GetTemporaryGrantForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
+}
+
+const hasPermanentPrincipalGrants = `-- name: HasPermanentPrincipalGrants :one
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_grants
+  WHERE organization_id = $1
+    AND principal_urn = $2
+    AND expires_at IS NULL
+)::boolean AS has_grants
+`
+
+type HasPermanentPrincipalGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+}
+
+// Reports whether a principal holds any permanent grant. Provisioning uses it
+// to decide whether default grants were already written, so a temporary grant
+// given to the principal never stands in for them.
+func (q *Queries) HasPermanentPrincipalGrants(ctx context.Context, arg HasPermanentPrincipalGrantsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPermanentPrincipalGrants, arg.OrganizationID, arg.PrincipalUrn)
+	var has_grants bool
+	err := row.Scan(&has_grants)
+	return has_grants, err
+}
+
+const insertAccessRequest = `-- name: InsertAccessRequest :one
+INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (organization_id, requester_user_id, scope, selector) WHERE deleted IS FALSE AND status = 'pending'
+DO NOTHING
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertAccessRequestParams struct {
+	OrganizationID  string
+	RequesterUserID string
+	Scope           string
+	Selector        []byte
+	ResourceName    pgtype.Text
+	Message         pgtype.Text
+	ChallengeIds    []string
+	ExpiresAt       pgtype.Timestamptz
+}
+
+// Stores a pending request. Returns no row when the requester already has a
+// pending request for the same access; the caller loads that one instead.
+func (q *Queries) InsertAccessRequest(ctx context.Context, arg InsertAccessRequestParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, insertAccessRequest,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Scope,
+		arg.Selector,
+		arg.ResourceName,
+		arg.Message,
+		arg.ChallengeIds,
+		arg.ExpiresAt,
+	)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const insertAccessRequestMessage = `-- name: InsertAccessRequestMessage :one
+INSERT INTO access_request_messages (
+  organization_id
+  , access_request_id
+  , provider
+  , kind
+  , recipient_user_id
+  , slack_team_id
+  , slack_user_id
+  , slack_channel_id
+  , slack_message_ts
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+)
+ON CONFLICT (access_request_id, provider, recipient_user_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, organization_id, access_request_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
+`
+
+type InsertAccessRequestMessageParams struct {
+	OrganizationID  string
+	AccessRequestID uuid.UUID
+	Provider        string
+	Kind            string
+	RecipientUserID string
+	SlackTeamID     pgtype.Text
+	SlackUserID     pgtype.Text
+	SlackChannelID  pgtype.Text
+	SlackMessageTs  pgtype.Text
+}
+
+// Records a notification sent for an access request. One per recipient and
+// provider, so a retried send that already recorded its message inserts
+// nothing.
+func (q *Queries) InsertAccessRequestMessage(ctx context.Context, arg InsertAccessRequestMessageParams) (AccessRequestMessage, error) {
+	row := q.db.QueryRow(ctx, insertAccessRequestMessage,
+		arg.OrganizationID,
+		arg.AccessRequestID,
+		arg.Provider,
+		arg.Kind,
+		arg.RecipientUserID,
+		arg.SlackTeamID,
+		arg.SlackUserID,
+		arg.SlackChannelID,
+		arg.SlackMessageTs,
+	)
+	var i AccessRequestMessage
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.AccessRequestID,
+		&i.Provider,
+		&i.Kind,
+		&i.RecipientUserID,
+		&i.SlackTeamID,
+		&i.SlackUserID,
+		&i.SlackChannelID,
+		&i.SlackMessageTs,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,
-  resource_kind, resource_id, resolution_type, role_slug, resolved_by
+  resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by
 )
 SELECT
   $1, unnest($2::text[]), $3, $4,
-  $5, $6, $7, $8, $9
+  $5, $6, $7, $8, $9::uuid, $10
 ON CONFLICT (organization_id, challenge_id) DO NOTHING
-RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at
+RETURNING id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by, created_at
 `
 
 type InsertChallengeResolutionsParams struct {
-	OrganizationID string
-	ChallengeIds   []string
-	PrincipalUrn   string
-	Scope          string
-	ResourceKind   string
-	ResourceID     string
-	ResolutionType string
-	RoleSlug       pgtype.Text
-	ResolvedBy     string
+	OrganizationID   string
+	ChallengeIds     []string
+	PrincipalUrn     string
+	Scope            string
+	ResourceKind     string
+	ResourceID       string
+	ResolutionType   string
+	RoleSlug         pgtype.Text
+	TemporaryGrantID uuid.NullUUID
+	ResolvedBy       string
 }
 
 // Creates resolution records for one or more denied challenges.
@@ -857,6 +1504,7 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 		arg.ResourceID,
 		arg.ResolutionType,
 		arg.RoleSlug,
+		arg.TemporaryGrantID,
 		arg.ResolvedBy,
 	)
 	if err != nil {
@@ -876,6 +1524,7 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 			&i.ResourceID,
 			&i.ResolutionType,
 			&i.RoleSlug,
+			&i.TemporaryGrantID,
 			&i.ResolvedBy,
 			&i.CreatedAt,
 		); err != nil {
@@ -983,7 +1632,8 @@ const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :exe
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO NOTHING
+DO UPDATE SET expires_at = NULL, updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL
 `
 
 type InsertPrincipalGrantIfAbsentParams struct {
@@ -993,7 +1643,9 @@ type InsertPrincipalGrantIfAbsentParams struct {
 	Selectors      []byte
 }
 
-// Creates a single grant row and leaves an existing identical row untouched.
+// Creates a single permanent grant row and leaves an existing identical
+// permanent row untouched. An identical temporary row, live or expired, is
+// made permanent and counts as written: the permanent grant did not exist.
 func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
 		arg.OrganizationID,
@@ -1005,6 +1657,69 @@ func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPr
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const insertTemporaryGrant = `-- name: InsertTemporaryGrant :one
+
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  expires_at = EXCLUDED.expires_at,
+  created_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL
+  AND principal_grants.expires_at <= clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type InsertTemporaryGrantParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+}
+
+type InsertTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Queries for temporary grants: principal_grants rows with a non-NULL
+// expires_at. One row per org/principal/scope/selectors still holds, so a
+// temporary grant and a permanent grant for the same target never coexist.
+// Creates a temporary grant, or restarts an expired one for the same target.
+// Returns no row when the target is already held permanently or by a live
+// temporary grant; the caller reports which with GetPrincipalGrantByIdentity.
+func (q *Queries) InsertTemporaryGrant(ctx context.Context, arg InsertTemporaryGrantParams) (InsertTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, insertTemporaryGrant,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.ExpiresAt,
+	)
+	var i InsertTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
 }
 
 const listAccessMemberDirectoryRoleSources = `-- name: ListAccessMemberDirectoryRoleSources :many
@@ -1366,6 +2081,167 @@ func (q *Queries) ListAccessNotificationUsers(ctx context.Context, organizationI
 	return items, nil
 }
 
+const listAccessRequestMessages = `-- name: ListAccessRequestMessages :many
+SELECT id, organization_id, access_request_id, provider, kind, recipient_user_id, slack_team_id, slack_user_id, slack_channel_id, slack_message_ts, created_at, updated_at, deleted_at, deleted
+FROM access_request_messages
+WHERE organization_id = $1
+  AND access_request_id = $2
+  AND deleted IS FALSE
+ORDER BY created_at, id
+`
+
+type ListAccessRequestMessagesParams struct {
+	OrganizationID  string
+	AccessRequestID uuid.UUID
+}
+
+func (q *Queries) ListAccessRequestMessages(ctx context.Context, arg ListAccessRequestMessagesParams) ([]AccessRequestMessage, error) {
+	rows, err := q.db.Query(ctx, listAccessRequestMessages, arg.OrganizationID, arg.AccessRequestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AccessRequestMessage
+	for rows.Next() {
+		var i AccessRequestMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.AccessRequestID,
+			&i.Provider,
+			&i.Kind,
+			&i.RecipientUserID,
+			&i.SlackTeamID,
+			&i.SlackUserID,
+			&i.SlackChannelID,
+			&i.SlackMessageTs,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessRequestPeople = `-- name: ListAccessRequestPeople :many
+SELECT id, display_name, email
+FROM users
+WHERE id = ANY($1::text[])
+`
+
+type ListAccessRequestPeopleRow struct {
+	ID          string
+	DisplayName string
+	Email       string
+}
+
+// Names the requesters and deciders a list of requests mentions.
+func (q *Queries) ListAccessRequestPeople(ctx context.Context, ids []string) ([]ListAccessRequestPeopleRow, error) {
+	rows, err := q.db.Query(ctx, listAccessRequestPeople, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessRequestPeopleRow
+	for rows.Next() {
+		var i ListAccessRequestPeopleRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessRequests = `-- name: ListAccessRequests :many
+SELECT access_requests.id, access_requests.organization_id, access_requests.requester_user_id, access_requests.scope, access_requests.selector, access_requests.resource_name, access_requests.message, access_requests.status, access_requests.decided_by_user_id, access_requests.decided_via, access_requests.decided_at, access_requests.temporary_grant_id, access_requests.challenge_ids, access_requests.expires_at, access_requests.created_at, access_requests.updated_at, access_requests.deleted_at, access_requests.deleted, principal_grants.expires_at AS grant_expires_at
+FROM access_requests
+LEFT JOIN principal_grants
+  ON principal_grants.id = access_requests.temporary_grant_id
+  AND principal_grants.organization_id = access_requests.organization_id
+WHERE access_requests.organization_id = $1
+  AND access_requests.deleted IS FALSE
+  AND ($2::text IS NULL OR access_requests.requester_user_id = $2::text)
+  AND (
+    $3::text IS NULL
+    OR (CASE
+          WHEN access_requests.status = 'pending' AND access_requests.expires_at <= clock_timestamp() THEN 'expired'
+          ELSE access_requests.status
+        END) = $3::text
+  )
+ORDER BY access_requests.created_at DESC, access_requests.id DESC
+LIMIT $4
+`
+
+type ListAccessRequestsParams struct {
+	OrganizationID  string
+	RequesterUserID pgtype.Text
+	Status          pgtype.Text
+	MaxRows         int32
+}
+
+type ListAccessRequestsRow struct {
+	AccessRequest  AccessRequest
+	GrantExpiresAt pgtype.Timestamptz
+}
+
+// Lists an organization's requests, newest first. A pending request whose
+// window has passed counts as expired for the status filter.
+func (q *Queries) ListAccessRequests(ctx context.Context, arg ListAccessRequestsParams) ([]ListAccessRequestsRow, error) {
+	rows, err := q.db.Query(ctx, listAccessRequests,
+		arg.OrganizationID,
+		arg.RequesterUserID,
+		arg.Status,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessRequestsRow
+	for rows.Next() {
+		var i ListAccessRequestsRow
+		if err := rows.Scan(
+			&i.AccessRequest.ID,
+			&i.AccessRequest.OrganizationID,
+			&i.AccessRequest.RequesterUserID,
+			&i.AccessRequest.Scope,
+			&i.AccessRequest.Selector,
+			&i.AccessRequest.ResourceName,
+			&i.AccessRequest.Message,
+			&i.AccessRequest.Status,
+			&i.AccessRequest.DecidedByUserID,
+			&i.AccessRequest.DecidedVia,
+			&i.AccessRequest.DecidedAt,
+			&i.AccessRequest.TemporaryGrantID,
+			&i.AccessRequest.ChallengeIds,
+			&i.AccessRequest.ExpiresAt,
+			&i.AccessRequest.CreatedAt,
+			&i.AccessRequest.UpdatedAt,
+			&i.AccessRequest.DeletedAt,
+			&i.AccessRequest.Deleted,
+			&i.GrantExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAccessibleMCPServersForUser = `-- name: ListAccessibleMCPServersForUser :many
 WITH user_grants AS (
   SELECT
@@ -1375,6 +2251,7 @@ WITH user_grants AS (
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND pg.principal_urn = ANY($2::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
     AND pg.scope IN (
       'mcp:connect', 'mcp:read', 'mcp:write',
       'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
@@ -1432,7 +2309,10 @@ WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.server_id = s.id
     AND blocked.strict
-    AND blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'mcp:blocked_' || split_part(allowed.scope, ':', 2)
+      OR (allowed.scope = 'mcp:write' AND blocked.scope = 'mcp:blocked_read')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY s.name
@@ -1460,9 +2340,12 @@ type ListAccessibleMCPServersForUserRow struct {
 // server, so plugin membership is deliberately not consulted.
 //
 // The shape mirrors the authorization engine's own: a permission is an allow
-// grant for a scope minus a blocked_ grant for THAT SAME scope proving the same
-// server (see authz/expressions.go). mcp:blocked_connect withdraws
-// mcp:connect; it does not withdraw mcp:read. A grant made directly to the
+// grant for a scope minus a blocked_ grant proving the same server for that
+// scope or for one it implies (see authz/expressions.go): mcp:blocked_write
+// withdraws mcp:write, and mcp:blocked_read withdraws mcp:read and also
+// mcp:write, because a write check honours a read block (see scopeExpansions
+// in authz/scopes.go). mcp:blocked_connect withdraws mcp:connect only;
+// connect is implied by neither read nor write. A grant made directly to the
 // user that names this server outranks a block inherited from a role or
 // user:all, while the user's own blocks always apply (authz/precedence.go).
 func (q *Queries) ListAccessibleMCPServersForUser(ctx context.Context, arg ListAccessibleMCPServersForUserParams) ([]ListAccessibleMCPServersForUserRow, error) {
@@ -1500,6 +2383,7 @@ WITH user_grants AS (
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND pg.principal_urn = ANY($2::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
     AND pg.scope IN (
       'skill:read', 'skill:write',
       'skill:blocked_read', 'skill:blocked_write'
@@ -1539,7 +2423,10 @@ JOIN grant_matches allowed
 WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
-    AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'skill:blocked_read'
+      OR (blocked.scope = 'skill:blocked_write' AND allowed.scope = 'skill:write')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 ORDER BY cs.display_name, cs.name
@@ -1565,6 +2452,16 @@ type ListAccessibleSkillsForUserRow struct {
 // distributed to a plugin the user holds is still unreachable if RBAC does not
 // allow it, so distribution is not consulted. Principal precedence also
 // matches: a direct grant naming the skill outranks an inherited block.
+//
+// Blocks pair with allows by scope: skill:blocked_read withdraws skill:read and
+// also skill:write, because a write check honours a read block (see
+// scopeExpansions in authz/scopes.go), and skill:blocked_write withdraws
+// skill:write. Callers read the result as "skills this user can reach", which
+// is the skill:read check, and the engine does not withdraw that on
+// skill:blocked_write. So a user whose only grant is skill:write, blocked by
+// skill:blocked_write, is left out here although the engine lets them read the
+// skill. That case is kept as it was until list and single-skill access are
+// reconciled.
 // SELECT DISTINCT only permits ORDER BY over selected columns, and
 // skills.display_name is NOT NULL, so the coalesce it replaced never fell back.
 func (q *Queries) ListAccessibleSkillsForUser(ctx context.Context, arg ListAccessibleSkillsForUserParams) ([]ListAccessibleSkillsForUserRow, error) {
@@ -1951,9 +2848,59 @@ func (q *Queries) ListAssignableAgents(ctx context.Context, organizationID strin
 	return items, nil
 }
 
+const listChallengeResolutionTemporaryGrants = `-- name: ListChallengeResolutionTemporaryGrants :many
+SELECT id, expires_at, created_at, (expires_at > clock_timestamp())::boolean AS active
+FROM principal_grants
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+  AND expires_at IS NOT NULL
+`
+
+type ListChallengeResolutionTemporaryGrantsParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+type ListChallengeResolutionTemporaryGrantsRow struct {
+	ID        uuid.UUID
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+	Active    bool
+}
+
+// Returns each temporary grant a challenge resolution points at, expired ones
+// included. A grant that is missing was revoked (revocation deletes the row).
+// active compares the deadline with the database clock, the same clock
+// authorization reads grants with. created_at moves when an expired grant is
+// restarted, which tells a resolution of the earlier grant from the new one.
+func (q *Queries) ListChallengeResolutionTemporaryGrants(ctx context.Context, arg ListChallengeResolutionTemporaryGrantsParams) ([]ListChallengeResolutionTemporaryGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listChallengeResolutionTemporaryGrants, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChallengeResolutionTemporaryGrantsRow
+	for rows.Next() {
+		var i ListChallengeResolutionTemporaryGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.Active,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many
 
-SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions
+SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, temporary_grant_id, resolved_by, created_at FROM authz_challenge_resolutions
 WHERE organization_id = $1
   AND challenge_id = ANY($2::text[])
 `
@@ -1985,6 +2932,7 @@ func (q *Queries) ListChallengeResolutions(ctx context.Context, arg ListChalleng
 			&i.ResourceID,
 			&i.ResolutionType,
 			&i.RoleSlug,
+			&i.TemporaryGrantID,
 			&i.ResolvedBy,
 			&i.CreatedAt,
 		); err != nil {
@@ -2436,6 +3384,59 @@ func (q *Queries) ListLiveDirectoryRoleMappingsForSource(ctx context.Context, ar
 	return items, nil
 }
 
+const listManagedAssistantAgentIDs = `-- name: ListManagedAssistantAgentIDs :many
+SELECT aab.agent_id::uuid AS agent_id
+FROM assistant_agent_bindings AS aab
+JOIN project_managed_assistants AS pma
+  ON pma.project_id = aab.project_id
+  AND pma.assistant_id = aab.assistant_id
+JOIN assistants
+  ON assistants.id = aab.assistant_id
+  AND assistants.project_id = aab.project_id
+  AND assistants.organization_id = aab.organization_id
+  AND assistants.deleted IS FALSE
+JOIN projects
+  ON projects.id = aab.project_id
+  AND projects.organization_id = aab.organization_id
+  AND projects.deleted IS FALSE
+JOIN agents
+  ON agents.id = aab.agent_id
+  AND agents.organization_id = aab.organization_id
+  AND agents.project_id = aab.project_id
+  AND agents.deleted IS FALSE
+WHERE aab.organization_id = $1
+  AND aab.deleted IS FALSE
+  AND aab.agent_id = ANY($2::uuid[])
+`
+
+type ListManagedAssistantAgentIDsParams struct {
+	OrganizationID string
+	AgentIds       []uuid.UUID
+}
+
+// The requested agents that are currently bound to a project's managed
+// assistant. Only these agents may hold organization-wide read policy; every
+// other agent has org:read filtered out of its runtime policy.
+func (q *Queries) ListManagedAssistantAgentIDs(ctx context.Context, arg ListManagedAssistantAgentIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listManagedAssistantAgentIDs, arg.OrganizationID, arg.AgentIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var agent_id uuid.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMemberPrincipalsByUsers = `-- name: ListMemberPrincipalsByUsers :many
 WITH active_users AS (
   SELECT users.id AS user_id
@@ -2589,6 +3590,59 @@ func (q *Queries) ListMemberRolePrincipalsByWorkosUser(ctx context.Context, arg 
 	for rows.Next() {
 		var i ListMemberRolePrincipalsByWorkosUserRow
 		if err := rows.Scan(&i.RoleSlug, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberRolePrincipalsByWorkosUsers = `-- name: ListMemberRolePrincipalsByWorkosUsers :many
+SELECT
+  ora.workos_user_id,
+  ora.role_urn::text AS principal_urn
+FROM organization_role_assignments AS ora
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE ora.organization_id = $1
+  AND ora.workos_user_id = ANY($2::text[])
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+  AND ora.deleted_at IS NULL
+ORDER BY ora.workos_user_id, ora.role_urn
+`
+
+type ListMemberRolePrincipalsByWorkosUsersParams struct {
+	OrganizationID string
+	WorkosUserIds  []string
+}
+
+type ListMemberRolePrincipalsByWorkosUsersRow struct {
+	WorkosUserID string
+	PrincipalUrn string
+}
+
+// The roles several members hold, in one read, for a role save that works
+// out what each member it assigns gains.
+func (q *Queries) ListMemberRolePrincipalsByWorkosUsers(ctx context.Context, arg ListMemberRolePrincipalsByWorkosUsersParams) ([]ListMemberRolePrincipalsByWorkosUsersRow, error) {
+	rows, err := q.db.Query(ctx, listMemberRolePrincipalsByWorkosUsers, arg.OrganizationID, arg.WorkosUserIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberRolePrincipalsByWorkosUsersRow
+	for rows.Next() {
+		var i ListMemberRolePrincipalsByWorkosUsersRow
+		if err := rows.Scan(&i.WorkosUserID, &i.PrincipalUrn); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -2841,6 +3895,7 @@ SELECT id, organization_id, principal_urn, principal_type, scope, selectors, cre
 FROM principal_grants
 WHERE organization_id = $1
   AND ($2::text = '' OR principal_urn = $2)
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
 ORDER BY principal_urn, scope
 `
 
@@ -2862,7 +3917,16 @@ type ListPrincipalGrantsByOrgRow struct {
 
 // Queries for managing principal grants (RBAC).
 // principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
-// Returns all grant rows for an organization, optionally filtered by principal URN.
+// Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
+//
+// A row with a non-NULL expires_at is a temporary grant. Once expires_at has
+// passed it grants nothing: every read used for authorization or display
+// filters it out, and a permanent write of the same grant takes the row over
+// by clearing expires_at. Audience reads and replacements see permanent rows
+// only, so saving an audience never turns a temporary grant permanent or
+// removes one.
+// Returns all live grant rows for an organization, optionally filtered by
+// principal URN.
 func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]ListPrincipalGrantsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalGrantsByOrg, arg.OrganizationID, arg.PrincipalUrn)
 	if err != nil {
@@ -2901,6 +3965,8 @@ WHERE organization_id = $1
     'resource_kind', $3::text,
     'resource_id', $4::text
   )
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn
 `
 
@@ -2952,6 +4018,8 @@ WHERE organization_id = $1
     'resource_kind', $3::text
   )
   AND selectors->>'resource_id' = ANY($4::text[])
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn
 `
 
@@ -3018,6 +4086,68 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 			return nil, err
 		}
 		items = append(items, challenge_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTemporaryGrants = `-- name: ListTemporaryGrants :many
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND expires_at IS NOT NULL
+  AND ($2::text = '' OR principal_urn = $2)
+  AND ($3::boolean OR expires_at > clock_timestamp())
+ORDER BY expires_at, id
+LIMIT 500
+`
+
+type ListTemporaryGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	IncludeExpired bool
+}
+
+type ListTemporaryGrantsRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Lists an organization's temporary grants, soonest deadline first, optionally
+// for one principal. Expired grants are included only on request; revoked
+// grants are deleted and live on in the audit log.
+func (q *Queries) ListTemporaryGrants(ctx context.Context, arg ListTemporaryGrantsParams) ([]ListTemporaryGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listTemporaryGrants, arg.OrganizationID, arg.PrincipalUrn, arg.IncludeExpired)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTemporaryGrantsRow
+	for rows.Next() {
+		var i ListTemporaryGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3270,6 +4400,17 @@ func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRol
 	return err
 }
 
+const lockAuthPermissionBackfill = `-- name: LockAuthPermissionBackfill :exec
+SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
+`
+
+// Takes the organization's auth client backfill lock for the transaction's
+// life; the key must match authclientbackfill's LockOrganizationBackfill.
+func (q *Queries) LockAuthPermissionBackfill(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockAuthPermissionBackfill, organizationID)
+	return err
+}
+
 const lockChallengeResolutions = `-- name: LockChallengeResolutions :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
   jsonb_build_array('access.challenge-resolution', $1::text)::text, 0
@@ -3419,6 +4560,54 @@ func (q *Queries) LockResourceAudience(ctx context.Context, arg LockResourceAudi
 	return err
 }
 
+const lockRolePrincipalGrants = `-- name: LockRolePrincipalGrants :exec
+SELECT pg_advisory_xact_lock(hashtextextended('role-grants:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockRolePrincipalGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// Serializes grant writes for one role principal in an organization until the
+// transaction ends. Role edits and the assistant-role-grants backfill both take
+// it, so a backfill cannot recheck a role, lose a race with a revocation, and
+// then write grants back.
+func (q *Queries) LockRolePrincipalGrants(ctx context.Context, arg LockRolePrincipalGrantsParams) error {
+	_, err := q.db.Exec(ctx, lockRolePrincipalGrants, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const markAuthPermissionTakenOver = `-- name: MarkAuthPermissionTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+  AND taken_over_at IS NULL
+`
+
+type MarkAuthPermissionTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+}
+
+// An explicit grant write takes the grant over from the default auth
+// permission backfill: a rollback leaves it, and a rerun still never writes it
+// again. Run after the write, so a grant provisioned meanwhile is seen.
+func (q *Queries) MarkAuthPermissionTakenOver(ctx context.Context, arg MarkAuthPermissionTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markAuthPermissionTakenOver,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
 const markGlobalRoleDeleted = `-- name: MarkGlobalRoleDeleted :execrows
 UPDATE global_roles
 SET workos_deleted_at = $1,
@@ -3494,6 +4683,127 @@ func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg Ma
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const markPrincipalAuthPermissionsTakenOver = `-- name: MarkPrincipalAuthPermissionsTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND taken_over_at IS NULL
+`
+
+type MarkPrincipalAuthPermissionsTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// An explicit write of a principal's whole policy takes every grant the
+// backfill provisioned for it over, including ones since removed.
+func (q *Queries) MarkPrincipalAuthPermissionsTakenOver(ctx context.Context, arg MarkPrincipalAuthPermissionsTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markPrincipalAuthPermissionsTakenOver, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const recordAuthPermissionDefault = `-- name: RecordAuthPermissionDefault :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+type RecordAuthPermissionDefaultParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records a default grant written at organization creation.
+func (q *Queries) RecordAuthPermissionDefault(ctx context.Context, arg RecordAuthPermissionDefaultParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionDefault,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
+}
+
+const recordAuthPermissionPolicyTakeover = `-- name: RecordAuthPermissionPolicyTakeover :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind, taken_over_at)
+VALUES ($1, $2, $3, $4, $5, clock_timestamp())
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+SET taken_over_at = COALESCE(auth_permission_provisions.taken_over_at, EXCLUDED.taken_over_at),
+    updated_at = clock_timestamp()
+`
+
+type RecordAuthPermissionPolicyTakeoverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records that an explicit write owns the principal's policy even when it
+// leaves no grant to mark, so the backfill never treats the principal as
+// untouched.
+func (q *Queries) RecordAuthPermissionPolicyTakeover(ctx context.Context, arg RecordAuthPermissionPolicyTakeoverParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionPolicyTakeover,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
+}
+
+const renewTemporaryGrant = `-- name: RenewTemporaryGrant :one
+UPDATE principal_grants
+SET expires_at = $1, updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type RenewTemporaryGrantParams struct {
+	ExpiresAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type RenewTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Moves a live temporary grant's deadline. The caller has locked it.
+func (q *Queries) RenewTemporaryGrant(ctx context.Context, arg RenewTemporaryGrantParams) (RenewTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, renewTemporaryGrant, arg.ExpiresAt, arg.ID, arg.OrganizationID)
+	var i RenewTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
 }
 
 const repairOrganizationRoleAssignmentUserLink = `-- name: RepairOrganizationRoleAssignmentUserLink :execrows
@@ -3612,6 +4922,51 @@ func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg Rep
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const revokeTemporaryGrant = `-- name: RevokeTemporaryGrant :one
+DELETE FROM principal_grants
+WHERE id = $1
+  AND organization_id = $2
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type RevokeTemporaryGrantParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type RevokeTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Ends a live temporary grant early by deleting it. The expires_at condition
+// means a permanent grant is never removed this way.
+func (q *Queries) RevokeTemporaryGrant(ctx context.Context, arg RevokeTemporaryGrantParams) (RevokeTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, revokeTemporaryGrant, arg.ID, arg.OrganizationID)
+	var i RevokeTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
 }
 
 const softDeleteAgentRoleAssignmentsByRole = `-- name: SoftDeleteAgentRoleAssignmentsByRole :exec
@@ -3978,6 +5333,7 @@ INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
+  expires_at = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 `
@@ -4000,8 +5356,10 @@ type UpsertPrincipalGrantRow struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
-// Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
-// the existing row is kept and its updated_at is bumped.
+// Creates or updates a single permanent grant row. On conflict (same
+// org/principal/scope/selectors), the existing row is kept and its updated_at
+// is bumped; a temporary row becomes permanent, since this write asks for
+// access with no deadline.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,
@@ -4019,6 +5377,49 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.Selectors,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const withdrawAccessRequest = `-- name: WithdrawAccessRequest :one
+UPDATE access_requests
+SET status = 'withdrawn', updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND id = $2
+  AND requester_user_id = $3
+  AND status = 'pending'
+  AND deleted IS FALSE
+RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, expires_at, created_at, updated_at, deleted_at, deleted
+`
+
+type WithdrawAccessRequestParams struct {
+	OrganizationID  string
+	ID              uuid.UUID
+	RequesterUserID string
+}
+
+func (q *Queries) WithdrawAccessRequest(ctx context.Context, arg WithdrawAccessRequestParams) (AccessRequest, error) {
+	row := q.db.QueryRow(ctx, withdrawAccessRequest, arg.OrganizationID, arg.ID, arg.RequesterUserID)
+	var i AccessRequest
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.RequesterUserID,
+		&i.Scope,
+		&i.Selector,
+		&i.ResourceName,
+		&i.Message,
+		&i.Status,
+		&i.DecidedByUserID,
+		&i.DecidedVia,
+		&i.DecidedAt,
+		&i.TemporaryGrantID,
+		&i.ChallengeIds,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

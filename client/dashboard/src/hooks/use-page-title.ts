@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { AppRoute, AppRoutes } from "@/routes";
+import type { AppRoute, AppRoutes } from "@/routes";
 
 const BASE_TITLE = "Speakeasy";
 

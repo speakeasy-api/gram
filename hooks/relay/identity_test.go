@@ -10,6 +10,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/speakeasy-api/agenthooks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,6 +51,13 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	socket := filepath.Join(dir, "agent.sock")
+	serveIdentitySocket(t, socket, status, body)
+	return socket
+}
+
+// serveIdentitySocket is startIdentitySocket at a caller-chosen path.
+func serveIdentitySocket(t *testing.T, socket string, status int, body string) {
+	t.Helper()
 	ln, err := net.Listen("unix", socket)
 	require.NoError(t, err)
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +74,6 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 	})}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
-	return socket
 }
 
 // isolateInstalledAgent hides machine-wide speakeasyd installs, and any under
@@ -79,6 +86,192 @@ func isolateInstalledAgent(t *testing.T) {
 	previous := machineWideAgentPaths
 	machineWideAgentPaths = nil
 	t.Cleanup(func() { machineWideAgentPaths = previous })
+	stubAccountHome(t, "")
+}
+
+// stubAccountHome replaces the OS account's home for the test, so the real
+// developer install under it cannot answer.
+func stubAccountHome(t *testing.T, home string) {
+	t.Helper()
+	previous := accountHomeDir
+	accountHomeDir = func() string { return home }
+	t.Cleanup(func() { accountHomeDir = previous })
+}
+
+// writeFakeAgent installs a shell speakeasyd at path that prints body and, when
+// marker is set, creates it so the test can tell whether it ran. Only shell
+// builtins: the tests empty PATH, so `touch` would not be found.
+func writeFakeAgent(t *testing.T, path, body, marker string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	script := "#!/bin/sh\n"
+	if marker != "" {
+		script += ": > '" + marker + "'\n"
+	}
+	script += "printf '%s' '" + body + "'\n"
+	require.NoError(t, os.WriteFile(path, []byte(script), 0o700))
+}
+
+func perUserAgentPath(home string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin", "speakeasyd")
+	}
+	return filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd")
+}
+
+// An agent harness runs hooks with $HOME pointed at a temporary folder. The
+// per-user device agent still lives under the account's real home, and the
+// relay must find it there rather than fall through to a machine-wide copy.
+func TestDeviceAgentEmailFindsAgentUnderAccountHomeWhenHOMEMoved(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	isolateInstalledAgent(t)
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
+	account := t.TempDir()
+	stubAccountHome(t, account)
+	writeFakeAgent(t, perUserAgentPath(account), `{"email":"managed@example.com"}`, "")
+
+	stale := filepath.Join(t.TempDir(), "machine-wide-speakeasyd")
+	staleRan := filepath.Join(t.TempDir(), "stale-ran")
+	writeFakeAgent(t, stale, `{"email":"stale@example.com"}`, staleRan)
+	machineWideAgentPaths = []string{stale}
+
+	t.Setenv("HOME", t.TempDir()) // the harness's temporary home: no installs
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_SOCKET", filepath.Join(t.TempDir(), "nope.sock"))
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+
+	require.Equal(t, "managed@example.com", deviceAgentEmail(t.Context()))
+	require.NoFileExists(t, staleRan, "machine-wide copy ran although the per-user agent answered")
+}
+
+// Machine-wide copies are installer seeds that do not auto-update; an old one
+// can raise a macOS keychain dialog. A running daemon's socket must answer
+// before any of them is exec'd.
+func TestDeviceAgentEmailAsksSocketBeforeMachineWideCopy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	isolateInstalledAgent(t)
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
+	stale := filepath.Join(t.TempDir(), "machine-wide-speakeasyd")
+	staleRan := filepath.Join(t.TempDir(), "stale-ran")
+	writeFakeAgent(t, stale, `{"email":"stale@example.com"}`, staleRan)
+	machineWideAgentPaths = []string{stale}
+
+	socket := startIdentitySocket(t, http.StatusOK, `{"v":1,"enrolled":true,"email":"socket@example.com","source":"managed"}`)
+	t.Setenv("SPEAKEASY_SOCKET", socket)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+
+	require.Equal(t, "socket@example.com", deviceAgentEmail(t.Context()))
+	require.NoFileExists(t, staleRan, "machine-wide copy ran although the daemon socket answered")
+}
+
+// With no per-user agent and no daemon, the machine-wide copy is still the
+// last resort.
+func TestDeviceAgentEmailFallsBackToMachineWideCopy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	isolateInstalledAgent(t)
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
+	machineWide := filepath.Join(t.TempDir(), "machine-wide-speakeasyd")
+	writeFakeAgent(t, machineWide, `{"email":"machine@example.com"}`, "")
+	machineWideAgentPaths = []string{machineWide}
+
+	t.Setenv("SPEAKEASY_SOCKET", filepath.Join(t.TempDir(), "nope.sock"))
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+
+	require.Equal(t, "machine@example.com", deviceAgentEmail(t.Context()))
+}
+
+// The agent must read the account's enrollment and keychain, not the
+// harness's temporary home, whichever install answers.
+func TestDeviceAgentIdentityRunsWithAccountHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	isolateInstalledAgent(t)
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
+	account := t.TempDir()
+	stubAccountHome(t, account)
+	agent := filepath.Join(t.TempDir(), "machine-wide-speakeasyd")
+	require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\n"+
+		"[ \"$HOME\" = '"+account+"' ] && printf '%s' '{\"email\":\"account-home@example.com\"}'\n"), 0o700))
+	machineWideAgentPaths = []string{agent}
+
+	t.Setenv("SPEAKEASY_SOCKET", filepath.Join(t.TempDir(), "nope.sock"))
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+
+	require.Equal(t, "account-home@example.com", deviceAgentEmail(t.Context()))
+}
+
+func TestAgentSocketPathsListHOMEThenAccountHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("named pipe path does not depend on the home folder")
+	}
+	t.Setenv("SPEAKEASY_SOCKET", "")
+	moved := t.TempDir()
+	t.Setenv("HOME", moved)
+	account := t.TempDir()
+	stubAccountHome(t, account)
+
+	require.Equal(t, []string{homeSocketPath(moved), homeSocketPath(account)}, agentSocketPaths())
+
+	stubAccountHome(t, moved)
+	require.Equal(t, []string{homeSocketPath(moved)}, agentSocketPaths(), "one home, one path")
+}
+
+// shortTempDir is a temp folder short enough that a socket under the device
+// agent's per-home layout stays within the ~104-byte sockaddr_un limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	// /tmp, not os.TempDir(): macOS's per-user TMPDIR alone eats about half
+	// of the limit.
+	dir, err := os.MkdirTemp("/tmp", "h")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// A stale socket file under the temporary $HOME (a daemon that ran there once)
+// must not hide the live daemon under the account's home.
+func TestSocketIdentitySkipsStaleSocketUnderHOME(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-socket fixture is POSIX-only")
+	}
+	t.Setenv("SPEAKEASY_SOCKET", "")
+	moved := shortTempDir(t)
+	t.Setenv("HOME", moved)
+	stale := homeSocketPath(moved)
+	require.NoError(t, os.MkdirAll(filepath.Dir(stale), 0o755))
+	require.NoError(t, os.WriteFile(stale, nil, 0o600))
+
+	account := shortTempDir(t)
+	stubAccountHome(t, account)
+	live := homeSocketPath(account)
+	require.NoError(t, os.MkdirAll(filepath.Dir(live), 0o755))
+	serveIdentitySocket(t, live, http.StatusOK, `{"v":1,"enrolled":true,"email":"live@example.com","source":"managed"}`)
+
+	require.Equal(t, "live@example.com", socketIdentityEmail(t.Context()))
 }
 
 func TestDeviceAgentEmailSocketRescue(t *testing.T) {
@@ -339,4 +532,57 @@ func writeCodexExtension(t *testing.T, home, editorDir, version string) string {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o700))
 	return path
+}
+
+// noClaudeAccount isolates the test from the developer's own Claude session:
+// no device agent answers, and neither the env var nor a config file names an
+// account until the test sets one.
+func noClaudeAccount(t *testing.T) string {
+	t.Helper()
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("CLAUDE_CODE_USER_EMAIL", "")
+	config := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", config)
+	return config
+}
+
+func TestResolveUserEmailReadsClaudeAccountInCowork(t *testing.T) {
+	claude := &agenthooks.Event{Provider: agenthooks.ProviderClaudeCode}
+
+	t.Run("env var", func(t *testing.T) {
+		noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "cowork@example.com")
+		require.Equal(t, "cowork@example.com", resolveUserEmail(t.Context(), claude))
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		config := noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		require.NoError(t, os.WriteFile(filepath.Join(config, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"file@example.com"}}`), 0o600))
+		require.Equal(t, "file@example.com", resolveUserEmail(t.Context(), claude))
+	})
+
+	t.Run("invalid env var falls back to the config file", func(t *testing.T) {
+		config := noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "not-an-email")
+		require.NoError(t, os.WriteFile(filepath.Join(config, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"file@example.com"}}`), 0o600))
+		require.Equal(t, "file@example.com", resolveUserEmail(t.Context(), claude))
+	})
+
+	t.Run("invalid values are ignored", func(t *testing.T) {
+		config := noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "not-an-email")
+		require.NoError(t, os.WriteFile(filepath.Join(config, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"also-not"}}`), 0o600))
+		require.Empty(t, resolveUserEmail(t.Context(), claude))
+	})
+
+	t.Run("outside Cowork", func(t *testing.T) {
+		noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "cowork@example.com")
+		require.Empty(t, resolveUserEmail(t.Context(), claude))
+	})
 }

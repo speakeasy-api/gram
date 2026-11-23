@@ -38,6 +38,28 @@ it("reconciles catalog and saved choices in the header without mounting the edit
   ]);
 });
 
+it("leaves auth client scopes out because overrides never grant them", () => {
+  const catalog = saveCatalog([
+    {
+      slug: "mcp:connect",
+      resourceType: "mcp",
+      description: "Connect to and use MCP servers.",
+      visibility: "user_visible",
+    },
+    {
+      slug: "mcp:auth",
+      resourceType: "mcp_auth_client",
+      description: "Use an upstream auth client to reach MCP servers.",
+      visibility: "user_visible",
+    },
+  ]);
+  expect(catalog.map((scope) => scope.slug)).toEqual([
+    "org:read",
+    "mcp:connect",
+  ]);
+  expect(loadState().scopes["mcp:auth"]).toBeUndefined();
+});
+
 it("distinguishes a disabled override from an active override with no grants", () => {
   const scopes = { "org:read": { enabled: false, resources: null } };
   saveState({ enabled: true, scopes });

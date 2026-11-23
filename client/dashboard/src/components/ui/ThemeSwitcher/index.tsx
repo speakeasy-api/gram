@@ -1,11 +1,12 @@
 "use client";
 
-import { ReactNode, useId } from "react";
+import type { ReactNode } from "react";
+import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { Moon, Sun } from "lucide-react";
 import { useIsMounted } from "@/components/ui/hooks/useIsMounted";
 import { useConfig } from "@/components/ui/hooks/useConfig";
-import { Theme } from "@/components/ui/context/theme";
+import type { Theme } from "@/components/ui/context/theme";
 
 const THEMES: { key: Theme; icon: ReactNode }[] = [
   { key: "light", icon: <Sun /> },

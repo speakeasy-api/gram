@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { Skeleton, SkeletonCode, SkeletonParagraph, SkeletonTable } from ".";
+import { Skeleton, SkeletonCode, SkeletonParagraph } from ".";
 
 const meta: Meta<typeof Skeleton> = {
   title: "Design System/Skeleton",
@@ -25,16 +25,21 @@ export const FromChildren: Story = {
   ),
 };
 
+export const AnnouncedLoading: Story = {
+  render: () => (
+    <Skeleton label="Loading activity">
+      <div className="h-12 w-96" />
+      <div className="h-12 w-96" />
+    </Skeleton>
+  ),
+};
+
 export const Paragraph: Story = {
   render: () => (
     <div className="w-96">
       <SkeletonParagraph lines={4} />
     </div>
   ),
-};
-
-export const TablePlaceholder: Story = {
-  render: () => <SkeletonTable />,
 };
 
 export const CodePlaceholder: Story = {

@@ -71,6 +71,96 @@
     });
   }
 
+  // Hide and Show update in place; without the script the forms post and redirect.
+  var visibleServers = document.querySelector("[data-gateway-visible-list]");
+  var hiddenServers = document.querySelector("[data-gateway-hidden-list]");
+  if (visibleServers && hiddenServers) {
+    var hiddenSection = document.querySelector("[data-gateway-hidden-section]");
+    var allHidden = document.querySelector("[data-gateway-all-hidden]");
+    var gatewaySummary = document.querySelector("[data-gateway-summary]");
+    var hiddenCount = document.querySelector("[data-gateway-hidden-count]");
+    var visibilityError = document.querySelector(
+      "[data-gateway-visibility-error]",
+    );
+
+    var refreshGatewayCounts = function () {
+      var visibleRows = visibleServers.querySelectorAll(
+        "[data-gateway-server]",
+      );
+      var hiddenRows = hiddenServers.querySelectorAll("[data-gateway-server]");
+      var ready = Array.prototype.filter.call(visibleRows, function (row) {
+        return row.getAttribute("data-gateway-server-ready") === "true";
+      }).length;
+      var summary =
+        ready +
+        " of " +
+        visibleRows.length +
+        (visibleRows.length === 1 ? " server" : " servers") +
+        " connected";
+      if (hiddenRows.length) summary += " · " + hiddenRows.length + " hidden";
+      gatewaySummary.textContent = summary;
+      hiddenCount.textContent = String(hiddenRows.length);
+      visibleServers.hidden = visibleRows.length === 0;
+      allHidden.hidden = visibleRows.length !== 0;
+      hiddenSection.hidden = hiddenRows.length === 0;
+    };
+
+    var moveGatewayRow = function (row, hide) {
+      Array.prototype.forEach.call(
+        row.querySelectorAll(
+          "[data-gateway-server-status], [data-gateway-server-actions]",
+        ),
+        function (el) {
+          el.hidden = hide;
+        },
+      );
+      // The row attribute swaps the hide icon for the Show label (see the
+      // gatewayServerRow template).
+      row.toggleAttribute("data-gateway-server-hidden", hide);
+      var toggle = row.querySelector("[data-gateway-visibility-toggle]");
+      toggle.value = hide ? "show_server" : "hide_server";
+      toggle.title = hide
+        ? "Make this server available to your tools again"
+        : "Hide this server, preventing your agent from attempting to access it.";
+      (hide ? hiddenServers : visibleServers).appendChild(row);
+    };
+
+    document.addEventListener("submit", async function (event) {
+      var visibilityForm = event.target;
+      if (!visibilityForm.matches("[data-gateway-visibility-form]")) return;
+      event.preventDefault();
+      var toggle = visibilityForm.querySelector(
+        "[data-gateway-visibility-toggle]",
+      );
+      if (toggle.disabled) return;
+      var hide = toggle.value === "hide_server";
+      var body = new URLSearchParams(new FormData(visibilityForm));
+      body.set("action", toggle.value);
+      toggle.disabled = true;
+      visibilityError.hidden = true;
+      var moved = false;
+      try {
+        var response = await fetch(visibilityForm.getAttribute("action"), {
+          method: "POST",
+          credentials: "same-origin",
+          body: body,
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error(String(response.status));
+        moveGatewayRow(visibilityForm.closest("[data-gateway-server]"), hide);
+        moved = true;
+        refreshGatewayCounts();
+      } catch (_) {
+        visibilityError.textContent =
+          "Couldn't update that server. Reload the page and try again.";
+        visibilityError.hidden = false;
+      } finally {
+        toggle.disabled = false;
+        if (moved) toggle.focus();
+      }
+    });
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
@@ -122,7 +212,9 @@
         if (
           savedMode === "" ||
           savedMode === "direct" ||
-          savedMode === "progressive"
+          savedMode === "progressive" ||
+          (savedMode === "code_mode" &&
+            discoverySelect.querySelector('option[value="code_mode"]'))
         ) {
           discoverySelect.value = savedMode;
         }
@@ -254,6 +346,19 @@
           showError(error);
         }
       }
+      function connectionUsable(session) {
+        if (!session) return false;
+        if (
+          session.HasRefreshToken &&
+          (!session.RefreshExpiresAt ||
+            new Date(session.RefreshExpiresAt).getTime() > Date.now())
+        )
+          return true;
+        return (
+          !session.AccessExpiresAt ||
+          new Date(session.AccessExpiresAt).getTime() > Date.now()
+        );
+      }
       function accountLabel(session) {
         return (
           [session.UpstreamDisplayName, session.UpstreamEmail]
@@ -288,10 +393,7 @@
               return (
                 binding.RemoteSessionClientID ===
                   provider.getAttribute("data-remote-client") &&
-                binding.RemoteSession &&
-                (data.candidates || []).some(function (session) {
-                  return session.ID === binding.RemoteSessionID;
-                })
+                connectionUsable(binding.RemoteSession)
               );
             });
           });
@@ -308,11 +410,7 @@
             var attached = document.createElement("span");
             attached.className = "text-muted-foreground text-xs";
             var account = binding.RemoteSession;
-            var eligible =
-              account &&
-              (data.candidates || []).some(function (candidate) {
-                return candidate.ID === binding.RemoteSessionID;
-              });
+            var eligible = connectionUsable(account);
             var connectedAs = provider.getAttribute("data-connected-as");
             var sameAccount =
               account &&
@@ -325,6 +423,13 @@
                 (sameAccount ? "" : " · " + accountLabel(account))
               : "Agent access unavailable. Detach it before choosing an account. Your service connection has not been changed.";
             row.appendChild(attached);
+            if (!data.canManageConnections) {
+              var readonly = document.createElement("span");
+              readonly.textContent =
+                "Only agent editors can change this assignment.";
+              row.appendChild(readonly);
+              return;
+            }
             var detach = document.createElement("button");
             detach.type = "button";
             detach.className =
@@ -335,6 +440,10 @@
             });
             row.appendChild(detach);
           } else {
+            if (!data.canManageConnections) {
+              row.textContent = "Ask an agent editor to assign a connection.";
+              return;
+            }
             var candidates = (data.candidates || []).filter(function (item) {
               return item.RemoteSessionClientID === clientId;
             });
@@ -529,15 +638,63 @@
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
   guardActionButtons("button[data-validate-link]", "Checking…");
+  guardActionButtons("button[data-switch-account]", "Opening sign-in…");
+
+  // Back from the sign-in can restore this page with its buttons pending;
+  // reload it so they work again.
+  if (document.querySelector("button[data-switch-account]")) {
+    window.addEventListener("pageshow", function (event) {
+      if (event.persisted) {
+        window.location.reload();
+      }
+    });
+  }
 
   // Identity-chained cards render neutral, so they read right without script.
   // Check each exchange in the background and settle the card in place; any
-  // failure keeps the neutral copy and the separate sign-in fallback.
+  // failure keeps the neutral copy and the own-account fallback.
   var connectedSummary = document.querySelector("[data-connected-summary]");
   var chainActionURL = (function () {
     var services = document.querySelector("[data-service-connections]");
     return services ? services.getAttribute("data-action-url") : "";
   })();
+
+  // "your own <service> account", from the card's service name.
+  function ownAccount(card) {
+    var service = card.getAttribute("data-remote-display") || "";
+    return service ? "your own " + service + " account" : "your own account";
+  }
+
+  // Labels a card's own-account button with the service's name when fits
+  // allows it, and "Use your own account" otherwise.
+  function labelOwnAccount(card, button, fits) {
+    button.textContent = "Use " + ownAccount(card);
+    if (card.getAttribute("data-remote-display") && !fits(button)) {
+      button.textContent = "Use your own account";
+    }
+  }
+
+  // Beside the card's text a long service name would crowd it, so the button
+  // keeps it within half the card; under the text, within the card's width.
+  // The card's title already names the service.
+  Array.prototype.forEach.call(
+    document.querySelectorAll("button[data-connect-fallback]"),
+    function (button) {
+      var card = button.closest("[data-remote-client]");
+      if (!card) {
+        return;
+      }
+      var row = card.querySelector("[data-card-row]");
+      var actions = card.querySelector("[data-card-actions]");
+      var besideText =
+        !row || window.getComputedStyle(row).flexDirection === "row";
+      labelOwnAccount(card, button, function (labelled) {
+        return besideText || !actions
+          ? labelled.offsetWidth <= card.offsetWidth / 2
+          : labelled.offsetWidth <= actions.clientWidth;
+      });
+    },
+  );
 
   function settleChainCheck(status, card, result) {
     var state = result ? result.status : "";
@@ -564,13 +721,26 @@
       status.className = "text-xs text-default-warning";
       status.textContent =
         result.message ||
-        "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
-      var fallback = card.querySelector("button[data-connect-fallback]");
-      if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
-        fallback.className =
-          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm";
-        fallback.removeAttribute("data-connect-fallback");
-        fallback.textContent = "Connect";
+        "Your identity provider sign-in wasn't accepted. Use " +
+          ownAccount(card) +
+          ".";
+      var switchAccount =
+        result.action === "switch_account"
+          ? card.querySelector("button[data-switch-account]")
+          : null;
+      if (switchAccount) {
+        // The company sign-in above the own-account button, at one width
+        // right of the text; under the text on a narrow screen.
+        switchAccount.removeAttribute("hidden");
+        var actions = card.querySelector("[data-card-actions]");
+        if (actions) {
+          actions.className =
+            "flex shrink-0 flex-col items-start gap-1.5 sm:items-stretch";
+        }
+        var own = card.querySelector("button[data-connect-fallback]");
+        if (own && own.className.indexOf("justify-center") < 0) {
+          own.className += " justify-center";
+        }
       }
       signalChainRejected();
       return;
@@ -664,6 +834,21 @@
       ) {
         refreshForm.submit();
       }
+    });
+  }
+
+  // A gateway server's credential decides which of its tools can be
+  // approved, so changing it reloads the page with every server's pick.
+  // Unsaved session length, agent selection, and tool toggles reset on this
+  // reload: approval must be reviewed against the newly selected credentials,
+  // rather than carrying a stale authorization selection into the new page.
+  var gatewayAuthForm = document.querySelector("#gateway-auth-form");
+  if (gatewayAuthForm) {
+    var authSelects = document.querySelectorAll("select[data-auto-submit]");
+    Array.prototype.forEach.call(authSelects, function (select) {
+      select.addEventListener("change", function () {
+        gatewayAuthForm.submit();
+      });
     });
   }
 })();

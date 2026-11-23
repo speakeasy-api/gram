@@ -16,6 +16,9 @@ import (
 // CreateUserSessionIssuerRequestBody is the type of the "userSessionIssuers"
 // service "createUserSessionIssuer" endpoint HTTP request body.
 type CreateUserSessionIssuerRequestBody struct {
+	// Authorization-server topology. Shared mode supports standalone workload
+	// token exchange without an MCP server.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
@@ -2531,6 +2534,12 @@ func NewCreateUserSessionIssuerPayload(body *CreateUserSessionIssuerRequestBody,
 		AuthnChallengeMode:   *body.AuthnChallengeMode,
 		SessionDurationHours: *body.SessionDurationHours,
 	}
+	if body.AuthorizationServerMode != nil {
+		v.AuthorizationServerMode = *body.AuthorizationServerMode
+	}
+	if body.AuthorizationServerMode == nil {
+		v.AuthorizationServerMode = "endpoint"
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2620,6 +2629,11 @@ func ValidateCreateUserSessionIssuerRequestBody(body *CreateUserSessionIssuerReq
 	}
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
 	}
 	if body.AuthnChallengeMode != nil {
 		if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {

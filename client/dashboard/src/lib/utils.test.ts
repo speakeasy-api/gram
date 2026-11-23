@@ -8,6 +8,7 @@ import {
   supportsFirstPartyConnect,
   tunnelGatewayURL,
 } from "./utils";
+import type { RuntimeConfig } from "./runtime-config";
 
 describe("supportsFirstPartyConnect", () => {
   const eligible = {
@@ -72,59 +73,91 @@ describe("chunk", () => {
   });
 });
 
+// Mirrors the configuration the gram-infra chart renders for each deployment.
+const prod: RuntimeConfig = {
+  tunnelHost: "tunnel.speakeasy.com",
+  customDomainCname: "cname.getgram.ai.",
+  firstPartyHosts: ["app.getgram.ai", "ai.speakeasy.com"],
+};
+const dev: RuntimeConfig = {
+  tunnelHost: "tunnel.dev.getgram.ai",
+  customDomainCname: "cname.dev.getgram.ai.",
+  firstPartyHosts: ["dev.getgram.ai", "dev.ai.speakeasy.com"],
+};
+const preview: RuntimeConfig = {
+  tunnelHost: "tunnel-pr-6012.dev.getgram.ai",
+  customDomainCname: "cname.dev.getgram.ai.",
+};
+const local: RuntimeConfig = {};
+
 describe("tunnelGatewayURL", () => {
   it.each([
-    ["https://app.getgram.ai", "wss://tunnel.speakeasy.com/connect"],
-    ["https://ai.speakeasy.com", "wss://tunnel.speakeasy.com/connect"],
-    ["https://dev.getgram.ai", "wss://tunnel.dev.getgram.ai/connect"],
-    ["https://dev.ai.speakeasy.com", "wss://tunnel.dev.getgram.ai/connect"],
+    ["https://app.getgram.ai", prod, "wss://tunnel.speakeasy.com/connect"],
+    ["https://ai.speakeasy.com", prod, "wss://tunnel.speakeasy.com/connect"],
+    ["https://dev.getgram.ai", dev, "wss://tunnel.dev.getgram.ai/connect"],
+    [
+      "https://dev.ai.speakeasy.com",
+      dev,
+      "wss://tunnel.dev.getgram.ai/connect",
+    ],
     [
       "https://pr-6012.dev.getgram.ai",
+      preview,
       "wss://tunnel-pr-6012.dev.getgram.ai/connect",
     ],
-    ["http://localhost:8080", "ws://tunnel.localhost:8080/connect"],
-  ])("maps %s to %s", (serverURL, expected) => {
-    expect(tunnelGatewayURL(serverURL)).toBe(expected);
-  });
+    ["http://localhost:8080", local, "ws://tunnel.localhost:8080/connect"],
+  ])(
+    "maps %s to the configured or derived host",
+    (serverURL, config, expected) => {
+      expect(tunnelGatewayURL(serverURL, config)).toBe(expected);
+    },
+  );
 });
 
 describe("getCustomDomainCNAME", () => {
   it.each([
-    ["https://app.getgram.ai", "cname.getgram.ai."],
-    ["https://ai.speakeasy.com", "cname.getgram.ai."],
-    ["https://dev.getgram.ai", "cname.dev.getgram.ai."],
-    ["https://dev.ai.speakeasy.com", "cname.dev.getgram.ai."],
-    ["https://app.dev.getgram.ai", "cname.dev.getgram.ai."],
-    ["not a url", "cname.getgram.ai."],
-  ])("maps %s to %s", (serverURL, expected) => {
-    expect(getCustomDomainCNAME(serverURL)).toBe(expected);
-  });
+    ["https://app.getgram.ai", prod, "cname.getgram.ai."],
+    ["https://ai.speakeasy.com", prod, "cname.getgram.ai."],
+    ["https://dev.getgram.ai", dev, "cname.dev.getgram.ai."],
+    ["https://dev.ai.speakeasy.com", dev, "cname.dev.getgram.ai."],
+    ["https://app.dev.getgram.ai", local, "cname.dev.getgram.ai."],
+    ["https://staging.example.com", local, "cname.staging.example.com."],
+    ["not a url", local, ""],
+  ])(
+    "maps %s to the configured or derived target",
+    (serverURL, config, expected) => {
+      expect(getCustomDomainCNAME(serverURL, config)).toBe(expected);
+    },
+  );
 });
 
 describe("agentEgressHosts", () => {
   it.each([
-    ["https://app.getgram.ai", ["app.getgram.ai", "ai.speakeasy.com"]],
-    ["https://ai.speakeasy.com", ["ai.speakeasy.com", "app.getgram.ai"]],
-    ["https://dev.getgram.ai", ["dev.getgram.ai", "dev.ai.speakeasy.com"]],
+    ["https://app.getgram.ai", prod, ["app.getgram.ai", "ai.speakeasy.com"]],
+    ["https://ai.speakeasy.com", prod, ["ai.speakeasy.com", "app.getgram.ai"]],
+    ["https://dev.getgram.ai", dev, ["dev.getgram.ai", "dev.ai.speakeasy.com"]],
     [
       "https://dev.ai.speakeasy.com",
+      dev,
       ["dev.ai.speakeasy.com", "dev.getgram.ai"],
     ],
-    ["https://pr-12.dev.getgram.ai", ["pr-12.dev.getgram.ai"]],
-    ["https://localhost:8080", ["localhost"]],
-  ])("allows %s egress to %j", (serverURL, expected) => {
-    expect(agentEgressHosts(serverURL)).toEqual(expected);
+    ["https://pr-12.dev.getgram.ai", preview, ["pr-12.dev.getgram.ai"]],
+    ["https://localhost:8080", local, ["localhost"]],
+  ])("allows %s egress to %j", (serverURL, config, expected) => {
+    expect(agentEgressHosts(serverURL, config)).toEqual(expected);
   });
 });
 
 describe("firstPartyHosts", () => {
   it.each([
-    ["https://app.getgram.ai", ["app.getgram.ai", "ai.speakeasy.com"]],
-    ["https://ai.speakeasy.com", ["app.getgram.ai", "ai.speakeasy.com"]],
-    ["https://dev.getgram.ai", ["dev.getgram.ai", "dev.ai.speakeasy.com"]],
-    ["https://pr-12.dev.getgram.ai", ["pr-12.dev.getgram.ai"]],
-  ])("lists %s as %j", (serverURL, expected) => {
-    expect(firstPartyHosts(serverURL)).toEqual(expected);
+    ["https://app.getgram.ai", prod, ["app.getgram.ai", "ai.speakeasy.com"]],
+    ["https://ai.speakeasy.com", prod, ["app.getgram.ai", "ai.speakeasy.com"]],
+    ["https://dev.getgram.ai", dev, ["dev.getgram.ai", "dev.ai.speakeasy.com"]],
+    ["https://pr-12.dev.getgram.ai", preview, ["pr-12.dev.getgram.ai"]],
+    // A host the deployment routes but does not list keeps only itself.
+    ["https://api.getgram.ai", prod, ["api.getgram.ai"]],
+  ])("lists %s as %j", (serverURL, config, expected) => {
+    expect(firstPartyHosts(serverURL, config)).toEqual(expected);
   });
 });
 
@@ -141,5 +174,16 @@ describe("partner signup redirect", () => {
     expect(url.searchParams.get("partner_code")).toBe("partner & friends");
     expect(url.searchParams.get("org_name")).toBe("Acme");
     expect(url.searchParams.get("redirect")).toBe("/welcome");
+  });
+
+  it("adds sign-up attribution params", () => {
+    const url = new URL(
+      buildLoginRedirectURL("/welcome", "Acme", undefined, undefined, {
+        utm_source: "linkedin",
+        analytics_session_id: "sess-123",
+      }),
+    );
+    expect(url.searchParams.get("utm_source")).toBe("linkedin");
+    expect(url.searchParams.get("analytics_session_id")).toBe("sess-123");
   });
 });

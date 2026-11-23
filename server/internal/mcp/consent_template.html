@@ -29,9 +29,6 @@
       <section class="bg-card border">
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
           {{if and .Gateway .Gateway.Focus}}
-          {{/* One server's connect page. Connecting a service is the whole
-          job here: the gateway is approved on its own page, so this page
-          has no approve step of its own. */}}
           <p class="text-eyebrow">Connect a server</p>
           <h1 class="text-display-xs break-all">{{.Gateway.Focus.Name}}</h1>
           <p class="text-sm text-muted-foreground">
@@ -225,6 +222,8 @@
           </p>
           {{end}}
           {{if .Gateway.Servers}}
+          {{$visible := .VisibleGatewayRows}}
+          {{$hidden := .HiddenGatewayRows}}
           <details
             class="group"
             data-gateway-list
@@ -235,74 +234,48 @@
               class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
             >
               <span class="text-sm" data-gateway-summary
-                >{{.Gateway.ReadyCount}} of {{len .Gateway.Servers}} {{if eq (len .Gateway.Servers) 1}}server{{else}}servers{{end}} connected</span
+                >{{.Gateway.ReadyCount}} of {{len $visible}} {{if eq (len $visible) 1}}server{{else}}servers{{end}} connected{{if $hidden}} · {{len $hidden}} hidden{{end}}</span
               >
               <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true"
                 >Show servers</span
               >
               <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true"
-                >Hide</span
+                >Collapse</span
               >
             </summary>
             <div class="flex flex-col gap-3 px-6 pt-4 pb-6 sm:px-8">
               <p class="text-xs text-muted-foreground">
-                A server that needs you to sign in works as soon as you connect
-                it, now or the first time you use it.
+                {{if .ShowToolsIsland}}Only servers verified at consent are included. If access or a connection changes, reload this page to review it.{{else}}Connect a server that needs you to sign in before using it.{{end}}
               </p>
-              <ul class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0">
-                {{range .Gateway.Servers}}
-                <li
-                  class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
-                  data-gateway-server="{{.Slug}}"
-                >
-                  <span class="flex min-w-0 flex-col gap-0.5">
-                    <span class="flex min-w-0 items-baseline gap-2">
-                      <span class="truncate text-sm">{{.Name}}</span>
-                      {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
-                    </span>
-                    <span
-                      class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
-                      data-gateway-server-status="{{.Status}}"
-                      >{{.StatusLabel}}</span
-                    >
-                  </span>
-                  {{if .ConnectClientID}}
-                  <form
-                    method="POST"
-                    action="{{$.ConsentPath}}/remote-session"
-                    class="shrink-0"
-                  >
-                    <input type="hidden" name="state" value="{{$.State}}" />
-                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
-                    <input type="hidden" name="client_id" value="{{.ConnectClientID}}" />
-                    <button
-                      type="submit"
-                      name="action"
-                      value="connect"
-                      class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
-                      data-connect-link
-                    >
-                      {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
-                    </button>
-                  </form>
-                  {{else if .NeedsSignIn}}
-                  <a
-                    href="{{$.ConsentPath}}?state={{$.State}}&server={{.Slug}}"
-                    class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
-                    data-gateway-server-page
-                    >{{if .Ready}}Manage{{else}}Connect{{end}} &rsaquo;</a
-                  >
-                  {{else if .NotSetUp}}
-                  <a
-                    href="{{$.ConsentPath}}?state={{$.State}}&server={{.Slug}}"
-                    class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
-                    data-gateway-server-page
-                    >View &rsaquo;</a
-                  >
-                  {{end}}
-                </li>
-                {{end}}
+              {{/* Changing a server's credential reloads the page so the
+              tools offered for approval are the ones it reaches. */}}
+              <form method="GET" action="{{$.ConsentPath}}" id="gateway-auth-form" class="hidden">
+                <input type="hidden" name="state" value="{{$.State}}" />
+              </form>
+              <ul
+                class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0"
+                data-gateway-visible-list
+                {{if not $visible}}hidden{{end}}
+              >
+                {{range $visible}}{{template "gatewayServerRow" .}}{{end}}
               </ul>
+              <p class="text-sm text-muted-foreground" data-gateway-all-hidden {{if $visible}}hidden{{end}}>
+                You've hidden every server on this gateway.
+              </p>
+              <p class="text-xs text-default-warning" data-gateway-visibility-error role="alert" hidden></p>
+              <details class="group/hidden" data-gateway-hidden-section {{if not $hidden}}hidden{{end}}>
+                <summary class="text-muted-foreground interact:text-foreground flex cursor-pointer list-none items-center justify-between gap-3 text-xs">
+                  <span>Hidden (<span data-gateway-hidden-count>{{len $hidden}}</span>)</span>
+                  <span class="text-eyebrow group-open/hidden:hidden" aria-hidden="true">Expand</span>
+                  <span class="text-eyebrow hidden group-open/hidden:inline" aria-hidden="true">Collapse</span>
+                </summary>
+                <p class="text-xs text-muted-foreground mt-2">
+                  Hidden servers aren't available to your AI tools. Show one to use it again.
+                </p>
+                <ul class="m-0 mt-2 flex list-none flex-col border p-0 opacity-60" data-gateway-hidden-list>
+                  {{range $hidden}}{{template "gatewayServerRow" .}}{{end}}
+                </ul>
+              </details>
             </div>
           </details>
           {{else}}
@@ -312,6 +285,39 @@
           {{end}}
         </div>
         {{end}}
+
+        {{with .UpstreamAuth}}{{if .ShowPicker}}
+        {{/* Each option is a different upstream identity, so the choice is
+        part of the approval: the radios belong to the approve form. */}}
+        <fieldset class="m-0 flex flex-col gap-3 border-0 border-b px-6 py-6 sm:px-8" data-upstream-auth>
+          <legend class="text-eyebrow float-left mb-3 w-full p-0">Sign in to the service as</legend>
+          <ul class="m-0 flex list-none flex-col border p-0">
+            {{range .Options}}
+            <li class="flex items-start gap-3 px-4 py-3 not-first:border-t" data-upstream-auth-option="{{.ID}}">
+              <input
+                type="radio"
+                name="auth_client"
+                form="consent-approve-form"
+                value="{{.ID}}"
+                id="auth-client-{{.ID}}"
+                class="mt-1"
+                {{if .Selected}}checked{{end}}
+                {{if not .Usable}}disabled{{end}}
+              />
+              <label for="auth-client-{{.ID}}" class="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span class="truncate text-sm">{{.Name}}</span>
+                <span class="text-xs text-muted-foreground">{{.TypeLabel}}{{if .Shared}} · the service records your actions as this shared identity{{end}}</span>
+                {{if eq .State "connect"}}<span class="text-xs text-muted-foreground">Connect your account below to choose this.</span>
+                {{else if eq .State "reconnect"}}<span class="text-xs text-default-warning">Reconnect your account below to choose this.</span>
+                {{else if eq .State "setup"}}<span class="text-xs text-muted-foreground">Not set up yet. Ask an administrator.</span>{{end}}
+              </label>
+            </li>
+            {{end}}
+          </ul>
+        </fieldset>
+        {{else}}{{with .Selected}}
+        <input type="hidden" name="auth_client" form="consent-approve-form" value="{{.ID}}" />
+        {{end}}{{end}}{{end}}
 
         {{if .RemoteSessionCards}}
         <div
@@ -343,7 +349,7 @@
             {{range .RemoteSessionCards}}
 
             <li data-remote-client="{{.ClientID}}" data-remote-display="{{.IssuerDisplay}}" data-connected-as="{{.ConnectedAs}}" class="flex flex-col px-4 py-3 not-first:border-t">
-              <div class="flex items-start justify-between gap-3">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:has-[details[open]]:items-start" data-card-row>
               <div class="flex min-w-0 items-start gap-3">
 
                 {{if .IssuerLogoURL}}<img
@@ -362,7 +368,15 @@
                   rather than hiding under it; a pending automatic verification
                   shows on it until the page refreshes with the verdict;
                   everything descriptive sits in the disclosure below. */}}
-                  {{if .Rejected}}
+                  {{if .SignInAddress}}
+                  <span class="text-xs text-default-warning" data-validation="sign-in-address"
+                    >{{.SignInAddressStatus}}</span
+                  >
+                  {{else if .Unavailable}}
+                  <span class="text-xs text-default-warning" data-validation="unavailable"
+                    >Unavailable · try again shortly</span
+                  >
+                  {{else if .Rejected}}
                   <span class="text-xs text-default-warning" data-validation="rejected"
                     >{{.ValidationReason}} — reconnect to continue</span
                   >
@@ -384,10 +398,8 @@
                       > · Not yet verified</span
                     >{{end}}</span
                   >
-                  {{end}} {{if .ValidationNotice}}
-                  <span class="text-xs text-default-warning" data-validation-notice
-                    >{{.ValidationNotice}}</span
-                  >
+                  {{end}} {{if .AttachmentReconnect}}
+                  <span class="text-xs text-muted-foreground">Sign in again to choose the account for this agent</span>
                   {{end}} {{if .IdentityReconnect}}
                   <span class="text-xs text-muted-foreground"
                     >Reconnect to add account details</span
@@ -421,18 +433,143 @@
                   <span class="text-xs text-muted-foreground"
                     >Not connected</span
                   >
+                  {{end}} {{if .ValidationNotice}}
+                  <span class="text-xs text-default-warning" data-validation-notice
+                    >{{.ValidationNotice}}</span
+                  >
                   {{end}} {{if .SharedServerNote}}
                   <span class="text-xs text-muted-foreground" data-shared-server-note
                     >{{.SharedServerNote}}</span
                   >
                   {{end}}
+                {{$panel := .Panel}} {{if $panel.ShowDetails}}
+                  {{/* The descriptive detail, collapsed by default; Panel decides
+                  which lines a state shows. Native details keeps it
+                  keyboard-reachable and working without the page script. */}}
+                  <details class="group mt-1" data-card-details>
+                    <summary
+                      class="flex cursor-pointer list-none items-center gap-1 text-eyebrow"
+                    >
+                      Details
+                      <svg
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        class="size-3 shrink-0 transition-transform group-open:rotate-180"
+                        data-card-details-chevron
+                      >
+                        <path d="M4 6l4 4 4-4" />
+                      </svg>
+                    </summary>
+                    <div class="bg-accent mt-2 flex w-fit max-w-[70%] flex-col gap-1 border px-3 py-3 max-sm:w-full max-sm:max-w-full" data-card-details-panel>
+                      {{if $panel.ShowIdentity}}
+                      <span
+                        class="text-xs text-muted-foreground break-words has-[[data-caveat-trigger]:hover]:[&_[data-identity-text]]:bg-destructive/20 has-[[data-caveat-trigger]:focus-visible]:[&_[data-identity-text]]:bg-destructive/20"
+                        >Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>{{.ConnectedAs}}</span>{{if .IdentityCaveat}}
+                        <span class="group/caveat relative inline-block" data-identity-caveat
+                          ><span
+                            class="text-destructive cursor-help inline-block"
+                            tabindex="0"
+                            role="img"
+                            aria-label="Identity caveat"
+                            aria-describedby="identity-caveat-{{.ClientID}}"
+                            data-caveat-trigger
+                            ><svg
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.5"
+                              stroke-linecap="round"
+                              aria-hidden="true"
+                              class="size-3 inline-block"
+                            >
+                              <circle cx="8" cy="8" r="6.5" />
+                              <path d="M8 4.75v3.75M8 11.25h.01" />
+                            </svg></span
+                          ><span
+                            id="identity-caveat-{{.ClientID}}"
+                            role="tooltip"
+                            class="bg-popover text-popover-foreground pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden w-64 -translate-x-1/2 border px-3 py-1.5 text-xs whitespace-normal shadow-md group-hover/caveat:block group-focus-within/caveat:block"
+                            >{{.IdentityCaveat}}</span
+                          ></span
+                        >{{end}}</span
+                      >
+                      {{end}} {{if $panel.ShowAccountContext}}
+                      {{/* Each chip carries its own separator glued on with non-breaking spaces, so a
+                      wrapped row never starts with a dot while a long value can still break. */}}
+                      <span class="text-xs text-muted-foreground" data-account-context
+                        >{{range $i, $chip := .AccountChips}}<span class="break-words">{{if $i}}&nbsp;·&nbsp;{{end}}{{$chip}}</span>{{end}}</span
+                      >
+                      {{end}} {{if $panel.ShowToken}}
+                      <span class="text-xs text-muted-foreground" data-token-line
+                        >Token active{{if .TokenExpiresIn}} · expires in
+                        <time datetime="{{.TokenExpiresAt}}">{{.TokenExpiresIn}}</time>{{end}}</span
+                      >
+                      {{end}} {{if $panel.ShowValidationReason}}
+                      <span class="text-xs text-muted-foreground" data-validation-reason
+                        >{{.ValidationReason}}</span
+                      >
+                      {{end}} {{if $panel.ShowLapse}}
+                      <span class="text-xs text-muted-foreground" data-lapse-line
+                        >Lapses in
+                        <time datetime="{{.RefreshExpiresAt}}"
+                          >{{.RefreshExpiresIn}}</time
+                        >
+                        if unused.</span
+                      >
+                      {{end}} {{if $panel.ShowAutoRefresh}}
+                      <span class="text-xs text-muted-foreground" data-auto-refresh-line
+                        >Auto refresh on.</span
+                      >
+                      {{end}} {{if $panel.ShowAccessEnd}}
+                      <span class="text-xs text-muted-foreground" data-access-end-line
+                        >Access ends in
+                        <time datetime="{{.AuthorizationExpiresAt}}"
+                          >{{.AuthorizationExpiresIn}}</time
+                        >.</span
+                      >
+                      {{end}} {{if $panel.ShowLinks}}
+                      {{/* The resource's own links (RFC 9728) for an attachment issuer, the authorization server's otherwise. */}}
+                      <span
+                        class="flex flex-wrap gap-x-3 text-xs text-muted-foreground"
+                        data-issuer-links
+                      >
+                        {{if .IssuerDocumentationURL}}<a
+                          href="{{.IssuerDocumentationURL}}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="underline"
+                          >Documentation</a
+                        >{{end}} {{if .IssuerPolicyURL}}<a
+                          href="{{.IssuerPolicyURL}}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="underline"
+                          >Policy</a
+                        >{{end}} {{if .IssuerTosURL}}<a
+                          href="{{.IssuerTosURL}}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="underline"
+                          >Terms</a
+                        >{{end}}
+                      </span>
+                      {{end}}
+                    </div>
+                  </details>
+                {{end}}
                 </div>
               </div>
 
               <form
                 method="POST"
                 action="{{$.ConsentPath}}/remote-session"
-                class="flex flex-wrap items-center justify-end gap-1.5"
+                class="flex shrink-0 flex-wrap items-center justify-start gap-1.5 sm:justify-end"
+                data-card-actions
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
                 <input
@@ -458,7 +595,7 @@
                 >
                   Refresh
                 </button>
-                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive))}}
+                {{end}} {{end}} {{if and .Connected .CanValidate (not (or .Rejected .Inactive .Unavailable .SignInAddress))}}
                 <button
                   type="submit"
                   name="action"
@@ -468,17 +605,33 @@
                 >
                   Verify
                 </button>
-                {{end}} {{if or (not .Connected) .IdentityReconnect .Rejected .Inactive}}
-                {{if and .Chained (ne .ChainCheck "rejected")}}
+                {{end}} {{if or (not .Connected) (and .Unavailable (not .UnavailableTunnel)) .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}
+                {{if .Chained}}
+                {{if $.AccountSwitch}}
+                {{/* Shown by the page script only when the check offers it. */}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="switch_account"
+                  class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 shrink-0 items-center justify-center whitespace-nowrap px-3 text-sm"
+                  data-switch-account
+                  hidden
+                >
+                  Sign in with your company account
+                </button>
+                {{end}}
+                {{/* Every company sign-in card offers the same outlined action in every
+                state. The short label never overflows a narrow card; the page script
+                names the service when it fits. */}}
                 <button
                   type="submit"
                   name="action"
                   value="connect"
-                  class="text-muted-foreground interact:text-foreground interact:underline flex h-8 cursor-pointer items-center px-1 text-xs underline-offset-2"
+                  class="interact:bg-accent flex h-8 shrink-0 items-center whitespace-nowrap border px-3 text-sm"
                   data-connect-link
                   data-connect-fallback
                 >
-                  Use a separate sign-in instead
+                  Use your own account
                 </button>
                 {{else}}
                 <button
@@ -488,7 +641,7 @@
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
                 >
-                  {{if or .Expired .Unroutable .IdentityReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
+                  {{if or .Expired .Unavailable .Unroutable .IdentityReconnect .AttachmentReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
                 </button>
                 {{end}}
                 {{end}} {{if or .Connected .Expired .Unroutable}}
@@ -516,126 +669,6 @@
               </form>
 
               </div>
-              {{$panel := .Panel}} {{if $panel.ShowDetails}}
-                {{/* The descriptive detail, collapsed by default; Panel decides
-                which lines a state shows. Native details keeps it
-                keyboard-reachable and working without the page script. */}}
-                <details class="group mt-1" data-card-details>
-                  <summary
-                    class="flex cursor-pointer list-none items-center gap-1 text-eyebrow"
-                  >
-                    Details
-                    <svg
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      aria-hidden="true"
-                      class="size-3 shrink-0 transition-transform group-open:rotate-180"
-                      data-card-details-chevron
-                    >
-                      <path d="M4 6l4 4 4-4" />
-                    </svg>
-                  </summary>
-                  <div class="bg-accent mt-2 flex w-fit max-w-[70%] flex-col gap-1 border px-3 py-3 max-sm:w-full max-sm:max-w-full" data-card-details-panel>
-                    {{if $panel.ShowIdentity}}
-                    <span
-                      class="text-xs text-muted-foreground break-words has-[[data-caveat-trigger]:hover]:[&_[data-identity-text]]:bg-destructive/20 has-[[data-caveat-trigger]:focus-visible]:[&_[data-identity-text]]:bg-destructive/20"
-                      >Authenticated as <span class="-mx-0.5 px-0.5 py-px box-decoration-clone" data-identity-text>{{.ConnectedAs}}</span>{{if .IdentityCaveat}}
-                      <span class="group/caveat relative inline-block" data-identity-caveat
-                        ><span
-                          class="text-destructive cursor-help inline-block"
-                          tabindex="0"
-                          role="img"
-                          aria-label="Identity caveat"
-                          aria-describedby="identity-caveat-{{.ClientID}}"
-                          data-caveat-trigger
-                          ><svg
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.5"
-                            stroke-linecap="round"
-                            aria-hidden="true"
-                            class="size-3 inline-block"
-                          >
-                            <circle cx="8" cy="8" r="6.5" />
-                            <path d="M8 4.75v3.75M8 11.25h.01" />
-                          </svg></span
-                        ><span
-                          id="identity-caveat-{{.ClientID}}"
-                          role="tooltip"
-                          class="bg-popover text-popover-foreground pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden w-64 -translate-x-1/2 border px-3 py-1.5 text-xs whitespace-normal shadow-md group-hover/caveat:block group-focus-within/caveat:block"
-                          >{{.IdentityCaveat}}</span
-                        ></span
-                      >{{end}}</span
-                    >
-                    {{end}} {{if $panel.ShowAccountContext}}
-                    {{/* Each chip carries its own separator glued on with non-breaking spaces, so a
-                    wrapped row never starts with a dot while a long value can still break. */}}
-                    <span class="text-xs text-muted-foreground" data-account-context
-                      >{{range $i, $chip := .AccountChips}}<span class="break-words">{{if $i}}&nbsp;·&nbsp;{{end}}{{$chip}}</span>{{end}}</span
-                    >
-                    {{end}} {{if $panel.ShowToken}}
-                    <span class="text-xs text-muted-foreground" data-token-line
-                      >Token active{{if .TokenExpiresIn}} · expires in
-                      <time datetime="{{.TokenExpiresAt}}">{{.TokenExpiresIn}}</time>{{end}}</span
-                    >
-                    {{end}} {{if $panel.ShowValidationReason}}
-                    <span class="text-xs text-muted-foreground" data-validation-reason
-                      >{{.ValidationReason}}</span
-                    >
-                    {{end}} {{if $panel.ShowLapse}}
-                    <span class="text-xs text-muted-foreground" data-lapse-line
-                      >Lapses in
-                      <time datetime="{{.RefreshExpiresAt}}"
-                        >{{.RefreshExpiresIn}}</time
-                      >
-                      if unused.</span
-                    >
-                    {{end}} {{if $panel.ShowAutoRefresh}}
-                    <span class="text-xs text-muted-foreground" data-auto-refresh-line
-                      >Auto refresh on.</span
-                    >
-                    {{end}} {{if $panel.ShowAccessEnd}}
-                    <span class="text-xs text-muted-foreground" data-access-end-line
-                      >Access ends in
-                      <time datetime="{{.AuthorizationExpiresAt}}"
-                        >{{.AuthorizationExpiresIn}}</time
-                      >.</span
-                    >
-                    {{end}} {{if $panel.ShowLinks}}
-                    {{/* The resource's own links (RFC 9728) for an attachment issuer, the authorization server's otherwise. */}}
-                    <span
-                      class="flex flex-wrap gap-x-3 text-xs text-muted-foreground"
-                      data-issuer-links
-                    >
-                      {{if .IssuerDocumentationURL}}<a
-                        href="{{.IssuerDocumentationURL}}"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="underline"
-                        >Documentation</a
-                      >{{end}} {{if .IssuerPolicyURL}}<a
-                        href="{{.IssuerPolicyURL}}"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="underline"
-                        >Policy</a
-                      >{{end}} {{if .IssuerTosURL}}<a
-                        href="{{.IssuerTosURL}}"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="underline"
-                        >Terms</a
-                      >{{end}}
-                    </span>
-                    {{end}}
-                  </div>
-                </details>
-              {{end}}
               {{if $.AgentSelectionEnabled}}
               <div
                 data-agent-access
@@ -650,17 +683,83 @@
         </div>
         {{end}}
 
+        {{with .CatalogChanges}}
+        {{if or .Added .Removed .Changed}}
+        <section class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8" data-catalog-changes aria-labelledby="catalog-changes-heading">
+          <h2 class="text-eyebrow" id="catalog-changes-heading">Review updated tools</h2>
+          <p class="text-sm text-muted-foreground">Changes apply only after you approve. Your current tool selection is preselected.</p>
+          <div class="divide-y border">
+            {{if .Added}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Added <span class="text-muted-foreground font-mono">{{len .Added}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Added}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+            {{if .Removed}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Removed <span class="text-muted-foreground font-mono">{{len .Removed}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Removed}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+            {{if .Changed}}
+            <details class="group">
+              <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <span class="text-sm">Changed <span class="text-muted-foreground font-mono">{{len .Changed}}</span></span>
+                <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
+                <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
+              </summary>
+              <ul class="divide-y">
+                {{range .Changed}}
+                {{template "catalogToolDiff" .}}
+                {{end}}
+              </ul>
+            </details>
+            {{end}}
+          </div>
+        </section>
+        {{end}}
+        {{end}}
+        {{with .ApprovalError}}
+        <div role="alert" class="border-b px-6 py-6 text-sm sm:px-8">
+          <p>{{.Message}}</p>
+          {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
+        </div>
+        {{end}}
+        {{with .SelfApprovalError}}
+        <div role="alert" data-agent-self-only data-self-approval-error class="border-b px-6 py-6 text-sm sm:px-8">
+          <p>{{.Message}}</p>
+          {{if .ActionURL}}<a class="underline" href="{{.ActionURL}}">{{.ActionLabel}}</a>{{end}}
+        </div>
+        {{end}}
         {{if .ShowToolsIsland}}
         <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <h2 class="text-eyebrow">Tool access</h2>
           <div
             id="consent-tools-root"
+            data-gateway-inventory="{{.GatewayInventory}}"
             data-tools-url="{{.ConsentToolsURL}}"
             data-state="{{.State}}"
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
+            data-gateway="{{if or .ShowDiscoveryMode .CatalogChanges}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
             data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
@@ -670,8 +769,9 @@
             aria-live="polite"
           >
             <p class="text-sm text-muted-foreground">
-              Loading available tools…
+              Loading tool choices. Approval is unavailable until they appear.
             </p>
+            <noscript>To choose tools, enable JavaScript and reload this page.</noscript>
           </div>
         </div>
         {{end}}
@@ -701,7 +801,7 @@
             <span
               class="text-eyebrow hidden shrink-0 group-open:inline"
               aria-hidden="true"
-              >Hide</span
+              >Collapse</span
             >
           </summary>
 
@@ -742,7 +842,8 @@
                 </select>
               </dd>
             </div>
-            {{end}} {{if .ShowDiscoveryMode}}
+            {{end}}
+            {{if .ShowDiscoveryMode}}
             <div data-agent-self-only>
               <dt class="text-eyebrow">Tool discovery</dt>
               <dd class="mt-1 ml-0">
@@ -753,21 +854,35 @@
                   aria-describedby="discovery-mode-help"
                   class="bg-card border px-2 py-1.5 font-mono text-sm"
                 >
-                  <option value="">Use gateway default</option>
+                  <option value="">{{if .GatewayDefaultMode}}Gateway default ({{.GatewayDefaultMode}}){{else}}Use gateway default{{end}}</option>
                   <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
                   <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
+                  {{if .ShowCodeMode}}<option value="code_mode"{{if eq .PrefillDiscoveryMode "code_mode"}} selected{{end}}>Code Mode</option>{{end}}
                 </select>
                 <p
                   id="discovery-mode-help"
                   class="text-muted-foreground mt-2 text-sm"
                 >
-                  Progressive discovers tools as needed. Direct lists every
-                  available tool. Use Direct if your client cannot discover
-                  tools progressively.
+                  Progressive discovers tools as needed, starting from
+                  <code>list_servers</code>. Direct lists every available tool
+                  as a qualified <code>server--tool</code> name. Use Direct if
+                  your client cannot discover tools progressively. {{if .ShowCodeMode}}Code Mode exposes one execute tool to discover and call tools using Python, with <code>tools.search</code>, <code>tools.describe</code> and <code>tools.call</code>.{{end}}
                 </p>
               </dd>
             </div>
-            {{end}} {{if .RemoteSessionCards}}
+            {{else if .GatewayDefaultMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">{{.GatewayDefaultMode}} (gateway default). Connections without an override follow this setting.</dd>
+            </div>
+            {{end}}
+            {{if .CodeModeUnavailable}}
+            <div data-agent-self-only>
+              <dt class="sr-only">Code Mode unavailable</dt>
+              <dd class="ml-0 text-muted-foreground text-sm">The code runtime is unavailable. Progressive discovery is available for this connection.</dd>
+            </div>
+            {{end}}
+            {{if .RemoteSessionCards}}
             <div>
               <dt class="text-eyebrow">Auto refresh</dt>
               <dd class="mt-1 ml-0">
@@ -826,13 +941,16 @@
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           Connection complete. This tab will close automatically.
         </p>
+        {{else if and .ApprovalError .Gateway .Gateway.Focus}}
+        <div class="px-6 py-6 sm:px-8">
+          <a href="{{.ConsentPath}}?state={{.State}}&server=" class="underline" data-gateway-back>Back to all servers</a>
+        </div>
         {{else if and .Gateway .Gateway.Focus}}
-        {{/* No approve button: connecting a service above is what makes the
-        server usable, so the page says that instead of offering an approval
-        that would do nothing. */}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">
             {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
+            {{else if .Gateway.Focus.AddressNotice}}{{.Gateway.Focus.AddressNotice}}
+            {{else if .Gateway.Focus.ConnectionUnavailable}}{{.Gateway.Focus.Name}}'s sign-in has expired and hasn't been renewed. Try again shortly.
             {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.
             {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}
           </p>
@@ -848,7 +966,8 @@
           {{if .RemoteSessionCards}}When you've connected the services above, you can close this tab.{{else}}You can close this tab.{{end}}
         </p>
         {{else}}
-        <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
+        <div class="flex flex-col gap-3 px-6 py-6 sm:px-8">
+        <div class="flex flex-col gap-3 sm:flex-row">
           <form
             method="POST"
             action="{{.ConsentPath}}"
@@ -870,11 +989,6 @@
             >
               Give access
             </button>
-            {{if and (not .ConsentEnabled) (not .ShowToolsIsland)}}
-            <p data-agent-self-only class="text-muted-foreground mt-2 text-xs">
-              Connect a service above to enable access.
-            </p>
-            {{end}}
           </form>
           <form method="POST" action="{{.ConsentPath}}">
             <input type="hidden" name="state" value="{{.State}}" />
@@ -888,6 +1002,12 @@
               Cancel
             </button>
           </form>
+        </div>
+        {{if and (not .ConsentEnabled) (not .ApprovalError) (not .SelfApprovalError)}}
+        <p data-agent-self-only class="text-muted-foreground text-xs">
+          Connect or reconnect a service above to give access.
+        </p>
+        {{end}}
         </div>
         {{end}}
       </section>
@@ -903,3 +1023,136 @@
     {{end}}
   </body>
 </html>
+{{define "gatewayServerRow"}}
+{{$server := .}}
+<li
+  class="group/server flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
+  data-gateway-server="{{.Slug}}"
+  data-gateway-server-ready="{{.Ready}}"
+  {{if .Hidden}}data-gateway-server-hidden{{end}}
+>
+  <span class="flex min-w-0 flex-col gap-0.5">
+    <span class="flex min-w-0 items-baseline gap-2">
+      <span class="truncate text-sm">{{.Name}}</span>
+      {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
+    </span>
+    <span
+      class="text-xs {{if .StatusWarns}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
+      data-gateway-server-status="{{.Status}}"
+      {{if .Hidden}}hidden{{end}}
+      >{{.StatusLabel}}</span
+    >
+                    {{with .Auth}}{{if .ShowPicker}}
+                    <select
+                      name="auth_client.{{$server.Slug}}"
+                      form="gateway-auth-form"
+                      aria-label="Sign in to {{$server.Name}} as"
+                      data-auto-submit
+                      class="bg-card mt-1 max-w-full border px-2 py-1 text-xs"
+                    >
+                      {{range .Options}}
+                      <option value="{{.ID}}" {{if .Selected}}selected{{end}} {{if not .Usable}}disabled{{end}}>
+                        {{.Name}} · {{.TypeLabel}}{{if eq .State "connect"}} (connect first){{else if eq .State "reconnect"}} (reconnect first){{else if eq .State "setup"}} (not set up){{end}}
+                      </option>
+                      {{end}}
+                    </select>
+                    {{end}}{{end}}
+  </span>
+  <span class="flex shrink-0 items-center gap-3">
+    {{if .CanHide}}
+    {{/* Hide is an icon that shows on row hover or focus, and always on touch
+      screens, which can't hover. A hidden row swaps it for a plain Show
+      button. consent_script.js toggles data-gateway-server-hidden on the row. */}}
+    <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0" data-gateway-visibility-form>
+      <input type="hidden" name="state" value="{{.State}}" />
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+      <input type="hidden" name="server_id" value="{{.ServerID}}" />
+      <button
+        type="submit"
+        name="action"
+        value="{{if .Hidden}}show_server{{else}}hide_server{{end}}"
+        class="text-muted-foreground interact:text-foreground interact:bg-accent interact:border-border flex h-8 min-w-8 cursor-pointer items-center justify-center border border-transparent text-xs opacity-0 transition-[color,background-color,border-color,opacity] group-hover/server:opacity-100 group-focus-within/server:opacity-100 pointer-coarse:opacity-100 group-data-[gateway-server-hidden]/server:px-3 group-data-[gateway-server-hidden]/server:opacity-100 disabled:cursor-wait disabled:opacity-60"
+        title="{{if .Hidden}}Make this server available to your tools again{{else}}Hide this server, preventing your agent from attempting to access it.{{end}}"
+        data-gateway-visibility-toggle
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          class="size-4 group-data-[gateway-server-hidden]/server:hidden"
+        >
+          <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+          <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+          <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+          <path d="m2 2 20 20" />
+        </svg>
+        <span class="sr-only group-data-[gateway-server-hidden]/server:hidden">Hide</span>
+        <span class="hidden group-data-[gateway-server-hidden]/server:inline">Show</span>
+      </button>
+    </form>
+    {{end}}
+    <span class="flex shrink-0 items-center gap-3" data-gateway-server-actions {{if .Hidden}}hidden{{end}}>
+      {{if .ConnectClientID}}
+      <form method="POST" action="{{.ConsentPath}}/remote-session" class="shrink-0">
+        <input type="hidden" name="state" value="{{.State}}" />
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+        <input type="hidden" name="client_id" value="{{.ConnectClientID}}" />
+        <button
+          type="submit"
+          name="action"
+          value="connect"
+          class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
+          data-connect-link
+        >
+          {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
+        </button>
+      </form>
+      {{else if or .NeedsSignIn .ConnectionUnavailable}}
+      <a
+        href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
+        class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+        data-gateway-server-page
+        >{{if or .Ready .ConnectionUnavailable}}Manage{{else}}Connect{{end}} &rsaquo;</a
+      >
+      {{else if .NotSetUp}}
+      <a
+        href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
+        class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+        data-gateway-server-page
+        >View &rsaquo;</a
+      >
+      {{end}}
+    </span>
+  </span>
+</li>
+{{end}}
+
+{{define "catalogToolDiff"}}
+<li>
+  <details>
+    <summary class="interact:bg-accent list-item list-inside cursor-pointer px-4 py-3 font-mono text-xs break-all">{{.Name}}</summary>
+    <dl class="divide-y border-t">
+      {{range .Fields}}
+      <div class="px-4 py-3">
+        <dt class="text-muted-foreground mb-2 font-mono text-xs">{{.Name}}</dt>
+        <dd class="grid min-w-0 gap-2 {{if and .HasBefore .HasAfter}}sm:grid-cols-2{{end}}">
+          {{if .HasBefore}}<div class="min-w-0 bg-red-50 px-3 py-2 text-red-700 dark:bg-red-950 dark:text-red-400">
+            <span class="mb-1 block text-xs font-medium">− Before</span>
+            <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-xs">{{.Before}}</pre>
+          </div>
+          {{end}}
+          {{if .HasAfter}}<div class="min-w-0 bg-emerald-50 px-3 py-2 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+            <span class="mb-1 block text-xs font-medium">+ After</span>
+            <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-xs">{{.After}}</pre>
+          </div>{{end}}
+        </dd>
+      </div>
+      {{end}}
+    </dl>
+  </details>
+</li>
+{{end}}

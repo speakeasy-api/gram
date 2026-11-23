@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -35,12 +36,12 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 			return nil, oops.E(oops.CodeBadRequest, nil, "principal_id and user_session_issuer_id must be supplied together")
 		}
 		var err error
-		op, err = s.beginBindingOperation(ctx, *payload.PrincipalID, *payload.UserSessionIssuerID)
+		op, err = s.beginBindingOperation(ctx, *payload.PrincipalID, *payload.UserSessionIssuerID, false)
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = op.tx.Rollback(ctx) }()
-	} else if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	} else if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +111,7 @@ func (s *Service) CountRemoteSessions(ctx context.Context, payload *gen.CountRem
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -139,7 +140,7 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -193,8 +194,9 @@ func (s *Service) RevokeRemoteSession(ctx context.Context, payload *gen.RevokeRe
 	// revoke into a failed request. See upstreamrevoke.go.
 	s.revoker.RevokeDetached(ctx, RevokedCredentials{
 		RemoteSessionClientID: revoked.RemoteSessionClientID,
-		AccessTokenEncrypted:  revoked.AccessTokenEncrypted,
-		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+		OrganizationID:        revoked.OrganizationID,
+		AccessToken:           upstreamtokens.Stored(revoked.AccessTokenEncrypted, revoked.AccessTokenOrgEncrypted),
+		RefreshToken:          upstreamtokens.Stored(revoked.RefreshTokenEncrypted, revoked.RefreshTokenOrgEncrypted),
 	})
 
 	return nil

@@ -17,6 +17,11 @@ func RotateKeyKeysPath() string {
 	return "/rpc/keys.rotate"
 }
 
+// ExtendAgentKeysKeysPath returns the URL path to the keys service extendAgentKeys HTTP endpoint.
+func ExtendAgentKeysKeysPath() string {
+	return "/rpc/keys.extendAgentKeys"
+}
+
 // ListKeysKeysPath returns the URL path to the keys service listKeys HTTP endpoint.
 func ListKeysKeysPath() string {
 	return "/rpc/keys.list"
@@ -25,6 +30,11 @@ func ListKeysKeysPath() string {
 // RevokeKeyKeysPath returns the URL path to the keys service revokeKey HTTP endpoint.
 func RevokeKeyKeysPath() string {
 	return "/rpc/keys.revoke"
+}
+
+// UpdateKeyPolicyKeysPath returns the URL path to the keys service updateKeyPolicy HTTP endpoint.
+func UpdateKeyPolicyKeysPath() string {
+	return "/rpc/keys.updatePolicy"
 }
 
 // VerifyKeyKeysPath returns the URL path to the keys service verifyKey HTTP endpoint.

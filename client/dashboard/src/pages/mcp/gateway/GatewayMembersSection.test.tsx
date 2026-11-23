@@ -13,6 +13,12 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 
+const functionsAvailability = vi.hoisted(() => ({ available: true }));
+vi.mock("@/hooks/useFunctionsAvailability", () => ({
+  useFunctionsAvailability: () =>
+    functionsAvailability.available ? "available" : "unavailable",
+  useFunctionsAvailable: () => functionsAvailability.available,
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const permissions = vi.hoisted(() => ({
@@ -41,21 +47,13 @@ vi.mock("@/hooks/useRBAC", () => ({
     isLoading: false,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      catalog: { href: () => "/catalog" },
-      add: Object.fromEntries(
-        ["remote", "tunneled", "openapi", "fromSource", "function"].map(
-          (key) => [key, { href: () => "/" + key }],
-        ),
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 import { AddServersSheet } from "./GatewayMembersSection";
 
 afterEach(() => {
+  functionsAvailability.available = true;
   cleanup();
   vi.clearAllMocks();
   permissions.scopes = new Set([
@@ -268,7 +266,7 @@ describe("Add servers sheet", () => {
       screen.getByRole("checkbox", { name: "Alpha" }).closest("li")!,
     );
     expect(alpha.getByText("alpha")).toBeTruthy();
-    expect(alpha.getByText("Proxied")).toBeTruthy();
+    expect(alpha.getByText("Remote")).toBeTruthy();
     expect(alpha.queryByText("Excluded")).toBeNull();
     const beta = within(
       screen.getByRole("checkbox", { name: "Beta" }).closest("li")!,
@@ -279,7 +277,7 @@ describe("Add servers sheet", () => {
       screen.getByRole("checkbox", { name: "Local tools" }).closest("li")!,
     );
     expect(tools.getByText("local-tools")).toBeTruthy();
-    expect(tools.getByText("Hosted")).toBeTruthy();
+    expect(tools.getByText("Hosted by Speakeasy")).toBeTruthy();
     expect(tools.getByText("MCP off")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
@@ -623,12 +621,30 @@ describe("Add servers sheet", () => {
   });
 
   it.each([
-    ["From the catalog", "/catalog?attachToGateway=gateway"],
-    ["Hosted remotely", "/remote?attachToGateway=gateway"],
-    ["Reachable through a tunnel", "/tunneled?attachToGateway=gateway"],
-    ["From your API", "/openapi?attachToGateway=gateway"],
-    ["From an existing source", "/fromSource?attachToGateway=gateway"],
-    ["Write custom code", "/function?attachToGateway=gateway"],
+    [
+      "From the catalog",
+      "/org/projects/project/mcp/catalog?attachToGateway=gateway",
+    ],
+    [
+      "Hosted remotely",
+      "/org/projects/project/mcp/add/remote?attachToGateway=gateway",
+    ],
+    [
+      "Reachable through a tunnel",
+      "/org/projects/project/mcp/add/tunneled?attachToGateway=gateway",
+    ],
+    [
+      "From your API",
+      "/org/projects/project/mcp/add/openapi?attachToGateway=gateway",
+    ],
+    [
+      "From an existing source",
+      "/org/projects/project/mcp/add/from-existing-source?attachToGateway=gateway",
+    ],
+    [
+      "Write custom code",
+      "/org/projects/project/mcp/add/function?attachToGateway=gateway",
+    ],
   ])("opens %s with gateway context", (label, href) => {
     setup();
     fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
@@ -658,6 +674,25 @@ describe("Add servers sheet", () => {
       screen.getByRole("menuitem", { name: /^Write custom code/ }),
     ).toBeTruthy();
     expect(screen.getAllByRole("menuitem")).toHaveLength(6);
+  });
+
+  it("hides function creation on a deployment without Functions", () => {
+    functionsAvailability.available = false;
+    setup();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Add new" }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: "mouse",
+    });
+    expect(
+      screen.queryByRole("menuitem", { name: /^Write custom code/ }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("menuitem", {
+        name: /^From an existing source.*OpenAPI document this project/,
+      }),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("menuitem")).toHaveLength(5);
   });
 
   it("guards rapid duplicate submits while a batch is pending", async () => {
@@ -827,7 +862,7 @@ it.each([["project:read:project", "mcp:write:gateway"], ["mcp:write:gateway"]])(
     expect(item.getAttribute("aria-disabled")).not.toBe("true");
     fireEvent.click(item);
     expect(permissions.navigate).toHaveBeenCalledWith(
-      "/catalog?attachToGateway=gateway",
+      "/org/projects/project/mcp/catalog?attachToGateway=gateway",
     );
   },
 );

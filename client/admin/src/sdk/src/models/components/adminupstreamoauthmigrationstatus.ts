@@ -8,9 +8,17 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminUpstreamAuthEnforcement,
+  AdminUpstreamAuthEnforcement$inboundSchema,
+} from "./adminupstreamauthenforcement.js";
+import {
   AdminUpstreamOAuthMigrationAuthClients,
   AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
 } from "./adminupstreamoauthmigrationauthclients.js";
+import {
+  AdminUpstreamOAuthMigrationExecutionProfiles,
+  AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema,
+} from "./adminupstreamoauthmigrationexecutionprofiles.js";
 import {
   AdminUpstreamOAuthMigrationServer,
   AdminUpstreamOAuthMigrationServer$inboundSchema,
@@ -25,9 +33,21 @@ export type AdminUpstreamOAuthMigrationStatus = {
    */
   authClients?: AdminUpstreamOAuthMigrationAuthClients | undefined;
   /**
+   * Credential and server pairs without a choice that are not pending, because the credential was issued for the servers approved at consent and is refused anywhere else. Absent when the serving replica predates the field, which is not a reported zero.
+   */
+  consentScopedSelections?: number | undefined;
+  /**
    * Live user session credentials scanned.
    */
   credentials: number;
+  /**
+   * One organization's upstream auth enforcement.
+   */
+  enforcement?: AdminUpstreamAuthEnforcement | undefined;
+  /**
+   * Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
+   */
+  executionProfiles?: AdminUpstreamOAuthMigrationExecutionProfiles | undefined;
   /**
    * Whether the organization has nothing left to write and no server needing configuration.
    */
@@ -67,7 +87,12 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
     auth_clients: z.optional(
       AdminUpstreamOAuthMigrationAuthClients$inboundSchema,
     ),
+    consent_scoped_selections: z.optional(z.int()),
     credentials: z.int(),
+    enforcement: z.optional(AdminUpstreamAuthEnforcement$inboundSchema),
+    execution_profiles: z.optional(
+      AdminUpstreamOAuthMigrationExecutionProfiles$inboundSchema,
+    ),
     migrated: z.boolean(),
     organization_id: z.string(),
     pending_associations: z.int(),
@@ -81,6 +106,8 @@ export const AdminUpstreamOAuthMigrationStatus$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "auth_clients": "authClients",
+      "consent_scoped_selections": "consentScopedSelections",
+      "execution_profiles": "executionProfiles",
       "organization_id": "organizationId",
       "pending_associations": "pendingAssociations",
       "pending_selections": "pendingSelections",

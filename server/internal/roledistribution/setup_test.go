@@ -24,12 +24,12 @@ func createMCPServerAndEndpointForToolset(t *testing.T, f pipelineFixture, tools
 	t.Helper()
 	ctx := t.Context()
 	_, err := mcpserversrepo.New(f.db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: pgtype.Text{String: toolset.Name, Valid: true}, Slug: toolset.McpSlug,
+		ID: toolset.ID, ProjectID: toolset.ProjectID, Name: pgtype.Text{String: toolset.Name, Valid: true}, Slug: pgtype.Text{String: toolset.Slug, Valid: true},
 		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private",
 	})
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(f.db).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID: toolset.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: toolset.McpSlug.String,
+		ProjectID: toolset.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Slug: toolset.Slug,
 	})
 	require.NoError(t, err)
 }
@@ -42,8 +42,7 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 	f := newPipelineFixture(t)
 	org := f.event.GetOrganizationId()
 	backing, err := toolsetsrepo.New(f.db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID: org, ProjectID: f.project, Name: "Existing server", Slug: "existing-server", McpEnabled: true,
-		McpSlug: pgtype.Text{String: "existing-server", Valid: true},
+		OrganizationID: org, ProjectID: f.project, Name: "Existing server", Slug: "existing-server",
 	})
 	require.NoError(t, err)
 	createMCPServerAndEndpointForToolset(t, f, backing)
@@ -54,9 +53,13 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 	require.NoError(t, err)
 	_, err = accessrepo.New(f.db).InsertPrincipalGrantIfAbsent(ctx, accessrepo.InsertPrincipalGrantIfAbsentParams{OrganizationID: org, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 	require.NoError(t, err)
-	manual, err := pluginsrepo.New(f.db).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: org, ProjectID: f.project, Name: "Manual distribution", Slug: "manual-distribution"})
+	manual, err := pluginsrepo.New(f.db).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: org, ProjectID: f.project, Name: "Manual distribution", Slug: "manual-distribution", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(f.db).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{OrganizationID: org, PluginID: manual.ID, PrincipalUrn: f.roleURN})
+	require.NoError(t, err)
+	handManaged, err := pluginsrepo.New(f.db).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: org, ProjectID: f.project, Name: "Hand managed", Slug: "hand-managed"})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(f.db).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{OrganizationID: org, PluginID: handManaged.ID, PrincipalUrn: f.roleURN})
 	require.NoError(t, err)
 	require.NoError(t, f.handler.HandleRoleDistributionSetupRequested(ctx, f.event, gcp.MessageMetadata{ID: "existing-grants"}))
 	for _, action := range []audit.Action{audit.ActionPluginCreate, audit.ActionPluginAssignmentsSet, audit.ActionPluginServerAdd} {
@@ -66,14 +69,23 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 		require.Equal(t, "system", record.ActorType)
 		require.Equal(t, "automatic-role-distribution", record.ActorID)
 	}
+	created, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionPluginCreate)
+	require.NoError(t, err)
+	createdSnapshot, err := audittest.DecodeAuditData(created.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, true, createdSnapshot["auto_sync_enabled"], "a role plugin is created with auto sync on")
+	require.Equal(t, false, createdSnapshot["auto_add_servers_enabled"], "a role plugin is created with automatic server adding off")
 	automatic, err := testrepo.New(f.db).PipelineEngineeringPlugin(ctx, f.project)
 	require.NoError(t, err)
-	for _, pluginID := range []uuid.UUID{automatic, manual.ID} {
+	for _, pluginID := range []uuid.UUID{automatic, handManaged.ID} {
 		servers, err := pluginsrepo.New(f.db).ListPluginServers(ctx, pluginID)
 		require.NoError(t, err)
-		require.Len(t, servers, 1, "setup populates every matching plugin")
-		require.Equal(t, serverID, servers[0].McpServerID.UUID)
+		require.Empty(t, servers, "setup leaves plugins without automatic server adding empty")
 	}
+	servers, err := pluginsrepo.New(f.db).ListPluginServers(ctx, manual.ID)
+	require.NoError(t, err)
+	require.Len(t, servers, 1, "setup populates every matching plugin that opted in")
+	require.Equal(t, serverID, servers[0].McpServerID.UUID)
 	// Redelivery leaves stable membership identities intact.
 	before, err := pluginsrepo.New(f.db).ListPluginServers(ctx, manual.ID)
 	require.NoError(t, err)
@@ -106,7 +118,7 @@ func TestRoleDistributionSetup_PopulatesOtherProject(t *testing.T) {
 	projectID := uuid.New()
 	_, err := testrepo.New(f.db).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: projectID, OrganizationID: org, Name: "Other project", Slug: "other-project"})
 	require.NoError(t, err)
-	backing, err := toolsetsrepo.New(f.db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: org, ProjectID: projectID, Name: "Other server", Slug: "other-server", McpEnabled: true, McpSlug: pgtype.Text{String: "other-server", Valid: true}})
+	backing, err := toolsetsrepo.New(f.db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: org, ProjectID: projectID, Name: "Other server", Slug: "other-server"})
 	require.NoError(t, err)
 	createMCPServerAndEndpointForToolset(t, f, backing)
 	principal, err := urn.ParsePrincipal(f.roleURN)
@@ -115,7 +127,7 @@ func TestRoleDistributionSetup_PopulatesOtherProject(t *testing.T) {
 	require.NoError(t, err)
 	_, err = accessrepo.New(f.db).InsertPrincipalGrantIfAbsent(ctx, accessrepo.InsertPrincipalGrantIfAbsentParams{OrganizationID: org, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 	require.NoError(t, err)
-	plugin, err := pluginsrepo.New(f.db).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: org, ProjectID: projectID, Name: "Other distribution", Slug: "other-distribution"})
+	plugin, err := pluginsrepo.New(f.db).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{OrganizationID: org, ProjectID: projectID, Name: "Other distribution", Slug: "other-distribution", AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true}})
 	require.NoError(t, err)
 	_, err = pluginsrepo.New(f.db).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{OrganizationID: org, PluginID: plugin.ID, PrincipalUrn: f.roleURN})
 	require.NoError(t, err)

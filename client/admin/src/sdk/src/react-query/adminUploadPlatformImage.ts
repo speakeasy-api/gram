@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { UploadImageResult } from "../models/components/uploadimageresult.js";
+import { AdminUploadImageResult } from "../models/components/adminuploadimageresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -32,7 +32,7 @@ export type AdminUploadPlatformImageMutationVariables = {
   options?: RequestOptions;
 };
 
-export type AdminUploadPlatformImageMutationData = UploadImageResult;
+export type AdminUploadPlatformImageMutationData = AdminUploadImageResult;
 
 export type AdminUploadPlatformImageMutationError =
   | ServiceError
@@ -49,7 +49,7 @@ export type AdminUploadPlatformImageMutationError =
  * uploadPlatformImage admin
  *
  * @remarks
- * Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+ * Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.
  */
 export function useAdminUploadPlatformImageMutation(
   options?: MutationHookOptions<

@@ -340,16 +340,31 @@ func TestScanner_PubsubFlagOnSharesLaneAndPreservesPolicyFiltering(t *testing.T)
 	require.Equal(t, int32(0), pii.callCount.Load())
 }
 
-func TestScanner_PubsubKeepsPromptInjectionLocal(t *testing.T) {
+func TestScanner_PubsubRoutesPromptInjectionRemotely(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 	insertRealtimeBlockPolicy(t, ti, ctx, "mixed", []string{"gitleaks", "prompt_injection"}, nil)
 	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
-		require.Len(t, request.Lanes, 1)
-		lane := request.Lanes[0]
-		require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, lane.Scanner)
-		reply := riskv1.EnforcementReply_builder{Scanner: new(lane.Scanner), Status: new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)}.Build()
-		return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true}, nil
+		require.Len(t, request.Lanes, 2)
+		replies := make(map[enforcereply.Lane]*riskv1.EnforcementReply, len(request.Lanes))
+		for _, lane := range request.Lanes {
+			builder := riskv1.EnforcementReply_builder{
+				Scanner: new(lane.Scanner),
+				Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			}
+			if lane.Scanner == riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION {
+				builder.Findings = []*riskv1.EnforcementFinding{riskv1.EnforcementFinding_builder{
+					RuleId:      new("prompt_injection.detected"),
+					Category:    new("prompt_injection"),
+					Score:       new(1.0),
+					Description: new("remote prompt injection description"),
+					StartPos:    new(int32(0)),
+					EndPos:      new(int32(len(request.Content))),
+				}.Build()}
+			}
+			replies[lane] = builder.Build()
+		}
+		return enforcereply.Outcome{ByLane: replies, Complete: true}, nil
 	}}
 	engine := &recordingPIEngine{}
 	scanner, err := risk.NewScannerWithEnforcementDispatcher(
@@ -371,8 +386,9 @@ func TestScanner_PubsubKeepsPromptInjectionLocal(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "prompt_injection", result.Source)
+	require.Equal(t, "remote prompt injection description", result.Description)
 	require.Equal(t, int32(1), dispatcher.calls.Load())
-	require.Equal(t, int32(1), engine.calls.Load())
+	require.Equal(t, int32(0), engine.calls.Load())
 }
 func TestScanner_LocalCompletionMetersOnceWithOriginProvenance(t *testing.T) {
 	t.Parallel()
@@ -662,8 +678,9 @@ func TestScanner_LocalFailureDoesNotMeter(t *testing.T) {
 func TestScanner_PubsubDegradationFailsOpen(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
-		name       string
-		dispatcher risk.EnforcementDispatcher
+		name             string
+		dispatcher       risk.EnforcementDispatcher
+		expectedComplete bool
 	}{
 		{name: "dispatcher unavailable", dispatcher: nil},
 		{name: "publish error", dispatcher: &fakeEnforcementDispatcher{fn: func(enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
@@ -672,7 +689,7 @@ func TestScanner_PubsubDegradationFailsOpen(t *testing.T) {
 		{name: "deadline", dispatcher: &fakeEnforcementDispatcher{fn: func(enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 			return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{}, Deadline: true}, nil
 		}}},
-		{name: "truncated clean reply", dispatcher: &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+		{name: "truncated clean reply", expectedComplete: true, dispatcher: &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
 			lane := request.Lanes[0]
 			reply := riskv1.EnforcementReply_builder{Scanner: new(lane.Scanner), Status: new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)}.Build()
 			return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true, Truncated: true}, nil
@@ -709,7 +726,7 @@ func TestScanner_PubsubDegradationFailsOpen(t *testing.T) {
 			outcome, err := scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "alice@example.com", message.User, ""))
 			require.NoError(t, err, "degraded scans preserve legacy fail-open disposition")
 			require.NotNil(t, outcome)
-			require.False(t, outcome.Complete, "degraded scans cannot establish accepted inference history")
+			require.Equal(t, test.expectedComplete, outcome.Complete)
 			require.Equal(t, result, outcome.Result)
 			require.NoError(t, ctx.Err(), "the inner deadline need not expire the outer request")
 			require.Equal(t, int32(0), pii.callCount.Load())
@@ -901,6 +918,83 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 	require.Equal(t, "ACME token", result.Description)
 }
 
+func TestScanner_PubsubRoutesCustomRulesWithoutCallerMetering(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+	_, err := riskrepo.New(ti.conn).CreateCustomDetectionRule(ctx, riskrepo.CreateCustomDetectionRuleParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		RuleID:         "custom.acme_token",
+		Title:          "ACME token",
+		Description:    "ACME token",
+		DetectionExpr:  pgtype.Text{String: `content.matchRegex("ACME-[A-Z0-9]{8}")`, Valid: true},
+		Severity:       "high",
+	})
+	require.NoError(t, err)
+	policyID := uuid.New()
+	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "remote custom block",
+		Sources:        []string{},
+		CustomRuleIds:  []string{"custom.acme_token"},
+		Enabled:        true,
+		Action:         "block",
+		AudienceType:   "everyone",
+	})
+	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+		require.Len(t, request.Lanes, 1)
+		lane := request.Lanes[0]
+		require.Equal(t, riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_CUSTOM_RULES, lane.Scanner)
+		require.Equal(t, []string{"custom.acme_token"}, request.CustomRuleIDs)
+		reply := riskv1.EnforcementReply_builder{
+			Scanner: new(lane.Scanner),
+			Status:  new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			Findings: []*riskv1.EnforcementFinding{riskv1.EnforcementFinding_builder{
+				RuleId:      new("custom.acme_token"),
+				Category:    new(risk_analysis.SourceCustom),
+				Description: new("remote custom rule description"),
+				Score:       new(1.0),
+			}.Build()},
+		}.Build()
+		return enforcereply.Outcome{ByLane: map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply}, Complete: true}, nil
+	}}
+	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	published := make(chan struct{}, 1)
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Run(func(mock.Arguments) {
+		published <- struct{}{}
+	})
+	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		nil,
+		nil,
+		pubsubEnforcementFlags(ctx),
+		testCELEngine(t),
+		dispatcher,
+		metering.NewRiskRecorder(publisher),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "does not match locally", message.User, ""))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "remote custom block", result.PolicyName)
+	require.Equal(t, risk_analysis.SourceCustom, result.Source)
+	require.Equal(t, "custom.acme_token", result.RuleID)
+	require.Equal(t, "remote custom rule description", result.Description)
+	require.Never(t, func() bool { return len(published) > 0 }, 100*time.Millisecond, time.Millisecond)
+}
+
 // TestScanner_ScanForEnforcement_BlockWinsOverWarn guards the block > warn
 // precedence in the enforcement fan-out: when both a block and a warn policy
 // match the same input, the hard deny must win regardless of which scan
@@ -989,6 +1083,39 @@ func TestScanner_RecommendedScopesSkipAssistantMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, result, "assistant messages are out of scope for every category")
 	require.Equal(t, int32(0), engine.calls.Load(), "prompt injection classifier must not run for assistant_message")
+}
+
+func TestScanner_PubsubSkipsOutOfScopePromptInjectionLane(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	insertRealtimeBlockPolicy(t, ti, ctx, "prompt injection", []string{risk_analysis.SourcePromptInjection}, nil)
+	dispatcher := &fakeEnforcementDispatcher{fn: func(enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+		return enforcereply.Outcome{}, errors.New("out-of-scope prompt injection must not dispatch")
+	}}
+	engine := &recordingPIEngine{}
+	scanner, err := risk.NewScannerWithEnforcementDispatcher(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		nil,
+		promptinjection.NewScanner(testenv.NewLogger(t), engine.Classify),
+		nil,
+		pubsubEnforcementFlags(ctx),
+		testCELEngine(t),
+		dispatcher,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+	)
+	require.NoError(t, err)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "assistant echoed hostile instructions", message.Assistant, ""))
+	require.NoError(t, err)
+	require.Nil(t, result)
+	require.Equal(t, int32(0), dispatcher.calls.Load())
+	require.Equal(t, int32(0), engine.calls.Load())
 }
 
 func TestScanner_RecommendedScopesPromptInjectionRunsOnUserAndToolResponse(t *testing.T) {
@@ -1517,4 +1644,51 @@ func TestScanner_CustomDetectionScopeLimitsIncompleteEvaluation(t *testing.T) {
 			require.Equal(t, tc.complete, outcome.Complete, "only required custom evaluation gates acceptance")
 		})
 	}
+}
+
+func TestScanner_PubsubOutOfScopeCustomRulesDoNotMarkIncomplete(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	analyzerConfig, err := risk_analysis.WithDetectionScopes(nil, []risk_analysis.DetectionScopeConfig{
+		{Category: "custom", ScopeInclude: `kind == "tool_request"`},
+	})
+	require.NoError(t, err)
+	policyID := uuid.New()
+	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sources:        []string{},
+		Name:           "custom scoped",
+		CustomRuleIds:  []string{"custom.remote_only"},
+		AnalyzerConfig: analyzerConfig,
+		Enabled:        true,
+		Action:         "block",
+		AudienceType:   "everyone",
+	})
+	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+	dispatcher := &fakeEnforcementDispatcher{fn: func(request enforcereply.DispatchRequest) (enforcereply.Outcome, error) {
+		require.Len(t, request.Lanes, 1)
+		lane := request.Lanes[0]
+		reply := riskv1.EnforcementReply_builder{
+			Scanner:    new(lane.Scanner),
+			Status:     new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+			Incomplete: new(true),
+		}.Build()
+		return enforcereply.Outcome{
+			ByLane:   map[enforcereply.Lane]*riskv1.EnforcementReply{lane: reply},
+			Complete: true,
+		}, nil
+	}}
+	scanner := newScannerWithDispatcher(t, ti, nil, pubsubEnforcementFlags(ctx), dispatcher)
+
+	outcome, err := scanner.ScanForInferenceEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "ordinary user prompt", message.User, ""))
+	require.NoError(t, err)
+	require.NotNil(t, outcome)
+	require.Nil(t, outcome.Result)
+	require.True(t, outcome.Complete)
+	require.Equal(t, int32(0), dispatcher.calls.Load())
 }

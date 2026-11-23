@@ -16,7 +16,6 @@ func testToolCallEnv() toolconfig.ToolCallEnv {
 	return toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}
@@ -111,7 +110,6 @@ func TestToolsForwardPayloadsWithoutAuthOverrides(t *testing.T) {
 	env := toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}
@@ -283,7 +281,6 @@ func TestCreateToolRejectsMissingContent(t *testing.T) {
 	err := NewCreateTool(svc).Call(t.Context(), toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}, bytes.NewBufferString(`{}`), &out)
@@ -298,7 +295,6 @@ func TestToolsRejectInvalidLimits(t *testing.T) {
 	env := toolconfig.ToolCallEnv{
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 	}

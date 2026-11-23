@@ -396,6 +396,92 @@ func (q *Queries) DeleteClientBindingsFixture(ctx context.Context, remoteSession
 	return err
 }
 
+const listClientsClaimedThroughOtherIssuers = `-- name: ListClientsClaimedThroughOtherIssuers :many
+SELECT link.remote_session_client_id, NULL::uuid AS mcp_server_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS other
+  ON other.id = link.user_session_issuer_id
+ AND other.deleted IS FALSE
+WHERE link.remote_session_client_id = ANY($1::uuid[])
+  AND other.id <> ALL($2::uuid[])
+  AND other.project_id IS NULL
+  AND other.organization_id = $3::text
+  AND (
+    SELECT count(*)
+    FROM user_session_issuers AS organization_issuer
+    WHERE organization_issuer.organization_id = $3::text
+      AND organization_issuer.project_id IS NULL
+      AND organization_issuer.deleted IS FALSE
+      AND organization_issuer.id <> ALL($4::uuid[])
+  ) = 1
+UNION
+SELECT link.remote_session_client_id, member.mcp_server_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS other
+  ON other.id = link.user_session_issuer_id
+ AND other.deleted IS FALSE
+LEFT JOIN projects AS other_project
+  ON other_project.id = other.project_id
+JOIN meta_mcp_servers AS gateway
+  ON gateway.user_session_issuer_id = other.id
+ AND gateway.deleted IS FALSE
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.deleted IS FALSE
+WHERE link.remote_session_client_id = ANY($1::uuid[])
+  AND other.id <> ALL($2::uuid[])
+  AND COALESCE(other.organization_id, other_project.organization_id) = $3::text
+  AND member.mcp_server_id = ANY($5::uuid[])
+`
+
+type ListClientsClaimedThroughOtherIssuersParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	ScopeIssuerIds         []uuid.UUID
+	OrganizationID         string
+	RetiringIssuerIds      []uuid.UUID
+	McpServerIds           []uuid.UUID
+}
+
+type ListClientsClaimedThroughOtherIssuersRow struct {
+	RemoteSessionClientID uuid.UUID
+	McpServerID           uuid.NullUUID
+}
+
+// The named clients that an association would also claim on a user session
+// issuer outside scope_issuer_ids, with the server whose association would.
+// Serving counts another server's association as claiming a client on the
+// organization's only organization-level issuer, for any server (returned
+// with a NULL mcp_server_id), and on the issuer of a gateway the server is a
+// member of, for that member only. Associating such a client therefore
+// changes what unassociated servers on that issuer require.
+// retiring_issuer_ids are about to be retired, so they do not count toward
+// the organization-level issuers.
+func (q *Queries) ListClientsClaimedThroughOtherIssuers(ctx context.Context, arg ListClientsClaimedThroughOtherIssuersParams) ([]ListClientsClaimedThroughOtherIssuersRow, error) {
+	rows, err := q.db.Query(ctx, listClientsClaimedThroughOtherIssuers,
+		arg.RemoteSessionClientIds,
+		arg.ScopeIssuerIds,
+		arg.OrganizationID,
+		arg.RetiringIssuerIds,
+		arg.McpServerIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClientsClaimedThroughOtherIssuersRow
+	for rows.Next() {
+		var i ListClientsClaimedThroughOtherIssuersRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.McpServerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGatewayAssociationCandidates = `-- name: ListGatewayAssociationCandidates :many
 WITH fronted AS (
     SELECT g.user_session_issuer_id AS issuer_id, s.id AS server_id
@@ -439,6 +525,19 @@ WITH fronted AS (
       ) = 1
 )
 SELECT f.issuer_id::uuid AS issuer_id,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS offer
+         JOIN mcp_auth_clients AS offered
+           ON offered.id = offer.auth_client_id
+          AND offered.organization_id = offer.organization_id
+          AND offered.source = 'admin'
+          AND offered.remote_session_client_id IS NOT NULL
+          AND offered.deleted IS FALSE
+         WHERE offer.mcp_server_id = s.id
+           AND offer.source = 'admin'
+           AND offer.deleted IS FALSE
+       )::boolean AS offers_own_oauth_client,
        s.id AS mcp_server_id,
        s.project_id,
        p.organization_id,
@@ -481,7 +580,28 @@ SELECT f.issuer_id::uuid AS issuer_id,
          FROM mcp_server_remote_session_clients AS recorded
          WHERE recorded.mcp_server_id = s.id
            AND recorded.remote_session_client_id = c.id
-       )::boolean AS pair_recorded
+       )::boolean AS pair_recorded,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_remote_session_clients AS claimed
+         JOIN mcp_servers AS sibling
+           ON sibling.id = claimed.mcp_server_id
+          AND sibling.project_id = claimed.project_id
+          AND sibling.deleted IS FALSE
+         JOIN projects AS sibling_project
+           ON sibling_project.id = sibling.project_id
+          AND sibling_project.organization_id = p.organization_id
+          AND sibling_project.deleted IS FALSE
+         JOIN remote_mcp_servers AS sibling_remote
+           ON sibling_remote.id = sibling.remote_mcp_server_id
+          AND sibling_remote.project_id = sibling.project_id
+          AND sibling_remote.deleted IS FALSE
+         WHERE claimed.remote_session_client_id = c.id
+           AND claimed.deleted IS FALSE
+           AND sibling.id <> s.id
+           AND r.url IS NOT NULL
+           AND rtrim(sibling_remote.url, '/') = rtrim(r.url, '/')
+       )::boolean AS claimed_by_sibling
 FROM fronted AS f
 JOIN mcp_servers AS s
   ON s.id = f.server_id
@@ -510,6 +630,7 @@ ORDER BY f.issuer_id, s.id, c.id
 
 type ListGatewayAssociationCandidatesRow struct {
 	IssuerID              uuid.UUID
+	OffersOwnOauthClient  bool
 	McpServerID           uuid.UUID
 	ProjectID             uuid.UUID
 	OrganizationID        string
@@ -519,6 +640,7 @@ type ListGatewayAssociationCandidatesRow struct {
 	DerivedMatch          bool
 	PairLive              bool
 	PairRecorded          bool
+	ClaimedBySibling      bool
 }
 
 // One row per proxied MCP server a gateway issuer fronts and each live client
@@ -538,6 +660,13 @@ type ListGatewayAssociationCandidatesRow struct {
 // client: request routing matches tunnels by derived issuer alone, and so
 // does this. derived_match reports that the client's authorization server is
 // the one derived for the server, the comparison consent claimed members by.
+// claimed_by_sibling reports that the client is associated with another live
+// server of the organization on the same remote upstream URL. A grant's
+// resource is that URL, so the client's grants match both servers alike; its
+// association with the other one already accounts for them, so they do not
+// leave this server waiting for configuration.
+// offers_own_oauth_client reports that the server offers an OAuth-backed auth
+// client an administrator or a server-only identity commit configured for it.
 func (q *Queries) ListGatewayAssociationCandidates(ctx context.Context, organizationID string) ([]ListGatewayAssociationCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listGatewayAssociationCandidates, organizationID)
 	if err != nil {
@@ -549,6 +678,7 @@ func (q *Queries) ListGatewayAssociationCandidates(ctx context.Context, organiza
 		var i ListGatewayAssociationCandidatesRow
 		if err := rows.Scan(
 			&i.IssuerID,
+			&i.OffersOwnOauthClient,
 			&i.McpServerID,
 			&i.ProjectID,
 			&i.OrganizationID,
@@ -558,6 +688,7 @@ func (q *Queries) ListGatewayAssociationCandidates(ctx context.Context, organiza
 			&i.DerivedMatch,
 			&i.PairLive,
 			&i.PairRecorded,
+			&i.ClaimedBySibling,
 		); err != nil {
 			return nil, err
 		}
@@ -604,6 +735,7 @@ WITH page AS (
            s.user_session_issuer_id,
            s.remote_mcp_server_id,
            s.toolset_id,
+           s.requires_upstream_auth,
            s.remote_session_issuer_id AS derived_issuer_id,
            rms.url AS remote_url,
            EXISTS (
@@ -632,8 +764,9 @@ WITH page AS (
     WHERE s.deleted IS FALSE
       AND s.id > $1::uuid
       AND ($2::text = '' OR p.organization_id = $2::text)
+      AND (COALESCE(cardinality($3::uuid[]), 0) = 0 OR s.id = ANY($3::uuid[]))
     ORDER BY s.id
-    LIMIT $3::int
+    LIMIT $4::int
 )
 SELECT page.id AS mcp_server_id,
        page.project_id,
@@ -668,7 +801,22 @@ SELECT page.id AS mcp_server_id,
          WHERE live.mcp_server_id = page.id
            AND live.deleted IS FALSE
        )::bigint AS live_associations,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS offer
+         JOIN mcp_auth_clients AS offered
+           ON offered.id = offer.auth_client_id
+          AND offered.organization_id = offer.organization_id
+          AND offered.source = 'admin'
+          AND offered.remote_session_client_id IS NOT NULL
+          AND offered.deleted IS FALSE
+         WHERE offer.mcp_server_id = page.id
+           AND offer.source = 'admin'
+           AND offer.deleted IS FALSE
+       )::boolean AS offers_own_oauth_client,
+       (page.requires_upstream_auth IS FALSE)::boolean AS upstream_auth_not_required,
        c.id AS remote_session_client_id,
+       c.remote_session_issuer_id AS client_provider_id,
        COALESCE((
          SELECT i.issuer = ANY (rpr.authorization_servers)
          FROM remote_session_issuers AS i
@@ -735,26 +883,30 @@ ORDER BY page.id, c.id
 type ListUpstreamClientBackfillCandidatesParams struct {
 	Cursor         uuid.UUID
 	OrganizationID string
+	McpServerIds   []uuid.UUID
 	PageSize       int32
 }
 
 type ListUpstreamClientBackfillCandidatesRow struct {
-	McpServerID           uuid.UUID
-	ProjectID             uuid.UUID
-	OrganizationID        string
-	UserSessionIssuerID   uuid.UUID
-	RemoteBacked          bool
-	Hosted                bool
-	Proxied               bool
-	IssuerServerCount     int64
-	IssuerHasGateway      bool
-	LiveAssociations      int64
-	RemoteSessionClientID uuid.NullUUID
-	MetadataMatch         bool
-	GrantMatch            bool
-	DerivedMatch          bool
-	PairLive              bool
-	PairRecorded          bool
+	McpServerID             uuid.UUID
+	ProjectID               uuid.UUID
+	OrganizationID          string
+	UserSessionIssuerID     uuid.UUID
+	RemoteBacked            bool
+	Hosted                  bool
+	Proxied                 bool
+	IssuerServerCount       int64
+	IssuerHasGateway        bool
+	LiveAssociations        int64
+	OffersOwnOauthClient    bool
+	UpstreamAuthNotRequired bool
+	RemoteSessionClientID   uuid.NullUUID
+	ClientProviderID        uuid.NullUUID
+	MetadataMatch           bool
+	GrantMatch              bool
+	DerivedMatch            bool
+	PairLive                bool
+	PairRecorded            bool
 }
 
 // One row per live MCP server carrying a user session issuer and each client
@@ -779,8 +931,23 @@ type ListUpstreamClientBackfillCandidatesRow struct {
 // pair_recorded is true when an association row exists for the pair, live or
 // removed: a removed row on a shared issuer is an explicit detach the backfill
 // must not undo.
+//
+// offers_own_oauth_client reports that the server offers an OAuth-backed auth
+// client an administrator or a server-only identity commit configured for it.
+//
+// upstream_auth_not_required reports that the server is explicitly recorded
+// as needing no upstream authentication. client_provider_id is the bound
+// client's remote session issuer.
+//
+// A non-empty mcp_server_ids limits the page to those servers, for a caller
+// deciding a known set inside its own transaction.
 func (q *Queries) ListUpstreamClientBackfillCandidates(ctx context.Context, arg ListUpstreamClientBackfillCandidatesParams) ([]ListUpstreamClientBackfillCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listUpstreamClientBackfillCandidates, arg.Cursor, arg.OrganizationID, arg.PageSize)
+	rows, err := q.db.Query(ctx, listUpstreamClientBackfillCandidates,
+		arg.Cursor,
+		arg.OrganizationID,
+		arg.McpServerIds,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -799,7 +966,10 @@ func (q *Queries) ListUpstreamClientBackfillCandidates(ctx context.Context, arg 
 			&i.IssuerServerCount,
 			&i.IssuerHasGateway,
 			&i.LiveAssociations,
+			&i.OffersOwnOauthClient,
+			&i.UpstreamAuthNotRequired,
 			&i.RemoteSessionClientID,
+			&i.ClientProviderID,
 			&i.MetadataMatch,
 			&i.GrantMatch,
 			&i.DerivedMatch,
@@ -907,8 +1077,13 @@ func (q *Queries) SeedGatewayMemberFixture(ctx context.Context, arg SeedGatewayM
 }
 
 const seedGrantFixture = `-- name: SeedGrantFixture :exec
-INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, resource)
-VALUES ($1, $2, $3, 'encrypted', $4)
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, organization_id, access_token_encrypted, resource)
+VALUES ($1, $2, $3,
+  (SELECT org.id FROM remote_session_clients AS client
+   LEFT JOIN projects AS project ON project.id = client.project_id
+   JOIN organization_metadata AS org ON org.id = COALESCE(project.organization_id, client.organization_id)
+   WHERE client.id = $3),
+  'encrypted', $4)
 `
 
 type SeedGrantFixtureParams struct {

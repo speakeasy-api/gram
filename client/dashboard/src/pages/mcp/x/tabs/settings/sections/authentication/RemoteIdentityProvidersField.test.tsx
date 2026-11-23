@@ -15,17 +15,8 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
-// The route helper resolves :orgSlug from the URL; stubbing it keeps the
-// expected href readable without standing up the org route tree.
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        href: (id: string) =>
-          `/org-slug/projects/project-slug/remote-identity-providers/${id}`,
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org-slug", projectSlug: "project-slug" }),
 }));
 
 function issuer(overrides: Partial<RemoteSessionIssuer> = {}) {

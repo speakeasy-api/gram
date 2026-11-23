@@ -15,11 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // createPublicMCPToolsetWithCustomDomain creates a public MCP toolset, then creates
-// a verified+activated custom domain and links it to the toolset.
+// a verified+activated custom domain and moves the toolset's endpoint onto it.
 func createPublicMCPToolsetWithCustomDomain(
 	t *testing.T,
 	ctx context.Context,
@@ -27,14 +27,13 @@ func createPublicMCPToolsetWithCustomDomain(
 	authCtx *contextvalues.AuthContext,
 	slug string,
 	domainName string,
-) (toolsets_repo.Toolset, customdomains_repo.CustomDomain) {
+) (hostedToolset, customdomains_repo.CustomDomain) {
 	t.Helper()
 
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 	domainsRepo := customdomains_repo.New(ti.conn)
 
 	// Create a public MCP toolset (without custom domain initially)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 
 	// Create and activate a custom domain
 	domain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
@@ -55,24 +54,14 @@ func createPublicMCPToolsetWithCustomDomain(
 	})
 	require.NoError(t, err)
 
-	// Link the custom domain to the toolset
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            toolset.McpIsPublic,
-		McpEnabled:             toolset.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: toolset.McpSlug.String, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}})
+	toolset.CustomDomainID = uuid.NullUUID{UUID: domain.ID, Valid: true}
 
 	return toolset, domain
 }
 
-func TestServePublic_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
+// A custom-domain endpoint is not served on the platform host.
+func TestServePublic_CustomDomain_PlatformDomainNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -86,11 +75,9 @@ func TestServePublic_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 		"custom-platform.example.com",
 	)
 
-	// Request via the platform domain (no custom domain context) should still work
-	unauthCtx := context.Background()
-	w, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
+	_, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
 }
 
 func TestServePublic_CustomDomain_CustomDomainAlsoWorks(t *testing.T) {
@@ -122,13 +109,12 @@ func TestServePublic_NoCustomDomain_PlatformDomainWorks(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsets_repo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
 	// Create a standard toolset without any custom domain
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "no-cd-platform-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "no-cd-platform-"+uuid.New().String()[:8])
 
 	// Platform domain should work as before
 	unauthCtx := context.Background()
@@ -204,7 +190,8 @@ func serveWellKnownHTTP(
 	return w, nil
 }
 
-func TestWellKnownOAuth_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
+// A custom-domain endpoint's metadata is not served on the platform host.
+func TestWellKnownOAuth_CustomDomain_PlatformDomainNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -218,11 +205,7 @@ func TestWellKnownOAuth_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 		"wellknown-domain.example.com",
 	)
 
-	// The well-known endpoint should find the toolset via the platform domain.
-	// It will return an error because no OAuth is configured, but crucially it
-	// should NOT return "not found" — proving the toolset lookup succeeded.
 	_, err := serveWellKnownHTTP(t, context.Background(), ti, toolset.McpSlug.String)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "OAuth")
-	require.NotContains(t, err.Error(), "not found")
+	require.Contains(t, err.Error(), "not found")
 }

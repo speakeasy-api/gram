@@ -1,4 +1,5 @@
 import { cleanup, render } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { HooksSetupDialog } from "./HooksSetupDialog";
@@ -36,8 +37,8 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
 vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ plugins: { href: () => "/plugins" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 afterEach(() => {
@@ -47,13 +48,15 @@ afterEach(() => {
 
 function claudeText(): string {
   render(
-    <TooltipProvider>
-      <HooksSetupDialog
-        open
-        onOpenChange={vi.fn<() => void>()}
-        defaultProvider="claude"
-      />
-    </TooltipProvider>,
+    <MemoryRouter>
+      <TooltipProvider>
+        <HooksSetupDialog
+          open
+          onOpenChange={vi.fn<() => void>()}
+          defaultProvider="claude"
+        />
+      </TooltipProvider>
+    </MemoryRouter>,
   );
   return document.body.textContent!.replace(/\s+/g, " ");
 }

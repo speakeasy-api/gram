@@ -33,7 +33,7 @@ func callbackWithOrgHost(t *testing.T, defaultHost *string, origin requestorigin
 	ctx = requestorigin.WithContext(ctx, origin)
 	ctx, stateParam := instance.stateWithNonce(ctx, t, destination)
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
+		Code:  new("mock_code"),
 		State: &stateParam,
 	})
 	require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestService_Callback_OrganizationHostNamesTheOrganization(t *testing.T) {
 		ctx := requestorigin.WithContext(ctx, originAt(requestorigin.SurfacePlatform, testServerURL.String()))
 		ctx, stateParam := instance.stateWithNonce(ctx, t, destination)
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
+			Code:  new("mock_code"),
 			State: &stateParam,
 		})
 		require.NoError(t, err)
@@ -230,7 +230,7 @@ func TestService_Callback_OrganizationHostSkipsImpersonation(t *testing.T) {
 
 	ctx = requestorigin.WithContext(ctx, originAt(requestorigin.SurfacePlatform, testServerURL.String()))
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-		Code: "impersonation_code",
+		Code: new("impersonation_code"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)

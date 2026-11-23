@@ -11,11 +11,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -136,6 +138,36 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_RemoteMemberRoutedWithoutIssu
 	got := callConnectionStatus(t, ti, context.Background(), metaSlug, bearer)
 	require.Equal(t, metamcp.SignInConnected, got.statuses["member-routed"])
 	require.Equal(t, metamcp.SignInNotRequired, got.statuses["member-open"])
+}
+
+// A member with no derived provider that offers an enabled static credential
+// needs a credential. A caller sending none reads not signed in, not "no
+// sign-in needed", while a member offering no auth client still needs none.
+func TestServePublic_MetaEndpoint_ConnectionStatus_StaticCredentialMemberWithoutCredential(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	metaSlug := "meta-status-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, uuid.Nil)
+	static := createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-static", "https://static.example.com/mcp/"+uuid.NewString(), uuid.NullUUID{}, 0)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-open", "https://open.example.com/mcp/"+uuid.NewString(), uuid.NullUUID{}, 1)
+
+	fixtures := authclientfixtures.New(ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, ClientType: "static_credential", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: authClientID, OrganizationID: orgID, Name: "X-Api-Key", Value: pgtype.Text{String: "key", Valid: true}}))
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: static.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
+
+	got := callConnectionStatus(t, ti, ctx, metaSlug, "")
+	require.Equal(t, metamcp.SignInNotConnected, got.statuses["member-static"])
+	require.Equal(t, metamcp.SignInNotRequired, got.statuses["member-open"])
+	require.Contains(t, got.text, "1 of 2 servers ready")
+	require.Contains(t, got.text, "member-static: not signed in")
 }
 
 // tools/list links connection_status to its view, and resources/list and

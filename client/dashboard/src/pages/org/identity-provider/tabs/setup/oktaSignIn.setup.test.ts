@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { GramCore } from "@gram/client/core.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
@@ -57,6 +58,7 @@ function makeClient(
     grantTypes: null,
     credentialOwner: "subject",
     legacyCallbackUrl: false,
+    forwardClientName: false,
     organizationId: "organization-id",
     projectId: "",
     remoteSessionIssuerId: "remote-issuer-id",

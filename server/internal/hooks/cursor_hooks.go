@@ -219,7 +219,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				ToolName:        toolName,
 				ToolInput:       ev.ToolInput,
 				RiskPolicyID:    policy.ID,
-				PolicyName:      policy.Name,
+				// Cursor sends no MCP server list, so every route is offered.
+				SessionMCPServers: nil,
+				PolicyName:        policy.Name,
 			})
 			blockReason = auditReason
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
@@ -469,6 +471,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  s.now(),
@@ -553,6 +556,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		FunctionID:     nil,
 	}
 
+	stampEndpointGeneration(ctx, attrs)
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,

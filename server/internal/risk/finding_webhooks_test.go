@@ -1,9 +1,7 @@
 package risk_test
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -15,27 +13,22 @@ import (
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-func TestOutboxRiskFindingCreatedEmitterHonorsCutoverFlag(t *testing.T) {
+func TestOutboxRiskFindingCreatedEmitterPublishesStableEvent(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, true)
-	emitter := risk.NewOutboxRiskFindingCreatedEmitter(testenv.NewLogger(t), ti.conn, flags)
+	emitter := risk.NewOutboxRiskFindingCreatedEmitter(ti.conn)
 	findingID := uuid.New()
 	candidate := risk.RiskFindingCreatedEvent{
-		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Event: outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]{
 			ID: events.RiskFindingCreatedEventID(findingID),
@@ -58,9 +51,9 @@ func TestOutboxRiskFindingCreatedEmitterHonorsCutoverFlag(t *testing.T) {
 	before, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, string(events.RiskFindingCreatedV1.EventType()))
 	require.NoError(t, err)
 	require.NoError(t, emitter.Emit(ctx, []risk.RiskFindingCreatedEvent{candidate}))
-	afterEnabled, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, string(events.RiskFindingCreatedV1.EventType()))
+	after, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, string(events.RiskFindingCreatedV1.EventType()))
 	require.NoError(t, err)
-	require.Equal(t, before+1, afterEnabled)
+	require.Equal(t, before+1, after)
 
 	outboxRows, err := testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
@@ -75,43 +68,4 @@ func TestOutboxRiskFindingCreatedEmitterHonorsCutoverFlag(t *testing.T) {
 	require.NoError(t, json.Unmarshal(envelope.GetPayload(), &payload))
 	require.Equal(t, findingID, payload.ID)
 
-	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, false)
-	require.NoError(t, emitter.Emit(ctx, []risk.RiskFindingCreatedEvent{candidate}))
-	afterDisabled, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, string(events.RiskFindingCreatedV1.EventType()))
-	require.NoError(t, err)
-	require.Equal(t, afterEnabled, afterDisabled)
-}
-
-type unreachableFlags struct{}
-
-func (unreachableFlags) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
-	return false, errors.New("flag service unreachable")
-}
-
-func (unreachableFlags) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
-	return false, errors.New("flag service unreachable")
-}
-
-func (unreachableFlags) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
-	return nil, errors.New("flag service unreachable")
-}
-
-func TestOutboxRiskFindingCreatedEmitterFailsOnFlagLookupError(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	emitter := risk.NewOutboxRiskFindingCreatedEmitter(testenv.NewLogger(t), ti.conn, unreachableFlags{})
-	findingID := uuid.New()
-	err := emitter.Emit(ctx, []risk.RiskFindingCreatedEvent{{
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Event: outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]{
-			ID:      events.RiskFindingCreatedEventID(findingID),
-			Payload: events.RiskFindingCreatedPayloadV1{ID: findingID},
-		},
-	}})
-	require.Error(t, err, "an unresolved flag must fail the batch so redelivery retries it")
 }

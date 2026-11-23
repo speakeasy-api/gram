@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { DashboardPlacement } from "@gram/client/models/components/dashboardplacement.js";
 import { describe, expect, it } from "vitest";
 import {

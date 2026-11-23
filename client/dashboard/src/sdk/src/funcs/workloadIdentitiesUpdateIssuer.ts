@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * updateIssuer workloadIdentities
  *
  * @remarks
- * Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+ * Edit a trusted issuer's name, description, tags, JWKS URI, or assertion reuse setting. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
  */
 export function workloadIdentitiesUpdateIssuer(
   client: GramCore,

@@ -18,14 +18,12 @@ import (
 // an admin decides, and the decision is what changes enforcement.
 //
 // Implemented by the mcpapproval service and injected at wiring, so this
-// package never imports it. A nil intake, or an intake reporting the approval
-// feature is unavailable, falls back to the legacy bypass request.
+// package never imports it. A nil intake falls back to the legacy bypass
+// request.
 type ShadowMCPApprovalIntake interface {
 	// AdmitBlockedServer records the ask and returns the id and current
 	// status of the review it landed on — a repeat ask for an
-	// already-approved server attaches without reopening it. A forbidden
-	// error means the approval workflow is not enabled for the organization
-	// and the caller should fall back to the legacy bypass request.
+	// already-approved server attaches without reopening it.
 	AdmitBlockedServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, requesterEmail, note string) (requestID string, status string, err error)
 
 	// ReconcileStandingDecisionsForPolicy replays the project's recorded

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { describe, expect, it } from "vitest";
 import {

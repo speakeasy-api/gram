@@ -12,8 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/internal/jwk"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
@@ -30,6 +30,10 @@ const (
 )
 
 const externalKeyProviderGcpKms = "gcp_kms"
+
+// externalKeyPurposeSign is external_keys.purpose for keys that can back a
+// JSON Web Key Set.
+const externalKeyPurposeSign = "sign"
 
 // mintRatePerMin and mintRateBurst bound how often one organization can mint a
 // key (set creation and key publication). Each mint calls GetPublicKey, a KMS
@@ -106,10 +110,13 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 	if row.EmaIssuerManaged {
 		return nil, oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
 	}
+	if row.ExternalKey.Purpose != externalKeyPurposeSign {
+		return nil, oops.E(oops.CodeBadRequest, nil, "this key encrypts organization data and cannot back a JSON Web Key Set; choose a signing key").LogError(ctx, logger)
+	}
 	if row.ExternalKey.Provider != externalKeyProviderGcpKms {
 		return nil, oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
 	}
-	if err := managedrows.RequireUnmanaged(row.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(row.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
 		return nil, err
 	}
 	if !row.ResourceName.Valid {

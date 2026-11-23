@@ -6,6 +6,7 @@
 // Invocation contract (baked into generated provider configs):
 //
 //	speakeasy-hooks agenthooks run --provider=claude-code   # hook event on stdin
+//	speakeasy-hooks agenthooks run --provider=vibe          # Vibe hook event on stdin
 //	speakeasy-hooks pi serve [--config=<path>]               # Pi extension NDJSON stdio
 //	speakeasy-hooks login [--force] [--config=<path>]        # interactive sign-in
 //
@@ -37,7 +38,7 @@ func main() {
 			// login accepts the same deployment flags as the hook path
 			// (--config, --server-url, --project, --org) so the nudge can
 			// point it at the plugin's identity instead of the prod defaults.
-			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
+			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", InstallRoute: ""}, os.Args[2:])
 			os.Exit(runLogin(relay.LoadConfig(flagCfg), rest))
 		case "install":
 			os.Exit(runInstall(os.Args[2:]))
@@ -45,7 +46,7 @@ func main() {
 			// Pi drives hooks from a long-lived TypeScript extension rather
 			// than a process per event, so its events arrive as NDJSON frames
 			// on stdin for the lifetime of one Pi session.
-			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
+			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", InstallRoute: ""}, os.Args[2:])
 			os.Exit(relay.RunPiCommand(context.Background(), relay.LoadConfig(flagCfg), rest))
 		case "drain":
 			// Replays the offline payload spool (see relay/drain.go). Takes
@@ -61,8 +62,15 @@ func main() {
 	// speakeasy.json via --config. Read the deployment flags without mutating
 	// argv: agenthooks tolerates unknown flags, and its --async re-exec
 	// forwards argv to the detached worker, which must keep --config.
-	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[1:])
+	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", InstallRoute: ""}, os.Args[1:])
 	cfg := relay.LoadConfig(flagCfg)
+
+	// Vibe is decoded by the relay itself: the external agenthooks module
+	// rejects --provider=vibe at parse time, so those invocations never reach
+	// agenthooks.Main.
+	if relay.IsVibeInvocation(os.Args[1:]) {
+		os.Exit(relay.RunVibeCommand(context.Background(), cfg, os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	}
 
 	agenthooks.Main(relay.NewRunner(cfg))
 }
@@ -71,7 +79,7 @@ func main() {
 // backs local end-to-end testing; production distribution is wired separately.
 func runInstall(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, openclaw, pi")
+	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, openclaw, copilot, pi, vibe")
 	dir := fs.String("dir", "", "output directory for the plugin package")
 	serverURL := fs.String("server-url", relay.DefaultServerURL, "Speakeasy server URL to bake into the plugin")
 	siteURL := fs.String("site-url", "", "dashboard origin for browser sign-in when it differs from the server URL (local dev)")
@@ -102,6 +110,8 @@ func runInstall(args []string) int {
 		HooksAPIKey:  relay.Env("HOOKS_ORG_KEY"),
 		BrowserLogin: *browserLogin,
 		BinaryPath:   binaryPath,
+		AgentKey:     false, // the environment's org key is shared, never an agent's
+		InstallRoute: relay.InstallRouteHooksInstall,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "speakeasy-hooks install: %v\n", err)
 		return 1

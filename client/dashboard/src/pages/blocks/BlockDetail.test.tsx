@@ -54,20 +54,7 @@ vi.mock("@/contexts/Auth", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ auth: { switchScopes: mocks.switchScopes } }),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: ({
-    orgSlug,
-    projectSlug,
-  }: {
-    orgSlug?: string;
-    projectSlug?: string;
-  }) => ({
-    riskEvents: {
-      href: () => `/${orgSlug}/projects/${projectSlug}/risk-events`,
-    },
-  }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("sonner", () => ({

@@ -1,7 +1,8 @@
 // TODO: https://linear.app/speakeasy/issue/SXF-170/table-component
+import { Spinner } from "@/components/ui/Spinner";
+import type { PropsWithChildren } from "react";
 import React, {
   forwardRef,
-  PropsWithChildren,
   type ReactNode,
   useCallback,
   useMemo,
@@ -9,7 +10,7 @@ import React, {
   useState,
 } from "react";
 import { cn } from "@/lib/utils";
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { isGroupOf } from "@/components/ui/lib/typeUtils";
 import styles from "./styles.module.css";
 import {
@@ -755,14 +756,16 @@ function RowExpandable<T extends object>({
         renderRow={renderRow}
       />
       {/* This grid stuff is a cute way to make the height animate smoothly when expanding/collapsing */}
-      <div
+      <tr
         className={cn(
           "[grid-column:1/-1] grid overflow-hidden transition-[grid-template-rows] duration-300",
           isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >
-        <div className="min-h-0 overflow-auto">{content}</div>
-      </div>
+        <td colSpan={columns.length} className="min-h-0 overflow-auto p-0">
+          {content}
+        </td>
+      </tr>
     </>
   );
 }
@@ -942,7 +945,7 @@ function LoadMore<T extends object>({
           {isLoading ? (
             <>
               Loading
-              <Loader2 className="animate-spin" />
+              <Spinner className="mr-0" />
             </>
           ) : (
             "Load more"

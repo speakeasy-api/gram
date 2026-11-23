@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { describe, expect, it } from "vitest";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
@@ -8,6 +9,7 @@ import {
   allowDestructiveWrite,
   allowWrite,
   blockDestructiveWrite,
+  clearScopeWrite,
   narrowingSeed,
   narrowWrite,
   revokeRowWrite,
@@ -82,6 +84,52 @@ describe("allowWrite", () => {
 
     expect(allowWrite(direct, rows[0]!, "use").entries).toEqual([]);
   });
+
+  it("lifts the row's own view block when opening manage", () => {
+    // A view block also takes manage, so allowing manage has to lift it or
+    // the new grant stays blocked.
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([
+      {
+        principalUrn: "user:1",
+        level: "manage",
+        tools: [],
+        dispositions: [],
+      },
+    ]);
+  });
+});
+
+describe("allowWrite keeps what a lifted block also closed", () => {
+  it("keeps manage blocked when allowing view lifts a view block", () => {
+    // The view block also closes the manage the role grants. Allowing view
+    // must not hand that manage back.
+    const { direct, rows } = state([
+      role({ level: "manage" }),
+      role({ appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "view").entries).toEqual([
+      {
+        principalUrn: "role:global:1",
+        level: "blocked_manage",
+        tools: [],
+        dispositions: [],
+      },
+    ]);
+  });
+
+  it("writes no manage block when nothing grants manage", () => {
+    const { direct, rows } = state([
+      role({ level: "view" }),
+      role({ appliesTo: "resource", level: "blocked_view" }),
+    ]);
+
+    expect(allowWrite(direct, rows[0]!, "view").entries).toEqual([]);
+  });
 });
 
 describe("revokeScopeWrite", () => {
@@ -117,8 +165,8 @@ describe("revokeScopeWrite", () => {
   });
 
   it("blocks view without touching a block already written for manage", () => {
-    // The mcp:blocked_* scopes are independent, so each line's block stands
-    // on its own rather than one making another redundant.
+    // Each line's block is written for that line, even where a view block
+    // would also cover manage, so lifting one line later leaves the other.
     const { direct, rows } = state([
       role({ level: "manage" }),
       role({ appliesTo: "resource", level: "blocked_manage" }),
@@ -141,21 +189,61 @@ describe("revokeScopeWrite", () => {
   });
 
   it("blocks a scope a stronger grant on the same row satisfies", () => {
-    // Manage satisfies a connect check, so dropping the connect rule is not
-    // enough — the block is what actually closes the line.
+    // Manage satisfies a view check, so dropping the view rule is not enough
+    // — the block is what actually closes the line.
     const { direct, rows } = state([
       entry({ principalUrn: "user:1", level: "manage" }),
     ]);
 
-    expect(revokeScopeWrite(direct, rows[0]!, "use").entries).toEqual([
+    expect(revokeScopeWrite(direct, rows[0]!, "view").entries).toEqual([
       { principalUrn: "user:1", level: "manage" },
       {
         principalUrn: "user:1",
-        level: "blocked",
+        level: "blocked_view",
         tools: [],
         dispositions: [],
       },
     ]);
+  });
+});
+
+describe("clearScopeWrite", () => {
+  it("drops the row's own grant and block for that scope only", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "view" }),
+      entry({ principalUrn: "user:1", level: "blocked_view" }),
+      entry({ principalUrn: "user:1", level: "blocked_manage" }),
+    ]);
+
+    const write = clearScopeWrite(direct, rows[0]!, "view", "Acme Ops");
+
+    expect(write.entries).toEqual([
+      { principalUrn: "user:1", level: "blocked_manage" },
+    ]);
+    expect(write.message).toBe("Cleared Hana Sato's view setting on Acme Ops.");
+  });
+
+  it("writes no block in place of a grant something else still gives", () => {
+    // Unlike revoking, clearing leaves the line to whatever else decides it.
+    const { direct, rows } = state([
+      role({ level: "manage" }),
+      role({ appliesTo: "resource", level: "blocked_manage" }),
+    ]);
+
+    expect(clearScopeWrite(direct, rows[0]!, "manage").entries).toEqual([]);
+  });
+
+  it("says the row leaves the list when its last rule here is cleared", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "blocked_view" }),
+    ]);
+
+    const write = clearScopeWrite(direct, rows[0]!, "view", "Acme Ops");
+
+    expect(write.entries).toEqual([]);
+    expect(write.message).toBe(
+      "Cleared Hana Sato's view setting on Acme Ops. Hana Sato has nothing else set here and is no longer listed.",
+    );
   });
 });
 
@@ -171,15 +259,14 @@ describe("lifting a block", () => {
     expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([]);
   });
 
-  it("keeps another line's block, which takes nothing from this scope", () => {
+  it("lifts a view block, which takes manage too", () => {
+    // Manage includes view, so the view block is what closes the manage line.
     const { direct, rows } = state([
       role({ level: "manage" }),
       role({ appliesTo: "resource", level: "blocked_view" }),
     ]);
 
-    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([
-      { principalUrn: "role:global:1", level: "blocked_view" },
-    ]);
+    expect(allowWrite(direct, rows[0]!, "manage").entries).toEqual([]);
   });
 
   it("keeps a stronger block, which takes nothing from this scope", () => {
@@ -273,8 +360,8 @@ describe("revokeRowWrite", () => {
   });
 
   it("blocks every scope for a principal an organization-wide rule reaches", () => {
-    // Blocks are independent, so "no access at all" has to say so three
-    // times rather than leaning on one block to cover the rest.
+    // Connect's block stands alone, so "no access at all" writes a block for
+    // each line rather than leaning on the view block to cover the rest.
     const { direct, rows } = state([role()]);
 
     const write = revokeRowWrite(direct, rows[0]!, "Acme Ops");
@@ -687,6 +774,41 @@ describe("an annotation choice is stored as a block", () => {
       },
     ]);
   });
+
+  // Connect does not come with manage, so blocks alone would leave this row
+  // with no connect at all. The choice is written as the grant, and the
+  // block still keeps out tools that also carry a left-out annotation.
+  it("grants the chosen annotations when nothing else grants connect", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "manage" }),
+    ]);
+
+    const written = narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: [], dispositions: ["read_only"] },
+      undefined,
+    ).entries;
+
+    expect(written).toHaveLength(3);
+    expect(written).toEqual(
+      expect.arrayContaining([
+        { principalUrn: "user:1", level: "manage" },
+        {
+          principalUrn: "user:1",
+          level: "use",
+          tools: [],
+          dispositions: ["read_only"],
+        },
+        {
+          principalUrn: "user:1",
+          level: "blocked",
+          tools: [],
+          dispositions: ["destructive", "idempotent", "open_world"],
+        },
+      ]),
+    );
+  });
 });
 
 describe("subtracting by name without a catalogue", () => {
@@ -1063,4 +1185,81 @@ it("refuses narrowing that would discard an unknown stored block", () => {
       catalog,
     ),
   ).toThrow("not supported");
+});
+
+describe("narrowing to read-only tools on an OpenAPI server", () => {
+  // An OpenAPI GET is annotated read-only, idempotent and open-world at once,
+  // and a POST open-world. The runtime checks a call under one disposition,
+  // the first in priority order, so a block on open-world and idempotent
+  // leaves the GETs reachable — and the page has to read it the same way, or
+  // a saved "read-only tools" reads back as no access at all.
+  const openapi: ToolSelectionTool[] = [
+    {
+      name: "list_pets",
+      annotations: ["read_only", "idempotent", "open_world"],
+    },
+    {
+      name: "get_pet",
+      annotations: ["read_only", "idempotent", "open_world"],
+    },
+    { name: "create_pet", annotations: ["open_world"] },
+    { name: "update_pet", annotations: ["idempotent", "open_world"] },
+    {
+      name: "delete_pet",
+      annotations: ["destructive", "idempotent", "open_world"],
+    },
+  ];
+
+  it("reads the saved choice back as the read-only tools", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+    const written = narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: [], dispositions: ["read_only"] },
+      openapi,
+    ).entries;
+    expect(written).toContainEqual({
+      principalUrn: "user:1",
+      level: "blocked",
+      tools: [],
+      dispositions: ["destructive", "idempotent", "open_world"],
+    });
+
+    // What the list holds once the save lands.
+    const saved = buildAccessRows(written.map((rule) => entry({ ...rule })));
+    expect(reachableTools(saved[0]!.cells.use, openapi)).toEqual([
+      "list_pets",
+      "get_pet",
+    ]);
+    expect(narrowingSeed(saved[0]!, openapi)).toEqual({
+      tools: ["list_pets", "get_pet"],
+      dispositions: [],
+    });
+  });
+
+  it("keeps an annotation block a name choice matches exactly", () => {
+    // Saving the dialog untouched sends back the names the block leaves. The
+    // block they amount to is the annotation block already standing, so it
+    // stays written as annotations.
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive", "idempotent", "open_world"],
+      }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(
+      narrowWrite(
+        direct,
+        person,
+        { tools: ["list_pets", "get_pet"], dispositions: [] },
+        openapi,
+      ).message,
+    ).toBe("Access to this server is unchanged.");
+  });
 });

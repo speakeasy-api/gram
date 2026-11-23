@@ -1,6 +1,6 @@
 /**
- * Source type as used in deployment assets ("openapi", "function", "externalmcp").
- * URN kind as used in tool URNs ("http", "function", "externalmcp").
+ * Source type as used in deployment assets ("openapi", "function").
+ * URN kind as used in tool URNs ("http", "function").
  *
  * The only non-trivial mapping is "openapi" ↔ "http".
  */
@@ -8,14 +8,12 @@
 export type SourceType =
   | "openapi"
   | "function"
-  | "externalmcp"
   | "remotemcp"
   | "tunneledmcp"
   | "unproxiedmcp";
 export type UrnKind =
   | "http"
   | "function"
-  | "externalmcp"
   | "remotemcp"
   | "tunneledmcp"
   | "unproxiedmcp";
@@ -23,7 +21,6 @@ export type UrnKind =
 const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   openapi: "http",
   function: "function",
-  externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
   unproxiedmcp: "unproxiedmcp",
@@ -32,7 +29,6 @@ const sourceTypeToUrn: Record<SourceType, UrnKind> = {
 const urnToSourceType: Record<UrnKind, SourceType> = {
   http: "openapi",
   function: "function",
-  externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
   unproxiedmcp: "unproxiedmcp",
@@ -125,6 +121,106 @@ export function remoteSessionScopeTier(entity: {
   return "platform";
 }
 
+/**
+ * Domains under which anyone can host a site, so the label before them names
+ * the platform, not the service.
+ */
+const SHARED_HOSTING_DOMAINS = [
+  "amazonaws.com",
+  "appspot.com",
+  "azurecontainerapps.io",
+  "azurewebsites.net",
+  "cloudfunctions.net",
+  "deno.dev",
+  "firebaseapp.com",
+  "fly.dev",
+  "github.io",
+  "herokuapp.com",
+  "modal.run",
+  "netlify.app",
+  "ngrok-free.app",
+  "ngrok.app",
+  "ngrok.io",
+  "onrender.com",
+  "pages.dev",
+  "railway.app",
+  "replit.app",
+  "run.app",
+  "trycloudflare.com",
+  "vercel.app",
+  "web.app",
+  "workers.dev",
+];
+
+/**
+ * Labels that, before a two-letter country code, form a public suffix such as
+ * co.uk, or.jp or edu.au.
+ */
+const SECOND_LEVEL_SUFFIXES = [
+  "ac",
+  "co",
+  "com",
+  "edu",
+  "go",
+  "gob",
+  "gov",
+  "ltd",
+  "me",
+  "mil",
+  "ne",
+  "net",
+  "nom",
+  "or",
+  "org",
+  "plc",
+  "sch",
+];
+
+/**
+ * A readable name for the service behind a URL, from its host:
+ * "https://mcp.canva.com/mcp" reads "Canva" and "mcp.acme-wiki.example" reads
+ * "Acme Wiki". Null when the host does not name a service: IP addresses,
+ * single-label hosts such as localhost, internationalised domains, and sites
+ * on shared hosting domains such as vercel.app. The server names servers
+ * created without a name by the same rules (remoteMCPDisplayName).
+ */
+export function readableServiceNameFromUrl(url: string): string | null {
+  let host: string;
+  try {
+    host = new URL(url.trim()).hostname;
+  } catch {
+    return null;
+  }
+  // A fully qualified name ends in a dot that names no label.
+  host = host.replace(/\.$/, "");
+  const labels = host.split(".");
+  if (
+    labels.length < 2 ||
+    /^\d+$/.test(labels[labels.length - 1]!) ||
+    host.startsWith("[") ||
+    labels.some((label) => label.startsWith("xn--")) ||
+    SHARED_HOSTING_DOMAINS.some(
+      (domain) => host === domain || host.endsWith(`.${domain}`),
+    )
+  ) {
+    return null;
+  }
+  // The registrable name sits before the public suffix: "canva" in
+  // mcp.canva.com, "example" in api.example.co.uk.
+  const suffixLength =
+    labels.length >= 3 &&
+    labels[labels.length - 1]!.length === 2 &&
+    SECOND_LEVEL_SUFFIXES.includes(labels[labels.length - 2]!)
+      ? 2
+      : 1;
+  const name = labels[labels.length - 1 - suffixLength]!;
+  const words = name.split(/[-_]+/).filter(Boolean);
+  if (words.length === 0) return null;
+  return words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 // Derive a default display name from an Issuer URL's hostname. Unlike the slug
 // transform this keeps the hostname human-readable: dots are preserved rather
 // than hyphenated. (URL parsing lowercases the host either way.) Returns null
@@ -156,8 +252,21 @@ export function mcpServerRouteParam(server: {
   id: string;
   slug?: string | null | undefined;
 }): string {
-  return server.slug?.trim() || server.id;
+  const slug = server.slug?.trim();
+  return slug && !RESERVED_MCP_SEGMENTS.has(slug) ? slug : server.id;
 }
+
+// Static /mcp segments; servers slugged like one are linked by id.
+export const RESERVED_MCP_SEGMENTS: ReadonlySet<string> = new Set([
+  "add",
+  "catalog",
+  "deployments",
+  "sources",
+  "organization-gateway",
+  "project-gateway",
+  "gateway",
+  "x",
+]);
 
 // uuidRegex matches the canonical 8-4-4-4-12 hex form that Go's UUID package
 // emits via String() and that the Goa-generated SDK uses on the wire. It is

@@ -2,9 +2,11 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 )
@@ -31,22 +33,40 @@ type UpsertOrganizationMetadataParams = UpsertOrganizationMetadataWithRequestsPa
 type UpsertOrganizationMetadataRow = OrganizationMetadatum
 
 func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (UpsertOrganizationMetadataRow, error) {
+	row, _, err := q.UpsertOrganizationMetadataWithCreation(ctx, arg)
+	return row, err
+}
+
+// UpsertOrganizationMetadataWithCreation also reports whether this statement
+// inserted the organization, rather than adopting an existing metadata row.
+func (q *Queries) UpsertOrganizationMetadataWithCreation(ctx context.Context, arg UpsertOrganizationMetadataParams) (UpsertOrganizationMetadataRow, bool, error) {
 	tx, err := q.beginDistribution(ctx)
 	if err != nil {
-		return UpsertOrganizationMetadataRow{}, err
+		return UpsertOrganizationMetadataRow{}, false, err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	result, err := q.WithTx(tx).UpsertOrganizationMetadataWithRequests(ctx, arg)
 	if err != nil {
-		return UpsertOrganizationMetadataRow{}, err
+		return UpsertOrganizationMetadataRow{}, false, err
 	}
 	if err := requests.PublishAll(ctx, tx, result.Requests); err != nil {
-		return UpsertOrganizationMetadataRow{}, fmt.Errorf("publish role distribution source requests: %w", err)
+		return UpsertOrganizationMetadataRow{}, false, fmt.Errorf("publish role distribution source requests: %w", err)
+	}
+	// The source query emits a bootstrap request only for INSERT, using its
+	// existing atomic inserted flag. Do not infer creation from a prior read:
+	// identity synchronization can race provisioning.
+	var emitted []requests.Request
+	if err := json.Unmarshal(result.Requests, &emitted); err != nil {
+		return UpsertOrganizationMetadataRow{}, false, fmt.Errorf("decode organization creation result: %w", err)
+	}
+	created := false
+	for _, request := range emitted {
+		created = created || request.BootstrapOrganizationID == result.ID
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return UpsertOrganizationMetadataRow{}, fmt.Errorf("commit role distribution source transaction: %w", err)
+		return UpsertOrganizationMetadataRow{}, false, fmt.Errorf("commit role distribution source transaction: %w", err)
 	}
-	return organizationMetadata(result), nil
+	return organizationMetadata(result), created, nil
 }
 
 type CreateOrganizationMetadataParams = CreateOrganizationMetadataWithRequestsParams
@@ -138,8 +158,11 @@ func organizationMetadata(result UpsertOrganizationMetadataWithRequestsRow) Orga
 		VerifiedDomains:    result.VerifiedDomains,
 		CreationSource:     result.CreationSource,
 		DefaultHost:        result.DefaultHost,
-		CreatedAt:          result.CreatedAt,
-		UpdatedAt:          result.UpdatedAt,
-		DisabledAt:         result.DisabledAt,
+		// The WorkOS upsert does not return this staff-only column, and no
+		// caller of this path reads it.
+		AdoptionDashboardUrl: pgtype.Text{String: "", Valid: false},
+		CreatedAt:            result.CreatedAt,
+		UpdatedAt:            result.UpdatedAt,
+		DisabledAt:           result.DisabledAt,
 	}
 }

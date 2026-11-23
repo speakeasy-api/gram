@@ -171,7 +171,7 @@ func newLinearDefinition() Definition {
 		},
 		SupportedEventTypes: supportedLinearEventTypes,
 		Authenticate:        nil,
-		PreVerify:           nil,
+		Handshake:           nil,
 		Ingest:              linearIngest,
 	}
 	return NewWebhookDefinition(vendor, schema, compiled, func(raw map[string]any) (Config, error) {

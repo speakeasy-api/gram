@@ -4,6 +4,7 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { LLM_ANALYZER_NOTICE, StandardPolicyEditor } from "./PolicyDetail";
@@ -84,10 +85,7 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: vi.fn(),
   useProjectSlugForRequests: () => "test-project",
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ policyCenter: { goTo: vi.fn() } }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "test-project" }),
 }));
 
 vi.mock("nuqs", () => ({
@@ -180,16 +178,18 @@ function renderEditor(
   // mocked flag would not be re-read.
   const tree = () => (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <StandardPolicyEditor
-          policy={policy}
-          prefill={
-            initialCategories
-              ? { categories: new Set(initialCategories), mcpServerIds: [] }
-              : undefined
-          }
-        />
-      </TooltipProvider>
+      <MemoryRouter>
+        <TooltipProvider>
+          <StandardPolicyEditor
+            policy={policy}
+            prefill={
+              initialCategories
+                ? { categories: new Set(initialCategories), mcpServerIds: [] }
+                : undefined
+            }
+          />
+        </TooltipProvider>
+      </MemoryRouter>
     </QueryClientProvider>
   );
   const view = render(tree());

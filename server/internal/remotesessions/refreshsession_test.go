@@ -19,11 +19,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"sync/atomic"
 )
 
 // seedRefreshableOrgSession seeds an org-scoped issuer (token endpoint pointed
@@ -69,7 +72,7 @@ func seedRefreshableOrgSession(t *testing.T, ctx context.Context, ti *testInstan
 	authorizationExpiresAt := time.Now().Add(24 * time.Hour)
 	refreshExpiresAt := time.Now().Add(2 * time.Hour)
 
-	row, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	row, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             urn.NewUserSubject("subject-" + slug),
 		UserSessionIssuerID:    userIssuerID,
 		RemoteSessionClientID:  clientUUID,
@@ -137,7 +140,7 @@ func TestRefreshSession(t *testing.T) {
 		RemoteSessionClientID: uuid.MustParse(result.RemoteSessionClientID),
 	})
 	require.NoError(t, err)
-	plain, err := enc.Decrypt(stored.AccessTokenEncrypted)
+	plain, err := enc.Decrypt(stored.AccessTokenEncrypted.String)
 	require.NoError(t, err)
 	require.Equal(t, "refreshed-access", plain)
 	require.Equal(t, []string{"read:only"}, stored.Scopes)
@@ -208,7 +211,7 @@ func TestRefreshSession_UnreadableRefreshToken(t *testing.T) {
 	// A non-empty value that is not valid ciphertext: passes the has-refresh-token
 	// gate but fails to decrypt.
 	bogus := "not-valid-ciphertext"
-	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            urn.NewUserSubject("admin-refresh-corrupt-subject"),
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientUUID,
@@ -340,7 +343,7 @@ func TestRefreshScopeRecoveryRejectsJWTForAnotherSubject(t *testing.T) {
 		withIDTokenIssuer(issuer), withEnrichmentAS(as))
 	require.Equal(t, remotesessions.IdentitySourceUserinfo, env.session.IdentitySource.String)
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
@@ -371,10 +374,44 @@ func TestTokenResponseNullScopeIsUnreportedAtExchangeAndRefresh(t *testing.T) {
 	})
 	require.Equal(t, []string{"initial:read"}, env.session.Scopes)
 
-	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
 	require.Equal(t, []string{"initial:read"}, stored.Scopes, "a null refresh scope keeps the stored scope")
+}
+
+// TestRefreshSession_OrganizationKeyUnusable answers a refresh the
+// organization's key cannot store right now as unavailable: the admin's
+// request is fine and succeeds once the key is usable again.
+func TestRefreshSession_OrganizationKeyUnusable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	enc := testenv.NewEncryptionClient(t)
+
+	var posts atomic.Int32
+	session := seedRefreshableOrgSession(t, ctx, ti, enc, "admin-refresh-key", func(w http.ResponseWriter, _ *http.Request) {
+		posts.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`))
+	})
+
+	// The service runs without organization encryption, so once the
+	// organization is enrolled its tokens cannot be sealed here.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	keys := orgencryptiontest.New(t, ti.conn)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), ti.conn, audit.NewLogger(), keys.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	_, err := transitions.Enroll(ctx, authCtx.ActiveOrganizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	_, err = ti.service.RefreshSession(ctx, &orgsessionsgen.RefreshSessionPayload{
+		ID:           session.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.Zero(t, posts.Load(), "nothing is asked of the provider while the result could not be stored")
 }

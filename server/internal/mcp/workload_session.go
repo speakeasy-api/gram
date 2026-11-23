@@ -37,6 +37,17 @@ var errWorkloadSessionOutOfReach = errors.New("workload session does not reach t
 // workloadSessionReach is which MCP servers a workload session was minted for.
 type workloadSessionReach string
 
+type workloadSessionReachContextKey struct{}
+
+func withWorkloadSessionReach(ctx context.Context, reach workloadSessionReach) context.Context {
+	return context.WithValue(ctx, workloadSessionReachContextKey{}, reach)
+}
+
+func workloadSessionReachFromContext(ctx context.Context) (workloadSessionReach, bool) {
+	reach, ok := ctx.Value(workloadSessionReachContextKey{}).(workloadSessionReach)
+	return reach, ok
+}
+
 const (
 	// workloadSessionReachResource is the one MCP server the grant named as
 	// its RFC 8707 resource.
@@ -52,8 +63,12 @@ const (
 // minted with. It carries no authorizer: a workload records no approving human,
 // which is where it differs from an agent credential.
 type workloadSessionCredential struct {
-	DelegatedGrants        []byte
-	DelegatedGrantsVersion int32
+	// Set by the resource-bound builtin contract at issuance and, after marker
+	// validation, at consumption. Admission derives the ceiling from live agent
+	// policy and intersects it with live agent and owner authority.
+	DerivesPolicyAtAdmission bool
+	DelegatedGrants          []byte
+	DelegatedGrantsVersion   int32
 }
 
 // encodeIssuerWorkloadSessionPolicy is the ceiling of a workload session
@@ -77,6 +92,7 @@ func encodeIssuerWorkloadSessionPolicy(issuerProjectID uuid.UUID, version runtim
 		PrincipalUrn: "",
 		Scope:        authz.ScopeMCPConnect,
 		Selector:     selector,
+		Inferred:     false,
 	}})
 	if err != nil {
 		return nil, fmt.Errorf("construct issuer workload session policy: %w", err)
@@ -104,6 +120,13 @@ func loadWorkloadSessionCredential(
 	delegatedGrantsVersion pgtype.Int4,
 ) (workloadSessionCredential, error) {
 	return checkWorkloadSessionCredential(endpoint.OrganizationID, subject, storedSubject, organizationID, delegatedGrants, delegatedGrantsVersion, func(version runtimepolicy.DelegatedPolicyVersion) ([]byte, error) {
+		if gateway, err := gatewayTargetFromEndpoint(endpoint); err == nil {
+			target, ok := gateway.authorizationTarget(endpoint.ProjectID)
+			if !ok {
+				return nil, errors.New("gateway cannot carry a workload session policy")
+			}
+			return encodeAgentSessionPolicy(*target, version)
+		}
 		target, ok := agentAuthorizationTarget(endpoint)
 		if !ok {
 			return nil, errors.New("endpoint cannot carry an agent session policy")
@@ -170,8 +193,9 @@ func checkWorkloadSessionCredential(
 	}
 
 	return workloadSessionCredential{
-		DelegatedGrants:        append([]byte(nil), delegatedGrants...),
-		DelegatedGrantsVersion: delegatedGrantsVersion.Int32,
+		DerivesPolicyAtAdmission: false,
+		DelegatedGrants:          append([]byte(nil), delegatedGrants...),
+		DelegatedGrantsVersion:   delegatedGrantsVersion.Int32,
 	}, nil
 }
 
@@ -188,6 +212,14 @@ func isCredentialDenial(err error) bool {
 	return shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized
 }
 
+// markCredentialDenial marks only a real denial as rejected; other failures judged nothing.
+func markCredentialDenial(err error) error {
+	if isCredentialDenial(err) {
+		return fmt.Errorf("%w: %w", errCredentialRejected, err)
+	}
+	return err
+}
+
 func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizationID string, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || subject.Kind != urn.SessionSubjectKindWorkload {
@@ -198,12 +230,16 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizatio
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	actor := urn.NewWorkloadPrincipal(workloadIssuerID, externalSubject)
+	grants, version := credential.DelegatedGrants, credential.DelegatedGrantsVersion
+	if credential.DerivesPolicyAtAdmission {
+		grants, version = nil, 0
+	}
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, authCtx, actor, contextvalues.PrincipalCredential{
 		// No authorizer, so admission must not require one.
 		AuthorizerUserID:         "",
-		DelegatedGrants:          credential.DelegatedGrants,
-		DelegatedGrantsVersion:   credential.DelegatedGrantsVersion,
-		DerivesPolicyAtAdmission: false,
+		DelegatedGrants:          grants,
+		DelegatedGrantsVersion:   version,
+		DerivesPolicyAtAdmission: credential.DerivesPolicyAtAdmission,
 	})
 	return ctx, nil
 }
@@ -239,6 +275,10 @@ func (s *Service) admitWorkloadSession(ctx context.Context, organizationID strin
 // else could accept it. A session minted for all of the issuer's servers is
 // only out of reach here, and stays valid at the others.
 func (s *Service) requireWorkloadSessionAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, reach workloadSessionReach) (context.Context, error) {
+	if endpoint.MetaMcpServerID.Valid {
+		// Gateway entry and member authorization are separate decisions.
+		return ctx, nil
+	}
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
 		if reach == workloadSessionReachIssuer {

@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,9 @@ func (s *Service) RevealRiskResultPayload(ctx context.Context, payload *gen.Reve
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return nil, fmt.Errorf("authorize risk payload reveal: %w", err)
 	}
 	projectID := *authCtx.ProjectID
 
@@ -61,7 +65,7 @@ func (s *Service) RevealRiskResultPayload(ctx context.Context, payload *gen.Reve
 		return nil, oops.E(oops.CodeNotFound, nil, "risk result has no revealable MCP payload")
 	}
 
-	if err := s.authz.Require(ctx, authz.ChatReadCheck(uuid.Nil.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.UnrestrictedChats().Read()); err != nil {
 		return nil, err
 	}
 

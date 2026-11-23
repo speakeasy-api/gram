@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it, vi } from "vitest";
 import { ensureToolsetWrapper } from "./ensureToolsetWrapper";
 function setup(servers: { id: string }[] = []) {

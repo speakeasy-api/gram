@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { ToolMetric } from "@gram/client/models/components/toolmetric.js";
 import { describe, expect, it } from "vitest";
 import {

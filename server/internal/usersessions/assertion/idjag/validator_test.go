@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -57,6 +59,7 @@ func (k *testKeys) VerificationKeyForAlgorithm(_ context.Context, _ jwks.Source,
 
 type testGuard struct {
 	claimed map[string]bool
+	owners  map[string]string
 	calls   int
 }
 
@@ -69,6 +72,28 @@ func (g *testGuard) Reserve(_ context.Context, key replay.Key, _ time.Time) (boo
 	}
 	g.claimed[key.ID] = true
 	return true, nil
+}
+
+func (g *testGuard) ReserveOwned(_ context.Context, key replay.Key, _ time.Time, owner string) (bool, error) {
+	g.calls++
+	if g.owners == nil {
+		g.owners = map[string]string{}
+	}
+	if current, held := g.owners[key.ID]; held {
+		return current == owner, nil
+	}
+	if g.claimed[key.ID] {
+		return false, nil
+	}
+	g.owners[key.ID] = owner
+	return true, nil
+}
+
+func (g *testGuard) Release(_ context.Context, key replay.Key, owner string) error {
+	if g.owners[key.ID] == owner {
+		delete(g.owners, key.ID)
+	}
+	return nil
 }
 
 type testAssertion struct {
@@ -99,7 +124,12 @@ func validTestClaims() jwt.Claims {
 }
 
 func validTestExtra() additionalClaims {
-	return additionalClaims{Resource: testResource, ClientID: testClientID, Email: "person@example.com", Scope: "read"}
+	return additionalClaims{Resource: resourceClaim(testResource), ClientID: testClientID, Email: "person@example.com", Scope: "read"}
+}
+
+func resourceClaim(value string) json.RawMessage {
+	raw, _ := json.Marshal(value)
+	return raw
 }
 
 func signTestAssertion(t *testing.T, signer jose.Signer, claims jwt.Claims, extra additionalClaims) string {
@@ -136,9 +166,61 @@ func TestValidateAcceptsProvisionedIDJAGAndRejectsReplay(t *testing.T) {
 	require.Equal(t, urn.NewUserSubject("gram-user-1"), result.Subject)
 	require.Equal(t, store.trusted.ID, result.TrustedIssuerID)
 	require.Equal(t, "enterprise-user-1", result.Claims.ExternalSubject)
+	require.Equal(t, testResource, result.Claims.Resource)
 	require.Equal(t, 1, guard.calls)
 	_, err = validator.Validate(t.Context(), raw, request)
 	require.Equal(t, ReasonReplayed, ReasonOf(err))
+}
+
+func TestIsOutage(t *testing.T) {
+	t.Parallel()
+
+	down := &pgconn.PgError{Code: "57P01"}
+	broken := &pgconn.PgError{Code: "42P01"}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "directory down", err: reject(ReasonSubjectUnavailable, down), want: true},
+		{name: "directory query broken", err: reject(ReasonSubjectUnavailable, broken), want: false},
+		{name: "replay store down", err: reject(ReasonReplayStoreUnavailable, down), want: true},
+		{name: "keys down", err: reject(ReasonKeyUnresolvable, errors.New("jwks")), want: true},
+		{name: "local key budget spent", err: reject(ReasonKeyBudgetExhausted, errors.New("budget")), want: true},
+		{name: "key store down", err: reject(ReasonKeyStoreUnavailable, down), want: true},
+		{name: "key store query broken", err: reject(ReasonKeyStoreUnavailable, broken), want: false},
+		{name: "unusable keys", err: reject(ReasonKeyUnusable, errors.New("alg mismatch")), want: false},
+		{name: "trust read down", err: reject(ReasonTrustUnavailable, down), want: true},
+		{name: "trust query broken", err: reject(ReasonTrustUnavailable, broken), want: false},
+		{name: "no trust link", err: reject(ReasonTrustUnavailable, ErrNoTrustedIssuer), want: false},
+		{name: "trust link has no keys", err: reject(ReasonTrustUnavailable, ErrTrustedIssuerHasNoJWKS), want: false},
+		{name: "replayed", err: reject(ReasonReplayed, errors.New("jti")), want: false},
+		{name: "bad signature", err: reject(ReasonSignatureInvalid, errors.New("sig")), want: false},
+		{name: "misconfigured", err: reject(ReasonVerifierMisconfigured, errors.New("cfg")), want: false},
+		{name: "another error", err: errors.New("other"), want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, IsOutage(tc.err))
+		})
+	}
+}
+
+// Spending our own fetch budget isn't the customer's outage, so its reason stays apart from theirs.
+func TestValidateMapsFetchBudgetApartFromKeySetOutage(t *testing.T) {
+	t.Parallel()
+
+	require.NotEqual(t, ReasonKeyUnresolvable, ReasonKeyBudgetExhausted)
+	require.True(t, IsOutage(reject(ReasonKeyBudgetExhausted, jwks.ErrFetchRateLimited)))
+}
+
+func TestIsStoreFault(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsStoreFault(reject(ReasonSubjectUnavailable, &pgconn.PgError{Code: "42P01"})))
+	require.False(t, IsStoreFault(reject(ReasonSubjectUnavailable, &pgconn.PgError{Code: "57P01"})), "an outage")
+	require.False(t, IsStoreFault(reject(ReasonTrustUnavailable, ErrNoTrustedIssuer)), "configuration")
+	require.False(t, IsStoreFault(reject(ReasonSignatureInvalid, errors.New("sig"))), "the assertion")
 }
 
 func TestValidateChecksTypeBeforeKeys(t *testing.T) {
@@ -239,7 +321,13 @@ func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
 		{name: "token endpoint audience", mutate: func(claims *jwt.Claims, _ *additionalClaims) {
 			claims.Audience = jwt.Audience{"https://gram.example.com/token"}
 		}, reason: ReasonAudienceMismatch},
-		{name: "missing resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = "" }, reason: ReasonResourceMismatch},
+		{name: "missing resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = nil }, reason: ReasonResourceNotIndicated},
+		{name: "empty resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = resourceClaim("") }, reason: ReasonResourceMismatch},
+		{name: "null resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = json.RawMessage("null") }, reason: ReasonResourceMismatch},
+		{name: "non-string resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = json.RawMessage("42") }, reason: ReasonResourceMismatch},
+		{name: "resource mismatch", mutate: func(_ *jwt.Claims, extra *additionalClaims) {
+			extra.Resource = resourceClaim("https://gram.example.com/mcp/other/mcp")
+		}, reason: ReasonResourceMismatch},
 		{name: "client mismatch", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.ClientID = "https://other.example.com/client" }, reason: ReasonClientMismatch},
 	}
 	for _, testCase := range cases {
@@ -250,5 +338,64 @@ func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
 		_, err := validator.Validate(t.Context(), raw, request)
 		require.Equal(t, testCase.reason, ReasonOf(err), testCase.name)
 		require.Zero(t, guard.calls, testCase.name)
+	}
+}
+
+// oktaStyleExtra is an ID-JAG's additional claims as Okta issues them, with no resource claim.
+type oktaStyleExtra struct {
+	ClientID string `json:"client_id"`
+	Email    string `json:"email"`
+}
+
+func TestValidateAcceptsAssertionWithoutResourceWhenRequestIndicatesOne(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	request.ResourceIndicated = true
+	raw, err := jwt.Signed(assertion.signer).Claims(validTestClaims()).Claims(oktaStyleExtra{ClientID: testClientID, Email: "person@example.com"}).Serialize()
+	require.NoError(t, err)
+	result, err := validator.Validate(t.Context(), raw, request)
+	require.NoError(t, err)
+	require.Empty(t, result.Claims.Resource)
+	require.Equal(t, 1, guard.calls)
+}
+
+func TestValidateRejectsAssertionWithoutResourceWhenRequestIndicatesNone(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	raw, err := jwt.Signed(assertion.signer).Claims(validTestClaims()).Claims(oktaStyleExtra{ClientID: testClientID, Email: "person@example.com"}).Serialize()
+	require.NoError(t, err)
+	_, err = validator.Validate(t.Context(), raw, request)
+	require.Equal(t, ReasonResourceNotIndicated, ReasonOf(err))
+	require.Zero(t, guard.calls)
+}
+
+func TestValidateRejectsMismatchedResourceClaimEvenWhenRequestIndicatesOne(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	request.ResourceIndicated = true
+	extra := validTestExtra()
+	extra.Resource = resourceClaim("https://gram.example.com/mcp/other/mcp")
+	raw := signTestAssertion(t, assertion.signer, validTestClaims(), extra)
+	_, err := validator.Validate(t.Context(), raw, request)
+	require.Equal(t, ReasonResourceMismatch, ReasonOf(err))
+	require.Zero(t, guard.calls)
+}
+
+// A present but empty or null resource claim never falls back to the request's resource.
+func TestValidateRejectsEmptyOrNullResourceClaimWhenRequestIndicatesOne(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	for name, claim := range map[string]json.RawMessage{"empty": resourceClaim(""), "null": json.RawMessage("null")} {
+		validator, _, _, guard, request := newTestValidator(t, assertion.key)
+		request.ResourceIndicated = true
+		extra := validTestExtra()
+		extra.Resource = claim
+		raw := signTestAssertion(t, assertion.signer, validTestClaims(), extra)
+		_, err := validator.Validate(t.Context(), raw, request)
+		require.Equal(t, ReasonResourceMismatch, ReasonOf(err), name)
+		require.Zero(t, guard.calls, name)
 	}
 }

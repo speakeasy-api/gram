@@ -19,8 +19,13 @@ func customDomainFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:    "custom-domain-backend-service",
-			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
+			Usage:   "Kubernetes service that custom domain MCP routes use (defaults to gram-server)",
 			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
+		},
+		&cli.StringFlag{
+			Name:    "custom-domain-server-backend-service",
+			Usage:   "Kubernetes service that custom domain server routes use (defaults to the custom domain MCP backend service)",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_SERVER_BACKEND_SERVICE"},
 		},
 		&cli.StringFlag{
 			Name:    "custom-domain-cname",
@@ -38,7 +43,43 @@ func customDomainFlags() []cli.Flag {
 				return nil
 			},
 		},
+		customDomainTargetSuffixFlag(),
 	}
+}
+
+// customDomainTargetSuffixFlag configures the parent DNS name used for
+// per-domain CNAME targets.
+func customDomainTargetSuffixFlag() cli.Flag {
+	return &cli.StringFlag{
+		Name:    "custom-domain-target-suffix",
+		Usage:   "Parent DNS name of per-domain CNAME targets (<token>.<suffix>, e.g., domains.speakeasy.com). Unset disables per-domain targets.",
+		EnvVars: []string{"GRAM_CUSTOM_DOMAIN_TARGET_SUFFIX"},
+		Action: func(_ *cli.Context, value string) error {
+			if _, err := customdomains.ParseDNSTargetSuffix(value); err != nil {
+				return fmt.Errorf("invalid --custom-domain-target-suffix: %w", err)
+			}
+			return nil
+		},
+	}
+}
+
+// customDomainTargetSuffixFromCLI returns the normalized per-domain target
+// suffix, or empty when per-domain targets are disabled. The flag-level
+// validator has already rejected invalid values, so an error here is
+// unreachable in practice but still propagated.
+func customDomainTargetSuffixFromCLI(c *cli.Context) (string, error) {
+	suffix, err := customdomains.ParseDNSTargetSuffix(c.String("custom-domain-target-suffix"))
+	if err != nil {
+		return "", fmt.Errorf("invalid --custom-domain-target-suffix: %w", err)
+	}
+	return suffix, nil
+}
+
+// customDomainCNAMEFromCLI returns the shared CNAME target in the same
+// normalized form as per-domain targets (lowercase, no trailing dot), so API
+// responses and health remediation name both targets consistently.
+func customDomainCNAMEFromCLI(c *cli.Context) string {
+	return customdomains.NormalizeDomainName(c.String("custom-domain-cname"))
 }
 
 // customDomainARecordsFromCLI returns the parsed apex A-record targets. The

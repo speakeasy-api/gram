@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -137,6 +138,11 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 func titleIsUpForGrabs(title string, messages []repo.ChatMessage) bool {
 	if chat.IsPlaceholderTitle(title) {
 		return true
+	}
+	// A cron chat captured before cron titles stored its envelope, which
+	// reads under its job name; a generated title would lose that name.
+	if _, ok := chattitle.StoredCronTitle(title); ok {
+		return false
 	}
 	contents := make([]string, 0, len(messages))
 	for _, msg := range messages {

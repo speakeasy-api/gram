@@ -5,7 +5,6 @@ import (
 	"slices"
 )
 
-// GrantEffect classifies how one loaded grant shaped the decision for a check.
 type GrantEffect string
 
 const (
@@ -53,21 +52,15 @@ const (
 	BlockedReasonOwnExclusion BlockedReason = "own_exclusion"
 )
 
-// GrantContribution is one loaded grant that matched a check, and its effect
-// on the decision.
 type GrantContribution struct {
-	// Grant is the loaded grant, including the principal holding it.
 	Grant Grant
 
-	// Effect is how the grant shaped the decision.
 	Effect GrantEffect
 
 	// Reason qualifies a blocked direct grant; it is empty otherwise.
 	Reason BlockedReason
 }
 
-// GrantCheckExplanation is the decision for one check and every grant that
-// matched it.
 type GrantCheckExplanation struct {
 	// Allowed is the decision, taken from the same evaluation GrantsAuthorize
 	// and Engine use.
@@ -77,6 +70,11 @@ type GrantCheckExplanation struct {
 	// matching exclusion, each in load order. Grants that do not match the
 	// check are omitted.
 	Contributions []GrantContribution
+
+	// ConnectionNotOwned reports a personal auth-client check denied because
+	// the connection is not the represented user's own; outside the engine no
+	// user is ever represented. Contributions is then empty.
+	ConnectionNotOwned bool
 }
 
 // ExplainGrantCheck evaluates one check against already-loaded grants and
@@ -88,6 +86,9 @@ type GrantCheckExplanation struct {
 func ExplainGrantCheck(grants []Grant, check Check) (GrantCheckExplanation, error) {
 	if err := validateInput(check); err != nil {
 		return GrantCheckExplanation{}, err
+	}
+	if personalCheckUnbound(check) {
+		return GrantCheckExplanation{Allowed: false, Contributions: nil, ConnectionNotOwned: true}, nil
 	}
 	evaluation, err := evaluateGrantCheck(grants, check)
 	if err != nil {
@@ -149,7 +150,7 @@ func ExplainGrantCheck(grants []Grant, check Check) (GrantCheckExplanation, erro
 		}
 	}
 
-	return GrantCheckExplanation{Allowed: allowed, Contributions: contributions}, nil
+	return GrantCheckExplanation{Allowed: allowed, Contributions: contributions, ConnectionNotOwned: false}, nil
 }
 
 // blockedReason says why a blocked allow grant did not outrank the
@@ -169,4 +170,14 @@ func blockedReason(grant Grant, check Check, exclusions []Grant) BlockedReason {
 		return BlockedReasonOwnExclusion
 	}
 	return BlockedReasonNone
+}
+
+// ExplainAuthClientUse explains whether grants let userID use clientID, acting
+// as themselves. A personal credential is explained for userID's own
+// connection: dims.ConnectionOwner must be userID. The result only describes
+// a decision; nothing authorizes on it.
+func ExplainAuthClientUse(grants []Grant, clientID string, dims MCPAuthClientDimensions, userID string) (GrantCheckExplanation, error) {
+	check := MCPAuthClientCheck(clientID, dims)
+	check.representedUser = userID
+	return ExplainGrantCheck(grants, check)
 }

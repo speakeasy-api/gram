@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -92,7 +92,7 @@ func resolveAttachableKeySet(ctx context.Context, logger *slog.Logger, txRepo *r
 		return oops.E(oops.CodeUnexpected, err, "lock json web key set").LogError(ctx, logger)
 	}
 
-	return managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this json web key set")
+	return idpmanagedresources.RequireUnmanaged(set.IdentityProviderConnectionID, "this json web key set")
 }
 
 // resolveCreateKeySet validates the json_web_key_set_id a create form names,
@@ -130,7 +130,7 @@ func (s *Service) AttachKeySet(ctx context.Context, payload *clientsgen.AttachKe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -156,7 +156,7 @@ func (s *Service) DetachKeySet(ctx context.Context, payload *clientsgen.DetachKe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -269,7 +269,7 @@ func (s *Service) requireOrgClientKeySetAccess(ctx context.Context) (*contextval
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, logger, err
 	}
 
@@ -304,7 +304,7 @@ func (s *Service) mutateOrganizationClientKeySet(ctx context.Context, logger *sl
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
 		return nil, err
 	}
 

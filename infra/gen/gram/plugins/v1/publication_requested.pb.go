@@ -22,14 +22,15 @@ const (
 )
 
 type PublicationRequested struct {
-	state                      protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_OrganizationId  *string                `protobuf:"bytes,1,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_ProjectId       *string                `protobuf:"bytes,2,opt,name=project_id,json=projectId"`
-	xxx_hidden_CreatedByUserId *string                `protobuf:"bytes,3,opt,name=created_by_user_id,json=createdByUserId"`
-	XXX_raceDetectHookData     protoimpl.RaceDetectHookData
-	XXX_presence               [1]uint32
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	state                           protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_OrganizationId       *string                `protobuf:"bytes,1,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_ProjectId            *string                `protobuf:"bytes,2,opt,name=project_id,json=projectId"`
+	xxx_hidden_CreatedByUserId      *string                `protobuf:"bytes,3,opt,name=created_by_user_id,json=createdByUserId"`
+	xxx_hidden_IncludePausedPlugins bool                   `protobuf:"varint,4,opt,name=include_paused_plugins,json=includePausedPlugins"`
+	XXX_raceDetectHookData          protoimpl.RaceDetectHookData
+	XXX_presence                    [1]uint32
+	unknownFields                   protoimpl.UnknownFields
+	sizeCache                       protoimpl.SizeCache
 }
 
 func (x *PublicationRequested) Reset() {
@@ -87,19 +88,31 @@ func (x *PublicationRequested) GetCreatedByUserId() string {
 	return ""
 }
 
+func (x *PublicationRequested) GetIncludePausedPlugins() bool {
+	if x != nil {
+		return x.xxx_hidden_IncludePausedPlugins
+	}
+	return false
+}
+
 func (x *PublicationRequested) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 4)
 }
 
 func (x *PublicationRequested) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 4)
 }
 
 func (x *PublicationRequested) SetCreatedByUserId(v string) {
 	x.xxx_hidden_CreatedByUserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 4)
+}
+
+func (x *PublicationRequested) SetIncludePausedPlugins(v bool) {
+	x.xxx_hidden_IncludePausedPlugins = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 4)
 }
 
 func (x *PublicationRequested) HasOrganizationId() bool {
@@ -123,6 +136,13 @@ func (x *PublicationRequested) HasCreatedByUserId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
 }
 
+func (x *PublicationRequested) HasIncludePausedPlugins() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
 func (x *PublicationRequested) ClearOrganizationId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_OrganizationId = nil
@@ -138,12 +158,20 @@ func (x *PublicationRequested) ClearCreatedByUserId() {
 	x.xxx_hidden_CreatedByUserId = nil
 }
 
+func (x *PublicationRequested) ClearIncludePausedPlugins() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_IncludePausedPlugins = false
+}
+
 type PublicationRequested_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
 	OrganizationId  *string
 	ProjectId       *string
 	CreatedByUserId *string
+	// Also publish the pending changes of plugins whose auto sync is off, as a
+	// manual sync does.
+	IncludePausedPlugins *bool
 }
 
 func (b0 PublicationRequested_builder) Build() *PublicationRequested {
@@ -151,16 +179,20 @@ func (b0 PublicationRequested_builder) Build() *PublicationRequested {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 4)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 4)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.CreatedByUserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 4)
 		x.xxx_hidden_CreatedByUserId = b.CreatedByUserId
+	}
+	if b.IncludePausedPlugins != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 4)
+		x.xxx_hidden_IncludePausedPlugins = *b.IncludePausedPlugins
 	}
 	return m0
 }
@@ -169,12 +201,13 @@ var File_gram_plugins_v1_publication_requested_proto protoreflect.FileDescriptor
 
 const file_gram_plugins_v1_publication_requested_proto_rawDesc = "" +
 	"\n" +
-	"+gram/plugins/v1/publication_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x97\x01\n" +
+	"+gram/plugins/v1/publication_requested.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xcd\x01\n" +
 	"\x14PublicationRequested\x12'\n" +
 	"\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12+\n" +
-	"\x12created_by_user_id\x18\x03 \x01(\tR\x0fcreatedByUserId:\n" +
+	"\x12created_by_user_id\x18\x03 \x01(\tR\x0fcreatedByUserId\x124\n" +
+	"\x16include_paused_plugins\x18\x04 \x01(\bR\x14includePausedPlugins:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$BCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\beditionsp\xe9\a"
 
 var file_gram_plugins_v1_publication_requested_proto_msgTypes = make([]protoimpl.MessageInfo, 1)

@@ -308,16 +308,21 @@ func dedupeStrings(values []string) []string {
 }
 
 func (t *ListTriggers) Descriptor() core.ToolDescriptor {
+	var threadContext core.ThreadContextPolicy
+	if t.assistantSelfScoped {
+		threadContext = core.ThreadContextRequired
+	}
 	readOnly := true
 	destructive := false
 	idempotent := true
 	openWorld := false
 
 	return core.ToolDescriptor{
-		SourceSlug:  sourceTriggers,
-		HandlerName: "list_triggers",
-		Name:        toolNameListTriggers,
-		Description: "List trigger instances configured for the current project.",
+		SourceSlug:    sourceTriggers,
+		ThreadContext: threadContext,
+		HandlerName:   "list_triggers",
+		Name:          toolNameListTriggers,
+		Description:   "List trigger instances configured for the current project.",
 		InputSchema: core.BuildInputSchema[listTriggersInput](
 			core.WithPropertyEnum("definition_slug", stringSliceToAny(listDefinitionSlugs())...),
 		),
@@ -342,7 +347,7 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 	var selfTargetRef string
 	var selfCorrelationID string
 	if t.assistantSelfScoped {
-		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 		if !ok {
 			return fmt.Errorf("assistant list-triggers requires an assistant principal")
 		}
@@ -403,22 +408,27 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 }
 
 func (t *ConfigureTrigger) Descriptor() core.ToolDescriptor {
+	threadContext := core.ThreadContextWake
+	if t.assistantSelfScoped {
+		threadContext = core.ThreadContextRequired
+	}
 	readOnly := false
 	destructive := false
 	idempotent := false
 	openWorld := false
 
 	return core.ToolDescriptor{
-		SourceSlug:  sourceTriggers,
-		HandlerName: "configure_trigger",
-		Name:        toolNameConfigure,
-		Description: "Create or update a trigger instance using a definition-specific config schema selected by definition_slug.",
-		InputSchema: t.inputSchema,
-		Annotations: triggerToolAnnotations(readOnly, destructive, idempotent, openWorld),
-		Managed:     true,
-		Variables:   nil,
-		OwnerKind:   nil,
-		OwnerID:     nil,
+		SourceSlug:    sourceTriggers,
+		ThreadContext: threadContext,
+		HandlerName:   "configure_trigger",
+		Name:          toolNameConfigure,
+		Description:   "Create or update a trigger instance using a definition-specific config schema selected by definition_slug.",
+		InputSchema:   t.inputSchema,
+		Annotations:   triggerToolAnnotations(readOnly, destructive, idempotent, openWorld),
+		Managed:       true,
+		Variables:     nil,
+		OwnerKind:     nil,
+		OwnerID:       nil,
 	}
 }
 
@@ -475,7 +485,7 @@ func (t *ConfigureTrigger) upsertTrigger(
 		return t.upsertWake(ctx, authCtx, params)
 	}
 	if t.assistantSelfScoped {
-		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 		if !ok {
 			return nil, fmt.Errorf("assistant configure-trigger requires an assistant principal")
 		}
@@ -631,7 +641,7 @@ func (t *ConfigureTrigger) upsertWake(
 	authCtx *contextvalues.AuthContext,
 	params configureTriggerParams,
 ) (*configureTriggerResult, error) {
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return nil, fmt.Errorf("wake triggers require an assistant principal")
 	}

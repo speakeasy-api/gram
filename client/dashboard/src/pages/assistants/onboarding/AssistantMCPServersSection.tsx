@@ -14,11 +14,12 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { RESERVED_MCP_SEGMENTS, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useToolsets } from "@/pages/toolsets/useToolsets";
-import { Assistant } from "@gram/client/models/components/assistant.js";
-import { AssistantMCPServerRef } from "@gram/client/models/components/assistantmcpserverref.js";
-import { AssistantToolsetRef } from "@gram/client/models/components/assistanttoolsetref.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
+import type { AssistantMCPServerRef } from "@gram/client/models/components/assistantmcpserverref.js";
+import type { AssistantToolsetRef } from "@gram/client/models/components/assistanttoolsetref.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
@@ -27,6 +28,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // The Select can't represent "no environment" with an empty value, so the
 // project-default choice gets a sentinel that is stripped before saving.
@@ -226,22 +228,40 @@ function AttachedServerRow({
 }): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
+  const gramProject = useProjectSlugForRequests();
+  // Refs carry only a slug; a slug a static /mcp segment claims needs the id.
+  const reservedSlug =
+    serverRef.kind === "mcpServer" && RESERVED_MCP_SEGMENTS.has(serverRef.slug);
+  const { data: serversResult } = useMcpServers({ gramProject }, undefined, {
+    enabled: reservedSlug,
+    throwOnError: false,
+  });
+  const reservedServer = serversResult?.mcpServers.find(
+    (server) => server.slug === serverRef.slug,
+  );
+  const serverParam = reservedServer
+    ? mcpServerRouteParam(reservedServer)
+    : serverRef.slug;
+  const slugCode = <code className="truncate text-xs">{serverRef.slug}</code>;
 
   const link =
-    serverRef.kind === "toolset" ? (
-      <routes.mcp.details.Link
+    reservedSlug && !reservedServer ? (
+      // Unlinked until the id is known: the bare slug would open a static page.
+      <span className="min-w-0">{slugCode}</span>
+    ) : serverRef.kind === "toolset" ? (
+      <routes.toolset.Link
         params={[serverRef.slug]}
+        className="min-w-0 hover:no-underline"
+      >
+        <code className="truncate text-xs">{serverRef.slug}</code>
+      </routes.toolset.Link>
+    ) : (
+      <routes.mcp.details.Link
+        params={[serverParam]}
         className="min-w-0 hover:no-underline"
       >
         <code className="truncate text-xs">{serverRef.slug}</code>
       </routes.mcp.details.Link>
-    ) : (
-      <routes.mcp.x.Link
-        params={[serverRef.slug]}
-        className="min-w-0 hover:no-underline"
-      >
-        <code className="truncate text-xs">{serverRef.slug}</code>
-      </routes.mcp.x.Link>
     );
 
   return (
@@ -445,9 +465,11 @@ function DialogOptionsBody({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Text small muted>
-        Loading servers…
-      </Text>
+      <Skeleton label="Loading servers">
+        <div className="h-7 w-full" />
+        <div className="h-7 w-full" />
+        <div className="h-7 w-full" />
+      </Skeleton>
     );
   }
   if (isError) {

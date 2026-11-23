@@ -1,0 +1,113 @@
+package glint
+
+import (
+	"go/ast"
+	"go/types"
+	"slices"
+	"strings"
+
+	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
+)
+
+// no-raw-authz-checks keeps the server on the typed authorization
+// requests generated from the authz registry (authz.MCPServer(id, project).Write(),
+// authz.Environments(p).Write(), ...). A hand-built authz.Check
+// literal lets a caller pair any scope with any resource and leave out
+// dimensions the model requires; the refs make those mistakes
+// unrepresentable.
+//
+// The rule applies to every package except internal/authz itself, which builds
+// the typed refs from these literals. Its subpackages are covered like any
+// other package. Test files may build checks to assert on them.
+
+const (
+	noRawAuthzChecksAnalyzer       = "norawauthzchecks"
+	noRawAuthzChecksDefaultMessage = "build authorization checks with the typed refs generated from the authz registry, such as authz.Environment(id, project).Read()"
+)
+
+const authzPkgPath = "github.com/speakeasy-api/gram/server/internal/authz"
+
+type noRawAuthzChecksSettings struct {
+	Disabled bool `json:"disabled"`
+
+	// Packages limits the rule to these package prefixes, for tests whose
+	// packages cannot carry the production import paths. Empty means every
+	// package outside internal/authz.
+	Packages []string `json:"packages"`
+}
+
+func newNoRawAuthzChecksAnalyzer(rule noRawAuthzChecksSettings) *analysis.Analyzer {
+	applies := func(path string) bool {
+		if len(rule.Packages) > 0 {
+			return packageMatches(path, rule.Packages)
+		}
+		return path != authzPkgPath
+	}
+
+	return &analysis.Analyzer{
+		Name:     noRawAuthzChecksAnalyzer,
+		Doc:      noRawAuthzChecksDefaultMessage,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
+		Run: func(pass *analysis.Pass) (any, error) {
+			if !applies(pass.Pkg.Path()) {
+				return nil, nil
+			}
+			ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+			ins.WithStack([]ast.Node{(*ast.CompositeLit)(nil)}, func(node ast.Node, push bool, stack []ast.Node) bool {
+				if !push {
+					return true
+				}
+				// Tests may build checks to assert on them.
+				if strings.HasSuffix(pass.Fset.File(node.Pos()).Name(), "_test.go") {
+					return true
+				}
+				n := node.(*ast.CompositeLit)
+				// The zero value returned beside an error names
+				// nothing and is refused if evaluated.
+				if isAuthzCheckType(pass.TypesInfo.TypeOf(n)) && !zeroCheckBesideError(n, stack) {
+					pass.ReportRangef(n, "replace the authz.Check literal: %s", noRawAuthzChecksDefaultMessage)
+				}
+				return true
+			})
+			return nil, nil
+		},
+	}
+}
+
+// zeroCheckBesideError reports whether lit is an empty authz.Check{} returned
+// next to an error that is not the literal nil, as in
+// `return authz.Check{}, err`.
+func zeroCheckBesideError(lit *ast.CompositeLit, stack []ast.Node) bool {
+	if len(lit.Elts) > 0 || len(stack) < 2 {
+		return false
+	}
+	ret, ok := stack[len(stack)-2].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) < 2 {
+		return false
+	}
+	last := ret.Results[len(ret.Results)-1]
+	if last == ast.Expr(lit) {
+		return false
+	}
+	if id, ok := last.(*ast.Ident); ok && id.Name == "nil" {
+		return false
+	}
+	return true
+}
+
+func packageMatches(path string, prefixes []string) bool {
+	return slices.ContainsFunc(prefixes, func(prefix string) bool {
+		return path == prefix || strings.HasPrefix(path, prefix+"/")
+	})
+}
+
+func isAuthzCheckType(t types.Type) bool {
+	named, ok := types.Unalias(t).(*types.Named)
+	if !ok {
+		return false
+	}
+	obj := named.Obj()
+	return obj.Name() == "Check" && obj.Pkg() != nil && obj.Pkg().Path() == authzPkgPath
+}

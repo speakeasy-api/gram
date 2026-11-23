@@ -41,14 +41,12 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-a" }),
+}));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: vi.fn() }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
-  }),
 }));
 vi.mock("@gram/client/react-query/plugins", () => ({
   usePluginsSuspense: state.list,
@@ -66,6 +64,20 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
       repoName: "plugins",
       repoUrl: "https://example.com/repo",
       marketplaceUrl: "https://example.com/private-token",
+    } satisfies PublishStatusResult,
+  }),
+  usePublishStatus: () => ({
+    data: {
+      configured: true,
+      connected: true,
+      hasCollaborators: true,
+      upToDate: false,
+      repoOwner: "example",
+      repoName: "plugins",
+      repoUrl: "https://example.com/repo",
+      marketplaceUrl: "https://example.com/private-token",
+      vibeObservabilityAvailable: true,
+      vibeObservabilityPlugin: "example-observability",
     } satisfies PublishStatusResult,
   }),
   invalidateAllPublishStatus: vi.fn(),
@@ -147,6 +159,8 @@ beforeEach(() => {
           skillCount: 0,
           agentPluginsV1Compatible: true,
           autoCreated: false,
+          autoSyncEnabled: true,
+          autoAddServersEnabled: false,
         } satisfies Plugin,
       ],
     },
@@ -223,7 +237,12 @@ describe("Plugins index authorization", () => {
     expect(state.create).toHaveBeenCalledWith(
       expect.objectContaining({
         request: {
-          createPluginForm: { name: "Example plugin", description: undefined },
+          createPluginForm: {
+            name: "Example plugin",
+            description: undefined,
+            autoSyncEnabled: false,
+            autoAddServersEnabled: false,
+          },
         },
       }),
     );
@@ -232,6 +251,73 @@ describe("Plugins index authorization", () => {
     ).toBeNull();
     expect(state.settings).not.toHaveBeenCalled();
     expect(state.settingsRead).not.toHaveBeenCalled();
+  });
+  it("keeps both automatic settings off and collapsed under Advanced settings", () => {
+    render(page());
+    fireEvent.click(screen.getByRole("button", { name: "Create plugin" }));
+    expect(
+      screen.queryByRole("switch", { name: "Sync changes automatically" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("switch", { name: "Add MCP servers automatically" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Advanced settings" }));
+    const autoSync = screen.getByRole("switch", {
+      name: "Sync changes automatically",
+    });
+    const autoAdd = screen.getByRole("switch", {
+      name: "Add MCP servers automatically",
+    });
+    expect(autoSync.getAttribute("aria-checked")).toBe("false");
+    expect(autoAdd.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(autoSync);
+    fireEvent.click(autoAdd);
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Automatic plugin" },
+    });
+    fireEvent.submit(screen.getByLabelText("Name").closest("form")!);
+    expect(state.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: {
+          createPluginForm: expect.objectContaining({
+            name: "Automatic plugin",
+            autoSyncEnabled: true,
+            autoAddServersEnabled: true,
+          }),
+        },
+      }),
+    );
+  });
+  it("tells admins which plugins wait for Sync changes", () => {
+    state.admin = true;
+    state.list.mockReturnValue({
+      data: {
+        plugins: [
+          {
+            id: "plugin-a",
+            name: "Staged plugin",
+            slug: "staged-plugin",
+            createdAt: new Date("2026-01-01"),
+            updatedAt: new Date("2026-01-01"),
+            agentPluginsV1Compatible: true,
+            autoCreated: false,
+            autoSyncEnabled: false,
+            autoAddServersEnabled: false,
+          } satisfies Plugin,
+        ],
+      },
+    });
+    render(page());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Toggle project marketplace details",
+      }),
+    );
+    expect(
+      screen.getByText(
+        "Auto sync is off for Staged plugin, so its changes publish only when someone clicks Sync changes.",
+      ),
+    ).toBeTruthy();
   });
   it("does not mount index queries without plugin read access", () => {
     state.writer = false;

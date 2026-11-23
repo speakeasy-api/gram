@@ -35,13 +35,13 @@ func TestRoleSetupPublishesExistingGrantedServer(t *testing.T) {
 	require.NoError(t, err)
 	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
 	require.NoError(t, err)
-	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "setup-backfill"})
+	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "setup-backfill", AutoAddServersEnabled: new(true)})
 	require.NoError(t, err)
 	// Establish the existing marketplace required by transactional refresh hints.
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 	const artifact = "cursor-plugins/setup-backfill-cursor/mcp.json"
-	require.NotContains(t, string(publisher.lastPushedFiles[artifact]), server.McpSlug.String)
+	require.NotContains(t, string(publisher.lastPushedFiles[artifact]), server.Slug)
 	fixtures := testrepo.New(ti.conn)
 	before, err := fixtures.ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
@@ -77,5 +77,5 @@ func TestRoleSetupPublishesExistingGrantedServer(t *testing.T) {
 	require.NoError(t, err)
 	content, exists := publisher.lastPushedFiles[artifact]
 	require.True(t, exists, "setup role plugin must produce a client package")
-	require.Contains(t, string(content), server.McpSlug.String, "published package includes the existing granted server without manual content edits")
+	require.Contains(t, string(content), server.Slug, "published package includes the existing granted server without manual content edits")
 }

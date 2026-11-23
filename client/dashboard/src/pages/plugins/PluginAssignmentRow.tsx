@@ -1,6 +1,9 @@
 import { IdentityLink } from "@/components/identity-link";
 import { RoleLink } from "@/components/role-link";
 import { Text } from "@/components/ui/Text";
+import { InstallModeBadge } from "./InstallModeBadge";
+import { PrincipalIconTile } from "./PrincipalIconTile";
+import type { InstallMode } from "./install-modes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -50,11 +53,13 @@ function principalDescription(
 // icon-tile list row with a resolved name and a describing subtitle.
 export function PluginAssignmentRow({
   urn,
+  installMode,
   roleByUrn,
   memberByUrn,
   audienceByUrn,
 }: {
   urn: string;
+  installMode: InstallMode;
   roleByUrn: Map<string, Role>;
   memberByUrn: Map<string, AccessMember>;
   audienceByUrn: Map<string, PluginAudience>;
@@ -76,10 +81,8 @@ export function PluginAssignmentRow({
 
   return (
     <div className="flex items-center gap-3 py-3">
-      <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center">
-        <IconComponent className="h-4 w-4" />
-      </div>
-      <div className="min-w-0">
+      <PrincipalIconTile icon={IconComponent} />
+      <div className="min-w-0 flex-1">
         {/* Only the principals that name one person reach an identity page;
             roles, groups and attributes name a set. */}
         <IdentityLink
@@ -101,6 +104,7 @@ export function PluginAssignmentRow({
           </Text>
         )}
       </div>
+      <InstallModeBadge mode={installMode} />
     </div>
   );
 }

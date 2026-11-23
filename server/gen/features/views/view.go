@@ -72,10 +72,24 @@ type ProductFeaturesView struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled *bool
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool
+	// Whether this deployment can run assistants. A deployment-wide setting, not
+	// an organization entitlement: false when the deployment runs with the
+	// disabled assistant runtime provider. Absent from staff admin responses.
+	AssistantsAvailable *bool
+	// Whether this deployment can run Speakeasy Functions. A deployment-wide
+	// setting, not an organization entitlement: false when the deployment runs
+	// with the disabled Functions provider. Absent from staff admin responses.
+	FunctionsAvailable *bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 var (
@@ -103,7 +117,11 @@ var (
 			"network_ingress_enabled",
 			"signals_intelligence_enabled",
 			"organization_gateway_disabled",
+			"code_mode_enabled",
 			"device_agent",
+			"assistants_available",
+			"functions_available",
+			"upstream_auth_enforced",
 		},
 	}
 )
@@ -182,6 +200,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.OrganizationGatewayDisabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_gateway_disabled", "result"))
+	}
+	if result.CodeModeEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code_mode_enabled", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

@@ -38,7 +38,7 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	if ac.UserID == "" || ac.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 	if !s.sessions.SignInEnforced(ctx, ac.ActiveOrganizationID) {
@@ -49,7 +49,7 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID), attr.SlogUserID(payload.UserID))
 
-	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{}) //nolint:exhaustruct // default transaction options
+	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{}) //nolint:exhaustruct_v5 // default transaction options
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}

@@ -26,7 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -92,7 +92,7 @@ func NewService(
 // External keys and the external credentials that reach them are one feature, so
 // they sit behind one entitlement — gating only the credentials would leave the
 // keys themselves reachable by an organization that was never sold them.
-func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, *slog.Logger, error) {
+func (s *Service) requireOrgAccess(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
@@ -100,7 +100,7 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, logger, err
 	}
 
@@ -130,7 +130,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) CreateAwsKmsKey(ctx context.Context, payload *gen.CreateAwsKmsKeyPayload) (*gen.AwsKmsKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func (s *Service) CreateAwsKmsKey(ctx context.Context, payload *gen.CreateAwsKms
 }
 
 func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKmsKeyPayload) (*gen.AwsKmsKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKms
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading aws kms key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
 		return nil, err
 	}
 
@@ -298,7 +298,7 @@ func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKms
 }
 
 func (s *Service) CreateGcpKmsKey(ctx context.Context, payload *gen.CreateGcpKmsKeyPayload) (*gen.GcpKmsKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +382,7 @@ func (s *Service) CreateGcpKmsKey(ctx context.Context, payload *gen.CreateGcpKms
 }
 
 func (s *Service) UpdateGcpKmsKey(ctx context.Context, payload *gen.UpdateGcpKmsKeyPayload) (*gen.GcpKmsKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +423,7 @@ func (s *Service) UpdateGcpKmsKey(ctx context.Context, payload *gen.UpdateGcpKms
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading gcp kms key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
 		return nil, err
 	}
 
@@ -490,7 +490,7 @@ func (s *Service) ListGcpKmsKeys(ctx context.Context, payload *gen.ListGcpKmsKey
 // listKeys returns the org's key summaries, optionally filtered to a single
 // provider (invalid pgtype.Text = no filter).
 func (s *Service) listKeys(ctx context.Context, provider pgtype.Text) (*gen.ListExternalKeysResult, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +509,7 @@ func (s *Service) listKeys(ctx context.Context, provider pgtype.Text) (*gen.List
 }
 
 func (s *Service) GetAwsKmsKey(ctx context.Context, payload *gen.GetAwsKmsKeyPayload) (*gen.AwsKmsKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +534,7 @@ func (s *Service) GetAwsKmsKey(ctx context.Context, payload *gen.GetAwsKmsKeyPay
 }
 
 func (s *Service) GetGcpKmsKey(ctx context.Context, payload *gen.GetGcpKmsKeyPayload) (*gen.GcpKmsKey, error) {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgRead)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -582,7 +582,7 @@ func (s *Service) DeleteGcpKmsKey(ctx context.Context, payload *gen.DeleteGcpKms
 // The refusal path's coverage lives with the jsonwebkeysets package tests,
 // which own the JWKS fixtures this package's tests cannot create.
 func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string) error {
-	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
+	authCtx, logger, err := s.requireOrgAccess(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -614,7 +614,7 @@ func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string)
 		return oops.E(oops.CodeUnexpected, err, "error deleting external key").LogError(ctx, logger)
 	}
 
-	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this external key"); err != nil {
 		return err
 	}
 

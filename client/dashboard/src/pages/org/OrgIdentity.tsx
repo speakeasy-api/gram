@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { SlackWorkspaces } from "./slack-workspaces/SlackWorkspaces";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 
@@ -8,9 +9,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
@@ -19,7 +18,7 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
+import { ExternalLink, FolderSync, Globe, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 import { DirectoryPeopleSummary } from "@/pages/identities/DirectoryPeopleSummary";
@@ -153,7 +152,7 @@ function WorkOSPortalButton({
       >
         {generatePortalLink.isPending && (
           <Button.LeftIcon>
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Spinner className="mr-0" />
           </Button.LeftIcon>
         )}
         {label}
@@ -314,11 +313,8 @@ export default function OrgIdentity(): JSX.Element {
     "tab",
     parseAsStringLiteral(IDENTITY_TABS).withDefault("sso"),
   );
-  // Without the rollout flag (or org:admin) the tab does not exist.
-  const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const { hasScope } = useRBAC();
   const issuer = useEnterpriseIssuer();
-  const showExternalProviders = providerFlag.status === "enabled";
   // Speakeasy's own issuer is listed once the organization is offered it, and
   // whenever one exists or its status failed to load, so Disable and Retry stay
   // reachable.
@@ -326,8 +322,8 @@ export default function OrgIdentity(): JSX.Element {
     issuer.isError ||
     (issuer.data !== undefined &&
       (issuer.data.state !== "unavailable" || !!issuer.data.issuer));
-  const showIdentityProviders =
-    (showExternalProviders || showSpeakeasyProvider) && hasScope("org:admin");
+  // Without org:admin the tab does not exist.
+  const showIdentityProviders = hasScope("org:admin");
 
   const showSlack = hasScope("org:admin");
   let activeTab: IdentityPageTab = requestedTab;
@@ -369,10 +365,7 @@ export default function OrgIdentity(): JSX.Element {
     >
       {activeTab === "sso" && <SingleSignOnTab />}
       {activeTab === "identity-providers" && (
-        <IdentityProviders
-          showExternal={showExternalProviders}
-          showSpeakeasy={showSpeakeasyProvider}
-        />
+        <IdentityProviders showSpeakeasy={showSpeakeasyProvider} />
       )}
       {activeTab === "slack-workspaces" && <SlackWorkspaces />}
     </TabbedPage>

@@ -1,4 +1,5 @@
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
+import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 
 // Snapshot of the issuer + RFC 8414 metadata for a given Issuer URL. Created
 // fresh on every successful discovery and seeded from saved records in the
@@ -225,4 +226,43 @@ export function legacyCallbackURL(callbackURL: string): string {
     /\/mcp\/remote_login_callback$/,
     "/oauth/callback",
   );
+}
+
+/** The snapshot a fresh discovery of `url` captured from its metadata. */
+export function discoveredFromDraft(
+  url: string,
+  draft: RemoteSessionIssuerDraft,
+): DiscoveredEndpoints {
+  return {
+    url,
+    authorizationEndpoint: draft.authorizationEndpoint ?? "",
+    tokenEndpoint: draft.tokenEndpoint ?? "",
+    registrationEndpoint: draft.registrationEndpoint ?? "",
+    jwksUri: draft.jwksUri ?? "",
+    scopesSupported: draft.scopesSupported ?? [],
+    grantTypesSupported: draft.grantTypesSupported ?? [],
+    authorizationGrantProfilesSupported:
+      draft.authorizationGrantProfilesSupported ?? [],
+    responseTypesSupported: draft.responseTypesSupported ?? [],
+    tokenEndpointAuthMethodsSupported:
+      draft.tokenEndpointAuthMethodsSupported ?? [],
+    // Discovery ran, so a document that omits the field captures as [] —
+    // never null, which is reserved for "never captured" seeded records.
+    codeChallengeMethodsSupported: draft.codeChallengeMethodsSupported ?? [],
+    clientIdMetadataDocumentSupported: draft.clientIdMetadataDocumentSupported,
+    revocationEndpoint: draft.revocationEndpoint ?? "",
+    serviceDocumentation: draft.serviceDocumentation ?? "",
+    opPolicyUri: draft.opPolicyUri ?? "",
+    opTosUri: draft.opTosUri ?? "",
+    userinfoEndpoint: draft.userinfoEndpoint ?? "",
+    introspectionEndpoint: draft.introspectionEndpoint ?? "",
+    introspectionEndpointAuthMethodsSupported:
+      draft.introspectionEndpointAuthMethodsSupported ?? [],
+    idTokenSigningAlgValuesSupported:
+      draft.idTokenSigningAlgValuesSupported ?? [],
+    claimsSupported: draft.claimsSupported ?? [],
+    backchannelLogoutSupported: draft.backchannelLogoutSupported,
+    authorizationResponseIssParameterSupported:
+      draft.authorizationResponseIssParameterSupported,
+  };
 }

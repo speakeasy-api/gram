@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/wide"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -98,8 +99,14 @@ var redactedQueryParams = map[string]bool{
 	// agents that still append `?email=` (current agents send a header).
 	"email": true,
 
-	// Chat search terms, which are user-typed free text.
+	// Search terms, which are user-typed free text and may contain resource names.
 	"search": true,
+	"q":      true,
+
+	// Product analytics session id forwarded by the sign-up page on
+	// auth.login. It joins a browser session (and its replay) to an identified
+	// user, so it stays out of logs that already carry IP and user agent.
+	"analytics_session_id": true,
 }
 
 // logSafeURL renders a request URL for logs and observability context with
@@ -298,8 +305,8 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 				attr.SlogURLOriginal(safeURL),
 				attr.SlogHostName(r.Host),
 			}
-			if idx := strings.IndexByte(r.Pattern, '/'); idx >= 0 {
-				attrs = append(attrs, attr.SlogHTTPRoute(r.Pattern[idx:]))
+			if route := httpstream.Route(r); route != "" {
+				attrs = append(attrs, attr.SlogHTTPRoute(route))
 			}
 			if requestContext.ReqID != "" {
 				attrs = append(attrs, attr.SlogHTTPRequestID(requestContext.ReqID))
@@ -340,6 +347,10 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			filtered := conv.Default(rw.Header().Get(constants.HeaderFilteredResponse), "0")
 			if ok, err := strconv.ParseBool(filtered); err == nil && ok {
 				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseFiltered(true))
+			}
+
+			if encoding := rw.Header().Get(constants.HeaderContentEncoding); encoding != "" {
+				responseAttrs = append(responseAttrs, attr.SlogHTTPResponseHeaderContentEncoding(encoding))
 			}
 
 			wide.Push(ctx, responseAttrs...)

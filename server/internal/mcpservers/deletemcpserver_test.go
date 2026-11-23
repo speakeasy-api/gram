@@ -682,7 +682,7 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 		ProjectID: *authCtx.ProjectID, AssistantID: assistant.ID,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, counts.McpServers, "deleted target must be physically detached")
+	require.EqualValues(t, 1, counts, "deleted target must be physically detached")
 	remaining, err := ar.LoadAssistantMcpServers(ctx, assistantsrepo.LoadAssistantMcpServersParams{
 		AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: *authCtx.ProjectID,
 	})
@@ -700,7 +700,7 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reloaded.MCPServers, 1)
 	name := "updated assistant"
-	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: reloaded.MCPServers[0].ServerSlug.String}}, nil, nil, nil, nil)
+	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: reloaded.MCPServers[0].ServerSlug.String}}, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, name, updated.Name)
 }

@@ -21,6 +21,7 @@ func TestChallengeBucketResolutionQuerySizeIndependentOfResolutionCount(t *testi
 				Outcome:        nil,
 				PrincipalURN:   nil,
 				Scope:          nil,
+				ExcludeScopes:  nil,
 				MemberUserIDs:  nil,
 			},
 			Resolved:             &resolved,

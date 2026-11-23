@@ -17,9 +17,17 @@ import {
  */
 export type ServerIdentityImpactResult = {
   /**
+   * With change detach and mcp_server_id, the clients only that server uses, which leaving User Identity unbinds from the issuer.
+   */
+  detachClientIds?: Array<string> | undefined;
+  /**
    * MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.
    */
   hiddenServerCount: number;
+  /**
+   * With change detach and mcp_server_id, the clients other consumers also use. They stay bound, and leaving User Identity only removes that server's association with them.
+   */
+  releaseClientIds?: Array<string> | undefined;
   /**
    * Affected MCP servers the caller can read.
    */
@@ -32,12 +40,16 @@ export const ServerIdentityImpactResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    detach_client_ids: z.optional(z.array(z.string())),
     hidden_server_count: z.int(),
+    release_client_ids: z.optional(z.array(z.string())),
     servers: z.array(ServerIdentityImpactServer$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "detach_client_ids": "detachClientIds",
       "hidden_server_count": "hiddenServerCount",
+      "release_client_ids": "releaseClientIds",
     });
   }),
 );

@@ -83,11 +83,6 @@ WHERE s.user_session_issuer_id IS NOT NULL
     SELECT 1 FROM meta_mcp_servers AS other
     WHERE other.user_session_issuer_id = s.user_session_issuer_id
       AND other.deleted IS FALSE
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM toolsets AS other
-    WHERE other.user_session_issuer_id = s.user_session_issuer_id
-      AND other.deleted IS FALSE
   );
 
 CREATE TEMP TABLE journey_default_plugins ON COMMIT DROP AS
@@ -149,11 +144,6 @@ WHERE mcp_server_id IN (SELECT id FROM journey_mcp_servers)
   AND deleted IS FALSE;
 
 UPDATE meta_mcp_server_members
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE mcp_server_id IN (SELECT id FROM journey_mcp_servers)
-  AND deleted IS FALSE;
-
-UPDATE organization_mcp_collection_server_attachments
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE mcp_server_id IN (SELECT id FROM journey_mcp_servers)
   AND deleted IS FALSE;

@@ -2,16 +2,19 @@ import { ToolUsageIdentity } from "@/components/tool-usage-identity";
 import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Heading } from "@/components/ui/Heading";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
 import type { GetToolUsageUsersResult } from "@gram/client/models/components/gettoolusageusersresult.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import type { HostedServerRef, OverviewRange } from "./MCPOverviewTab";
+import { OVERVIEW_STALE_TIME_MS } from "./MCPOverviewTab";
 
 type UserRow = GetToolUsageUsersResult["users"][number] & {
   agent?: { id: string; name: string };
@@ -53,13 +56,11 @@ const columns: Column<UserRow>[] = [
 ];
 
 export function TopUsersTable({
-  toolsetSlug,
-  from,
-  to,
+  server,
+  range,
 }: {
-  toolsetSlug: string;
-  from: Date;
-  to: Date;
+  server: HostedServerRef;
+  range: OverviewRange;
 }): React.JSX.Element {
   const client = useGramContext();
 
@@ -67,20 +68,23 @@ export function TopUsersTable({
     useQuery({
       queryKey: [
         "mcp-detail-top-users",
-        toolsetSlug,
-        from.toISOString(),
-        to.toISOString(),
+        server.kind,
+        server.id,
+        server.slug,
+        ...range.key,
       ],
       queryFn: () =>
         unwrapAsync(
           telemetryGetToolUsageUsers(client, {
             getToolUsageSummaryPayload: {
-              from,
-              to,
-              hostedToolsetSlugs: [toolsetSlug],
+              ...range.resolve(),
+              ...(server.kind === "mcp-server"
+                ? { mcpServerIds: [server.id] }
+                : { hostedToolsetSlugs: [server.slug] }),
             },
           }),
         ),
+      staleTime: OVERVIEW_STALE_TIME_MS,
       throwOnError: false,
     }),
   );

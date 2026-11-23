@@ -36,6 +36,7 @@ func (l *Logger) LogOrganizationPromotionRedeemed(ctx context.Context, dbtx repo
 		return fmt.Errorf("marshal promotion redemption: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(ActionOrganizationPromotionRedeemed), SubjectID: event.OrganizationID, SubjectType: "organization",

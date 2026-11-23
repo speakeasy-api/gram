@@ -22,6 +22,39 @@ func TestStringToNullUUID_Valid(t *testing.T) {
 	require.Equal(t, id, result.UUID)
 }
 
+func TestPGIntervalToDuration(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		in   pgtype.Interval
+		want time.Duration
+		ok   bool
+	}{
+		{"hours", pgtype.Interval{Microseconds: (720 * time.Hour).Microseconds(), Days: 0, Months: 0, Valid: true}, 720 * time.Hour, true},
+		{"days", pgtype.Interval{Microseconds: 0, Days: 30, Months: 0, Valid: true}, 720 * time.Hour, true},
+		{"days and hours", pgtype.Interval{Microseconds: (6 * time.Hour).Microseconds(), Days: 1, Months: 0, Valid: true}, 30 * time.Hour, true},
+		{"months", pgtype.Interval{Microseconds: 0, Days: 0, Months: 1, Valid: true}, 0, false},
+		{"null", pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: false}, 0, false},
+		{"days overflow", pgtype.Interval{Microseconds: 0, Days: 300_000, Months: 0, Valid: true}, 0, false},
+		{"microseconds overflow", pgtype.Interval{Microseconds: math.MaxInt64, Days: 0, Months: 0, Valid: true}, 0, false},
+		{"sum overflows", pgtype.Interval{Microseconds: (math.MaxInt64 / int64(time.Microsecond)) - 1, Days: 1, Months: 0, Valid: true}, 0, false},
+	} {
+		got, ok := conv.PGIntervalToDuration(tc.in)
+		require.Equal(t, tc.ok, ok, tc.name)
+		require.Equal(t, tc.want, got, tc.name)
+	}
+}
+
+func TestPGIntervalToDuration_RoundTripsPtrToPGInterval(t *testing.T) {
+	t.Parallel()
+
+	d := 14 * 24 * time.Hour
+	got, ok := conv.PGIntervalToDuration(conv.PtrToPGInterval(&d))
+	require.True(t, ok)
+	require.Equal(t, d, got)
+}
+
 func TestStringToNullUUID_EmptyIsInvalid(t *testing.T) {
 	t.Parallel()
 

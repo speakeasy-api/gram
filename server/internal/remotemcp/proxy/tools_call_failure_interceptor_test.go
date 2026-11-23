@@ -51,6 +51,10 @@ func TestProxy_Post_ToolsCallFailureInterceptor(t *testing.T) {
 		wantFailure  bool
 		wantStatus   int
 		wantErrCode  oops.Code
+		// answered marks a failure the proxy answers on the client's
+		// stream itself, returning nil, so the failure carries the
+		// recorded cause rather than the returned error.
+		answered bool
 	}{
 		{
 			name:         "result",
@@ -99,6 +103,8 @@ func TestProxy_Post_ToolsCallFailureInterceptor(t *testing.T) {
 			},
 			wantFailure: true,
 			wantStatus:  http.StatusOK,
+			wantErrCode: oops.CodeGatewayError,
+			answered:    true,
 		},
 		{
 			name: "upstream response refused",
@@ -193,7 +199,11 @@ func TestProxy_Post_ToolsCallFailureInterceptor(t *testing.T) {
 			require.NotNil(t, failure.Request)
 			require.Equal(t, "get_weather", failure.Request.Params.Name)
 			require.Equal(t, tc.wantStatus, failure.StatusCode)
-			require.Equal(t, err, failure.Err, "failure carries the error the proxy returned")
+			if tc.answered {
+				require.NoError(t, err, "the proxy answered the client itself")
+			} else {
+				require.Equal(t, err, failure.Err, "failure carries the error the proxy returned")
+			}
 			if tc.wantErrCode != "" {
 				var shareable *oops.ShareableError
 				require.ErrorAs(t, failure.Err, &shareable)

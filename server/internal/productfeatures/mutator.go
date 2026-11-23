@@ -128,7 +128,7 @@ func (m *Mutator) SetFeature(ctx context.Context, organizationID string, feature
 }
 
 func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationID string, feature Feature, enabled bool, actor MutationActor) (bool, error) {
-	if feature == Feature("automatic-role-distribution") {
+	if feature == Feature("automatic-role-distribution") || feature == Feature("provider_setup") {
 		return false, oops.E(oops.CodeInvalid, nil, "unknown product feature")
 	}
 	if feature == FeatureRemoteSessionAutoRefreshEnforced {
@@ -136,6 +136,15 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 	}
 	if feature == FeatureSkills && !enabled {
 		return false, nil
+	}
+
+	syncGateway := func() error { return nil }
+	if feature == FeatureOrganizationGatewayDisabled {
+		var err error
+		syncGateway, err = prepareGatewayAuthClients(ctx, dbtx, organizationID)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	// Derive changed from the write itself so audit records exactly the
@@ -177,6 +186,10 @@ func (m *Mutator) applyFeatureTx(ctx context.Context, dbtx pgx.Tx, organizationI
 		default:
 			changed = true
 		}
+	}
+
+	if err := syncGateway(); err != nil {
+		return false, err
 	}
 
 	if changed {

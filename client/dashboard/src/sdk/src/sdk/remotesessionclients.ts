@@ -123,7 +123,7 @@ export class RemoteSessionClients extends ClientSDK {
    * createRemoteSessionClient remoteSessionClients
    *
    * @remarks
-   * Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
+   * Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer. With template_client_id, the new client instead reuses a stored client's upstream registration: the server copies that client's secret and callback into the new record, and neither is returned to the caller.
    */
   async create(
     request: CreateRemoteSessionClientRequest,

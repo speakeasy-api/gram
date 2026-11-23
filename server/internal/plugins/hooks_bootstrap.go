@@ -10,8 +10,11 @@ import (
 	"strings"
 	"unicode/utf16"
 
+	"github.com/Masterminds/semver/v3"
+
 	"github.com/speakeasy-api/gram/hooks/relay"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookversions"
 )
 
 type hooksBinaryTarget struct {
@@ -40,6 +43,15 @@ func hooksReleaseTargets(version string, sha256s map[string]string) map[string]h
 // allowlisted for ingest.
 var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, hooksBinarySHA256s)
 
+// Values of GenerateConfig.InstallRoute. The speakeasy-hooks binary's own
+// install command writes "hooks_install".
+const (
+	InstallRouteMarketplace  = "marketplace"
+	InstallRouteDownload     = "download"
+	InstallRouteAgentInstall = "agent_install"
+	InstallRouteDogfood      = "dogfood"
+)
+
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	b, err := json.MarshalIndent(relay.FileConfig{
 		ServerURL: cfg.ServerURL,
@@ -50,11 +62,13 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
+		AgentKey:     cfg.HooksKeyIsAgent,
 		BrowserLogin: cfg.BrowserLogin,
 		// Legacy observability-mode flag; new plugins never set it. Outage
 		// tolerance flows to the binary at run time via ingest effects
 		// (hooks_fail_open), not through baked configuration.
-		Nonblocking: false,
+		Nonblocking:  false,
+		InstallRoute: cfg.InstallRoute,
 	}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal speakeasy.json: %w", err)
@@ -85,6 +99,26 @@ func hooksDownloadHost(serverURL string) string {
 		return u.Host
 	}
 	return serverURL
+}
+
+// LatestHooksVersion is the hooks release new installs get.
+func LatestHooksVersion() string { return hooksBinaryVersion }
+
+// hooksMinimumSupportedVersion is the oldest hooks release still supported.
+// Installs below it, and every legacy per-tool endpoint, are unsupported.
+const hooksMinimumSupportedVersion = "0.3.0"
+
+// HooksVersionPolicy is the version range installs are classified against.
+func HooksVersionPolicy() (hookversions.Policy, error) {
+	latest, err := semver.NewVersion(hooksBinaryVersion)
+	if err != nil {
+		return hookversions.Policy{Latest: nil, Minimum: nil}, fmt.Errorf("parse latest hooks version: %w", err)
+	}
+	minimum, err := semver.NewVersion(hooksMinimumSupportedVersion)
+	if err != nil {
+		return hookversions.Policy{Latest: nil, Minimum: nil}, fmt.Errorf("parse minimum hooks version: %w", err)
+	}
+	return hookversions.Policy{Latest: latest, Minimum: minimum}, nil
 }
 
 func renderHooksBootstrap(cfg GenerateConfig) []byte {
@@ -120,7 +154,64 @@ install_failure_exit=%d
 install_failure() {
   printf 'speakeasy-hooks: %%s\n' "$1" >&2
   printf 'speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (SPEAKEASY_AI_HOOKS_HOME overrides the cache location)\n' >&2
+  [ -z "${2:-}" ] || report_install_failure "$2" || true
   exit "$install_failure_exit"
+}
+
+# Best effort: tell the control plane an install failed, with a short timeout,
+# using the key in the plugin's config. Never fails the script.
+report_config=
+report_harness=
+config_field() {
+  sed -n "s/^[[:space:]]*\"$1\":[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$report_config" 2>/dev/null | head -n 1
+}
+report_url_ok() {
+  case "$1" in
+    *@*) return 1 ;;
+    https://*) return 0 ;;
+    http://127.0.0.1 | http://127.0.0.1[:/]* | http://localhost | http://localhost[:/]* | 'http://[::1]' | 'http://[::1]'[:/]*) return 0 ;;
+  esac
+  return 1
+}
+report_install_failure() {
+  [ -r "$report_config" ] || return 0
+  server_url=$(config_field server_url)
+  api_key=$(config_field hooks_api_key)
+  project=$(config_field project)
+  [ -n "$server_url" ] && [ -n "$api_key" ] || return 0
+  report_url_ok "$server_url" || return 0
+  report_host=$(uname -n 2>/dev/null || true)
+  case "$report_host" in *[!A-Za-z0-9._-]*) report_host= ;; esac
+  case "$report_harness" in *[!A-Za-z0-9._-]*) report_harness= ;; esac
+  case "$api_key$project" in *[!A-Za-z0-9._-]*) return 0 ;; esac
+  # One report per version an hour, so a failing install does not report on
+  # every hook call.
+  if [ -n "${install_dir:-}" ]; then
+    report_stamp="${install_dir}.reported"
+    [ -z "$(find "$report_stamp" -mmin -60 2>/dev/null)" ] || return 0
+    : >"$report_stamp" 2>/dev/null || true
+  fi
+  now=$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)
+  body=$(printf '{"schema_version":"hook.ingest.v1","source":{"adapter":"bootstrap","hostname":"%%s"},"event":{"type":"client.install_failed","occurred_at":"%%s"},"data":{"install_failure":{"cause":"%%s","attempted_at":"%%s","version":"%%s","os":"%%s","arch":"%%s","harness":"%%s"}}}' \
+    "$report_host" "$now" "$1" "$now" "$version" "${os:-}" "${arch:-}" "$report_harness")
+  report_endpoint="${server_url%%/}/rpc/hooks.ingest"
+  # Headers go through a config file or stdin so the key never shows in ps.
+  if command -v curl >/dev/null 2>&1; then
+    {
+      printf 'header = "Gram-Key: %%s"\n' "$api_key"
+      [ -z "$project" ] || printf 'header = "Gram-Project: %%s"\n' "$project"
+    } | curl --config - --silent --output /dev/null --connect-timeout 2 --max-time 3 \
+      --header 'Content-Type: application/json' --data "$body" "$report_endpoint" >/dev/null 2>&1 || true
+  elif command -v wget >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+    report_rc=$(umask 077 && mktemp 2>/dev/null) || return 0
+    {
+      printf 'header = Gram-Key: %%s\n' "$api_key"
+      [ -z "$project" ] || printf 'header = Gram-Project: %%s\n' "$project"
+      printf 'header = Content-Type: application/json\n'
+    } >"$report_rc"
+    WGETRC="$report_rc" timeout 3 wget -q -O /dev/null --tries=1 --timeout=3 --max-redirect=0 --post-data="$body" "$report_endpoint" >/dev/null 2>&1 || true
+    rm -f "$report_rc"
+  fi
 }
 
 # Codex plugin versions are disposable. When its inline command supplies a
@@ -245,6 +336,13 @@ if [ -n "${reexec_stable:-}" ]; then
   exec bash "$published_script" "$@"
 fi
 
+for arg in "$@"; do
+  case "$arg" in
+    --config=*) report_config=${arg#--config=} ;;
+    --provider=*) report_harness=${arg#--provider=} ;;
+  esac
+done
+
 case "$(uname -s)" in
   Darwin) os=darwin ;;
   Linux) os=linux ;;
@@ -348,7 +446,7 @@ if ! cache_valid; then
   # reasoning as the lock wait) so a stalled network lands on the configured
   # install-failure policy instead of an opaque provider timeout.
   if command -v curl >/dev/null 2>&1; then
-    curl --fail --silent --show-error --location --connect-timeout 10 --max-time 45 "$url" --output "$archive" || install_failure 'download failed'
+    curl --fail --silent --show-error --location --connect-timeout 10 --max-time 45 "$url" --output "$archive" || install_failure 'download failed' download
   elif command -v wget >/dev/null 2>&1; then
     # wget --timeout is a per-read timeout, not a wall-clock cap: a server that
     # trickles bytes resets it indefinitely. timeout(1) enforces the real
@@ -357,7 +455,7 @@ if ! cache_valid; then
     if command -v timeout >/dev/null 2>&1; then
       wget_cmd="timeout 45 $wget_cmd"
     fi
-    $wget_cmd "$url" -O "$archive" || install_failure 'download failed'
+    $wget_cmd "$url" -O "$archive" || install_failure 'download failed' download
   else
     install_failure 'curl or wget is required for first install'
   fi
@@ -376,7 +474,7 @@ if ! cache_valid; then
     install_failure 'no SHA-256 utility is available'
   fi
   if [ "$actual_sha" != "$expected_sha" ]; then
-    install_failure 'downloaded archive checksum mismatch'
+    install_failure 'downloaded archive checksum mismatch' checksum_mismatch
   fi
 
   extracted="${work}/${binary_name}"
@@ -384,8 +482,43 @@ if ! cache_valid; then
     unzip -p "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
   elif command -v busybox >/dev/null 2>&1; then
     busybox unzip -p "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
+  elif command -v python3 >/dev/null 2>&1; then
+    # Slim container images, the official OpenClaw image among them, ship
+    # neither unzip nor busybox but do carry python3 and its zipfile module.
+    python3 -c $'import sys, zipfile\ndata = zipfile.ZipFile(sys.argv[1]).read(sys.argv[2])\nwith open(sys.argv[3], "wb") as out: out.write(data)' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
+  elif command -v bsdtar >/dev/null 2>&1; then
+    bsdtar -xOf "$archive" "$binary_name" > "$extracted" || install_failure 'archive extraction failed'
+  elif command -v node >/dev/null 2>&1; then
+    # Images built to run Node apps, OpenClaw's among them, always carry node.
+    # Node has no unzip API, so this reads the central directory by hand and
+    # inflates the one entry. ZIP64, a missing entry, or a method other than
+    # store or deflate exits non-zero.
+    node -e '
+      const fs = require("fs");
+      const zlib = require("zlib");
+      const [, archive, name, out] = process.argv;
+      const zip = fs.readFileSync(archive);
+      const end = zip.lastIndexOf("PK\x05\x06");
+      if (end < 0) process.exit(1);
+      let entry = zip.readUInt32LE(end + 16);
+      if (entry === 0xffffffff) process.exit(1);
+      while (zip.readUInt32LE(entry) === 0x02014b50) {
+        const nameEnd = entry + 46 + zip.readUInt16LE(entry + 28);
+        if (zip.toString("utf8", entry + 46, nameEnd) === name) break;
+        entry = nameEnd + zip.readUInt16LE(entry + 30) + zip.readUInt16LE(entry + 32);
+      }
+      if (zip.readUInt32LE(entry) !== 0x02014b50) process.exit(1);
+      const method = zip.readUInt16LE(entry + 10);
+      const size = zip.readUInt32LE(entry + 20);
+      const local = zip.readUInt32LE(entry + 42);
+      if (method !== 0 && method !== 8) process.exit(1);
+      if (size === 0xffffffff || local === 0xffffffff || zip.readUInt32LE(local) !== 0x04034b50) process.exit(1);
+      const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28);
+      const data = zip.subarray(start, start + size);
+      fs.writeFileSync(out, method === 8 ? zlib.inflateRawSync(data) : data);
+    ' "$archive" "$binary_name" "$extracted" || install_failure 'archive extraction failed'
   else
-    install_failure 'unzip is required for first install'
+    install_failure 'unzip, busybox, python3, bsdtar or node is required for first install'
   fi
   chmod 755 "$extracted" || install_failure 'could not mark the binary executable'
   mkdir -p "$install_dir" || install_failure 'could not create the install directory'
@@ -419,10 +552,48 @@ $ForwardArgs = @($args)
 $Version = %q
 $InstallFailureExit = %d
 
-function Exit-InstallFailure([string]$Message) {
+function Exit-InstallFailure([string]$Message, [string]$Cause = "") {
     [Console]::Error.WriteLine("speakeasy-hooks: $Message")
     [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (SPEAKEASY_AI_HOOKS_HOME overrides the cache location)")
+    if ($Cause) { Send-InstallFailure $Cause }
     exit $InstallFailureExit
+}
+
+# Best effort: tell the control plane an install failed, with a short timeout,
+# using the key in the plugin's config. Never fails the script.
+function Send-InstallFailure([string]$Cause) {
+    try {
+        $ConfigPath = $null
+        $Harness = ""
+        foreach ($Arg in $ForwardArgs) {
+            if ($Arg.StartsWith("--config=", [StringComparison]::Ordinal)) { $ConfigPath = $Arg.Substring(9) }
+            elseif ($Arg.StartsWith("--provider=", [StringComparison]::Ordinal)) { $Harness = $Arg.Substring(11) }
+        }
+        if (-not $ConfigPath -or -not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { return }
+        $Config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+        if (-not $Config.server_url -or -not $Config.hooks_api_key) { return }
+        $Parsed = $null
+        if (-not [Uri]::TryCreate([string]$Config.server_url, [UriKind]::Absolute, [ref]$Parsed)) { return }
+        if ($Parsed.UserInfo) { return }
+        if ($Parsed.Scheme -ne "https" -and -not ($Parsed.Scheme -eq "http" -and $Parsed.IsLoopback)) { return }
+        if ($InstallDir) {
+            $Stamp = "$InstallDir.reported"
+            $Recent = Get-Item -LiteralPath $Stamp -ErrorAction SilentlyContinue
+            if ($Recent -and $Recent.LastWriteTimeUtc -gt [DateTime]::UtcNow.AddHours(-1)) { return }
+            try { [System.IO.File]::WriteAllText($Stamp, "") } catch { }
+        }
+        $Now = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        $Body = @{
+            schema_version = "hook.ingest.v1"
+            source = @{ adapter = "bootstrap"; hostname = [Environment]::MachineName }
+            event = @{ type = "client.install_failed"; occurred_at = $Now }
+            data = @{ install_failure = @{ cause = $Cause; attempted_at = $Now; version = $Version; os = "windows"; arch = "$Arch"; harness = $Harness } }
+        } | ConvertTo-Json -Depth 5 -Compress
+        $Headers = @{ "Gram-Key" = $Config.hooks_api_key }
+        if ($Config.project) { $Headers["Gram-Project"] = $Config.project }
+        $Uri = $Config.server_url.TrimEnd("/") + "/rpc/hooks.ingest"
+        Invoke-WebRequest -UseBasicParsing -Method Post -TimeoutSec 3 -MaximumRedirection 0 -Uri $Uri -Headers $Headers -ContentType "application/json" -Body $Body | Out-Null
+    } catch { }
 }
 
 # Codex supplies a version-independent plugin data directory. Publish this
@@ -671,16 +842,16 @@ try {
         try {
             if (-not (Wait-Job -Job $Download -Timeout 45)) {
                 Stop-Job -Job $Download
-                Exit-InstallFailure "download failed"
+                Exit-InstallFailure "download failed" "download"
             }
             Receive-Job -Job $Download -ErrorAction Stop | Out-Null
         } catch {
-            Exit-InstallFailure "download failed"
+            Exit-InstallFailure "download failed" "download"
         } finally {
             Remove-Job -Job $Download -Force -ErrorAction SilentlyContinue
         }
         $ActualSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $Archive).Hash.ToLowerInvariant()
-        if ($ActualSha -ne $ExpectedSha) { Exit-InstallFailure "downloaded archive checksum mismatch" }
+        if ($ActualSha -ne $ExpectedSha) { Exit-InstallFailure "downloaded archive checksum mismatch" "checksum_mismatch" }
 
         $Extracted = Join-Path $Work "extracted"
         Expand-Archive -LiteralPath $Archive -DestinationPath $Extracted

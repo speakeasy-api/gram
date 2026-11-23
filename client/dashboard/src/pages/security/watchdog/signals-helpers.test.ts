@@ -1,9 +1,11 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import {
   filterSignalsByCategory,
   filterSignalsBySeverity,
   groupSignals,
+  signalBucketStarts,
   toggleFilterValue,
   trendPercent,
 } from "./signals-helpers";
@@ -205,5 +207,35 @@ describe("toggleFilterValue", () => {
   it("adds a missing value and removes a present one", () => {
     expect(toggleFilterValue([], "secrets")).toEqual(["secrets"]);
     expect(toggleFilterValue(["secrets", "pii"], "secrets")).toEqual(["pii"]);
+  });
+});
+
+describe("signalBucketStarts", () => {
+  it("splits a day into 24 hour-wide epoch-aligned buckets", () => {
+    const from = new Date("2026-08-01T10:30:00Z");
+    const to = new Date("2026-08-02T10:30:00Z");
+    const { starts, bucketMs } = signalBucketStarts(from, to, 25);
+    expect(bucketMs).toBe(3_600_000);
+    expect(starts).toHaveLength(25);
+    // Aligned down to the hour that contains `from`.
+    expect(new Date(starts[0]!).toISOString()).toBe("2026-08-01T10:00:00.000Z");
+    expect(new Date(starts[24]!).toISOString()).toBe(
+      "2026-08-02T10:00:00.000Z",
+    );
+  });
+
+  it("rounds the width up and floors it at a minute", () => {
+    const from = new Date("2026-08-01T00:00:00Z");
+    expect(
+      signalBucketStarts(from, new Date("2026-08-01T00:10:00Z"), 1).bucketMs,
+    ).toBe(60_000);
+    // 7 days / 24 = 25200s exactly.
+    expect(
+      signalBucketStarts(from, new Date("2026-08-08T00:00:00Z"), 24).bucketMs,
+    ).toBe(25_200_000);
+    // One extra second rounds the width up, never down.
+    expect(
+      signalBucketStarts(from, new Date("2026-08-08T00:00:01Z"), 24).bucketMs,
+    ).toBe(25_201_000);
   });
 });

@@ -91,7 +91,8 @@ type AllowEntry struct {
 // entries. An empty allow list authorizes zero tools.
 type SessionSelection struct {
 	// Resource pins the selection to the endpoint whose tool inventory the
-	// user consented on: "mcp_server:<uuid>" or "toolset:<uuid>". Session
+	// user consented on: "mcp_server:<uuid>", "toolset:<uuid>" or, for a
+	// gateway, "meta_mcp_server:<uuid>". Session
 	// tokens are portable across endpoints sharing an issuer, so a selection
 	// served against a different resource is rejected, never reinterpreted.
 	Resource string `json:"resource"`
@@ -111,16 +112,17 @@ type SessionSelection struct {
 	liveAnnotations []string
 }
 
-// Document caps. Entry count admits a full manual list plus one entry per
-// vocabulary annotation; the occurrence cap bounds total memory even when
-// snapshot expansions overlap.
-const (
-	selectionMaxRawBytes        = 2 << 20
-	selectionMaxAllowEntries    = 1004
-	selectionMaxSnapshotNames   = 1000
-	selectionMaxNameOccurrences = 5000
-	selectionMaxNameBytes       = 200
-)
+// MaxTools bounds a captured inventory and every selection made from it.
+const MaxTools = 10000
+
+// Serialized policies include overlapping annotation snapshots.
+const selectionMaxRawBytes = 16 << 20
+
+// Leave 1 MiB for JSONB's added separator whitespace when policies are read back.
+// The tool and entry limits bound that expansion to fewer than 100,000 bytes.
+const selectionMaxWriteBytes = selectionMaxRawBytes - (1 << 20)
+
+const selectionMaxNameBytes = 200
 
 // NewSessionSelection assembles, canonicalizes, and validates a selection:
 // annotation entries first in vocabulary order, tool entries after in
@@ -128,6 +130,13 @@ const (
 // caller-owned slices are never mutated or aliased. The returned selection
 // is compiled — a persisted document is always a valid one.
 func NewSessionSelection(resource string, grantID uuid.UUID, entries []AllowEntry) (*SessionSelection, error) {
+	size, err := selectionJSONSize(resource, grantID, entries)
+	if err != nil {
+		return nil, err
+	}
+	if size > selectionMaxWriteBytes {
+		return nil, fmt.Errorf("tool selection document exceeds %d bytes", selectionMaxWriteBytes)
+	}
 	vocabRank := func(name string) int {
 		return slices.Index(KnownAnnotations, name)
 	}
@@ -169,6 +178,73 @@ func NewSessionSelection(resource string, grantID uuid.UUID, entries []AllowEntr
 	return selection, nil
 }
 
+// selectionJSONSize measures the wire document using only bounded individual
+// strings. It stops at the write budget before cloning or encoding snapshots.
+func selectionJSONSize(resource string, grantID uuid.UUID, entries []AllowEntry) (int, error) {
+	if !validResource(resource) {
+		return 0, fmt.Errorf("tool selection carries an invalid resource binding")
+	}
+	if len(entries) > MaxTools+len(KnownAnnotations) {
+		return 0, fmt.Errorf("tool selection exceeds %d allow entries", MaxTools+len(KnownAnnotations))
+	}
+	header, err := json.Marshal(&SessionSelection{Resource: resource, GrantID: grantID, Allow: []AllowEntry{}, nameSet: nil, liveAnnotations: nil})
+	if err != nil {
+		return 0, fmt.Errorf("measure tool selection: %w", err)
+	}
+	size := len(header)
+	for i, entry := range entries {
+		if entry.Type != AllowTypeTool && entry.Type != AllowTypeAnnotation {
+			return 0, fmt.Errorf("tool selection carries unknown allow entry type")
+		}
+		if len(entry.Name) > selectionMaxNameBytes {
+			return 0, fmt.Errorf("tool selection carries an invalid tool name")
+		}
+		if entry.Mode != nil && *entry.Mode != AnnotationModeSnapshot && *entry.Mode != AnnotationModeLive {
+			return 0, fmt.Errorf("tool selection carries unknown annotation mode")
+		}
+		metadata := entry
+		metadata.Tools = nil
+		raw, err := json.Marshal(metadata)
+		if err != nil {
+			return 0, fmt.Errorf("measure tool selection entry: %w", err)
+		}
+		size += len(raw)
+		if i > 0 {
+			size++ // Comma between entries.
+		}
+		if entry.Tools != nil {
+			if len(*entry.Tools) > MaxTools {
+				return 0, fmt.Errorf("snapshot expansion exceeds %d names", MaxTools)
+			}
+			if *entry.Tools == nil {
+				size += len(`,"tools":null`)
+			} else {
+				size += len(`,"tools":[]`)
+			}
+			for j, name := range *entry.Tools {
+				if len(name) > selectionMaxNameBytes {
+					return 0, fmt.Errorf("tool selection carries an invalid snapshot tool name")
+				}
+				encoded, err := json.Marshal(name)
+				if err != nil {
+					return 0, fmt.Errorf("measure snapshot tool name: %w", err)
+				}
+				size += len(encoded)
+				if j > 0 {
+					size++ // Comma between names.
+				}
+				if size > selectionMaxWriteBytes {
+					return size, nil
+				}
+			}
+		}
+		if size > selectionMaxWriteBytes {
+			return size, nil
+		}
+	}
+	return size, nil
+}
+
 // ParseSessionSelection decodes and validates a stored tool_selection
 // document. Speakeasy is the document's only writer, so any malformation is
 // corruption and rejects the whole document — callers fail closed into
@@ -199,7 +275,7 @@ func ParseSessionSelection(raw []byte) (*SessionSelection, error) {
 // server-authored "<kind>:<uuid>" shape with a canonical, non-zero UUID.
 func validResource(resource string) bool {
 	kind, id, ok := strings.Cut(resource, ":")
-	if !ok || (kind != "mcp_server" && kind != "toolset") {
+	if !ok || (kind != "mcp_server" && kind != "toolset" && kind != gatewayResourceKind) {
 		return false
 	}
 	parsed, err := uuid.Parse(id)
@@ -217,15 +293,14 @@ func (s *SessionSelection) compile() error {
 	if s.Allow == nil {
 		return fmt.Errorf("tool selection missing allow list")
 	}
-	if len(s.Allow) > selectionMaxAllowEntries {
-		return fmt.Errorf("tool selection exceeds %d allow entries", selectionMaxAllowEntries)
+	if len(s.Allow) > MaxTools+len(KnownAnnotations) {
+		return fmt.Errorf("tool selection exceeds %d allow entries", MaxTools+len(KnownAnnotations))
 	}
 
 	names := map[string]struct{}{}
 	var live []string
 	seenTools := map[string]bool{}
 	seenAnnotations := map[string]bool{}
-	occurrences := 0
 
 	validName := func(name string) bool {
 		return name != "" && len(name) <= selectionMaxNameBytes
@@ -244,7 +319,6 @@ func (s *SessionSelection) compile() error {
 				return fmt.Errorf("tool selection repeats tool entry %q", entry.Name)
 			}
 			seenTools[entry.Name] = true
-			occurrences++
 			names[entry.Name] = struct{}{}
 
 		case AllowTypeAnnotation:
@@ -268,8 +342,8 @@ func (s *SessionSelection) compile() error {
 				if entry.Tools == nil {
 					return fmt.Errorf("snapshot annotation allow entries require a tools array")
 				}
-				if len(*entry.Tools) > selectionMaxSnapshotNames {
-					return fmt.Errorf("snapshot expansion exceeds %d names", selectionMaxSnapshotNames)
+				if len(*entry.Tools) > MaxTools {
+					return fmt.Errorf("snapshot expansion exceeds %d names", MaxTools)
 				}
 				withinEntry := map[string]bool{}
 				for _, name := range *entry.Tools {
@@ -280,7 +354,6 @@ func (s *SessionSelection) compile() error {
 						return fmt.Errorf("snapshot expansion repeats tool %q", name)
 					}
 					withinEntry[name] = true
-					occurrences++
 					names[name] = struct{}{}
 				}
 			default:
@@ -291,8 +364,8 @@ func (s *SessionSelection) compile() error {
 			return fmt.Errorf("tool selection carries unknown allow entry type %q", entry.Type)
 		}
 
-		if occurrences > selectionMaxNameOccurrences {
-			return fmt.Errorf("tool selection exceeds %d tool name occurrences", selectionMaxNameOccurrences)
+		if len(names) > MaxTools {
+			return fmt.Errorf("tool selection exceeds %d distinct tools", MaxTools)
 		}
 	}
 
@@ -357,9 +430,6 @@ func AnnotationsMatch(annotations *types.ToolAnnotations, values []string) bool 
 // FilterToolsBySelection intersects tools with a session selection: a tool
 // passes iff an allow entry includes it by name or a live annotation grant
 // matches its declared hints. A nil selection returns the slice untouched.
-// Proxy/external-MCP placeholders are dropped from every restrictive
-// selection: their callable names exist only after upstream unfolding, so
-// they fail closed.
 func FilterToolsBySelection(tools []*types.Tool, sel *SessionSelection) []*types.Tool {
 	if sel == nil {
 		return tools
@@ -367,7 +437,7 @@ func FilterToolsBySelection(tools []*types.Tool, sel *SessionSelection) []*types
 
 	filtered := make([]*types.Tool, 0, len(tools))
 	for _, tool := range tools {
-		if tool == nil || conv.IsProxyTool(tool) {
+		if tool == nil {
 			continue
 		}
 		base, err := conv.ToBaseTool(tool)
@@ -384,3 +454,5 @@ func FilterToolsBySelection(tools []*types.Tool, sel *SessionSelection) []*types
 	}
 	return filtered
 }
+
+const gatewayResourceKind = "meta_mcp_server"

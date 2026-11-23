@@ -19,7 +19,7 @@ func (s *Service) TestingCompletionTokens() *assistanttokens.Manager {
 	s.authz = authz.NewEngine(s.logger, s.db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	s.auth = auth.New(s.logger, s.db, s.sessions, s.authz)
 	s.assistantTokens = assistanttokens.New("test-secret", s.db, nil, nil, nil)
-	s.chatSessions = chatsessions.NewManager(s.logger, nil, "test-secret")
+	s.chatSessions = chatsessions.NewManager(s.logger, nil, "test-secret", s.sessions)
 	return s.assistantTokens
 }
 
@@ -28,4 +28,8 @@ func (s *Service) TestingAuthorizeCompletion(r *http.Request, completion bool) (
 		return s.authorizeCompletion(r)
 	}
 	return s.directAuthorize(r.Context(), r)
+}
+
+func (s *Service) TestingSetChatSessions(manager *chatsessions.Manager) {
+	s.chatSessions = manager
 }

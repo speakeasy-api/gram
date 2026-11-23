@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { AiScanTarget } from "@gram/client/models/components/aiscantarget.js";
 import { describe, expect, it } from "vitest";

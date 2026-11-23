@@ -25,6 +25,10 @@ export type MetaMcpMemberUsage = {
    */
   mcpServerId: string;
   /**
+   * Display name of the server. Set for Organization Gateway usage, whose servers span projects the caller may not have loaded.
+   */
+  mcpServerName?: string | undefined;
+  /**
    * Tool calls dispatched to this member through the gateway
    */
   toolCalls: number;
@@ -41,6 +45,7 @@ export const MetaMcpMemberUsage$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     mcp_server_id: z.string(),
+    mcp_server_name: z.optional(z.string()),
     tool_calls: z.int(),
   }),
   z.transform((v) => {
@@ -48,6 +53,7 @@ export const MetaMcpMemberUsage$inboundSchema: z.ZodMiniType<
       "error_count": "errorCount",
       "last_called_at": "lastCalledAt",
       "mcp_server_id": "mcpServerId",
+      "mcp_server_name": "mcpServerName",
       "tool_calls": "toolCalls",
     });
   }),

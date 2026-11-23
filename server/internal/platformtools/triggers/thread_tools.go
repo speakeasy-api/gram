@@ -37,16 +37,17 @@ func (t *UnsubscribeThread) Descriptor() core.ToolDescriptor {
 	openWorld := false
 
 	return core.ToolDescriptor{
-		SourceSlug:  sourceTriggers,
-		HandlerName: "unsubscribe_thread",
-		Name:        toolNameUnsubscribeThread,
-		Description: "Stop receiving new messages from the current conversation's thread, and from threads routed to this conversation, unless you are mentioned. A later mention subscribes you again and delivers the messages you missed.",
-		InputSchema: core.BuildInputSchema[unsubscribeThreadInput](),
-		Annotations: triggerToolAnnotations(readOnly, destructive, idempotent, openWorld),
-		Managed:     true,
-		Variables:   nil,
-		OwnerKind:   nil,
-		OwnerID:     nil,
+		SourceSlug:    sourceTriggers,
+		ThreadContext: core.ThreadContextRequired,
+		HandlerName:   "unsubscribe_thread",
+		Name:          toolNameUnsubscribeThread,
+		Description:   "Stop receiving new messages from the current conversation's thread, and from threads routed to this conversation, unless you are mentioned. A later mention subscribes you again and delivers the messages you missed.",
+		InputSchema:   core.BuildInputSchema[unsubscribeThreadInput](),
+		Annotations:   triggerToolAnnotations(readOnly, destructive, idempotent, openWorld),
+		Managed:       true,
+		Variables:     nil,
+		OwnerKind:     nil,
+		OwnerID:       nil,
 	}
 }
 
@@ -58,7 +59,7 @@ func (t *UnsubscribeThread) Call(ctx context.Context, env toolconfig.ToolCallEnv
 	if err != nil {
 		return err
 	}
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return fmt.Errorf("unsubscribing from a thread requires an assistant principal")
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -31,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -40,6 +42,9 @@ import (
 )
 
 const testServerURL = "https://app.getgram.ai"
+
+// testSiteURL is the dashboard base that plugin server links are built on.
+const testSiteURL = "https://dashboard.getgram.ai"
 
 var infra *testenv.Environment
 
@@ -84,6 +89,8 @@ type testInstance struct {
 	blobs assets.BlobStore
 	// deviceAgentTokens mints the device-agent tokens the service accepts.
 	deviceAgentTokens *deviceagenttoken.Issuer
+	// redis backs rate limiters a test attaches to the service.
+	redis *redis.Client
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -129,9 +136,11 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
-	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL})
+	siteURL, err := url.Parse(testSiteURL)
+	require.NoError(t, err)
+	orgHosts := orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL})
 	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, orgHosts, blobs, telemetryLogger, nil, deviceAgentTokens, marketplacetokenstest.Tokens(t, conn))
 
 	return ctx, &testInstance{
 		service:           svc,
@@ -142,6 +151,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		features:          features,
 		blobs:             blobs,
 		deviceAgentTokens: deviceAgentTokens,
+		redis:             redisClient,
 	}
 }
 
@@ -173,18 +183,21 @@ func withPerUserKeyAuth(t *testing.T, ctx context.Context, ownerEmail string) co
 	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
-// publishMarketplace gives a project a marketplace_token, which is what makes
-// its marketplace visible to the agent endpoint (the query requires one).
+// publishMarketplace gives a project a marketplace token, which is what makes
+// its marketplace visible to the agent endpoint (the query requires one). An
+// empty token leaves the connection without one.
 func publishMarketplace(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, token string) {
 	t.Helper()
 	_, err := pluginsrepo.New(conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
-		ProjectID:        projectID,
-		InstallationID:   1,
-		RepoOwner:        "speakeasy",
-		RepoName:         "plugins-" + token, // unique per (installation, owner, repo)
-		MarketplaceToken: pgtype.Text{String: token, Valid: true},
+		ProjectID:      projectID,
+		InstallationID: 1,
+		RepoOwner:      "speakeasy",
+		RepoName:       "plugins-" + token, // unique per (installation, owner, repo)
 	})
 	require.NoError(t, err)
+	if token != "" {
+		marketplacetokenstest.Plant(t, conn, projectID, token)
+	}
 }
 
 // seedProject creates an additional project in an existing org, used to exercise

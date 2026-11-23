@@ -44,7 +44,8 @@ const (
 // these to decide retry/failover: *NoLiveSession, *TunnelBusy,
 // *ActiveCheckFailed and *SubstreamFailed are gateway-side (a route was picked
 // but the agent session was gone, at capacity, could not be revalidated, or
-// broke); *NoRoute, *InvalidRoute,
+// broke), and *ForwardRejected answers 403 when the gateway refused Speakeasy's
+// own forward token; *NoRoute, *InvalidRoute,
 // *RouteStoreUnavailable and *RouteLookupFailed are gram-server-side (routing
 // could not select a gateway owner at all).
 const (
@@ -56,6 +57,7 @@ const (
 	TunnelErrorTunnelBusy            = "tunnel-busy"
 	TunnelErrorActiveCheckFailed     = "active-check-failed"
 	TunnelErrorSubstreamFailed       = "substream-failed"
+	TunnelErrorForwardRejected       = "forward-rejected"
 	TunnelErrorNoRoute               = "no-route"
 	TunnelErrorInvalidRoute          = "invalid-route"
 	TunnelErrorRouteStoreUnavailable = "route-store-unavailable"

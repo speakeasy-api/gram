@@ -10,10 +10,15 @@ import { ClientCard } from "./ClientCard";
 // Unlike OverviewTab.test, this renders the real Radix select fields, which a
 // disabled fieldset does not stop from opening.
 
-const testState = vi.hoisted(() => ({ admin: false, mutate: vi.fn() }));
+const testState = vi.hoisted(() => ({
+  admin: false,
+  mutate: vi.fn(),
+  mutateAsync: vi.fn(),
+}));
 beforeEach(() => {
   testState.admin = false;
   testState.mutate.mockClear();
+  testState.mutateAsync.mockReset();
 });
 
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
@@ -40,6 +45,7 @@ vi.mock(
   () => ({
     useUpdateOrganizationRemoteSessionClientMutation: () => ({
       mutate: testState.mutate,
+      mutateAsync: testState.mutateAsync,
       isPending: false,
     }),
   }),
@@ -52,12 +58,136 @@ vi.mock("./KeySetField", () => ({
 
 afterEach(cleanup);
 
+describe("sending the MCP client's name to the authorization server", () => {
+  const label = "Send the MCP client's name to the authorization server";
+
+  it("is off by default and saved only when changed", () => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    const checkbox = screen.getByRole("checkbox", { name: label });
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          forwardClientName: true,
+        }),
+      },
+    });
+  });
+
+  it("can be turned off again", () => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{ ...client, forwardClientName: true }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          forwardClientName: false,
+        }),
+      },
+    });
+  });
+
+  it("is omitted when saving another field", () => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    fireEvent.change(screen.getByLabelText("Audience"), {
+      target: { value: "new-audience" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    const form =
+      testState.mutate.mock.calls[0]?.[0].request.updateRemoteSessionClientForm;
+    expect(form).not.toHaveProperty("forwardClientName");
+  });
+
+  it("is locked for people who cannot edit", () => {
+    testState.admin = false;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    expect(
+      screen.getByRole("checkbox", { name: label }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("is hidden for service accounts, which have no user sign-in", () => {
+    testState.admin = true;
+    render(
+      <ClientCard
+        client={{
+          ...client,
+          credentialOwner: "self",
+          tokenEndpointAuthMethod: AuthMethod.ClientSecretBasic,
+        }}
+        issuer={issuer}
+        issuerId="issuer-1"
+      />,
+    );
+    expect(screen.queryByRole("checkbox", { name: label })).toBeNull();
+  });
+});
+
+describe("client audience updates", () => {
+  it.each([
+    ["cleared", "", ""],
+    ["whitespace-only", "   ", ""],
+    ["changed", "  new-audience  ", "new-audience"],
+  ])("sends the %s audience explicitly", (_label, value, expected) => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    fireEvent.change(screen.getByLabelText("Audience"), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          audience: expected,
+        }),
+      },
+    });
+  });
+
+  it.each(["aud", undefined])(
+    "omits unchanged audience %s when saving another field",
+    (audience) => {
+      testState.admin = true;
+      render(
+        <ClientCard
+          client={{ ...client, audience }}
+          issuer={issuer}
+          issuerId="issuer-1"
+        />,
+      );
+      fireEvent.click(screen.getByRole("switch"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateRemoteSessionClientForm: expect.objectContaining({
+            legacyCallbackUrl: true,
+          }),
+        },
+      });
+      expect(
+        testState.mutate.mock.lastCall?.[0].request
+          .updateRemoteSessionClientForm,
+      ).not.toHaveProperty("audience");
+    },
+  );
+});
+
 const client = {
   id: "client-1",
   clientId: "upstream-client",
   tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
   jsonWebKeySetId: "set-1",
   legacyCallbackUrl: false,
+  forwardClientName: false,
   audience: "aud",
 } as RemoteSessionClient;
 
@@ -143,10 +273,12 @@ it("preserves unknown audience configuration for unrelated non-JWT edits and blo
     request: {
       updateRemoteSessionClientForm: expect.objectContaining({
         audience: "new-audience",
-        tokenEndpointAuthAudienceFormat: undefined,
       }),
     },
   });
+  expect(
+    testState.mutate.mock.lastCall?.[0].request.updateRemoteSessionClientForm,
+  ).not.toHaveProperty("tokenEndpointAuthAudienceFormat");
   const auth = screen
     .getAllByRole("combobox")
     .find((el) => el.id !== "client-scopes")!;
@@ -173,4 +305,57 @@ it("labels an unknown authentication method as unsupported rather than the defau
   expect(screen.getByText("Unsupported authentication method")).toBeTruthy();
   expect(screen.queryByText("client_secret_basic (default)")).toBeNull();
   expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+});
+
+// A container such as the duplicate sheet warns before discarding edits, so a
+// corrected client ID must count as unsaved.
+it.each([["Client ID", "corrected-client"]])(
+  "reports an edited %s as unsaved",
+  (label, value) => {
+    testState.admin = true;
+    const onDirtyChange = vi.fn<(dirty: boolean) => void>();
+    render(
+      <ClientCard
+        client={client}
+        issuer={issuer}
+        issuerId="issuer-1"
+        onDirtyChange={onDirtyChange}
+      />,
+    );
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    const input = screen.getByLabelText(label);
+    const original = (input as HTMLInputElement).value;
+    fireEvent.change(input, { target: { value } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.change(input, { target: { value: original } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  },
+);
+
+it("renames the client from the card header without submitting the form", async () => {
+  testState.admin = true;
+  testState.mutateAsync.mockResolvedValue({
+    ...client,
+    displayName: "Production",
+  });
+  render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+
+  fireEvent.click(screen.getByTitle("Rename client"));
+  const input = screen.getByLabelText("Name");
+  fireEvent.change(input, { target: { value: "  Production " } });
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  await vi.waitFor(() =>
+    expect(testState.mutateAsync).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: {
+          id: "client-1",
+          displayName: "Production",
+        },
+      },
+    }),
+  );
+  expect(testState.mutate).not.toHaveBeenCalled();
 });

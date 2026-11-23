@@ -55,6 +55,7 @@ func TestList_ReadsCachedResourceScopesWithoutProbing(t *testing.T) {
 		Visibility:            "private",
 	})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, projectID, serverID, issuerID)
 
 	// No row yet: the issuer's catalogue stands, and nothing is probed.
 	require.Equal(t, []string{"okta.users.read"}, rowFor(t, list(t, ctx, si, true), serverID).Scopes)
@@ -124,6 +125,7 @@ func scopelessRemoteServer(t *testing.T, ctx context.Context, si *instance) (pro
 		Visibility:            "private",
 	})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, projectID, serverID, issuerID)
 	return projectID, serverID, upstream.URL, hits
 }
 

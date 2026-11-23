@@ -1,5 +1,9 @@
 // Package roledelivery applies event-scoped role access changes to plugin contents.
 // It never reconciles contents during publication or records separate ownership.
+//
+// Only plugins with auto_add_servers_enabled take part. For any other plugin,
+// role and audience changes neither add nor remove servers; admins manage its
+// server list by hand.
 package roledelivery
 
 import (
@@ -49,24 +53,26 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 }
 
 // allowed reports whether grants deliver s. Only connect (or root) grants
-// deliver: read and write still satisfy connect at the endpoint (see
-// authz scopeExpansions[ScopeMCPConnect]), but counting them here would make a
-// narrowed connect rule meaningless.
+// deliver, matching the endpoint, where mcp:read and mcp:write do not satisfy
+// mcp:connect.
 func allowed(grants []authz.Grant, s server) (bool, error) {
-	grants = slices.DeleteFunc(slices.Clone(grants), func(g authz.Grant) bool {
-		return g.Scope == authz.ScopeMCPRead || g.Scope == authz.ScopeMCPWrite
-	})
-	allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, s.ResourceID.String(), s.ProjectID.String()))
+	allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(s.ResourceID), authz.ProjectIDOf(s.ProjectID)).Connect())
 	if err != nil {
 		return false, fmt.Errorf("evaluate role delivery Use access: %w", err)
 	}
 	return allowed, nil
 }
 
+// IsRole reports whether an audience principal is a role, the only audience
+// kind that delivers servers.
+func IsRole(principal string) bool {
+	return strings.HasPrefix(principal, "role:organization:") || strings.HasPrefix(principal, "role:global:")
+}
+
 func roleGrants(ctx context.Context, tx pgx.Tx, org string, roles []string) (map[string][]authz.Grant, error) {
 	result := make(map[string][]authz.Grant)
 	for _, role := range roles {
-		if !strings.HasPrefix(role, "role:organization:") && !strings.HasPrefix(role, "role:global:") {
+		if !IsRole(role) {
 			continue
 		}
 		grants, err := Snapshot(ctx, tx, org, role)
@@ -99,9 +105,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 		changed := false
 		for _, membership := range memberships {
-			matches := s.BackendKind == "mcp_server" && membership.McpServerID.Valid && membership.McpServerID.UUID == s.ID
-			matches = matches || (s.LegacyToolsetID.Valid && membership.ToolsetID.Valid && membership.ToolsetID.UUID == s.LegacyToolsetID.UUID)
-			if !matches {
+			if !membership.McpServerID.Valid || membership.McpServerID.UUID != s.ID {
 				continue
 			}
 			removed, err := pluginsrepo.New(tx).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: membership.ID, PluginID: pluginID})
@@ -118,7 +122,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 		return changed, nil
 	}
-	if !s.Eligible || s.BackendKind != "mcp_server" {
+	if !s.Eligible {
 		return false, nil
 	}
 	exists, err := pluginsrepo.New(tx).HasRoleDeliveryMembership(ctx, pluginsrepo.HasRoleDeliveryMembershipParams{PluginID: pluginID, OrganizationID: org, ProjectID: s.ProjectID, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}, LegacyToolsetID: s.LegacyToolsetID, PreserveRemoval: preserveRemoval})
@@ -154,11 +158,11 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		}
 	}
 	params := pluginsrepo.AddPluginServerParams{PluginID: pluginID, DisplayName: name, Policy: "required", SortOrder: 0, McpServerID: uuid.NullUUID{UUID: s.ID, Valid: true}}
-	membership, err := pluginsrepo.New(tx).AddPluginServer(ctx, params)
+	added, err := pluginsrepo.New(tx).AddPluginServer(ctx, params)
 	if err != nil {
 		return false, fmt.Errorf("add role-delivered membership: %w", err)
 	}
-	if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, membership, true); err != nil {
+	if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, added, true); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -166,6 +170,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 
 // AudienceChanged applies only newly added/removed role audiences. Replacing an
 // unchanged audience is a no-op even when an administrator removed contents.
+// Callers skip it for plugins without auto_add_servers_enabled.
 func AudienceChanged(ctx context.Context, tx pgx.Tx, org string, projectID, pluginID uuid.UUID, before, after []string, guard *admission.Guard) (bool, error) {
 	old, err := roleGrants(ctx, tx, org, before)
 	if err != nil {
@@ -221,6 +226,8 @@ func AudienceChanged(ctx context.Context, tx pgx.Tx, org string, projectID, plug
 
 // Populate is bounded setup/backfill, not an ongoing reconciliation. Deleted
 // membership history is respected here but not by a later explicit assignment.
+// Callers run it only for plugins with auto_add_servers_enabled: role setup,
+// and turning the setting on.
 func Populate(ctx context.Context, tx pgx.Tx, org string, projectID, pluginID uuid.UUID, role string, guard *admission.Guard) (bool, error) {
 	grants, err := Snapshot(ctx, tx, org, role)
 	if err != nil {
@@ -248,7 +255,8 @@ func Populate(ctx context.Context, tx pgx.Tx, org string, projectID, pluginID uu
 	return changed, nil
 }
 
-// RoleChanged applies a single role's effective Use delta to existing audiences.
+// RoleChanged applies a single role's effective Use delta to existing audiences
+// of plugins with auto_add_servers_enabled.
 // It does not create plugins or restore admin removals on unchanged replay.
 // New applicable grants can restore contents; revocation requires losing
 // effective Use. Returned projects need publication.

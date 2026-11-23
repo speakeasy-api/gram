@@ -3,14 +3,14 @@ package authz
 import (
 	"context"
 	"fmt"
-	"slices"
-	"strings"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// LoadGrants loads and normalizes grants for the given organization and principals.
+// LoadGrants loads and normalizes grants for the given organization and
+// principals. The result is exactly the stored grant set: no defaults are
+// synthesized, so a role edit that removes a grant takes effect immediately.
 func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) ([]Grant, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
@@ -39,68 +39,66 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selectors,
+			Inferred:     row.Inferred,
 		})
 	}
 
-	assistantDefaults, err := assistantSystemRoleDefaults(ctx, db, principals, grantRows)
+	return grantRows, nil
+}
+
+// LoadUserGrants batches principal resolution and grant loading while keeping
+// each user's policy separate. Like ResolveUserPrincipals, inactive and unknown
+// users receive only user:all grants. The number of queries is independent of
+// the number of users.
+func LoadUserGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, userIDs []string) (map[string][]Grant, error) {
+	if organizationID == "" {
+		return nil, fmt.Errorf("organization id is required")
+	}
+	result := make(map[string][]Grant, len(userIDs))
+	uniqueIDs := make([]string, 0, len(userIDs))
+	for _, userID := range userIDs {
+		if userID == urn.AllUsersPrincipalID {
+			return nil, fmt.Errorf("%w: user id %q", ErrPrincipalInvalid, userID)
+		}
+		if _, ok := result[userID]; !ok {
+			result[userID] = nil
+			uniqueIDs = append(uniqueIDs, userID)
+		}
+	}
+	if len(uniqueIDs) == 0 {
+		return result, nil
+	}
+
+	rows, err := accessrepo.New(db).ListMemberPrincipalsByUsers(ctx, accessrepo.ListMemberPrincipalsByUsersParams{
+		OrganizationID: organizationID,
+		UserIds:        uniqueIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve user policy principals: %w", err)
+	}
+	principals := []urn.Principal{AllUsersPrincipal()}
+	// A shared role can apply to several users, but another user's direct or
+	// role grants must never become part of a user's runtime permission cap.
+	principalUsers := map[string][]string{AllUsersPrincipal().String(): uniqueIDs}
+	for _, row := range rows {
+		principal, err := urn.ParsePrincipal(row.PrincipalUrn)
+		if err != nil {
+			return nil, fmt.Errorf("parse user policy principal: %w", err)
+		}
+		key := principal.String()
+		if _, ok := principalUsers[key]; !ok {
+			principals = append(principals, principal)
+		}
+		principalUsers[key] = append(principalUsers[key], row.UserID)
+	}
+	grants, err := LoadGrants(ctx, db, organizationID, principals)
 	if err != nil {
 		return nil, err
 	}
-
-	return withAssistantSystemRoleDefaults(grantRows, assistantDefaults), nil
-}
-
-// assistantSystemRoleDefaults returns the assistant scopes each built-in role
-// principal holds by default, keyed by the principals that lack stored
-// assistant grants. Organizations seeded before the assistant scopes existed
-// have no persisted rows for them, and system-role grants are immutable, so the
-// defaults are supplied at load time instead. The global roles are only looked
-// up when such a principal is present, which keeps the extra query off
-// organizations seeded with the current defaults.
-func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal, grants []Grant) (map[string][]Scope, error) {
-	missing := make(map[string]struct{})
-	for _, principal := range principals {
-		if principal.Type != urn.PrincipalTypeRole || !strings.HasPrefix(principal.ID, "global:") {
-			continue
-		}
-		key := principal.String()
-		if !slices.ContainsFunc(grants, func(grant Grant) bool {
-			return grant.PrincipalUrn == key && ResourceKindForScope(grant.Scope) == ResourceKindAssistant
-		}) {
-			missing[key] = struct{}{}
+	for _, grant := range grants {
+		for _, userID := range principalUsers[grant.PrincipalUrn] {
+			result[userID] = append(result[userID], grant)
 		}
 	}
-	if len(missing) == 0 {
-		return nil, nil
-	}
-
-	roles, err := accessrepo.New(db).ListGlobalRoles(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list global system roles: %w", err)
-	}
-	defaults := make(map[string][]Scope, len(missing))
-	for _, role := range roles {
-		roleGrants, ok := SystemRoleGrants[role.WorkosSlug]
-		key := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String()).String()
-		if _, isMissing := missing[key]; !ok || !isMissing || role.Deleted || role.WorkosDeleted {
-			continue
-		}
-		for _, grant := range roleGrants {
-			if scope := Scope(grant.Scope); ResourceKindForScope(scope) == ResourceKindAssistant {
-				defaults[key] = append(defaults[key], scope)
-			}
-		}
-	}
-	return defaults, nil
-}
-
-func withAssistantSystemRoleDefaults(grants []Grant, scopesByPrincipal map[string][]Scope) []Grant {
-	for principal, scopes := range scopesByPrincipal {
-		for _, scope := range scopes {
-			grant := NewGrant(scope, WildcardResource)
-			grant.PrincipalUrn = principal
-			grants = append(grants, grant)
-		}
-	}
-	return grants
+	return result, nil
 }

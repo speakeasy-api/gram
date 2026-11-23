@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 )
@@ -75,61 +74,6 @@ func TestMCPProtocolVersionTelemetryCoversGetAndDelete(t *testing.T) {
 	}
 }
 
-// routePathForSlug turns a chi route pattern into a concrete request path by
-// substituting a slug for its single parameter.
-func routePathForSlug(t *testing.T, pattern, slug string) string {
-	t.Helper()
-
-	open := strings.IndexByte(pattern, '{')
-	closing := strings.IndexByte(pattern, '}')
-	require.Greater(t, closing, open, "pattern %q has no route parameter", pattern)
-	require.GreaterOrEqual(t, open, 0, "pattern %q has no route parameter", pattern)
-
-	return pattern[:open] + slug + pattern[closing+1:]
-}
-
-// TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes derives paths from the
-// route patterns the server actually registers rather than from string literals
-// repeated here. The middleware duplicates route knowledge outside the router,
-// so a route that moves out from under it would otherwise be served
-// uninstrumented with nothing to signal it.
-//
-// Every MCP endpoint mounts all three Streamable HTTP verbs, and the protocol
-// version is carried on all of them: POST for JSON-RPC messages, GET for the
-// standalone SSE stream, DELETE for session termination. Asserting the full
-// cross-product keeps a verb-specific gap from hiding behind a passing POST.
-func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
-	t.Parallel()
-
-	patterns := []string{mcp.PublicServerRoute, mcp.PlatformToolsetRoute}
-	methods := []string{http.MethodPost, http.MethodGet, http.MethodDelete}
-
-	for _, pattern := range patterns {
-		path := routePathForSlug(t, pattern, "my-server")
-		for _, method := range methods {
-			got := recordSpanForRequest(t, method, path, mcpversions.Version20250618)
-			require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
-				"route %q resolved to %q, which the middleware does not match for %s", pattern, path, method)
-		}
-	}
-
-	// Speakeasy's own platform MCP server carries no slug, so routePathForSlug
-	// cannot derive it, and the constant cannot be imported: internal/platformmcp
-	// imports this package, so referencing platformmcp.Path here would be an
-	// import cycle. Keep this literal in lockstep with it. Registered for POST
-	// only (see cmd/gram/platform_mcp.go), hence no verb cross-product.
-	got := recordSpanForRequest(t, http.MethodPost, "/platform-mcp", mcpversions.Version20250618)
-	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
-		"/platform-mcp is an MCP JSON-RPC endpoint and must be matched")
-
-	// The per-agent gateway is addressed by agent id rather than slug and is
-	// registered for POST only, hence no verb cross-product.
-	agentPath := routePathForSlug(t, mcp.AgentGatewayRoute, "0e3b6b1a-0000-4000-8000-000000000001")
-	got = recordSpanForRequest(t, http.MethodPost, agentPath, mcpversions.Version20250618)
-	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
-		"%s is an MCP JSON-RPC endpoint and must be matched", mcp.AgentGatewayRoute)
-}
-
 func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
 	t.Parallel()
 
@@ -152,7 +96,7 @@ func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
 }
 
 // TestMCPProtocolVersionTelemetryIgnoresSlugSiblingRoutes is the inverse of
-// TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes: these static routes
+// TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes in cmd/gram: these static routes
 // are registered directly beside /mcp/{mcpSlug}, so they
 // occupy the slug position without being MCP endpoints and chi resolves them
 // first. Shape alone cannot tell them apart from a slug, so they are excluded
@@ -276,4 +220,71 @@ func TestMCPProtocolVersionTelemetryToleratesMissingSpan(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestMCPProtocolVersionTelemetry_TrailingSlashScope(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		path string
+		want bool
+	}{
+		{path: "/mcp/server/", want: true},
+		{path: "/mcp/idp_callback/", want: true},
+		{path: "/mcp/remote_login_callback/", want: true},
+		{path: "/mcp/remote_login_bind/", want: true},
+		{path: "/mcp/install-page-hash.js/", want: true},
+		{path: "/mcp/server//"},
+		{path: "/mcp//"},
+		{path: "/mcp/"},
+		{path: "/mcp/server/token/"},
+		{path: "/mcp/server/install/"},
+		{path: "/.well-known/oauth-protected-resource/mcp/server/"},
+		{path: "/platform/mcp/server/"},
+		{path: "/platform-mcp/", want: true},
+		{path: "/agent-mcp/agent/"},
+		{path: "/approvals-mcp/", want: true},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+
+			got := recordSpanForRequest(t, http.MethodPost, tc.path, mcpversions.Version20250618)
+			if tc.want {
+				require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)])
+			} else {
+				require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey))
+			}
+		})
+	}
+}
+
+func TestChannelsMCPProtocolVersionTelemetry(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+		got := recordSpanForRequest(t, method, "/channels/example-org/example-project/mcp", mcpversions.Version20260728)
+		require.Equal(t, mcpversions.Version20260728, got[string(attr.McpNegotiatedProtocolVersionKey)])
+	}
+}
+
+func TestChannelsMCPProtocolVersionTelemetryRejectsAliases(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"/channels/mcp",
+		"/channels/example-org/example-project/api",
+		"/channels/example-org/example-project/mcp/",
+		"/channels/example-org/example-project/mcp/extra",
+		"/channels//example-project/mcp",
+		"/channels/example-org//mcp",
+		"/channels/example-org/example-project/%6dcp",
+		"/channels/example%2Forg/example-project/mcp",
+		"/channels/example%252Forg/example-project/mcp",
+		"/%63hannels/example-org/example-project/mcp",
+		"/.well-known/oauth-protected-resource/channels/example-org/example-project/mcp",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20260728)
+			require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey))
+		})
+	}
 }

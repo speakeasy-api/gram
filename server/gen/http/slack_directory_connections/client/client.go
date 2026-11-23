@@ -42,6 +42,10 @@ type Client struct {
 	// Begin Doer is the HTTP client used to make requests to the begin endpoint.
 	BeginDoer goahttp.Doer
 
+	// SetDefaultProject Doer is the HTTP client used to make requests to the
+	// setDefaultProject endpoint.
+	SetDefaultProjectDoer goahttp.Doer
+
 	// Disconnect Doer is the HTTP client used to make requests to the disconnect
 	// endpoint.
 	DisconnectDoer goahttp.Doer
@@ -74,6 +78,7 @@ func NewClient(
 		GetMemberDoer:          doer,
 		SetMappingDoer:         doer,
 		BeginDoer:              doer,
+		SetDefaultProjectDoer:  doer,
 		DisconnectDoer:         doer,
 		RestoreResponseBody:    restoreBody,
 		scheme:                 scheme,
@@ -246,6 +251,30 @@ func (c *Client) Begin() goa.Endpoint {
 		resp, err := c.BeginDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "begin", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetDefaultProject returns an endpoint that makes HTTP requests to the
+// slackDirectoryConnections service setDefaultProject server.
+func (c *Client) SetDefaultProject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetDefaultProjectRequest(c.encoder)
+		decodeResponse = DecodeSetDefaultProjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetDefaultProjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetDefaultProjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "setDefaultProject", err)
 		}
 		return decodeResponse(resp)
 	}

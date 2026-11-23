@@ -13,8 +13,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
@@ -73,9 +75,9 @@ func TestGetAttachImpactBetweenPerServerIssuersOnCustomDomain(t *testing.T) {
 	useAuthenticationHost(t, ctx, ti, candidateID)
 	domainID := createCustomDomain(t, ctx, ti)
 	toolset := attachIssuerToolset(t, ctx, ti, projectID, currentID, "impact-domain-toolset")
-	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
-		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
-	}))
+	testenv.SetHostedMCP(t, ctx, ti.conn, projectID, toolset.ID, testenv.HostedMCP{
+		Visibility: "", UserSessionIssuerID: nil, Slug: toolset.Slug, CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true},
+	})
 
 	impact, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
 	require.NoError(t, err)
@@ -95,6 +97,47 @@ func TestGetAttachImpactBetweenPerServerIssuersOnCustomDomain(t *testing.T) {
 	impact, err = ti.service.GetAttachImpact(ctx, payload)
 	require.NoError(t, err)
 	require.True(t, impact.AuthorizationServerChanges)
+}
+
+// A toolset with a canonical server previews that server's issuer, and is on
+// the platform host through any live endpoint.
+func TestGetAttachImpactCanonicalServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	currentID := seedIssuer(t, ctx, ti, "impact-canonical-current")
+	candidateID := seedIssuer(t, ctx, ti, "impact-canonical-candidate")
+	useAuthenticationHost(t, ctx, ti, candidateID)
+	domainID := createCustomDomain(t, ctx, ti)
+	toolset := attachIssuerToolset(t, ctx, ti, projectID, currentID, "impact-canonical-toolset")
+	testenv.SetHostedMCP(t, ctx, ti.conn, projectID, toolset.ID, testenv.HostedMCP{
+		Visibility: mcpservers.VisibilityDisabled, UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	// Naming the toolset or its canonical server previews the same thing.
+	preview := func() *projectgen.UserSessionIssuerAttachImpact {
+		t.Helper()
+		byToolset, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+		require.NoError(t, err)
+		byServer, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{McpServerID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+		require.NoError(t, err)
+		require.Equal(t, byToolset, byServer)
+		return byToolset
+	}
+
+	// Without a live endpoint the preview errs toward warning.
+	impact := preview()
+	require.Equal(t, currentID.String(), impact.CurrentIssuer.ID)
+	require.True(t, impact.AuthorizationServerChanges)
+
+	// A live endpoint governs.
+	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-canonical-domain")
+	require.False(t, preview().AuthorizationServerChanges)
+
+	createMCPServerEndpoint(t, ctx, ti, projectID, toolset.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "impact-canonical-platform")
+	require.True(t, preview().AuthorizationServerChanges)
 }
 
 // useAuthenticationHost opts an issuer in to announcing the authentication
@@ -187,7 +230,7 @@ func TestGetAttachImpactFirstIssuer(t *testing.T) {
 	issuerID := seedIssuer(t, ctx, ti, "impact-first")
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "impact-unattached", Slug: "impact-unattached", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: false,
+		Name: "impact-unattached", Slug: "impact-unattached", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
 	})
 	require.NoError(t, err)
 

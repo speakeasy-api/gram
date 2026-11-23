@@ -28,8 +28,8 @@ func TestPolicyBelongsToOrganization(t *testing.T) {
 
 // An approved row with no stored principals is an everyone-approval written
 // before RecordDecision normalized the empty set — replaying it literally
-// would grant nobody. A denial's empty set stays empty: it grants nothing by
-// design.
+// would grant nobody. A denial's empty set stays empty: the denial covers
+// everyone when it is enforced.
 func TestStandingDecisionPrincipals_NormalizesLegacyEmptyApprovals(t *testing.T) {
 	t.Parallel()
 

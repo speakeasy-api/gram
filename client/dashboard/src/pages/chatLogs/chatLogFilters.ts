@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { format } from "date-fns/format";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 
 // Raw OTEL streams are persisted for analytics but are too noisy for the chat

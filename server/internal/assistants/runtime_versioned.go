@@ -180,17 +180,24 @@ func (s *ServiceCore) installKitRuntime(kit RuntimeBackend) error {
 }
 
 func runtimeBackendForVersion(backend RuntimeBackend, version int16) (string, error) {
+	var selected string
 	if selector, ok := backend.(interface{ BackendForVersion(int16) (string, error) }); ok {
 		result, err := selector.BackendForVersion(version)
 		if err != nil {
 			return result, fmt.Errorf("select runtime backend: %w", err)
 		}
-		return result, nil
+		selected = result
+	} else if version == 1 || version == 2 {
+		selected = backend.Backend()
+	} else {
+		return "", fmt.Errorf("assistant runtime version %d admission is not configured", version)
 	}
-	if version == 1 || version == 2 {
-		return backend.Backend(), nil
+	// A runtime row stamped with the disabled target could never be routed,
+	// so admission stops here instead.
+	if selected == RuntimeProviderDisabled {
+		return "", ErrRuntimeDisabled
 	}
-	return "", fmt.Errorf("assistant runtime version %d admission is not configured", version)
+	return selected, nil
 }
 func boundRuntimeProtocol(backend RuntimeBackend, r assistantRuntimeRecord) (runtimeProtocol, error) {
 	if selector, ok := backend.(interface {
@@ -292,7 +299,7 @@ func (k *KitGKERuntimeBackend) RuntimeReadyForAdmission(ctx context.Context) err
 	if err := k.preflightPermissions(ctx); err != nil {
 		return err
 	}
-	if _, err := k.config.GKE.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+	if _, err := k.config.GKE.Dynamic.Resource(kitClaimGVR).Namespace(k.config.GKE.Namespace).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
 		return fmt.Errorf("%w: inspect Kit GKE admission API: %w", errRuntimeSwitchUnavailable, err)
 	}
 	return nil

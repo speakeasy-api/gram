@@ -7,10 +7,12 @@ import { mcpServersCreate } from "../funcs/mcpServersCreate.js";
 import { mcpServersDelete } from "../funcs/mcpServersDelete.js";
 import { mcpServersDeleteToolMetadata } from "../funcs/mcpServersDeleteToolMetadata.js";
 import { mcpServersGet } from "../funcs/mcpServersGet.js";
+import { mcpServersGetUsageImpact } from "../funcs/mcpServersGetUsageImpact.js";
 import { mcpServersList } from "../funcs/mcpServersList.js";
 import { mcpServersListForOrg } from "../funcs/mcpServersListForOrg.js";
 import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
 import { mcpServersListToolMetadata } from "../funcs/mcpServersListToolMetadata.js";
+import { mcpServersSetSetupGuideCompleted } from "../funcs/mcpServersSetSetupGuideCompleted.js";
 import { mcpServersSetToolMetadata } from "../funcs/mcpServersSetToolMetadata.js";
 import { mcpServersSetToolMetadataBatch } from "../funcs/mcpServersSetToolMetadataBatch.js";
 import { mcpServersUpdate } from "../funcs/mcpServersUpdate.js";
@@ -20,6 +22,7 @@ import { ListMcpServersResult } from "../models/components/listmcpserversresult.
 import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
 import { ListToolMetadataResult } from "../models/components/listtoolmetadataresult.js";
 import { McpServer } from "../models/components/mcpserver.js";
+import { McpServerUsageImpact } from "../models/components/mcpserverusageimpact.js";
 import { SetToolMetadataBatchResult } from "../models/components/settoolmetadatabatchresult.js";
 import { ToolMetadata } from "../models/components/toolmetadata.js";
 import {
@@ -43,6 +46,10 @@ import {
   GetMcpServerSecurity,
 } from "../models/operations/getmcpserver.js";
 import {
+  GetMcpServerUsageImpactRequest,
+  GetMcpServerUsageImpactSecurity,
+} from "../models/operations/getmcpserverusageimpact.js";
+import {
   ListMcpServersRequest,
   ListMcpServersSecurity,
 } from "../models/operations/listmcpservers.js";
@@ -58,6 +65,10 @@ import {
   ListMcpServerToolMetadataRequest,
   ListMcpServerToolMetadataSecurity,
 } from "../models/operations/listmcpservertoolmetadata.js";
+import {
+  SetMcpServerSetupGuideCompletedRequest,
+  SetMcpServerSetupGuideCompletedSecurity,
+} from "../models/operations/setmcpserversetupguidecompleted.js";
 import {
   SetMcpServerToolMetadataRequest,
   SetMcpServerToolMetadataSecurity,
@@ -169,6 +180,25 @@ export class McpServers extends ClientSDK {
   }
 
   /**
+   * getMcpServerUsageImpact mcpServers
+   *
+   * @remarks
+   * Preview who a breaking change to an MCP server affects: the server's active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server's user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.
+   */
+  async getUsageImpact(
+    request: GetMcpServerUsageImpactRequest,
+    security?: GetMcpServerUsageImpactSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<McpServerUsageImpact> {
+    return unwrapAsync(mcpServersGetUsageImpact(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listMcpServers mcpServers
    *
    * @remarks
@@ -237,6 +267,25 @@ export class McpServers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListToolMetadataResult> {
     return unwrapAsync(mcpServersListToolMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setSetupGuideCompleted mcpServers
+   *
+   * @remarks
+   * Mark the upstream provider's manual setup guide for an MCP server as done, or clear that mark. Marking it done again keeps the original completion time. Requires the same access as updateMcpServer.
+   */
+  async setSetupGuideCompleted(
+    request: SetMcpServerSetupGuideCompletedRequest,
+    security?: SetMcpServerSetupGuideCompletedSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<McpServer> {
+    return unwrapAsync(mcpServersSetSetupGuideCompleted(
       this,
       request,
       security,

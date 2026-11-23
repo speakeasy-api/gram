@@ -29,6 +29,10 @@ type ProcessDeploymentWorkflowResult struct {
 	Status       string
 }
 
+// ProcessDeploymentRunTimeout bounds one deployment workflow run. A deployment
+// still created or pending after this long is not being processed.
+const ProcessDeploymentRunTimeout = 15 * time.Minute
+
 func ExecuteProcessDeploymentWorkflow(ctx context.Context, env *tenv.Environment, params ProcessDeploymentWorkflowParams) (client.WorkflowRun, error) {
 	id := conv.Default(params.IdempotencyKey, params.DeploymentID.String())
 	implementation := ProcessDeploymentWorkflow
@@ -40,7 +44,7 @@ func ExecuteProcessDeploymentWorkflow(ctx context.Context, env *tenv.Environment
 		TaskQueue:                string(env.Queue()),
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-		WorkflowRunTimeout:       15 * time.Minute,
+		WorkflowRunTimeout:       ProcessDeploymentRunTimeout,
 	}, implementation, params)
 }
 

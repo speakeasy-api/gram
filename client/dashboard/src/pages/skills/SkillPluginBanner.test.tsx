@@ -11,10 +11,8 @@ const discovery = vi.hoisted(() =>
     },
   })),
 );
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 const permissions = vi.hoisted(() => ({
   hasScope: vi.fn(),
@@ -22,9 +20,6 @@ const permissions = vi.hoisted(() => ({
 }));
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
   usePluginWriteAccess: () => permissions.hasScope("plugin:write", "project-a"),
-}));
-vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
-  ClientIconFan: () => null,
 }));
 vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: () => undefined,
@@ -154,6 +149,6 @@ describe("SkillPluginBanner", () => {
       screen
         .getByRole("link", { name: "View Example plugin" })
         .getAttribute("href"),
-    ).toBe("/plugins/plugin-a?skillId=scoped-skill");
+    ).toBe("/org/projects/project/plugins/plugin-a?skillId=scoped-skill");
   });
 });

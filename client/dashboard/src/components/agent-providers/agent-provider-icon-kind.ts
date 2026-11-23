@@ -5,6 +5,7 @@ export type AgentProviderIconKind =
   | "opencode"
   | "openclaw"
   | "pi"
+  | "kit"
   | "litellm"
   | "cline"
   | "warp"
@@ -39,6 +40,11 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
     ?.trim()
     .toLowerCase()
     .replace(/[\s_]+/g, "-");
+
+  // Exact aliases avoid assigning Kit's mark to unrelated toolkit sources.
+  if (normalizedSource === "kit" || normalizedSource === "ahp-harness:kit") {
+    return "kit";
+  }
 
   if (
     normalizedSource === "anthropic" ||

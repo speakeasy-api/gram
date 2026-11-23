@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useCallback, ReactNode } from "react";
+import type { ReactNode } from "react";
+import { createContext, useContext, useCallback } from "react";
 
 // Define a minimal tool type for direct execution
 // This avoids strict AI SDK type requirements while still being type-safe
@@ -24,9 +25,8 @@ interface ToolExecutionContextValue {
   isToolAvailable: (toolName: string) => boolean;
 }
 
-const ToolExecutionContext = createContext<ToolExecutionContextValue | null>(
-  null,
-);
+export const ToolExecutionContext =
+  createContext<ToolExecutionContextValue | null>(null);
 
 interface ToolExecutionProviderProps {
   children: ReactNode;

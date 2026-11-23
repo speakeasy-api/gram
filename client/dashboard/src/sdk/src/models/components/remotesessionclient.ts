@@ -83,9 +83,17 @@ export type RemoteSessionClient = {
    */
   credentialOwner: CredentialOwner;
   /**
+   * Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.
+   */
+  displayName?: string | undefined;
+  /**
    * The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
    */
   federatedCallbackUrl?: string | undefined;
+  /**
+   * Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.
+   */
+  forwardClientName: boolean;
   /**
    * Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
    */
@@ -94,6 +102,10 @@ export type RemoteSessionClient = {
    * The remote_session_client id.
    */
   id: string;
+  /**
+   * The identity provider connection that manages this client. Null for a client administrators manage directly. A managed client is changed through its connection and cannot be duplicated or used as a template.
+   */
+  identityProviderConnectionId?: string | undefined;
   /**
    * The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.
    */
@@ -177,9 +189,12 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     credential_owner: CredentialOwner$inboundSchema,
+    display_name: z.optional(z.string()),
     federated_callback_url: z.optional(z.string()),
+    forward_client_name: z.boolean(),
     grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
+    identity_provider_connection_id: z.optional(z.string()),
     json_web_key_set_id: z.optional(z.string()),
     legacy_callback_url: z.boolean(),
     organization_id: z.string(),
@@ -210,8 +225,11 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
       "credential_owner": "credentialOwner",
+      "display_name": "displayName",
       "federated_callback_url": "federatedCallbackUrl",
+      "forward_client_name": "forwardClientName",
       "grant_types": "grantTypes",
+      "identity_provider_connection_id": "identityProviderConnectionId",
       "json_web_key_set_id": "jsonWebKeySetId",
       "legacy_callback_url": "legacyCallbackUrl",
       "organization_id": "organizationId",

@@ -106,7 +106,7 @@ func (wc *Client) GetOrganizationDomainPolicy(ctx context.Context, orgID string)
 // CreateOrganization creates a WorkOS organization with the given name and
 // sets its external_id to the Speakeasy org ID. Returns the WorkOS org ID.
 func (wc *Client) CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error) {
-	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	o, err := wc.orgs.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Name:           name,
 		Domains:        nil,
 		DomainData:     nil,
@@ -128,7 +128,7 @@ var ErrOrganizationCreationRejected = errors.New("WorkOS rejected organization c
 // CreateOrganizationWithVerifiedDomain asserts prior administrator verification
 // of hostname. It does not retry because creation has no idempotency key.
 func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error) {
-	o, err := wc.orgsNoRetry.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	o, err := wc.orgsNoRetry.CreateOrganization(ctx, organizations.CreateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Name:           name,
 		Domains:        nil,
 		DomainData:     []organizations.OrganizationDomainData{{Domain: hostname, State: organizations.Verified}},
@@ -157,8 +157,8 @@ func (wc *Client) CreateOrganizationWithVerifiedDomain(ctx context.Context, name
 }
 
 // CreateOrganizationMembership adds a WorkOS user to a WorkOS organization
-// with the given role and returns the membership ID.
-func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
+// with the given role and returns the complete membership.
+func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*Member, error) {
 	membership, err := wc.um.CreateOrganizationMembership(ctx, usermanagement.CreateOrganizationMembershipOpts{
 		UserID:         workosUserID,
 		OrganizationID: workosOrgID,
@@ -166,9 +166,33 @@ func (wc *Client) CreateOrganizationMembership(ctx context.Context, workosUserID
 		RoleSlugs:      nil,
 	})
 	if err != nil {
-		return "", fmt.Errorf("create organization membership: %w", err)
+		return nil, fmt.Errorf("create organization membership: %w", err)
 	}
-	return membership.ID, nil
+
+	// Creating an existing membership can succeed without applying the role.
+	member := convertMember(membership)
+	if roleSlug == "" || slices.Contains(member.RoleSlugs, roleSlug) {
+		return &member, nil
+	}
+
+	// Refresh before replacing roles so changes since creation are preserved.
+	// shortcut: writes after this read can still race; use atomic role-add when available.
+	membership, err = wc.um.GetOrganizationMembership(ctx, usermanagement.GetOrganizationMembershipOpts{
+		OrganizationMembership: membership.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("refresh organization membership: %w", err)
+	}
+	member = convertMember(membership)
+	if slices.Contains(member.RoleSlugs, roleSlug) {
+		return &member, nil
+	}
+
+	updated, err := wc.UpdateMemberRoles(ctx, member.ID, append(member.RoleSlugs, roleSlug))
+	if err != nil {
+		return nil, fmt.Errorf("apply requested membership role: %w", err)
+	}
+	return updated, nil
 }
 
 // EnsureOrgExternalID sets the WorkOS organization's external_id to gramOrgID
@@ -201,7 +225,7 @@ func (wc *Client) UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, 
 }
 
 func updateOrganizationExternalID(ctx context.Context, client *organizations.Client, workosOrgID, externalID string) error {
-	_, err := client.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct // deprecated WorkOS fields are intentionally omitted.
+	_, err := client.UpdateOrganization(ctx, organizations.UpdateOrganizationOpts{ //nolint:exhaustruct_v5 // deprecated WorkOS fields are intentionally omitted.
 		Organization:     workosOrgID,
 		Name:             "",
 		Domains:          nil,

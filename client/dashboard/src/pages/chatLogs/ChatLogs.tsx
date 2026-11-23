@@ -11,5 +11,5 @@ import { LogsAgentsContent } from "@/components/observe/LogsAgents";
  * This route contributes the scope it is gated on.
  */
 export default function ChatLogs(): JSX.Element {
-  return <LogsAgentsContent scope="org:admin" />;
+  return <LogsAgentsContent scope="project:read" />;
 }

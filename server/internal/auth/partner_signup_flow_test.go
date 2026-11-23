@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 
 	goahttp "goa.design/goa/v3/http"
 	"testing"
@@ -129,7 +130,7 @@ func testPartnerSignupCallback(t *testing.T, resolutionErr, offerErr error) {
 	}
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", " FiXtUrE ", "")
 	resolver.AssertNumberOfCalls(t, "ResolveGatewayPromotionCode", 0)
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	resolver.AssertExpectations(t)
 	if resolutionErr != nil || offerErr != nil {
@@ -187,7 +188,7 @@ func TestPartnerSignupExistingOrganizationIsNotAttributed(t *testing.T) {
 		require.NoError(t, inst.createTestOrganization(ctx, org, user.UserID))
 	}
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", " FiXtUrE ", "")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error")
 	_, err = orgRepo.New(inst.conn).GetOrganizationPromotionApplication(ctx, user.Organizations[0].ID)
@@ -203,7 +204,7 @@ func TestPartnerSignupCallbackToRegisterPreservesCode(t *testing.T) {
 	ctx, inst := newTestAuthServiceForOrganizationProvisioning(t, user, partnerSignupConfiguration(t, resolver))
 	seedPartnerOffer(t, ctx, inst)
 	ctx, state := partnerSignupLogin(t, ctx, inst, "", "fixture", "")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	location, err := url.Parse(result.Location)
 	require.NoError(t, err)
@@ -275,7 +276,7 @@ func testPartnerSignupCommittedOrganizationRetry(t *testing.T, redeemed bool, of
 	require.NoError(t, orgRepo.New(inst.conn).SetOrganizationDefaultHostForTest(ctx, orgRepo.SetOrganizationDefaultHostForTestParams{ID: org.ID, DefaultHost: conv.ToPGText("https://" + testExtraPlatformHost)}))
 	ctx = requestorigin.WithContext(ctx, originAt(requestorigin.SurfacePlatform, testServerURL.String()))
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", " FiXtUrE ", "")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	require.Equal(t, extraHostTransfer("/"+org.Slug+"/billing"), result.Location)
 	persisted, err := orgRepo.New(inst.conn).GetOrganizationPromotionApplication(ctx, org.ID)
@@ -297,7 +298,7 @@ func TestPartnerSignupInvalidCodeRedirectsAfterLogin(t *testing.T) {
 	resolver.On("ResolveGatewayPromotionCode", mock.Anything, "invalid").Return("", errors.New("promotion code not found")).Once()
 	ctx, inst := newTestAuthServiceForOrganizationProvisioning(t, user, partnerSignupConfiguration(t, resolver))
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", " INVALID ", "/destination")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	location, err := url.Parse(result.Location)
 	require.NoError(t, err)
@@ -500,7 +501,7 @@ func testPartnerSignupRejectsIneligibleOffer(t *testing.T, promotionID, flow str
 		changePartnerOffer(t, ctx, inst, promotionID, flow, enabled)
 	}
 	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", "fixture", "")
-	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: new("mock_code"), State: &state})
 	require.NoError(t, err)
 	require.Contains(t, result.Location, "signin_error=")
 	_, err = orgRepo.New(inst.conn).GetOrganizationMetadataBySlug(ctx, "fixture-company")
@@ -509,4 +510,61 @@ func testPartnerSignupRejectsIneligibleOffer(t *testing.T, promotionID, flow str
 	require.NoError(t, err)
 	require.Zero(t, count)
 	require.Empty(t, inst.trialNotifier.trialStarted)
+}
+
+func TestPartnerSignupCallbackRecovery(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, code, providerError, reason string
+	}{
+		{name: "canceled", providerError: "access_denied", reason: "signin_canceled"},
+		{name: "missing code", reason: "signin_link_invalid"},
+		{name: "rejected code", code: "rejected-code", reason: "signin_link_invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			resolver := newSignupPromotionCodeResolver(t)
+			ctx, inst := newTestAuthServiceForOrganizationProvisioning(t, defaultMockUserInfo(), partnerSignupConfiguration(t, resolver))
+			ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", "fixture", "/destination")
+			var exchanges atomic.Int32
+			inst.mockAuthServer.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				exchanges.Add(1)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"invalid code"}`))
+			})
+			payload := &gen.CallbackPayload{State: &state, Code: new(tc.code), Error: new(tc.providerError)}
+
+			result, err := inst.service.Callback(ctx, payload)
+			require.NoError(t, err)
+			location, err := url.Parse(result.Location)
+			require.NoError(t, err)
+			require.Equal(t, strings.TrimRight(inst.authConfigs.SignInRedirectURL, "/")+"/sign-up", location.Scheme+"://"+location.Host+location.Path)
+			require.Equal(t, url.Values{"signin_error": {tc.reason}, "partner_code": {"fixture"}, "org_name": {"Fixture Company"}, "redirect": {"/destination"}}, location.Query())
+			require.Empty(t, result.SessionToken)
+			require.Empty(t, result.SessionCookie)
+			expectedExchanges := int32(0)
+			if tc.code != "" {
+				expectedExchanges = 1
+			}
+			require.Equal(t, expectedExchanges, exchanges.Load())
+			replay, err := inst.service.Callback(ctx, payload)
+			require.NoError(t, err)
+			replayLocation, err := url.Parse(replay.Location)
+			require.NoError(t, err)
+			require.Equal(t, url.Values{"signin_error": {"signin_link_invalid"}}, replayLocation.Query())
+			require.Empty(t, resolver.Calls)
+
+			// A copied state cannot consume the owner's signup intent.
+			ctx, copiedState := partnerSignupLogin(t, ctx, inst, "Fixture Company", "fixture", "/destination")
+			copied, err := inst.service.Callback(auth.TestNonceBindingContext(ctx, "different-browser"), &gen.CallbackPayload{State: &copiedState, Error: new("access_denied")})
+			require.NoError(t, err)
+			copiedLocation, err := url.Parse(copied.Location)
+			require.NoError(t, err)
+			require.Equal(t, url.Values{"signin_error": {"signin_link_invalid"}}, copiedLocation.Query())
+			var intent map[string]string
+			require.NoError(t, inst.nonceStore.Get(ctx, "auth:signup_intent:"+extractNonceFromState(t, copiedState), &intent))
+			require.Equal(t, "fixture", intent["PartnerCode"])
+		})
+	}
 }

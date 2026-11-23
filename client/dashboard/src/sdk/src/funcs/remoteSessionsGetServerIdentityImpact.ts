@@ -111,6 +111,7 @@ async function $do(
     "client_id": payload.client_id,
     "mcp_server_id": payload.mcp_server_id,
     "provider_id": payload.provider_id,
+    "replace_client": payload.replace_client,
     "user_session_issuer_id": payload.user_session_issuer_id,
   });
 

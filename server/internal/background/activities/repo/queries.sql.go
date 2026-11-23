@@ -746,7 +746,8 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (extract(epoch FROM k.updated_at) * 1000000)::bigint AS limit_generation,
-    k.key_encrypted AS api_key_encrypted
+    k.key_encrypted AS api_key_encrypted,
+    k.key_org_encrypted AS api_key_org_encrypted
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
 WHERE om.disabled_at IS NULL
@@ -757,13 +758,14 @@ ORDER BY om.slug
 `
 
 type GetOpenRouterCreditsMonitoringTargetsRow struct {
-	OrganizationID   string
-	OrganizationSlug string
-	GramAccountType  string
-	KeyType          string
-	MonthlyCredits   int64
-	LimitGeneration  int64
-	ApiKeyEncrypted  pgtype.Text
+	OrganizationID     string
+	OrganizationSlug   string
+	GramAccountType    string
+	KeyType            string
+	MonthlyCredits     int64
+	LimitGeneration    int64
+	ApiKeyEncrypted    pgtype.Text
+	ApiKeyOrgEncrypted pgtype.Text
 }
 
 // Targets for periodic OpenRouter credit usage polling. Filters out disabled
@@ -791,6 +793,7 @@ func (q *Queries) GetOpenRouterCreditsMonitoringTargets(ctx context.Context, acc
 			&i.MonthlyCredits,
 			&i.LimitGeneration,
 			&i.ApiKeyEncrypted,
+			&i.ApiKeyOrgEncrypted,
 		); err != nil {
 			return nil, err
 		}
@@ -937,10 +940,11 @@ WITH latest_deployments AS (
 toolset_metrics AS (
   SELECT 
     p.organization_id,
-    COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
-    COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
-    (COUNT(CASE WHEN w.id IS NULL AND t.mcp_enabled = true THEN 1 END)
-      + COUNT(CASE WHEN w.visibility <> 'disabled' THEN 1 END))::bigint as total_enabled_servers,
+    -- A hosted server counts by its canonical wrapper's visibility; a toolset without one is not hosted.
+    COUNT(CASE WHEN w.visibility = 'public' THEN 1 END) as public_mcp_servers,
+    COUNT(CASE WHEN w.visibility = 'private' THEN 1 END) as private_mcp_servers,
+    -- Matches GetEnabledServerCount.
+    COUNT(CASE WHEN w.visibility IN ('public', 'private') THEN 1 END)::bigint as total_enabled_servers,
     COUNT(t.id) as total_toolsets
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
@@ -1443,7 +1447,13 @@ JOIN projects p ON p.id = t.project_id
     AND p.deleted IS FALSE
 JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
+  -- Only a toolset whose canonical wrapper serves it is hosted.
+  AND EXISTS (
+      SELECT 1
+      FROM mcp_servers w
+      WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+        AND w.visibility IN ('public', 'private')
+  )
   AND NOT EXISTS (
       SELECT 1
       FROM openrouter_api_keys k
@@ -1995,7 +2005,13 @@ WITH latest_toolsets AS (
         LIMIT 1
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
-      AND t.mcp_enabled IS TRUE
+      -- Only a toolset whose canonical wrapper serves it is hosted.
+      AND EXISTS (
+          SELECT 1
+          FROM mcp_servers w
+          WHERE w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
+            AND w.visibility IN ('public', 'private')
+      )
       AND NOT EXISTS (
           SELECT 1
           FROM openrouter_api_keys k
@@ -2078,33 +2094,6 @@ WHERE candidates.indexed IS NULL
             AND definitions.deployment_id = candidates.deployment_id
             AND definitions.deleted IS FALSE
       )
-      OR EXISTS (
-          SELECT 1
-          FROM external_mcp_tool_definitions definitions
-          JOIN external_mcp_attachments attachments
-            ON attachments.id = definitions.external_mcp_attachment_id
-           AND attachments.deployment_id = candidates.deployment_id
-           AND attachments.deleted IS FALSE
-          WHERE definitions.tool_urn = ANY(candidates.tool_urns)
-            AND definitions.type <> 'proxy'
-            AND definitions.deleted IS FALSE
-      )
-  )
-  AND NOT EXISTS (
-      SELECT 1
-      FROM unnest(candidates.tool_urns) selected(tool_urn)
-      WHERE selected.tool_urn LIKE 'tools:externalmcp:%'
-        AND NOT EXISTS (
-            SELECT 1
-            FROM external_mcp_tool_definitions definitions
-            JOIN external_mcp_attachments attachments
-              ON attachments.id = definitions.external_mcp_attachment_id
-             AND attachments.deployment_id = candidates.deployment_id
-             AND attachments.deleted IS FALSE
-            WHERE definitions.tool_urn = selected.tool_urn
-              AND definitions.type <> 'proxy'
-              AND definitions.deleted IS FALSE
-        )
   )
 ORDER BY hashtextextended(candidates.id::text, $1), candidates.id
 LIMIT $2

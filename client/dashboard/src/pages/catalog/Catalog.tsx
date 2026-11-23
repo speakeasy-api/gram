@@ -11,13 +11,12 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  type PulseMCPServer,
-  useIsCatalogServerInstalled,
+  type CatalogServer,
+  useCatalogInstallations,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
 import { McpTabs } from "@/pages/mcp/McpTabs";
 import { useRoutes } from "@/routes";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
@@ -38,15 +37,21 @@ import { filterAndSortServers } from "./hooks/serverMetadata";
 import { useFilterState, type SortOption } from "./hooks/useFilterState";
 import { ServerCard } from "./ServerCard";
 import { ServerTableRow } from "./ServerTableRow";
+import { useCatalogTeamUsage } from "./useCatalogTeamUsage";
 
 // Sort options shown in the toolbar (mirrors the legacy SortDropdown order).
 const CATALOG_SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "popular", label: "Most Popular" },
   { value: "recent", label: "Recently Released" },
   { value: "updated", label: "Last Updated" },
   { value: "alphabetical", label: "A → Z" },
   { value: "alphabetical-desc", label: "Z → A" },
 ];
+
+// Offered to org admins only, the people who can see Shadow MCP usage.
+const TEAM_USAGE_SORT_OPTION: { value: SortOption; label: string } = {
+  value: "team-usage",
+  label: "Most used by your team",
+};
 
 export function CatalogRoot(): JSX.Element {
   return <Outlet />;
@@ -106,10 +111,9 @@ function CatalogInner() {
     }
   };
 
-  // Category + sort stay page state (no UI to change category today; sort is the
-  // SortDropdown). The five granular filters now run through the unified filter
-  // system, which reads/writes the same URL params, so existing links keep
-  // working. We bridge its value object back to the catalog's `FilterValues`
+  // Sort stays page state (the SortDropdown). The granular filters run through
+  // the unified filter system, which reads/writes the same URL params, so
+  // existing links keep working. We bridge its value object back to the catalog's `FilterValues`
   // shape so `filterAndSortServers` is reused unchanged.
   const pageState = useFilterState();
   const dimensionFilters = useDimensionFilters(CATALOG_FILTERS);
@@ -117,13 +121,8 @@ function CatalogInner() {
     () => toCatalogFilterValues(dimensionFilters.values),
     [dimensionFilters.values],
   );
-  const filterState = useMemo(
-    () => ({ category: pageState.category, sort: pageState.sort, filters }),
-    [pageState.category, pageState.sort, filters],
-  );
-
   const [viewMode, setViewMode] = useViewMode();
-  const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
+  const [addingServers, setAddingServers] = useState<CatalogServer[]>([]);
 
   const {
     data,
@@ -131,23 +130,29 @@ function CatalogInner() {
     isFetching,
     refetch: refetchCatalog,
   } = useListMCPCatalog();
-  // Legacy installs live on the deployment's external MCP attachments; new
-  // installs are remote MCP servers matched by endpoint URL. Both mark a
-  // catalog entry as added.
-  const { data: deploymentResult } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-  const externalMcps = deployment?.externalMcps ?? [];
-  const isInstalledByUrl = useIsCatalogServerInstalled();
-  const isServerAdded = (server: PulseMCPServer) =>
-    externalMcps.some(
-      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-    ) || isInstalledByUrl(server);
+  const { installState } = useCatalogInstallations();
 
   // The backend returns the full catalog in one response.
   const allServers = useMemo(
-    () => (data?.servers as PulseMCPServer[]) ?? [],
+    () => (data?.servers as CatalogServer[]) ?? [],
     [data],
   );
+
+  // The team's own use of each server, from Shadow MCP. It loads after the
+  // catalog and fills in on the cards; nothing waits for it.
+  const {
+    usage: teamUsage,
+    canSeeUsage,
+    refetch: refetchTeamUsage,
+  } = useCatalogTeamUsage(allServers, !isLoading && allServers.length > 0);
+
+  // Someone who cannot see usage may still open a link sorted by it; they
+  // get the default order and a toolbar that matches it.
+  const sort: SortOption =
+    pageState.sort === "team-usage" && !canSeeUsage
+      ? "alphabetical"
+      : pageState.sort;
+  const filterState = useMemo(() => ({ sort, filters }), [sort, filters]);
 
   // Search, sort, and filter the full catalog client-side.
   const filteredServers = useMemo(() => {
@@ -155,8 +160,9 @@ function CatalogInner() {
       allServers,
       filterState,
       searchQuery || undefined,
+      teamUsage,
     );
-  }, [allServers, filterState, searchQuery]);
+  }, [allServers, filterState, searchQuery, teamUsage]);
 
   // Check if any granular filters are active
   const hasActiveFilters = useMemo(
@@ -167,7 +173,7 @@ function CatalogInner() {
   // One server at a time: the card's own Add button opens the install dialog
   // for that server. The dialog still takes a list, so a future bulk path can
   // reuse it unchanged.
-  const handleAdd = (server: PulseMCPServer) => {
+  const handleAdd = (server: CatalogServer) => {
     setAddingServers([server]);
   };
 
@@ -177,8 +183,8 @@ function CatalogInner() {
         title="MCP Catalog"
         description={
           <>
-            Discover and import official third-party MCP servers to your
-            project. Powered by the official{" "}
+            Discover and import third-party MCP servers to your project. Powered
+            by the{" "}
             <a
               href="https://www.speakeasy.com/product/mcp-gateway/catalog"
               target="_blank"
@@ -208,12 +214,17 @@ function CatalogInner() {
           onClearAll: dimensionFilters.clearAll,
         }}
         sort={{
-          value: pageState.sort,
+          value: sort,
           onChange: (v) => pageState.setSort(v as SortOption),
-          options: CATALOG_SORT_OPTIONS,
+          options: canSeeUsage
+            ? [TEAM_USAGE_SORT_OPTION, ...CATALOG_SORT_OPTIONS]
+            : CATALOG_SORT_OPTIONS,
         }}
         viewToggle={{ value: viewMode, onChange: setViewMode }}
-        onRefresh={() => void refetchCatalog()}
+        onRefresh={() => {
+          void refetchCatalog();
+          refetchTeamUsage();
+        }}
         isRefreshing={isFetching}
       >
         {/* Server grid / table */}
@@ -234,8 +245,9 @@ function CatalogInner() {
                   detailHref={routes.mcp.catalog.detail.href(
                     encodeURIComponent(server.registrySpecifier),
                   )}
-                  isAdded={isServerAdded(server)}
+                  installState={installState(server)}
                   onAdd={() => handleAdd(server)}
+                  teamUsage={teamUsage.get(server.registrySpecifier)}
                 />
               );
             })}
@@ -248,7 +260,7 @@ function CatalogInner() {
                 { label: "Name" },
                 { label: "Version" },
                 { label: "Description" },
-                { label: "Tools" },
+                ...(canSeeUsage ? [{ label: "Your team" }] : []),
                 { label: "" },
               ]}
             >
@@ -261,8 +273,10 @@ function CatalogInner() {
                     detailHref={routes.mcp.catalog.detail.href(
                       encodeURIComponent(server.registrySpecifier),
                     )}
-                    isAdded={isServerAdded(server)}
+                    installState={installState(server)}
                     onAdd={() => handleAdd(server)}
+                    showTeamUsage={canSeeUsage}
+                    teamUsage={teamUsage.get(server.registrySpecifier)}
                   />
                 );
               })}
@@ -273,16 +287,11 @@ function CatalogInner() {
         {/* Empty state */}
         {!isLoading && filteredServers.length === 0 && (
           <EmptySearchResult
-            hasFilters={
-              hasActiveFilters ||
-              filterState.category !== "all" ||
-              searchQuery !== ""
-            }
+            hasFilters={hasActiveFilters || searchQuery !== ""}
             onClear={() => {
               setSearchQuery("");
-              // clearFilters resets category + sort + every filter param in
-              // a single URL update (the unified state re-reads from it),
-              // so a category-filtered empty state isn't left stuck.
+              // clearFilters resets sort + every filter param in a single
+              // URL update (the unified state re-reads from it).
               pageState.clearFilters();
             }}
           />
@@ -290,6 +299,8 @@ function CatalogInner() {
       </ResourceListPage>
 
       <AddServerDialog
+        openProviderSetup={!attachToGatewayId}
+        attachToGatewayId={attachToGatewayId ?? undefined}
         servers={addingServers}
         projectSlug={project.slug}
         open={addingServers.length > 0}

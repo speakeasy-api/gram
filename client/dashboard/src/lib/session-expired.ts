@@ -5,7 +5,7 @@ import { getApiBaseURL } from "@/lib/utils";
  * Paths that render without a session. A 401 on these is expected (auth.info
  * always 401s when logged out), so it must not trigger a login redirect.
  */
-export const UNAUTHENTICATED_PATHS = [
+const UNAUTHENTICATED_PATHS = [
   "/login",
   "/register",
   "/explore-demo",

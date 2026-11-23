@@ -33,6 +33,25 @@ func (s *Service) enforceShadowMCPToolAccess(
 		detail = "MCP server is not Speakeasy-hosted"
 	}
 
+	// Onboarding takes effect at once: when the project serves an official
+	// version of this server, the direct connection is blocked whatever the
+	// policy's default and whatever access was granted to the direct URL
+	// before. The block message sends the agent to the official version.
+	if official, ok := s.shadowMCPOfficialServer(ctx, organizationID, projectID, evidence.FullURL); ok {
+		s.logger.InfoContext(ctx, "shadow-mcp call blocked: an official version of the server exists",
+			attr.SlogEvent("shadow_mcp_official_server_redirect"),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID),
+			attr.SlogRiskPolicyID(policy.ID),
+			attr.SlogValueAny(map[string]any{
+				"official_mcp_server_id":  official.MCPServerID.String(),
+				"official_link_automatic": official.Automatic,
+				"tool_name":               toolName,
+			}),
+		)
+		return shadowMCPOfficialServerDetail(official, evidence.FullURL), true
+	}
+
 	// Allow-all policies invert the default: every non-Speakeasy-hosted server is
 	// permitted unless its URL is on the policy's blocked list. Bypass grants
 	// are a block_all concept and are never consulted here — the blocked-list
@@ -72,6 +91,18 @@ func (s *Service) enforceShadowMCPToolAccess(
 		return "", false
 	}
 	return detail, true
+}
+
+// shadowMCPOfficialServerDetail is the audit reason for a direct call blocked
+// because the project serves an official version of the server. It says
+// whether the link was automatic or an administrator's choice, so the audit
+// trail shows why the call was redirected.
+func shadowMCPOfficialServerDetail(official shadowmcp.OfficialServer, fullURL string) string {
+	how := "chosen by an administrator"
+	if official.Automatic {
+		how = "chosen automatically because it proxies to this URL"
+	}
+	return fmt.Sprintf("MCP server has an official version %q, %s; direct use is blocked (URL: %s)", official.Name, how, fullURL)
 }
 
 func (s *Service) canBypassPolicy(

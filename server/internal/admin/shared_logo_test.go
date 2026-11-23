@@ -11,6 +11,7 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	issuersrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -37,7 +39,7 @@ func TestStandaloneIssuerLogo_SharedDashboardStorageAndReplacement(t *testing.T)
 	require.NoError(t, err)
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
-	svc.SetRemoteSessionService(remotesessions.NewGlobalService(svc.logger, tp, testenv.NewMeterProvider(t), db, enc, policy))
+	svc.SetRemoteSessionService(remotesessions.NewGlobalService(svc.logger, tp, testenv.NewMeterProvider(t), db, enc, clientsecretstest.New(t, db, enc), policy))
 
 	// Separate service/store instances share only the database and disk location,
 	// as the admin and dashboard API processes do. No copy or in-memory blob map.
@@ -47,6 +49,7 @@ func TestStandaloneIssuerLogo_SharedDashboardStorageAndReplacement(t *testing.T)
 	dashboardRoot, err := os.OpenRoot(directory)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, adminRoot.Close()); require.NoError(t, dashboardRoot.Close()) })
+	svc.dashboardURL, _ = url.Parse("https://public.example.test")
 	svc.SetAssetService(assets.NewPlatformService(svc.logger, tp, policy, db, assets.NewFSBlobStore(svc.logger, adminRoot)))
 	dashboardAssets := assets.NewPlatformService(svc.logger, tp, policy, db, assets.NewFSBlobStore(svc.logger, dashboardRoot))
 	adminMux, dashboardMux := goahttp.NewMuxer(), goahttp.NewMuxer()

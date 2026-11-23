@@ -9,10 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -81,10 +81,15 @@ type Service struct {
 	guardian    *guardian.Policy
 	syncTrigger SyncTrigger
 	features    feature.Provider
+	reader      *Reader
+
+	// serverURL is this deployment's server URL, handed to providers as
+	// Deps.ServerURL.
+	serverURL *url.URL
 }
 
 // deviceLevelCoverage reports whether an org matches coverage on hardware
-// serials rather than assigned-user emails. Shared by the management API and
+// serials rather than assigned-user emails. Shared by the coverage reads and
 // the sync runner so a pushed snapshot and the dashboard an admin is looking
 // at can never disagree about the mode.
 //
@@ -127,10 +132,6 @@ func deviceLevelCoverage(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	return enabled
 }
 
-func (s *Service) deviceLevelCoverage(ctx context.Context, orgID string) bool {
-	return deviceLevelCoverage(ctx, s.logger, s.db, s.features, orgID)
-}
-
 // coverageAttestation names the strongest claim that holds for EVERY active
 // device in a response — deliberately not just the org's matching mode.
 //
@@ -162,6 +163,7 @@ func NewService(
 	guardianPolicy *guardian.Policy,
 	syncTrigger SyncTrigger,
 	features feature.Provider,
+	serverURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("deviceintegrations.api"))
 	return &Service{
@@ -176,6 +178,8 @@ func NewService(
 		guardian:    guardianPolicy,
 		syncTrigger: syncTrigger,
 		features:    features,
+		reader:      NewReader(logger, db, features),
+		serverURL:   serverURL,
 	}
 }
 
@@ -227,7 +231,7 @@ func (s *Service) ListProviders(ctx context.Context, payload *gen.ListProvidersP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -244,7 +248,7 @@ func (s *Service) GetConfig(ctx context.Context, payload *gen.GetConfigPayload) 
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -268,7 +272,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -352,7 +356,7 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -403,7 +407,7 @@ func (s *Service) TestConnection(ctx context.Context, payload *gen.TestConnectio
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -441,7 +445,7 @@ func (s *Service) TestConnection(ctx context.Context, payload *gen.TestConnectio
 // provider implements. All outbound HTTP uses the guardian SSRF-hardened
 // client: instance URLs are customer-supplied.
 func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) error {
-	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian), ServerURL: s.serverURL}
 	switch {
 	case desc.NewInventorySource != nil:
 		if err := desc.NewInventorySource(deps).TestConnection(ctx, creds, settings); err != nil {
@@ -469,7 +473,7 @@ func (s *Service) probeProvider(ctx context.Context, desc providers.Descriptor, 
 // failure surfaces as an actionable bad-request so the customer fixes the
 // credentials/workspace instead of saving a config that can never sync.
 func (s *Service) provisionIfSupported(ctx context.Context, orgID string, desc providers.Descriptor, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
-	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian), ServerURL: s.serverURL}
 	var prov providers.Provisioner
 	switch {
 	case desc.NewEvidenceSink != nil:
@@ -499,7 +503,7 @@ func (s *Service) ListSchedules(ctx context.Context, payload *gen.ListSchedulesP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -580,7 +584,7 @@ func (s *Service) SetScheduleEnabled(ctx context.Context, payload *gen.SetSchedu
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -647,7 +651,7 @@ func (s *Service) RetrySchedule(ctx context.Context, payload *gen.RetryScheduleP
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -710,56 +714,29 @@ func (s *Service) ListManagedDevices(ctx context.Context, payload *gen.ListManag
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
-	// The design supplies Default(50) and bounds [1,200]; Goa materializes
-	// the default when the client omits the parameter.
-	limit := payload.Limit
-
-	cursor := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if payload.Cursor != nil && *payload.Cursor != "" {
-		parsed, err := uuid.Parse(*payload.Cursor)
-		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")
-		}
-		cursor = uuid.NullUUID{UUID: parsed, Valid: true}
-	}
-
-	// Blank entries would leave a non-empty array that matches no device, so a
-	// filter of only empty values has to read as no filter at all.
-	userIDs := nonBlank(payload.UserIds)
-	userEmails := nonBlank(payload.UserEmails)
-
-	rows, err := s.repo.ListManagedDevices(ctx, repo.ListManagedDevicesParams{
-		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
-		DeviceLevel:    s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID),
+	result, err := s.reader.ManagedDevices(ctx, ManagedDevicesQuery{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
-		CursorID:       cursor,
-		Bucket:         conv.PtrToPGTextEmpty(payload.CoverageBucket),
-		UserIds:        userIDs,
-		UserEmails:     userEmails,
-		PageLimit:      int32(limit), //nolint:gosec // design bounds limit to [1,200]
+		Provider:       conv.PtrValOr(payload.Provider, ""),
+		CoverageBucket: conv.PtrValOr(payload.CoverageBucket, ""),
+		PolicyState:    conv.PtrValOr(payload.PolicyState, ""),
+		UserIDs:        payload.UserIds,
+		UserEmails:     payload.UserEmails,
+		Cursor:         conv.PtrValOr(payload.Cursor, ""),
+		// The design supplies Default(50) and bounds [1,200]; Goa materializes
+		// the default when the client omits the parameter.
+		Limit: payload.Limit,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrInvalidCursor):
+		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "list managed devices")
 	}
-
-	devices := make([]*gen.ManagedDevice, 0, len(rows))
-	for _, row := range rows {
-		devices = append(devices, deviceView(row))
-	}
-	var nextCursor *string
-	if len(rows) == limit {
-		last := rows[len(rows)-1].ID.String()
-		nextCursor = &last
-	}
-	return &gen.ListManagedDevicesResult{
-		Devices:    devices,
-		NextCursor: nextCursor,
-	}, nil
+	return result, nil
 }
 
 func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePayload) (*gen.DeviceIntegrationCoverage, error) {
@@ -767,48 +744,60 @@ func (s *Service) GetCoverage(ctx context.Context, payload *gen.GetCoveragePaylo
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
 		return nil, err
 	}
 
-	// Resolved once and shared: the bucket counts and the unmanaged-users tile
-	// sit side by side on the same page, so evaluating the flag twice could
-	// render a device as covered next to a tile calling its user unmanaged.
-	deviceLevel := s.deviceLevelCoverage(ctx, authCtx.ActiveOrganizationID)
-
-	counts, err := s.repo.GetCoverageCounts(ctx, repo.GetCoverageCountsParams{
-		ActiveCutoff:   conv.ToPGTimestamptz(time.Now().UTC().Add(-activeWindow)),
-		DeviceLevel:    deviceLevel,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
-	})
+	coverage, err := s.reader.Coverage(ctx, authCtx.ActiveOrganizationID, conv.PtrValOr(payload.Provider, ""))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute device integration coverage")
 	}
-	unmanaged, err := s.repo.CountUnmanagedAgentUsers(ctx, repo.CountUnmanagedAgentUsersParams{
-		DeviceLevel:    deviceLevel,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Provider:       conv.PtrToPGTextEmpty(payload.Provider),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count unmanaged agent users")
+	return coverage, nil
+}
+
+func (s *Service) ListFleetDevices(ctx context.Context, payload *gen.ListFleetDevicesPayload) (*gen.ListFleetDevicesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
+		return nil, err
 	}
 
-	return &gen.DeviceIntegrationCoverage{
-		OrganizationID:            authCtx.ActiveOrganizationID,
-		ActiveWindowMinutes:       int(activeWindow / time.Minute),
-		Attestation:               coverageAttestation(deviceLevel, counts.AgentActive, counts.AgentActiveDeviceAttested),
-		AgentActive:               counts.AgentActive,
-		AgentActiveDeviceAttested: counts.AgentActiveDeviceAttested,
-		AgentStale:                counts.AgentStale,
-		AgentOtherDevice:          counts.AgentOtherDevice,
-		NoAgent:                   counts.NoAgent,
-		NoEmail:                   counts.NoEmail,
-		UnresolvedEmail:           counts.UnresolvedEmail,
-		Missing:                   counts.Missing,
-		TotalDevices:              counts.Total,
-		UnmanagedAgentUsers:       unmanaged,
-	}, nil
+	result, err := s.reader.FleetDevices(ctx, FleetDevicesQuery{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Provider:       conv.PtrValOr(payload.Provider, ""),
+		InInventory:    payload.InInventory,
+		CoverageBucket: conv.PtrValOr(payload.CoverageBucket, ""),
+		PolicyState:    conv.PtrValOr(payload.PolicyState, ""),
+		UserIDs:        payload.UserIds,
+		UserEmails:     payload.UserEmails,
+		Cursor:         conv.PtrValOr(payload.Cursor, ""),
+		Limit:          payload.Limit,
+	})
+	switch {
+	case errors.Is(err, ErrInvalidCursor):
+		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "list fleet devices")
+	}
+	return result, nil
+}
+
+func (s *Service) GetFleetCoverage(ctx context.Context, payload *gen.GetFleetCoveragePayload) (*gen.FleetCoverage, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Read()); err != nil {
+		return nil, err
+	}
+
+	coverage, err := s.reader.FleetCoverage(ctx, authCtx.ActiveOrganizationID, conv.PtrValOr(payload.Provider, ""))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute fleet coverage")
+	}
+	return coverage, nil
 }
 
 func snapshotFromConfig(cfg Config) audit.DeviceIntegrationSnapshot {

@@ -1,12 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react";
 import { CalendarIcon, ChevronDown, Zap } from "lucide-react";
-import { generateText, LanguageModel, Output } from "ai";
+import type { LanguageModel } from "ai";
+import { generateText, Output } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
 import { cn } from "@/lib/utils";
-import { trackError } from "@/elements/lib/errorTracking";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { Calendar } from "./calendar";
 
@@ -425,9 +425,7 @@ User input: ${input}`,
     // Returning null keeps the UI graceful on an unparseable string, but the
     // failure must not be invisible — a 401/gateway error here looks identical
     // to "couldn't parse" to the user. Surface it so it's diagnosable.
-    trackError(error, {
-      source: "custom",
-      location: "TimeRangePicker.parseWithAI",
+    console.error("TimeRangePicker.parseWithAI failed:", error, {
       hasAuthHeaders: Boolean(authHeaders),
     });
     return null;
@@ -447,6 +445,11 @@ export interface TimeRangePickerProps {
   onPresetChange?: (preset: DateRangePreset) => void;
   /** Called when a custom range is selected */
   onCustomRangeChange?: (from: Date, to: Date, label?: string) => void;
+  /**
+   * Replaces onCustomRangeChange for calendar picks when supplied.
+   * Both dates are local midnight; to is the final selected day, inclusive.
+   */
+  onCalendarRangeChange?: (from: Date, to: Date) => void;
   /** Called to clear custom range */
   onClearCustomRange?: () => void;
   /** Initial label for custom range (from URL params) */
@@ -483,6 +486,7 @@ function TimeRangePicker({
   customRange,
   onPresetChange,
   onCustomRangeChange,
+  onCalendarRangeChange,
   onClearCustomRange,
   customRangeLabel: initialCustomLabel,
   showLive = false,
@@ -556,7 +560,8 @@ function TimeRangePicker({
 
   const handleCalendarSelect = (range: { start: Date; end: Date | null }) => {
     if (range.start && range.end) {
-      onCustomRangeChange?.(range.start, range.end);
+      if (onCalendarRangeChange) onCalendarRangeChange(range.start, range.end);
+      else onCustomRangeChange?.(range.start, range.end);
       setCustomLabel(null); // Calendar selections don't have AI labels
       setIsOpen(false);
       setShowCalendar(false);

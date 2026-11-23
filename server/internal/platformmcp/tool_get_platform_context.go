@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP SDK manifests intentionally rely on documented zero-value optional fields.
+//nolint:exhaustruct_v5 // MCP SDK manifests intentionally rely on documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -13,7 +13,7 @@ func registerGetPlatformContextTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_platform_context",
 		Title:       "Show the Current Organization",
-		Description: "Show which organization this session is working in, explain how live RBAC affects the shared Platform MCP catalogue, and identify unsupported issuer and identity-chaining remediation workflows. Call this first in a new conversation before choosing a permitted workflow.",
+		Description: "Show which organization this session is working in, explain how live RBAC affects the shared Platform MCP catalogue, and identify unsupported issuer and identity-chaining remediation workflows. Call this first in a new conversation before choosing a permitted workflow. To see which user and roles this session is connected as, call whoami.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, PlatformContext, error) {
 		principal, err := principalFromToolContext(ctx)

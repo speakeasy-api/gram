@@ -34,6 +34,8 @@ type ExternalKey struct {
 	// @access: confidential
 	Provider string
 	// @access: confidential
+	Purpose string
+	// @access: confidential
 	Algorithm string
 	// @access: confidential
 	Name string

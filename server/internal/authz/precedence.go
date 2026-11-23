@@ -25,6 +25,9 @@ import (
 //   - A direct grant spanning every resource (resource_id "*") does not
 //     override, so a broad user grant can still be revoked on one resource by
 //     a role or organization-wide block.
+//   - A grant inferred by the default auth permission backfill does not
+//     override, even when it names one resource: it mirrors access the user
+//     already had rather than an administrator's decision about them.
 //   - Agent grants never override. An agent's owner can write its policy
 //     without being an administrator, so letting those grants outrank a block
 //     would let owners lift a block an administrator put on the agent's role
@@ -64,10 +67,25 @@ func DirectOverrideGrants(grants []Grant) []Grant {
 	return direct
 }
 
+// DirectSelectorsByScope groups the selectors of DirectOverrideGrants by
+// scope. Clients read them next to each effective grant to apply the same
+// precedence: a direct grant naming a resource outranks a block inherited from
+// a role or everyone.
+func DirectSelectorsByScope(grants []Grant) map[Scope][]Selector {
+	direct := make(map[Scope][]Selector)
+	for _, grant := range DirectOverrideGrants(grants) {
+		direct[grant.Scope] = append(direct[grant.Scope], grant.Selector)
+	}
+	return direct
+}
+
 // isDirectOverrideGrant reports whether grant takes part in direct override
 // evaluation: a direct exclusion, or a direct allow naming a concrete resource.
 func isDirectOverrideGrant(grant Grant) bool {
 	if !IsDirectGrant(grant) {
+		return false
+	}
+	if grant.Inferred && !IsBlocklistScope(grant.Scope) {
 		return false
 	}
 	return IsBlocklistScope(grant.Scope) || grant.Selector.ResourceID() != WildcardResource
@@ -115,11 +133,11 @@ func directOverride(grants []Grant, check Check) (*Grant, *Check, error) {
 // directOverrideCheck returns the check a direct grant must satisfy to outrank
 // an inherited exclusion. A server-level check is proven by any direct grant on
 // the server, but a tool call only by one whose every constraint the call
-// carries. Loose matching would let a disposition-scoped grant reach a tool
-// with no derivable disposition, past a block that otherwise covers it.
+// carries, so a disposition-scoped grant never reaches a tool with no
+// derivable disposition, past a block that otherwise covers it.
 func directOverrideCheck(check Check) Check {
-	if _, toolCall := check.Dimensions[SelectorKeyTool]; toolCall {
-		return check.WithStrictSelectorMatch()
+	if check.isToolCall() {
+		check.exact = true
 	}
 	return check
 }

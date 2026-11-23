@@ -38,26 +38,25 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, fixtures.SeedDelegationLoaderClientFixture(ctx, testrepo.SeedDelegationLoaderClientFixtureParams{
 		ID: client, OrganizationID: org, RemoteSessionIssuerID: issuer, ClientID: "test-client", Scope: nil,
 	}))
-	//nolint:glint // notestingrawsql: tenant fixtures across owner domains with caller-chosen ids
-	_, err = conn.Exec(ctx, `INSERT INTO user_session_issuers (organization_id,slug,authn_challenge_mode,session_duration,trusted_remote_session_issuer_id,trusted_remote_session_client_id) VALUES ($1,'delegation-test','interactive',interval '1 hour',$2,$3)`, org, issuer, client)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedDelegationUserSessionIssuerFixture(ctx, testrepo.SeedDelegationUserSessionIssuerFixtureParams{
+		OrganizationID: pgtype.Text{String: org, Valid: true}, Slug: "delegation-test",
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}, TrustedRemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true},
+	}))
 	text := func(s string) pgtype.Text { return pgtype.Text{String: s, Valid: true} }
-	params := repo.UpsertTrustedDelegationCredentialParams{
+	params := repo.UpsertTrustedDelegationCredentialFixtureParams{
 		OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject,
 		IdentityAssertionEncrypted: text("encrypted-assertion"),
 		IdentityAssertionExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 		RefreshTokenEncrypted:      text("encrypted-refresh"), UpstreamSubjectEncrypted: text("encrypted-subject"),
 		NonceEncrypted: text("encrypted-nonce"), CredentialConfigHash: text("config"),
 	}
-	row, err := q.UpsertTrustedDelegationCredential(ctx, params)
+	row, err := q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), row.CredentialGeneration.Int64)
-	_, err = q.UpsertTrustedDelegationCredential(ctx, params)
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	// Cleanup cannot act through a mismatched issuer binding.
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET identity_assertion_expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, row.ID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.ExpireDelegationAssertionFixture(ctx, row.ID))
 	cleanup := repo.ClearExpiredTrustedDelegationAssertionParams{OrganizationID: org, ClientID: client, IssuerID: uuid.New(), SubjectUrn: subject}
 	cleared, err := q.ClearExpiredTrustedDelegationAssertion(ctx, cleanup)
 	require.NoError(t, err)
@@ -67,9 +66,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), cleared)
 	// Legacy NULL generations behave as generation 1 until a write advances them.
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET credential_generation = NULL WHERE id = $1`, row.ID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.ClearDelegationGenerationFixture(ctx, row.ID))
 	params.ExpectedGeneration = row.CredentialGeneration.Int64
 	claimID := uuid.New()
 	claimed, err := q.ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: row.CredentialGeneration.Int64, RefreshClaimID: claimID})
@@ -89,22 +86,20 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.True(t, attempted.LastRefreshAttemptAt.Valid)
 
 	// Claim acquisition invalidates callback snapshots that might preserve a spent token.
-	_, err = q.UpsertTrustedDelegationCredential(ctx, params)
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET last_refresh_attempt_at = clock_timestamp() - interval '2 days' WHERE id=$1`, row.ID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.BackdateDelegationRefreshAttemptFixture(ctx, row.ID))
 	_, err = q.ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: uuid.New()})
 	require.ErrorIs(t, err, pgx.ErrNoRows) // A timeout never releases the claim.
 	// Fresh login supersedes the in-flight generation; its late result cannot win.
 	params.ExpectedGeneration = claimed.CredentialGeneration.Int64
 	params.RefreshTokenEncrypted = text("new-login-refresh")
-	replacement, err := q.UpsertTrustedDelegationCredential(ctx, params)
+	replacement, err := q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.NoError(t, err)
 	require.False(t, replacement.RefreshClaimID.Valid)
 	require.True(t, replacement.LastRefreshAttemptAt.Valid)
 	require.WithinDuration(t, time.Now().Add(-48*time.Hour), replacement.LastRefreshAttemptAt.Time, time.Minute)
-	_, err = q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID, RefreshTokenEncrypted: text("late-refresh")})
+	_, err = q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	get := repo.GetTrustedDelegationCredentialParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject}
 	read, err := q.GetTrustedDelegationCredential(ctx, get)
@@ -118,12 +113,11 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	claimID = uuid.New()
 	claimed, err = q.ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: read.CredentialGeneration.Int64, RefreshClaimID: claimID})
 	require.NoError(t, err)
-	completed, err := q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID, RefreshTokenEncrypted: text("rotated-refresh"), UpstreamSubjectEncrypted: text("encrypted-subject"), NonceEncrypted: text("encrypted-nonce")})
+	completed, err := q.CompleteTrustedDelegationRefresh(ctx, repo.CompleteTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID})
 	require.NoError(t, err)
 	require.Greater(t, completed.CredentialGeneration.Int64, claimed.CredentialGeneration.Int64)
-	require.Equal(t, "rotated-refresh", completed.RefreshTokenEncrypted.String)
+	require.Equal(t, "new-login-refresh", completed.RefreshTokenEncrypted.String, "the completion leaves the tokens to SetTrustedIssuerSessionTokens in the same transaction")
 	require.False(t, completed.RefreshClaimID.Valid)
-	require.False(t, completed.IdentityAssertionEncrypted.Valid)
 
 	// Release remains possible after live trust removal and changes only its own claim.
 	claimID = uuid.New()
@@ -157,21 +151,17 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	released, err = q.ReleaseTrustedDelegationRefresh(ctx, release)
 	require.NoError(t, err)
 	require.Zero(t, released)
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE user_session_issuers SET deleted_at=NULL WHERE organization_id=$1`, org)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.RestoreDelegationUserIssuersFixture(ctx, org))
 	completed, err = q.GetTrustedDelegationCredential(ctx, get)
 	require.NoError(t, err)
-	require.Equal(t, "rotated-refresh", completed.RefreshTokenEncrypted.String)
+	require.Equal(t, "new-login-refresh", completed.RefreshTokenEncrypted.String)
 	require.False(t, completed.RefreshClaimID.Valid)
 	get.OrganizationID = "org_another_test"
 	_, err = q.GetTrustedDelegationCredential(ctx, get)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	get.OrganizationID = org
 	// Expiry clears assertion and refresh, plus identity-only residue, even when inactive.
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET identity_assertion_expires_at=clock_timestamp()-interval '1 hour',refresh_expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, row.ID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.ExpireDelegationCredentialFixture(ctx, row.ID))
 	// A tenant cleanup must not consume another tenant's expiration budget.
 	foreignCount, err := q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text("org_other"), BatchSize: 500})
 	require.NoError(t, err)
@@ -189,12 +179,10 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, count)
 	params.ExpectedGeneration = read.CredentialGeneration.Int64
-	_, err = q.UpsertTrustedDelegationCredential(ctx, params)
+	_, err = q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.NoError(t, err)
 	// Aggregate timestamps describe current-registration observations only.
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET observation_status='durable_credential_present', observed_at=clock_timestamp(), credential_obtained_at=clock_timestamp()-interval '1 day', last_refresh_succeeded_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, row.ID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.MarkDelegationObservedFixture(ctx, row.ID))
 	counts, err := q.CountTrustedDelegationObservations(ctx, repo.CountTrustedDelegationObservationsParams{OrganizationID: org, ClientID: client, ConfigHash: "config", ObservedSince: pgtype.Timestamptz{Time: time.Now().Add(-30 * 24 * time.Hour), Valid: true}})
 	require.NoError(t, err)
 	require.Len(t, counts, 1)
@@ -206,9 +194,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, counts)
 	// Status derives current credential validity without refreshing observation time.
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET refresh_token_encrypted=NULL, refresh_expires_at=clock_timestamp()-interval '1 day', identity_assertion_expires_at=NULL WHERE id=$1`, row.ID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.ExpireDelegationRefreshFixture(ctx, row.ID))
 	counts, err = q.CountTrustedDelegationObservations(ctx, repo.CountTrustedDelegationObservationsParams{OrganizationID: org, ClientID: client, ConfigHash: "config", ObservedSince: pgtype.Timestamptz{Time: time.Now().Add(-30 * 24 * time.Hour), Valid: true}})
 	require.NoError(t, err)
 	require.Len(t, counts, 1)
@@ -223,9 +209,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.False(t, read.UpstreamSubjectEncrypted.Valid)
 	require.Equal(t, observed, read.ObservedAt)
 	// Stale expiry metadata without its secret must not starve later batches.
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET identity_assertion_encrypted='valid-assertion', identity_assertion_expires_at=clock_timestamp()+interval '1 day', upstream_subject_encrypted='subject', refresh_expires_at=clock_timestamp()-interval '1 day' WHERE id=$1`, row.ID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.SetStaleDelegationRefreshExpiryFixture(ctx, row.ID))
 	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Zero(t, count)
@@ -233,18 +217,14 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	project := uuid.New()
 	_, err = fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: project, Name: "Cleanup test", Slug: "cleanup-test", OrganizationID: org})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET project_id=$2 WHERE id=$1`, row.ID, project)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.SetDelegationProjectFixture(ctx, testrepo.SetDelegationProjectFixtureParams{ID: row.ID, ProjectID: uuid.NullUUID{UUID: project, Valid: true}}))
 	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
-	var projectHasSecrets bool
-	//nolint:glint // notestingrawsql: reads private credential columns that no production query exposes
-	err = conn.QueryRow(ctx, `SELECT identity_assertion_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL FROM trusted_issuer_sessions WHERE id=$1`, row.ID).Scan(&projectHasSecrets)
+	_, err = fixtures.GetDelegationAssertionOrSubjectPresentFixture(ctx, row.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	params.ExpectedGeneration = 0
-	row, err = q.UpsertTrustedDelegationCredential(ctx, params)
+	row, err = q.UpsertTrustedDelegationCredentialFixture(ctx, params)
 	require.NoError(t, err)
 	// Explicit revocation must work after removal of trust, without a live read.
 	require.NoError(t, fixtures.RevokeDelegationUserIssuersFixture(ctx, org))
@@ -256,13 +236,11 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	revoked, err = q.RevokeTrustedDelegationCredential(ctx, revocation)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), revoked)
-	var secretsRemain bool
-	var generation int64
-	//nolint:glint // notestingrawsql: reads private credential columns that no production query exposes
-	err = conn.QueryRow(ctx, `SELECT identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL, credential_generation FROM trusted_issuer_sessions WHERE id=$1`, row.ID).Scan(&secretsRemain, &generation)
+	revokedState, err := fixtures.GetDelegationSecretsAndGenerationFixture(ctx, row.ID)
 	require.NoError(t, err)
-	require.False(t, secretsRemain)
-	require.Greater(t, generation, row.CredentialGeneration.Int64)
+	require.False(t, revokedState.Present)
+	require.True(t, revokedState.CredentialGeneration.Valid)
+	require.Greater(t, revokedState.CredentialGeneration.Int64, row.CredentialGeneration.Int64)
 	// A removed membership blocks all reads before any decryption, and cleanup erases residue.
 	require.NoError(t, fixtures.ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, org))
 	_, err = q.GetTrustedDelegationCredential(ctx, get)
@@ -270,31 +248,24 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count)
-	var hasSecrets bool
-	//nolint:glint // notestingrawsql: reads private credential columns that no production query exposes
-	err = conn.QueryRow(ctx, `SELECT identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL FROM trusted_issuer_sessions WHERE id=$1`, row.ID).Scan(&hasSecrets)
+	_, err = fixtures.GetDelegationSecretsPresentFixture(ctx, row.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	for _, lifecycle := range []string{"deleted", "orphaned", "secret-free-orphan", "secret-free-deleted", "secret-free-org-orphan"} {
 		{
 			t.Logf("cleanup lifecycle: %s", lifecycle)
 			id := uuid.New()
-			//nolint:glint // notestingrawsql: fabricates trusted issuer sessions in lifecycle states production writes cannot produce
-			_, err := conn.Exec(ctx, `INSERT INTO trusted_issuer_sessions (id,organization_id,remote_session_client_id,subject_urn,identity_assertion_encrypted,refresh_token_encrypted,upstream_subject_encrypted,nonce_encrypted,deleted_at) VALUES ($1,$2,$3,'user:cleanup-test','assertion','refresh','subject','nonce',CASE WHEN $4='deleted' THEN clock_timestamp() ELSE NULL END)`, id, org, client, lifecycle)
+			err := fixtures.SeedDelegationLifecycleSessionFixture(ctx, testrepo.SeedDelegationLifecycleSessionFixtureParams{
+				ID: id, OrganizationID: text(org), RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true}, Lifecycle: lifecycle,
+			})
 			require.NoError(t, err)
 			if lifecycle == "orphaned" {
-				//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-				_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET remote_session_client_id=NULL, organization_id=NULL WHERE id=$1`, id)
-				require.NoError(t, err)
+				require.NoError(t, fixtures.OrphanDelegationSessionFixture(ctx, id))
 			}
 			if lifecycle == "secret-free-orphan" {
-				//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-				_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET remote_session_client_id=NULL, identity_assertion_encrypted=NULL, refresh_token_encrypted=NULL, upstream_subject_encrypted=NULL, nonce_encrypted=NULL WHERE id=$1`, id)
-				require.NoError(t, err)
+				require.NoError(t, fixtures.StripDelegationOrphanSecretsFixture(ctx, id))
 			}
 			if lifecycle == "secret-free-deleted" || lifecycle == "secret-free-org-orphan" {
-				//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-				_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET identity_assertion_encrypted=NULL, refresh_token_encrypted=NULL, upstream_subject_encrypted=NULL, nonce_encrypted=NULL, deleted_at=CASE WHEN $2='secret-free-deleted' THEN clock_timestamp() ELSE NULL END, organization_id=CASE WHEN $2='secret-free-org-orphan' THEN NULL ELSE organization_id END WHERE id=$1`, id, lifecycle)
-				require.NoError(t, err)
+				require.NoError(t, fixtures.StripDelegationLifecycleSecretsFixture(ctx, testrepo.StripDelegationLifecycleSecretsFixtureParams{ID: id, Lifecycle: lifecycle}))
 			}
 			cleanupOrg := text(org)
 			if lifecycle == "orphaned" || lifecycle == "secret-free-org-orphan" {
@@ -303,8 +274,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 			count, err := q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: cleanupOrg, BatchSize: 1})
 			require.NoError(t, err)
 			require.Equal(t, int64(1), count)
-			//nolint:glint // notestingrawsql: reads private credential columns that no production query exposes
-			err = conn.QueryRow(ctx, `SELECT identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL FROM trusted_issuer_sessions WHERE id=$1`, id).Scan(&hasSecrets)
+			_, err = fixtures.GetDelegationSecretsPresentFixture(ctx, id)
 			require.ErrorIs(t, err, pgx.ErrNoRows)
 			count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})
 			require.NoError(t, err)

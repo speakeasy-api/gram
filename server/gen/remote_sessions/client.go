@@ -15,12 +15,16 @@ import (
 
 // Client is the "remoteSessions" service client.
 type Client struct {
+	BeginBindingRefreshEndpoint               goa.Endpoint
+	CompleteBindingRefreshEndpoint            goa.Endpoint
 	ListBindingsEndpoint                      goa.Endpoint
 	AttachBindingEndpoint                     goa.Endpoint
 	DetachBindingEndpoint                     goa.Endpoint
+	TestServerConnectionEndpoint              goa.Endpoint
 	CommitServerIdentityConfigurationEndpoint goa.Endpoint
 	GetServerIdentityImpactEndpoint           goa.Endpoint
 	ListServerClientAssociationsEndpoint      goa.Endpoint
+	AttachServerClientAssociationEndpoint     goa.Endpoint
 	DetachServerClientAssociationEndpoint     goa.Endpoint
 	ListRemoteSessionsEndpoint                goa.Endpoint
 	CountRemoteSessionsEndpoint               goa.Endpoint
@@ -28,19 +32,69 @@ type Client struct {
 }
 
 // NewClient initializes a "remoteSessions" service client given the endpoints.
-func NewClient(listBindings, attachBinding, detachBinding, commitServerIdentityConfiguration, getServerIdentityImpact, listServerClientAssociations, detachServerClientAssociation, listRemoteSessions, countRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
+func NewClient(beginBindingRefresh, completeBindingRefresh, listBindings, attachBinding, detachBinding, testServerConnection, commitServerIdentityConfiguration, getServerIdentityImpact, listServerClientAssociations, attachServerClientAssociation, detachServerClientAssociation, listRemoteSessions, countRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
 	return &Client{
+		BeginBindingRefreshEndpoint:               beginBindingRefresh,
+		CompleteBindingRefreshEndpoint:            completeBindingRefresh,
 		ListBindingsEndpoint:                      listBindings,
 		AttachBindingEndpoint:                     attachBinding,
 		DetachBindingEndpoint:                     detachBinding,
+		TestServerConnectionEndpoint:              testServerConnection,
 		CommitServerIdentityConfigurationEndpoint: commitServerIdentityConfiguration,
 		GetServerIdentityImpactEndpoint:           getServerIdentityImpact,
 		ListServerClientAssociationsEndpoint:      listServerClientAssociations,
+		AttachServerClientAssociationEndpoint:     attachServerClientAssociation,
 		DetachServerClientAssociationEndpoint:     detachServerClientAssociation,
 		ListRemoteSessionsEndpoint:                listRemoteSessions,
 		CountRemoteSessionsEndpoint:               countRemoteSessions,
 		RevokeRemoteSessionEndpoint:               revokeRemoteSession,
 	}
+}
+
+// BeginBindingRefresh calls the "beginBindingRefresh" endpoint of the
+// "remoteSessions" service.
+// BeginBindingRefresh may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) BeginBindingRefresh(ctx context.Context, p *BeginBindingRefreshPayload) (res *BindingRefreshAttempt, err error) {
+	var ires any
+	ires, err = c.BeginBindingRefreshEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*BindingRefreshAttempt), nil
+}
+
+// CompleteBindingRefresh calls the "completeBindingRefresh" endpoint of the
+// "remoteSessions" service.
+// CompleteBindingRefresh may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CompleteBindingRefresh(ctx context.Context, p *CompleteBindingRefreshPayload) (res *BindingRefreshResult, err error) {
+	var ires any
+	ires, err = c.CompleteBindingRefreshEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*BindingRefreshResult), nil
 }
 
 // ListBindings calls the "listBindings" endpoint of the "remoteSessions"
@@ -106,6 +160,29 @@ func (c *Client) AttachBinding(ctx context.Context, p *AttachBindingPayload) (re
 func (c *Client) DetachBinding(ctx context.Context, p *DetachBindingPayload) (err error) {
 	_, err = c.DetachBindingEndpoint(ctx, p)
 	return
+}
+
+// TestServerConnection calls the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+// TestServerConnection may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TestServerConnection(ctx context.Context, p *TestServerConnectionPayload) (res *ServerConnectionTestResult, err error) {
+	var ires any
+	ires, err = c.TestServerConnectionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ServerConnectionTestResult), nil
 }
 
 // CommitServerIdentityConfiguration calls the
@@ -175,6 +252,29 @@ func (c *Client) ListServerClientAssociations(ctx context.Context, p *ListServer
 		return
 	}
 	return ires.(*ListServerClientAssociationsResult), nil
+}
+
+// AttachServerClientAssociation calls the "attachServerClientAssociation"
+// endpoint of the "remoteSessions" service.
+// AttachServerClientAssociation may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) AttachServerClientAssociation(ctx context.Context, p *AttachServerClientAssociationPayload) (res *AttachServerClientAssociationResult, err error) {
+	var ires any
+	ires, err = c.AttachServerClientAssociationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AttachServerClientAssociationResult), nil
 }
 
 // DetachServerClientAssociation calls the "detachServerClientAssociation"

@@ -6,6 +6,8 @@ import type { Lifecycle } from "@gram/client/models/operations/listagents.js";
 
 /** The lifecycle values the agent roster filter may send. */
 export type AgentLifecycleFilter = Lifecycle;
+/** The part of the SDK client that the agent roster uses. */
+export type AgentsClient = Pick<Gram, "agents">;
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
 import { Source } from "@gram/client/models/components/searchuserspayload.js";
@@ -74,6 +76,8 @@ export type RegisteredAgentPage = {
 };
 
 export type RegisteredAgentPageRequest = {
+  /** Restrict the roster to this project; omit for the organization inventory. */
+  projectId?: string;
   cursor?: string;
   limit?: number;
   /** Case-insensitive substring match on the agent name, applied by the server. */
@@ -97,13 +101,14 @@ export type RegisteredAgentPageRequest = {
  * describe a different list than the one the cursor walks.
  */
 export async function fetchRegisteredAgents(
-  client: Gram,
+  client: AgentsClient,
   request: RegisteredAgentPageRequest = {},
   signal?: AbortSignal,
 ): Promise<RegisteredAgentPage> {
   try {
     const page = await client.agents.list(
       {
+        projectId: request.projectId,
         cursor: request.cursor,
         limit: request.limit,
         search: request.search?.trim() || undefined,

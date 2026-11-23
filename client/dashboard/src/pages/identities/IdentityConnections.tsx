@@ -87,6 +87,7 @@ export default function IdentityConnections(): JSX.Element {
   return (
     <IdentitySection
       title="Connections"
+      timeRange
       meta={sectionMeta([
         { count: graph?.nodes.length ?? 0, singular: "node" },
         { count: sessions.length, singular: "live connection" },

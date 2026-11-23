@@ -18,7 +18,14 @@
       "subject": "Access requested for {data.organization_name}",
       "preview_text": "{data.requester_name} requested additional access.",
       "source": "access_request.lmx",
-      "variables": ["requester_name", "organization_name", "manage_access_link"]
+      "variables": [
+        "requester_name",
+        "organization_name",
+        "manage_access_link",
+        "permission_label",
+        "permission_scope",
+        "permission_description"
+      ]
     },
     "custom_domain_unhealthy": {
       "managed_name": "gram.transactional.v2.custom_domain_unhealthy",

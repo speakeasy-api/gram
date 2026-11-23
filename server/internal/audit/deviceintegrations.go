@@ -66,6 +66,7 @@ func (l *Logger) LogDeviceIntegrationUpsert(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -103,6 +104,7 @@ func (l *Logger) LogDeviceIntegrationDelete(ctx context.Context, dbtx repo.DBTX,
 	action := ActionDeviceIntegrationDelete
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -153,6 +155,7 @@ func (l *Logger) LogDeviceIntegrationUpdateSchedule(ctx context.Context, dbtx re
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 
@@ -202,6 +205,7 @@ func (l *Logger) LogDeviceIntegrationRetrySchedule(ctx context.Context, dbtx rep
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 

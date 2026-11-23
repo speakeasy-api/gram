@@ -109,6 +109,7 @@ export function setChallengesData(
       outcome?: QueryParamOutcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
+      excludeScopes?: Array<string> | undefined;
       projectId?: string | undefined;
       resolved?: boolean | undefined;
       ids?: Array<string> | undefined;
@@ -134,6 +135,7 @@ export function invalidateChallenges(
       outcome?: QueryParamOutcome | undefined;
       principalUrn?: string | undefined;
       scope?: string | undefined;
+      excludeScopes?: Array<string> | undefined;
       projectId?: string | undefined;
       resolved?: boolean | undefined;
       ids?: Array<string> | undefined;

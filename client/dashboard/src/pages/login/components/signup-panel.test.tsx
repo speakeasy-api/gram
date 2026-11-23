@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setAnalyticsSessionIdSource } from "@/lib/signup-attribution";
 import { SignUpPanel } from "./signup-panel";
 
 const telemetryCapture = vi.hoisted(() => vi.fn());
@@ -168,6 +169,44 @@ describe("SignUpPanel", () => {
         .getByRole("button", { name: /create account/i })
         .hasAttribute("disabled"),
     ).toBe(false);
+  });
+
+  it("forwards sign-up attribution to the login endpoint", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+    const previousURL = window.location.href;
+    window.history.replaceState(
+      null,
+      "",
+      "/sign-up?utm_source=linkedin&utm_campaign=q4-mcp-gateway",
+    );
+    setAnalyticsSessionIdSource(() => "sess-123");
+
+    try {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByRole("checkbox"));
+      await user.type(
+        screen.getByLabelText("Work email"),
+        "someone@example.com",
+      );
+      await user.type(screen.getByLabelText("Company name"), "Acme Inc");
+      await user.click(screen.getByRole("button", { name: /create account/i }));
+
+      expect(assign).toHaveBeenCalledTimes(1);
+      const params = new URL(
+        assign.mock.calls[0]?.[0] as string,
+        "https://example.com",
+      ).searchParams;
+      expect(params.get("utm_source")).toBe("linkedin");
+      expect(params.get("utm_campaign")).toBe("q4-mcp-gateway");
+      expect(params.get("analytics_session_id")).toBe("sess-123");
+    } finally {
+      setAnalyticsSessionIdSource(null);
+      window.history.replaceState(null, "", previousURL);
+      assign.mockRestore();
+    }
   });
 
   it("hands off a company name in a non-latin script unchanged", async () => {

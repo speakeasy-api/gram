@@ -85,7 +85,7 @@ func TestDelegationVerificationFailureQuarantinesRotation(t *testing.T) {
 			row, loadErr := store.load(t.Context(), b)
 			require.NoError(t, loadErr)
 			require.Empty(t, row.IdentityAssertionEncrypted.String)
-			if kind == FederatedRefreshAmbiguous {
+			if kind != FederatedRefreshInvalidIdentity {
 				require.ErrorIs(t, err, ErrDelegationTemporary)
 				require.True(t, row.RefreshClaimID.Valid)
 				require.NotEqual(t, "rotated-refresh", row.RefreshTokenEncrypted.String)
@@ -94,9 +94,9 @@ func TestDelegationVerificationFailureQuarantinesRotation(t *testing.T) {
 				later := s.now().Add(24 * time.Hour)
 				s.now = func() time.Time { return later }
 				_, err = s.Resolve(t.Context(), b, allow)
-				require.ErrorIs(t, err, ErrDelegationTemporary)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 			} else {
-				require.ErrorIs(t, err, ErrDelegationConfiguration)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 				require.Empty(t, row.RefreshTokenEncrypted.String)
 				require.Empty(t, row.UpstreamSubjectEncrypted.String)
 				require.Empty(t, row.NonceEncrypted.String)

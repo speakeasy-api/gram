@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -39,42 +38,6 @@ const (
 )
 
 var stubAssertionSecret = []byte("stub-assertion-secret-0123456789abcdef")
-
-// stubCiphertextPrefix marks a stubDecrypter ciphertext; the plaintext follows it.
-const stubCiphertextPrefix = "enc:"
-
-// stubDecrypter decrypts stubCiphertextPrefix-prefixed values, or fails with err.
-type stubDecrypter struct {
-	mu    sync.Mutex
-	err   error
-	calls int
-}
-
-func (d *stubDecrypter) Decrypt(ciphertext string) (string, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.calls++
-	if d.err != nil {
-		return "", d.err
-	}
-	plaintext, ok := strings.CutPrefix(ciphertext, stubCiphertextPrefix)
-	if !ok {
-		return "", errors.New("stub decrypter: not a stub ciphertext")
-	}
-	return plaintext, nil
-}
-
-func (d *stubDecrypter) Calls() int {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.calls
-}
-
-func (d *stubDecrypter) setErr(err error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.err = err
-}
 
 // fakeClock is shared by the client and the stub so iat checks agree.
 type fakeClock struct {
@@ -204,7 +167,6 @@ type stubOkta struct {
 	rotateTokenNonce     bool
 	tokenNonce           string
 	lastAppsQuery        url.Values
-	groupsQueries        []url.Values
 	emitResourceNonce    string
 	emitTokenNonce       string
 	requireResourceNonce bool
@@ -226,7 +188,6 @@ type stubOkta struct {
 	apps                    []appJSON
 	appUsers                map[string][]appUserJSON
 	appGroups               map[string][]appGroupJSON
-	groups                  []groupJSON
 	pageSize                int
 	pending429              int
 	rateLimitLimit          int
@@ -293,7 +254,6 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 		apps:                    nil,
 		appUsers:                map[string][]appUserJSON{},
 		appGroups:               map[string][]appGroupJSON{},
-		groups:                  nil,
 		pageSize:                0,
 		pending429:              0,
 		rateLimitLimit:          0,
@@ -315,7 +275,6 @@ func newStubOkta(t *testing.T, clock *fakeClock) *stubOkta {
 	mux.HandleFunc("GET /api/v1/apps/{id}", s.resource(s.handleGetApp))
 	mux.HandleFunc("GET /api/v1/apps/{id}/users", s.resource(s.handleAppUsers))
 	mux.HandleFunc("GET /api/v1/apps/{id}/groups", s.resource(s.handleAppGroups))
-	mux.HandleFunc("GET /api/v1/groups", s.resource(s.handleListGroups))
 	mux.HandleFunc("GET /", s.resource(s.handleOverride))
 	s.srv = httptest.NewServer(mux)
 	s.origin = s.srv.URL
@@ -355,12 +314,6 @@ func (s *stubOkta) setAppGroups(appID string, groups []appGroupJSON) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.appGroups[appID] = groups
-}
-
-func (s *stubOkta) setGroups(groups []groupJSON) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.groups = groups
 }
 
 func (s *stubOkta) setPageSize(n int) {
@@ -914,32 +867,6 @@ func (s *stubOkta) handleAppGroups(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, paginate(s, w, r, groups))
 }
 
-func (s *stubOkta) handleListGroups(w http.ResponseWriter, r *http.Request) {
-	s.mu.Lock()
-	groups := s.groups
-	s.groupsQueries = append(s.groupsQueries, r.URL.Query())
-	s.mu.Unlock()
-	if r.URL.Query().Has("q") {
-		http.Error(w, "q does not support pagination", http.StatusBadRequest)
-		return
-	}
-	if search := r.URL.Query().Get("search"); search != "" {
-		var prefix string
-		if !strings.HasPrefix(search, "profile.name sw ") || json.Unmarshal([]byte(strings.TrimPrefix(search, "profile.name sw ")), &prefix) != nil {
-			http.Error(w, "invalid search expression", http.StatusBadRequest)
-			return
-		}
-		filtered := make([]groupJSON, 0)
-		for _, group := range groups {
-			if strings.HasPrefix(strings.ToLower(group.Profile.Name), strings.ToLower(prefix)) {
-				filtered = append(filtered, group)
-			}
-		}
-		groups = filtered
-	}
-	s.writeJSON(w, http.StatusOK, paginate(s, w, r, groups))
-}
-
 func (s *stubOkta) recordedProofs() []proofRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -976,12 +903,11 @@ func (f *fakeSleeper) Waits() []time.Duration {
 }
 
 type testClient struct {
-	client    *httpClient
-	stub      *stubOkta
-	signer    *stubSigner
-	decrypter *stubDecrypter
-	sleeper   *fakeSleeper
-	clock     *fakeClock
+	client  *httpClient
+	stub    *stubOkta
+	signer  *stubSigner
+	sleeper *fakeSleeper
+	clock   *fakeClock
 }
 
 func (tc testClient) currentNonce() string {
@@ -1003,8 +929,7 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	decrypter := &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0}
-	factory, ok := NewClientFactory(logger, policy, signer, decrypter).(*clientFactory)
+	factory, ok := NewClientFactory(logger, policy, signer).(*clientFactory)
 	require.True(t, ok)
 
 	cfg.OrgURL = stub.srv.URL
@@ -1019,8 +944,8 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 	if cfg.JSONWebKeySetID == uuid.Nil && cfg.AuthMethod != remotesessions.TokenEndpointAuthMethodBasic {
 		cfg.JSONWebKeySetID = uuid.New()
 	}
-	if secret, ok := strings.CutPrefix(cfg.ClientSecretEncrypted, stubCiphertextPrefix); ok && cfg.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic {
-		stub.setClientSecret(secret)
+	if credentials, ok := cfg.Credentials.(*fakeCredentials); ok && cfg.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		stub.setClientSecret(credentials.secret)
 	}
 
 	client, err := factory.Client(cfg)
@@ -1037,7 +962,7 @@ func newTestClient(t *testing.T, tracerProvider trace.TracerProvider, logger *sl
 	impl.now = clock.Now
 	impl.jitter = func() time.Duration { return maxRateLimitJitter / 2 }
 
-	return testClient{client: impl, stub: stub, signer: signer, decrypter: decrypter, sleeper: sleeper, clock: clock}
+	return testClient{client: impl, stub: stub, signer: signer, sleeper: sleeper, clock: clock}
 }
 
 func testConfig() Config {
@@ -1049,7 +974,6 @@ func testConfig() Config {
 		OrganizationID:        "",
 		AuthMethod:            "",
 		JSONWebKeySetID:       uuid.New(),
-		ClientSecretEncrypted: "",
 		MaxPages:              0,
 	}
 }
@@ -1059,7 +983,7 @@ func basicTestConfig(secret string) Config {
 	cfg := testConfig()
 	cfg.AuthMethod = remotesessions.TokenEndpointAuthMethodBasic
 	cfg.JSONWebKeySetID = uuid.Nil
-	cfg.ClientSecretEncrypted = stubCiphertextPrefix + secret
+	cfg.Credentials = newFakeCredentials(secret)
 	return cfg
 }
 

@@ -1,12 +1,15 @@
 package remotesessions_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -167,8 +170,22 @@ func TestUpdateRemoteSessionClient_OrgLevelClientNotFoundFromProject(t *testing.
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// withoutOrganizationAdmin narrows the caller to a project editor: write access
+// to the project and its MCP servers, read access to the organization.
+func withoutOrganizationAdmin(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	projectID := projectIDFromContext(t, ctx).String()
+	return authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeOrgRead, activeOrganizationID(t, ctx)),
+		authz.NewGrant(authz.ScopeProjectRead, projectID),
+		authz.NewGrant(authz.ScopeProjectWrite, projectID),
+		authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource),
+		authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource),
+	)
+}
+
 // An organization-level client on an organization-level user session issuer
-// is shared by every project's servers, so a project caller may not change it.
+// is shared by every project's servers, so a project editor may not change it.
 func TestAttachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -180,11 +197,11 @@ func TestAttachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-attach-usi")
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-attach-cid")
 
-	_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+	_, err := ti.service.AttachUserSessionIssuer(withoutOrganizationAdmin(t, ctx), &clientsgen.AttachUserSessionIssuerPayload{
 		ID:                  orgClient.String(),
 		UserSessionIssuerID: userIssuer.String(),
 	})
-	requireOopsCode(t, err, oops.CodeConflict)
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	requireClientBound(t, ctx, ti, orgClient, userIssuer, false)
 }
@@ -200,11 +217,11 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-detach-usi")
 	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-detach-cid", userIssuer)
 
-	_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+	_, err := ti.service.DetachUserSessionIssuer(withoutOrganizationAdmin(t, ctx), &clientsgen.DetachUserSessionIssuerPayload{
 		ID:                  orgClient.String(),
 		UserSessionIssuerID: userIssuer.String(),
 	})
-	requireOopsCode(t, err, oops.CodeConflict)
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	requireClientBound(t, ctx, ti, orgClient, userIssuer, true)
 }
@@ -233,12 +250,13 @@ func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
 			_, err := repo.New(tx).LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{ID: userIssuer, ProjectID: projectIDFromContext(t, ctx), OrganizationID: activeOrganizationID(t, ctx)})
 			require.NoError(t, err)
 			done := make(chan error, 1)
+			editorCtx := withoutOrganizationAdmin(t, ctx)
 			go func() {
 				if attach {
-					_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
+					_, err := ti.service.AttachUserSessionIssuer(editorCtx, &clientsgen.AttachUserSessionIssuerPayload{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
 					done <- err
 				} else {
-					_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
+					_, err := ti.service.DetachUserSessionIssuer(editorCtx, &clientsgen.DetachUserSessionIssuerPayload{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
 					done <- err
 				}
 			}()
@@ -255,7 +273,7 @@ func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
 			require.NoError(t, tx.Commit(ctx))
 			select {
 			case err := <-done:
-				requireOopsCode(t, err, oops.CodeConflict)
+				requireOopsCode(t, err, oops.CodeForbidden)
 				require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 			case <-time.After(30 * time.Second):
 				t.Fatal("binding change did not complete after releasing issuer lock")

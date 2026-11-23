@@ -15,6 +15,7 @@ var Connection = Type("SlackDirectoryConnection", func() {
 	Attribute("status", String, "Authorization status, independent of directory sync.", func() { Enum("connected", "disconnected", "reconnect_required") })
 	Attribute("generation", String, "Connection generation used to reject stale changes.", func() { Format(FormatUUID) })
 	Attribute("granted_scopes", ArrayOf(String), "Permissions granted by Slack.")
+	Attribute("missing_scopes", ArrayOf(String), "Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.")
 	Attribute("last_error_code", String, "Bounded authorization failure code, when known.")
 	Attribute("disconnected_at", String, "When credentials were removed.", func() { Format(FormatDateTime) })
 	Attribute("member_count", Int64, "Members observed in the last complete snapshot, including guests and bots.")
@@ -27,7 +28,8 @@ var Connection = Type("SlackDirectoryConnection", func() {
 	Attribute("last_sync_failed_at", String, "Most recent failed attempt; may precede a successful sync.", func() { Format(FormatDateTime) })
 	Attribute("last_full_sync_succeeded_at", String, "Last complete directory publication, possibly from an earlier authorization.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "Last connection change timestamp.", func() { Format(FormatDateTime) })
-	Required("id", "workspace_id", "workspace_name", "status", "generation", "granted_scopes", "updated_at", "member_count", "directory_status", "sync_status")
+	Attribute("default_project_id", String, "Project whose managed assistant answers Speakeasy app mentions and direct messages in this workspace.", func() { Format(FormatUUID) })
+	Required("id", "workspace_id", "workspace_name", "status", "generation", "granted_scopes", "missing_scopes", "updated_at", "member_count", "directory_status", "sync_status")
 })
 
 var Mapping = Type("SlackIdentityMapping", func() {
@@ -228,6 +230,25 @@ var _ = Service("slackDirectoryConnections", func() {
 		Meta("openapi:operationId", "beginSlackDirectoryConnection")
 		Meta("openapi:extension:x-speakeasy-name-override", "begin")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"BeginSlackDirectoryConnection"}`)
+	})
+	Method("setDefaultProject", func() {
+		Description("Choose the project whose managed assistant answers Speakeasy app mentions and direct messages in a connected workspace. Omit project_id to clear it. A project can be the default for at most one workspace.")
+		Payload(func() {
+			security.SessionPayload()
+			Meta("openapi:typename", "SetSlackDirectoryDefaultProjectRequestBody")
+			Attribute("id", String, "Durable organization workspace connection ID.", func() { Format(FormatUUID) })
+			Attribute("project_id", String, "Project in the organization. Omit to clear the default project.", func() { Format(FormatUUID) })
+			Required("id")
+		})
+		Result(Connection)
+		HTTP(func() {
+			POST("/rpc/slackDirectoryConnections.setDefaultProject")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "setSlackDirectoryDefaultProject")
+		Meta("openapi:extension:x-speakeasy-name-override", "setDefaultProject")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetSlackDirectoryDefaultProject"}`)
 	})
 	Method("disconnect", func() {
 		Payload(func() {

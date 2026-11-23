@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
 	apprepo "github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
@@ -41,7 +42,7 @@ func verifiedConnection(t *testing.T, ctx context.Context, si *serviceInstance) 
 
 func newSyncer(t *testing.T, si *serviceInstance) *oktaapplications.Syncer {
 	t.Helper()
-	return oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), si.conn.conn, si.oktaFakes)
+	return oktaapplications.NewSyncer(testenv.NewLogger(t), testenv.NewMeterProvider(t), si.conn.conn, si.oktaFakes, clientsecretstest.New(t, si.conn.conn, si.enc))
 }
 
 func runSync(t *testing.T, ctx context.Context, syncer *oktaapplications.Syncer, id uuid.UUID) {
@@ -55,11 +56,9 @@ func fixtureApp(id, label, name string) okta.App {
 
 func setFixtures(si *serviceInstance, apps []okta.App, users map[string][]okta.AppUser, groups map[string][]okta.AppGroup) {
 	si.oktaFakes.Fake(fullOrgURL).SetFixtures(okta.Fixtures{
-		Users:         nil,
 		Apps:          apps,
 		AppUsers:      users,
 		AppGroups:     groups,
-		Groups:        nil,
 		GrantedScopes: allScopes(),
 	})
 }

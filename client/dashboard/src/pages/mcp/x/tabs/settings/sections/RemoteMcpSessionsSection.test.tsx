@@ -1,19 +1,8 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RemoteMcpSessionsSection } from "./RemoteMcpSessionsSection";
 
-const mocks = vi.hoisted(() => ({
-  clients: vi.fn(),
-  issuer: vi.fn(),
-}));
-
-vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
-  useUserSessionIssuer: () => mocks.issuer(),
-}));
-vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: () => mocks.clients(),
-}));
 vi.mock("./authentication/authTarget", () => ({
   useMcpServerAuthTarget: () => ({}),
 }));
@@ -24,16 +13,19 @@ vi.mock("./authentication/useSelectableUserSessionIssuers", () => ({
     isError: false,
   }),
 }));
+const readiness = vi.hoisted(() => ({
+  value: {
+    upstreamAuth: "legacy",
+    isLoadingRemoteIdentity: false,
+    identityUnavailable: false,
+    remoteIdentityMode: "user",
+  },
+}));
+vi.mock("@/hooks/useMcpServerAuthenticationReadiness", () => ({
+  useMcpServerAuthenticationReadiness: () => readiness.value,
+}));
 vi.mock("./authentication/UserSessionIssuerField", () => ({
   UserSessionIssuerField: () => <span>User session issuer</span>,
-}));
-vi.mock("./authentication/UserIdentitySessionControls", () => ({
-  UserIdentitySessionControls: () => (
-    <div>
-      <span>Session length</span>
-      <span>Client access</span>
-    </div>
-  ),
 }));
 
 const mcpServer = {
@@ -46,49 +38,47 @@ const mcpServer = {
   updatedAt: new Date(0),
 } as McpServer;
 
-beforeEach(() => {
-  mocks.issuer.mockReturnValue({
-    data: { id: "user-session-issuer-1" },
-    isLoading: false,
-    isError: false,
-  });
-  mocks.clients.mockReturnValue({
-    items: [],
-    isLoading: false,
-    isError: false,
-  });
+afterEach(() => {
+  cleanup();
+  readiness.value = {
+    upstreamAuth: "legacy",
+    isLoadingRemoteIdentity: false,
+    identityUnavailable: false,
+    remoteIdentityMode: "user",
+  };
 });
 
-afterEach(cleanup);
-
 describe("RemoteMcpSessionsSection", () => {
-  it("shows existing session controls for User Identity", () => {
-    mocks.clients.mockReturnValue({
-      items: [{ id: "remote-session-client-1" }],
-      isLoading: false,
-      isError: false,
-    });
-
-    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-
-    expect(screen.getByText("Session length")).toBeDefined();
-    expect(screen.getByText("Client access")).toBeDefined();
-    expect(screen.getByText("User session issuer")).toBeDefined();
-  });
-
-  it("offers the user session issuer before User Identity is configured", () => {
+  it("shows only the provider picker; its settings live in MCP Sessions", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 
     expect(screen.getByText("User session issuer")).toBeDefined();
-  });
-
-  it("does not present User Identity controls for other modes", () => {
-    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
-
-    expect(
-      screen.getByText(/apply when User Identity is configured/i),
-    ).toBeDefined();
+    expect(screen.queryByText(/Sessions last/)).toBeNull();
+    expect(screen.queryByText("Shared authorization server")).toBeNull();
     expect(screen.queryByText("Session length")).toBeNull();
     expect(screen.queryByText("Client access")).toBeNull();
+  });
+
+  it.each(["none", "agent"])(
+    "hides when people do not sign in as themselves (%s)",
+    (mode) => {
+      readiness.value = { ...readiness.value, remoteIdentityMode: mode };
+      render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
+      expect(screen.queryByText("Sessions")).toBeNull();
+    },
+  );
+
+  it.each([
+    ["loading", { isLoadingRemoteIdentity: true }],
+    ["unavailable", { identityUnavailable: true }],
+    ["enforced", { upstreamAuth: "enforced" }],
+  ])("stays while the mode is not known (%s)", (_, override) => {
+    readiness.value = {
+      ...readiness.value,
+      remoteIdentityMode: "none",
+      ...override,
+    };
+    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
+    expect(screen.getByText("Sessions")).toBeDefined();
   });
 });

@@ -1248,9 +1248,11 @@ func unmarshalExternalMCPServerEntryResponseBodyToTypesExternalMCPServerEntry(v 
 		Title:             v.Title,
 		IconURL:           v.IconURL,
 		Meta:              v.Meta,
-		ToolCount:         *v.ToolCount,
-		IsReadOnly:        *v.IsReadOnly,
+		ToolCount:         v.ToolCount,
+		IsReadOnly:        v.IsReadOnly,
 		SupportsDcr:       *v.SupportsDcr,
+		SupportsCimd:      v.SupportsCimd,
+		AuthSetup:         v.AuthSetup,
 	}
 	if v.Remotes != nil {
 		res.Remotes = make([]*types.ExternalMCPRemote, len(v.Remotes))

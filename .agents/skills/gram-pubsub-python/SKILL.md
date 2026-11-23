@@ -208,8 +208,16 @@ coroutine; await it.
 `pystreams` runs locally against the shared Pub/Sub emulator — no Config
 Connector, no real GCP.
 
-- **Start it:** `pitchfork start pystreams-multi` or the pitchfork mcp server if
-  available (runs `uv run multi` in the `pystreams/` dir).
+- **Off by default:** `mise.toml` sets `GRAM_PYSTREAMS_STUB=true`, so the stack
+  does not start `pystreams-multi` and `gram streams` stands in for it
+  (`server/internal/scanners/presidiostub`): ping and Presidio analysis
+  messages are acked, and Presidio enforcement gets an OK reply with no
+  findings. `gram streams` refuses the stub outside `environment=local`.
+- **Run the real thing:** set `GRAM_PYSTREAMS_STUB = "false"` in
+  `mise.local.toml`, then `pitchfork restart streams` and
+  `pitchfork start pystreams-multi` (or the pitchfork mcp server; runs
+  `uv run multi` in the `pystreams/` dir). The start task refuses to run while
+  the stub is on, since two consumers would split each subscription.
 - **Emulator:** `mise.toml` sets `PUBSUB_EMULATOR_HOST` (and the
   `pubsub-emulator` compose service the Go side uses is the same one). With that
   env var set, `multi` builds an `EmulatedPubSubBroker`, which lazily creates the

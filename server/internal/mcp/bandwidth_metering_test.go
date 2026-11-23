@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
@@ -17,9 +18,11 @@ import (
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 type mcpBandwidthPublisher struct {
@@ -59,7 +62,7 @@ func TestMCPBandwidthAttributionForResolvedHostedEndpoint(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "bandwidth-hosted-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "bandwidth-hosted-"+uuid.NewString()[:8])
 	slug := "bandwidth-hosted-" + uuid.NewString()[:8]
 	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
 	body := makeInitializeBody()
@@ -103,6 +106,54 @@ func TestMCPBandwidthAttributionForAuthorizedPlatformToolset(t *testing.T) {
 	require.Len(t, messages, 2, recorder.Body.String())
 	requireBandwidthMessage(t, messages[0], metering.MeterMCPBandwidthIngress, int64(len(body)), authCtx, requestPath, metering.MCPServerTypePlatformToolset, slug, slug)
 	requireBandwidthMessage(t, messages[1], metering.MeterMCPBandwidthEgress, int64(recorder.Body.Len()), authCtx, requestPath, metering.MCPServerTypePlatformToolset, slug, slug)
+}
+
+func TestMCPBandwidthAttributionForPrivateNetworkEndpoint(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "bandwidth-private-"+uuid.NewString()[:8])
+	slug := "bandwidth-private-" + uuid.NewString()[:8]
+	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
+	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true},
+		ID:                mcpServer.ID,
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+	ingressID := uuid.New()
+	require.NoError(t, testrepo.New(ti.conn).InsertNetworkIngressFixture(ctx, testrepo.InsertNetworkIngressFixtureParams{
+		ID:             ingressID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		DnsName:        pgtype.Text{String: "bandwidth-private.example.ts.net", Valid: true},
+	}))
+	privateCtx := requestorigin.WithContext(ctx, requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://bandwidth-private.example.ts.net",
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		NetworkIngressID: ingressID,
+		NetworkIdentity:  nil,
+	})
+	body := makeInitializeBody()
+	publisher := &mcpBandwidthPublisher{}
+	handler := metering.NewMCPBandwidthMiddleware(ti.logger, publisher)(oops.MCPErrHandle(ti.logger, ti.service.ServePublic))
+	recorder := httptest.NewRecorder()
+	req := newMCPBandwidthRequest(privateCtx, "/mcp/"+slug, "mcpSlug", slug, body, "")
+
+	handler.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	messages := publisher.snapshot()
+	require.Len(t, messages, 2, recorder.Body.String())
+	requireBandwidthMessage(t, messages[0], metering.MeterMCPBandwidthIngress, int64(len(body)), authCtx, "/mcp/"+slug, metering.MCPServerTypeHosted, mcpServer.ID.String(), mcpServer.Slug.String)
+	requireBandwidthMessage(t, messages[1], metering.MeterMCPBandwidthEgress, int64(recorder.Body.Len()), authCtx, "/mcp/"+slug, metering.MCPServerTypeHosted, mcpServer.ID.String(), mcpServer.Slug.String)
+	for _, message := range messages {
+		require.Equal(t, ingressID.String(), message.GetAttributes()[metering.AttributeNetworkIngressID])
+	}
 }
 
 func TestMCPBandwidthDoesNotAttributeUnknownEndpoint(t *testing.T) {

@@ -1,8 +1,8 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Text } from "@/components/ui/Text";
-import { Loader2 } from "lucide-react";
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { DetectorCard } from "../DetectorCard";
 import { ActionStep } from "../policy-editor-shell";
@@ -256,7 +256,7 @@ function SelectedTools({
   if (toolsSource.status !== "ready") {
     return (
       <Text small muted className="flex items-center gap-2">
-        <Loader2 className="size-4 animate-spin" /> Loading tools...
+        <Spinner className="mr-0 size-4" /> Loading tools...
       </Text>
     );
   }

@@ -40,7 +40,21 @@ func (a *ahpTestAuthorizer) Authorize(ctx context.Context, key string, scheme *s
 	}
 }
 
+// AuthorizeWithHandlerProjectAccess resolves the project the way Authorize
+// does: these tests authenticate humans, whose project check stays upstream.
+func (a *ahpTestAuthorizer) AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+	return a.Authorize(ctx, key, scheme)
+}
+
 func ahpRequest(t *testing.T, h http.Handler, method string, event map[string]any, effects []string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := ahpHTTPRequest(t, method, event, effects, headers)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w
+}
+
+func ahpHTTPRequest(t *testing.T, method string, event map[string]any, effects []string, headers map[string]string) *http.Request {
 	t.Helper()
 	params := map[string]any{"protocolVersion": "draft", "event": event}
 	body := map[string]any{"jsonrpc": "2.0", "method": method, "params": params}
@@ -55,9 +69,7 @@ func ahpRequest(t *testing.T, h http.Handler, method string, event map[string]an
 	for k, v := range headers {
 		r.Header.Set(k, v)
 	}
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	return w
+	return r
 }
 
 func ahpToolEvent(eventType string) map[string]any {

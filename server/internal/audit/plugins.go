@@ -31,6 +31,15 @@ type PluginSnapshot struct {
 	Name        string  `json:"name"`
 	Slug        string  `json:"slug"`
 	Description *string `json:"description,omitempty"`
+
+	// AutoSyncEnabled reports whether the plugin's changes publish
+	// automatically. Nil when the entry predates the setting.
+	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
+
+	// AutoAddServersEnabled reports whether the plugin's role audiences add
+	// and remove its MCP servers automatically. Nil when the entry predates
+	// the setting.
+	AutoAddServersEnabled *bool `json:"auto_add_servers_enabled,omitempty"`
 }
 
 type LogPluginCreateEvent struct {
@@ -44,11 +53,22 @@ type LogPluginCreateEvent struct {
 	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
+
+	// PluginSnapshotAfter is the created plugin, recording settings chosen at
+	// creation such as auto sync being off. Nil records no snapshot.
+	PluginSnapshotAfter *PluginSnapshot
 }
 
 func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogPluginCreateEvent) error {
 	action := ActionPluginCreate
+
+	afterSnapshot, err := marshalAuditPayload(event.PluginSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -65,7 +85,7 @@ func (l *Logger) LogPluginCreate(ctx context.Context, dbtx repo.DBTX, event LogP
 		SubjectSlug:        conv.ToPGTextEmpty(event.PluginSlug),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 
@@ -101,6 +121,7 @@ func (l *Logger) LogPluginUpdate(ctx context.Context, dbtx repo.DBTX, event LogP
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -140,6 +161,7 @@ type LogPluginDeleteEvent struct {
 func (l *Logger) LogPluginDelete(ctx context.Context, dbtx repo.DBTX, event LogPluginDeleteEvent) error {
 	action := ActionPluginDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -212,6 +234,7 @@ func (l *Logger) LogPluginServerAdd(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -275,6 +298,7 @@ func (l *Logger) LogPluginServerUpdate(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -327,6 +351,7 @@ func (l *Logger) LogPluginServerRemove(ctx context.Context, dbtx repo.DBTX, even
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -384,6 +409,7 @@ func (l *Logger) LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, ev
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -439,6 +465,7 @@ func (l *Logger) LogPluginPublish(ctx context.Context, dbtx repo.DBTX, event Log
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -503,6 +530,7 @@ func (l *Logger) LogPluginMarketplaceSettingsUpdate(ctx context.Context, dbtx re
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

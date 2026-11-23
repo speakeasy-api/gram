@@ -42,14 +42,6 @@ type upsertPackage struct {
 	versionID uuid.UUID
 }
 
-type upsertExternalMCP struct {
-	registryID              uuid.NullUUID
-	name                    string
-	slug                    string
-	registryServerSpecifier string
-	selectedRemotes         []string
-}
-
 type deploymentFields struct {
 	projectID      uuid.UUID
 	userID         string
@@ -71,7 +63,6 @@ func createDeployment(
 	openAPIv3ToUpsert []upsertOpenAPIv3,
 	functionsToUpsert []upsertFunctions,
 	packagesToUpsert []upsertPackage,
-	externalMCPsToUpsert []upsertExternalMCP,
 ) (uuid.UUID, error) {
 	ctx, span := tracer.Start(ctx, "createDeployment")
 	defer span.End()
@@ -81,7 +72,7 @@ func createDeployment(
 		key = uuid.New().String()
 	}
 
-	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert, externalMCPsToUpsert); err != nil {
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).LogError(ctx, logger)
 	}
 
@@ -127,7 +118,6 @@ func createDeployment(
 		openAPIv3ToUpsert,
 		functionsToUpsert,
 		packagesToUpsert,
-		externalMCPsToUpsert,
 	)
 	if aerr != nil {
 		return uuid.Nil, aerr
@@ -157,17 +147,15 @@ func cloneDeployment(
 	openAPIv3ToUpsert []upsertOpenAPIv3,
 	functionsToUpsert []upsertFunctions,
 	packagesToUpsert []upsertPackage,
-	externalMCPsToUpsert []upsertExternalMCP,
 	openAPIv3ToExclude []uuid.UUID,
 	functionsToExclude []uuid.UUID,
 	packagesToExclude []uuid.UUID,
-	externalMCPsToExclude []string,
 ) (uuid.UUID, error) {
 	ctx, span := tracer.Start(ctx, "cloneDeployment")
 	defer span.End()
 	defer span.SetStatus(codes.Ok, "deployment cloned")
 
-	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert, externalMCPsToUpsert); err != nil {
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
 		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).LogError(ctx, logger)
 	}
 
@@ -214,16 +202,7 @@ func cloneDeployment(
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment functions assets").LogError(ctx, logger)
 	}
 
-	_, err = depRepo.CloneDeploymentExternalMCPs(ctx, repo.CloneDeploymentExternalMCPsParams{
-		OriginalDeploymentID: srcDepID,
-		CloneDeploymentID:    newID,
-		ExcludedSlugs:        externalMCPsToExclude,
-	})
-	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment external mcps").LogError(ctx, logger)
-	}
-
-	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, functionsToUpsert, packagesToUpsert, externalMCPsToUpsert)
+	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, functionsToUpsert, packagesToUpsert)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -250,7 +229,6 @@ func amendDeployment(
 	openAPIv3ToUpsert []upsertOpenAPIv3,
 	functionsToUpsert []upsertFunctions,
 	packagesToUpsert []upsertPackage,
-	externalMCPsToUpsert []upsertExternalMCP,
 ) error {
 	id := uuid.UUID(deploymentID)
 
@@ -301,20 +279,6 @@ func amendDeployment(
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment package").LogError(ctx, logger)
-		}
-	}
-
-	for _, e := range externalMCPsToUpsert {
-		_, err := depRepo.UpsertDeploymentExternalMCP(ctx, repo.UpsertDeploymentExternalMCPParams{
-			DeploymentID:            id,
-			RegistryID:              e.registryID,
-			Name:                    e.name,
-			Slug:                    e.slug,
-			RegistryServerSpecifier: e.registryServerSpecifier,
-			SelectedRemotes:         e.selectedRemotes,
-		})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, err, "error adding deployment external mcp").LogError(ctx, logger)
 		}
 	}
 

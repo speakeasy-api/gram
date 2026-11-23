@@ -19,18 +19,13 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 )
 
 const (
-	// ModulePath and PinnedVersion identify the reviewed export every citation
-	// names. The version is declared here rather than read from the build's
-	// module graph because a test binary carries no module graph — a version
-	// nothing can assert is a version that silently rots. A test pins this
-	// constant to go.mod, so a dependency bump that forgets the citation fails
-	// CI instead of shipping a guide that cites the wrong export.
-	ModulePath    = "github.com/speakeasy-api/mcp-setup-docs/go"
-	PinnedVersion = "v0.3.9"
 	// sourceName is the human half of a citation: "mcp-setup-docs/go@v0.3.0".
+	// Every citation pairs it with setupguides.PinnedVersion, which a test
+	// pins to go.mod so a citation never names the wrong export.
 	sourceName = "mcp-setup-docs/go"
 
 	// Owner is who is accountable for reviewing this content. mcp-setup-docs
@@ -140,7 +135,7 @@ func Build(opts Options) ([]platformmcp.SetupResource, error) {
 				Provider:     string(guide.Slug),
 				Intent:       section.intent,
 				Owner:        Owner,
-				Source:       sourceName + "@" + PinnedVersion,
+				Source:       sourceName + "@" + setupguides.PinnedVersion,
 				ObservedAt:   observedAt,
 				RevalidateBy: observedAt.Add(revalidationWindow),
 				Aliases:      guide.Aliases,

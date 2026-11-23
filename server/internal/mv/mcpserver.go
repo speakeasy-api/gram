@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 // BuildMcpServerView converts a repo mcp_servers row into the API response
@@ -18,6 +19,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		Name:                  conv.FromPGText[string](server.Name),
 		Slug:                  conv.FromPGText[string](server.Slug),
 		PlatformEndpointSlug:  nil,
+		LegacyPlatformSlug:    nil,
 		EnvironmentID:         conv.FromNullableUUID(server.EnvironmentID),
 		UserSessionIssuerID:   conv.FromNullableUUID(server.UserSessionIssuerID),
 		RemoteMcpServerID:     conv.FromNullableUUID(server.RemoteMcpServerID),
@@ -31,6 +33,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		PrimaryEndpointID:     nil,
 		PrimaryEndpointURL:    nil,
 		HasEndpoint:           nil,
+		SetupGuideCompletedAt: conv.PtrEmpty(conv.FromPGTimestamptz(server.SetupGuideCompletedAt)),
 		CreatedAt:             server.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:             server.UpdatedAt.Time.Format(time.RFC3339),
 	}
@@ -48,20 +51,15 @@ func BuildMcpServerListView(servers []repo.McpServer) []*types.McpServer {
 // BuildMcpServerToolsetSummaryView converts a toolset summary row into the
 // API type.
 func BuildMcpServerToolsetSummaryView(row repo.ListToolsetSummariesByIDsRow) *types.McpServerToolsetSummary {
-	slugs := row.ExternalMcpSlugs
-	if slugs == nil {
-		slugs = []string{}
-	}
 	return &types.McpServerToolsetSummary{
 		ID:                    row.ID.String(),
 		Slug:                  row.Slug,
 		Name:                  row.Name,
 		Description:           conv.FromPGText[string](row.Description),
-		ToolCount:             int(row.ToolCount),
+		ToolCount:             int(row.ToolCount) + platformtools.CountTools(row.PlatformToolUrns),
 		ToolSelectionMode:     row.ToolSelectionMode,
-		ExternalMcpSlugs:      slugs,
-		ExternalMcpProxyOnly:  row.ExternalMcpProxyOnly,
 		ExternalOauthServerID: conv.FromNullableUUID(row.ExternalOauthServerID),
 		RegistrySpecifier:     conv.PtrEmpty(row.RegistrySpecifier),
+		HostingMcpServerID:    nil,
 	}
 }

@@ -18,6 +18,7 @@ func TestApplyAuthenticatedActorUsesAgentInsteadOfAuthorizer(t *testing.T) {
 		AuthorizerUserID: "user_authorizer",
 	})
 	params := repo.InsertAuditLogParams{
+		IsInternal:       false,
 		ActorID:          "user_authorizer",
 		ActorType:        string(urn.PrincipalTypeUser),
 		ActorDisplayName: conv.ToPGText("Authorizer Name"),

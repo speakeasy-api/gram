@@ -59,11 +59,10 @@ func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
 
 	queries := approvalrepo.New(m.db)
 
-	// Re-checked here, not only at start: the flags can flip between the
-	// admin's click and this activity being picked up, and the kill switch
-	// only means anything if a queued run also honors it. A killed or
-	// de-rolled run resolves its report as failed — silently skipping would
-	// strand it in running.
+	// Re-checked here, not only at start: the kill switch can flip between the
+	// admin's click and this activity being picked up, and only means anything
+	// if a queued run also honors it. A killed run resolves its report as
+	// failed — silently skipping would strand it in running.
 	if reason, gated := m.researchGate(ctx, input.OrgID); gated {
 		if err := m.failReport(ctx, queries, input, reason, nil); err != nil {
 			// Success here with the row still running would strand it until
@@ -188,9 +187,9 @@ func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Quer
 	return nil
 }
 
-// researchGate mirrors the service's start-time gate for the execution side:
-// the kill switch first, then the rollout flag, both failing closed. Returns
-// the reason to record when the run must not execute.
+// researchGate mirrors the service's start-time kill switch for the execution
+// side, failing closed. Returns the reason to record when the run must not
+// execute.
 func (m *McpResearch) researchGate(ctx context.Context, organizationID string) (string, bool) {
 	var groups map[string]string
 	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, organizationID)
@@ -200,10 +199,7 @@ func (m *McpResearch) researchGate(ctx context.Context, organizationID string) (
 		groups = feature.OrgProjectGroups(org.Slug, "")
 	}
 
-	// The kill switch fails closed like everything else here: a run must not
-	// execute while the state of its stop control is unknown — the rollout
-	// flag failing closed alongside only covers the case where both
-	// evaluations fail together, not a partial failure.
+	// A run must not execute while the state of its stop control is unknown.
 	killed, err := m.flags.IsFlagEnabled(ctx, feature.FlagMCPResearchKill, organizationID, groups)
 	if err != nil {
 		m.logger.WarnContext(ctx, "mcp research kill-switch check failed; refusing to run", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
@@ -211,15 +207,6 @@ func (m *McpResearch) researchGate(ctx context.Context, organizationID string) (
 	}
 	if killed {
 		return "research was disabled before this run executed", true
-	}
-
-	enabled, err := m.flags.IsFlagEnabled(ctx, feature.FlagMCPResearch, organizationID, groups)
-	if err != nil {
-		m.logger.WarnContext(ctx, "mcp research flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return "research is not enabled for this organization", true
-	}
-	if !enabled {
-		return "research is not enabled for this organization", true
 	}
 
 	return "", false

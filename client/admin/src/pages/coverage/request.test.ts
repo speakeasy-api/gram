@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { serializeSupportMatrixUpdate } from "./request";
 import type { Draft } from "./model";

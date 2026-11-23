@@ -14,22 +14,12 @@ vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => true,
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ projectSlug: "project" }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({ auth: { logout: vi.fn() } }),
   useProjectSlugForRequests: () => "project",
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasAnyScope: () => true, isLoading: false }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    settings: { goTo: vi.fn() },
-    exploreDemo: { goTo: vi.fn() },
-    identities: {
-      detail: { overview: { href: (urn: string) => `/identities/${urn}` } },
-    },
-  }),
-  useOrgRoutes: () => ({ billing: { goTo: vi.fn() } }),
 }));
 vi.mock("@/components/ui/ThemeSwitcher", () => ({ ThemeSwitcher: () => null }));
 
@@ -79,7 +69,7 @@ it("opens the account name as the first keyboard-accessible profile link", async
       <Routes>
         <Route path="/" element={null} />
         <Route
-          path="/identities/:identity"
+          path="/org/projects/project/identities/:identity/overview"
           element={<h1>Identity overview</h1>}
         />
       </Routes>
@@ -94,7 +84,7 @@ it("opens the account name as the first keyboard-accessible profile link", async
   });
   expect(document.activeElement).toBe(profileLink);
   expect(profileLink.getAttribute("href")).toBe(
-    "/identities/user%3Auser_admin",
+    "/org/projects/project/identities/user%3Auser_admin/overview",
   );
 
   await user.keyboard("{Enter}");

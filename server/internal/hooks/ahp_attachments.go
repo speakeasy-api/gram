@@ -47,6 +47,8 @@ const (
 
 var errAHPEvidenceSize = errors.New("AHP prompt and attachment text exceeds the 1 MiB limit")
 
+var errAHPAttachmentUnavailable = errors.New("AHP staged attachment unavailable")
+
 // ahpStagedUpload is the verified upload body kept until an event resolves it.
 type ahpStagedUpload struct {
 	Content []byte `json:"content"`
@@ -144,12 +146,13 @@ func (s *Service) serveAHPUpload(w http.ResponseWriter, r *http.Request) {
 // endpoint in the authenticated project resolve. Binary bodies are staged but
 // excluded from text prompt ingestion.
 func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageInboundEvent) ([]*gen.HookPromptAttachmentEntry, error) {
-	if e == nil || s.cache == nil {
+	if e == nil {
 		return nil, nil
 	}
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, nil
+	authCtx, authenticated := contextvalues.GetAuthContext(ctx)
+	sessionID := ""
+	if e.Session.Present && e.Session.Value != nil {
+		sessionID = e.Session.Value.ID
 	}
 	var attachments []*gen.HookPromptAttachmentEntry
 	evidenceBytes := 0
@@ -163,8 +166,14 @@ func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageIn
 			}
 			body := part.AttachmentBodyPart.Value
 			id, ok := strings.CutPrefix(body.Body.Ref, ahpUploadRefPrefix)
-			if !ok || id == "" {
+			if !ok {
 				continue
+			}
+			// A receipt promises staged evidence. Never turn an expired, evicted,
+			// cross-project, or unreadable reference into a successful partial scan.
+			// The SDK reports this error under the subscription's failure policy.
+			if id == "" || s.cache == nil || !authenticated || authCtx == nil || authCtx.ProjectID == nil {
+				return nil, errAHPAttachmentUnavailable
 			}
 			var staged ahpStagedUpload
 			if err := s.cache.Get(ctx, ahpUploadCacheKey(*authCtx.ProjectID, id), &staged); err != nil {
@@ -174,7 +183,7 @@ func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageIn
 						attr.SlogProjectID(authCtx.ProjectID.String()),
 					)
 				}
-				continue
+				return nil, errAHPAttachmentUnavailable
 			}
 			if !ahpIsText(staged.Content) {
 				continue
@@ -189,7 +198,7 @@ func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageIn
 			evidenceBytes += size
 			timestamp := e.Time
 			attachments = append(attachments, &gen.HookPromptAttachmentEntry{
-				EntryUUID:      ahpAttachmentEntryID(e.Source, e.ID, message.ID, body.ID),
+				EntryUUID:      ahpAttachmentEntryID(e.Source, sessionID, e.ID, message.ID, body.ID),
 				PromptID:       nil,
 				PromptSha256:   nil,
 				FilePath:       nil,
@@ -206,10 +215,15 @@ func (s *Service) ahpPromptAttachments(ctx context.Context, e *ahp.UserMessageIn
 	return attachments, nil
 }
 
-// ahpAttachmentEntryID derives a stable attachment identifier from the event
-// and part identity, so replays of an event address the same attachment.
-func ahpAttachmentEntryID(source, eventID, messageID, partID string) string {
-	identity, _ := json.Marshal([]string{source, eventID, messageID, partID})
+// ahpAttachmentEntryID follows logical message/part identity across arrival and
+// admission, even before a turn exists. Detached events conservatively retain
+// event scope rather than assuming message IDs are unique across sessions.
+func ahpAttachmentEntryID(source, sessionID, eventID, messageID, partID string) string {
+	scope, id := "session", sessionID
+	if id == "" {
+		scope, id = "event", eventID
+	}
+	identity, _ := json.Marshal([]string{source, scope, id, messageID, partID})
 	return fmt.Sprintf("ahp-attachment:%x", sha256.Sum256(identity))
 }
 

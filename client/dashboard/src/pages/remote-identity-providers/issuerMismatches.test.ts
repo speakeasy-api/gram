@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { IssuerFieldMismatch } from "@gram/client/models/components/issuerfieldmismatch.js";
 import { describe, expect, it } from "vitest";
 import {

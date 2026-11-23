@@ -3,7 +3,10 @@ package oktaseed_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	assetrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"log"
+	"net/url"
 	"os"
 	"strconv"
 	"testing"
@@ -86,6 +89,12 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, oktaseed.Result{Created: 0, Updated: 0, Unchanged: len(oktaseed.Vendors)}, result)
 
+	base, err := url.Parse("https://assets.example")
+	require.NoError(t, err)
+	svc.WithAssetBaseURL(base)
+	iconAsset, err := assetrepo.New(db).CreatePlatformAsset(ctx, assetrepo.CreatePlatformAssetParams{Name: "icon.svg", Url: "icon.svg", Sha256: "icon", Kind: "image", ContentType: "image/svg+xml", ContentLength: 10})
+	require.NoError(t, err)
+	icon := &mcpregistry.CatalogIcon{Src: assets.ServeImageURL(base, iconAsset.ID), MimeType: "image/svg+xml", Sizes: []string{"any"}}
 	// Staff edits survive a re-run, inside the namespace and outside it: the
 	// seed adds its own names next to the one staff added.
 	first := oktaseed.Vendors[0]
@@ -100,7 +109,14 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	rawMeta, err := json.Marshal(meta)
 	require.NoError(t, err)
 	root["_meta"] = rawMeta
+	var server map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(root["server"], &server))
+	server["icons"] = json.RawMessage(`[{"src":"https://upstream.example/icon.png"}]`)
+	root["server"], err = json.Marshal(server)
+	require.NoError(t, err)
 	edited, err := json.Marshal(root)
+	require.NoError(t, err)
+	edited, err = mcpregistry.WithCatalogIcons(edited, mcpregistry.CatalogIcons{Default: icon, Dark: icon})
 	require.NoError(t, err)
 	_, err = svc.Save(ctx, e.ID, mcpregistry.Token(e), edited)
 	require.NoError(t, err)
@@ -111,6 +127,10 @@ func TestVendorsAreValidRecords(t *testing.T) {
 	e, err = svc.GetByName(ctx, first.Name)
 	require.NoError(t, err)
 	require.Contains(t, string(e.Data), "https://docs.example.test/edited")
+	require.Contains(t, string(e.Data), "https://upstream.example/icon.png")
+	icons, err := mcpregistry.ParseCatalogIcons(e.Data)
+	require.NoError(t, err)
+	require.Equal(t, mcpregistry.CatalogIcons{Default: icon, Dark: icon}, icons)
 	mapping, err := mcpregistry.ParseOktaMapping(e.Data)
 	require.NoError(t, err)
 	require.Equal(t, append([]string{"staff-added"}, first.Mapping.OINNames...), mapping.OINNames)
@@ -176,7 +196,7 @@ func TestApplyKeepsExistingIcon(t *testing.T) {
 	const chosen = "https://icons.example.test/chosen.png"
 	stored, err := json.Marshal(map[string]any{
 		"server": map[string]any{"name": first.Name, "description": "Curated", "version": "1", "remotes": remotes, "icons": []map[string]string{{"src": chosen}}},
-		"_meta":  map[string]any{mcpregistry.OktaNamespace: first.Mapping, "com.speakeasy.ai/catalog": map[string]any{"supportsDcr": false}},
+		"_meta":  map[string]any{mcpregistry.OktaNamespace: first.Mapping, "com.speakeasy.ai/catalog": map[string]any{"supportsDcr": false, "documentationUrl": "https://docs.example.test/curated"}},
 	})
 	require.NoError(t, err)
 	_, err = svc.Create(ctx, stored)
@@ -193,6 +213,73 @@ func TestApplyKeepsExistingIcon(t *testing.T) {
 	recorded, present := storedSupportsDCR(t, e.Data)
 	require.True(t, present)
 	require.False(t, recorded)
+}
+
+func TestApplyAddsMissingDocumentationURL(t *testing.T) {
+	t.Parallel()
+	v, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "oktaseeddocsaddtestdb")
+	require.NoError(t, err)
+	svc := mcpregistry.New(db, v)
+
+	vendor := vendorWithDocumentationURL(t)
+	remotes := make([]map[string]string, 0, len(vendor.Remotes))
+	for _, r := range vendor.Remotes {
+		remotes = append(remotes, map[string]string{"type": r.Type, "url": r.URL})
+	}
+	// An entry created before the seed had a documentation link gets it.
+	stored, err := json.Marshal(map[string]any{
+		"server": map[string]any{"name": vendor.Name, "description": "Seeded", "version": "1", "remotes": remotes},
+		"_meta":  map[string]any{mcpregistry.OktaNamespace: vendor.Mapping, "com.speakeasy.ai/catalog": map[string]any{"supportsDcr": vendor.SupportsDCR}},
+	})
+	require.NoError(t, err)
+	_, err = svc.Create(ctx, stored)
+	require.NoError(t, err)
+
+	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Updated)
+	e, err := svc.GetByName(ctx, vendor.Name)
+	require.NoError(t, err)
+	require.Empty(t, v.ValidateStored(e.Data))
+	link, present := storedDocumentationURL(t, e.Data)
+	require.True(t, present)
+	require.Equal(t, vendor.DocumentationURL, link)
+}
+
+func TestApplyKeepsStaffDocumentationURL(t *testing.T) {
+	t.Parallel()
+	v, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "oktaseeddocskeeptestdb")
+	require.NoError(t, err)
+	svc := mcpregistry.New(db, v)
+
+	vendor := vendorWithDocumentationURL(t)
+	remotes := make([]map[string]string, 0, len(vendor.Remotes))
+	for _, r := range vendor.Remotes {
+		remotes = append(remotes, map[string]string{"type": r.Type, "url": r.URL})
+	}
+	const chosen = "https://docs.example.test/staff-chosen"
+	stored, err := json.Marshal(map[string]any{
+		"server": map[string]any{"name": vendor.Name, "description": "Curated", "version": "1", "remotes": remotes, "icons": []map[string]string{{"src": "https://icons.example.test/chosen.png"}}},
+		"_meta":  map[string]any{mcpregistry.OktaNamespace: vendor.Mapping, "com.speakeasy.ai/catalog": map[string]any{"supportsDcr": vendor.SupportsDCR, "documentationUrl": chosen}},
+	})
+	require.NoError(t, err)
+	_, err = svc.Create(ctx, stored)
+	require.NoError(t, err)
+
+	result, err := oktaseed.Apply(ctx, testenv.NewLogger(t), svc)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Unchanged)
+	e, err := svc.GetByName(ctx, vendor.Name)
+	require.NoError(t, err)
+	link, present := storedDocumentationURL(t, e.Data)
+	require.True(t, present)
+	require.Equal(t, chosen, link)
 }
 
 func TestApplyLeavesAnUndecodableOktaMappingAlone(t *testing.T) {
@@ -276,4 +363,34 @@ func storedSupportsDCR(t *testing.T, data json.RawMessage) (bool, bool) {
 	var value bool
 	require.NoError(t, json.Unmarshal(raw, &value))
 	return value, true
+}
+
+// storedDocumentationURL reads the catalog documentation link and whether the
+// record sets it.
+func storedDocumentationURL(t *testing.T, data json.RawMessage) (string, bool) {
+	t.Helper()
+	var root struct {
+		Meta map[string]map[string]json.RawMessage `json:"_meta"`
+	}
+	require.NoError(t, json.Unmarshal(data, &root))
+	raw, ok := root.Meta["com.speakeasy.ai/catalog"]["documentationUrl"]
+	if !ok {
+		return "", false
+	}
+	var value string
+	require.NoError(t, json.Unmarshal(raw, &value))
+	return value, true
+}
+
+// vendorWithDocumentationURL returns the first seeded vendor that has a
+// documentation link.
+func vendorWithDocumentationURL(t *testing.T) oktaseed.Vendor {
+	t.Helper()
+	for _, vendor := range oktaseed.Vendors {
+		if vendor.DocumentationURL != "" {
+			return vendor
+		}
+	}
+	require.FailNow(t, "no seeded vendor has a documentation link")
+	return oktaseed.Vendor{}
 }

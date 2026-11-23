@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -24,7 +25,7 @@ func TestAcceptPendingInvitationForUser_JoinsInvitedOrganization(t *testing.T) {
 	_, invite := seedInviteCallbackInvite(t, ctx, ti, "platform-mcp-join", authCtx.ActiveOrganizationID, authCtx.UserID, authz.SystemRoleMember)
 	seedInviteeUser(t, ctx, ti)
 	require.NoError(t, userrepo.New(ti.conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{ID: "user_01INVITEE", WorkosID: conv.ToPGText("user_01INVITEE")}))
-	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", authCtx.ActiveOrganizationID, authz.SystemRoleMember).Return("membership_01INVITE", nil).Once()
+	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", authCtx.ActiveOrganizationID, authz.SystemRoleMember).Return(&thirdpartyworkos.Member{ID: "membership_01INVITE", RoleSlugs: []string{authz.SystemRoleMember}}, nil).Once()
 
 	pending, err := ti.service.PendingInvitationsForEmail(ctx, "Invitee@Example.test", "")
 	require.NoError(t, err)
@@ -121,7 +122,7 @@ func TestAcceptPendingInvitationForUser_SSOCoveredEmailRequiresSSOSignIn(t *test
 	_, err = ti.service.AcceptPendingInvitationForUser(ctx, "user_01INVITEE", "invitee@example.test", "org_01OTHER", invite.ID.String())
 	require.ErrorIs(t, err, organizations.ErrInvitationRequiresSSO)
 
-	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", org.ID, authz.SystemRoleMember).Return("membership_01INVITE", nil).Once()
+	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", org.ID, authz.SystemRoleMember).Return(&thirdpartyworkos.Member{ID: "membership_01INVITE", RoleSlugs: []string{authz.SystemRoleMember}}, nil).Once()
 	_, err = ti.service.AcceptPendingInvitationForUser(ctx, "user_01INVITEE", "invitee@example.test", org.WorkosID.String, invite.ID.String())
 	require.NoError(t, err)
 	storedInvite, err = repo.GetInvitationByID(ctx, invite.ID)

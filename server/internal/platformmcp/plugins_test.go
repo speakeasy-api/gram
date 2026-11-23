@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/directory"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
@@ -26,15 +28,16 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	output := ListPluginsOutput{
 		ProjectID: "00000000-0000-0000-0000-000000000001",
 		Plugins: []Plugin{{
-			ID:          "00000000-0000-0000-0000-0000000000a1",
-			Name:        "Marketing",
-			Slug:        "marketing",
-			Description: "Tools the marketing team installs",
-			IsDefault:   false,
-			ServerCount: 3,
-			SkillCount:  1,
-			Assignments: &PluginAssignmentSummary{AllMembers: false, Roles: 2, Users: 4},
-			Publication: PluginPublicationPublished,
+			ID:              "00000000-0000-0000-0000-0000000000a1",
+			Name:            "Marketing",
+			Slug:            "marketing",
+			Description:     "Tools the marketing team installs",
+			IsDefault:       false,
+			ServerCount:     3,
+			SkillCount:      1,
+			Assignments:     &PluginAssignmentSummary{AllMembers: false, Roles: 2, Users: 4},
+			Publication:     PluginPublicationPublished,
+			AutoSyncEnabled: new(false),
 		}},
 		NextCursor: "opaque",
 	}
@@ -44,7 +47,7 @@ func TestListPluginsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"plugins", "id", "name", "slug", "description", "is_default", "auto_created",
 		"server_count", "skill_count",
 		"assignments", "all_members", "roles", "users",
-		"publication",
+		"publication", "auto_sync_enabled",
 		"next_cursor",
 	}, decodeKeys(t, output))
 }
@@ -135,6 +138,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			SkillCount:            1,
 			Assignments:           &PluginAssignmentSummary{AllMembers: true},
 			Publication:           PluginPublicationUnpublished,
+			AutoSyncEnabled:       new(true),
 			DistributionAdmission: &DistributionAdmission{State: DistributionAdmissionCovered, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-04T12:00:00Z", Complete: true},
 		},
 		Servers: []PluginServer{{
@@ -158,6 +162,9 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		AssignmentsTruncated:      &assignmentsTruncated,
 		ReferencesExpireAt:        "2026-09-04T12:10:00Z",
 		Truncated:                 false,
+		PublicationEvidence: &PluginPublicationEvidence{
+			Fresh: new(false), Packages: []PluginPublicationPackage{{ServerName: "Billing", MCPURL: "https://mcp.example.test/billing"}}, AwaitingManualSync: true,
+		},
 	}
 
 	require.ElementsMatch(t, []string{
@@ -165,13 +172,14 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"plugin", "id", "name", "slug", "is_default", "auto_created",
 		"server_count", "skill_count",
 		"assignments", "all_members", "roles", "users",
-		"publication", "distribution_admission", "state", "missing_audience_counts", "everyone", "roles", "groups", "attributes", "users", "checked_at", "complete",
+		"publication", "auto_sync_enabled", "distribution_admission", "state", "missing_audience_counts", "everyone", "roles", "groups", "attributes", "users", "checked_at", "complete",
 		"servers", "display_name", "backend", "mcp_slug", "policy", "enabled",
 		"skills", "name", "follows_latest",
 		"assignment_version",
 		"assignments", "kind", "display_name", "reference",
 		"assignment_details_complete", "assignments_truncated", "references_expire_at",
 		"truncated",
+		"publication_evidence", "not_configured", "unavailable", "fresh", "packages", "server_name", "mcp_url", "awaiting_manual_sync",
 	}, decodeKeys(t, output))
 }
 
@@ -216,12 +224,12 @@ func TestPluginAssignmentVersionCoversPluginAndCanonicalAssignmentSet(t *testing
 	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	pluginID := uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
 	assignments := []string{"role:global:00000000-0000-0000-0000-0000000000b2", "*"}
-	version := pluginAssignmentVersion(key, projectID, pluginID, assignments)
+	version := pluginAssignmentVersion(key, projectID, pluginID, assignments, nil)
 
-	require.Equal(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*", assignments[0], "*"}))
-	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*"}))
-	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, uuid.New(), assignments))
-	require.NotEqual(t, version, pluginAssignmentVersion(key, uuid.New(), pluginID, assignments))
+	require.Equal(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*", assignments[0], "*"}, nil))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*"}, nil))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, uuid.New(), assignments, nil))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, uuid.New(), pluginID, assignments, nil))
 }
 
 func TestCurrentPluginAssignmentsCanonicalizesAndHidesUnreviewedAssignments(t *testing.T) {
@@ -255,8 +263,8 @@ func TestPluginAssignmentVersionCanonicalizesDirectoryPrincipals(t *testing.T) {
 	legacyCase := "directory_group:00000000-0000-0000-0000-0000000000B2"
 
 	require.Equal(t,
-		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}),
-		pluginAssignmentVersion(key, projectID, pluginID, []string{legacyCase}),
+		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}, nil),
+		pluginAssignmentVersion(key, projectID, pluginID, []string{legacyCase}, nil),
 	)
 }
 
@@ -270,6 +278,7 @@ func TestMatchesTargetNameRefusesPartialMatches(t *testing.T) {
 		want   bool
 	}{
 		{name: "id", wanted: id, want: true},
+		{name: "id case insensitive", wanted: strings.ToUpper(id), want: true},
 		{name: "slug", wanted: "marketing", want: true},
 		{name: "slug case insensitive", wanted: "MARKETING", want: true},
 		{name: "exact name", wanted: "Marketing Tools", want: true},
@@ -330,4 +339,36 @@ func TestPluginCursorTreatsNoCursorAsTheFirstPage(t *testing.T) {
 	after, err := codec.Decode("", Principal{OrganizationID: "org_1"}, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, after)
+}
+
+func TestPluginAssignmentVersionCoversInstallModes(t *testing.T) {
+	t.Parallel()
+
+	key := []byte("version-key")
+	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	pluginID := uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
+	assignments := []string{"*"}
+	base := pluginAssignmentVersion(key, projectID, pluginID, assignments, nil)
+
+	require.Equal(t, base, pluginAssignmentVersion(key, projectID, pluginID, assignments, map[string]installmode.Mode{"*": installmode.Default}), "a missing mode counts as default")
+	require.NotEqual(t, base, pluginAssignmentVersion(key, projectID, pluginID, assignments, map[string]installmode.Mode{"*": installmode.Required}))
+	require.NotEqual(t,
+		pluginAssignmentVersion(key, projectID, pluginID, assignments, map[string]installmode.Mode{"*": installmode.Required}),
+		pluginAssignmentVersion(key, projectID, pluginID, assignments, map[string]installmode.Mode{"*": installmode.Available}),
+	)
+}
+
+func TestPluginAssignmentVersionCanonicalizesInstallModeKeys(t *testing.T) {
+	t.Parallel()
+
+	key := []byte("version-key")
+	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	pluginID := uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
+	canonical := directory.GroupPrincipal(uuid.MustParse("00000000-0000-0000-0000-0000000000b2"))
+	legacyCase := "directory_group:00000000-0000-0000-0000-0000000000B2"
+
+	require.Equal(t,
+		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}, map[string]installmode.Mode{canonical: installmode.Required}),
+		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}, map[string]installmode.Mode{legacyCase: installmode.Required}),
+	)
 }

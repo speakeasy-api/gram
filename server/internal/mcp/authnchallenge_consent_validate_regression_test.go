@@ -12,8 +12,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
@@ -30,6 +35,80 @@ func TestConsentValidationRefusesAGatewayMemberWithAmbiguousClients(t *testing.T
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 	require.Empty(t, fx.member.drain(), "ambiguous credentials must not reach the backend")
+}
+
+// On a gateway, a member associated with the card's client verifies with
+// that client's credential even when the sign-in also binds two clients of
+// another authorization server for other servers. Those clients are never
+// resolved for this member, so they cannot fail its check.
+func TestConsentValidationVerifiesAnAssociatedGatewayMemberBesideAnotherProvidersDuplicateClients(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedMetaValidationFixture(t, "validate-associated-meta")
+	projectID, orgID := consentTestTenant(t, ctx)
+
+	member, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerBySlug(ctx, mcpservers_repo.GetMCPServerBySlugParams{Slug: conv.ToPGText("validate-associated-meta-member"), ProjectID: projectID})
+	require.NoError(t, err)
+	_, err = upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: orgID, ProjectID: projectID, McpServerID: member.ID, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+
+	first := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "validate-associated-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+	otherIssuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, first)
+	q := remotesessionsrepo.New(fx.ti.conn)
+	second, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(orgID),
+		RemoteSessionIssuerID: otherIssuer,
+		ClientID:              "validate-associated-other-second-external-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: second.ID,
+		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
+	}))
+
+	requireValidated(t, fx)
+	requireProbe(t, fx.member.drain(), "token-validate-associated-meta", true, true)
+}
+
+// Where upstream auth is enforced, a gateway member's typed auth client
+// decides its credential, so a card that client offers verifies even when the
+// sign-in also binds another client of the same authorization server, with
+// its own grant for the member's upstream.
+func TestConsentValidationVerifiesATypedOfferBesideASameProviderClientUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedMetaValidationFixture(t, "validate-typed-meta")
+	projectID, orgID := consentTestTenant(t, ctx)
+	_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	fx.ti.service.SetAuthClientPermission(func() bool { return true })
+
+	member, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerBySlug(ctx, mcpservers_repo.GetMCPServerBySlugParams{Slug: conv.ToPGText("validate-typed-meta-member"), ProjectID: projectID})
+	require.NoError(t, err)
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(fx.clientID)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: member.ID, AuthClientID: authClientID, Source: "admin"}))
+
+	q := remotesessionsrepo.New(fx.ti.conn)
+	duplicate, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(orgID),
+		RemoteSessionIssuerID: clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, fx.clientID),
+		ClientID:              "validate-typed-meta-duplicate-external-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		CallbackBaseUrl:       conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: duplicate.ID,
+		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
+	}))
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-typed-duplicate", fx.member.url)
+
+	requireValidated(t, fx)
+	requireProbe(t, fx.member.drain(), "token-validate-typed-meta", true, true)
 }
 
 // A standalone server verifies the card's own client with that client's
@@ -94,4 +173,80 @@ func TestConsentValidationTimeoutStillDeletesMintedSession(t *testing.T) {
 	require.Equal(t, "unknown", session.ValidationStatus.String)
 	require.Equal(t, fx.name+" did not answer in time", session.ValidationReason.String)
 	require.Equal(t, map[string]int64{"unknown": 1}, validationCounts(t, fx.reader))
+}
+
+// Legacy direct Verify scopes ambiguity checks to the target server's bindings.
+func TestConsentValidationLegacyDirectServerScopesAmbiguousClients(t *testing.T) {
+	t.Parallel()
+	for _, relevant := range []bool{false, true} {
+		name := "unrelated"
+		if relevant {
+			name = "relevant"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			prefix := "validate-legacy-" + name
+			ctx, fx := seedStandaloneValidationFixture(t, prefix)
+			projectID, orgID := consentTestTenant(t, ctx)
+			_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+				OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
+			})
+			require.NoError(t, err)
+			_, err = productfeaturesrepo.New(fx.ti.conn).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
+				OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced),
+			})
+			require.NoError(t, err)
+			fx.ti.service.ReloadAuthEnforcement()
+
+			associate := func(serverID, clientID uuid.UUID) {
+				t.Helper()
+				rows, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+					OrganizationID: orgID, ProjectID: projectID, McpServerID: serverID, RemoteSessionClientID: clientID,
+				})
+				require.NoError(t, err)
+				require.Equal(t, int64(1), rows)
+			}
+			associate(fx.endpoint.McpServerID.UUID, fx.clientID)
+			first := fx.clientID
+			boundServer := fx.endpoint.McpServerID.UUID
+			resource := fx.member.url
+			var unrelated *validationMember
+			if !relevant {
+				unrelated = newValidationMember(t)
+				resource = unrelated.url
+				boundServer = createPublicRemoteMcpServer(t, ctx, fx.ti.conn, projectID, fx.endpoint.UserSessionIssuerID, prefix+"-sibling", resource)
+				first = createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "", []uuid.UUID{fx.endpoint.UserSessionIssuerID})
+				associate(boundServer, first)
+				insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, first, fx.subject, "token-other", resource)
+			}
+			providerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, first)
+			duplicate, err := remotesessionsrepo.New(fx.ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+				ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(orgID), RemoteSessionIssuerID: providerID,
+				ClientID: prefix + "-duplicate", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			})
+			require.NoError(t, err)
+			require.NoError(t, remotesessionsrepo.New(fx.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: duplicate.ID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID,
+			}))
+			associate(boundServer, duplicate.ID)
+			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.endpoint.UserSessionIssuerID, duplicate.ID, fx.subject, "token-duplicate", resource)
+
+			if relevant {
+				_, err := postValidate(t, fx, fx.clientID)
+				var shareable *oops.ShareableError
+				require.ErrorAs(t, err, &shareable)
+				require.Equal(t, oops.CodeUnexpected, shareable.Code)
+				require.Empty(t, fx.member.drain(), "ambiguous relevant credentials must not be probed")
+			} else {
+				requireValidated(t, fx)
+				requireProbe(t, fx.member.drain(), "token-"+prefix, true, true)
+				_, err := postValidate(t, fx, first)
+				var refused *oops.ShareableError
+				require.ErrorAs(t, err, &refused)
+				require.Equal(t, oops.CodeBadRequest, refused.Code, "an unrelated card cannot be verified on this endpoint")
+				require.Empty(t, fx.member.drain(), "an unrelated card must not probe the target")
+				require.Empty(t, unrelated.drain(), "an unrelated card must not probe its own backend")
+			}
+		})
+	}
 }

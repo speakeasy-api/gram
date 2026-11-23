@@ -87,9 +87,10 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
-	service := NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}})
+	service := NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, nil)
 	require.NotNil(t, service)
 	reg := newRegistrar(newTestMCPServer())
+	reg.withProjects(&RegistrationStore{db: conn})
 	registerAnalyticsTools(reg, service)
 
 	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
@@ -108,7 +109,7 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 	actor = contextvalues.SetActingSurface(actor, contextvalues.ActingSurfacePlatformMCP)
 	granted := ContextWithPrincipal(authz.GrantsToContext(actor, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())}), principal)
 	window := `"from":"` + base.Add(-time.Hour).Format(time.RFC3339) + `","to":"` + base.Add(time.Hour).Format(time.RFC3339) + `"`
-	projectID := `"project_id":"` + project.ID.String() + `"`
+	projectID := `"project_slug":"` + project.Slug + `"`
 
 	t.Run("describe serves the catalog for the project", func(t *testing.T) {
 		t.Parallel()
@@ -209,18 +210,19 @@ func TestAnalyticsToolsFollowTheExploreFlag(t *testing.T) {
 	authzEngine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authzEngine)
 	reg := newRegistrar(newTestMCPServer())
-	registerAnalyticsTools(reg, NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}))
+	reg.withProjects(&RegistrationStore{db: conn})
+	registerAnalyticsTools(reg, NewAnalyticsService(testenv.NewLogger(t), engine, flags, NewPostgresOrganizationSlugResolver(conn), reader, OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}, nil))
 
 	actor := contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	actor = contextvalues.SetActingSurface(actor, contextvalues.ActingSurfacePlatformMCP)
 	granted := ContextWithPrincipal(authz.GrantsToContext(actor, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String())}), principal)
-	arguments := json.RawMessage(`{"project_id":"` + project.ID.String() + `"}`)
+	arguments := json.RawMessage(`{"project_slug":"` + project.Slug + `"}`)
 
 	// Not set at all: indeterminate, and closed.
 	_, err = descriptorByName(t, reg, describeAnalyticsCatalogToolName).Invoke(granted, arguments)
 	refusal := requireAnalyticsRefusal(t, err)
 	require.Equal(t, analyticsNotEnabledCode, refusal.Code)
-	require.Contains(t, refusal.Message, "not switched on")
+	require.Contains(t, refusal.Message, "not enabled")
 
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, false)
 	_, err = descriptorByName(t, reg, describeAnalyticsCatalogToolName).Invoke(granted, arguments)

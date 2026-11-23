@@ -1,4 +1,5 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -14,11 +15,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     metaMcp: { addMember: api.add, listMembers: api.list },
   }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: { gateway: { overview: { href: (id: string) => `/gateway/${id}` } } },
-  }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("react-router", async (original) => ({
   ...(await original<typeof import("react-router")>()),
@@ -56,7 +53,9 @@ it("attaches the created server, invalidates membership and returns to the gatew
     },
   });
   expect(api.invalidate).toHaveBeenCalledTimes(1);
-  expect(api.navigate).toHaveBeenCalledWith("/gateway/gateway");
+  expect(api.navigate).toHaveBeenCalledWith(
+    "/org/projects/project/mcp/gateway/gateway/overview",
+  );
 });
 it("preserves creation after failure and retries only attachment", async () => {
   api.add.mockRejectedValueOnce(new Error("offline"));

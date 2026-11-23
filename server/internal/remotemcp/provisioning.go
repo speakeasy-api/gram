@@ -3,7 +3,9 @@ package remotemcp
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -18,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -88,6 +91,9 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "lock provisioning writer scope")
+	}
 	if err := requireLiveProjectForActiveOrganization(ctx, tx, authCtx); err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}
@@ -100,9 +106,6 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		return RemoteMCPProvisioningResult{}, err
 	}
 
-	if err := mcpservers.VerifyLiveRemoteMCPSourceInTransaction(ctx, tx, *authCtx.ProjectID, remote.ID); err != nil {
-		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "verify remote MCP source")
-	}
 	mcpServer, err := mcpservers.CreateMCPServerInTransaction(ctx, tx, s.audit, mcpservers.MCPServerTransactionInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
@@ -147,49 +150,82 @@ func normalizedRemoteMCPSourceName(name *string) pgtype.Text {
 	return pgtype.Text{String: trimmed, Valid: trimmed != ""}
 }
 
+// remoteMCPDisplayName is the name the server is shown with: the one given,
+// or else one read from its address.
 func remoteMCPDisplayName(rawURL string, name pgtype.Text) string {
 	if name.Valid {
 		return name.String
 	}
+	if readable := readableServiceName(rawURL); readable != "" {
+		return readable
+	}
 	return strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
+}
+
+// sharedHostingDomains are domains under which anyone can host a site, so the
+// label before them names the platform, not the service.
+var sharedHostingDomains = []string{
+	"amazonaws.com", "appspot.com", "azurecontainerapps.io", "azurewebsites.net",
+	"cloudfunctions.net", "deno.dev", "firebaseapp.com", "fly.dev", "github.io",
+	"herokuapp.com", "modal.run", "netlify.app", "ngrok-free.app", "ngrok.app",
+	"ngrok.io", "onrender.com", "pages.dev", "railway.app", "replit.app",
+	"run.app", "trycloudflare.com", "vercel.app", "web.app", "workers.dev",
+}
+
+// secondLevelSuffixes precede a two-letter country code in public suffixes
+// such as co.uk, or.jp or edu.au.
+var secondLevelSuffixes = map[string]bool{
+	"ac": true, "co": true, "com": true, "edu": true, "go": true, "gob": true, "gov": true, "ltd": true, "me": true, "mil": true, "ne": true, "net": true, "nom": true, "or": true, "org": true, "plc": true, "sch": true,
+}
+
+// readableServiceName reads the service's name from a URL's host:
+// https://mcp.ramp.com/mcp reads "Ramp" and mcp.acme-wiki.example reads
+// "Acme Wiki". It gives "" when the host does not name a service: IP
+// addresses, single-label hosts such as localhost, internationalised
+// domains, and sites on shared hosting domains such as vercel.app. The
+// dashboard suggests names by the same rules (readableServiceNameFromUrl).
+func readableServiceName(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	labels := strings.Split(host, ".")
+	last := labels[len(labels)-1]
+	if len(labels) < 2 || strings.Trim(last, "0123456789") == "" || strings.Contains(host, ":") {
+		return ""
+	}
+	for _, r := range host {
+		if r > unicode.MaxASCII {
+			return ""
+		}
+	}
+	for _, label := range labels {
+		if strings.HasPrefix(label, "xn--") {
+			return ""
+		}
+	}
+	for _, domain := range sharedHostingDomains {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return ""
+		}
+	}
+	suffix := 1
+	if len(labels) >= 3 && len(last) == 2 && secondLevelSuffixes[labels[len(labels)-2]] {
+		suffix = 2
+	}
+	words := strings.FieldsFunc(labels[len(labels)-1-suffix], func(r rune) bool { return r == '-' || r == '_' })
+	for i, word := range words {
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // createRemoteMCPSource owns the source row, its derived identifier, and the
 // matching audit event. Both dashboard workflows use it so their source records
 // cannot diverge while the atomic workflow adds its linked MCP server.
 func createRemoteMCPSource(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, input remoteMCPSourceInput) (repo.RemoteMcpServer, error) {
-	if authCtx == nil || authCtx.ProjectID == nil {
-		return repo.RemoteMcpServer{}, oops.E(oops.CodeBadRequest, nil, "invalid remote MCP source input")
-	}
-	return CreateRemoteMCPSourceInTransaction(ctx, tx, auditLogger, RemoteMCPSourceTransactionInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ActorUserID:    authCtx.UserID,
-		ActorEmail:     authCtx.Email,
-		Name:           input.Name,
-		URL:            input.URL,
-		TransportType:  input.TransportType,
-	})
-}
-
-// RemoteMCPSourceTransactionInput names the project and actor a remote MCP
-// source is created for when the caller has no request auth context, such as
-// a staff migration acting on a customer project.
-type RemoteMCPSourceTransactionInput struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	ActorUserID    string
-	ActorEmail     *string
-	Name           *string
-	URL            string
-	TransportType  string
-}
-
-// CreateRemoteMCPSourceInTransaction creates the remote_mcp_servers row and its
-// audit event in the caller's transaction. It neither probes the upstream nor
-// creates an issuer or client.
-func CreateRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input RemoteMCPSourceTransactionInput) (repo.RemoteMcpServer, error) {
-	if tx == nil || auditLogger == nil || input.ProjectID == uuid.Nil || input.OrganizationID == "" {
+	if tx == nil || auditLogger == nil || authCtx == nil || authCtx.ProjectID == nil {
 		return repo.RemoteMcpServer{}, oops.E(oops.CodeBadRequest, nil, "invalid remote MCP source input")
 	}
 	remoteID, err := uuid.NewV7()
@@ -202,7 +238,7 @@ func CreateRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, auditLog
 	}
 	remote, err := repo.New(tx).CreateServer(ctx, repo.CreateServerParams{
 		ID:            remoteID,
-		ProjectID:     input.ProjectID,
+		ProjectID:     *authCtx.ProjectID,
 		Name:          normalizedRemoteMCPSourceName(input.Name),
 		Slug:          conv.ToPGText(remoteSlug),
 		TransportType: input.TransportType,
@@ -216,10 +252,10 @@ func CreateRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, auditLog
 		return repo.RemoteMcpServer{}, oops.E(oops.CodeUnexpected, err, "create remote MCP server")
 	}
 	if err := auditLogger.LogRemoteMcpServerCreate(ctx, tx, audit.LogRemoteMcpServerCreateEvent{
-		OrganizationID:     input.OrganizationID,
-		ProjectID:          input.ProjectID,
-		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID),
-		ActorDisplayName:   input.ActorEmail,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ProjectID:          *authCtx.ProjectID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:   authCtx.Email,
 		ActorSlug:          nil,
 		RemoteMcpServerURN: urn.NewRemoteMcpServer(remote.ID),
 		RemoteMcpServerURL: remote.Url,
@@ -236,14 +272,7 @@ func requireLiveProjectForActiveOrganization(ctx context.Context, tx pgx.Tx, aut
 	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.E(oops.CodeBadRequest, nil, "invalid project ownership check")
 	}
-	var projectID uuid.UUID
-	err := tx.QueryRow(ctx, `
-SELECT id
-FROM projects
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-FOR UPDATE`, *authCtx.ProjectID, authCtx.ActiveOrganizationID).Scan(&projectID)
+	_, err := repo.New(tx).LockLiveProjectForRemoteMCPProvisioning(ctx, repo.LockLiveProjectForRemoteMCPProvisioningParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeNotFound, err, "project not found in active organization")
 	}

@@ -155,7 +155,11 @@ func (d *KitGKEManagedCheckpointDriver) Select(ctx context.Context, trigger *uns
 	if err = kitGKEObserved(current); err != nil {
 		return nil, err
 	}
-	name, found, err := unstructured.NestedString(current.Object, "status", "snapshotCreated")
+	// GKE serves the result as an object reference; older schemas used a bare name.
+	name, found, err := unstructured.NestedString(current.Object, "status", "snapshotCreated", "name")
+	if err != nil || !found {
+		name, found, err = unstructured.NestedString(current.Object, "status", "snapshotCreated")
+	}
 	if err != nil || !found || len(validation.IsDNS1123Subdomain(name)) != 0 {
 		return nil, fmt.Errorf("%w: trigger has no valid status.snapshotCreated", ErrKitGKEManagedSnapshotSchema)
 	}

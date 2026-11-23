@@ -38,6 +38,7 @@ func (l *Logger) LogSlackIdentityMapping(ctx context.Context, dbtx repo.DBTX, ac
 		return fmt.Errorf("marshal Slack mapping after: %w", err)
 	}
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
 		Action: string(action), SubjectID: event.MembershipURN.ID.String(), SubjectType: string(subjectTypeSlackDirectoryMembership), SubjectDisplayName: conv.PtrToPGTextEmpty(event.MembershipSnapshotAfter.DisplayName), SubjectSlug: conv.ToPGTextEmpty(""),

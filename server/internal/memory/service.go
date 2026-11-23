@@ -362,7 +362,7 @@ func (s *MemoryService) Remember(
 	}
 
 	originThread := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if principal, hasPrincipal := contextvalues.GetAssistantPrincipal(ctx); hasPrincipal && principal.ThreadID != uuid.Nil {
+	if principal, hasPrincipal := contextvalues.GetAssistantToolTarget(ctx); hasPrincipal && principal.ThreadID != uuid.Nil {
 		originThread = uuid.NullUUID{UUID: principal.ThreadID, Valid: true}
 	}
 

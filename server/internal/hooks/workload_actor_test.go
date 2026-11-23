@@ -115,6 +115,17 @@ func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance) hooks
 		AgentID:          agent.ID,
 	}))
 
+	admitWorkloads(t, ti)
+
+	token, _, err := ti.service.deviceAgentTokens.Mint(authCtx.ActiveOrganizationID, urn.NewWorkloadPrincipal(issuerID, subject), time.Now())
+	require.NoError(t, err)
+	return hooksWorkload{actor: actor, token: token, projectSlug: *authCtx.ProjectSlug, organizationID: authCtx.ActiveOrganizationID, issuerID: issuerID, subject: subject}
+}
+
+// admitWorkloads gives the service an engine that admits workload sessions,
+// which the default test engine does not.
+func admitWorkloads(t *testing.T, ti *testInstance) {
+	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{
 		DevMode:                          false,
 		AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
@@ -123,10 +134,6 @@ func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance) hooks
 	})
 	ti.service.authz = engine
 	ti.service.auth = auth.New(testenv.NewLogger(t), ti.conn, ti.sessionManager, engine)
-
-	token, _, err := ti.service.deviceAgentTokens.Mint(authCtx.ActiveOrganizationID, urn.NewWorkloadPrincipal(issuerID, subject), time.Now())
-	require.NoError(t, err)
-	return hooksWorkload{actor: actor, token: token, projectSlug: *authCtx.ProjectSlug, organizationID: authCtx.ActiveOrganizationID, issuerID: issuerID, subject: subject}
 }
 
 // authenticateWorkload runs the device-agent token requirement Goa runs for
@@ -198,6 +205,30 @@ func revokeAgentHooks(t *testing.T, ctx context.Context, ti *testInstance, workl
 		Scope:          string(authz.ScopeOrgHooksIngest),
 		Selectors:      selectors,
 	})
+	require.NoError(t, err)
+}
+
+// A workload sends hooks as its agent, so like an agent key it needs the
+// agent's hooks grant on the project it names and not project:read there.
+func TestCodexAndIngest_WorkloadNeedsNoProjectRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	selectors, err := authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: workload.organizationID,
+		PrincipalUrn:   workload.actor,
+		Scope:          string(authz.ScopeProjectRead),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+
+	_, err = authenticateWorkload(t, ti, "codex", workload.token, workload.projectSlug)
+	require.NoError(t, err)
+	_, err = ti.service.Ingest(context.Background(), workloadIngestPayload(workload, workload.projectSlug))
 	require.NoError(t, err)
 }
 

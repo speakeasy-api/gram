@@ -11,10 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"sync"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -94,61 +91,21 @@ func NewPersistentLocalSigningClient(alg jose.SignatureAlgorithm, path string) (
 	}
 	doc := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Headers: nil, Bytes: der})
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("create persistent local key directory: %w", err)
-	}
-	tmp, err := os.CreateTemp(dir, ".local-kms-*.tmp")
-	if err != nil {
-		return nil, fmt.Errorf("create persistent local key temporary file: %w", err)
-	}
-	tmpName := tmp.Name()
-	removeTemp := func() error {
-		return errors.Join(tmp.Close(), os.Remove(tmpName))
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		return nil, errors.Join(fmt.Errorf("secure persistent local key temporary file: %w", err), removeTemp())
-	}
-	if _, err := tmp.Write(doc); err != nil {
-		return nil, errors.Join(fmt.Errorf("write persistent local key temporary file: %w", err), removeTemp())
-	}
-	if err := tmp.Sync(); err != nil {
-		return nil, errors.Join(fmt.Errorf("sync persistent local key temporary file: %w", err), removeTemp())
-	}
-	if err := tmp.Close(); err != nil {
-		return nil, errors.Join(fmt.Errorf("close persistent local key temporary file: %w", err), os.Remove(tmpName))
-	}
-
-	if err := os.Link(tmpName, path); err != nil {
-		removeErr := os.Remove(tmpName)
+	if err := publishLocalKeyFile(path, doc); err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			client, readErr := readLocalSigningClient(alg, path)
-			return client, errors.Join(readErr, removeErr)
+			// Another process published first; converge on its key.
+			return readLocalSigningClient(alg, path)
 		}
-		return nil, errors.Join(fmt.Errorf("publish persistent local key: %w", err), removeErr)
-	}
-	if err := os.Remove(tmpName); err != nil {
-		return nil, fmt.Errorf("remove persistent local key temporary file: %w", err)
+		return nil, err
 	}
 
 	return client, nil
 }
 
 func readLocalSigningClient(alg jose.SignatureAlgorithm, path string) (*LocalSigningClient, error) {
-	file, err := os.Open(path) //nolint:gosec // path is an application-selected local-development config file, not request input.
+	doc, err := readLocalKeyFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("open persistent local %s key: %w", alg, err)
-	}
-	info, err := file.Stat()
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("inspect persistent local %s key: %w", alg, err), file.Close())
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return nil, errors.Join(fmt.Errorf("persistent local %s key must be a regular file accessible only to its owner", alg), file.Close())
-	}
-	doc, readErr := io.ReadAll(file)
-	if err := errors.Join(readErr, file.Close()); err != nil {
-		return nil, fmt.Errorf("read persistent local %s key: %w", alg, err)
+		return nil, fmt.Errorf("persistent local %s key: %w", alg, err)
 	}
 	block, rest := pem.Decode(doc)
 	if block == nil || block.Type != "PRIVATE KEY" || len(rest) != 0 {
@@ -267,7 +224,7 @@ func (c *LocalSigningClient) CreateSigningKey(ctx context.Context, params Create
 
 	keyName := params.KeyRing + "/cryptoKeys/" + params.KeyID
 
-	return &CreatedSigningKey{KeyName: keyName, KeyVersionName: signingKeyVersionName(keyName)}, nil
+	return &CreatedSigningKey{KeyName: keyName, KeyVersionName: firstKeyVersionName(keyName)}, nil
 }
 
 // GrantSignerVerifier validates its inputs; there is no IAM in-process.

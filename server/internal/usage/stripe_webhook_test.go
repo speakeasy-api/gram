@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -74,12 +75,16 @@ func (f *fakeStripeWebhookClient) CreateCheckoutSession(context.Context, stripec
 	return nil, errors.New("not implemented")
 }
 
+func (*fakeStripeWebhookClient) PublishableKey() string {
+	return ""
+}
+
 func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
 	f.checkoutCalls.Add(1)
 	return f.checkout, f.checkoutError
 }
 
-func (f *fakeStripeWebhookClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+func (f *fakeStripeWebhookClient) GetSubscription(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -386,7 +391,7 @@ func stripeLifecycleOpenRouterProvisioner(t *testing.T, db *pgxpool.Pool, baseUR
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	return openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 }
 
@@ -1087,6 +1092,8 @@ func configurePaygCheckout(t *testing.T, service *Service, eventID, subscription
 		Partner:                nil,
 		ID:                     "checkout_placeholder",
 		Status:                 "complete",
+		PaymentStatus:          "paid",
+		OrganizationID:         stripeWebhookOrganizationID,
 		CustomerID:             "customer_placeholder",
 		SubscriptionID:         subscriptionID,
 		SubscriptionCustomerID: "customer_placeholder",
@@ -1620,7 +1627,7 @@ func TestStripeCheckoutCompletionConvertsActiveEnterpriseTrialAtomicallyOnce(t *
 	require.False(t, ssoEnabled)
 	require.NotContains(t, featureCache.snapshot(), productfeatures.FeatureSSO)
 
-	enterpriseFloor, ok := openrouter.DefaultCreditLimit(stripeWebhookOrganizationID, "enterprise", false)
+	enterpriseFloor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, stripeWebhookOrganizationID, "enterprise", false)
 	require.True(t, ok)
 	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
 	require.False(t, chat.Disabled)
@@ -1727,7 +1734,7 @@ func TestStripeCheckoutTrialConversionAuditTreatsLimitOnlyChangeAsUnchangedAcces
 	require.Equal(t, false, chatBefore["key_access_changed"])
 	require.Equal(t, false, chatAfter["key_access_changed"])
 	require.EqualValues(t, 17, chatBefore["monthly_credits"])
-	enterpriseFloor, ok := openrouter.DefaultCreditLimit(stripeWebhookOrganizationID, "enterprise", false)
+	enterpriseFloor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, stripeWebhookOrganizationID, "enterprise", false)
 	require.True(t, ok)
 	require.EqualValues(t, enterpriseFloor, chatAfter["monthly_credits"])
 	require.NotEqual(t, chatBefore["monthly_credits"], chatAfter["monthly_credits"])
@@ -1751,7 +1758,7 @@ func TestStripeCheckoutCompletionAfterTrialExpiryConvertsBothKeys(t *testing.T) 
 	converted, err := trialsrepo.New(db).GetTrial(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.True(t, converted.ConvertedAt.Valid)
-	floor, ok := openrouter.DefaultCreditLimit(stripeWebhookOrganizationID, "enterprise", false)
+	floor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, stripeWebhookOrganizationID, "enterprise", false)
 	require.True(t, ok)
 	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
 	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
@@ -1823,7 +1830,7 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
@@ -1928,7 +1935,7 @@ func TestStripeCheckoutFinalBillingCauseRecoveryReconcilesStaleDisabledMirror(t 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "final cause recovery").Code)
@@ -1977,7 +1984,7 @@ func TestStripeCheckoutLayeredBillingRecoveryDoesNotReconcileUnchangedAccess(t *
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "layered recovery").Code)
@@ -2128,7 +2135,7 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2350,7 +2357,7 @@ func TestStripeCheckoutExactReplayRepairsPostCommitOpenRouterFailure(t *testing.
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2628,6 +2635,7 @@ func TestStripeSubscriptionDeletionPostCommitReconcileFailurePreservesDurableInt
 		nil,
 		nil,
 		testenv.NewEncryptionClient(t),
+		staff.Organization{},
 		option,
 	)
 
@@ -2673,7 +2681,7 @@ func TestStripeSubscriptionDeletionExactReplayRepairsPostCommitOpenRouterFailure
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2726,7 +2734,7 @@ func TestStripeSubscriptionDeletionReplayCannotOverrideLaterConversion(t *testin
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "loss").Code)
@@ -2790,7 +2798,7 @@ func TestConvertedDemotedTrialSubscriptionLossWinsBeforeDelayedActivationReconci
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 	require.NoError(t, RepairPaygOpenRouterChatKey(
 		t.Context(), testenv.NewLogger(t), db, production, stripeWebhookOrganizationID, openrouter.KeyDesiredStateEnabled,
@@ -3120,4 +3128,111 @@ func TestStripeCheckoutRejectsMalformedIdentifiers(t *testing.T) {
 	}}
 	service := &Service{logger: testenv.NewLogger(t), stripeClient: client, stripeHandler: testStripeWebhookHandler}
 	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "malformed").Code)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidCompletion(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "unpaid", "active", false, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesTrialCompletion(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "no_payment_required", "trialing", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidTrialCompletion(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.completed", "unpaid", "trialing", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesAsyncSuccess(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_succeeded", "paid", "active", true, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesUnpaidAsyncSuccess(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_succeeded", "unpaid", "active", false, false)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesAsyncFailure(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_failed", "unpaid", "active", false, true)
+}
+
+func TestStripeCheckoutAsyncPaymentOutcomesStaleAsyncFailure(t *testing.T) {
+	t.Parallel()
+	testStripeCheckoutAsyncPaymentOutcomes(t, "checkout.session.async_payment_failed", "paid", "active", false, false)
+}
+
+func testStripeCheckoutAsyncPaymentOutcomes(t *testing.T, tcEventType string, tcPaymentStatus string, tcSubscriptionStatus string, tcActivated bool, tcFailed bool) {
+	t.Helper()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_async", "subscription_async", tcSubscriptionStatus)
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	verify := client.verify
+	client.verify = func(body []byte, signature string) (*stripeclient.WebhookEvent, error) {
+		event, err := verify(body, signature)
+		event.Type = tcEventType
+		return event, err
+	}
+	client.checkout.PaymentStatus = tcPaymentStatus
+	metrics := &captureStripeWebhookMetrics{}
+	service.stripeMetrics = metrics
+	for range 2 {
+		require.Equal(t, http.StatusOK, serveStripeWebhook(service, "async outcome").Code)
+	}
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, tcActivated, metadata.StripeSubscriptionID.Valid)
+	if !tcActivated && !tcFailed && tcPaymentStatus == "unpaid" {
+		require.Zero(t, stripeWebhookReceiptCount(t, db), "pending payment must not record an activation receipt")
+	}
+	if tcFailed {
+		require.EqualValues(t, 1, metrics.invoicePaymentFailures.Load())
+	} else {
+		require.Zero(t, metrics.invoicePaymentFailures.Load())
+	}
+}
+
+func TestStripeCheckoutRejectsOrganizationMetadataMismatch(t *testing.T) {
+	t.Parallel()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_org_mismatch", "subscription_placeholder", "active")
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.checkout.OrganizationID = "org_other"
+	require.Equal(t, http.StatusBadRequest, serveStripeWebhook(service, "wrong organization").Code)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+}
+
+func TestStripeCheckoutPendingPaymentCanLaterSucceed(t *testing.T) {
+	t.Parallel()
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_delayed_payment", "subscription_delayed_payment", "active")
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.checkout.PaymentStatus = "unpaid"
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "pending payment").Code)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.False(t, metadata.StripeSubscriptionID.Valid)
+
+	verify := client.verify
+	client.verify = func(body []byte, signature string) (*stripeclient.WebhookEvent, error) {
+		event, err := verify(body, signature)
+		event.ID = "event_delayed_payment_succeeded"
+		event.Type = "checkout.session.async_payment_succeeded"
+		return event, err
+	}
+	client.checkout.PaymentStatus = "paid"
+	for range 2 {
+		require.Equal(t, http.StatusOK, serveStripeWebhook(service, "payment succeeded").Code)
+	}
+	metadata, err = repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_delayed_payment", metadata.StripeSubscriptionID.String)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 }

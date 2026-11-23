@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -269,7 +270,7 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 	}
 
 	// project:write, not project:read: this persists.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -371,7 +372,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -570,7 +571,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeForbidden, nil, "changing an identity provider's MCP tunnel binding requires a platform admin").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 	if v := conv.PtrValOr(tunneledMcpServerID, ""); v != "" {
@@ -736,7 +737,7 @@ func (s *Service) ListRemoteSessionIssuers(ctx context.Context, payload *gen.Lis
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -815,7 +816,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 			return nil, err
 		}
 		issuer, err = repo.New(s.db).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
@@ -832,7 +833,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 			return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 		}
 	case hasIssuer:
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 			return nil, err
 		}
 
@@ -864,7 +865,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		}
 		issuer = match
 	default: // hasSlug
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 			return nil, err
 		}
 		var err error
@@ -897,7 +898,7 @@ func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -948,7 +949,7 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 
@@ -1217,7 +1218,8 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 // It probes the well-known locations from issuerProbeCandidates in order. The
 // first document carrying both an authorization_endpoint and a token_endpoint
 // is the primary; one same-issuer document of the other family then fills in
-// the members the primary omits. A 200 that parses but lacks those endpoints
+// the members the primary omits, except RFC 9207 iss support, which only the
+// primary decides. A 200 that parses but lacks those endpoints
 // is almost always a catch-all answering a speculative candidate, so it is
 // returned only when no candidate yields a usable document. A candidate that
 // fails transiently is unreadable: the run still succeeds when another
@@ -1264,8 +1266,8 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	// documents, and several providers publish jwks_uri, claims_supported, and
 	// the ID token signing algorithms only in the OpenID one, so after the
 	// primary the other family is probed and one same-issuer document fills
-	// in what the primary left out. There are only two families, so the loop
-	// ends as soon as the second has contributed.
+	// in what the primary left out, except RFC 9207 iss support. There are
+	// only two families, so the loop ends as soon as the second has contributed.
 	var firstErr *discoveryError
 	var untrustedErr *untrustedDocumentError
 	var primary, fallback *rfc8414Document
@@ -1395,6 +1397,11 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 // even as false or empty, is kept: the primary document is authoritative for
 // flags such as CIMD support that Speakeasy acts on. Either side without a JSON
 // object leaves base unchanged.
+//
+// RFC 9207 iss support never comes from extra. A primary document that omits it
+// declares no support (RFC 9207 §3), and turning the flag on makes the login
+// callback reject every response without iss, so another document's claim
+// cannot enable that check.
 func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
 	var baseMembers, extraMembers map[string]json.RawMessage
 	if err := json.Unmarshal(base.raw, &baseMembers); err != nil || baseMembers == nil {
@@ -1404,6 +1411,7 @@ func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
 		return base
 	}
 	merged := maps.Clone(extraMembers)
+	delete(merged, oauthwire.MetadataAuthorizationResponseIssParameterSupported)
 	maps.Copy(merged, baseMembers)
 	if len(merged) == len(baseMembers) {
 		return base

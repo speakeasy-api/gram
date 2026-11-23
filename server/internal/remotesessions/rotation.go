@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -151,6 +153,11 @@ type RotateClientRegistrationParams struct {
 	// the login belongs to. It covers legacy rows whose own organization_id was
 	// never backfilled; an empty value falls back to the row's.
 	OrganizationID string
+
+	// RegistrationScope is what the replacement registers when the client
+	// stores no scope: the scope the triggering login requests. Empty falls
+	// back to what a login without a resource would request.
+	RegistrationScope []string
 }
 
 // ClientRotator re-registers a remote_session_client with its issuer in
@@ -165,6 +172,9 @@ type ClientRotator struct {
 	db     *pgxpool.Pool
 	enc    *encryption.Client
 	policy *guardian.Policy
+
+	// secrets reads the client's stored secret and stores its replacement.
+	secrets *clientsecrets.Secrets
 
 	// tunnels carries the probe and the re-registration for an issuer bound to
 	// a tunneled MCP server. Both endpoints they reach — the token endpoint and
@@ -189,11 +199,12 @@ type ClientRotator struct {
 
 // NewClientRotator wires a rotator over the same database, encryption key,
 // egress policy, and lease cache the refresh path uses.
-func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, serverURL *url.URL, revoker *UpstreamRevoker, auditLogger *audit.Logger, registrationTelemetry registration.Recorder) *ClientRotator {
+func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, secrets *clientsecrets.Secrets, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, serverURL *url.URL, revoker *UpstreamRevoker, auditLogger *audit.Logger, registrationTelemetry registration.Recorder) *ClientRotator {
 	return &ClientRotator{
 		logger:      logger,
 		db:          db,
 		enc:         enc,
+		secrets:     secrets,
 		policy:      policy,
 		tunnels:     tunnels,
 		origins:     DefaultCallbackOrigins(serverURL),
@@ -382,12 +393,8 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, err
 	}
 
-	// Only a registration a dynamic registration could reproduce is replaced:
-	// a CIMD client's client_id is its document URL, a managed client's
-	// registration belongs to its identity provider connection, a
-	// private_key_jwt client's is bound to a key set, and a self client's uses
-	// a grant the replacement registration does not request.
-	if current.ClientIDMetadataUri.Valid || current.IdentityProviderConnectionID.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT || CredentialOwner(current.CredentialOwner) == CredentialOwnerSelf {
+	// Only a registration a dynamic registration could reproduce is replaced.
+	if !canReregister(current.ClientIDMetadataUri, current.IdentityProviderConnectionID, current.TokenEndpointAuthMethod, current.CredentialOwner) {
 		return zero, ErrClientNotRotatable
 	}
 	endpoint := strings.TrimSpace(row.IssuerRegistrationEndpoint.String)
@@ -399,7 +406,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		if err := revalidateRotationSnapshot(ctx, q, row); err != nil {
 			return zero, err
 		}
-		recognized, err := r.upstreamRecognizesClient(ctx, row)
+		recognized, err := r.upstreamRecognizesClient(ctx, conn, row)
 		if err != nil {
 			return zero, fmt.Errorf("probe issuer for client registration: %w", err)
 		}
@@ -430,6 +437,11 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	if err := revalidateRotationSnapshot(ctx, q, row); err != nil {
 		return zero, err
 	}
+	// A registration cannot be undone, so confirm the replacement's secret can
+	// be stored before asking the issuer for one.
+	if err := r.secrets.RequireUsable(ctx, conn, clientOwner(current)); err != nil {
+		return zero, fmt.Errorf("check client secret key before re-registration: %w", err)
+	}
 	// The replacement is registered over whatever transport the issuer names,
 	// so a bound issuer's private registration endpoint is reachable. This is
 	// the rotator's own system path: it re-registers a client an administrator
@@ -437,7 +449,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	// it does not widen who can create a tunnel binding.
 	registered, err := RegisterDynamicClient(ctx, r.policy, r.tunnels, r.origins.ForClient(current.CallbackBaseUrl), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
-		Scope:                   conv.PtrEmpty(strings.Join(current.Scope, " ")),
+		Scope:                   conv.PtrEmpty(strings.Join(rotationRegistrationScope(row, params.RegistrationScope), " ")),
 		TokenEndpointAuthMethod: conv.PtrEmpty(current.TokenEndpointAuthMethod.String),
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(row.IssuerTunneledMcpServerID)),
 	}, r.registrationTelemetry)
@@ -452,14 +464,6 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, ErrClientRotationInProgress
 	}
 
-	var secretCiphertext pgtype.Text
-	if registered.ClientSecret != "" {
-		ciphertext, err := r.enc.Encrypt([]byte(registered.ClientSecret))
-		if err != nil {
-			return zero, fmt.Errorf("encrypt re-registered client secret: %w", err)
-		}
-		secretCiphertext = conv.ToPGText(ciphertext)
-	}
 	issuedAt := registered.ClientIDIssuedAt
 	if !issuedAt.Valid {
 		issuedAt = conv.ToPGTimestamptz(time.Now().UTC())
@@ -510,7 +514,6 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 
 	updated, err := txRepo.ReplaceRemoteSessionClientRegistration(ctx, repo.ReplaceRemoteSessionClientRegistrationParams{
 		ClientID:                registered.ClientID,
-		ClientSecretEncrypted:   secretCiphertext,
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   secretExpiresAt,
 		TokenEndpointAuthMethod: conv.ToPGTextEmpty(conv.Default(registered.TokenEndpointAuthMethod, current.TokenEndpointAuthMethod.String)),
@@ -526,6 +529,21 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	}
 	if err != nil {
 		return zero, fmt.Errorf("persist re-registered client: %w", err)
+	}
+	// The replacement's secret, or none for a public registration. A write
+	// fenced by a transition seals the same secret again; the issuer is never
+	// asked to register again.
+	if registered.ClientSecret != "" {
+		updated, err = r.secrets.Set(ctx, dbtx, updated.ID, clientOwner(updated), []byte(registered.ClientSecret), secretExpiresAt)
+	} else {
+		updated, err = r.secrets.Clear(ctx, dbtx, updated.ID, clientOwner(updated))
+	}
+	if err != nil {
+		if errors.Is(err, clientsecrets.ErrClientNotFound) {
+			return zero, ErrRotationSnapshotChanged
+		}
+		logger.ErrorContext(ctx, "store re-registered client secret; the new upstream registration is abandoned", attr.SlogOAuthClientID(registered.ClientID), attr.SlogError(err))
+		return zero, fmt.Errorf("store re-registered client secret: %w", err)
 	}
 
 	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, updated.ID)
@@ -661,7 +679,7 @@ func (r *ClientRotator) awaitRotation(ctx context.Context, clientID uuid.UUID, s
 // already gone, leaving the client reconnecting with the dead client_id until
 // its next rejection; so an issuer having a bad minute neither rotates nor
 // exonerates the client.
-func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.GetRemoteSessionClientForRotationRow) (bool, error) {
+func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, db repo.DBTX, row repo.GetRemoteSessionClientForRotationRow) (bool, error) {
 	client := row.RemoteSessionClient
 	tokenEndpoint := row.IssuerTokenEndpoint.String
 	if tokenEndpoint == "" {
@@ -669,10 +687,10 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 	}
 
 	clientSecret := ""
-	if client.ClientSecretEncrypted.Valid {
-		secret, err := r.enc.Decrypt(client.ClientSecretEncrypted.String)
+	if stored := clientsecrets.Stored(client.ClientSecretEncrypted, client.ClientSecretOrgEncrypted); clientsecrets.Has(stored) {
+		secret, err := r.secrets.Open(ctx, db, clientOwner(client), stored)
 		if err != nil {
-			return false, fmt.Errorf("decrypt stored client secret: %w", err)
+			return false, fmt.Errorf("open stored client secret: %w", err)
 		}
 		clientSecret = secret
 	}
@@ -746,8 +764,9 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 // the issuer has stopped recognizing it, returning the client to send to the
 // authorize endpoint. Any failure leaves the client as it was: the login then
 // fails at the issuer exactly as it would have without this step, and the
-// warning here names why.
-func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organizationID string, client Client) Client {
+// warning here names why. scopes is what the login requests, registered when
+// the client stores none.
+func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organizationID string, client Client, scopes []string) Client {
 	trigger, needed := client.needsRegistrationRotation(time.Now())
 	if !needed {
 		return client
@@ -762,6 +781,7 @@ func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organ
 		ActorDisplayName:         &actorLabel,
 		ConfirmUpstreamRejection: trigger == RotationTriggerUpstreamRejected,
 		OrganizationID:           organizationID,
+		RegistrationScope:        scopes,
 	})
 	if errors.Is(err, ErrClientStillRecognized) {
 		// The rejection was spurious and its marker is already cleared; the
@@ -786,11 +806,27 @@ func (m *ChallengeManager) rotateRejectedRegistration(ctx context.Context, organ
 	}
 
 	client.ExternalClientID = rotated.ClientID
-	client.ClientSecretEncrypted = conv.FromPGText[string](rotated.ClientSecretEncrypted)
 	client.LegacyCallbackUrl = rotated.LegacyCallbackUrl
 	client.ClientSecretExpiresAt = timestampPtr(rotated.ClientSecretExpiresAt)
 	client.UpstreamRejectedAt = timestampPtr(rotated.UpstreamRejectedAt)
 	return client
+}
+
+// rotationRegistrationScope keeps a replacement registered for what logins
+// request: a registration naming no scope can leave a provider granting less.
+// The client serves every resource on its issuer, so the triggering login's
+// request widens the issuer-level scope rather than replacing it.
+func rotationRegistrationScope(row repo.GetRemoteSessionClientForRotationRow, requested []string) []string {
+	if len(row.RemoteSessionClient.Scope) > 0 {
+		return row.RemoteSessionClient.Scope
+	}
+	scope := issuerRegistrationScope(row.IssuerScopesSupported, row.IssuerScopeOverride, row.IssuerOmitScopeFallback, issuerLevelResource())
+	for _, s := range requested {
+		if !slices.Contains(scope, s) {
+			scope = append(scope, s)
+		}
+	}
+	return scope
 }
 
 // timestampPtr is the nullable form of a pgtype.Timestamptz.

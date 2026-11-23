@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { Modifier, Variant } from "./types";
+import type { Modifier, Variant } from "./types";
 import { Icon } from "@/components/ui/Icon";
-import { iconNames } from "../Icon/names";
+import type { IconName } from "../Icon/names";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -44,7 +44,7 @@ export type AlertProps = {
   inline?: boolean;
   dismissible?: boolean;
   onDismiss?: () => void;
-  iconName?: (typeof iconNames)[number];
+  iconName?: IconName;
   useContainer?: boolean;
   className?: string;
   /**
@@ -55,15 +55,14 @@ export type AlertProps = {
   title?: React.ReactNode | null;
 };
 
-const iconForVariant: Record<Variant, (typeof iconNames)[number] | undefined> =
-  {
-    default: "info",
-    success: "check",
-    error: "circle-alert",
-    warning: "circle-alert",
-    info: "info",
-    feature: "star",
-  };
+const iconForVariant: Record<Variant, IconName | undefined> = {
+  default: "info",
+  success: "check",
+  error: "circle-alert",
+  warning: "circle-alert",
+  info: "info",
+  feature: "star",
+};
 
 /**
  * What each variant calls itself. Every variant has a word, so an alert

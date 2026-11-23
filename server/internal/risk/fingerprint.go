@@ -18,6 +18,9 @@ import (
 // other use of the same pepper.
 const hkdfInfo = "gram/risk/fingerprint/tenant"
 
+// derivedKeyBytes is the length of a key derived from the pepper, sized for HMAC-SHA256.
+const derivedKeyBytes = 32
+
 // minCurrentPepperBytes is the minimum length of the key that signs new
 // fingerprints; an HMAC pepper shorter than this is guessable.
 const minCurrentPepperBytes = 16
@@ -26,6 +29,7 @@ var (
 	ErrInvalidFingerprintPepperJSON    = errors.New("invalid fingerprint pepper keyring json")
 	ErrInvalidFingerprintPepperKeyRing = errors.New("invalid fingerprint pepper keyring")
 	ErrFingerprintPepperKeyNotFound    = errors.New("fingerprint pepper key not found")
+	ErrReservedKeyInfo                 = errors.New("info label is reserved for fingerprints")
 )
 
 type Fingerprinter struct {
@@ -176,7 +180,7 @@ func (p Fingerprinter) deriveKey(version string, tenantID string, cache map[stri
 		return nil, err
 	}
 
-	key, err := hkdf.Key(sha256.New, pepper, []byte(tenantID), hkdfInfo, 32)
+	key, err := hkdf.Key(sha256.New, pepper, []byte(tenantID), hkdfInfo, derivedKeyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("hkdf: %w", err)
 	}
@@ -185,6 +189,24 @@ func (p Fingerprinter) deriveKey(version string, tenantID string, cache map[stri
 		cache[cacheKey] = key
 	}
 
+	return key, nil
+}
+
+// DeriveCurrentKey derives a per-tenant key from the current pepper for another use of it. The
+// info label keeps it cryptographically separate from fingerprints and from other uses, so the
+// fingerprint label is refused. A zero Fingerprinter returns an error.
+func (p Fingerprinter) DeriveCurrentKey(info, tenantID string) ([]byte, error) {
+	if info == hkdfInfo {
+		return nil, ErrReservedKeyInfo
+	}
+	pepper, err := p.get(p.currentVersion)
+	if err != nil {
+		return nil, err
+	}
+	key, err := hkdf.Key(sha256.New, pepper, []byte(tenantID), info, derivedKeyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("hkdf: %w", err)
+	}
 	return key, nil
 }
 

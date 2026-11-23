@@ -79,12 +79,16 @@ func TestCallback_ProviderErrorsDoNotExposeCredentials(t *testing.T) {
 			}
 
 			service := &Service{logger: logger, identity: resolver, cfg: AuthConfigurations{SignInRedirectURL: "https://app.example.test/login"}}
-			result, err := service.Callback(t.Context(), &gen.CallbackPayload{Code: code})
+			result, err := service.Callback(t.Context(), &gen.CallbackPayload{Code: new(code)})
 			require.NoError(t, err)
-			require.Equal(t, "https://app.example.test/login?signin_error=lookup_error", result.Location)
+			reason := "lookup_error"
+			if tc.name == "provider echoes code" {
+				reason = "signin_link_invalid"
+			}
+			require.Equal(t, "https://app.example.test/login?signin_error="+reason, result.Location)
 			location, err := url.Parse(result.Location)
 			require.NoError(t, err)
-			require.Equal(t, url.Values{"signin_error": {"lookup_error"}}, location.Query())
+			require.Equal(t, url.Values{"signin_error": {reason}}, location.Query())
 			require.Empty(t, result.SessionToken)
 			require.Empty(t, result.SessionCookie)
 			require.Contains(t, logs.String(), "identity provider code exchange failed")

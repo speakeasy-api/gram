@@ -220,15 +220,16 @@ describe("DecideAccessSheet", () => {
     );
   });
 
-  it("denies with the deny prefill and closes the sheet", async () => {
+  it("blocks with the block prefill under Advanced and closes the sheet", async () => {
     const onOpenChange = vi.fn<(open: boolean) => void>();
     renderSheet({
       target: { ...target, approvalRequestId: "existing-request-id" },
       onOpenChange,
     });
 
-    fireEvent.click(screen.getByRole("radio", { name: /Deny/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Deny Server" }));
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Block/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Block Server" }));
 
     await waitFor(() => {
       expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(1);
@@ -238,7 +239,7 @@ describe("DecideAccessSheet", () => {
         request: expect.objectContaining({
           recordDecisionRequestBody: expect.objectContaining({
             decision: "denied",
-            rationale: "Denied for use in this project.",
+            rationale: "Blocked for use in this project.",
           }),
         }),
       }),
@@ -250,9 +251,36 @@ describe("DecideAccessSheet", () => {
     expect(mocks.invalidateInventoryServer).toHaveBeenCalled();
   });
 
-  it("hides the audience picker under an allow-by-default policy", () => {
+  it("offers Block first under allow by default", () => {
     renderSheet({ disposition: "allow_all" });
 
+    expect(screen.getByRole("button", { name: "Block Server" })).toBeTruthy();
+    expect(
+      screen.getAllByText("Block the server for everyone in the project.")
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("offers Approve first under block by default", () => {
+    renderSheet({ disposition: "block_all" });
+
+    expect(screen.getByRole("button", { name: "Approve Server" })).toBeTruthy();
+  });
+
+  it("offers the reverse to a server that already carries the default action", () => {
+    renderSheet({
+      disposition: null,
+      target: { ...target, currentDecision: "denied" },
+    });
+
+    expect(screen.getByRole("button", { name: "Approve Server" })).toBeTruthy();
+  });
+
+  it("hides the approval audience under an allow-by-default policy", () => {
+    renderSheet({ disposition: "allow_all" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Approve/ }));
     expect(screen.queryAllByText("Who the approval covers")).toHaveLength(0);
     expect(
       screen.getAllByText("Unblock the server for everyone in the project.")
@@ -260,8 +288,10 @@ describe("DecideAccessSheet", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("shows the audience picker when a block-by-default policy exists", () => {
+  it("shows the audience picker under Advanced when a block-by-default policy exists", () => {
     renderSheet({ disposition: "block_all" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
 
     expect(
       screen.getAllByText("Who the approval covers").length,
@@ -346,6 +376,7 @@ describe("DecideAccessSheet", () => {
       target: { ...target, approvalRequestId: "existing-request-id" },
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.click(screen.getByTestId("audience-select"));
     fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
 
@@ -365,6 +396,103 @@ describe("DecideAccessSheet", () => {
         }),
       }),
     );
+  });
+
+  it("narrows a denial to chosen people or roles under Advanced", async () => {
+    renderSheet({
+      target: { ...target, approvalRequestId: "existing-request-id" },
+      disposition: null,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getAllByText("Who the block covers").length).toBeGreaterThan(
+      0,
+    );
+    fireEvent.click(screen.getByTestId("audience-select"));
+    expect(
+      screen.getAllByText(
+        "Block the server only for the people or roles below.",
+      ).length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Block Server" }));
+
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.decideMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          recordDecisionRequestBody: expect.objectContaining({
+            decision: "denied",
+            grantedPrincipalUrns: [
+              "user:user-one",
+              "role:organization:role-one",
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("narrows an approval while servers are allowed by default", async () => {
+    renderSheet({
+      target: { ...target, approvalRequestId: "existing-request-id" },
+      disposition: null,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Approve/ }));
+    fireEvent.click(screen.getByTestId("audience-select"));
+    expect(
+      screen.getAllByText(
+        "Allow the server only for the people or roles below.",
+      ).length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            recordDecisionRequestBody: expect.objectContaining({
+              decision: "approved",
+              grantedPrincipalUrns: [
+                "user:user-one",
+                "role:organization:role-one",
+              ],
+            }),
+          }),
+        }),
+      );
+    });
+  });
+
+  it("keeps each decision's audience while switching between them", () => {
+    renderSheet({ disposition: null });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByTestId("audience-select"));
+    fireEvent.click(screen.getByRole("radio", { name: /Approve/ }));
+    // The approval names nobody, so it covers everyone.
+    expect(
+      screen.getAllByText("Unblock the server for everyone in the project.")
+        .length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("radio", { name: /Block/ }));
+    // The narrowed block is still the one about to be sent.
+    expect(
+      screen.getAllByText(
+        "Block the server only for the people or roles below.",
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("offers no block audience when servers are blocked by default", () => {
+    renderSheet({ disposition: "block_all" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Block/ }));
+    expect(screen.queryAllByText("Who the block covers")).toHaveLength(0);
   });
 
   it("says nothing changed when opening the request itself fails", async () => {

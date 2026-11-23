@@ -80,7 +80,7 @@ type GetSetupDocsPayload struct {
 	// URL of the upstream MCP server endpoint
 	ServerURL *string
 	// Registry specifier for the server, as returned by listCatalog (e.g.,
-	// 'com.pulsemcp.mirror/box')
+	// 'io.example/server')
 	RegistrySpecifier *string
 	SessionToken      *string
 	ApikeyToken       *string

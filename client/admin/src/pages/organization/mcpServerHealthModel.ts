@@ -1,3 +1,4 @@
+import type { ScopeSource } from "@gram/admin-client/models/components/adminmcpserverresourcescopeclient";
 import type { AdminMcpServerToolCallOutcomes } from "@gram/admin-client/models/components/adminmcpservertoolcalloutcomes";
 import type { AdminMcpServerHealthRemoteSessionClient } from "@gram/admin-client/models/components/adminmcpserverhealthremotesessionclient";
 import type { AdminMcpServerToolCallBucket } from "@gram/admin-client/models/components/adminmcpservertoolcallbucket";
@@ -7,8 +8,9 @@ export const DATADOG_ORIGIN = "https://app.datadoghq.com";
 
 export type ToolCallTotals = {
   total: number;
-  // Every outcome at status 400 or above, which is what the chart's buckets
-  // count as failed. `unknown` is neither.
+  // Every outcome at status 400 or above, plus isError tool errors below 400
+  // and hook-reported tool errors, which the chart's buckets do not count.
+  // `unknown` is neither.
   failed: number;
   unauthorized: number;
   // 0 to 1. Zero calls is a zero share, never NaN.
@@ -126,6 +128,31 @@ export const SCOPE_LABELS: Record<
   global: "Platform",
 };
 
+// Which source decides the scopes a login through a client requests.
+export const SCOPE_SOURCE_LABELS: Record<ScopeSource, string> = {
+  client_scope: "Client's own scopes",
+  challenge_scope: "Last sign-in challenge",
+  resource_pin: "Pinned scopes",
+  live_resource: "Advertised by the server",
+  cached_resource: "Advertised by the server",
+  issuer_override: "Provider scope override",
+  issuer_omitted: "No scope (provider setting)",
+  issuer_catalogue: "Provider's whole catalogue",
+  none: "No scope",
+};
+
+/**
+ * Whitespace-separated scopes as a list, in order and without repeats. A comma
+ * is a legal scope character (RFC 6749 §3.3), so it is not a separator.
+ */
+export function parseScopes(text: string): string[] {
+  const scopes: string[] = [];
+  for (const scope of text.split(/\s+/)) {
+    if (scope && !scopes.includes(scope)) scopes.push(scope);
+  }
+  return scopes;
+}
+
 export const CHALLENGE_MODE_LABELS: Record<"chain" | "interactive", string> = {
   chain: "Chain",
   interactive: "Interactive",
@@ -164,7 +191,6 @@ export function humanize(value: string): string {
 
 export const LEGACY_AUTH_LABELS: Record<string, string> = {
   external_oauth: "external OAuth",
-  oauth_proxy: "OAuth proxy",
   gram_private: "private",
 };
 

@@ -108,6 +108,8 @@ async function $do(
   const path = pathToFunc("/rpc/auditlogs.listFacets")();
 
   const query = encodeFormQuery({
+    "category": payload?.category,
+    "origin": payload?.origin,
     "project_slug": payload?.project_slug,
   });
 

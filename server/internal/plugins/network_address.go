@@ -47,16 +47,12 @@ func remoteServerURL(serverURL string, r repo.ListPluginsWithMcpServersForProjec
 	}
 
 	// Custom-domain endpoints win on the public surface. The private surface
-	// is pinned to the ingress's configured namespace instead. A server
-	// address, when set, overrides the endpoint's slug and domain.
-	mcpBase, publicSlug, domain := serverURL, r.EndpointSlug, r.EndpointCustomDomain
-	if r.AddressSlug.Valid {
-		publicSlug, domain = r.AddressSlug.String, r.AddressCustomDomain
-	}
-	if cd := conv.FromPGText[string](domain); cd != nil {
+	// is pinned to the ingress's configured namespace instead.
+	mcpBase := serverURL
+	if cd := conv.FromPGText[string](r.EndpointCustomDomain); cd != nil {
 		mcpBase = "https://" + *cd
 	}
-	mcpURL, err = packageMCPURL(r.NetworkAccessMode, mcpBase, publicSlug, r.PrivateDnsName.String, r.PrivateEndpointSlug)
+	mcpURL, err = packageMCPURL(r.NetworkAccessMode, mcpBase, r.EndpointSlug, r.PrivateDnsName.String, r.PrivateEndpointSlug)
 	if err != nil {
 		return "", false, err
 	}

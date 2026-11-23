@@ -11,6 +11,10 @@ import {
   AgentDelegatedPolicy,
   AgentDelegatedPolicy$inboundSchema,
 } from "./agentdelegatedpolicy.js";
+import {
+  APIKeyPolicyGrant,
+  APIKeyPolicyGrant$inboundSchema,
+} from "./apikeypolicygrant.js";
 
 export type Key = {
   /**
@@ -55,6 +59,10 @@ export type Key = {
    */
   organizationId: string;
   /**
+   * An ordinary key's own policy
+   */
+  policyGrants?: Array<APIKeyPolicyGrant> | undefined;
+  /**
    * The optional project ID this key is scoped to
    */
   projectId?: string | undefined;
@@ -93,6 +101,7 @@ export const Key$inboundSchema: z.ZodMiniType<Key, unknown> = z.pipe(
     ),
     name: z.string(),
     organization_id: z.string(),
+    policy_grants: z.optional(z.array(APIKeyPolicyGrant$inboundSchema)),
     project_id: z.optional(z.string()),
     scopes: z.array(z.string()),
     subject_urn: z.optional(z.string()),
@@ -111,6 +120,7 @@ export const Key$inboundSchema: z.ZodMiniType<Key, unknown> = z.pipe(
       "key_prefix": "keyPrefix",
       "last_accessed_at": "lastAccessedAt",
       "organization_id": "organizationId",
+      "policy_grants": "policyGrants",
       "project_id": "projectId",
       "subject_urn": "subjectUrn",
       "updated_at": "updatedAt",

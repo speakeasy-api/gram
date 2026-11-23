@@ -65,7 +65,7 @@ export function WizardStepper({
     // rather than squeezing every name into a clipped column.
     <ol
       aria-label="Provisioning steps"
-      className="border-border flex overflow-x-auto border md:overflow-x-visible"
+      className="border-border flex overflow-x-auto border"
     >
       {steps.map(({ label, short }, index) => {
         // The step the reader is on is tested first: a settled step they are
@@ -144,10 +144,7 @@ export function WizardStepper({
                       ? "Current"
                       : `${String(index + 1).padStart(2, "0")}/${String(steps.length).padStart(2, "0")}`}
                 </span>
-                {/* Wrapped, not cut with an ellipsis: a step name cut to
-                      "Connect an aut…" names nothing. Where even wrapping
-                      will not fit, the step's own short name is used. */}
-                <span className="line-clamp-2 min-h-10 text-sm">
+                <span className="min-h-10 text-sm whitespace-nowrap">
                   {shortened ? short : label}
                 </span>
               </span>
@@ -164,7 +161,7 @@ export function WizardStepper({
                 ? "shrink-0"
                 : // Below md the cell keeps a readable width and the row
                   // scrolls; from md up it shares the row as before.
-                  "max-md:w-40 max-md:shrink-0 md:min-w-0 md:flex-1",
+                  "min-w-max flex-1",
             )}
           >
             {/* A tick alone does not say which step it was, and the native
@@ -296,14 +293,14 @@ export function WizardSummary({
             {servers.map((server) => (
               <li
                 key={server.id}
-                className="flex items-center justify-between gap-3 px-4 py-2 text-sm"
+                className="flex min-w-0 flex-col gap-1 px-4 py-2 text-sm"
               >
                 <span className="min-w-0 truncate">
                   <Marked on={highlight === `server:${server.id}`}>
                     {server.name}
                   </Marked>
                 </span>
-                <span className="text-muted-foreground shrink-0 font-mono text-xs">
+                <span className="text-muted-foreground min-w-0 font-mono text-xs break-words">
                   {server.detail}
                 </span>
               </li>

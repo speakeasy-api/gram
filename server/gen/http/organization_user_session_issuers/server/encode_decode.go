@@ -1102,6 +1102,212 @@ func EncodeListMcpServersError(encoder func(context.Context, http.ResponseWriter
 	}
 }
 
+// EncodeListRemoteSessionClientBindingsResponse returns an encoder for
+// responses returned by the organizationUserSessionIssuers
+// listRemoteSessionClientBindings endpoint.
+func EncodeListRemoteSessionClientBindingsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*organizationusersessionissuers.UserSessionIssuerRemoteSessionClientBindings)
+		enc := encoder(ctx, w)
+		body := NewListRemoteSessionClientBindingsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListRemoteSessionClientBindingsRequest returns a decoder for requests
+// sent to the organizationUserSessionIssuers listRemoteSessionClientBindings
+// endpoint.
+func DecodeListRemoteSessionClientBindingsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*organizationusersessionissuers.ListRemoteSessionClientBindingsPayload, error) {
+	return func(r *http.Request) (*organizationusersessionissuers.ListRemoteSessionClientBindingsPayload, error) {
+		var payload *organizationusersessionissuers.ListRemoteSessionClientBindingsPayload
+		var (
+			userSessionIssuerID string
+			sessionToken        *string
+			err                 error
+		)
+		userSessionIssuerID = r.URL.Query().Get("user_session_issuer_id")
+		if userSessionIssuerID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListRemoteSessionClientBindingsPayload(userSessionIssuerID, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListRemoteSessionClientBindingsError returns an encoder for errors
+// returned by the listRemoteSessionClientBindings
+// organizationUserSessionIssuers endpoint.
+func EncodeListRemoteSessionClientBindingsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRemoteSessionClientBindingsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetAuthenticationHostImpactResponse returns an encoder for responses
 // returned by the organizationUserSessionIssuers getAuthenticationHostImpact
 // endpoint.
@@ -2170,30 +2376,33 @@ func DecodeGetIssuerMigratePreflightRequest(mux goahttp.Muxer, decoder func(*htt
 	return func(r *http.Request) (*organizationusersessionissuers.GetIssuerMigratePreflightPayload, error) {
 		var payload *organizationusersessionissuers.GetIssuerMigratePreflightPayload
 		var (
-			sourceID     string
-			targetID     string
-			sessionToken *string
-			err          error
+			body GetIssuerMigratePreflightRequestBody
+			err  error
 		)
-		qp := r.URL.Query()
-		sourceID = qp.Get("source_id")
-		if sourceID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("source_id", "query string"))
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("source_id", sourceID, goa.FormatUUID))
-		targetID = qp.Get("target_id")
-		if targetID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("target_id", "query string"))
+		err = ValidateGetIssuerMigratePreflightRequestBody(&body)
+		if err != nil {
+			return payload, err
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+
+		var (
+			sessionToken *string
+		)
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		if err != nil {
-			return payload, err
-		}
-		payload = NewGetIssuerMigratePreflightPayload(sourceID, targetID, sessionToken)
+		payload = NewGetIssuerMigratePreflightPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3460,6 +3669,40 @@ func marshalOrganizationusersessionissuersUserSessionIssuerMcpServerToUserSessio
 	return res
 }
 
+// marshalOrganizationusersessionissuersUserSessionIssuerRemoteSessionClientToUserSessionIssuerRemoteSessionClientResponseBody
+// builds a value of type *UserSessionIssuerRemoteSessionClientResponseBody
+// from a value of type
+// *organizationusersessionissuers.UserSessionIssuerRemoteSessionClient.
+func marshalOrganizationusersessionissuersUserSessionIssuerRemoteSessionClientToUserSessionIssuerRemoteSessionClientResponseBody(v *organizationusersessionissuers.UserSessionIssuerRemoteSessionClient) *UserSessionIssuerRemoteSessionClientResponseBody {
+	res := &UserSessionIssuerRemoteSessionClientResponseBody{
+		ID:                      v.ID,
+		ClientID:                v.ClientID,
+		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
+		RemoteSessionIssuerName: v.RemoteSessionIssuerName,
+		RemoteSessionIssuerURL:  v.RemoteSessionIssuerURL,
+	}
+
+	return res
+}
+
+// marshalOrganizationusersessionissuersUserSessionIssuerServerRemoteSessionClientToUserSessionIssuerServerRemoteSessionClientResponseBody
+// builds a value of type
+// *UserSessionIssuerServerRemoteSessionClientResponseBody from a value of type
+// *organizationusersessionissuers.UserSessionIssuerServerRemoteSessionClient.
+func marshalOrganizationusersessionissuersUserSessionIssuerServerRemoteSessionClientToUserSessionIssuerServerRemoteSessionClientResponseBody(v *organizationusersessionissuers.UserSessionIssuerServerRemoteSessionClient) *UserSessionIssuerServerRemoteSessionClientResponseBody {
+	res := &UserSessionIssuerServerRemoteSessionClientResponseBody{
+		McpServerID:   v.McpServerID,
+		McpServerName: v.McpServerName,
+		ProjectID:     v.ProjectID,
+		ProjectName:   v.ProjectName,
+	}
+	if v.RemoteSessionClient != nil {
+		res.RemoteSessionClient = marshalOrganizationusersessionissuersUserSessionIssuerRemoteSessionClientToUserSessionIssuerRemoteSessionClientResponseBody(v.RemoteSessionClient)
+	}
+
+	return res
+}
+
 // marshalOrganizationusersessionissuersOrganizationUserSessionIssuerReferenceToOrganizationUserSessionIssuerReferenceResponseBody
 // builds a value of type *OrganizationUserSessionIssuerReferenceResponseBody
 // from a value of type
@@ -3483,6 +3726,78 @@ func marshalOrganizationusersessionissuersUserSessionIssuerFieldMismatchToUserSe
 		Field:       v.Field,
 		SourceValue: v.SourceValue,
 		TargetValue: v.TargetValue,
+	}
+
+	return res
+}
+
+// marshalOrganizationusersessionissuersUserSessionIssuerMigrationServerImpactToUserSessionIssuerMigrationServerImpactResponseBody
+// builds a value of type *UserSessionIssuerMigrationServerImpactResponseBody
+// from a value of type
+// *organizationusersessionissuers.UserSessionIssuerMigrationServerImpact.
+func marshalOrganizationusersessionissuersUserSessionIssuerMigrationServerImpactToUserSessionIssuerMigrationServerImpactResponseBody(v *organizationusersessionissuers.UserSessionIssuerMigrationServerImpact) *UserSessionIssuerMigrationServerImpactResponseBody {
+	res := &UserSessionIssuerMigrationServerImpactResponseBody{
+		McpServerID:    v.McpServerID,
+		McpServerName:  v.McpServerName,
+		McpServerSlug:  v.McpServerSlug,
+		ProjectID:      v.ProjectID,
+		ProjectName:    v.ProjectName,
+		ImpactSeverity: string(v.ImpactSeverity),
+		Hosted:         v.Hosted,
+	}
+	if v.Reasons != nil {
+		res.Reasons = make([]string, len(v.Reasons))
+		for i, val := range v.Reasons {
+			res.Reasons[i] = string(val)
+		}
+	} else {
+		res.Reasons = []string{}
+	}
+	if v.ClientsBefore != nil {
+		res.ClientsBefore = make([]*UserSessionIssuerMigrationClientResponseBody, len(v.ClientsBefore))
+		for i, val := range v.ClientsBefore {
+			if val == nil {
+				res.ClientsBefore[i] = nil
+				continue
+			}
+			res.ClientsBefore[i] = marshalOrganizationusersessionissuersUserSessionIssuerMigrationClientToUserSessionIssuerMigrationClientResponseBody(val)
+		}
+	} else {
+		res.ClientsBefore = []*UserSessionIssuerMigrationClientResponseBody{}
+	}
+	if v.ClientsAfter != nil {
+		res.ClientsAfter = make([]*UserSessionIssuerMigrationClientResponseBody, len(v.ClientsAfter))
+		for i, val := range v.ClientsAfter {
+			if val == nil {
+				res.ClientsAfter[i] = nil
+				continue
+			}
+			res.ClientsAfter[i] = marshalOrganizationusersessionissuersUserSessionIssuerMigrationClientToUserSessionIssuerMigrationClientResponseBody(val)
+		}
+	} else {
+		res.ClientsAfter = []*UserSessionIssuerMigrationClientResponseBody{}
+	}
+	if v.PinnedClientIds != nil {
+		res.PinnedClientIds = make([]string, len(v.PinnedClientIds))
+		for i, val := range v.PinnedClientIds {
+			res.PinnedClientIds[i] = val
+		}
+	} else {
+		res.PinnedClientIds = []string{}
+	}
+
+	return res
+}
+
+// marshalOrganizationusersessionissuersUserSessionIssuerMigrationClientToUserSessionIssuerMigrationClientResponseBody
+// builds a value of type *UserSessionIssuerMigrationClientResponseBody from a
+// value of type
+// *organizationusersessionissuers.UserSessionIssuerMigrationClient.
+func marshalOrganizationusersessionissuersUserSessionIssuerMigrationClientToUserSessionIssuerMigrationClientResponseBody(v *organizationusersessionissuers.UserSessionIssuerMigrationClient) *UserSessionIssuerMigrationClientResponseBody {
+	res := &UserSessionIssuerMigrationClientResponseBody{
+		RemoteSessionClientID: v.RemoteSessionClientID,
+		ClientID:              v.ClientID,
+		ProviderIssuer:        v.ProviderIssuer,
 	}
 
 	return res

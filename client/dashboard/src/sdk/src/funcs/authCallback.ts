@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  */
 export function authCallback(
   client: GramCore,
-  request: AuthCallbackRequest,
+  request?: AuthCallbackRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -67,7 +67,7 @@ export function authCallback(
 
 async function $do(
   client: GramCore,
-  request: AuthCallbackRequest,
+  request?: AuthCallbackRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -88,7 +88,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(AuthCallbackRequest$outboundSchema, value),
+    (value) => z.parse(z.optional(AuthCallbackRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -100,8 +100,9 @@ async function $do(
   const path = pathToFunc("/rpc/auth.callback")();
 
   const query = encodeFormQuery({
-    "code": payload.code,
-    "state": payload.state,
+    "code": payload?.code,
+    "error": payload?.error,
+    "state": payload?.state,
   });
 
   const headers = new Headers(compactMap({

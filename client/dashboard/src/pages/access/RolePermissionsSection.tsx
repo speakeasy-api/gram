@@ -100,7 +100,7 @@ export function RolePermissionsSection({
    */
   mcpAccessCount?: number | null;
 }): JSX.Element {
-  const [tab, setTab] = useState("mcp");
+  const [chosenTab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
   // A pick from the empty state waits here until the picker has closed.
   const pendingScope = useRef<Scope | null>(null);
@@ -113,6 +113,11 @@ export function RolePermissionsSection({
       .filter((group) => group.scopes.length > 0);
   const mcpGroups = groupsWith(isMcpAccessScope);
   const otherGroups = groupsWith((scope) => !isMcpAccessScope(scope));
+  // A subject whose servers are chosen elsewhere (an agent's are chosen in
+  // its setup flow) has no MCP access to give here, so it gets no tab that
+  // could only ever be empty.
+  const hasMcpTab = mcpGroups.length > 0 || !!renderMcpAccess;
+  const tab = hasMcpTab ? chosenTab : "organization";
 
   const selectedIn = (list: ScopeGroup[]) =>
     list.flatMap((group) =>
@@ -156,9 +161,11 @@ export function RolePermissionsSection({
         <Tabs value={tab} onValueChange={setTab} className="gap-0">
           <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
-              <PageTabsTrigger value="mcp">
-                {mcpTabLabel(mcpAccessCount, mcpSelected.length)}
-              </PageTabsTrigger>
+              {hasMcpTab && (
+                <PageTabsTrigger value="mcp">
+                  {mcpTabLabel(mcpAccessCount, mcpSelected.length)}
+                </PageTabsTrigger>
+              )}
               <PageTabsTrigger value="organization">
                 Platform access ({otherSelected.length})
               </PageTabsTrigger>
@@ -185,7 +192,7 @@ export function RolePermissionsSection({
                       {group.scopes.map((scope) => (
                         <CommandItem
                           key={scope.slug}
-                          value={`${scope.slug} ${scope.description}`}
+                          value={`${scope.label} ${scope.slug} ${scope.description}`}
                           onSelect={() => {
                             // The first pick moves the trigger from the empty
                             // state to the header. Close first and add once
@@ -201,8 +208,13 @@ export function RolePermissionsSection({
                           className="items-start gap-2"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="font-mono text-sm">
-                              {scope.slug}
+                            <div className="flex flex-wrap items-baseline gap-x-2">
+                              <span className="text-sm font-medium">
+                                {scope.label}
+                              </span>
+                              <span className="text-muted-foreground font-mono text-xs">
+                                {scope.slug}
+                              </span>
                             </div>
                             <div className="text-muted-foreground text-xs">
                               {scope.description}
@@ -260,12 +272,12 @@ export function RolePermissionsSection({
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Text
-                            variant="body"
-                            className="font-mono text-sm font-medium"
-                          >
-                            {scope.slug}
+                          <Text variant="body" className="text-sm font-medium">
+                            {scope.label}
                           </Text>
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {scope.slug}
+                          </span>
                           {markAgentIneligible &&
                             scope.agentEligible === false && (
                               <Badge variant="neutral" size="sm">

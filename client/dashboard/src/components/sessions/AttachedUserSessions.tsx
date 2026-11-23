@@ -1,8 +1,5 @@
 import { sessionAccountLabel } from "./session-account-identity";
 import { useEffect, useRef, useState } from "react";
-import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
-import { firstPartyConnectUrl } from "@/lib/utils";
-import type { Toolset } from "@/lib/toolTypes";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   useIsPlatformAdmin,
@@ -188,11 +185,6 @@ function OwnedSessionBindings({
     }
   return (
     <>
-      {!query.isLoading && !query.isError && rows.length === 0 && (
-        <Text small muted>
-          Create an agent you own to attach upstream sessions.
-        </Text>
-      )}
       {saveError && (
         <Text role="alert">
           Could not save all attachments. Some changes may have succeeded.
@@ -203,7 +195,7 @@ function OwnedSessionBindings({
         sessions={[...sessions.values()]}
         emptyMessage={
           rows.length === 0
-            ? "Accounts cannot be listed until an eligible agent is available."
+            ? "Create an agent you own first, then connect your account to it."
             : undefined
         }
         agents={rows.map(({ agent }) => ({
@@ -319,18 +311,4 @@ function OwnedSessionBindings({
       />
     </>
   );
-}
-
-export function ToolsetAttachedUserSessions({
-  toolset,
-}: {
-  toolset: Toolset;
-}): JSX.Element | null {
-  const target = useToolsetMcpTarget(toolset);
-  return target.userSessionIssuerId ? (
-    <AttachedUserSessions
-      issuerId={target.userSessionIssuerId}
-      connectUrl={firstPartyConnectUrl(target.url)}
-    />
-  ) : null;
 }

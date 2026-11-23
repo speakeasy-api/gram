@@ -13,6 +13,7 @@ package workloadpolicy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
@@ -23,6 +24,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -31,13 +33,17 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/workload_identities/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -52,7 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
-// Tier names in audit snapshots. A subject can be admitted at both tiers
+// Tier names in audit snapshots and the withdraw response. A subject can be admitted at both tiers
 // independently and withdrawing one leaves the other in force, so an entry that
 // does not say which tier it describes cannot be acted on.
 const (
@@ -132,8 +138,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // request. Both are needed on every query: organization_id is the tenancy
 // boundary, and project_id narrows within it rather than replacing it, because
 // the trust policy has an organization tier whose rows carry no project. A
-// dashboard session never selects a project, so its projectID is NULL and it
-// reads and writes the organization tier alone; only an API key names a project.
+// dashboard session reads and writes the organization tier alone unless it
+// explicitly selects an authorized project. API keys are already project-bound.
 type tenancy struct {
 	organizationID string
 	projectID      uuid.NullUUID
@@ -141,7 +147,30 @@ type tenancy struct {
 	actorEmail     *string
 }
 
-func (s *Service) resolve(ctx context.Context, scope authz.Scope) (tenancy, error) {
+func (s *Service) resolve(ctx context.Context, permission func(authz.WorkloadCollection) authz.Check, explicitProject *string) (tenancy, error) {
+	selectedProject := explicitProject != nil
+	if selectedProject {
+		if strings.TrimSpace(*explicitProject) == "" {
+			return tenancy{}, oops.E(oops.CodeInvalid, nil, "an explicit project slug must not be empty")
+		}
+		// Session authentication does not evaluate the optional project security
+		// scheme. Resolve it here through the same organization-bound, project-read
+		// authorization used by other project APIs; never trust the header itself.
+		if original, ok := contextvalues.GetAuthContext(ctx); ok && original != nil {
+			cloned := *original
+			if _, byKey := contextvalues.APIKeyAuthorization(ctx); !byKey {
+				// Dashboard context projects are incidental, not credential boundaries.
+				cloned.ProjectID = nil
+				cloned.ProjectSlug = nil
+			}
+			ctx = contextvalues.SetAuthContext(ctx, &cloned)
+		}
+		var err error
+		ctx, err = s.auth.Authorize(ctx, *explicitProject, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: nil, RequiredScopes: nil})
+		if err != nil {
+			return tenancy{}, err
+		}
+	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return tenancy{}, oops.C(oops.CodeUnauthorized)
@@ -151,21 +180,14 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope) (tenancy, erro
 	// organization is the resource the check names. There is no per-workload
 	// resource a grant could narrow to, which is why the dashboard treats this
 	// scope as unrestricted.
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Workloads(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return tenancy{}, err
 	}
 
-	// Only an API key selects a project. Every other caller, a dashboard
-	// session included, resolves to the organization tier even when its auth
-	// context carries a project, so the tier never depends on which security
-	// schemes happened to populate ProjectID.
+	// API keys are already project-bound. Sessions select a project only by an
+	// explicit, validated slug; an incidental context project is not selection.
 	projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && authCtx.ProjectID != nil {
+	if _, byKey := contextvalues.APIKeyAuthorization(ctx); (byKey || selectedProject) && authCtx.ProjectID != nil {
 		projectID = conv.ToNullUUID(*authCtx.ProjectID)
 	}
 
@@ -196,7 +218,7 @@ func (t tenancy) requestedTier(projectScoped bool) (uuid.NullUUID, error) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	if !t.projectID.Valid {
-		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "project_scoped requires a caller that names a project, and a dashboard session does not: omit it to write at the organization tier")
+		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "project_scoped requires a caller that names a project; send its slug in Gram-Project")
 	}
 	return t.projectID, nil
 }
@@ -230,7 +252,7 @@ func (s *Service) loadPolicy(ctx context.Context, dbtx repo.DBTX, t tenancy) (*g
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +261,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Work
 }
 
 func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsPayload) (*gen.WorkloadPlatformCatalog, error) {
-	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead); err != nil {
+	if _, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput); err != nil {
 		return nil, err
 	}
 
@@ -252,7 +274,7 @@ func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsP
 }
 
 func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlowsPayload) (*gen.WorkloadCustomFlows, error) {
-	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead); err != nil {
+	if _, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput); err != nil {
 		return nil, err
 	}
 
@@ -265,13 +287,13 @@ func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlow
 }
 
 func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListTokenEndpointsPayload) (*types.WorkloadTokenEndpoints, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
 
-	// An API key names a project, and sees that project's issuers alongside the
-	// organization's; a dashboard session sees every project's.
+	// A project-bound caller sees that project's issuers alongside the
+	// organization's; an organization-wide dashboard session sees every project's.
 	rows, err := usersessions_repo.New(s.db).ListSharedUserSessionIssuersInOrganization(ctx, usersessions_repo.ListSharedUserSessionIssuersInOrganizationParams{
 		OrganizationID: t.organizationID,
 		ProjectID:      t.projectID,
@@ -281,10 +303,16 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 	}
 
 	// MCP servers are served on the server URL's host, whichever host their
-	// issuer's authorization server is on.
+	// issuer's authorization server is on, unless the organization pins MCP
+	// traffic to its custom domain with an IP allowlist: the platform host then
+	// refuses it, so the domain is the host a platform must call.
 	serverURL, err := url.Parse(s.sharedHosts.ServerURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read the server URL").LogError(ctx, s.logger)
+	}
+	mcpHost, err := s.mcpHost(ctx, t.organizationID, serverURL.Host)
+	if err != nil {
+		return nil, err
 	}
 
 	items := make([]*types.WorkloadTokenEndpoint, 0, len(rows))
@@ -300,10 +328,24 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build token endpoint").LogError(ctx, s.logger)
 		}
-		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, authorizationServer.IssuerURL, authorizationServer.TokenEndpoint, serverURL.Host))
+		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, authorizationServer.IssuerURL, authorizationServer.TokenEndpoint, mcpHost))
 	}
 
 	return &types.WorkloadTokenEndpoints{Items: items}, nil
+}
+
+// mcpHost is the host an organization's MCP servers are reached on: its
+// custom domain when that domain carries an IP allowlist and is serving, since
+// the allowlist locks the platform host out, and platformHost otherwise.
+func (s *Service) mcpHost(ctx context.Context, organizationID string, platformHost string) (string, error) {
+	lockdown, err := customdomains.OrganizationLockdown(ctx, s.db, organizationID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to read the organization's custom domain").LogError(ctx, s.logger)
+	}
+	if lockdown.ServingHost == "" {
+		return platformHost, nil
+	}
+	return lockdown.ServingHost, nil
 }
 
 // requireTrustDomain enforces the WIMSE identifier draft's guidance that a trust
@@ -425,6 +467,7 @@ func IssuerSnapshot(row repo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
 		Description:            conv.FromPGTextOrEmpty[string](row.Description),
 		Tags:                   conv.DefaultSlice(row.Tags, []string{}),
 		AllowWildcardAdmission: row.AllowWildcardAdmission,
+		AllowAssertionReuse:    row.AllowAssertionReuse.Valid && row.AllowAssertionReuse.Bool,
 		Tier:                   tier(row.ProjectID),
 	}
 }
@@ -445,7 +488,7 @@ func AdmissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadI
 }
 
 func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -513,6 +556,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		Issuer:                 strings.TrimSpace(payload.Issuer),
 		JwksUri:                strings.TrimSpace(payload.JwksURI),
 		AllowWildcardAdmission: allowWildcard,
+		AllowAssertionReuse:    pgtype.Bool{Bool: conv.PtrValOr(payload.AllowAssertionReuse, false), Valid: true},
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -530,6 +574,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		IssuerURN:           urn.NewWorkloadIssuer(row.ID),
 		IssuerName:          row.Name,
 		IssuerSnapshotAfter: IssuerSnapshot(row),
+		Metadata:            nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer registration").LogError(ctx, s.logger)
 	}
@@ -547,7 +592,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 }
 
 func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -639,13 +684,17 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 	}
 
 	params := repo.UpdateWorkloadIssuerParams{
-		Name:           existing.Name,
-		Description:    existing.Description,
-		Tags:           conv.DefaultSlice(existing.Tags, []string{}),
-		JwksUri:        existing.JwksUri,
-		OrganizationID: t.organizationID,
-		ProjectID:      t.projectID,
-		ID:             id,
+		Name:                existing.Name,
+		Description:         existing.Description,
+		Tags:                conv.DefaultSlice(existing.Tags, []string{}),
+		JwksUri:             existing.JwksUri,
+		AllowAssertionReuse: existing.AllowAssertionReuse,
+		OrganizationID:      t.organizationID,
+		ProjectID:           t.projectID,
+		ID:                  id,
+	}
+	if payload.AllowAssertionReuse != nil {
+		params.AllowAssertionReuse = pgtype.Bool{Bool: *payload.AllowAssertionReuse, Valid: true}
 	}
 	if name != nil {
 		params.Name = *name
@@ -695,7 +744,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 }
 
 func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -762,6 +811,20 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		agentBySubject[assignment.MatchKind+"\x00"+assignment.Subject] = assignment.AgentID
 	}
 
+	// An admission whose admit is in the security log has its history there, so
+	// its cascaded withdrawal goes there too. Kit runtimes no longer audit their
+	// own admits, so their newer admissions have no history and are withdrawn in
+	// the configuration log with the issuer. The issuer withdrawal below is a
+	// configuration change either way.
+	admissionIDs := make([]uuid.UUID, 0, len(admissions))
+	for _, admission := range admissions {
+		admissionIDs = append(admissionIDs, admission.ID)
+	}
+	runtimeAdmitted, err := securityevent.RuntimeAdmittedSubjects(ctx, dbtx, t.organizationID, admissionIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error classifying cascaded workload withdrawals").LogError(ctx, s.logger)
+	}
+
 	// One entry per affected row, cause before effect: a single event on the
 	// issuer would not let the log answer when a given subject stopped being
 	// admitted.
@@ -771,7 +834,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 			assignedAgent = agentID.String()
 		}
 
-		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
+		withdrawal := audit.LogWorkloadAdmissionWithdrawEvent{
 			OrganizationID:          t.organizationID,
 			ProjectID:               admission.ProjectID,
 			Actor:                   t.actor,
@@ -780,7 +843,13 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 			AdmissionURN:            urn.NewWorkloadAdmission(admission.ID),
 			AdmissionDisplayName:    admission.Subject,
 			AdmissionSnapshotBefore: AdmissionSnapshot(admission, existing, assignedAgent),
-		}); err != nil {
+		}
+		if runtimeAdmitted[admission.ID] {
+			err = securityevent.LogWorkloadAdmissionWithdraw(ctx, dbtx, withdrawal)
+		} else {
+			err = s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, withdrawal)
+		}
+		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error recording cascaded workload withdrawal").LogError(ctx, s.logger)
 		}
 	}
@@ -819,8 +888,21 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 	return policy, nil
 }
 
+// requireSubjectAgentAuthorization preserves API-key scope enforcement while
+// using live membership, ownership, and grants for human assignment requests.
+func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx.Tx, agentID uuid.UUID) error {
+	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
+		return s.authz.Require(ctx, authz.Agent(authz.AgentIDOf(agentID)).Authorize())
+	}
+	_, _, err := agentmanagement.NewAuthorizer(s.authz).RequireAgentForUpdate(ctx, dbtx, agentID, agentmanagement.OwnedAgentAuthorize)
+	if err != nil {
+		return fmt.Errorf("authorize workload subject agent: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -903,7 +985,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	// The early, legible refusal. The issuer's permission is re-checked on every
 	// lookup, which is what makes clearing it revoke rules already written.
 	if err := workloadidentity.ValidateSubjectRule(matchKind, payload.Subject, issuerRow.AllowWildcardAdmission); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused")
+		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused: %s", err.Error())
 	}
 
 	// Tenancy-scoped for the same reason as the issuer: another organization's
@@ -919,6 +1001,10 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
 	}
 
+	if err := s.requireSubjectAgentAuthorization(ctx, dbtx, agent.ID); err != nil {
+		return nil, err
+	}
+
 	// Held before the children are written, so a concurrent withdrawal of this
 	// issuer either happens first — making the insert below a foreign-key failure
 	// against a tombstone the caller is told about — or waits and cascades over
@@ -931,6 +1017,23 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 			return nil, oops.E(oops.CodeNotFound, err, "the issuer was withdrawn while admitting this subject")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload issuer").LogError(ctx, s.logger)
+	}
+
+	// The selected issuer may have changed while this transaction waited for
+	// its lock. Validate the live policy, not the pre-lock snapshot.
+	issuerRow, err = q.GetWorkloadIssuer(ctx, repo.GetWorkloadIssuerParams{
+		OrganizationID: t.organizationID,
+		ProjectID:      projectID,
+		ID:             issuerRow.ID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "the issuer was withdrawn while admitting this subject")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading workload issuer").LogError(ctx, s.logger)
+	}
+	if err := workloadidentity.ValidateSubjectRule(matchKind, payload.Subject, issuerRow.AllowWildcardAdmission); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "subject rule refused: %s", err.Error())
 	}
 
 	admission, err := q.CreateWorkloadAdmission(ctx, repo.CreateWorkloadAdmissionParams{
@@ -988,7 +1091,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 }
 
 func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1049,6 +1152,26 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading admission").LogError(ctx, s.logger)
 	}
 
+	// Resolved exactly as admission resolves it: another organization's agent
+	// is a not-found, not a rejected write.
+	var agent *repo.GetOrganizationAgentRow
+	if agentID != nil {
+		row, err := q.GetOrganizationAgent(ctx, repo.GetOrganizationAgentParams{
+			OrganizationID: t.organizationID,
+			ID:             *agentID,
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeNotFound, err, "agent not found")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
+		}
+		if err := s.requireSubjectAgentAuthorization(ctx, dbtx, row.ID); err != nil {
+			return nil, err
+		}
+		agent = &row
+	}
+
 	// Every write under this issuer serializes here, so the fields this edit
 	// leaves alone are merged from the row as it stands, and a concurrent
 	// withdrawal cannot strip the assignment this edit repoints.
@@ -1096,23 +1219,6 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading the workload's agent assignment").LogError(ctx, s.logger)
-	}
-
-	// Resolved exactly as admission resolves it: another organization's agent
-	// is a not-found, not a rejected write.
-	var agent *repo.GetOrganizationAgentRow
-	if agentID != nil {
-		row, err := q.GetOrganizationAgent(ctx, repo.GetOrganizationAgentParams{
-			OrganizationID: t.organizationID,
-			ID:             *agentID,
-		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "agent not found")
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
-		}
-		agent = &row
 	}
 
 	agentBefore := ""
@@ -1183,8 +1289,8 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 	return policy, nil
 }
 
-func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
+func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WithdrawnWorkloadSubjectPolicy, error) {
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1327,7 +1433,11 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, s.logger)
 	}
 
-	return policy, nil
+	return &gen.WithdrawnWorkloadSubjectPolicy{
+		WithdrawnTier: tier(withdrawn.ProjectID),
+		Issuers:       policy.Issuers,
+		Admissions:    policy.Admissions,
+	}, nil
 }
 
 // isUniqueViolation reports a partial unique index rejecting a duplicate, which

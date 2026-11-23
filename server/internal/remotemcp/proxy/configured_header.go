@@ -34,6 +34,10 @@ type ConfiguredHeader struct {
 	// bad-request error if the header cannot be resolved to a non-empty value.
 	IsRequired bool
 
+	// IsSecret preserves whether the configured value is credential material,
+	// even after decryption. It does not change header resolution.
+	IsSecret bool
+
 	// Name is the HTTP header name to send to the remote MCP server.
 	Name string
 

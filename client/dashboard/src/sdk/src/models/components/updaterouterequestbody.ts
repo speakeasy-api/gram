@@ -13,12 +13,28 @@ export const UpdateRouteRequestBodyDataSource = {
   ProductTelemetry: "product_telemetry",
   RiskFindings: "risk_findings",
   ToolCallLogs: "tool_call_logs",
+  McpConnectionLogs: "mcp_connection_logs",
 } as const;
 /**
  * Class of data exported by this route.
  */
 export type UpdateRouteRequestBodyDataSource = ClosedEnum<
   typeof UpdateRouteRequestBodyDataSource
+>;
+
+/**
+ * Lowest level this route sends. Only for mcp_connection_logs. Omit to keep the current level.
+ */
+export const UpdateRouteRequestBodyMinSeverity = {
+  Info: "info",
+  Warn: "warn",
+  Error: "error",
+} as const;
+/**
+ * Lowest level this route sends. Only for mcp_connection_logs. Omit to keep the current level.
+ */
+export type UpdateRouteRequestBodyMinSeverity = ClosedEnum<
+  typeof UpdateRouteRequestBodyMinSeverity
 >;
 
 export type UpdateRouteRequestBody = {
@@ -31,6 +47,10 @@ export type UpdateRouteRequestBody = {
    */
   enabled: boolean;
   /**
+   * Lowest level this route sends. Only for mcp_connection_logs. Omit to keep the current level.
+   */
+  minSeverity?: UpdateRouteRequestBodyMinSeverity | undefined;
+  /**
    * OTEL destination configured on this route. Required when enabled.
    */
   otelDestinationId?: string | undefined;
@@ -42,9 +62,15 @@ export const UpdateRouteRequestBodyDataSource$outboundSchema: z.ZodMiniEnum<
 > = z.enum(UpdateRouteRequestBodyDataSource);
 
 /** @internal */
+export const UpdateRouteRequestBodyMinSeverity$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateRouteRequestBodyMinSeverity
+> = z.enum(UpdateRouteRequestBodyMinSeverity);
+
+/** @internal */
 export type UpdateRouteRequestBody$Outbound = {
   data_source: string;
   enabled: boolean;
+  min_severity?: string | undefined;
   otel_destination_id?: string | undefined;
 };
 
@@ -56,11 +82,13 @@ export const UpdateRouteRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     dataSource: UpdateRouteRequestBodyDataSource$outboundSchema,
     enabled: z.boolean(),
+    minSeverity: z.optional(UpdateRouteRequestBodyMinSeverity$outboundSchema),
     otelDestinationId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       dataSource: "data_source",
+      minSeverity: "min_severity",
       otelDestinationId: "otel_destination_id",
     });
   }),

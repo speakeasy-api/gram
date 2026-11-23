@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
@@ -68,6 +68,10 @@ const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
   {
     value: DataSource.ToolCallLogs,
     label: "Tool call logs",
+  },
+  {
+    value: DataSource.McpConnectionLogs,
+    label: "MCP connection logs",
   },
 ];
 
@@ -134,6 +138,10 @@ function renderDataSourceDescription(
         telemetry instead.
       </>
     );
+  }
+
+  if (dataSource === DataSource.McpConnectionLogs) {
+    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. You can choose to also send warnings (blocked connections, and failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts) or info (declined connections). Connections through organization gateways are not included.";
   }
 
   return "OTLP data";
@@ -424,6 +432,10 @@ function DataExportsInner(): JSX.Element {
       const existingRoute = state.routes.find(
         (route) => route.dataSource === values.dataSource,
       );
+      const minSeverity =
+        values.dataSource === DataSource.McpConnectionLogs
+          ? values.minSeverity
+          : undefined;
       if (existingRoute) {
         await updateRoute.mutateAsync({
           request: {
@@ -433,6 +445,7 @@ function DataExportsInner(): JSX.Element {
               dataSource: values.dataSource,
               enabled: values.enabled,
               otelDestinationId: destinationID,
+              minSeverity,
             },
           },
         });
@@ -444,6 +457,7 @@ function DataExportsInner(): JSX.Element {
               dataSource: values.dataSource,
               enabled: values.enabled,
               otelDestinationId: destinationID,
+              minSeverity,
             },
           },
         });
@@ -501,19 +515,15 @@ function DataExportsInner(): JSX.Element {
     await queryClient.cancelQueries({ queryKey });
     const previous =
       queryClient.getQueryData<ListDataExportsForOrgResult>(queryKey);
-    queryClient.setQueryData<ListDataExportsForOrgResult>(
-      queryKey,
-      (current) =>
-        current
-          ? {
-              ...current,
-              routes: current.routes.map((candidate) =>
-                candidate.id === route.id
-                  ? { ...candidate, enabled }
-                  : candidate,
-              ),
-            }
-          : current,
+    queryClient.setQueryData<ListDataExportsForOrgResult>(queryKey, (current) =>
+      current
+        ? {
+            ...current,
+            routes: current.routes.map((candidate) =>
+              candidate.id === route.id ? { ...candidate, enabled } : candidate,
+            ),
+          }
+        : current,
     );
 
     try {

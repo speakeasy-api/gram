@@ -101,6 +101,7 @@ const connection: SlackDirectoryConnection = {
   generation: "00000000-0000-4000-8000-000000000002",
   status: "connected",
   grantedScopes: [],
+  missingScopes: [],
   updatedAt: new Date("2026-01-01T00:00:00Z"),
   memberCount: 2,
   syncStatus: "idle",

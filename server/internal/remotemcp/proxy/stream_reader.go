@@ -33,6 +33,18 @@ type streamReader struct {
 	// other sources of Read failure.
 	idleFired atomic.Bool
 
+	// drained is set by [streamReader.drain] before it cancels the upstream
+	// request, so relay callers can tell a shutdown close from a failure.
+	drained atomic.Bool
+
+	// rotated is set by [streamReader.rotate] before it cancels the upstream
+	// request, so relay callers can tell a maximum-age close from a failure.
+	rotated atomic.Bool
+
+	// ended is set once the upstream body reaches EOF. A stream that already
+	// ended is not marked drained, so it is reported as the upstream closing it.
+	ended atomic.Bool
+
 	// readCloser is the upstream response body being relayed.
 	readCloser io.ReadCloser
 
@@ -50,6 +62,9 @@ func newStreamReader(inner io.ReadCloser, timeout time.Duration, cancel context.
 		cancelFunc: cancel,
 		closedOnce: atomic.Bool{},
 		idleFired:  atomic.Bool{},
+		drained:    atomic.Bool{},
+		rotated:    atomic.Bool{},
+		ended:      atomic.Bool{},
 		readCloser: inner,
 		timeout:    timeout,
 		timer:      nil, // assigned below; AfterFunc closure references r
@@ -88,6 +103,60 @@ func (r *streamReader) IdleTimedOut() bool {
 	return r.idleFired.Load()
 }
 
+// drain ends the stream because the server is shutting down: it marks the
+// stream drained and cancels the upstream request, which makes any in-flight
+// Read return an error. A stream that already ended is left alone.
+func (r *streamReader) drain() {
+	if r.ended.Load() || r.closedOnce.Load() {
+		return
+	}
+	r.drained.Store(true)
+	r.cancelFunc()
+}
+
+// rotate ends the stream because it reached its maximum age: it marks the
+// stream rotated and cancels the upstream request, which makes any in-flight
+// Read return an error. A stream that already ended is left alone.
+func (r *streamReader) rotate() {
+	if r.ended.Load() || r.closedOnce.Load() {
+		return
+	}
+	r.rotated.Store(true)
+	r.cancelFunc()
+}
+
+// drainStream ends a relayed upstream body for shutdown when it is a
+// *streamReader.
+func drainStream(body io.ReadCloser) {
+	if sr, ok := body.(*streamReader); ok {
+		sr.drain()
+	}
+}
+
+// rotateStream ends a relayed upstream body at its maximum age when it is a
+// *streamReader.
+func rotateStream(body io.ReadCloser) {
+	if sr, ok := body.(*streamReader); ok {
+		sr.rotate()
+	}
+}
+
+// streamDrained reports whether a relayed upstream body was ended by
+// [streamReader.drain]. Like [streamIdledOut], it returns false for a body
+// that is not a *streamReader.
+func streamDrained(body io.ReadCloser) bool {
+	sr, ok := body.(*streamReader)
+	return ok && sr.drained.Load()
+}
+
+// streamRotated reports whether a relayed upstream body was ended by
+// [streamReader.rotate]. Like [streamIdledOut], it returns false for a body
+// that is not a *streamReader.
+func streamRotated(body io.ReadCloser) bool {
+	sr, ok := body.(*streamReader)
+	return ok && sr.rotated.Load()
+}
+
 // streamIdledOut reports whether a relayed upstream body was terminated by
 // the per-event idle watchdog rather than a genuine failure. Centralizes the
 // coupling to the concrete *streamReader wrapper: if the body is ever
@@ -113,6 +182,7 @@ func (r *streamReader) Read(p []byte) (int, error) {
 	}
 
 	if errors.Is(err, io.EOF) {
+		r.ended.Store(true)
 		r.timer.Stop()
 	}
 

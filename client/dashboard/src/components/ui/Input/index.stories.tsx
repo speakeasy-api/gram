@@ -1,4 +1,5 @@
-import { Input, InputProps } from ".";
+import type { InputProps } from ".";
+import { Input } from ".";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 const meta: Meta<typeof Input> = {

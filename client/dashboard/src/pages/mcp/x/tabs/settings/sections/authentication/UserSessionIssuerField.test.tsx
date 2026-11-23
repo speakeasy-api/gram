@@ -8,6 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthTarget } from "./authTarget";
 import { UserSessionIssuerField } from "./UserSessionIssuerField";
@@ -67,15 +68,60 @@ vi.mock("@/components/user-session-issuer-select", () => ({
   ),
 }));
 
-vi.mock("@/lib/remote-identity", () => ({
-  ScopeBadge: () => null,
-}));
-
 vi.mock("@gram/client/react-query/userSessionIssuerAttachImpact.js", () => ({
   useUserSessionIssuerAttachImpact: (request: unknown) => {
     testState.impactRequests.push(request);
     return testState.impact;
   },
+}));
+
+vi.mock("@gram/client/react-query/mcpServerUsageImpact.js", () => ({
+  useMcpServerUsageImpact: (
+    _request: unknown,
+    _security: unknown,
+    options?: { enabled?: boolean },
+  ) =>
+    options?.enabled === false
+      ? {
+          data: undefined,
+          isFetching: false,
+          isPending: true,
+          isError: false,
+          fetchStatus: "idle",
+        }
+      : {
+          data: {
+            serverName: "Example server",
+            signInRequired: true,
+            sharedSignIn: true,
+            activeConnectionCount: 3,
+            activeSubjectCount: 2,
+            sharedConnectionCount: 1,
+            subjects: [
+              {
+                subjectUrn: "user:alice",
+                subjectType: "user",
+                displayName: "Alice",
+                connectionCount: 2,
+                clientNames: ["Cursor"],
+                sharedSignIn: false,
+              },
+              {
+                subjectUrn: "user:bob",
+                subjectType: "user",
+                email: "bob@example.com",
+                connectionCount: 1,
+                clientNames: [],
+                sharedSignIn: true,
+              },
+            ],
+            subjectsTruncated: false,
+          },
+          isFetching: false,
+          isPending: false,
+          isError: false,
+          fetchStatus: "idle",
+        },
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -87,6 +133,14 @@ vi.mock("@gram/client/react-query/userSessionIssuers.js", () => ({
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// The settings link beside the picker needs only an address.
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcpSessions: {
+      provider: { settings: { href: (id: string) => `/sessions/${id}` } },
+    },
+  }),
+}));
 
 function issuer(id: string): UserSessionIssuer {
   return {
@@ -107,8 +161,12 @@ function issuer(id: string): UserSessionIssuer {
 
 const link = vi.fn<(userSessionIssuerId: string) => Promise<void>>();
 
-function renderField(currentIssuerId: string | null): void {
+function renderField(
+  currentIssuerId: string | null,
+  mcpServerId?: string,
+): void {
   const target: AuthTarget = {
+    mcpServerId,
     kind: "standard",
     slug: "server",
     projectId: "project-1",
@@ -121,12 +179,14 @@ function renderField(currentIssuerId: string | null): void {
   };
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <UserSessionIssuerField
-        target={target}
-        issuers={[issuer("current"), issuer("candidate")]}
-        isLoading={false}
-        isError={false}
-      />
+      <MemoryRouter>
+        <UserSessionIssuerField
+          target={target}
+          issuers={[issuer("current"), issuer("candidate")]}
+          isLoading={false}
+          isError={false}
+        />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -159,7 +219,9 @@ describe("UserSessionIssuerField", () => {
 
     chooseCandidateAndSave();
 
-    expect(screen.getByText("Change user session issuer?")).toBeDefined();
+    expect(
+      screen.getByText("Change MCP Authentication Provider?"),
+    ).toBeDefined();
     expect(link).not.toHaveBeenCalled();
     expect(testState.impactRequests).toContainEqual({
       toolsetId: "toolset-1",
@@ -171,7 +233,11 @@ describe("UserSessionIssuerField", () => {
       ),
     ).toBeDefined();
 
-    fireEvent.click(screen.getByRole("button", { name: "Change issuer" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Change MCP Authentication Provider",
+      }),
+    );
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
   });
 
@@ -193,7 +259,11 @@ describe("UserSessionIssuerField", () => {
     chooseCandidateAndSave();
 
     expect(screen.getByText(/Couldn't check whether/)).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Change issuer" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Change MCP Authentication Provider",
+      }),
+    );
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
   });
 
@@ -227,8 +297,33 @@ describe("UserSessionIssuerField", () => {
 
     expect(
       screen
-        .getByRole("button", { name: "Change issuer" })
+        .getByRole("button", { name: "Change MCP Authentication Provider" })
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("lists who is connected to an MCP server and waits for its name", async () => {
+    testState.impact.data = { authorizationServerChanges: false };
+    renderField("current", "mcp-server-1");
+
+    chooseCandidateAndSave();
+
+    expect(
+      screen.getByText(/3 active connections from 2 callers/),
+    ).toBeDefined();
+    expect(screen.getByText("Alice")).toBeDefined();
+    expect(screen.getByText("bob@example.com")).toBeDefined();
+    // The row badge, and the note explaining it.
+    expect(screen.getAllByText("Shared sign-in")).toHaveLength(2);
+    const confirm = screen.getByRole("button", {
+      name: "Change MCP Authentication Provider",
+    });
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Type the server name to confirm"), {
+      target: { value: "Example server" },
+    });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
   });
 });

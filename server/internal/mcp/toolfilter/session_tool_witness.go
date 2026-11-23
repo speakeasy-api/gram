@@ -36,9 +36,6 @@ const (
 	// list_changed notifications, each rebuilding the record wholesale.
 	sessionToolWitnessTTL = 15 * time.Minute
 
-	// sessionToolWitnessMaxTools mirrors the consent snapshot cap.
-	sessionToolWitnessMaxTools = 1000
-
 	// sessionToolWitnessMaxNameBytes mirrors the consent snapshot per-name cap.
 	sessionToolWitnessMaxNameBytes = 200
 
@@ -158,7 +155,7 @@ func (s *SessionToolWitnessStore) WitnessPage(ctx context.Context, grantID, sess
 		seen[tool.Name] = true
 		witness.Tools = append(witness.Tools, tool)
 	}
-	if len(witness.Tools) > sessionToolWitnessMaxTools {
+	if len(witness.Tools) > MaxTools {
 		s.drop(ctx, grantID, key)
 		return
 	}

@@ -16,7 +16,7 @@ import (
 
 func preparationAuditCounts(t *testing.T, ctx context.Context, ti *testInstance) map[audit.Action]int64 {
 	t.Helper()
-	counts := map[audit.Action]int64{}
+	counts := make(map[audit.Action]int64)
 	for _, action := range []audit.Action{
 		audit.ActionRemoteSessionClientEnableIdentityChaining,
 		audit.ActionRemoteSessionClientUpdateIdentityChainingScopes,

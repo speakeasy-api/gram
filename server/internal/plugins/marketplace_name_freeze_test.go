@@ -20,7 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -75,18 +78,28 @@ func agentMarketplaceName(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 
 	connection, err := pluginsrepo.New(conn).GetGitHubConnection(ctx, projectID)
 	require.NoError(t, err)
-	require.True(t, connection.MarketplaceToken.Valid)
+	tokens := marketplacetokenstest.Tokens(t, conn)
+	token, err := tokens.Open(ctx, conn, marketplacetokens.FromConnection(connection))
+	require.NoError(t, err)
 
 	rows, err := agentrepo.New(conn).GetAgentPluginSet(ctx, agentrepo.GetAgentPluginSetParams{
 		OrganizationID: orgID,
 		PrincipalUrns:  []string{orgWildcardPrincipal},
 	})
 	require.NoError(t, err)
-	view := mv.BuildAgentPluginsView(rows, func(token string) string {
+	view, err := mv.BuildAgentPluginsView(rows, func(row agentrepo.GetAgentPluginSetRow) (string, error) {
+		return tokens.Open(ctx, conn, marketplacetokens.Stored{
+			OrganizationID: row.ConnectionOrganizationID,
+			Hash:           row.MarketplaceTokenHash,
+			Copies:         orgencryption.Copies{Platform: row.MarketplaceTokenEncrypted, Org: row.MarketplaceTokenOrgEncrypted},
+			Legacy:         row.MarketplaceToken,
+		})
+	}, func(token string) string {
 		return "https://app.getgram.ai/marketplace/" + token + ".git"
-	})
+	}, nil)
+	require.NoError(t, err)
 	for _, marketplace := range view.Marketplaces {
-		if strings.HasSuffix(marketplace.URL, "/"+connection.MarketplaceToken.String+".git") {
+		if strings.HasSuffix(marketplace.URL, "/"+token+".git") {
 			return marketplace.Name
 		}
 	}
@@ -210,7 +223,6 @@ func rewritePublishedHooksConfig(t *testing.T, ctx context.Context, conn *pgxpoo
 		InstallationID:           current.InstallationID,
 		RepoOwner:                current.RepoOwner,
 		RepoName:                 current.RepoName,
-		MarketplaceToken:         current.MarketplaceToken,
 		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
 		PublishedHooksVersion:    current.PublishedHooksVersion,
 		PublishedHooksConfig:     rewritten,

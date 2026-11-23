@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { describe, expect, it } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";

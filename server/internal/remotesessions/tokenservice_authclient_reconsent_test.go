@@ -16,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens/upstreamtokenstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -73,9 +75,7 @@ func newReconsentFixture(t *testing.T, slug string) (context.Context, reconsentF
 
 func (r reconsentFixture) store(t *testing.T, ctx context.Context, organizationID string, signIn uuid.UUID, token string) repo.RemoteSession {
 	t.Helper()
-	accessEnc, err := r.enc.Encrypt([]byte(token))
-	require.NoError(t, err)
-	session, err := remotesessions.StoreRemoteSessionGrant(ctx, repo.New(r.ti.conn), organizationID, repo.UpsertRemoteSessionParams{SubjectUrn: r.member, UserSessionIssuerID: signIn, RemoteSessionClientID: r.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	session, err := remotesessions.StoreRemoteSessionGrant(ctx, r.ti.conn, upstreamtokenstest.New(t, r.ti.conn, r.enc), organizationID, repo.UpsertRemoteSessionGrantParams{SubjectUrn: r.member, UserSessionIssuerID: signIn, RemoteSessionClientID: r.clientID, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}}, upstreamtokens.RemoteSessionTokens{AccessToken: token, RefreshToken: "", KeepRefreshToken: false})
 	require.NoError(t, err)
 	return session
 }
@@ -127,7 +127,7 @@ func TestStoreRemoteSessionGrant_ReconsentInAnotherOrganizationStartsANewGrant(t
 		organizationID string
 		signIn         uuid.UUID
 	}{{r.otherProject, r.otherOrg, r.otherSignIn}, {r.projectID, r.organizationID, r.signInA}} {
-		tokens, err := r.mgr.ResolveClientAccessTokens(ctx, legacy.projectID, legacy.organizationID, legacy.signIn, r.member, r.clientID, false)
+		tokens, err := r.mgr.ResolveClientAccessTokens(ctx, remotesessions.RefreshAttribution{}, legacy.projectID, legacy.organizationID, legacy.signIn, r.member, r.clientID, false)
 		require.NoError(t, err)
 		require.Equal(t, "org-b-token", tokens[r.issuerID].Token)
 	}
@@ -147,12 +147,12 @@ func TestStoreRemoteSessionGrant_ReconsentInAnotherOrganizationLeavesTheFirstOrg
 	workloadCtx, caller := workloadCaller(t, ctx, r.ti.conn, auth, "ac-reconsent-workload-caller")
 
 	r.store(t, ctx, r.organizationID, r.signInA, "org-a-token")
-	tokens, err := r.mgr.ResolveClientAccessTokens(workloadCtx, r.projectID, r.organizationID, r.signInA, caller, r.clientID, false)
+	tokens, err := r.mgr.ResolveClientAccessTokens(workloadCtx, remotesessions.RefreshAttribution{}, r.projectID, r.organizationID, r.signInA, caller, r.clientID, false)
 	require.NoError(t, err)
 	require.Equal(t, "org-a-token", tokens[r.issuerID].Token)
 
 	r.store(t, ctx, r.otherOrg, r.otherSignIn, "org-b-token")
-	_, err = r.mgr.ResolveClientAccessTokens(workloadCtx, r.projectID, r.organizationID, r.signInA, caller, r.clientID, false)
+	_, err = r.mgr.ResolveClientAccessTokens(workloadCtx, remotesessions.RefreshAttribution{}, r.projectID, r.organizationID, r.signInA, caller, r.clientID, false)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "the first organization's workload no longer resolves the grant")
 }
 
@@ -171,8 +171,10 @@ func TestStoreRemoteSessionGrant_ReconsentInTheSameOrganizationUpdatesInPlace(t 
 	require.NoError(t, err)
 	require.Equal(t, "second-token", tokens[r.issuerID].Token)
 
-	_, err = r.agentGrant(ctx)
-	require.ErrorIs(t, err, pgx.ErrNoRows, "an attachment pins the previous grant generation, as before")
+	attached, err := r.agentGrant(ctx)
+	require.NoError(t, err)
+	require.Equal(t, second.ID, attached.ID)
+	require.Equal(t, second.GrantGeneration, attached.GrantGeneration, "the attachment reads current credentials from the same row")
 }
 
 func TestStoreRemoteSessionGrant_WithoutOrganizationProvenanceIsRefused(t *testing.T) {
@@ -180,9 +182,7 @@ func TestStoreRemoteSessionGrant_WithoutOrganizationProvenanceIsRefused(t *testi
 	ctx, r := newReconsentFixture(t, "ac-reconsent-no-org")
 
 	first := r.store(t, ctx, r.organizationID, r.signInA, "first-token")
-	accessEnc, err := r.enc.Encrypt([]byte("second-token"))
-	require.NoError(t, err)
-	_, err = remotesessions.StoreRemoteSessionGrant(ctx, repo.New(r.ti.conn), "", repo.UpsertRemoteSessionParams{SubjectUrn: r.member, UserSessionIssuerID: r.otherSignIn, RemoteSessionClientID: r.clientID, AccessTokenEncrypted: accessEnc, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	_, err := remotesessions.StoreRemoteSessionGrant(ctx, r.ti.conn, upstreamtokenstest.New(t, r.ti.conn, r.enc), "", repo.UpsertRemoteSessionGrantParams{SubjectUrn: r.member, UserSessionIssuerID: r.otherSignIn, RemoteSessionClientID: r.clientID, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}}, upstreamtokens.RemoteSessionTokens{AccessToken: "second-token", RefreshToken: "", KeepRefreshToken: false})
 	require.ErrorIs(t, err, remotesessions.ErrRemoteLoginWithoutOrganization, "a state without an organization cannot write a grant")
 
 	kept, err := repo.New(r.ti.conn).GetRemoteSessionByID(ctx, repo.GetRemoteSessionByIDParams{ID: first.ID, ProjectID: r.projectID, OrganizationID: r.organizationID})

@@ -58,7 +58,6 @@ type instance struct {
 	orgID        string
 	connectionID uuid.UUID
 	oktaIssuerID uuid.UUID
-	flags        *feature.InMemory
 	authCtx      *contextvalues.AuthContext
 }
 
@@ -96,13 +95,11 @@ func newTestService(t *testing.T) (context.Context, *instance) {
 	authCtx.ActiveOrganizationID = orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagOktaConnections, orgID, true)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := oktaresourceconnections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), flags)
+	svc := oktaresourceconnections.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), &feature.InMemory{})
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID), authz.NewGrant(authz.ScopeMCPRead, authz.WildcardResource))
 
-	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, oktaIssuerID: uuid.Nil, flags: flags, authCtx: authCtx}
+	si := &instance{svc: svc, conn: conn, q: repo.New(conn), orgID: orgID, connectionID: uuid.Nil, oktaIssuerID: uuid.Nil, authCtx: authCtx}
 	si.connectionID = createConnection(t, ctx, si)
 	return ctx, si
 }
@@ -221,7 +218,33 @@ func createServerWithBackend(t *testing.T, ctx context.Context, si *instance, pr
 		Visibility:            "private",
 	})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, projectID, id, issuerID)
 	return id, backendID
+}
+
+// associateServerIssuer makes issuerID the server's provider through a live
+// client association, reusing a client the server's project can see so that
+// tests counting the issuer's clients keep their expected number.
+func associateServerIssuer(t *testing.T, ctx context.Context, si *instance, projectID, serverID, issuerID uuid.UUID) {
+	t.Helper()
+	clients, err := si.q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{OrganizationID: si.orgID, IssuerIds: []uuid.UUID{issuerID}})
+	require.NoError(t, err)
+	clientID := uuid.Nil
+	for _, c := range clients {
+		if !c.ProjectID.Valid || c.ProjectID.UUID == projectID {
+			clientID = c.ID
+			break
+		}
+	}
+	if clientID == uuid.Nil {
+		clientID = addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oaassociated"+uuid.NewString()[:8])
+	}
+	require.NoError(t, testrepo.New(si.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID:             projectID,
+		OrganizationID:        si.orgID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
+	}))
 }
 
 func createUserSessionIssuer(t *testing.T, ctx context.Context, si *instance) uuid.UUID {

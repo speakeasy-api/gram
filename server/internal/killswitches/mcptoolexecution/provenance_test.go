@@ -51,7 +51,7 @@ func testIdentityContext(t *testing.T, kind mcpidentity.Kind, userID string) con
 	case mcpidentity.KindAgent:
 		return stampValidatedSession(t, boundary, urn.NewAgentSubject(uuid.New()))
 	case mcpidentity.KindChatSession:
-		return boundary.StampChatSession(t.Context())
+		return boundary.StampChatSession(t.Context(), "")
 	case mcpidentity.KindWorkload:
 		return stampValidatedSession(t, boundary, urn.NewWorkloadSubject(uuid.New(), "repo:example/app:ref:refs/heads/main"))
 	default:

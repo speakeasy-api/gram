@@ -119,6 +119,7 @@ export function setCheckMcpEndpointSlugAvailabilityData(
     parameters: {
       slug: string;
       customDomainId?: string | undefined;
+      mcpServerId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -140,6 +141,7 @@ export function invalidateCheckMcpEndpointSlugAvailability(
     [parameters: {
       slug: string;
       customDomainId?: string | undefined;
+      mcpServerId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

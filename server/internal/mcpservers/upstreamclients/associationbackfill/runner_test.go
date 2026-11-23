@@ -379,6 +379,11 @@ func TestDecide(t *testing.T) {
 		}
 	}
 
+	offersOwnClient := func(r ListUpstreamClientBackfillCandidatesRow) ListUpstreamClientBackfillCandidatesRow {
+		r.OffersOwnOauthClient = true
+		return r
+	}
+
 	unproxied := func(r ListUpstreamClientBackfillCandidatesRow) ListUpstreamClientBackfillCandidatesRow {
 		r.RemoteBacked, r.Hosted, r.Proxied = false, true, false
 		return r
@@ -409,6 +414,8 @@ func TestDecide(t *testing.T) {
 		{"one metadata match", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, true, false, false, 0), row(clientB, 2, false, false, false, false, 0)}, OutcomeMetadataMatch, []uuid.UUID{clientA}},
 		{"two metadata matches are ambiguous", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, true, false, false, 0), row(clientB, 2, false, true, false, false, 0)}, OutcomeAmbiguous, nil},
 		{"shared without evidence but configured", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, false, true, true, 1)}, OutcomeConfigured, nil},
+		{"sole consumer offering its own client", []ListUpstreamClientBackfillCandidatesRow{offersOwnClient(row(clientA, 1, false, false, false, false, 0))}, OutcomeConfigured, nil},
+		{"shared metadata match offering its own client", []ListUpstreamClientBackfillCandidatesRow{offersOwnClient(row(clientA, 2, false, true, false, false, 0))}, OutcomeConfigured, nil},
 		{"shared without evidence", []ListUpstreamClientBackfillCandidatesRow{shared(clientA)}, OutcomeNoClient, nil},
 		{"a detached metadata match", []ListUpstreamClientBackfillCandidatesRow{row(clientA, 2, false, true, false, true, 0)}, OutcomeDetached, nil},
 		{"one grant", []ListUpstreamClientBackfillCandidatesRow{granted(shared(clientA)), shared(clientB)}, OutcomeGrant, []uuid.UUID{clientA}},

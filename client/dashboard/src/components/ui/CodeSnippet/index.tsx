@@ -1,13 +1,13 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { ProgrammingLanguage, Size } from "@/components/ui/lib/types";
+import type { ProgrammingLanguage, Size } from "@/components/ui/lib/types";
 import { AnimatePresence, motion } from "motion/react";
 import "@/components/ui/styles/codeSyntax.css";
 import "./codeSnippet.css";
 import { Icon } from "../Icon";
+import type { HighlightedCode } from "@/components/ui/lib/codeUtils";
 import {
   highlightCode,
-  HighlightedCode,
   LIGHT_THEME,
   DARK_THEME,
 } from "@/components/ui/lib/codeUtils";

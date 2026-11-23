@@ -68,6 +68,7 @@ func SkillSuggestionWorkflow(ctx workflow.Context, params SkillSuggestionParams)
 			params.Force = params.Force || message == skillSuggestionForceMessage
 			return params
 		},
+		nil,
 	)(ctx, params)
 }
 

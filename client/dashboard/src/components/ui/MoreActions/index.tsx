@@ -7,9 +7,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
+import type { IconName } from "@/components/ui/Icon/names";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 
 export type Action = {
   icon?: IconName;
@@ -93,10 +94,11 @@ export function MoreActions({
             aria-busy={triggerLoading === true}
             style={triggerStyle}
           >
-            <Icon
-              name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
-              className={cn("mr-1.5 size-4", triggerLoading && "animate-spin")}
-            />
+            {triggerLoading ? (
+              <Spinner className="mr-1.5 size-4" />
+            ) : (
+              <Icon name="ellipsis-vertical" className="mr-1.5 size-4" />
+            )}
             {triggerLabel}
           </Button>
         ) : (
@@ -109,10 +111,11 @@ export function MoreActions({
             aria-busy={triggerLoading === true}
             style={triggerStyle}
           >
-            <Icon
-              name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
-              className={cn("size-4", triggerLoading && "animate-spin")}
-            />
+            {triggerLoading ? (
+              <Spinner className="mr-0 size-4" />
+            ) : (
+              <Icon name="ellipsis-vertical" className="size-4" />
+            )}
             <Button.Text className="sr-only">
               {triggerLoading
                 ? "Action in progress"

@@ -25,7 +25,7 @@ export function InstrumentAgentsStep({
   return (
     <StepContainer
       title="Set up observability in other platforms"
-      description="Turn logging on, publish your plugin marketplace, install the Speakeasy device agent, and confirm events arrive. The agent enforces the observability plugin and MCP configuration across Cursor, Codex, and the other coding assistants on each machine. Claude Code and Claude Cowork are covered under Set up Anthropic observability."
+      description="Turn logging on, publish your plugin marketplace, install the Speakeasy device agent, and confirm events arrive. The agent installs the observability plugin and the MCP servers you distribute into Claude Code, Cursor, OpenAI Codex, GitHub Copilot, and the other coding assistants on each machine, on any plan. It cannot reach Claude Cowork; set that up under Set up Anthropic admin controls."
       onContinue={onComplete}
     >
       <div className="space-y-8">
@@ -66,7 +66,7 @@ export function InstrumentAgentsStep({
 
         <ConfirmTrafficSection
           index={5}
-          description="Run any tool in a coding assistant on a machine with the agent installed. Its events show up here once the hooks are active."
+          description="Run any tool in a coding assistant on a machine with the agent installed. Its events show up here once the hooks are active. Claude Code events are confirmed under Set up Anthropic admin controls."
           matchesSource={isOtherPlatformSource}
         />
       </div>

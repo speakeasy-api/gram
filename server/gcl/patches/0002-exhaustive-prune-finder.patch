@@ -1,0 +1,63 @@
+golangci-lint patch carried by Speakeasy until upstream ships an equivalent fix.
+
+Upstream: https://github.com/golangci/golangci-lint/issues/6822
+Applies to: golangci-lint v2.15.0 (server/gcl/version).
+
+Drops exhaustive's finder pass unless the typeswitch check is configured.
+finder exports a fact for every type declaration of every package, including
+all dependencies, but only the typeswitch check reads its result, and the
+server config enables only the switch and map-literal checks. The upstream
+exhaustive command prunes it the same way.
+
+Remove when: golangci-lint prunes finder itself, or this patch stops applying
+after an upgrade. It is independent of the other patches.
+
+diff --git a/pkg/golinters/exhaustive/exhaustive.go b/pkg/golinters/exhaustive/exhaustive.go
+index d2d29a7..be0dfdd 100644
+--- a/pkg/golinters/exhaustive/exhaustive.go
++++ b/pkg/golinters/exhaustive/exhaustive.go
+@@ -1,6 +1,7 @@
+ package exhaustive
+ 
+ import (
++	"slices"
+ 	"strconv"
+ 
+ 	"github.com/nishanths/exhaustive/passes/enumerated"
+@@ -17,6 +18,9 @@ func New(settings *config.ExhaustiveSettings) *goanalysis.Linter {
+ 
+ 	var exhCfg, enuCfg map[string]any
+ 
++	// The default value of the analyzer's "check" flag is "switch".
++	checkTypeSwitch := false
++
+ 	if settings != nil {
+ 		if settings.ExplicitExhaustiveSwitch {
+ 			internal.LinterLogger.Warnf("%s: the option 'explicit-exhaustive-switch' has been replaced by 'explicit-exhaustive'.", exhAnalyzer.Name)
+@@ -47,6 +51,8 @@ func New(settings *config.ExhaustiveSettings) *goanalysis.Linter {
+ 				}
+ 			}
+ 
++			checkTypeSwitch = slices.Contains(checks, "typeswitch")
++
+ 			exhCfg["check"] = checks
+ 		}
+ 
+@@ -75,6 +81,17 @@ func New(settings *config.ExhaustiveSettings) *goanalysis.Linter {
+ 		}
+ 	}
+ 
++	// The finder analyzer exports a fact for every type declaration of every package,
++	// including all dependencies, but its result is only read by the typeswitch check.
++	// The upstream command (cmd/exhaustive) prunes it the same way (see the comment on exhaustive.Analyzer.Requires).
++	if !checkTypeSwitch {
++		pruned := *exhAnalyzer
++		pruned.Requires = slices.DeleteFunc(slices.Clone(pruned.Requires), func(a *analysis.Analyzer) bool {
++			return a.Name == "finder"
++		})
++		exhAnalyzer = &pruned
++	}
++
+ 	return goanalysis.
+ 		NewLinter(
+ 			exhAnalyzer.Name,

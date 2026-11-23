@@ -1,14 +1,24 @@
 ---
 name: frontend
-description: Use when building, designing, redesigning, or reviewing any UI in the dashboard React frontend (client/dashboard, including the inlined Speakeasy Elements code) — a new page, tab, card, table, form, dialog, sheet, empty or error state, settings section, or UI copy — and when addressing design feedback or Gutternote comments on a preview. Triggers: "build a page for", "add UI for", "make this look better", "redesign", "the UX is confusing", "layout shift", "overflow", "add a tab", "dashboard component".
+description: Use when building, designing, redesigning, or reviewing any UI in the dashboard React frontend (client/dashboard, including the inlined Speakeasy Elements code) — a new page, tab, card, table, form, dialog, sheet, empty or error state, settings section, or UI copy — when writing or optimizing frontend hook/component tests, and when addressing design feedback or Gutternote comments on a preview. Triggers: "build a page for", "add UI for", "make this look better", "redesign", "the UX is confusing", "layout shift", "overflow", "add a tab", "dashboard component".
 metadata:
   relevant_files:
     - "client/dashboard/**"
+    - "client/**/*.test.{ts,tsx}"
 ---
 
-# Dashboard frontend
+# Frontend
+
+The UI design guidance below applies to `client/dashboard`. The component-test
+and measurement guidance applies across frontend packages: use the touched
+package's render helpers and scripts. Dashboard-only helpers and import paths
+are identified explicitly; do not copy them into another package.
 
 Good UI does not come from a better first prompt. It comes from running a short loop several times. Most dashboard UI that needs rework failed the same way: it was built from the backend model outward and never judged on screen. Each pattern below came up in several recent PRs and needed follow-up PRs to fix. Code hygiene was rarely the problem.
+
+## MCP provider setup
+
+For MCP catalog provider onboarding, setup pages and app-registration flows, use [implementing-mcp-provider-setup](../implementing-mcp-provider-setup/SKILL.md) before the design loop below. Existing approved implementation is the starting point. Changes to its flow or interaction pattern require explicit approval under that skill's gate, including when the user is unavailable. Ordinary integration and defect fixes within approved behavior proceed without renewed approval. For extensions of the approved flow, the requirements below to compare alternative directions and remove something do not apply; review affected states and shared-provider regressions.
 
 ## Designing UI (read first)
 
@@ -230,7 +240,7 @@ When Gutternote comments arrive on your PR's preview: fetch them with the MCP, f
 | fullbleed analytics/observe surface (sticky filters + big table/charts)    | `WorkbenchPage`                |
 | multi-step flow                                                            | `WizardPage`                   |
 | auth / standalone, outside the app shell                                   | `CenteredPage`                 |
-| genuine bespoke app canvas (chat, playground, builder)                     | `FullBleedPage` (escape hatch) |
+| genuine bespoke app canvas (chat, inspector, builder)                      | `FullBleedPage` (escape hatch) |
 
 ```tsx
 import { ResourceListPage } from "@/components/page-templates";
@@ -342,6 +352,59 @@ Checklist for the content below the title:
 
 A page that renders its own `<h1>` instead of this pattern is a defect; if a custom header is unavoidable, it must still render `<PageEyebrow />` + `text-display-sm font-thin`.
 
+## Keep imports lightweight
+
+Vitest evaluates transitive imports for each isolated test file. Production tree-shaking does not remove that test startup work. Keep shared primitives and helpers cheap to import:
+
+```typescript
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
+```
+
+- Use named imports from supported `date-fns/<function>` entry points instead of the package root.
+- Keep `SkeletonTable` in its own module; import it there in components, stories, and test mocks. Keep basic `Skeleton` and `Text` free of the table and animation dependency graph. Re-exporting `SkeletonTable` from `Skeleton` brings that graph back.
+- When rebasing, preserve main's behavior and migrate any new callers to these entry points. Check stories and mocks as well as production imports.
+- Preserve the import-boundary regression tests in `client/dashboard/src/components/ui/Skeleton/imports.test.tsx` and `client/dashboard/src/lib/dates.imports.test.ts`. They load the real lightweight modules and fail if the heavy dependencies are evaluated; mocking the module under test defeats the guard.
+
+## Efficient component tests
+
+- Reuse the package's render helpers. Await asynchronous `act` when flushing React work started by setup or an operation; it does not guarantee that pending requests have completed. Keep real route integration where it is part of the coverage, and preserve a fresh mount, router, and query state per test.
+- Scope queries to the relevant dialog, region, or row with `within`, preserving role, accessible-name, and visibility checks. Portaled options may live outside the triggering dialog. Reuse references only while their nodes remain mounted; reacquire after reopening or navigation. Do not substitute test IDs or `hidden: true` to make accessible queries cheaper.
+- Await an operation's completion promise when available. Keep `findBy*` and ordinary `waitFor` for later DOM or focus changes. Loading-state tests must control request completion explicitly and assert both pending and completed behavior; setup must not silently wait past the state under test.
+- Measure before expanding an optimization. Compare the full affected suite on the same runner with identical worker and cache settings, preserving cases and assertions. Report before/after times with variability; a lower median alone does not establish a reliable gain.
+
+```typescript
+const dialog = await screen.findByRole("dialog", { name: "Filters" });
+const fields = within(dialog);
+const apply = fields.getByRole("button", { name: "Apply" });
+// Reuse only during this opening; query again after closing and reopening.
+```
+
+## Await hook state without polling delays
+
+The `waitForHookState` helper below lives in `client/dashboard`; check the package before importing it.
+
+`renderHook` state changes need not mutate the DOM, so ordinary Testing Library `waitFor` can repeatedly pay its default 50ms polling interval. Choose the wait by what the assertion observes:
+
+- **Cheap hook state or mock-call assertions in dashboard:** use `waitForHookState` from `@/test/waitForHookState`. Other packages should use their existing wait utilities unless an equivalent helper is available. It retries every 1ms while retaining Testing Library's timeout, error propagation, and React handling. Await an actual operation inside `act` when the test already has its completion promise.
+- **DOM queries:** keep Testing Library's `findBy*` or ordinary `waitFor`. In mixed suites, use both helpers explicitly; a blanket import replacement would also accelerate expensive DOM queries. Keep the global polling interval unchanged.
+- **Debounce, polling cadence, cancellation, or timeout behavior:** retain the real or controlled clocks and intermediate-state assertions that prove that behavior. The helper is for observing state, not advancing time or replacing those checks.
+
+```typescript
+import { waitForHookState } from "@/test/waitForHookState";
+
+await waitForHookState(() => expect(result.current.loading).toBe(false));
+await waitForHookState(() =>
+  expect(result.current.state.configChanged).toBe(true),
+);
+```
+
+Await the specific transition the next action needs: `loading === false` does not guarantee a follow-up effect has finished. Preserve every case and assertion when migrating; do not replace failures with sleeps or swallowed errors. Keep the helper's timeout/retry regression tests in `client/dashboard/src/test/waitForHookState.test.ts` passing.
+
+For performance claims, compare alternating before/after runs with the same revision baseline, worker count, and cache settings; preserve test counts and distinguish test execution from whole-command/full-suite wall time. A faster hook file does not by itself prove a faster suite.
+
 ## Design-system inventory (consolidated — don't import the removed ones)
 
 The primitive shelf was consolidated; these imports are gone or moved. Reaching for a removed one is a defect:
@@ -383,6 +446,8 @@ The dashboard follows an editorial, print-like design language. The load-bearing
 ### Verification Commands
 
 Use `aube` package scripts for frontend checks. From the repo root, prefer `aube run -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
+
+Vitest defaults to happy-dom. Put `// @vitest-environment node` on the first line of a test whose assertions do not need the DOM, browser storage, `location`, or other browser behavior. Leave component tests and browser-behavior tests on happy-dom. Do not add a browser shim, weaken an assertion, or change production code so a file can run in Node.
 
 | Need                | Dashboard                           | Whole workspace                                 |
 | ------------------- | ----------------------------------- | ----------------------------------------------- |

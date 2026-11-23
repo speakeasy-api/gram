@@ -24,19 +24,22 @@ func TestLocalServerClientAssociations(t *testing.T) {
 
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
-// GitHub shares the workforce issuer with the EMA services but has no
-// evidence for either client, so it uses none.
+// Example OAuth (mcpserver-linear) uses its metadata document client, and
+// Linear and Notion (mcpserver-<vendor>-app) their metadata document clients.
+// Example Shared Credential has no bound client, so it uses none. Acme Wiki
+// has no sign-in of its own, so the backfill does not decide it. The
+// local-only Enterprise Sign-In (ID-JAG) Server is checked in
+// local_ema_test.go.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 	det := func(name string) uuid.UUID { return detUUID(spec.NameSeed + name) }
-	github := det("mcpserver-github")
 	want := map[uuid.UUID][]uuid.UUID{
-		det("mcpserver-linear"):      {det("remote-identity-client-linear"), det("attachment-client")},
-		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
-		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
+		det("mcpserver-linear"):     {det("remote-identity-client-linear")},
+		det("mcpserver-linear-app"): {det("remote-identity-client-linear-app")},
+		det("mcpserver-notion-app"): {det("remote-identity-client-notion-app")},
 	}
 
 	for range 2 {
@@ -62,17 +65,12 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 		for serverID, clients := range want {
 			require.ElementsMatch(t, clients, got[serverID], "server %s", serverID)
 		}
-		require.Equal(t, []uuid.UUID{github}, uncovered, "every proxied server with an issuer-bound client must be associated")
+		require.Empty(t, uncovered, "every proxied server with an issuer-bound client must be associated")
 
 		report, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
 		require.NoError(t, err)
 		require.Zero(t, report.Decided, "the seed must write every association the backfill would decide")
 		require.Zero(t, report.Gaps)
-		for _, result := range report.Results {
-			if result.MCPServerID == github {
-				require.Equal(t, associationbackfill.OutcomeNoClient, result.Outcome)
-			}
-		}
 		for _, result := range report.GatewayResults {
 			require.True(t, result.Outcome.Covered(), "gateway server %s is %s", result.MCPServerID, result.Outcome)
 		}

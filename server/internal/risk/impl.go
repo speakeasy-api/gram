@@ -53,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -126,9 +127,7 @@ type Service struct {
 	// approval workflow instead of a bypass request. Optional: nil keeps the
 	// legacy bypass flow.
 	approvalIntake ShadowMCPApprovalIntake
-	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
-	// when nil the feature is treated as disabled.
-	flags feature.Provider
+	flags          feature.Provider
 	// Scanners reused by the rule-playground endpoint (testDetectionRule)
 	// so the dashboard sees the exact same matcher output the worker
 	// produces during chat-message analysis. Optional: when nil the
@@ -139,6 +138,9 @@ type Service struct {
 	riskRecorder    *metering.RiskRecorder
 	// stokenCodec counts prepared rule-playground input.
 	stokenCodec *stokens.Codec
+
+	// approvals holds, lists and decides tool approval requests.
+	approvals *approval.Service
 	// celEng is the shared CEL env, injected at construction; used to compile
 	// and validate scope/detection expressions. nil in the lightweight observer.
 	celEng         *celenv.Engine
@@ -156,6 +158,9 @@ type Service struct {
 	// path, the same store the batch analysis activity hydrates parts from.
 	// Optional: when nil, content-part findings are not reconstructible.
 	assetStorage blobio.Reader
+	// sessionAccess answers whether a member may read a finding's chat without
+	// chat:read, by the chat service's own owner rule. Nil in the observer.
+	sessionAccess *chat.SessionAccess
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -193,6 +198,7 @@ func NewObserver(
 		cache:                        nil,
 		jwtSecret:                    "",
 		approvalIntake:               nil,
+		approvals:                    nil,
 		piiScanner:                   nil,
 		piScanner:                    nil,
 		gitleaksScanner:              nil,
@@ -205,6 +211,7 @@ func NewObserver(
 		findingsCH:                   nil,
 		findingEvidence:              nil,
 		assetStorage:                 nil,
+		sessionAccess:                nil,
 	}
 }
 
@@ -236,6 +243,7 @@ func NewService(
 	assetStorage blobio.Reader,
 	riskRecorder *metering.RiskRecorder,
 	platformToolsets map[string]platformtools.Toolset,
+	approvals *approval.Service,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -286,9 +294,11 @@ func NewService(
 		findingsCH:                   findingsCH,
 		findingEvidence:              findingEvidence,
 		assetStorage:                 assetStorage,
+		sessionAccess:                chat.NewSessionAccess(logger, db, authzEngine),
 		riskRecorder:                 riskRecorder,
 		platformToolsets:             platformToolsets,
 		stokenCodec:                  stokens.NewCodec(),
+		approvals:                    approvals,
 	}
 }
 
@@ -332,7 +342,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -369,14 +379,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	}
 
 	// prompt_based (LLM-judge) policies carry a prompt + optional model config
-	// instead of detection sources, and are gated behind FlagPromptPolicies
-	// during the MVP.
+	// instead of detection sources.
 	var prompt pgtype.Text
 	var modelConfig []byte
 	if policyType == ra.PolicyTypePromptBased {
-		if !s.promptPoliciesEnabled(ctx, authCtx) {
-			return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
-		}
 		if payloadHasCreatePromptPolicyDetectionConfig(payload) {
 			return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
 		}
@@ -394,6 +400,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		// detection sources. Persist an empty (non-null) source set.
 		sources = []string{}
 	} else {
+		if sources == nil && action == policycore.ActionRequireApproval {
+			// require_approval holds calls by MCP scope alone, with no detectors.
+			sources = []string{}
+		}
 		if sources == nil {
 			sources = []string{ra.SourceGitleaks}
 		}
@@ -508,6 +518,20 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err := policycore.ValidateMCPScope(mcpScope, sources, action); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
+	if action == policycore.ActionRequireApproval && !s.toolApprovalsEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "tool approvals are not enabled for this organization")
+	}
+	approvalConfig := approvalConfigFromPayload(payload.ApprovalConfig)
+	if err := policycore.ValidateApprovalPolicy(action, policyType, sources, payload.CustomRuleIds, approvalConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	if err := s.validateApprovers(ctx, authCtx.ActiveOrganizationID, approvalConfig); err != nil {
+		return nil, err
+	}
+	approvalConfigJSON, err := policycore.MarshalApprovalConfig(approvalConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
+	}
 
 	result, err := s.policies.CreatePolicy(ctx, policycore.CreateMutation{
 		Params: repo.CreateRiskPolicyParams{
@@ -531,6 +555,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 			Prompt:               prompt,
 			ModelConfig:          modelConfig,
+			ApprovalConfig:       approvalConfigJSON,
 			Score:                pgtype.Float8{Float64: payload.Score, Valid: true},
 		},
 		AudiencePrincipals: audiencePrincipals,
@@ -556,7 +581,7 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -577,7 +602,7 @@ func (s *Service) ListMCPPlatformToolsets(ctx context.Context, _ *gen.ListMCPPla
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -615,7 +640,7 @@ func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -657,7 +682,7 @@ func (s *Service) ListSessionQuarantines(ctx context.Context, _ *gen.ListSession
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -682,7 +707,7 @@ func (s *Service) ReleaseSessionQuarantine(ctx context.Context, payload *gen.Rel
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -772,7 +797,7 @@ func (s *Service) ListBuiltinExclusions(ctx context.Context, _ *gen.ListBuiltinE
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -809,7 +834,7 @@ func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -835,7 +860,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -866,10 +891,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		}
 	}
 
-	// policy_type is immutable; gate edits to prompt_based policies behind the flag.
-	if current.PolicyType == ra.PolicyTypePromptBased && !s.promptPoliciesEnabled(ctx, authCtx) {
-		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
-	}
 	if current.PolicyType == ra.PolicyTypeStandard && (payload.Prompt != nil || payload.ModelConfig != nil) {
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt and model_config are only supported for prompt-based policies")
 	}
@@ -958,6 +979,29 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 	if err := validateSourceAction(sources, action); err != nil {
 		return nil, err
+	}
+	if action == policycore.ActionRequireApproval && current.Action != policycore.ActionRequireApproval && !s.toolApprovalsEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "tool approvals are not enabled for this organization")
+	}
+	approvalConfig := policycore.Project(current, nil).ApprovalConfig
+	if payload.ApprovalConfig != nil {
+		approvalConfig = approvalConfigFromPayload(payload.ApprovalConfig)
+	}
+	if action != policycore.ActionRequireApproval && payload.ApprovalConfig == nil {
+		// Moving off require_approval drops the approvers it no longer uses.
+		approvalConfig = nil
+	}
+	if err := policycore.ValidateApprovalPolicy(action, current.PolicyType, sources, customRuleIds, approvalConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	if payload.ApprovalConfig != nil {
+		if err := s.validateApprovers(ctx, authCtx.ActiveOrganizationID, approvalConfig); err != nil {
+			return nil, err
+		}
+	}
+	approvalConfigJSON, err := policycore.MarshalApprovalConfig(approvalConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encode approval config").LogError(ctx, s.logger)
 	}
 
 	audienceType := current.AudienceType
@@ -1118,6 +1162,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			UserMessage:          userMessage,
 			Prompt:               prompt,
 			ModelConfig:          modelConfig,
+			ApprovalConfig:       approvalConfigJSON,
 			Score:                conv.PtrToPGFloat8(payload.Score),
 		},
 		AudiencePrincipals:   audiencePrincipals,
@@ -1148,7 +1193,7 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -1296,63 +1341,23 @@ func encodeRiskResultsCursor(c riskResultsCursor) string {
 	return c.MessageCreatedAt.UTC().Format(time.RFC3339Nano) + "|" + c.ID.String()
 }
 
-func cursorToParams(c *riskResultsCursor) (pgtype.Timestamptz, uuid.NullUUID) {
-	if c == nil {
-		return pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return pgtype.Timestamptz{Time: c.MessageCreatedAt, InfinityModifier: pgtype.Finite, Valid: true}, uuid.NullUUID{UUID: c.ID, Valid: true}
-}
-
-// ListRiskResults serves the dashboard's default risk results listing. It
-// always requires org:admin, but only returns raw `match`/`spans` content
-// when the request is scoped to a single chat_id AND the caller separately
-// holds chat:read for that exact chat — the same condition that already lets
-// them load the chat's full transcript (which contains the same secret
-// embedded in message content) via chat.LoadChat. That is a soft check
-// (FindMatched, not Require): missing chat:read doesn't fail the request, it
-// just falls back to a redacted response. Every other call — notably the
-// Risk Events page, which lists across many chats with no single chat_id
-// filter — gets match_redacted instead of the raw secret.
+// ListRiskResults serves the dashboard's risk results listing. It requires
+// org:admin and never returns raw `match`/`spans` content: ClickHouse rows
+// carry only the ingest-time match_redacted, and the plaintext is revealed
+// per finding through UnmaskRiskResult.
 func (s *Service) ListRiskResults(ctx context.Context, payload *gen.ListRiskResultsPayload) (*gen.ListRiskResultsResult, error) {
 	raw, err := s.listRiskResultsRaw(ctx, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	if payload.ChatID != nil && *payload.ChatID != "" {
-		matched, err := s.authz.FindMatched(ctx, []authz.Check{authz.ChatReadCheck(*payload.ChatID)})
-		if err == nil && len(matched) == 1 && matched[0] {
-			return raw, nil
-		}
-	}
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
 	for _, r := range raw.Results {
-		// ClickHouse-served rows are already store-redacted (Match nil,
-		// MatchRedacted stamped at ingest); re-deriving from a nil Match would
-		// clobber the real fingerprint with `<redacted len=0>`.
-		if r.Match == nil && r.MatchRedacted != nil {
-			continue
+		if r.ChatTitle != nil {
+			r.ChatTitle = new(authz.RedactSessionTitle(ctx, *r.ChatTitle, r.ChatID))
 		}
-		redactResultMatchInPlace(r, authCtx.ActiveOrganizationID)
 	}
-	return raw, nil
-}
 
-// redactResultMatchInPlace clears a result's raw match/spans and populates
-// match_redacted in their place, reusing the same fingerprint format (and
-// shadow_mcp/account_identity passthrough carve-out) as
-// redactMatch/redactRiskResult below.
-// Spans aren't given a redacted counterpart here because nothing on this
-// (non-agent) redacted path renders them.
-func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
-	matchRedacted := redactMatch(r.Source, conv.PtrValOrEmpty(r.RuleID, ""), r.Match, orgID)
-	r.MatchRedacted = &matchRedacted
-	r.Match = nil
-	r.Spans = nil
+	return raw, nil
 }
 
 func parseOptionalMCPServerID(raw *string) (string, error) {
@@ -1366,19 +1371,6 @@ func parseOptionalMCPServerID(raw *string) (string, error) {
 	return id.String(), nil
 }
 
-func (s *Service) riskFindingsClickHouseEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	projectSlug := ""
-	if authCtx.ProjectSlug != nil {
-		projectSlug = *authCtx.ProjectSlug
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, projectSlug))
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate risk findings ClickHouse cutover", attr.SlogError(err))
-		return false
-	}
-	return evaluation == feature.EvaluationEnabled
-}
-
 // listRiskResultsRaw is the shared, always-unredacted fetch behind both
 // ListRiskResults (which may redact its output) and ListRiskResultsForAgent
 // (which always redacts). Keeping this as the single source of raw data
@@ -1390,7 +1382,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1425,14 +1417,6 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.E(oops.CodeInvalid, nil, "invalid execution ID")
 	}
 
-	clickHouseCutover := s.riskFindingsClickHouseEnabled(ctx, authCtx)
-	if chatID != "" && mcpServerID == "" && !resultID.Valid && executionID == "" && !clickHouseCutover {
-		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
-		if err != nil {
-			totalCount = 0
-		}
-		return s.listResultsByChat(ctx, *authCtx.ProjectID, chatID, cursor, pageSize, totalCount)
-	}
 	// A policy filter narrows the pushdown alongside the other filters, so
 	// combinations like policy_id + rule_id are honored.
 	var policyIDInput *string
@@ -1488,7 +1472,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if toTime.Valid {
 		to = &toTime.Time
 	}
-	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to, chatID != "" && clickHouseCutover)
+	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1552,6 +1536,9 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 
 	redacted := make([]*types.RiskResultRedacted, 0, len(base.Results))
 	for _, r := range base.Results {
+		if r.ChatTitle != nil {
+			r.ChatTitle = new(authz.RedactSessionTitle(ctx, *r.ChatTitle, r.ChatID))
+		}
 		redacted = append(redacted, redactRiskResult(r, authCtx.ActiveOrganizationID))
 	}
 
@@ -1564,12 +1551,16 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 
 // UnmaskRiskResult returns the plaintext match for one risk result. Chat-backed
 // findings reconstruct it from chat data; MCP findings read encrypted evidence.
-// Both require chat:read for the result's chat, and successful reveals are
-// audited as discrete access events.
+// Both require chat:read for the result's chat, or that the member owns the
+// chat or owns or edits its agent (see requireChatRead); successful reveals are
+// audited as access events.
 func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskResultPayload) (*gen.RiskUnmaskResultResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return nil, fmt.Errorf("authorize risk match reveal: %w", err)
 	}
 
 	id, err := uuid.Parse(payload.ID)
@@ -1700,12 +1691,25 @@ func redactMatch(source, ruleID string, match *string, orgID string) string {
 }
 
 func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
+	result, err := s.listRiskResultsByChatRaw(ctx, payload)
+	if err != nil {
+		return nil, err
+	}
+	for _, chat := range result.Chats {
+		if chat.ChatTitle != nil {
+			chat.ChatTitle = new(authz.RedactSessionTitle(ctx, *chat.ChatTitle, new(chat.ChatID)))
+		}
+	}
+	return result, nil
+}
+
+func (s *Service) listRiskResultsByChatRaw(ctx context.Context, payload *gen.ListRiskResultsByChatPayload) (*gen.ListRiskResultsByChatResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1714,44 +1718,7 @@ func (s *Service) ListRiskResultsByChat(ctx context.Context, payload *gen.ListRi
 		return nil, oops.E(oops.CodeInvalid, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
-	pageSize := resolvePageSize(payload.Limit)
-	if s.flags != nil {
-		groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-		cutover, flagErr := s.flags.IsFlagEnabled(ctx, feature.FlagRiskFindingsClickHouseCutover, authCtx.ActiveOrganizationID, groups)
-		if flagErr != nil {
-			s.logger.WarnContext(ctx, "risk findings clickhouse cutover flag check failed; using postgres", attr.SlogError(flagErr))
-		} else if cutover {
-			return s.listRiskResultsByChatFromClickHouse(ctx, authCtx, cursor, pageSize)
-		}
-	}
-
-	rows, err := s.repo.ListRiskResultsGroupedByChat(ctx, repo.ListRiskResultsGroupedByChatParams{
-		ProjectID: *authCtx.ProjectID,
-		Cursor:    cursor,
-		PageLimit: conv.SafeInt32(pageSize + 1),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").LogError(ctx, s.logger)
-	}
-
-	chats := make([]*types.RiskChatSummary, 0, len(rows))
-	for _, row := range rows {
-		chats = append(chats, &types.RiskChatSummary{
-			ChatID:         row.ChatID.String(),
-			ChatTitle:      conv.FromPGText[string](row.ChatTitle),
-			UserID:         conv.FromPGText[string](row.ChatUserID),
-			FindingsCount:  row.FindingsCount,
-			LatestDetected: row.LatestDetected.Time.Format(time.RFC3339),
-		})
-	}
-
-	var nextCursor *string
-	if len(chats) > pageSize {
-		nextCursor = &chats[pageSize].ChatID
-		chats = chats[:pageSize]
-	}
-
-	return &gen.ListRiskResultsByChatResult{Chats: chats, NextCursor: nextCursor}, nil
+	return s.listRiskResultsByChatFromClickHouse(ctx, authCtx, cursor, resolvePageSize(payload.Limit))
 }
 
 func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverviewPayload) (*gen.RiskOverviewResult, error) {
@@ -1760,7 +1727,7 @@ func (s *Service) GetRiskOverview(ctx context.Context, payload *gen.GetRiskOverv
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1865,38 +1832,6 @@ func (s *Service) paginateResults(results []*types.RiskResult, extraRow *riskRes
 	return &gen.ListRiskResultsResult{Results: results, TotalCount: totalCount, NextCursor: nextCursor}
 }
 
-func (s *Service) listResultsByChat(ctx context.Context, projectID uuid.UUID, rawChatID string, cursor *riskResultsCursor, pageSize int, totalCount int64) (*gen.ListRiskResultsResult, error) {
-	chatID, err := uuid.Parse(rawChatID)
-	if err != nil {
-		return nil, oops.C(oops.CodeInvalid)
-	}
-	cursorCreatedAt, cursorID := cursorToParams(cursor)
-	rows, err := s.repo.ListRiskResultsByChatFound(ctx, repo.ListRiskResultsByChatFoundParams{
-		ChatID:                 chatID,
-		ProjectID:              projectID,
-		CursorMessageCreatedAt: cursorCreatedAt,
-		CursorID:               cursorID,
-		PageLimit:              conv.SafeInt32(pageSize + 1),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk results by chat").LogError(ctx, s.logger)
-	}
-	results := make([]*types.RiskResult, 0, len(rows))
-	var nextCursor *riskResultsCursor
-	for i, row := range rows {
-		cid := row.ChatID.String()
-		results = append(results, foundRowToResult(row.ID, row.RiskPolicyID, row.RiskPolicyVersion, row.BlockID, row.ChatMessageID, row.ChatContentPartID, &cid, row.ChatTitle, row.ChatUserID, row.Source, row.RuleID, row.Description, row.Match, row.StartPos, row.EndPos, row.Confidence, row.Tags, row.Spans, row.MessageCreatedAt))
-		if i == pageSize {
-			// Cursor from the LAST RETURNED row (not this extra row): the
-			// next-page predicate is a strict (message_created_at, id) <, so a
-			// cursor pointing at the extra row would skip it entirely.
-			last := rows[pageSize-1]
-			nextCursor = &riskResultsCursor{MessageCreatedAt: last.MessageCreatedAt.Time, ID: last.ID}
-		}
-	}
-	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
-}
-
 func (s *Service) ListRiskCategories(ctx context.Context, payload *gen.ListRiskCategoriesPayload) (*gen.RiskCategoriesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -1960,7 +1895,7 @@ func (s *Service) CompileExpr(ctx context.Context, payload *gen.CompileExprPaylo
 
 	// Authoring endpoint: gate on org-admin like the rest of the risk policy
 	// authoring surface.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -1983,7 +1918,7 @@ func (s *Service) GetRiskUserBreakdown(ctx context.Context, payload *gen.GetRisk
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -2052,7 +1987,7 @@ func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.Cr
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -2107,7 +2042,7 @@ func (s *Service) ListCustomDetectionRules(ctx context.Context, payload *gen.Lis
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -2130,7 +2065,7 @@ func (s *Service) GetCustomDetectionRule(ctx context.Context, payload *gen.GetCu
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -2156,7 +2091,7 @@ func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.Up
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -2206,7 +2141,7 @@ func (s *Service) DeleteCustomDetectionRule(ctx context.Context, payload *gen.De
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -2245,7 +2180,7 @@ func (s *Service) SuggestCustomDetectionRule(ctx context.Context, payload *gen.S
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -2281,7 +2216,7 @@ func (s *Service) SuggestExclusion(ctx context.Context, payload *gen.SuggestExcl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -2585,8 +2520,9 @@ func (s *Service) platformToolsetByID(id uuid.UUID) (platformtools.Toolset, bool
 		}
 	}
 	return platformtools.Toolset{
-		Slug:  "",
-		Tools: nil,
+		Slug:          "",
+		Tools:         nil,
+		ActingContext: nil,
 	}, false
 }
 
@@ -2977,7 +2913,7 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -3033,7 +2969,7 @@ func (s *Service) EvaluatePromptGuardrail(ctx context.Context, payload *gen.Eval
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -3198,7 +3134,7 @@ func (s *Service) SaveRiskEvalReview(ctx context.Context, payload *gen.SaveRiskE
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -3279,7 +3215,7 @@ func (s *Service) ListRiskEvalReviews(ctx context.Context, payload *gen.ListRisk
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -3309,7 +3245,7 @@ func (s *Service) DeleteRiskEvalReview(ctx context.Context, payload *gen.DeleteR
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 
@@ -3757,6 +3693,9 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 	if len(parts) > maxParts {
 		parts = parts[:maxParts]
 	}
+	if len(parts) == 0 && action == policycore.ActionRequireApproval {
+		parts = append(parts, "Tool")
+	}
 	if len(parts) == 0 {
 		parts = append(parts, "Risk")
 	}
@@ -3769,6 +3708,8 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 		actionLabel = "Warner"
 	case "quarantine":
 		actionLabel = "Quarantiner"
+	case policycore.ActionRequireApproval:
+		actionLabel = "Approval"
 	}
 
 	return strings.Join(parts, " & ") + " " + actionLabel
@@ -3937,6 +3878,37 @@ type promptModelConfig struct {
 	FailOpen    *bool    `json:"fail_open,omitempty"`
 }
 
+// validateApprovers checks that every approver names a user or role in the
+// organization, so a typo cannot hold calls for an approver nobody can be.
+func (s *Service) validateApprovers(ctx context.Context, organizationID string, config *policycore.ApprovalConfig) error {
+	if config == nil {
+		return nil
+	}
+	for _, approver := range config.Approvers {
+		principal, err := urn.ParsePrincipal(approver)
+		if err != nil {
+			return oops.E(oops.CodeInvalid, err, "invalid approver %q", approver)
+		}
+		err = authz.ValidatePrincipal(ctx, s.db, organizationID, principal)
+		if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+			return oops.E(oops.CodeInvalid, err, "approver %q is not a user or role in this organization", approver)
+		}
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check approver %q", approver).LogError(ctx, s.logger)
+		}
+	}
+	return nil
+}
+
+// approvalConfigFromPayload converts an API approval config to its domain
+// form. A nil config stays nil.
+func approvalConfigFromPayload(c *types.RiskPolicyApprovalConfig) *policycore.ApprovalConfig {
+	if c == nil {
+		return nil
+	}
+	return &policycore.ApprovalConfig{Approvers: c.Approvers}
+}
+
 // marshalModelConfig encodes an API model config into the JSONB column value.
 // Returns nil (SQL NULL) when no config was supplied.
 func marshalModelConfig(mc *types.RiskPolicyModelConfig) ([]byte, error) {
@@ -4002,116 +3974,19 @@ func promptPolicyNameFromBase(base string, existing []string) string {
 	}
 }
 
-// promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled
-// for the org. The flag is targeted by PostHog group (org/project slug) the
-// same way the dashboard evaluates it, so we forward the groups built from the
-// auth context. A nil provider or a failed lookup degrades to disabled.
-func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+// toolApprovalsEnabled reports whether the organization may create
+// require_approval policies. Errors fail closed.
+func (s *Service) toolApprovalsEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
 	if s.flags == nil {
 		return false
 	}
 	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, groups)
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagToolApprovals, authCtx.ActiveOrganizationID, groups)
 	if err != nil {
-		s.logger.WarnContext(ctx, "prompt-policies flag check failed; treating as disabled",
+		s.logger.WarnContext(ctx, "tool approvals flag check failed; treating as disabled",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		)
-		return false
 	}
-	return on
-}
-
-func foundRowToResult(
-	id, policyID uuid.UUID, policyVersion int64, blockID uuid.UUID, chatMessageID, chatContentPartID uuid.NullUUID, chatID *string, chatTitle, chatUserID pgtype.Text,
-	source string, ruleID, description, match pgtype.Text,
-	startPos, endPos pgtype.Int4,
-	confidence pgtype.Float8, tags []string, spans []byte, createdAt pgtype.Timestamptz,
-) *types.RiskResult {
-	return &types.RiskResult{
-		ID:                 id.String(),
-		PolicyID:           policyID.String(),
-		PolicyVersion:      policyVersion,
-		ExecutionID:        nil,
-		McpServerID:        nil,
-		MetaMcpServerID:    nil,
-		ToolsetID:          nil,
-		ToolName:           nil,
-		Phase:              nil,
-		MediationSurface:   nil,
-		McpMethod:          nil,
-		PrincipalKind:      nil,
-		IdentityStamped:    nil,
-		EnforcementOutcome: nil,
-		BlockID:            blockIDPtr(blockID),
-		ChatMessageID:      nullUUIDStringPtr(chatMessageID),
-		ChatContentPartID:  nullUUIDStringPtr(chatContentPartID),
-		ChatID:             chatID,
-		ChatTitle:          conv.FromPGText[string](chatTitle),
-		UserID:             conv.FromPGText[string](chatUserID),
-		Source:             source,
-		RuleID:             conv.FromPGText[string](ruleID),
-		Description:        conv.FromPGText[string](description),
-		Match:              conv.FromPGText[string](match),
-		StartPos:           conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
-		EndPos:             conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
-		Confidence:         conv.FromPGFloat8(confidence),
-		Tags:               tags,
-		Spans:              parseRiskSpans(spans),
-		// MatchRedacted is populated later by redactResultMatchInPlace, only
-		// for callers ListRiskResults decides shouldn't see raw match/spans.
-		MatchRedacted: nil,
-		CreatedAt:     createdAt.Time.Format(time.RFC3339),
-		// The PG listings behind this mapper only return open findings, so the
-		// suppression fields (and the deprecated FalsePositiveAt mirror) stay
-		// unset; the suppressed listing populates them from its own rows.
-		FalsePositiveAt:  nil,
-		SuppressedAt:     nil,
-		SuppressedReason: nil,
-		SuppressedDetail: nil,
-		ExclusionID:      nil,
-	}
-}
-
-func nullUUIDStringPtr(id uuid.NullUUID) *string {
-	if !id.Valid {
-		return nil
-	}
-	value := id.UUID.String()
-	return &value
-}
-
-// blockIDPtr maps the COALESCE'd block id to an optional string: a nil UUID
-// means the finding's message has no durable tool call block.
-func blockIDPtr(blockID uuid.UUID) *string {
-	if blockID == uuid.Nil {
-		return nil
-	}
-	return conv.PtrEmpty(blockID.String())
-}
-
-// parseRiskSpans decodes the risk_results.spans JSONB column into the API span
-// type. A nil/empty/invalid column yields nil so legacy rows simply have no
-// spans (the top-level match still carries the primary span).
-func parseRiskSpans(raw []byte) []*types.RiskSpan {
-	if len(raw) == 0 {
-		return nil
-	}
-	var spans []ra.FindingSpan
-	if err := json.Unmarshal(raw, &spans); err != nil {
-		return nil
-	}
-	out := make([]*types.RiskSpan, 0, len(spans))
-	for _, s := range spans {
-		start := s.StartPos
-		end := s.EndPos
-		out = append(out, &types.RiskSpan{
-			Match:    s.Match,
-			Field:    conv.PtrEmpty(s.Field),
-			Path:     conv.PtrEmpty(s.Path),
-			StartPos: &start,
-			EndPos:   &end,
-		})
-	}
-	return out
+	return evaluation == feature.EvaluationEnabled
 }

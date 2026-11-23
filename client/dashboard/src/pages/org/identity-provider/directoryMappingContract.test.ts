@@ -5,14 +5,14 @@ import {
   startCreateRoleFlow,
 } from "./directoryMappingFlow";
 
-import { Gram } from "@gram/client";
+import { Access } from "@gram/client/sdk/access.js";
 import { HTTPClient } from "@gram/client/lib/http.js";
 
 afterEach(() => window.sessionStorage.clear());
 
-function recordingClient() {
+function recordingAccess() {
   const requests: Request[] = [];
-  const client = new Gram({
+  const access = new Access({
     serverURL: "https://gram.example",
     httpClient: new HTTPClient({
       fetcher: async (request) => {
@@ -27,14 +27,14 @@ function recordingClient() {
       },
     }),
   });
-  return { client, requests };
+  return { access, requests };
 }
 
 describe("directory mapping SDK contract", () => {
   it.each(["chip edit", "create-role return"])(
     "sends a %s as a guarded set write and surfaces conflicts",
     async (flow) => {
-      const { client, requests } = recordingClient();
+      const { access, requests } = recordingAccess();
       const source = {
         sourceKind: "attribute" as const,
         attributeKey: "department",
@@ -66,7 +66,7 @@ describe("directory mapping SDK contract", () => {
               ],
             )!.form;
       await expect(
-        client.access.setDirectoryRoleMappings({
+        access.setDirectoryRoleMappings({
           setDirectoryRoleMappingsForm: form,
         }),
       ).rejects.toMatchObject({ statusCode: 409 });
@@ -87,9 +87,9 @@ describe("directory mapping SDK contract", () => {
   it.each([undefined, [], ["role:global:admin"]])(
     "preserves optional expected sets on the wire: %j",
     async (expectedRoleUrns) => {
-      const { client, requests } = recordingClient();
+      const { access, requests } = recordingAccess();
       await expect(
-        client.access.setDirectoryRoleMappings({
+        access.setDirectoryRoleMappings({
           setDirectoryRoleMappingsForm: {
             sourceKind: "attribute",
             attributeKey: "department",

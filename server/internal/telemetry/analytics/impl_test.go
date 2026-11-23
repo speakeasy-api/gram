@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
+	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
@@ -19,7 +20,8 @@ func TestDescribe(t *testing.T) {
 
 	result, err := ti.service.Describe(ctx, &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
-	require.Len(t, result.Datasets, 2)
+	require.Len(t, result.Datasets, 3, "an org admin reads every dataset")
+	require.Empty(t, result.RestrictedDatasets)
 
 	toolCalls := datasetNamed(t, result.Datasets, "tool_calls")
 	require.Equal(t, "event", toolCalls.Kind)
@@ -43,6 +45,16 @@ func TestDescribe(t *testing.T) {
 	require.NotNil(t, byName["mcp_server"].Lookup, "describe says which map mcp_server reads through")
 	require.Equal(t, MCPServerDisplayNamesLookup, byName["mcp_server"].Lookup.Name)
 	require.Contains(t, byName["mcp_server"].Lookup.Description, "Hooks settings")
+	require.NotNil(t, byName["agent"].Lookup, "an agent shows under its name")
+	require.Equal(t, AgentNamesLookup, byName["agent"].Lookup.Name)
+	require.Equal(t, []string{"count_distinct"}, byName["agent"].Aggregations)
+	require.Contains(t, *byName["surface"].Description, "Deprecated", "surface points readers at product and client")
+	require.NotNil(t, byName["product"].Description)
+	require.NotNil(t, byName["client"].Description)
+	require.NotNil(t, byName["family"].Lookup, "family is derived from the product")
+	require.Equal(t, ProductFamiliesLookup, byName["family"].Lookup.Name)
+	require.NotNil(t, byName["vendor"].Lookup, "vendor is derived from the product")
+	require.Equal(t, ProductVendorsLookup, byName["vendor"].Lookup.Name)
 	require.Nil(t, byName["tool_name"].Lookup, "a field read as reported names no lookup")
 	require.Nil(t, byName["tool_name"].Description, "a field with nothing to add has no description")
 	require.Nil(t, byName["user"].Description)
@@ -56,6 +68,13 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, "dimension", skillFields["tool_call"].Role, "the invocation's call id tells repeated invocations apart in rows mode")
 	require.Equal(t, []string{"count_distinct"}, skillFields["user"].Aggregations)
 
+	riskFindings := datasetNamed(t, result.Datasets, "risk_findings")
+	require.Equal(t, "metric", riskFindings.Kind, "describe says the dataset answers aggregates only")
+	require.Equal(t, []string{"category"}, defaultFields(riskFindings))
+	riskFields := fieldsByName(riskFindings)
+	require.Equal(t, RiskPolicySeveritiesLookup, riskFields["severity"].Lookup.Name)
+	require.Equal(t, RiskPolicyNamesLookup, riskFields["policy"].Lookup.Name)
+
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.Describe(t.Context(), &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
@@ -68,22 +87,116 @@ func TestDescribe(t *testing.T) {
 func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
 	t.Parallel()
 
-	described := describeDatasets(MustCatalog(nil, &Dataset{
+	catalog := MustCatalog(nil, &Dataset{
 		Name:        "things",
 		Kind:        KindEvent,
 		Grain:       "thing",
 		Description: "things",
 		TimeExpr:    "started_at",
+		Access:      AccessProject,
 		Fields: []Field{
 			{Name: "kind", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "kind", Description: "Which producers fill it.", Lookup: ""},
 			{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: "", Lookup: ""},
 		},
 		Source: toolCallsSource,
-	}))
+	})
+	described := describeDatasets(catalog, catalog.Datasets())
 	require.Len(t, described, 1)
 	require.NotNil(t, described[0].Fields[0].Description)
 	require.Equal(t, "Which producers fill it.", *described[0].Fields[0].Description)
 	require.Nil(t, described[0].Fields[1].Description, "a field with nothing to add has no description")
+}
+
+func TestQueryReadsAgentThroughItsName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	agent, err := agentsRepo.New(ti.db).CreateAgent(ctx, agentsRepo.CreateAgentParams{
+		OrganizationID: ti.organizationID,
+		OwnerUserID:    ti.userID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "release-bot",
+	})
+	require.NoError(t, err)
+
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	call := func(recordID, agentID string, at time.Time) chrepo.AgentEventRow {
+		r := agentEventFixture(ti.organizationID, recordID, "s1", "t1", recordID, "tool_call_result", at.UnixNano())
+		r.ProjectID = ti.projectID
+		r.ToolName = "Bash"
+		r.AgentID = agentID
+		return r
+	}
+	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+		call("c1", agent.ID.String(), base),
+		call("c2", agent.ID.String(), base.Add(time.Minute)),
+		call("c3", "", base.Add(2*time.Minute)),
+	}))
+	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(time.Hour).Format(time.RFC3339)
+
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		SessionToken: nil, ProjectSlugInput: nil,
+		Dataset: "tool_calls", From: from, To: to, Grain: nil,
+		Dimensions: []string{"agent"},
+		Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+		Filters:    []*gen.AnalyticsFilter{{Field: "agent", Operator: "equals", Values: []string{"release-bot"}}},
+		OrderBy:    []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}},
+		Limit:      0, Ungrouped: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Rows, 1, "a filter speaks the agent's name")
+	require.Equal(t, "release-bot", result.Rows[0]["agent"])
+	require.EqualValues(t, 2, result.Rows[0]["count"], "the call a person made is not the agent's")
+}
+
+func TestQueryDerivesFamilyAndVendorFromTheProduct(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	base := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+	call := func(recordID, product string, at time.Time) chrepo.AgentEventRow {
+		r := agentEventFixture(ti.organizationID, recordID, "s1", "t1", recordID, "tool_call_result", at.UnixNano())
+		r.ProjectID = ti.projectID
+		r.ToolName = "Bash"
+		r.Product = product
+		return r
+	}
+	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+		call("c1", "claude-code", base),
+		call("c2", "claude", base.Add(time.Minute)),
+		call("c3", "cowork", base.Add(2*time.Minute)),
+		call("c4", "codex", base.Add(3*time.Minute)),
+		call("c5", "chatgpt", base.Add(4*time.Minute)),
+	}))
+	from, to := base.Add(-time.Hour).Format(time.RFC3339), base.Add(time.Hour).Format(time.RFC3339)
+
+	counts := func(t *testing.T, dimension string, filters []*gen.AnalyticsFilter) map[string]int64 {
+		t.Helper()
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: []string{dimension},
+			Measures:   []*gen.AnalyticsMeasure{{Op: "count", Field: nil, Alias: nil}},
+			Filters:    filters,
+			OrderBy:    []*gen.AnalyticsOrderBy{{Measure: "count", Direction: "desc"}},
+			Limit:      0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		out := map[string]int64{}
+		for _, row := range result.Rows {
+			name, _ := row[dimension].(string)
+			n, _ := row["count"].(int64)
+			out[name] = n
+		}
+		return out
+	}
+
+	require.Equal(t, map[string]int64{"claude": 3, "codex": 1, "chatgpt": 1}, counts(t, "family", nil))
+	require.Equal(t, map[string]int64{"anthropic": 3, "openai": 2}, counts(t, "vendor", nil))
+	onClaude := []*gen.AnalyticsFilter{{Field: "family", Operator: "equals", Values: []string{"claude"}}}
+	require.Equal(t, map[string]int64{"claude-code": 1, "claude": 1, "cowork": 1}, counts(t, "product", onClaude), "a family filter reaches every product in the family")
+	onOpenAI := []*gen.AnalyticsFilter{{Field: "vendor", Operator: "equals", Values: []string{"openai"}}}
+	require.Equal(t, map[string]int64{"codex": 1, "chatgpt": 1}, counts(t, "product", onOpenAI))
 }
 
 func TestQueryReadsMCPServerThroughTheOverrideLookup(t *testing.T) {

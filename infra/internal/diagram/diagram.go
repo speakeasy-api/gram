@@ -78,13 +78,15 @@ type scanConstraint struct {
 // (cmd/presidio_load.py): it constructs a PresidioAnalysis purely to publish
 // synthetic traffic at the local emulator for profiling, so treating it as a
 // production publisher of gram-risk-v1-presidio-analysis would misrepresent the
-// committed topology.
+// committed topology. The data export test sources build a LogRecord only to send
+// a test event straight to a customer's endpoint; they publish nothing.
 var scanExclusionGlobs = []string{
 	"!**/*_test.go",
 	"!**/*_test.py",
 	"!**/test_*.py",
 	"!**/tests/**",
 	"!**/cmd/presidio_load.py",
+	"!**/internal/otel/route_test_sources.go",
 }
 
 // subscribeScans are static: subscriptions are registered at a single, specific

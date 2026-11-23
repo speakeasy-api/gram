@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -13,7 +14,6 @@ import { invalidateAllListDeployments } from "@gram/client/react-query/listDeplo
 import { invalidateAllListTools } from "@gram/client/react-query/listTools.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -210,7 +210,7 @@ function RemoveSourceDialogBody({
         >
           {pending ? (
             <Button.LeftIcon>
-              <Loader2Icon className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             </Button.LeftIcon>
           ) : null}
           <Button.Text>{pending ? "Deleting" : "Delete"}</Button.Text>

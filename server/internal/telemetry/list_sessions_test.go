@@ -27,10 +27,7 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name:           "sessions-" + uuid.NewString()[:8],
@@ -244,10 +241,7 @@ func TestListSessions_CrossRowDirectoryAndHookFilters(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	chatID := uuid.NewString()
@@ -320,10 +314,7 @@ func TestListSessions_CoLocatesAttributionFilters(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	matchingChatID := uuid.NewString()
@@ -413,10 +404,7 @@ func TestListSessions_ExcludesAssistantChatCompletions(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	assistantChatID := uuid.NewString()
@@ -476,10 +464,7 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	require.True(t, ok)
 	projectID := authCtx.ProjectID.String()
 
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeOrgRead,
-		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
 
 	now := time.Now().UTC()
 	chatIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
@@ -550,6 +535,109 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	require.Len(t, page3.Sessions, 1)
 	require.Nil(t, page3.NextCursor)
 	require.Equal(t, chatIDs[2], page3.Sessions[0].GramChatID)
+}
+
+// A session row names its user and title, so rows come only from projects the
+// caller holds chat:read on. Without it the list carries the slice's totals
+// alone; with it on one project, that project's rows and org-wide totals.
+func TestListSessions_RowsNeedChatRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+	orgRead := authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "sessions-" + uuid.NewString()[:8],
+		Slug:           "sessions-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	ownProjectChat := uuid.NewString()
+	otherProjectChat := uuid.NewString()
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    projectID,
+		timestamp:    now.Add(-10 * time.Minute),
+		chatID:       ownProjectChat,
+		email:        "olivia@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  100,
+		outputTokens: 50,
+		cost:         1.25,
+	})
+	insertListSessionClaudeAPIRequestLog(t, ctx, listSessionLogParams{
+		projectID:    otherProject.ID.String(),
+		timestamp:    now.Add(-8 * time.Minute),
+		chatID:       otherProjectChat,
+		email:        "sam@example.com",
+		hookSource:   "claude-code",
+		model:        "opus",
+		inputTokens:  300,
+		outputTokens: 100,
+		cost:         3.0,
+	})
+
+	payload := func() *gen.ListSessionsPayload {
+		return &gen.ListSessionsPayload{
+			From:   now.Add(-time.Hour).Format(time.RFC3339),
+			To:     now.Add(time.Hour).Format(time.RFC3339),
+			SortBy: "total_cost",
+			Limit:  10,
+		}
+	}
+	requireOrgTotals := func(t *testing.T, totals *gen.SessionTotals) {
+		t.Helper()
+		require.NotNil(t, totals)
+		require.Equal(t, int64(2), totals.SessionCount)
+		require.Equal(t, int64(2), totals.MessageCount)
+		require.Equal(t, int64(0), totals.ToolCallCount)
+		require.Equal(t, int64(400), totals.TotalInputTokens)
+		require.Equal(t, int64(150), totals.TotalOutputTokens)
+		require.Equal(t, int64(550), totals.TotalTokens)
+		require.InDelta(t, 4.25, totals.TotalCost, 0.0001)
+	}
+
+	// org:read alone: totals, no rows.
+	orgReader := authztest.WithExactGrants(t, ctx, orgRead)
+	totalsOnly := requireListSessions(t, orgReader, ti, payload(), func(res *gen.ListSessionsResult) bool {
+		return res.Scoped && res.Totals != nil && res.Totals.SessionCount == 2
+	})
+	require.Empty(t, totalsOnly.Sessions)
+	require.Nil(t, totalsOnly.NextCursor)
+	requireOrgTotals(t, totalsOnly.Totals)
+
+	// chat:read on one project: that project's rows, org-wide totals.
+	partialReader := authztest.WithExactGrants(t, ctx, orgRead, authz.NewGrant(authz.ScopeChatRead, projectID))
+	partial := requireListSessions(t, partialReader, ti, payload(), func(res *gen.ListSessionsResult) bool {
+		return res.Scoped && len(res.Sessions) == 1
+	})
+	require.Equal(t, ownProjectChat, partial.Sessions[0].GramChatID)
+	requireOrgTotals(t, partial.Totals)
+
+	// chat:read everywhere: every row, no totals block.
+	fullReader := authztest.WithExactGrants(t, ctx, sessionReaderGrants(authCtx)...)
+	full := requireListSessions(t, fullReader, ti, payload(), func(res *gen.ListSessionsResult) bool {
+		return !res.Scoped && len(res.Sessions) == 2
+	})
+	require.Nil(t, full.Totals)
+	require.Equal(t, otherProjectChat, full.Sessions[0].GramChatID)
+	require.Equal(t, ownProjectChat, full.Sessions[1].GramChatID)
+}
+
+// sessionReaderGrants is the grant shape that reads every session row in the
+// organization: org:read for the slice and an unrestricted chat:read for the
+// per-session rows.
+func sessionReaderGrants(authCtx *contextvalues.AuthContext) []authz.Grant {
+	return []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	}
 }
 
 func requireListSessions(

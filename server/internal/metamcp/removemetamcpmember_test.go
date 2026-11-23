@@ -161,11 +161,11 @@ func TestRemoveMetaMcpMember_DetachesProviderClient(t *testing.T) {
 	// Two members of the same gateway fronting the same upstream AS; the "one
 	// client per upstream per issuer" rule leaves exactly one binding.
 	firstServer := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, firstServer, remoteIssuerID, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "auto-detach-client-1"))
+	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, firstServer, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "auto-detach-client-1"))
 	firstMember := addMember(firstServer)
 
 	secondServer := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, secondServer, remoteIssuerID, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "auto-detach-client-2"))
+	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, secondServer, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "auto-detach-client-2"))
 	secondMember := addMember(secondServer)
 
 	require.Equal(t, 1, count(), "one client per upstream per issuer")
@@ -238,11 +238,11 @@ func TestRemoveMetaMcpMember_RetainsProviderForSharedIssuer(t *testing.T) {
 	}
 
 	serverA := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, serverA, remoteIssuerID, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "shared-client-a"))
+	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, serverA, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "shared-client-a"))
 	memberA := addMember(metaA.ID, serverA)
 
 	serverB := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWireMemberClient(t, ctx, ti.conn, projectID, serverB, remoteIssuerID, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "shared-client-b"))
+	stampAndWireMemberClient(t, ctx, ti.conn, projectID, orgID, serverB, createRemoteSessionClient(t, ctx, ti.conn, projectID, orgID, remoteIssuerID, "shared-client-b"))
 	addMember(metaB.ID, serverB)
 
 	require.Equal(t, 1, count(), "one client per upstream on the shared issuer")

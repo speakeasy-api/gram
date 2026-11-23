@@ -11,8 +11,16 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
+	"time"
 	"unicode/utf8"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -215,13 +223,20 @@ func (c *Client) PushFiles(ctx context.Context, installationID int64, owner, rep
 	return newCommitSHA, nil
 }
 
-// GetRepoFiles returns every file on the given branch as a path->content map,
-// using the Git Trees API (recursive) plus one blob fetch per file. Returns
+// repoFileFetchConcurrency bounds the parallel blob fetches in GetRepoFiles.
+// A publish is otherwise one sequential round trip per file, and GitHub's
+// secondary rate limits penalize bursts of concurrent requests, so keep this
+// modest.
+const repoFileFetchConcurrency = 8
+
+// GetRepoFiles returns the files on the given branch as a path->content map,
+// using the Git Trees API (recursive) plus one blob fetch per file. When
+// include is non-nil only paths it accepts are fetched and returned. Returns
 // ErrRepoNotFound if the repo or branch does not exist yet. The publish path
 // uses this to carry an unchanged plugin component (hooks or MCP) verbatim from
 // the existing repo into a fresh push, so publishing one component leaves the
 // other's files — including their embedded API keys — untouched.
-func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	treeURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "trees", branch)
 	treeURL += "?recursive=1"
 	resp, err := c.doAPI(ctx, installationID, http.MethodGet, treeURL, nil)
@@ -256,16 +271,29 @@ func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, 
 		return nil, fmt.Errorf("get tree: response truncated (repo too large)")
 	}
 
-	files := make(map[string][]byte, len(tree.Entries))
+	var (
+		mu    sync.Mutex
+		files = make(map[string][]byte, len(tree.Entries))
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(repoFileFetchConcurrency)
 	for _, entry := range tree.Entries {
-		if entry.Type != "blob" {
+		if entry.Type != "blob" || (include != nil && !include(entry.Path)) {
 			continue
 		}
-		content, err := c.getBlob(ctx, installationID, owner, repo, entry.SHA)
-		if err != nil {
-			return nil, fmt.Errorf("get blob %s: %w", entry.Path, err)
-		}
-		files[entry.Path] = content
+		g.Go(func() error {
+			content, err := c.getBlob(gctx, installationID, owner, repo, entry.SHA)
+			if err != nil {
+				return fmt.Errorf("get blob %s: %w", entry.Path, err)
+			}
+			mu.Lock()
+			files[entry.Path] = content
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("get repo files: %w", err)
 	}
 
 	return files, nil
@@ -364,25 +392,86 @@ func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, 
 	return result.Object.SHA, nil
 }
 
+// uploadTracer uses the explicitly configured provider even without a local
+// parent span. The parent-provider fallback supports lightweight test clients.
+func (c *Client) uploadTracer(ctx context.Context) trace.Tracer {
+	if c.tracer != nil {
+		return c.tracer
+	}
+	return trace.SpanFromContext(ctx).TracerProvider().Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/github")
+}
+
+// errTreeTimeout identifies GitHub's expensive inline-tree timeout, not other
+// 422 responses such as invalid paths. Only this failure enables a blob fallback.
+var errTreeTimeout = errors.New("GitHub tree creation timed out")
+
 func (c *Client) createTree(ctx context.Context, installationID int64, owner, repo string, files map[string][]byte) (string, error) {
-	treeEntries := make([]map[string]string, 0, len(files))
+	sha, err := c.createTreeAttempt(ctx, installationID, owner, repo, files, false)
+	if !errors.Is(err, errTreeTimeout) {
+		return sha, err
+	}
+	return c.createTreeAttempt(ctx, installationID, owner, repo, files, true)
+}
+
+func (c *Client) createTreeAttempt(ctx context.Context, installationID int64, owner, repo string, files map[string][]byte, blobsOnly bool) (string, error) {
+	ctx, span := c.uploadTracer(ctx).Start(ctx, "github.create_tree")
+	started := time.Now()
+	defer span.End()
+	defer func() {
+		span.SetAttributes(attribute.Int64("github.upload.duration_ms", time.Since(started).Milliseconds()))
+	}()
+
+	paths := make([]string, 0, len(files))
+	var totalBytes, largestFile int64
 	for path, content := range files {
-		// The Trees API treats `content` as UTF-8 text; binary content must be
-		// uploaded via the Blobs API and referenced by `sha`. Fail loudly here
-		// rather than silently corrupting binary files.
-		if !utf8.Valid(content) {
-			return "", fmt.Errorf("create tree: %q is not valid UTF-8 (binary content requires the Blobs API)", path)
-		}
-		mode := "100644"
-		if strings.HasSuffix(path, ".sh") {
-			mode = "100755"
-		}
-		treeEntries = append(treeEntries, map[string]string{
-			"path":    path,
-			"mode":    mode,
-			"type":    "blob",
-			"content": string(content),
+		paths = append(paths, path)
+		totalBytes += int64(len(content))
+		largestFile = max(largestFile, int64(len(content)))
+	}
+	slices.Sort(paths)
+	span.SetAttributes(
+		attribute.Int("github.upload.file_count", len(files)),
+		attribute.Int64("github.upload.total_bytes", totalBytes),
+		attribute.Int64("github.upload.largest_file_bytes", largestFile),
+	)
+
+	strategy := "inline"
+	if blobsOnly {
+		strategy = "blobs"
+	}
+	span.SetAttributes(attribute.String("github.upload.strategy", strategy))
+	// Keep the usual one-tree request for text. On GitHub's inline-tree timeout,
+	// move all contents to blobs so tree creation only has to process SHAs.
+	// Bound upload concurrency; a fallback is attempted only once per call.
+	treeEntries := make([]map[string]string, len(paths))
+	group, blobCtx := errgroup.WithContext(ctx)
+	group.SetLimit(4)
+	for i, path := range paths {
+		group.Go(func() error {
+			if err := blobCtx.Err(); err != nil {
+				return fmt.Errorf("blob upload canceled: %w", err)
+			}
+			mode := "100644"
+			if strings.HasSuffix(path, ".sh") {
+				mode = "100755"
+			}
+			entry := map[string]string{"path": path, "mode": mode, "type": "blob"}
+			if !blobsOnly && utf8.Valid(files[path]) {
+				entry["content"] = string(files[path])
+			} else {
+				sha, err := c.createBlob(blobCtx, installationID, owner, repo, files[path])
+				if err != nil {
+					return fmt.Errorf("create blob for %q: %w", path, err)
+				}
+				entry["sha"] = sha
+			}
+			treeEntries[i] = entry
+			return nil
 		})
+	}
+	if err := group.Wait(); err != nil {
+		span.SetStatus(codes.Error, "blob upload failed")
+		return "", fmt.Errorf("upload blobs: %w", err)
 	}
 
 	// Omit base_tree to build a clean tree from scratch. This ensures
@@ -392,17 +481,69 @@ func (c *Client) createTree(ctx context.Context, installationID int64, owner, re
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
+		span.SetStatus(codes.Error, "encode GitHub request failed")
 		return "", fmt.Errorf("marshal tree: %w", err)
 	}
 
+	span.SetAttributes(attribute.Int("github.upload.request_bytes", len(body)))
 	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "trees")
 	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
+		span.SetStatus(codes.Error, "GitHub request failed")
 		return "", err
 	}
+	span.SetAttributes(attribute.Int("http.response.status_code", resp.StatusCode))
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusCreated {
+		span.SetStatus(codes.Error, "GitHub rejected upload")
+		body := truncatedBody(resp)
+		if resp.StatusCode == http.StatusUnprocessableEntity && strings.Contains(strings.ToLower(body), "your request timed out") {
+			return "", fmt.Errorf("%w: status %d: %s", errTreeTimeout, resp.StatusCode, body)
+		}
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, body)
+	}
+
+	var result struct {
+		SHA string `json:"sha"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		span.SetStatus(codes.Error, "invalid GitHub response")
+		return "", fmt.Errorf("decode tree: %w", err)
+	}
+	return result.SHA, nil
+}
+
+// createBlob uploads content as a base64 blob and returns its SHA.
+func (c *Client) createBlob(ctx context.Context, installationID int64, owner, repo string, content []byte) (string, error) {
+	ctx, span := c.uploadTracer(ctx).Start(ctx, "github.create_blob")
+	defer span.End()
+	started := time.Now()
+	defer func() {
+		span.SetAttributes(attribute.Int64("github.upload.duration_ms", time.Since(started).Milliseconds()))
+	}()
+	span.SetAttributes(attribute.Int("github.upload.content_bytes", len(content)))
+	body, err := json.Marshal(map[string]string{
+		"content":  base64.StdEncoding.EncodeToString(content),
+		"encoding": "base64",
+	})
+	if err != nil {
+		span.SetStatus(codes.Error, "encode GitHub request failed")
+		return "", fmt.Errorf("marshal blob: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("github.upload.request_bytes", len(body)))
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "blobs")
+	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		span.SetStatus(codes.Error, "GitHub request failed")
+		return "", err
+	}
+	span.SetAttributes(attribute.Int("http.response.status_code", resp.StatusCode))
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusCreated {
+		span.SetStatus(codes.Error, "GitHub rejected upload")
 		return "", fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
 	}
 
@@ -410,7 +551,8 @@ func (c *Client) createTree(ctx context.Context, installationID int64, owner, re
 		SHA string `json:"sha"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode tree: %w", err)
+		span.SetStatus(codes.Error, "invalid GitHub response")
+		return "", fmt.Errorf("decode blob: %w", err)
 	}
 	return result.SHA, nil
 }

@@ -53,7 +53,7 @@ func updatedClientCredentialState(existing repo.RemoteSessionClient, method *str
 	return clientCredentialState{
 		owner:             CredentialOwner(existing.CredentialOwner),
 		method:            conv.PtrValOr(method, existing.TokenEndpointAuthMethod.String),
-		hasSecret:         newSecret || existing.ClientSecretEncrypted.Valid,
+		hasSecret:         newSecret || hasClientSecret(existing),
 		hasKeySet:         existing.JsonWebKeySetID.Valid,
 		legacyCallbackURL: conv.PtrValOr(legacyCallbackURL, existing.LegacyCallbackUrl),
 	}
@@ -88,6 +88,15 @@ func requireSelfClientCredential(state clientCredentialState) error {
 		return oops.E(oops.CodeBadRequest, nil, "a client with credential_owner self must authenticate at the token endpoint; use client_secret_basic, client_secret_post or private_key_jwt")
 	default:
 		return oops.E(oops.CodeBadRequest, nil, "a client with credential_owner self requires token_endpoint_auth_method client_secret_basic, client_secret_post or private_key_jwt")
+	}
+
+	return nil
+}
+
+// requireForwardClientNameOwner refuses the setting on a client with no user sign-in.
+func requireForwardClientNameOwner(owner CredentialOwner, forwardClientName *bool) error {
+	if owner == CredentialOwnerSelf && forwardClientName != nil && *forwardClientName {
+		return oops.E(oops.CodeBadRequest, nil, "a client with credential_owner self has no user sign-in, so it cannot send the MCP client's name")
 	}
 
 	return nil

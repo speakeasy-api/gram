@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	goahttp "goa.design/goa/v3/http"
+
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	toolsets_client "github.com/speakeasy-api/gram/server/gen/http/toolsets/client"
 	"github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	goahttp "goa.design/goa/v3/http"
 )
 
 type ToolsetsClientOptions struct {
@@ -38,12 +39,10 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 		h.GetToolset(),
 		h.ListToolFilters(),
 		h.ListToolSchemaStaticValues(),
-		h.CheckMCPSlugAvailability(),
 		h.CloneToolset(),
 		h.AddExternalOAuthServer(),
 		h.UpdateExternalOAuthServer(),
 		h.RemoveOAuthServer(),
-		h.SetUserSessionIssuer(),
 		h.SetToolVariationsGroup(),
 	)
 

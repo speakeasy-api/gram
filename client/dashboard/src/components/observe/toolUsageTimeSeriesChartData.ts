@@ -1,5 +1,6 @@
 import { formatChartLabel } from "@/components/chart/chartUtils";
 import {
+  OUTCOME,
   otherSeriesForTheme,
   SERIES,
   seriesForTheme,
@@ -39,7 +40,7 @@ export function pickTimeBucketMs(timeRangeMs: number): number {
   return TIME_BUCKET_STEPS_MS[TIME_BUCKET_STEPS_MS.length - 1]!;
 }
 
-export function bucketStartNsToMs(bucketStartNs: string): number | null {
+function bucketStartNsToMs(bucketStartNs: string): number | null {
   try {
     const ms = Number(BigInt(bucketStartNs) / 1_000_000n);
     return Number.isFinite(ms) ? ms : null;
@@ -185,4 +186,117 @@ export function buildToolUsageTimeSeries<
   });
 
   return { timestamps, labels, tooltipLabels, datasets, bucketMs };
+}
+
+/** The parts of a series point that split its calls by outcome. */
+export type ToolOutcomePoint = {
+  bucketStartNs: string;
+  eventCount: number;
+  failureCount: number;
+  blockedCount: number;
+  pendingCount: number;
+};
+
+/**
+ * Calls per bucket split by outcome, on the grid the caller has laid out:
+ * succeeded, failed, blocked and pending, each in its OUTCOME color, so every
+ * chart of the same calls paints the same outcome the same way. Order and
+ * color are fixed per outcome, never by rank, and an outcome with no calls
+ * gets no series (it would add a legend entry and tooltip line for nothing).
+ */
+export function toolOutcomeDatasets(
+  timeSeries: ToolOutcomePoint[],
+  grid: { fromMs: number; bucketMs: number; bucketCount: number },
+  pendingColor: string,
+): TimeSeriesDataset[] {
+  const { fromMs, bucketMs, bucketCount } = grid;
+  const zeros = () => Array.from<number>({ length: bucketCount }).fill(0);
+  const ok = zeros();
+  const failed = zeros();
+  const blocked = zeros();
+  const pending = zeros();
+  for (const point of timeSeries) {
+    const ms = bucketStartNsToMs(point.bucketStartNs);
+    if (ms === null) continue;
+    // The bucket containing `from` starts before it. Clamp rather than drop
+    // it, or the first bar of every window silently loses its events.
+    const index = Math.min(
+      Math.max(Math.floor((ms - fromMs) / bucketMs), 0),
+      bucketCount - 1,
+    );
+    const failures = Number(point.failureCount);
+    const blocks = Number(point.blockedCount);
+    const pends = Number(point.pendingCount);
+    // eventCount is every call in the bucket, so the successful remainder is
+    // what the three named outcomes leave behind.
+    ok[index] =
+      (ok[index] ?? 0) +
+      Math.max(Number(point.eventCount) - failures - blocks - pends, 0);
+    failed[index] = (failed[index] ?? 0) + failures;
+    blocked[index] = (blocked[index] ?? 0) + blocks;
+    pending[index] = (pending[index] ?? 0) + pends;
+  }
+  const series: [string, number[], string, string][] = [
+    ["Succeeded", ok, OUTCOME.ok, withAlpha(OUTCOME.ok, 0.8)],
+    ["Failed", failed, OUTCOME.failed, OUTCOME.failed],
+    ["Blocked", blocked, OUTCOME.blocked, OUTCOME.blocked],
+    ["Pending", pending, pendingColor, pendingColor],
+  ];
+  return series
+    .filter(([, data]) => data.some((value) => value > 0))
+    .map(([label, data, color, hover]) => ({
+      label,
+      data,
+      backgroundColor: color,
+      hoverBackgroundColor: hover,
+      stack: "total",
+      maxBarThickness: 32,
+    }));
+}
+
+/**
+ * Calls over time split by outcome, on the same dense grid and labels as
+ * buildToolUsageTimeSeries.
+ */
+export function buildToolOutcomeTimeSeries(
+  timeSeries: ToolOutcomePoint[],
+  from: Date,
+  to: Date,
+  pendingColor: string,
+): {
+  timestamps: number[];
+  labels: string[];
+  tooltipLabels: string[];
+  datasets: TimeSeriesDataset[];
+  bucketMs: number;
+} {
+  const fromMs = from.getTime();
+  const timeRangeMs = Math.max(to.getTime() - fromMs, HOUR_MS);
+  const bucketMs = pickTimeBucketMs(timeRangeMs);
+  const bucketCount = Math.floor(timeRangeMs / bucketMs) + 1;
+  const datasets = toolOutcomeDatasets(
+    timeSeries,
+    { fromMs, bucketMs, bucketCount },
+    pendingColor,
+  );
+  if (datasets.length === 0) {
+    return {
+      timestamps: [],
+      labels: [],
+      tooltipLabels: [],
+      datasets: [],
+      bucketMs,
+    };
+  }
+  const timestamps = Array.from(
+    { length: bucketCount },
+    (_, i) => fromMs + i * bucketMs,
+  );
+  return {
+    timestamps,
+    labels: timestamps.map((ts) => formatChartLabel(new Date(ts), timeRangeMs)),
+    tooltipLabels: timestamps.map((ts) => formatTooltipLabel(ts, bucketMs)),
+    datasets,
+    bucketMs,
+  };
 }

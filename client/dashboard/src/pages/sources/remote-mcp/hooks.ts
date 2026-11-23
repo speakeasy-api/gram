@@ -16,6 +16,8 @@ import { invalidateAllGetRemoteMcpServer } from "@gram/client/react-query/getRem
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
+import { invalidateAllShadowMCPInventoryServer } from "@gram/client/react-query/shadowMCPInventoryServer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import {
   useMutation,
@@ -33,7 +35,6 @@ export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
   url: string;
   userSessionIssuerId?: string | undefined;
-  organizationOwnedUserSessionIssuer?: boolean | undefined;
   identityMode: RemoteMcpCreationIdentity;
   agentAuthorization?: string;
 };
@@ -60,7 +61,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
       identityMode,
       agentAuthorization,
       userSessionIssuerId,
-      organizationOwnedUserSessionIssuer,
     }) => {
       const { remoteMcpServer, mcpServer } =
         await client.remoteMcp.createServerAndMcpServer({
@@ -78,7 +78,6 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         mcpServer,
         identityMode,
         agentAuthorization,
-        organizationOwnedUserSessionIssuer,
       });
       const configuredMcpServer =
         identityConfiguration.status === "configured"
@@ -110,6 +109,10 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         // Creation either links an existing issuer or mints a project issuer,
         // so refresh the effective list in both cases.
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        // Shadow MCP offers a server that proxies the same URL as the one to
+        // link, so a new server can change what its pages suggest.
+        invalidateAllShadowMCPInventory(queryClient),
+        invalidateAllShadowMCPInventoryServer(queryClient),
       ];
       // The issuer/client caches only change when explicit identity setup ran
       // to completion; an incomplete setup leaves them untouched, so don't

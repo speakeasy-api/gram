@@ -3,7 +3,10 @@ package authz
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
+	"strings"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -11,128 +14,110 @@ import (
 // {"resource_kind":"project","resource_id":"proj_123"}.
 // Wildcard uses {"resource_kind":"*","resource_id":"*"}.
 // For a grant selector to match a check selector, every key in the grant must
-// either equal the corresponding check value or be the wildcard "*".
+// be carried by the check and either equal its value or be the wildcard "*".
+// The registry names the few keys a check may leave out (Check.mayOmit).
 type Selector map[string]string
 
-const (
-	SelectorKeyResourceKind   = "resource_kind"
-	SelectorKeyResourceID     = "resource_id"
-	SelectorKeyTool           = "tool"
-	SelectorKeyDisposition    = "disposition"
-	SelectorKeyProjectID      = "project_id"
-	SelectorKeyServerURL      = "server_url"
-	SelectorKeyServerIdentity = "server_identity"
-)
+// The SelectorKey*, AuthClientType* and Disposition* names are generated from
+// the registry into selectors_gen.go.
 
-// Matches reports whether this (grant) selector satisfies the given check
-// selector. A nil/empty grant selector matches any check (defensive fallback).
-// For each key present in BOTH the grant and check selectors, the values must
-// be equal or the grant value must be "*". Keys present in the grant but absent
-// from the check are skipped — the check is not constraining that dimension.
-// This allows disposition-scoped grants (e.g. {"disposition":"read_only"}) to
-// match connection-level checks that don't yet specify a disposition.
-func (s Selector) Matches(check Selector) bool {
-	for k, grantVal := range s {
-		checkVal, ok := check[k]
-		if !ok {
-			// Check doesn't constrain this dimension — skip.
-			continue
-		}
-		if grantVal != "*" && grantVal != checkVal {
-			return false
-		}
+// SelectorValueRepresentedUser is the connection_owner value naming the user a
+// request acts for. The engine binds it; checks never carry it.
+const SelectorValueRepresentedUser = "$represented_user"
+
+// IsSharedAuthClientType reports whether clientType serves every caller with
+// one credential that belongs to nobody, as opposed to a person's own
+// connection or identity-provider sign-in.
+func IsSharedAuthClientType(clientType string) bool {
+	switch clientType {
+	case AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough:
+		return true
 	}
-	return true
+	return false
 }
 
-// StrictMatches is like Matches but requires every key in the grant selector
-// to be present in the check selector. Exclusion scopes use strict matching so
-// a tool-scoped exclusion does not match a dimensionless server-level check.
+// IsAgentKeyAuthClientType reports whether an agent key can be set up to use
+// clientType: a shared credential that needs nothing from the caller's
+// request, since the agent gateway does not carry the caller's headers to its
+// servers.
+func IsAgentKeyAuthClientType(clientType string) bool {
+	return IsSharedAuthClientType(clientType) && clientType != AuthClientTypePassThrough
+}
+
+// StrictMatches reports whether this (grant) selector covers the given check
+// selector: every key the grant names must be present in the check with an
+// equal value, or the grant value must be "*". A key the check omits never
+// matches, so a tool-scoped exclusion does not match a server-level check.
 func (s Selector) StrictMatches(check Selector) bool {
+	return s.strictMatches(check, "")
+}
+
+// StrictMatchesFor is StrictMatches with $represented_user bound to
+// representedUser on either side. An empty representedUser binds nothing, so
+// the marker matches only itself.
+func (s Selector) StrictMatchesFor(check Selector, representedUser string) bool {
+	return s.strictMatches(check, representedUser)
+}
+
+func (s Selector) strictMatches(check Selector, representedUser string) bool {
 	for k, grantVal := range s {
 		checkVal, ok := check[k]
 		if !ok {
 			return false
 		}
-		if grantVal != "*" && grantVal != checkVal {
+		if !selectorValueMatches(k, grantVal, checkVal, representedUser) {
 			return false
 		}
 	}
 	return true
 }
 
-// ResourceKindForScope derives the selector resource kind from a scope.
+// selectorValueMatches compares one grant value with one check value. Without a
+// binding, $represented_user matches only itself, as containment needs. With
+// one, the marker and the bound user are the same owner on either side, so a
+// symbolic candidate is contained by a grant pinned to the represented user.
+func selectorValueMatches(key, grantVal, checkVal, representedUser string) bool {
+	if grantVal == "*" || grantVal == checkVal {
+		return true
+	}
+	if key != SelectorKeyConnectionOwner || representedUser == "" {
+		return false
+	}
+	return (grantVal == SelectorValueRepresentedUser && checkVal == representedUser) ||
+		(checkVal == SelectorValueRepresentedUser && grantVal == representedUser)
+}
+
+// ResourceKindForScope returns the selector resource kind of a scope: the kind
+// the registry declares it on, or, for a scope the model does not know, the kind its
+// prefix has always meant.
 func ResourceKindForScope(scope Scope) string {
-	switch scope.Parts().Resource {
-	case "project", "plugin", "log":
+	if kind, ok := scopeResourceKinds[scope]; ok {
+		return kind
+	}
+	return legacyResourceKindForScope(scope)
+}
+
+// legacyResourceKindForScope keeps today's answer for scopes outside the
+// model, such as retired ones still stored in old policies.
+func legacyResourceKindForScope(scope Scope) string {
+	prefix := scope.Parts().Resource
+	switch prefix {
+	case "plugin", "log":
 		return ResourceKindProject
 	case "remote-mcp":
 		return ResourceKindMCP
-	case "mcp":
-		return ResourceKindMCP
-	case "org":
-		return ResourceKindOrg
-	case "environment":
-		return ResourceKindEnvironment
-	case "skill":
-		return ResourceKindSkill
-	case "assistant":
-		return ResourceKindAssistant
-	case "risk_policy":
-		return ResourceKindRiskPolicy
-	case "chat":
-		return ResourceKindChat
-	case "agent":
-		return ResourceKindAgent
-	case "workload":
-		return ResourceKindWorkload
-	default:
-		return ResourceKindWildcard
 	}
+	if declaredResourceKinds[prefix] && prefix != ResourceKindMCPAuthClient {
+		return prefix
+	}
+	return ResourceKindWildcard
 }
 
-// Disposition values matching MCP tool annotation hint names (snake_case, no _hint suffix).
-const (
-	DispositionReadOnly    = "read_only"
-	DispositionDestructive = "destructive"
-	DispositionIdempotent  = "idempotent"
-	DispositionOpenWorld   = "open_world"
-)
-
-// validDispositions is the set of allowed disposition values.
-var validDispositions = map[string]bool{
-	DispositionReadOnly:    true,
-	DispositionDestructive: true,
-	DispositionIdempotent:  true,
-	DispositionOpenWorld:   true,
-}
-
-// allowedSelectorKeys defines which extra keys (beyond resource_kind and
-// resource_id) are valid for each scope family. Scope families not listed here
-// allow no extra keys, except where scopeAllowsSelectorKey admits one for a
-// single scope.
-var allowedSelectorKeys = map[string]map[string]bool{
-	ResourceKindMCP: {
-		SelectorKeyTool:        true,
-		SelectorKeyDisposition: true,
-		SelectorKeyProjectID:   true,
-	},
-	ResourceKindEnvironment: {
-		SelectorKeyProjectID: true,
-	},
-	ResourceKindAssistant: {
-		SelectorKeyProjectID: true,
-	},
-	ResourceKindRiskPolicy: {
-		SelectorKeyServerURL:      true,
-		SelectorKeyServerIdentity: true,
-	},
-}
-
-// scopeAllowsSelectorKey allows project_id on org:hooks_ingest only: it is the
-// one org scope checked per project, and elsewhere the key would restrict nothing.
+// scopeAllowsSelectorKey reports whether a single permission declares key
+// beyond its type's dimensions. Today that is project_id on org:hooks_ingest,
+// the one org scope checked per project.
 func scopeAllowsSelectorKey(scope Scope, key string) bool {
-	return scope == ScopeOrgHooksIngest && key == SelectorKeyProjectID
+	return scopeSelectorKeys[scope][key]
 }
 
 // ValidateSelector checks that a selector is well-formed for the given scope.
@@ -167,8 +152,25 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		return fmt.Errorf("scope %q requires resource_kind=%q, got %q", scope, expectedKind, kind)
 	}
 
+	if scope == ScopeInferenceExecute {
+		if sel[SelectorKeyResourceID] != WildcardResource {
+			return fmt.Errorf("scope %q requires resource_id=%q", scope, WildcardResource)
+		}
+		if projectID, ok := sel[SelectorKeyProjectID]; ok && projectID == "" {
+			return fmt.Errorf("selector key %q must not be empty", SelectorKeyProjectID)
+		}
+	}
+
 	allowed := allowedSelectorKeys[expectedKind]
 	for k, v := range sel {
+		if v == SelectorValueRepresentedUser && k != SelectorKeyConnectionOwner {
+			return fmt.Errorf("selector value %q is only allowed for %q", SelectorValueRepresentedUser, SelectorKeyConnectionOwner)
+		}
+		// Checked before resource keys are skipped: an empty auth client ID
+		// could never authorize a check.
+		if expectedKind == ResourceKindMCPAuthClient && v == "" {
+			return fmt.Errorf("selector key %q must not be empty", k)
+		}
 		if k == SelectorKeyResourceKind || k == SelectorKeyResourceID {
 			continue
 		}
@@ -177,6 +179,14 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {
 			return fmt.Errorf("invalid disposition value %q", v)
+		}
+		if k == SelectorKeyClientType && v != WildcardResource && !validAuthClientTypes[v] {
+			return fmt.Errorf("invalid client_type value %q", v)
+		}
+		if k == SelectorKeyConnectionOwner || k == SelectorKeyUpstreamClient {
+			if clientType, ok := sel[SelectorKeyClientType]; ok && clientType != WildcardResource && clientType != AuthClientTypeRemoteSession {
+				return fmt.Errorf("selector key %q requires client_type %q", k, AuthClientTypeRemoteSession)
+			}
 		}
 		if k == SelectorKeyServerURL {
 			parsed, err := url.Parse(v)
@@ -203,6 +213,7 @@ func NewGrant(scope Scope, resourceID string) Grant {
 		PrincipalUrn: "",
 		Scope:        scope,
 		Selector:     NewSelector(scope, resourceID),
+		Inferred:     false,
 	}
 }
 
@@ -212,6 +223,7 @@ func NewGrantWithSelector(scope Scope, selector Selector) Grant {
 		PrincipalUrn: "",
 		Scope:        scope,
 		Selector:     selector,
+		Inferred:     false,
 	}
 }
 
@@ -247,6 +259,42 @@ func (s Selector) IsRestricted() bool {
 	return kind != WildcardResource || id != WildcardResource
 }
 
+// CoversEveryResource reports whether the selector names every resource of
+// its kind: a wildcard resource id and no narrowing dimension such as a
+// project, tool or server URL. Unlike IsRestricted, a wildcard confined to one
+// resource kind still counts, since that is how an unrestricted grant of a
+// scope is stored.
+func (s Selector) CoversEveryResource() bool {
+	for selectorKey, value := range s {
+		switch selectorKey {
+		case SelectorKeyResourceKind:
+		case SelectorKeyResourceID:
+			if value != WildcardResource {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// Key is a canonical text form of the selector: two selectors that name the
+// same resource the same way have the same key, whatever order their
+// dimensions were set in.
+func (s Selector) Key() string {
+	var b strings.Builder
+	for i, key := range slices.Sorted(maps.Keys(s)) {
+		if i > 0 {
+			b.WriteByte(';')
+		}
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(s[key])
+	}
+	return b.String()
+}
+
 // SelectorFromRow parses the selectors JSONB column into a Selector.
 func SelectorFromRow(selectors []byte) (Selector, error) {
 	var sel Selector
@@ -267,4 +315,40 @@ func (s Selector) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("marshal selector: %w", err)
 	}
 	return b, nil
+}
+
+// Dispositions lists every disposition a tool call can carry, sorted.
+func Dispositions() []string {
+	return slices.Sorted(maps.Keys(validDispositions))
+}
+
+// DispositionFromHints classifies a tool by its annotation hints into the one
+// disposition a tool call carries. Every caller that authorizes calling or
+// listing a tool uses it, so both see the same value.
+//
+//   - read-only, unless the tool is also destructive;
+//   - destructive;
+//   - idempotent;
+//   - open-world;
+//   - unannotated when no hint is true, including when there are none.
+//
+// A tool that says it is both read-only and destructive is classified
+// destructive, the reading that grants less, and conflicting reports it so the
+// caller can log it.
+func DispositionFromHints(readOnly, destructive, idempotent, openWorld *bool) (disposition string, conflicting bool) {
+	isTrue := func(hint *bool) bool { return hint != nil && *hint }
+	switch {
+	case isTrue(readOnly) && isTrue(destructive):
+		return DispositionDestructive, true
+	case isTrue(readOnly):
+		return DispositionReadOnly, false
+	case isTrue(destructive):
+		return DispositionDestructive, false
+	case isTrue(idempotent):
+		return DispositionIdempotent, false
+	case isTrue(openWorld):
+		return DispositionOpenWorld, false
+	default:
+		return DispositionUnannotated, false
+	}
 }

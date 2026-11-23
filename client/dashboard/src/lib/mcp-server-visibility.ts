@@ -11,6 +11,9 @@ import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
 import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus.js";
+import { invalidateAllGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import type { QueryClient } from "@tanstack/react-query";
 
 /**
@@ -70,5 +73,9 @@ export async function invalidateMcpServerQueries(
     invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
     invalidateAllPlugins(queryClient, { refetchType: "all" }),
     invalidateAllPublishStatus(queryClient, { refetchType: "all" }),
+    // A hosted server's visibility writes through to its toolset and billing counts.
+    invalidateAllToolset(queryClient, { refetchType: "all" }),
+    invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+    invalidateAllGetPeriodUsage(queryClient, { refetchType: "all" }),
   ]);
 }

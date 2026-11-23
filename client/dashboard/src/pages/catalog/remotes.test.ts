@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -7,8 +8,9 @@ import {
   filterToHttpRemotes,
   isFigmaCatalogServer,
   normalizeRemoteUrl,
+  getRemoteDisplayInfo,
 } from "./remotes";
-import type { PulseMCPServer } from "./hooks";
+import type { CatalogServer } from "./hooks";
 
 function remote(
   url: string,
@@ -31,7 +33,7 @@ function remote(
 function server(
   remotes: ExternalMCPRemote[],
   registrySpecifier = "test/server",
-): PulseMCPServer {
+): CatalogServer {
   return {
     description: "test",
     registrySpecifier,
@@ -238,5 +240,26 @@ describe("catalogHeadersForRemoteUrl", () => {
         "https://other.example/mcp",
       ),
     ).toEqual([]);
+  });
+});
+
+describe("Salesforce endpoint environment labels", () => {
+  it.each([
+    ["platform/sobject-reads", "SObject Reads · Production"],
+    ["sandbox/platform/sobject-reads", "SObject Reads · Sandbox"],
+    ["data/data360", "Data360 · Production"],
+    ["data/sandbox/data360", "Data360 · Sandbox"],
+    ["platform/headless-360", "Headless 360 · Production"],
+    ["sandbox/analytics/tableau-next", "Tableau Next · Sandbox"],
+  ])("identifies the environment for %s", (path, name) => {
+    expect(
+      getRemoteDisplayInfo(`https://api.salesforce.com/platform/mcp/v1/${path}`)
+        .name,
+    ).toBe(name);
+  });
+  it("preserves unrelated remote labels", () => {
+    expect(
+      getRemoteDisplayInfo("https://example.test/platform/sobject-reads").name,
+    ).toBe("SObject Reads");
   });
 });

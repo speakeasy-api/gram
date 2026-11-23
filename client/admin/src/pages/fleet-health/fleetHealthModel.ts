@@ -59,10 +59,9 @@ export async function fetchFleetHealth(refresh: boolean): Promise<FleetHealth> {
 
 export const fleetHealthQuery = {
   queryKey: ["fleet-health"],
-  // The server keeps the grids for a day and refreshes them in the background
-  // once an hour old, so a cached reload returns at once. Only a first visit,
-  // or one after 24 hours without any, waits on ClickHouse. Refresh asks the
-  // server for a fresh read instead.
+  // The server warms the default window nightly and retains snapshots for
+  // two days. Reads return cached data immediately and refresh it in the
+  // background once an hour old. A cache miss or Refresh reads ClickHouse.
   queryFn: (): Promise<FleetHealth> => fetchFleetHealth(false),
   staleTime: 5 * 60 * 1000,
   refetchOnWindowFocus: false,

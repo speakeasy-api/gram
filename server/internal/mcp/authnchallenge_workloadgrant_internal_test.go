@@ -12,8 +12,15 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
@@ -24,6 +31,20 @@ const workloadGrantTestIssuer = "https://idp.example.test"
 
 // failingWorkloadKeys answers every key lookup with err.
 type failingWorkloadKeys struct{ err error }
+
+type failingFeatureProvider struct{ err error }
+
+func (p failingFeatureProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+	return false, p.err
+}
+
+func (p failingFeatureProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
+	return false, p.err
+}
+
+func (p failingFeatureProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+	return nil, p.err
+}
 
 func (k failingWorkloadKeys) VerificationKeyForAlgorithm(context.Context, jwks.Source, string, jose.SignatureAlgorithm) (*jose.JSONWebKey, error) {
 	return nil, k.err
@@ -102,4 +123,78 @@ func TestAdmitWorkloadAssertion_UnknownKeyIsRefused(t *testing.T) {
 	require.True(t, ok, "%v", err)
 	require.Equal(t, workloadGrantRefused, refusal.outcome)
 	require.Equal(t, string(workload.ReasonKeyUnknown), refusal.reason)
+}
+
+func TestWorkloadAssertionPolicyRejectsChangedVerificationSource(t *testing.T) {
+	t.Parallel()
+	issuer := workloadidentity_repo.WorkloadIssuer{ID: uuid.New(), JwksUri: "https://issuer.example/keys", AllowAssertionReuse: pgtype.Bool{Bool: true, Valid: true}}
+	verified := presentedWorkload{issuerID: issuer.ID, jwksURI: issuer.JwksUri, allowAssertionReuse: true}
+	require.True(t, workloadAssertionPolicyMatches(issuer, verified))
+	issuer.JwksUri = "https://issuer.example/replacement-keys"
+	require.False(t, workloadAssertionPolicyMatches(issuer, verified), "an update committed before the issuance snapshot must invalidate earlier verification")
+}
+
+func TestRecheckWorkloadGrantStoredGatewayRequiresCurrentRollout(t *testing.T) {
+	t.Parallel()
+	organizationID := "test-org"
+	flags := new(feature.InMemory)
+	service := &Service{features: flags, logger: testenv.NewLogger(t)}
+	endpoint := &ResolvedMcpEndpoint{
+		OrganizationID:      organizationID,
+		ProjectID:           uuid.New(),
+		UserSessionIssuerID: uuid.New(),
+		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.New(), Valid: true},
+	}
+	grant := workloadGrantIssuance{endpoint: endpoint}
+
+	require.ErrorIs(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant), errGatewayMachineAccessDisabled)
+	lookupErr := errors.New("flag lookup failed")
+	service.features = failingFeatureProvider{err: lookupErr}
+	err := service.recheckWorkloadGrantAuthorization(t.Context(), grant)
+	require.ErrorIs(t, err, lookupErr)
+	refusal, ok := errors.AsType[*workloadGrantError](err)
+	require.True(t, ok)
+	require.Equal(t, workloadGrantUnavailable, refusal.outcome)
+	service.features = flags
+	flags.SetFlag(feature.FlagStoredGatewayMachineAccess, organizationID, true)
+	require.NoError(t, service.recheckWorkloadGrantAuthorization(t.Context(), grant))
+}
+
+func TestRecheckWorkloadGrantInferenceUsesFreshPoliciesWithoutChallengeLogging(t *testing.T) {
+	t.Parallel()
+	project := uuid.New()
+	engine := authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) {
+		t.Error("transactional recheck must not publish challenge logs through the pool")
+		return true, nil
+	}, nil)
+	service := &Service{authz: engine}
+	grant := workloadGrantIssuance{session: sessionIssuance{ProjectID: project, Audience: InferenceResource}}
+	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{UserID: "owner", ActiveOrganizationID: "test-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, "owner"))
+	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
+	allow := []authz.Grant{authz.NewGrant(authz.ScopeInferenceExecute, project.String())}
+	for _, revoked := range []string{"none", "ceiling", "agent", "owner"} {
+		t.Run(revoked, func(t *testing.T) {
+			t.Parallel()
+			admission := authz.WorkloadSessionAdmission{AgentPrincipal: urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()).String(), OwnerUserID: "owner", Ceiling: allow, Agent: allow, Owner: allow}
+			switch revoked {
+			case "ceiling":
+				admission.Ceiling = nil
+			case "agent":
+				admission.Agent = nil
+			case "owner":
+				admission.Owner = nil
+			}
+			admitter := authz.NewEngine(testenv.NewLogger(t), nil, nil, nil, authz.EngineOpts{
+				AdmitWorkloadSessionInTx: func(context.Context, pgx.Tx) (authz.WorkloadSessionAdmission, error) { return admission, nil },
+			})
+			fresh, err := admitter.AdmitWorkloadSessionInTx(ctx, nil)
+			require.NoError(t, err)
+			err = service.recheckWorkloadGrantAuthorization(fresh, grant)
+			if revoked == "none" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errCredentialRejected)
+			}
+		})
+	}
 }

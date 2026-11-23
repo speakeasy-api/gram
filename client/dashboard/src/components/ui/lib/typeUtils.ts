@@ -1,15 +1,14 @@
-import {
+import type {
   Breakpoint,
-  breakpoints,
   Direction,
   PaddingPerAxis,
   PaddingPerSide,
   PaddingPerSides,
   ResponsiveValue,
   Size,
-  sizes,
 } from "@/components/ui/lib/types";
-import { Group } from "@/components/ui/Table";
+import { breakpoints, sizes } from "@/components/ui/lib/types";
+import type { Group } from "@/components/ui/Table";
 
 /**
  * Create a range of numbers from 0 to N

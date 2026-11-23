@@ -19,7 +19,7 @@ func TestFindRepoRootCurrentCheckout(t *testing.T) {
 	require.DirExists(t, filepath.Join(root, "functions", "cmd", "runner"))
 }
 
-func TestFindRepoRootNestedModuleInWorktree(t *testing.T) { //nolint:paralleltest // changes the process working directory
+func TestFindRepoRootNestedModuleInWorktree(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module github.com/speakeasy-api/gram\n"), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: /unused/worktree\n"), 0600))
@@ -34,7 +34,7 @@ func TestFindRepoRootNestedModuleInWorktree(t *testing.T) { //nolint:paralleltes
 	require.Equal(t, want, got)
 }
 
-func TestFindRepoRootOutsideCheckout(t *testing.T) { //nolint:paralleltest // changes the process working directory
+func TestFindRepoRootOutsideCheckout(t *testing.T) {
 	t.Chdir(t.TempDir())
 	_, err := testenv.FindRepoRoot(t.Context())
 	require.ErrorContains(t, err, "no matching go.mod")

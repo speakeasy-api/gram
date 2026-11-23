@@ -6,16 +6,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
 import { cn, firstPartyHosts } from "@/lib/utils";
-import { ToolCallMessagePartProps } from "@assistant-ui/react";
+import type { ToolCallMessagePartProps } from "@assistant-ui/react";
 import { Icon } from "@/components/ui/Icon";
-import {
-  Check,
-  Copy,
-  ExternalLink,
-  Loader2,
-  Shuffle,
-  Sparkles,
-} from "lucide-react";
+import { Check, Copy, ExternalLink, Shuffle, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAssistantDraft } from "../useAssistantDraft";
 import {
@@ -34,6 +27,7 @@ import {
   type SlackReplyMode,
 } from "../slackCapabilities";
 import { SlackReplyModeOptions } from "../SlackReplyModeOptions";
+import { Spinner } from "@/components/ui/Spinner";
 
 type Status = ToolCallMessagePartProps["status"];
 
@@ -241,9 +235,7 @@ export function RequestEnvironmentSecretsComponent({
           onClick={() => void submit()}
           disabled={!anyFilled || submitting}
         >
-          {submitting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : null}
+          {submitting ? <Spinner /> : null}
           Save secrets
         </Button>
       </div>

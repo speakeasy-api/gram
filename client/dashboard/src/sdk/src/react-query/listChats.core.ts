@@ -57,6 +57,7 @@ export function buildListChatsQuery(
       userId: request?.userId,
       source: request?.source,
       assistantId: request?.assistantId,
+      agentId: request?.agentId,
       sourceKind: request?.sourceKind,
       excludeSourceKind: request?.excludeSourceKind,
       hasRisk: request?.hasRisk,
@@ -69,6 +70,7 @@ export function buildListChatsQuery(
       offset: request?.offset,
       sortBy: request?.sortBy,
       sortOrder: request?.sortOrder,
+      pinnedFirst: request?.pinnedFirst,
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
       gramChatSession: request?.gramChatSession,
@@ -102,6 +104,7 @@ export function queryKeyListChats(
     userId?: string | undefined;
     source?: string | undefined;
     assistantId?: string | undefined;
+    agentId?: string | undefined;
     sourceKind?: string | undefined;
     excludeSourceKind?: string | undefined;
     hasRisk?: HasRisk | undefined;
@@ -114,6 +117,7 @@ export function queryKeyListChats(
     offset?: number | undefined;
     sortBy?: SortBy | undefined;
     sortOrder?: SortOrder | undefined;
+    pinnedFirst?: boolean | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
     gramChatSession?: string | undefined;

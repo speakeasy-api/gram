@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -56,6 +58,7 @@ func TestGetStripeSubscriptionCandidate_ReturnsDetailsWithoutWriting(t *testing.
 		OrganizationID: "org_sub_preview", StripeSubscriptionID: "sub_preview_1",
 	})
 	require.NoError(t, err)
+	require.Equal(t, [][]stripeclient.GetSubscriptionOption{{stripeclient.RequireAdoptionEligibility}}, fake.subscriptionLookupOptions)
 	require.Equal(t, "sub_preview_1", result.ID)
 	require.Equal(t, "cus_preview_sub", result.CustomerID)
 	require.Equal(t, "active", result.Status)
@@ -159,7 +162,7 @@ func TestStripeSubscriptionEndpoints_RejectIneligibleOrganizationsBeforeLookup(t
 	t.Parallel()
 	ctx, svc, conn := newTestAdminService(t)
 	fake := enableStripeCustomerLookup(svc)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_sub_free", name: "Free", slug: "sub-free", accountType: "free"})
+	seedOrg(t, ctx, conn, orgFixture{id: "org_sub_free", name: "Enterprise", slug: "sub-free", accountType: "enterprise"})
 	require.NoError(t, usagerepo.New(conn).CreateStripeBillingMetadataFixture(ctx, usagerepo.CreateStripeBillingMetadataFixtureParams{
 		OrganizationID: "org_sub_free", StripeCustomerID: conv.ToPGText("cus_free"),
 	}))
@@ -178,7 +181,7 @@ func TestStripeSubscriptionEndpoints_RejectIneligibleOrganizationsBeforeLookup(t
 		name           string
 		organizationID string
 	}{
-		{name: "not payg", organizationID: "org_sub_free"},
+		{name: "paid enterprise", organizationID: "org_sub_free"},
 		{name: "missing customer", organizationID: "org_sub_nocustomer"},
 		{name: "existing subscription", organizationID: "org_sub_existing"},
 	}
@@ -258,7 +261,7 @@ func TestSetStripeSubscription_RejectsSubscriptionOwnedByAnotherOrganization(t *
 	require.Equal(t, "sub_taken", owner.StripeSubscriptionID.String)
 }
 
-func TestSetStripeSubscription_RejectsRetryAfterSuccess(t *testing.T) {
+func TestSetStripeSubscription_RetryAfterSuccessIsIdempotent(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn := newTestAdminService(t)
 	fake := enableStripeCustomerLookup(svc)
@@ -273,8 +276,7 @@ func TestSetStripeSubscription_RejectsRetryAfterSuccess(t *testing.T) {
 	_, err = svc.SetStripeSubscription(ctx, &gen.SetStripeSubscriptionPayload{
 		OrganizationID: "org_sub_retry", StripeSubscriptionID: "sub_retry",
 	})
-	requireOopsCode(t, err, oops.CodeConflict)
-	require.Equal(t, 2, fake.subscriptionLookupCount())
+	require.NoError(t, err)
 }
 
 func TestSetStripeSubscription_RejectsSubscriptionGoneAfterLock(t *testing.T) {
@@ -301,6 +303,8 @@ func TestSetStripeSubscription_ConcurrentAssignmentsOnlyOneSucceeds(t *testing.T
 	ctx, svc, conn := newTestAdminService(t)
 	fake := enableStripeCustomerLookup(svc)
 	seedPaygCustomer(t, ctx, conn, "org_sub_race", "sub-race", "cus_race")
+	require.NoError(t, adminrepo.New(conn).AdminUpdateOrganization(ctx, adminrepo.AdminUpdateOrganizationParams{ID: "org_sub_race", AccountType: conv.ToPGText("free")}))
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, "org_sub_race"))
 	fake.subscriptionCustomerID = "cus_race"
 
 	start := make(chan struct{})

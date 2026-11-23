@@ -13,15 +13,12 @@ import {
   FooterSaveButton,
 } from "@/components/detail/settings-section";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Text } from "@/components/ui/Text";
+import { RadioRows } from "@/lib/remote-identity/components/RadioRows";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 export function GatewayDiscoverySection({
   metaMcpServer,
@@ -31,6 +28,23 @@ export function GatewayDiscoverySection({
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
   const [mode, setMode] = useState(metaMcpServer.discoveryMode);
+  const organization = useOrganization();
+  const features = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  // Code Mode is rolled out per organization by Speakeasy. Organizations
+  // without it still see it, disabled, so they know to ask for it. Only a
+  // successful read says the organization is not enabled; while the read is
+  // loading or failed (members without org:read), the gateway's own
+  // availability decides.
+  const entitlementKnown = features.data !== undefined;
+  const notEnabled = features.data?.codeModeEnabled === false;
+  // Code Mode is never offered to anonymous callers.
+  const requiresSignIn = !metaMcpServer.userSessionIssuerId;
+  const codeModeSelectable =
+    metaMcpServer.codeModeEnabled === true && !notEnabled;
   const supportsEditing = isKnownEnumValue(
     UpdateMetaMcpServerFormDiscoveryMode,
     metaMcpServer.discoveryMode,
@@ -57,47 +71,84 @@ export function GatewayDiscoverySection({
           Tool discovery <ReleaseStageBadge stage="preview" />
         </SettingsSection.Title>
         <SettingsSection.Description>
-          Progressive discovers tools as needed. Direct lists every available
-          tool and works with clients that cannot discover tools progressively.
+          How agents find this gateway&apos;s tools.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <Field
             data-invalid={update.isError || undefined}
-            className="max-w-md"
+            className="max-w-xl"
           >
-            <FieldLabel htmlFor="gateway-discovery-mode">
-              Default mode
-            </FieldLabel>
-            <Select
-              value={supportsEditing && knownDraft ? mode : ""}
+            <FieldLabel>Default mode</FieldLabel>
+            <RadioRows
+              label="Default mode"
+              value={supportsEditing && knownDraft ? mode : null}
               onValueChange={(value) => {
                 if (
                   canWrite &&
                   supportsEditing &&
                   !update.isPending &&
-                  isKnownEnumValue(UpdateMetaMcpServerFormDiscoveryMode, value)
+                  isKnownEnumValue(
+                    UpdateMetaMcpServerFormDiscoveryMode,
+                    value,
+                  ) &&
+                  (value !== "code_mode" || codeModeSelectable)
                 )
                   setMode(value);
               }}
               disabled={!canWrite || !supportsEditing || update.isPending}
-            >
-              <SelectTrigger id="gateway-discovery-mode">
-                <SelectValue placeholder="Unknown mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="progressive">Progressive</SelectItem>
-                <SelectItem value="direct">Direct</SelectItem>
-              </SelectContent>
-            </Select>
+              rows={[
+                {
+                  value: "progressive",
+                  title: "Progressive",
+                  description: "Agents search for the tools they need.",
+                },
+                {
+                  value: "direct",
+                  title: "Direct",
+                  description:
+                    "Agents see every tool. Works with clients that can't search for tools.",
+                },
+                {
+                  value: "code_mode",
+                  title: "Code Mode",
+                  description:
+                    "Agents get one tool that finds and calls the others in Python.",
+                  disabled: !codeModeSelectable,
+                  badge: codeModeSelectable ? undefined : (
+                    <Text as="span" muted small className="font-normal">
+                      {notEnabled
+                        ? "Not enabled for your organization. Contact Speakeasy to turn it on."
+                        : requiresSignIn
+                          ? "Requires sign-in"
+                          : "Unavailable"}
+                    </Text>
+                  ),
+                },
+              ]}
+            />
+            {metaMcpServer.discoveryMode === "code_mode" &&
+              !codeModeSelectable && (
+                <p className="text-muted-foreground text-sm">
+                  {notEnabled
+                    ? "Code Mode is not enabled for your organization; contact Speakeasy to turn it on."
+                    : requiresSignIn
+                      ? "Code Mode requires sign-in, and this gateway allows anonymous callers."
+                      : entitlementKnown
+                        ? "The code runtime is unavailable."
+                        : "Code Mode is unavailable for this gateway."}{" "}
+                  Connections currently use Progressive discovery; the saved
+                  default remains Code Mode.
+                </p>
+              )}
             {update.isError && <FieldError>{update.error.message}</FieldError>}
           </Field>
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
             {supportsEditing
-              ? "Applies to connections using the gateway default. Clients may need to reconnect to refresh their tool list."
+              ? "Applies to new connections that use the gateway default. Existing connections keep their mode until they reconnect."
               : "Refresh the page before changing this gateway’s unsupported discovery mode."}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
@@ -113,7 +164,8 @@ export function GatewayDiscoverySection({
                   !supportsEditing ||
                   !knownDraft ||
                   mode === metaMcpServer.discoveryMode ||
-                  update.isPending
+                  update.isPending ||
+                  (mode === "code_mode" && !codeModeSelectable)
                 }
                 onClick={() => {
                   if (
@@ -123,7 +175,8 @@ export function GatewayDiscoverySection({
                     !isKnownEnumValue(
                       UpdateMetaMcpServerFormDiscoveryMode,
                       mode,
-                    )
+                    ) ||
+                    (mode === "code_mode" && !codeModeSelectable)
                   )
                     return;
                   update.mutate({

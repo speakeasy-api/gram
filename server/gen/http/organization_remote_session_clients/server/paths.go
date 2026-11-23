@@ -62,6 +62,11 @@ func RotateClientOrganizationRemoteSessionClientsPath() string {
 	return "/rpc/organizationRemoteSessionClients.rotate"
 }
 
+// DuplicateClientOrganizationRemoteSessionClientsPath returns the URL path to the organizationRemoteSessionClients service duplicateClient HTTP endpoint.
+func DuplicateClientOrganizationRemoteSessionClientsPath() string {
+	return "/rpc/organizationRemoteSessionClients.duplicate"
+}
+
 // DeleteClientOrganizationRemoteSessionClientsPath returns the URL path to the organizationRemoteSessionClients service deleteClient HTTP endpoint.
 func DeleteClientOrganizationRemoteSessionClientsPath() string {
 	return "/rpc/organizationRemoteSessionClients.delete"

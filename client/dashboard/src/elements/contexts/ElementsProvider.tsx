@@ -12,59 +12,45 @@ import {
   CHAT_ATTACHMENT_MAX_BYTES,
   createChatAttachmentAdapter,
 } from "@/elements/lib/attachmentUpload";
-import { initErrorTracking, trackError } from "@/elements/lib/errorTracking";
 import { DEFAULT_MODEL } from "@/elements/lib/models";
 import {
   clearFrontendToolApprovalConfig,
   getEnabledTools,
   setFrontendToolApprovalConfig,
   toAISDKTools,
-  wrapToolsWithApproval,
-  wrapToolsWithByteCap,
   type ApprovalHelpers,
 } from "@/elements/lib/tools";
-import { compactForModel } from "@/elements/lib/contextCompaction";
+import {
+  buildChatTools,
+  createChatModel,
+  streamChatTurn,
+} from "@/elements/lib/chatStream";
 import { dictationAdapter } from "@/elements/lib/dictation";
-import { describeStreamError } from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import elementsSystemPrompt from "@/elements/prompts/system.txt?raw";
-import { ElementsConfig, Model } from "@/elements/types";
-import { Plugin } from "@/elements/types/plugins";
+import type { ElementsConfig, Model } from "@/elements/types";
+import type { Plugin } from "@/elements/types/plugins";
+import type { AssistantTool } from "@assistant-ui/react";
 import {
   AssistantRuntimeProvider,
-  AssistantTool,
   type AttachmentAdapter,
   useAuiState,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
-import {
-  frontendTools as convertFrontendToolsToAISDKTools,
-  useChatRuntime,
-} from "@assistant-ui/react-ai-sdk";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import {
   QueryClient,
   QueryClientContext,
   QueryClientProvider,
 } from "@tanstack/react-query";
 import {
-  convertToModelMessages,
-  createUIMessageStream,
   lastAssistantMessageIsCompleteWithToolCalls,
-  LanguageModel,
-  smoothStream,
-  isStepCount,
-  streamText,
-  ToolSet,
-  toUIMessageStream,
   type ChatTransport,
   type UIMessage,
 } from "ai";
-
-type UIMessagePart = UIMessage["parts"][number];
+import type { ReactNode } from "react";
 import {
-  ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -154,34 +140,6 @@ function mergeInternalSystemPromptWith(
 }
 
 /**
- * Cleans messages before sending to the model to work around an AI SDK bug.
- * Strips callProviderMetadata from all parts (AI SDK bug #9731)
- */
-function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
-  return messages.map((message) => {
-    const partsArray = message.parts;
-    if (!Array.isArray(partsArray)) {
-      return message;
-    }
-
-    // Process each part: strip providerOptions/providerMetadata and filter reasoning.
-    // `callProviderMetadata` is not declared on `UIMessagePart`, so we widen the
-    // part to an indexable record just for the destructure.
-    const cleanedParts = partsArray.map((part) => {
-      const { callProviderMetadata: _omit, ...cleanPart } =
-        part as UIMessagePart & { callProviderMetadata?: unknown };
-      void _omit;
-      return cleanPart as UIMessagePart;
-    });
-
-    return {
-      ...message,
-      parts: cleanedParts,
-    };
-  });
-}
-
-/**
  * Main provider component that sets up auth, tools, and transport.
  * Delegates to either WithHistory or WithoutHistory based on config.
  */
@@ -230,16 +188,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // approvalHelpersRef below.
   const systemPromptRef = useRef(systemPrompt);
   systemPromptRef.current = systemPrompt;
-
-  // Initialize error tracking on mount
-  useEffect(() => {
-    initErrorTracking({
-      enabled: config.errorTracking?.enabled,
-      projectSlug: config.projectSlug,
-      variant: config.variant,
-    });
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- one-time init at mount; later config changes are intentionally ignored
-  }, []);
 
   // Generate a stable chat ID for server-side persistence (when history is disabled)
   // When history is enabled, the thread adapter manages chat IDs instead
@@ -327,8 +275,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   const defaultTransport = useMemo<ChatTransport<UIMessage>>(
     () => ({
       sendMessages: async ({ messages, abortSignal }) => {
-        const usingCustomModel = !!config.languageModel;
-
         if (auth.isLoading) {
           throw new Error("Session is loading");
         }
@@ -386,7 +332,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           ...validHeaders,
           "Gram-Chat-ID": chatId,
           "X-Gram-Source": "elements",
-          ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
+          ...config.api?.headers, // We do this after X-Gram-Source so the MCP Inspect chat can override it
           ...(environmentSlug && {
             "Gram-Environment": environmentSlug,
           }),
@@ -399,90 +345,44 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           mcpHeaders["Gram-Chat-Session"] = freshSession;
         }
 
-        // Create OpenRouter model (only needed when not using custom model)
-        const openRouterModel = usingCustomModel
-          ? null
-          : createOpenRouter({
-              baseURL: apiUrl,
-              apiKey: "unused, but must be set",
-              headers: headersWithChatId,
-            });
-
         if (config.languageModel) {
           console.log("Using custom language model", config.languageModel);
         }
 
-        // Combine tools - MCP tools only available when not using custom model
-        const combinedTools: ToolSet = {
-          ...mcpTools,
-          ...convertFrontendToolsToAISDKTools(frontendTools),
-        } as ToolSet;
+        // MCP and frontend tools, with approval gates and result size caps.
+        const tools = buildChatTools({
+          mcpTools,
+          frontendTools,
+          toolsRequiringApproval: config.tools?.toolsRequiringApproval,
+          approvalHelpers: getApprovalHelpers(),
+          maxOutputBytes: config.tools?.maxOutputBytes,
+        });
 
-        // Wrap tools that require approval
-        const approvedTools = wrapToolsWithApproval(
-          combinedTools,
-          config.tools?.toolsRequiringApproval,
-          getApprovalHelpers(),
-        );
-
-        // Cap oversized tool results so one greedy tool call (e.g. a wide log
-        // search) can't fill the context window in a single step.
-        const tools = wrapToolsWithByteCap(
-          approvedTools,
-          config.tools?.maxOutputBytes,
-        );
-
-        // Stream the response
+        // Create OpenRouter model (only needed when not using custom model)
         const modelToUse = config.languageModel
           ? config.languageModel
-          : (openRouterModel!.chat(model) as LanguageModel);
+          : createChatModel({
+              apiUrl,
+              headers: headersWithChatId,
+              modelId: model,
+            });
 
         try {
-          // This works around AI SDK bug where these fields cause validation failures
-          const cleanedMessages = cleanMessagesForModel(messages);
-          // Filter out system messages from the UI state — the system prompt
-          // is already provided via the `instructions:` parameter to streamText().
-          // Without this, loaded chat history includes the system message which
-          // gets sent alongside the `instructions:` param, causing duplication.
-          const nonSystemMessages = cleanedMessages.filter(
-            (m) => m.role !== "system",
-          );
-          const rawModelMessages =
-            await convertToModelMessages(nonSystemMessages);
-
-          // Auto-compact older turns if the estimated input is approaching
-          // the model's context window. System prompt + last few turns are
-          // always preserved. No-op when the conversation is small.
-          const compaction = config.contextCompaction?.disabled
-            ? {
-                messages: rawModelMessages,
-                droppedCount: 0,
-                estimatedTokensBefore: 0,
-                estimatedTokensAfter: 0,
-              }
-            : compactForModel(rawModelMessages, model, {
-                maxTokens: config.contextCompaction?.maxTokens,
-                compactAtFraction: config.contextCompaction?.compactAtFraction,
-                keepRecent: config.contextCompaction?.keepRecent,
-              });
-          if (compaction.droppedCount > 0) {
-            console.warn(
-              `[elements] compacted ${compaction.droppedCount} older turn(s) from ${compaction.estimatedTokensBefore} → ${compaction.estimatedTokensAfter} est. tokens (model ${model})`,
-            );
-          }
-          const modelMessages = compaction.messages;
-
-          const result = streamText({
-            instructions: systemPromptRef.current,
+          const stream = await streamChatTurn({
+            messages,
             model: modelToUse,
-            messages: modelMessages,
+            modelId: model,
+            instructions: systemPromptRef.current,
             tools,
-            stopWhen: isStepCount(10),
-            experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
-            onError: ({ error }) => {
+            contextCompaction: {
+              disabled: config.contextCompaction?.disabled,
+              maxTokens: config.contextCompaction?.maxTokens,
+              compactAtFraction: config.contextCompaction?.compactAtFraction,
+              keepRecent: config.contextCompaction?.keepRecent,
+            },
+            onStreamError: (error) => {
               console.error("Stream error in onError callback:", error);
-              trackError(error, { source: "streaming" });
 
               // Check if this is a network/connection error
               const isNetworkError =
@@ -504,26 +404,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // Mark as connected when stream starts successfully
           connectionStatus?.markConnected();
 
-          // This weird construction is necessary to get errors to propagate properly to assistant-ui.
-          // `originalMessages` is required: without it, `handleUIMessageStreamFinish` injects a
-          // fresh random messageId into every `start` chunk. On auto-resume that mismatches the
-          // prior assistant message's id, so useChat pushes a new UIMessage carrying the snapshot
-          // of the prior turn's parts — duplicating text and tool_calls into storage.
-          //
-          // onError: AI SDK masks errors by default; surface the friendly
-          // credits prompt for 402, otherwise keep the masking intact.
-          return createUIMessageStream({
-            execute: ({ writer }) => {
-              writer.merge(toUIMessageStream({ stream: result.stream, tools }));
-            },
-            originalMessages: messages,
-            onError: (error) =>
-              describeStreamError(error) ??
-              "An error occurred while generating a response.",
-          });
+          return stream;
         } catch (error) {
           console.error("Error creating stream:", error);
-          trackError(error, { source: "stream-creation" });
 
           // Check if this is a network/connection error
           const isNetworkError =
@@ -860,10 +743,7 @@ const ElementsProviderWithHistory = ({
     const timeoutId = setTimeout(() => {
       initialThreadSwitched.current = true;
       runtime.threads.switchToThread(initialThreadId).catch((error) => {
-        trackError(error, {
-          source: "custom",
-          operation: "switch-initial-thread",
-        });
+        console.error("Failed to switch to the initial thread:", error);
       });
     }, 100);
     return () => clearTimeout(timeoutId);
@@ -968,8 +848,8 @@ export const ElementsProvider = (
   props: ElementsProviderProps,
 ): React.JSX.Element => {
   // Share a host app's QueryClient so content rendered inside this provider
-  // (the dashboard mounts it around the page outlet) stays in one cache with
-  // the rest of the app. Standalone embeds get their own.
+  // and sibling content connected through the context bridge stay in one cache
+  // with the rest of the app. Standalone embeds get their own.
   const hostQueryClient = useContext(QueryClientContext);
   return (
     <QueryClientProvider client={hostQueryClient ?? standaloneQueryClient}>

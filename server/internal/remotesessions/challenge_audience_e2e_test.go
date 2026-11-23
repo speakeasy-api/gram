@@ -95,7 +95,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 
 			userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-aud-"+slugSuffix)
 
-			client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+			client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 				ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 				OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 				RemoteSessionIssuerID:   issuer.ID,
@@ -137,6 +137,40 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 			} else {
 				require.False(t, parsed.Query().Has("audience"), "audience param should be absent when client.audience is unset")
 			}
+		})
+	}
+}
+
+func TestBuildAuthorizationUrl_ForwardedClientName(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		forward    bool
+		clientName string
+		want       string
+	}{
+		{name: "off by default", forward: false, clientName: "Example Client", want: ""},
+		{name: "opted in", forward: true, clientName: "Example Client", want: "Example Client"},
+		{name: "opted in without a client", forward: true, clientName: "", want: ""},
+		{name: "opted in with only invisible characters", forward: true, clientName: "\u202e\x00", want: ""},
+		{name: "cleaned before sending", forward: true, clientName: "Exam\u202eple\n", want: "Example"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			opts := []syntheticLoginOption{withParentClientName(tc.clientName)}
+			if tc.forward {
+				opts = append(opts, withForwardClientName())
+			}
+			_, env, _, err := driveSyntheticLogin(t, "fwd-"+strings.ReplaceAll(tc.name, " ", "-"), scopelessToken, opts...)
+			require.NoError(t, err)
+
+			parsed, err := url.Parse(env.authURL)
+			require.NoError(t, err)
+			require.Equal(t, tc.want != "", parsed.Query().Has("speakeasy_client_name"))
+			require.Equal(t, tc.want, parsed.Query().Get("speakeasy_client_name"))
 		})
 	}
 }

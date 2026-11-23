@@ -16,7 +16,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Stack } from "@/components/ui/Stack";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { Fragment, ReactNode, useState } from "react";
+import type { ReactNode } from "react";
+import { Fragment, useState } from "react";
 import { Text } from "@/components/ui/Text";
 
 export type DropdownItem = {

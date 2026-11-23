@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -13,7 +12,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -60,11 +58,9 @@ func newRiskEnforcementDispatcher(
 	}
 
 	dispatcher, err := enforcereply.NewDispatcher(ctx, logger, meterProvider, broker, inbox, enforcereply.DispatcherConfig{
-		WaitTimeout: 0,
-		LaneWaitTimeout: map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // an override list is partial by definition; other lanes use WaitTimeout
-			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER: enforcereply.DefaultLLMAnalyzerWaitTimeout,
-		},
-		Flags: features,
+		WaitTimeout:     0,
+		LaneWaitTimeout: enforcereply.DefaultLaneWaitTimeouts(),
+		Flags:           features,
 	})
 	if err != nil {
 		logger.ErrorContext(ctx, "pub/sub enforcement disabled: create dispatcher", attr.SlogError(err))
@@ -95,6 +91,7 @@ func newMCPRiskEvaluator(
 	publishers *background.Publishers,
 	shadowMCPClient *shadowmcp.Client,
 	toolIOLogsEnabled telemetry.FeatureChecker,
+	approvals mcpriskscan.ApprovalGate,
 ) (*mcpriskscan.Evaluator, *risk.Scanner, error) {
 	var piiScanner ra.PIIScanner
 	if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
@@ -137,6 +134,7 @@ func newMCPRiskEvaluator(
 		publishers.RiskFindings,
 		mcpriskscan.DefaultPolicyConfig,
 		mcpriskscan.WithMCPFindingEvidenceWriter(risk.NewMCPFindingEvidenceStore(db, enc), toolIOLogsEnabled),
+		mcpriskscan.WithApprovalGate(approvals),
 	)
 	return evaluator, scanner, nil
 }

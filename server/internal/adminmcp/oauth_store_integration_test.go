@@ -67,6 +67,10 @@ func TestStaffOAuthStoreSingleUseGrantAndRefresh(t *testing.T) {
 
 	second := staffIssuedSession{ID: uuid.New(), JTI: "jti-" + uuid.NewString(), RefreshHash: staffTokenHash("refresh-two"), ExpiresAt: now.Add(time.Hour), RefreshTil: now.Add(90 * time.Minute)}
 	require.NoError(t, grants.RotateRefresh(ctx, first.RefreshHash, clientID, loaded, second, now))
+	extended, err := grants.PrepareRefresh(ctx, second.RefreshHash, clientID, now)
+	require.NoError(t, err)
+	require.WithinDuration(t, now.Add(staffInactivityTimeout), extended.AuthorizedTil, time.Second)
+	require.Equal(t, loaded.Generation, extended.Generation)
 	_, err = grants.PrepareRefresh(ctx, first.RefreshHash, clientID, now)
 	require.ErrorIs(t, err, errStaffRefreshReuse)
 	_, err = grants.PrepareRefresh(ctx, second.RefreshHash, clientID, now)

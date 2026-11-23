@@ -3,7 +3,6 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -249,7 +250,7 @@ func configureAutoRefreshGrant(t *testing.T, ctx context.Context, fx validationF
 	require.NoError(t, err)
 	refreshEncrypted, err := fx.ti.enc.Encrypt([]byte("auto-refresh-token"))
 	require.NoError(t, err)
-	grant, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	grant, err := remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            fx.subject,
 		UserSessionIssuerID:   fx.endpoint.UserSessionIssuerID,
 		RemoteSessionClientID: fx.clientID,

@@ -19,16 +19,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
@@ -112,7 +117,7 @@ func TestFederatedLoginProvisionedHuman(t *testing.T) {
 
 func TestFederatedLoginCredentialHandoff(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"consumer", "consumer_failure", "membership_denied"} {
+	for _, scenario := range []string{"consumer", "consumer_failure", "membership_denied", "organization_key_unusable"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			runFederatedLogin(t, scenario, nil)
@@ -187,6 +192,12 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		_, err = orgsrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgsrepo.UpsertOrganizationUserRelationshipParams{OrganizationID: f.organizationID, UserID: conv.ToPGText(duplicateID)})
 	case "workos_deleted_directory":
 		err = directoryrepo.New(ti.conn).SetOrganizationDirectoryUserDeletionFixture(ctx, directoryrepo.SetOrganizationDirectoryUserDeletionFixtureParams{OrganizationID: f.organizationID, LocalDeleted: false, WorkosDeleted: true})
+	case "organization_key_unusable":
+		// The service runs without organization encryption, so an enrolled
+		// organization's tokens cannot be sealed here and the key check fails.
+		keys := orgencryptiontest.New(t, ti.conn)
+		transitions := orgencryption.NewTransitions(testenv.NewLogger(t), ti.conn, audit.NewLogger(), keys.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+		_, err = transitions.Enroll(ctx, f.organizationID, orgencryption.UseCaseOAuthSessionTokens, orgencryption.SystemActor())
 	}
 	require.NoError(t, err)
 	beforeUsers, err := usersrepo.New(ti.conn).SnapshotOrganizationUsersFixture(ctx, usersrepo.SnapshotOrganizationUsersFixtureParams{UserID: mockidp.MockUserID, OrganizationIds: []string{f.organizationID, f.otherOrg}})
@@ -246,6 +257,11 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		callback, nonce, id = rotate(ctx, ti, provider, f.clientID, f.organizationID, req, callback)
 		expectedSecret = "rotated-secret"
 	}
+	var attempts *mcpconnectionattemptstest.Recording
+	if scenario == "organization_key_unusable" {
+		attempts = mcpconnectionattemptstest.New(t)
+		ti.service.SetConnectionRecorder(attempts.Recorder)
+	}
 	result := httptest.NewRecorder()
 	err = ti.service.HandleIDPCallback(result, routeIDPCallback(callback))
 	success := scenario == "success" || scenario == "first_party" || scenario == "consumer"
@@ -290,6 +306,17 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		require.Equal(t, "Your account is not provisioned for this organization. Contact your administrator", failure.Query().Get("error_description"))
 		require.Empty(t, resolver.memberChecks, "provisioned-human resolution must reject before the membership hook")
 		require.Zero(t, consumed, "unresolved humans must never reach credential handoff")
+	case "organization_key_unusable":
+		failure, parseErr := url.Parse(result.Header().Get("Location"))
+		require.NoError(t, parseErr)
+		require.Equal(t, "Sign-in is temporarily unavailable. Try again shortly", failure.Query().Get("error_description"))
+		require.Equal(t, "temporarily_unavailable", failure.Query().Get("error"), "the caller may retry")
+		reasons := make([]string, 0, len(attempts.Rows()))
+		for _, row := range attempts.Rows() {
+			reasons = append(reasons, row.Reason)
+		}
+		require.Contains(t, reasons, mcpconnectionattempts.CodeTransientFailure.String(), "a Speakeasy fault: the identity provider was never asked")
+		require.NotContains(t, reasons, mcpconnectionattempts.CodeIDPTransientFailure.String())
 	}
 	require.Zero(t, f.otherProviderCalls.Load(), "never contact a provider from another organization")
 	if scenario == "consumer" || scenario == "consumer_failure" {
@@ -311,7 +338,7 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 	count := provider.exchangeCount()
 	require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), routeIDPCallback(callback)), "callback is single-use even on rejection")
 	require.Equal(t, count, provider.exchangeCount(), "replay must not reach the token endpoint")
-	if scenario == "missing_cookie" || scenario == "wrong_cookie" || scenario == "expired_state" || scenario == "changed_client" || scenario == "deleted_client" || scenario == "changed_issuer" || scenario == "missing_response_issuer" || scenario == "wrong_response_issuer" {
+	if scenario == "missing_cookie" || scenario == "wrong_cookie" || scenario == "expired_state" || scenario == "changed_client" || scenario == "deleted_client" || scenario == "changed_issuer" || scenario == "missing_response_issuer" || scenario == "wrong_response_issuer" || scenario == "organization_key_unusable" {
 		require.Zero(t, provider.exchangeCount())
 	} else {
 		require.Equal(t, 1, provider.exchangeCount(), "identity and membership failures must exercise verified exchange")
@@ -356,7 +383,7 @@ func newFederationLoginFixture(t *testing.T, memberAllowed bool, offline ...bool
 	// Same external client id and user email in another tenant must not affect
 	// provider selection or provisioned-human resolution in this organization.
 	otherIssuer := createTrustedIDJAGIssuer(t, ctx, ti, otherOrg, otherProvider.URL, otherProvider.URL+"/jwks")
-	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(otherOrg), RemoteSessionIssuerID: otherIssuer.TrustedRemoteSessionIssuerID.UUID, ClientID: "selected-client", TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{"openid", "email"}})
+	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{OrganizationID: conv.ToPGText(otherOrg), RemoteSessionIssuerID: otherIssuer.TrustedRemoteSessionIssuerID.UUID, ClientID: "selected-client", TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{"openid", "email"}})
 	require.NoError(t, err)
 	seedIDJAGDirectoryUser(t, ctx, ti, otherOrg)
 	scopes := []string{"openid", "email"}
@@ -372,16 +399,15 @@ func newFederationLoginFixture(t *testing.T, memberAllowed bool, offline ...bool
 	secret, err := ti.enc.Encrypt([]byte("selected-secret"))
 	require.NoError(t, err)
 	// Insert an unselected client first: selection must follow the explicit FK.
-	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "not-selected", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: []string{"openid"}})
+	_, err = remotesessionsrepo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "not-selected", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: []string{"openid"}})
 	require.NoError(t, err)
-	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "selected-client", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: scopes})
+	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, remotesessionsrepo.CreateRemoteSessionClientFixtureParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), RemoteSessionIssuerID: remote.ID, ClientID: "selected-client", ClientSecretEncrypted: conv.ToPGText(secret), TokenEndpointAuthMethod: conv.ToPGText("client_secret_basic"), Scope: scopes})
 	require.NoError(t, err)
 	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{OrganizationID: conv.ToPGText(ac.ActiveOrganizationID), Slug: "federation-" + uuid.NewString(), AuthnChallengeMode: "chain", SessionDuration: pgtype.Interval{Microseconds: int64(8 * time.Hour / time.Microsecond), Valid: true}, TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, TrustedRemoteSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true}})
 	require.NoError(t, err)
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	toolset, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, Slug: toolset.Slug, ProjectID: *ac.ProjectID})
-	require.NoError(t, err)
-	downstream := createIDJAGClient(t, ctx, ti, issuer.ID)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *ac.ProjectID, toolset, issuer.ID)
+	downstream := createDCRClient(t, ctx, ti, issuer.ID)
 	seedIDJAGDirectoryUser(t, ctx, ti, ac.ActiveOrganizationID)
 	// AIM-75: NULL directory link resolves only an existing same-org human.
 	err = directoryrepo.New(ti.conn).ClearOrganizationDirectoryUserLinksFixture(ctx, ac.ActiveOrganizationID)

@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -15,7 +16,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { Loader2, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -397,7 +398,7 @@ export function ServerPickerSheet({
               >
                 {busy && (
                   <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    <Spinner className="mr-0 size-4" />
                   </Button.LeftIcon>
                 )}
                 <Button.Text>Add selected servers</Button.Text>

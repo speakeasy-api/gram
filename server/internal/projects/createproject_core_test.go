@@ -53,11 +53,17 @@ func TestCreateProjectWritesDefaultEnvironmentAndDefaultPlugin(t *testing.T) {
 	require.Equal(t, "default", environments[0].Slug)
 	require.Equal(t, "Default project for organization", environments[0].Description.String)
 
-	_, err = pluginsrepo.New(ti.conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID})
+	defaultPlugin, err := pluginsrepo.New(ti.conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID})
 	require.NoError(t, err)
 	afterPluginCreates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginCreate)
 	require.NoError(t, err)
 	require.Equal(t, pluginCreates+1, afterPluginCreates)
+	pluginCreate, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionPluginCreate, defaultPlugin.ID.String())
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(pluginCreate.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, defaultPlugin.Slug, snapshot["slug"])
+	require.Equal(t, true, snapshot["auto_sync_enabled"], "the Default plugin is created with auto sync on")
 
 	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionProjectCreate)
 	require.NoError(t, err)

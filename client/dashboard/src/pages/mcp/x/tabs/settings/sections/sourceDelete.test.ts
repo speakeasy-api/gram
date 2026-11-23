@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
@@ -8,8 +9,10 @@ import {
   deleteSourceCascade,
   failedLinkedDeletes,
   linkedMcpServersFilter,
+  nameList,
   serversBackedBySameSource,
   serversMatchingFilter,
+  sourceBackedConfirmName,
   sourceDeleteSpec,
 } from "./sourceDelete";
 
@@ -61,26 +64,18 @@ const tunneled = {
 } as TunneledMcpServer;
 
 describe("sourceDeleteSpec", () => {
-  it("keys remote and unproxied confirmation on the URL", () => {
-    expect(sourceDeleteSpec({ kind: "remote", source: remote })).toMatchObject({
-      confirmLabel: "the server URL",
-      confirmValue: remote.url,
-    });
+  it("names the source each kind deletes", () => {
     expect(
-      sourceDeleteSpec({ kind: "unproxied", source: unproxied }),
-    ).toMatchObject({
-      confirmLabel: "the server URL",
-      confirmValue: unproxied.url,
-    });
-  });
-
-  it("keys tunneled confirmation on the trimmed display name", () => {
+      sourceDeleteSpec({ kind: "remote", source: remote }).entityDescription,
+    ).toBe("the remote MCP source");
     expect(
-      sourceDeleteSpec({ kind: "tunneled", source: tunneled }),
-    ).toMatchObject({
-      confirmLabel: "the source name",
-      confirmValue: "Internal tools",
-    });
+      sourceDeleteSpec({ kind: "tunneled", source: tunneled })
+        .entityDescription,
+    ).toBe("the tunneled MCP source");
+    expect(
+      sourceDeleteSpec({ kind: "unproxied", source: unproxied })
+        .entityDescription,
+    ).toBe("the unproxied MCP source");
   });
 });
 
@@ -244,5 +239,39 @@ describe("deleteSourceCascade", () => {
     ).rejects.toThrow(
       "Every linked MCP server was deleted, but the unproxied MCP source was not: forbidden. Retry to finish.",
     );
+  });
+});
+
+describe("nameList", () => {
+  it("names up to three servers and counts the rest", () => {
+    const named = (...names: string[]) => names.map((name) => ({ name }));
+    expect(nameList(named("A"))).toBe("A");
+    expect(nameList(named("A", "B"))).toBe("A and B");
+    expect(nameList(named("A", "B", "C"))).toBe("A, B, and C");
+    expect(nameList(named("A", "B", "C", "D"))).toBe("A, B, and 2 more");
+    expect(nameList([{ name: "" }])).toBe("Unnamed server");
+  });
+});
+
+describe("sourceBackedConfirmName", () => {
+  it("uses the server name, else the source's address or name", () => {
+    expect(
+      sourceBackedConfirmName(" Linear ", { kind: "remote", source: remote }),
+    ).toBe("Linear");
+    expect(
+      sourceBackedConfirmName("", { kind: "remote", source: remote }),
+    ).toBe(remote.url);
+    expect(
+      sourceBackedConfirmName(undefined, {
+        kind: "tunneled",
+        source: tunneled,
+      }),
+    ).toBe(tunneled.name.trim());
+    expect(
+      sourceBackedConfirmName(undefined, {
+        kind: "tunneled",
+        source: { ...tunneled, name: "  Padded  " },
+      }),
+    ).toBe("Padded");
   });
 });

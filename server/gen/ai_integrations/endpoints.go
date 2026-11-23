@@ -22,6 +22,7 @@ type Endpoints struct {
 	GetConfig                      goa.Endpoint
 	UpsertConfig                   goa.Endpoint
 	DeleteConfig                   goa.Endpoint
+	ListOrgUnits                   goa.Endpoint
 	ListSchedules                  goa.Endpoint
 	SetScheduleEnabled             goa.Endpoint
 	RetrySchedule                  goa.Endpoint
@@ -39,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetConfig:                      NewGetConfigEndpoint(s, a.APIKeyAuth),
 		UpsertConfig:                   NewUpsertConfigEndpoint(s, a.APIKeyAuth),
 		DeleteConfig:                   NewDeleteConfigEndpoint(s, a.APIKeyAuth),
+		ListOrgUnits:                   NewListOrgUnitsEndpoint(s, a.APIKeyAuth),
 		ListSchedules:                  NewListSchedulesEndpoint(s, a.APIKeyAuth),
 		SetScheduleEnabled:             NewSetScheduleEnabledEndpoint(s, a.APIKeyAuth),
 		RetrySchedule:                  NewRetryScheduleEndpoint(s, a.APIKeyAuth),
@@ -54,6 +56,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetConfig = m(e.GetConfig)
 	e.UpsertConfig = m(e.UpsertConfig)
 	e.DeleteConfig = m(e.DeleteConfig)
+	e.ListOrgUnits = m(e.ListOrgUnits)
 	e.ListSchedules = m(e.ListSchedules)
 	e.SetScheduleEnabled = m(e.SetScheduleEnabled)
 	e.RetrySchedule = m(e.RetrySchedule)
@@ -268,6 +271,41 @@ func NewDeleteConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return nil, s.DeleteConfig(ctx, p)
+	}
+}
+
+// NewListOrgUnitsEndpoint returns an endpoint function that calls the method
+// "listOrgUnits" of service "aiIntegrations".
+func NewListOrgUnitsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListOrgUnitsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListOrgUnits(ctx, p)
 	}
 }
 

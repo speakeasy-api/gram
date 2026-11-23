@@ -21,13 +21,14 @@ type Client struct {
 	UpdateDomainEndpoint       goa.Endpoint
 	SetRootMcpEndpointEndpoint goa.Endpoint
 	ListRootMcpServersEndpoint goa.Endpoint
+	ReconcileDomainEndpoint    goa.Endpoint
 	CheckHealthEndpoint        goa.Endpoint
 	DeleteDomainEndpoint       goa.Endpoint
 	ListMcpEndpointsEndpoint   goa.Endpoint
 }
 
 // NewClient initializes a "domains" service client given the endpoints.
-func NewClient(getDomain, listDomains, createDomain, updateDomain, setRootMcpEndpoint, listRootMcpServers, checkHealth, deleteDomain, listMcpEndpoints goa.Endpoint) *Client {
+func NewClient(getDomain, listDomains, createDomain, updateDomain, setRootMcpEndpoint, listRootMcpServers, reconcileDomain, checkHealth, deleteDomain, listMcpEndpoints goa.Endpoint) *Client {
 	return &Client{
 		GetDomainEndpoint:          getDomain,
 		ListDomainsEndpoint:        listDomains,
@@ -35,6 +36,7 @@ func NewClient(getDomain, listDomains, createDomain, updateDomain, setRootMcpEnd
 		UpdateDomainEndpoint:       updateDomain,
 		SetRootMcpEndpointEndpoint: setRootMcpEndpoint,
 		ListRootMcpServersEndpoint: listRootMcpServers,
+		ReconcileDomainEndpoint:    reconcileDomain,
 		CheckHealthEndpoint:        checkHealth,
 		DeleteDomainEndpoint:       deleteDomain,
 		ListMcpEndpointsEndpoint:   listMcpEndpoints,
@@ -173,6 +175,29 @@ func (c *Client) ListRootMcpServers(ctx context.Context, p *ListRootMcpServersPa
 		return
 	}
 	return ires.(*ListRootMcpServersResult), nil
+}
+
+// ReconcileDomain calls the "reconcileDomain" endpoint of the "domains"
+// service.
+// ReconcileDomain may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ReconcileDomain(ctx context.Context, p *ReconcileDomainPayload) (res *CustomDomain, err error) {
+	var ires any
+	ires, err = c.ReconcileDomainEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CustomDomain), nil
 }
 
 // CheckHealth calls the "checkHealth" endpoint of the "domains" service.

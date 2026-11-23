@@ -23,8 +23,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -46,7 +52,7 @@ func TestConsentPage_ChainedServiceDefersToolInventory(t *testing.T) {
 	t.Parallel()
 
 	_, fx, issuer := seedChainedConsentEndpoint(t, "aim524-deferred-page")
-	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream).acquire = chainUnavailable
 
 	page := renderToolsIsland(t, fx)
 	require.Contains(t, page, inventoryDeferredAttr)
@@ -55,6 +61,121 @@ func TestConsentPage_ChainedServiceDefersToolInventory(t *testing.T) {
 	// The transport still answers "not connected"; the page flag is what
 	// turns that answer into the deferred state.
 	requireConsentInventoryConflict(t, fx)
+}
+
+// chainUnavailable is an identity provider exchange that cannot run yet.
+func chainUnavailable(context.Context, identitychaining.Request) identitychaining.Outcome {
+	return identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceUnknown, Retryable: true, Cached: false, Provider: ""}
+}
+
+// A company sign-in that the identity provider accepts loads the tool picker
+// before approval, with the exchanged credential, under the same gate as
+// gateway consent discovery.
+func TestConsentInventory_ChainedServiceLoadsToolsBeforeApproval(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		visibility   string
+		impersonated bool
+		wantTools    bool
+		legacy       bool
+	}{
+		"authorized":            {visibility: "public", impersonated: false, wantTools: true},
+		"legacy auth client":    {visibility: "public", wantTools: true, legacy: true},
+		"impersonated":          {visibility: "public", impersonated: true, wantTools: false},
+		"no connect on private": {visibility: "private", impersonated: false, wantTools: false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var mu sync.Mutex
+			var bearers []string
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == wellknown.OAuthProtectedResourcePath {
+					http.NotFound(w, r)
+					return
+				}
+				mu.Lock()
+				bearers = append(bearers, r.Header.Get("Authorization"))
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_thing","inputSchema":{"type":"object"}}]}}`))
+			}))
+			t.Cleanup(upstream.Close)
+
+			ctx, fx := standaloneConsent(t, "chained-picker", upstream.URL, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
+				remoteServer, err := remotemcp_repo.New(ti.conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{ID: uuid.New(), ProjectID: projectID, TransportType: "sse", Url: upstream.URL})
+				require.NoError(t, err)
+				server, err := mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug), RemoteMcpServerID: conv.ToNullUUID(remoteServer.ID), Visibility: tc.visibility, UserSessionIssuerID: conv.ToNullUUID(issuerID)})
+				require.NoError(t, err)
+				return server.ID
+			})
+			state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+			require.NoError(t, err)
+			signInID := uuid.New()
+			state.SignInID = &signInID
+			state.AuthorizerUserID = fx.subject.ID
+			state.AuthorizerImpersonated = &tc.impersonated
+			require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+
+			fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "chained-picker", "", []uuid.UUID{fx.shared})
+			var authClientID uuid.UUID
+			if tc.legacy {
+				fx.ti.service.manual = true
+				fx.ti.service.SetAuthClientPermitted(true)
+				// Manual fixtures must attach the registration as well as the auth client.
+				_, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: fx.orgID, ProjectID: fx.projectID, McpServerID: fx.endpoint.McpServerID.UUID, RemoteSessionClientID: fx.clientA})
+				require.NoError(t, err)
+				fixtures := authclientfixtures.New(fx.ti.conn)
+				for _, kind := range []string{"remote_session", "ema"} {
+					id, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: conv.ToNullUUID(fx.projectID), ClientType: kind, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(fx.clientA)})
+					require.NoError(t, err)
+					require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: id, Source: "admin"}))
+					if kind == "remote_session" {
+						authClientID = id
+					} else {
+						require.NoError(t, fixtures.SeedAuthClientEMAFixture(ctx, authclientfixtures.SeedAuthClientEMAFixtureParams{AuthClientID: id, Resource: upstream.URL}))
+					}
+				}
+				require.NotEqual(t, authClientID, fx.clientA)
+			}
+			g := setConsentGovernor(t, fx, clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA), upstream.URL)
+			g.token = "chained-token"
+			g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
+				return identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+			}
+
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Gram-Consent-State", fx.stateID)
+			req.Header.Set("Gram-Consent-Csrf", "csrf-token")
+			req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
+			if tc.legacy {
+				req.Header.Set("Gram-Consent-Auth-Client", authClientID.String())
+			}
+			w := httptest.NewRecorder()
+			serveErr := fx.ti.service.ServeConsentMCP(w, req, fx.endpoint)
+
+			mu.Lock()
+			defer mu.Unlock()
+			if !tc.wantTools {
+				require.Error(t, serveErr)
+				require.Empty(t, g.acquired, "no exchange outside the consent discovery gate")
+				require.Empty(t, bearers)
+				return
+			}
+			require.NoError(t, serveErr)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			require.Contains(t, w.Body.String(), `"get_thing"`)
+			require.Equal(t, []string{"Bearer chained-token"}, bearers)
+			require.Equal(t, []uuid.UUID{signInID}, g.signInIDs)
+			require.Len(t, g.acquired, 1)
+			require.Equal(t, fx.clientA, g.acquired[0].RemoteSessionClientID.UUID)
+			require.Equal(t, fx.subject.ID, g.acquired[0].UserID)
+		})
+	}
 }
 
 func requireConsentInventoryConflict(t *testing.T, fx consentActionFixture) {
@@ -122,7 +243,7 @@ func TestConsentInventory_DeferredConflictLogsAtInfo(t *testing.T) {
 	t.Parallel()
 
 	_, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-deferred")
-	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream).acquire = chainUnavailable
 
 	requireConsentInventoryConflict(t, fx)
 	deferred := logRecords(t, logs, deferredConflictLog)
@@ -136,7 +257,7 @@ func TestConsentInventory_StoredSelectionConflictStaysWarn(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-prefill")
-	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream).acquire = chainUnavailable
 	seedSubjectToolSelection(t, ctx, fx, []string{"get_thing"})
 
 	requireConsentInventoryConflict(t, fx)

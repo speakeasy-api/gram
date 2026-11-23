@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -85,17 +87,17 @@ func newTestAdminServiceOnDB(t *testing.T, conn *pgxpool.Pool) (context.Context,
 	validator, err := loadRegistryValidator()
 	require.NoError(t, err)
 	svc := &Service{
-		registry:              mcpregistry.New(conn, validator),
-		tracer:                tracerProvider.Tracer("admin_test"),
-		logger:                logger,
-		db:                    conn,
-		audit:                 audit.NewLogger(),
-		trial:                 trialemails.NoopNotifier{},
-		sessions:              sessions,
-		loginStates:           cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
-		hookClientsCache:      cache.NewTypedObjectCache[hookClientsSnapshot](logger, adminCache, cache.SuffixNone),
-		hookClientsRefreshing: &sync.Map{},
-		productFeatures:       productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		registry:         mcpregistry.New(conn, validator),
+		tracer:           tracerProvider.Tracer("admin_test"),
+		logger:           logger,
+		db:               conn,
+		audit:            audit.NewLogger(),
+		scopes:           remotemcp.NewStaffScopes(logger, conn, audit.NewLogger()),
+		trial:            trialemails.NoopNotifier{},
+		sessions:         sessions,
+		loginStates:      cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
+		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
+		productFeatures:  productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 	}
 	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
 	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)
@@ -109,7 +111,7 @@ func newTestAdminMeterService(t *testing.T) (context.Context, *Service, *pgxpool
 	ctx, svc, db := newTestAdminService(t)
 	meterConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	svc.billing = usage.NewBillingOperations(svc.logger, db, nil, nil, svc.audit, meterConn)
+	svc.billing = usage.NewBillingOperations(svc.logger, db, nil, nil, svc.audit, meterConn, staff.Organization{})
 	return ctx, svc, db, meterConn
 }
 

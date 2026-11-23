@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/iam"
+	kms "cloud.google.com/go/kms/apiv1"
 	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -63,13 +65,13 @@ func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSi
 	})
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
-			return nil, fmt.Errorf("%w: %s in %s", ErrSigningKeyExists, params.KeyID, params.KeyRing)
+			return nil, fmt.Errorf("%w: %s in %s", ErrKeyExists, params.KeyID, params.KeyRing)
 		}
 		if isTransientKMSError(err) || ctx.Err() != nil {
 			// GCP may have persisted the key even though the response was lost;
 			// the name is deterministic, so reconcile the version we would own.
 			keyName := params.KeyRing + "/cryptoKeys/" + params.KeyID
-			versionName := signingKeyVersionName(keyName)
+			versionName := firstKeyVersionName(keyName)
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
 			defer cancel()
 			if cleanupErr := c.reconcileUncertainCreate(cleanupCtx, versionName); cleanupErr != nil {
@@ -84,7 +86,7 @@ func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSi
 	if keyName == "" {
 		return nil, errors.New("create gcp kms crypto key: response omitted the key name")
 	}
-	versionName := signingKeyVersionName(keyName)
+	versionName := firstKeyVersionName(keyName)
 
 	if err := c.awaitVersionEnabled(ctx, versionName); err != nil {
 		// The key already exists even though provisioning failed. Do not use the
@@ -128,7 +130,7 @@ func (c *kmsSigningClient) reconcileFailedKeyGeneration(ctx context.Context, ver
 		case err == nil:
 			switch state := version.GetState(); state {
 			case kmspb.CryptoKeyVersion_ENABLED:
-				return c.DisableKeyVersion(ctx, versionName)
+				return disableKeyVersion(ctx, c.kms, versionName)
 			case kmspb.CryptoKeyVersion_DISABLED, kmspb.CryptoKeyVersion_DESTROY_SCHEDULED,
 				kmspb.CryptoKeyVersion_DESTROYED, kmspb.CryptoKeyVersion_GENERATION_FAILED:
 				return nil
@@ -201,11 +203,18 @@ func isTransientKMSError(err error) bool {
 // scheduled for destruction or destroyed can't sign either, so it counts as
 // done.
 func (c *kmsSigningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
+	return disableKeyVersion(ctx, c.kms, versionName)
+}
+
+// disableKeyVersion moves a version to DISABLED. A version already disabled,
+// scheduled for destruction or destroyed is unusable either way, so it counts
+// as done.
+func disableKeyVersion(ctx context.Context, client *kms.KeyManagementClient, versionName string) error {
 	if err := ValidateKeyVersionName(versionName); err != nil {
 		return err
 	}
 
-	_, err := c.kms.UpdateCryptoKeyVersion(ctx, &kmspb.UpdateCryptoKeyVersionRequest{
+	_, err := client.UpdateCryptoKeyVersion(ctx, &kmspb.UpdateCryptoKeyVersionRequest{
 		CryptoKeyVersion: &kmspb.CryptoKeyVersion{
 			Name:                             versionName,
 			State:                            kmspb.CryptoKeyVersion_DISABLED,
@@ -227,8 +236,8 @@ func (c *kmsSigningClient) DisableKeyVersion(ctx context.Context, versionName st
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"state"}},
 	})
 	if status.Code(err) == codes.FailedPrecondition {
-		version, getErr := c.kms.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
-		if getErr == nil && cannotSign(version.GetState()) {
+		version, getErr := client.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: versionName})
+		if getErr == nil && cannotUseVersion(version.GetState()) {
 			return nil
 		}
 	}
@@ -239,8 +248,9 @@ func (c *kmsSigningClient) DisableKeyVersion(ctx context.Context, versionName st
 	return nil
 }
 
-// cannotSign reports whether a version in state can no longer sign.
-func cannotSign(state kmspb.CryptoKeyVersion_CryptoKeyVersionState) bool {
+// cannotUseVersion reports whether a version in state can no longer sign,
+// encrypt or decrypt.
+func cannotUseVersion(state kmspb.CryptoKeyVersion_CryptoKeyVersionState) bool {
 	return state == kmspb.CryptoKeyVersion_DISABLED || state == kmspb.CryptoKeyVersion_DESTROY_SCHEDULED || state == kmspb.CryptoKeyVersion_DESTROYED
 }
 
@@ -248,25 +258,38 @@ func cannotSign(state kmspb.CryptoKeyVersion_CryptoKeyVersionState) bool {
 // SignerVerifierRole. Re-granting an existing binding is a no-op, so a retried
 // provisioning run does not churn the policy's etag.
 func (c *kmsSigningClient) GrantSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	return grantKeyRole(ctx, c.kms, keyName, serviceAccountEmail, SignerVerifierRole)
+}
+
+// RevokeSignerVerifier removes the SignerVerifierRole binding for the service
+// account on one crypto key. A missing binding is a no-op.
+func (c *kmsSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+	return revokeKeyRole(ctx, c.kms, keyName, serviceAccountEmail, SignerVerifierRole)
+}
+
+// grantKeyRole adds the service account to one crypto key's IAM policy under
+// role, never to the ring. Re-granting an existing binding is a no-op, so a
+// retried provisioning run does not churn the policy's etag.
+func grantKeyRole(ctx context.Context, client *kms.KeyManagementClient, keyName, serviceAccountEmail string, role iam.RoleName) error {
 	if err := ValidateKeyName(keyName); err != nil {
 		return err
 	}
 	if serviceAccountEmail == "" {
-		return errors.New("grant gcp kms signer verifier: service account email is required")
+		return fmt.Errorf("grant gcp kms %s: service account email is required", role)
 	}
 
-	handle := c.kms.ResourceIAM(keyName)
+	handle := client.ResourceIAM(keyName)
 	policy, err := handle.Policy(ctx)
 	if err != nil {
 		return fmt.Errorf("read gcp kms key iam policy: %w", err)
 	}
 
 	member := "serviceAccount:" + strings.ToLower(serviceAccountEmail)
-	if policy.HasRole(member, SignerVerifierRole) {
+	if policy.HasRole(member, role) {
 		return nil
 	}
 
-	policy.Add(member, SignerVerifierRole)
+	policy.Add(member, role)
 	if err := handle.SetPolicy(ctx, policy); err != nil {
 		return fmt.Errorf("set gcp kms key iam policy: %w", err)
 	}
@@ -274,28 +297,28 @@ func (c *kmsSigningClient) GrantSignerVerifier(ctx context.Context, keyName, ser
 	return nil
 }
 
-// RevokeSignerVerifier removes the SignerVerifierRole binding for the service
-// account on one crypto key. A missing binding is a no-op.
-func (c *kmsSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, serviceAccountEmail string) error {
+// revokeKeyRole removes the service account's role binding on one crypto key.
+// A missing binding is a no-op.
+func revokeKeyRole(ctx context.Context, client *kms.KeyManagementClient, keyName, serviceAccountEmail string, role iam.RoleName) error {
 	if err := ValidateKeyName(keyName); err != nil {
 		return err
 	}
 	if serviceAccountEmail == "" {
-		return errors.New("revoke gcp kms signer verifier: service account email is required")
+		return fmt.Errorf("revoke gcp kms %s: service account email is required", role)
 	}
 
-	handle := c.kms.ResourceIAM(keyName)
+	handle := client.ResourceIAM(keyName)
 	policy, err := handle.Policy(ctx)
 	if err != nil {
 		return fmt.Errorf("read gcp kms key iam policy: %w", err)
 	}
 
 	member := "serviceAccount:" + strings.ToLower(serviceAccountEmail)
-	if !policy.HasRole(member, SignerVerifierRole) {
+	if !policy.HasRole(member, role) {
 		return nil
 	}
 
-	policy.Remove(member, SignerVerifierRole)
+	policy.Remove(member, role)
 	if err := handle.SetPolicy(ctx, policy); err != nil {
 		return fmt.Errorf("set gcp kms key iam policy: %w", err)
 	}

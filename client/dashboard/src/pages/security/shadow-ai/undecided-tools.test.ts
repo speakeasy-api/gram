@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { describe, expect, it } from "vitest";

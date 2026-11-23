@@ -56,7 +56,9 @@ func parseInitializeParams(raw json.RawMessage) (initializeParams, []string, err
 	return params, slices.Sorted(maps.Keys(params.Capabilities)), nil
 }
 
-func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, metadataRepoParam *metadata_repo.Queries, clientInfoStore sessionClientInfoStore) (json.RawMessage, error) {
+// handleInitialize answers the hosted handshake. skillsEnabled is whether the
+// endpoint declares the Skills extension to this caller.
+func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, metadataRepoParam *metadata_repo.Queries, clientInfoStore sessionClientInfoStore, skillsEnabled bool) (json.RawMessage, error) {
 	params, capabilities, err := parseInitializeParams(req.Params)
 	validParams := err == nil
 	if err != nil {
@@ -115,7 +117,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpme
 		}
 	}
 
-	description := describeHostedServer(ctx, logger, metadataRepoParam, payload)
+	description := describeHostedServer(ctx, logger, metadataRepoParam, payload, skillsEnabled)
 
 	result := &result[initializeResult]{
 		ID:             req.ID,

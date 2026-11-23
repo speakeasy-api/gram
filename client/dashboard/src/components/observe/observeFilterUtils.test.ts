@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Operator } from "@gram/client/models/components/logfilter.js";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";

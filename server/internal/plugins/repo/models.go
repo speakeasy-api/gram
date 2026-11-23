@@ -28,6 +28,10 @@ type Plugin struct {
 	// @access: confidential
 	AutoCreated bool
 	// @access: confidential
+	AutoSyncEnabled pgtype.Bool
+	// @access: confidential
+	AutoAddServersEnabled bool
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -68,6 +72,14 @@ type PluginGithubConnection struct {
 	// @access: secret-restricted
 	MarketplaceToken pgtype.Text
 	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenHash pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenOrgEncrypted pgtype.Text
+	// @access: confidential
 	PublishedFingerprint pgtype.Text
 	// @access: confidential
 	PublishedMcpFingerprints []byte
@@ -88,8 +100,6 @@ type PluginServer struct {
 	PluginID uuid.UUID
 	// @access: confidential
 	ProjectID uuid.NullUUID
-	// @access: confidential
-	ToolsetID uuid.NullUUID
 	// @access: confidential
 	McpServerID uuid.NullUUID
 	// @access: confidential
