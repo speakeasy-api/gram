@@ -11,7 +11,6 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -72,9 +71,11 @@ type localToolCall struct {
 // tool is one source.
 type localToolSource func(ctx context.Context, server localToolServer) ([]localTool, error)
 
-// localTools lists every local tool a server offers. A source that fails is
-// left out, so the server's own tools and its other local tools stay
-// reachable. When two tools share a name, the first is kept.
+// localTools lists every local tool a server offers. When two tools share a
+// name, the first is kept. A source that fails is logged and left out: local
+// tools are extras, so a server's own tools and its other local tools stay
+// listed and callable, and a call to the missing tool's name is served as if
+// it were not there.
 func (s *Service) localTools(ctx context.Context, logger *slog.Logger, server localToolServer) []localTool {
 	if len(s.localToolSources) == 0 {
 		return nil
@@ -210,8 +211,40 @@ func withLocalToolsInCatalog(catalog *memberCatalog, local []localTool) *memberC
 	for _, entry := range catalog.entries {
 		catalog.byName[entry.Name] = entry
 	}
+	catalog.local = make(map[string]struct{}, len(local))
+	for _, tool := range local {
+		catalog.local[tool.definition.Name] = struct{}{}
+	}
 
 	return catalog
+}
+
+// withoutLocalTools is the catalog without the member's local tools: what
+// consent approves and a frozen catalog holds.
+func (catalog *memberCatalog) withoutLocalTools() *memberCatalog {
+	if catalog == nil || len(catalog.local) == 0 {
+		return catalog
+	}
+
+	kept := &memberCatalog{
+		entries:      make([]*toolListEntry, 0, len(catalog.entries)),
+		byName:       make(map[string]*toolListEntry, len(catalog.byName)),
+		local:        nil,
+		incomplete:   catalog.incomplete,
+		instructions: catalog.instructions,
+	}
+	for _, entry := range catalog.entries {
+		if _, local := catalog.local[entry.Name]; !local {
+			kept.entries = append(kept.entries, entry)
+		}
+	}
+	for name, entry := range catalog.byName {
+		if _, local := catalog.local[name]; !local {
+			kept.byName[name] = entry
+		}
+	}
+
+	return kept
 }
 
 // answerHostedLocalToolCall answers a hosted tools/call that names a local
@@ -291,4 +324,23 @@ func (s *Service) memberLocalTools(ctx context.Context, logger *slog.Logger, org
 	}
 
 	return s.localTools(ctx, logger, localToolServer{organizationID: organizationID, projectID: member.projectID, mcpServerID: member.serverID})
+}
+
+// localToolsOnlyKey marks a context whose tools/call only a local tool may
+// answer.
+type localToolsOnlyKey struct{}
+
+// withLocalToolsOnly marks a tools/call as allowed only because it names a
+// local tool, as a gateway allows a member's local tools that the caller did
+// not approve one by one. The member refuses such a call rather than run a
+// tool of its own when the name is not, or is no longer, a local tool, so none
+// of its tools runs under an approval that did not cover it.
+func withLocalToolsOnly(ctx context.Context) context.Context {
+	return context.WithValue(ctx, localToolsOnlyKey{}, true)
+}
+
+// localToolsOnly reports whether a context was marked by withLocalToolsOnly.
+func localToolsOnly(ctx context.Context) bool {
+	only, _ := ctx.Value(localToolsOnlyKey{}).(bool)
+	return only
 }

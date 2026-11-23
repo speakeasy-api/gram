@@ -510,3 +510,37 @@ func TestGatewayCachedCatalogOffersAMembersFeedbackTool(t *testing.T) {
 	require.Len(t, storedFeedback(t, ctx, ti, member), 1)
 	require.Zero(t, upstream.toolCalls())
 }
+
+// Approving a gateway never approves a member's feedback tool, which follows
+// access to the member instead. Once the tool is switched off, a call to its
+// name is refused rather than sent to the member under that approval.
+func TestGatewayCachedCatalogDoesNotApproveAMembersFeedbackTool(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	serveFeedback(t, ti)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "catalog-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	upstream := newRecordingUpstream(t, "ping")
+	memberSlug := "source"
+	member := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", memberSlug, 1, upstream.url)
+	setFeedbackTool(t, ctx, ti, member, true, "")
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, []string{memberSlug + "--ping", memberSlug + "--" + mcpfeedback.DefaultToolName})
+
+	setFeedbackTool(t, ctx, ti, member, false, "")
+
+	listed, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
+	require.NoError(t, err)
+	require.NotContains(t, listed.Body.String(), memberSlug+"--"+mcpfeedback.DefaultToolName)
+
+	called, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      memberSlug + "--" + mcpfeedback.DefaultToolName,
+		"arguments": map[string]any{"content": "ping never answers."},
+	}), connection.token, nil)
+	require.NoError(t, err)
+	require.Contains(t, called.Body.String(), "not approved", called.Body.String())
+	require.Empty(t, storedFeedback(t, ctx, ti, member))
+	require.Zero(t, upstream.toolCalls(), "the member never sees the call")
+}

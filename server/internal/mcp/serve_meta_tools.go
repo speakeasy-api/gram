@@ -319,6 +319,13 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// Resolved before the cached-view check so the named server's check is
 	// recorded on both paths; an unknown server is still refused after it.
 	member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
+	namesLocalTool := false
+	if ok {
+		_, namesLocalTool = localToolNamed(s.memberLocalTools(ctx, logger, gate.organizationID, member), toolName)
+	}
+	// A local tool's calls are not the member's tool calls, so a failed one
+	// is not written to the tool logs either.
+	attempt.localTool = namesLocalTool
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		found := false
 		for _, tool := range gate.catalog.Tools {
@@ -330,8 +337,10 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		// A member's local tools are not part of what was approved at connect
 		// time: access to them follows access to the member, not to any one of
 		// its tools.
-		if !found && ok {
-			_, found = localToolNamed(s.memberLocalTools(ctx, logger, gate.organizationID, member), toolName)
+		if !found && namesLocalTool {
+			found = true
+			// The member must answer it with that local tool or refuse it.
+			ctx = withLocalToolsOnly(ctx)
 		}
 		if !found {
 			// Absence from this cached view does not prove consent excluded a real
@@ -471,8 +480,12 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 
 // memberCatalog is one member's permission-filtered tool inventory.
 type memberCatalog struct {
-	entries    []*toolListEntry
-	byName     map[string]*toolListEntry
+	entries []*toolListEntry
+	byName  map[string]*toolListEntry
+	// local names the entries that are the member's local tools. Consent
+	// and the catalogs it freezes leave them out: access to them follows
+	// access to the member, not approval of any one of its tools.
+	local      map[string]struct{}
 	incomplete bool
 	// From a live upstream handshake. Cached catalogs do not probe upstream.
 	instructions string
@@ -506,7 +519,7 @@ func (s *Service) describeMemberToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, local: nil, incomplete: false, instructions: ""}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		entry := toolToListEntry(tool)

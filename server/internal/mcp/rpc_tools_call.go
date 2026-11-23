@@ -173,6 +173,11 @@ func handleToolsCall(
 			return answerHostedLocalToolCall(ctx, logger, clientInfoStore, payload, req.ID, tool, params.Arguments, reqMeta.ClientInfo)
 		}
 	}
+	// A gateway let this call through only because it named a local tool, so
+	// none of the server's own tools may answer it.
+	if localToolsOnly(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "%s", remotemcp.ToolNotApprovedMessage).LogInfo(ctx, logger)
+	}
 
 	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
 	// proxy matching, and the static name lookup all read this slice, so a
