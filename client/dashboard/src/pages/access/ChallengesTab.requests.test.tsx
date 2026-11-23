@@ -123,5 +123,6 @@ describe("ChallengesTab with pending access requests", () => {
 
     expect(screen.queryByTestId("challenge-request-line")).toBeNull();
     expect(screen.getByText("Grant")).toBeTruthy();
+    expect(screen.queryByText("Review")).toBeNull();
   });
 });

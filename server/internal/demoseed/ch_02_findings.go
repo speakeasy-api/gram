@@ -347,10 +347,10 @@ func (s *seeder) chfAIScanReceipts(ctx context.Context, ch driver.Conn) error {
 
 var (
 	chfChalScopes = []string{
-		"toolset:admin", "project:admin", "environment:read",
+		"mcp:write", "project:write", "environment:read",
 		"environment:write", "mcp:connect", "skill:write", "chat:read",
 	}
-	chfChalKinds = []string{"toolset", "project", "environment", "environment", "mcp", "skill", "chat"}
+	chfChalKinds = []string{"mcp", "project", "environment", "environment", "mcp", "skill", "chat"}
 	// chfChalProjectKinds are the seeded resource kinds whose checks carry a
 	// project_id dimension.
 	chfChalProjectKinds = map[string]bool{"environment": true, "mcp": true}
