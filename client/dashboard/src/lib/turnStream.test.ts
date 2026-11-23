@@ -5,6 +5,7 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
   readUIMessageStream,
   type UIMessage,
+  type UIMessageStreamWriter,
 } from "ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -171,10 +172,11 @@ describe("streamTurn", () => {
   // the persisted output and arguments, not an empty result and `{}`.
   it("reads omitted bodies from the persisted rows", async () => {
     const toolOutput = vi.fn(async (_toolCallId: string) => ({ rows: 3 }));
-    const toolCallInput = vi.fn(async (_toolCallId: string) => ({
-      path: "big.txt",
+    const toolCall = vi.fn(async (_toolCallId: string) => ({
+      name: "read",
+      input: { path: "big.txt" },
     }));
-    const persistedBodies: PersistedTurnBodies = { toolOutput, toolCallInput };
+    const persistedBodies: PersistedTurnBodies = { toolOutput, toolCall };
     const message = await runTurn(
       [
         {
@@ -198,7 +200,7 @@ describe("streamTurn", () => {
       persistedBodies,
     );
 
-    expect(toolCallInput).toHaveBeenCalledWith("call-1");
+    expect(toolCall).toHaveBeenCalledWith("call-1");
     expect(toolOutput).toHaveBeenCalledWith("call-1");
     const tools = message.parts.filter((p) => p.type.startsWith("tool-"));
     expect(tools).toHaveLength(1);
@@ -235,13 +237,149 @@ describe("streamTurn", () => {
         toolOutput: async () => {
           throw new Error("load failed");
         },
-        toolCallInput: async () => undefined,
+        toolCall: async () => undefined,
       },
     );
 
     const tools = message.parts.filter((p) => p.type.startsWith("tool-"));
     expect(tools).toHaveLength(1);
     expect(tools[0]).toMatchObject({ state: "output-available", input: {} });
+  });
+
+  // A persisted `null` is the tool's real result, not a missing row.
+  it("keeps a persisted null output and input", async () => {
+    const message = await runTurn(
+      [
+        {
+          kind: "message",
+          cursor: "1-0",
+          message_id: "m1",
+          finish_reason: "tool_calls",
+          tool_calls: [{ id: "call-1", function: { name: "read" } }],
+          body_omitted: true,
+        },
+        {
+          kind: "tool_output",
+          cursor: "1-1",
+          tool_call_id: "call-1",
+          body_omitted: true,
+        },
+        { kind: "done", cursor: "1-2", finish_reason: "stop" },
+      ],
+      {
+        toolOutput: async () => null,
+        toolCall: async () => ({ name: "read", input: null }),
+      },
+    );
+
+    const tools = message.parts.filter((p) => p.type.startsWith("tool-"));
+    expect(tools).toHaveLength(1);
+    expect(tools[0]).toMatchObject({
+      state: "output-available",
+      input: null,
+      output: null,
+    });
+  });
+
+  // A row with too many calls for even their ids to fit arrives with none.
+  // Each call is read from the row when its output arrives, so the output has
+  // a call to attach to.
+  it("renders a call whose row arrived without its calls", async () => {
+    const toolCall = vi.fn(async (_toolCallId: string) => ({
+      name: "search",
+      input: { q: "x" },
+    }));
+    const message = await runTurn(
+      [
+        {
+          kind: "message",
+          cursor: "1-0",
+          message_id: "m1",
+          finish_reason: "tool_calls",
+          body_omitted: true,
+        },
+        {
+          kind: "tool_output",
+          cursor: "1-1",
+          tool_call_id: "call-7",
+          output: "found",
+        },
+        { kind: "text", cursor: "1-2", text: "Done" },
+        {
+          kind: "message",
+          cursor: "1-3",
+          message_id: "m2",
+          finish_reason: "stop",
+        },
+        { kind: "done", cursor: "1-4", finish_reason: "stop" },
+      ],
+      { toolOutput: async () => undefined, toolCall },
+    );
+
+    expect(toolCall).toHaveBeenCalledWith("call-7");
+    const tools = message.parts.filter((p) => p.type.startsWith("tool-"));
+    expect(tools).toHaveLength(1);
+    expect(tools[0]).toMatchObject({
+      type: "tool-search",
+      state: "output-available",
+      input: { q: "x" },
+      output: "found",
+    });
+    expect(
+      lastAssistantMessageIsCompleteWithToolCalls({ messages: [message] }),
+    ).toBe(false);
+  });
+
+  // Stopping the turn aborts an in-flight lookup. That is not a failed load:
+  // the turn ends as aborted instead of answering the call with a fallback.
+  it("propagates an abort during an omitted-body lookup", async () => {
+    stubFetch([
+      sseBody([
+        {
+          kind: "message",
+          cursor: "1-0",
+          message_id: "m1",
+          finish_reason: "tool_calls",
+          tool_calls: [{ id: "call-1", function: { name: "read" } }],
+        },
+        {
+          kind: "tool_output",
+          cursor: "1-1",
+          tool_call_id: "call-1",
+          body_omitted: true,
+        },
+        { kind: "done", cursor: "1-2", finish_reason: "stop" },
+      ]),
+    ]);
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const controller = new AbortController();
+    const written: string[] = [];
+    const writer = {
+      write: (chunk: { type: string }) => {
+        written.push(chunk.type);
+      },
+      merge: () => {},
+      onError: undefined,
+    } as unknown as UIMessageStreamWriter<UIMessage>;
+
+    await expect(
+      streamTurn({
+        chatId: CHAT_ID,
+        writer,
+        abortSignal: controller.signal,
+        sessionToken: "session",
+        projectSlug: "proj",
+        persistedBodies: {
+          toolOutput: async () => {
+            controller.abort();
+            throw new DOMException("Aborted", "AbortError");
+          },
+          toolCall: async () => undefined,
+        },
+      }),
+    ).rejects.toThrow("Aborted");
+    expect(warned).not.toHaveBeenCalled();
+    expect(written).not.toContain("tool-output-available");
   });
 
   // A turn whose tool call is never answered still has to end cleanly: an

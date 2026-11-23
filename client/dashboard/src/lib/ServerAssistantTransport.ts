@@ -589,36 +589,60 @@ async function snapshotAssistantIds(
 
 /** chat.load's largest page; the current turn's rows are the newest. */
 const PERSISTED_BODIES_PAGE = 200;
+/**
+ * How many pages a lookup reads back before giving up. The row is almost
+ * always on the newest page, since the frame naming it is published right
+ * after it commits; reading back covers a turn that wrote more rows than one
+ * page since then, without walking a whole long chat.
+ */
+const PERSISTED_BODIES_MAX_PAGES = 5;
 
 /**
  * Reads the bodies the turn stream omits from oversized frames out of the
- * persisted rows. A frame is published only after its row commits, so one
- * chat.load taken after the frame arrived holds it; the result is reused for
- * later omitted frames and reloaded only when a row is not in it yet.
+ * persisted rows. A frame is published only after its row commits, so a
+ * chat.load taken after the frame arrived holds it; the rows are reused for
+ * later omitted frames and reloaded only when a row is not among them yet.
+ *
+ * A reload is a full chat.load, so this is for the rare oversized body, not
+ * for every frame.
  */
-export function createPersistedTurnBodies(
+function createPersistedTurnBodies(
   client: GramCore,
   chatId: string,
   abortSignal?: AbortSignal,
 ): PersistedTurnBodies {
-  let rows: {
+  type Row = {
+    seq: number;
     role: string;
     toolCallId?: string;
     toolCalls?: string;
     content?: unknown;
-  }[] = [];
-  const find = async (match: (row: (typeof rows)[number]) => boolean) => {
-    const cached = rows.find(match);
-    if (cached) return cached;
+  };
+  let rows: Row[] = [];
+  const load = async (beforeSeq?: number, generation?: number) => {
     const res = await chatLoad(
       client,
-      { id: chatId, limit: PERSISTED_BODIES_PAGE },
+      { id: chatId, limit: PERSISTED_BODIES_PAGE, beforeSeq, generation },
       undefined,
       { fetchOptions: { signal: abortSignal } },
     );
     if (!res.ok) throw res.error;
-    rows = res.value.messages;
-    return rows.find(match);
+    return res.value;
+  };
+  const find = async (match: (row: Row) => boolean) => {
+    const cached = rows.find(match);
+    if (cached) return cached;
+    let page = await load();
+    rows = page.messages;
+    for (let read = 1; ; read++) {
+      const hit = page.messages.find(match);
+      if (hit) return hit;
+      const oldest = page.messages[0];
+      if (!page.hasMoreBefore || !oldest || read >= PERSISTED_BODIES_MAX_PAGES)
+        return undefined;
+      page = await load(oldest.seq, page.generation);
+      rows = [...page.messages, ...rows];
+    }
   };
   return {
     async toolOutput(toolCallId) {
@@ -627,14 +651,16 @@ export function createPersistedTurnBodies(
       );
       return row ? toolOutputValue(row.content) : undefined;
     },
-    async toolCallInput(toolCallId) {
+    async toolCall(toolCallId) {
       const row = await find(
         (r) =>
           r.role === "assistant" &&
           parseToolCalls(r.toolCalls).some((c) => c.id === toolCallId),
       );
-      return parseToolCalls(row?.toolCalls).find((c) => c.id === toolCallId)
-        ?.input;
+      const call = parseToolCalls(row?.toolCalls).find(
+        (c) => c.id === toolCallId,
+      );
+      return call && { name: call.name, input: call.input };
     },
   };
 }

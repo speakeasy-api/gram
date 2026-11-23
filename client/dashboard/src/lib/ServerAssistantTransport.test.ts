@@ -134,7 +134,7 @@ function chatBody(chatId: string, rows: Row[]) {
     last_message_timestamp: TIMESTAMP,
     messages: rows.map((row, seq) => ({
       ...row,
-      seq,
+      seq: seq + 1,
       generation: 0,
       model: "test-model",
       created_at: TIMESTAMP,
@@ -151,6 +151,8 @@ const api = {
   rowsBefore: [] as Row[],
   /** chat.load rows after the message is sent. */
   rowsAfter: [] as Row[],
+  /** The page before the newest, served for a `before_seq` request. */
+  rowsOlder: [] as Row[],
   sent: false,
 };
 
@@ -182,10 +184,14 @@ beforeAll(async () => {
         }
         case "/rpc/chat.load": {
           const chatId = url.searchParams.get("id") ?? "";
-          json(
-            200,
-            chatBody(chatId, api.sent ? api.rowsAfter : api.rowsBefore),
-          );
+          if (url.searchParams.has("before_seq")) {
+            json(200, chatBody(chatId, api.rowsOlder));
+            return;
+          }
+          json(200, {
+            ...chatBody(chatId, api.sent ? api.rowsAfter : api.rowsBefore),
+            has_more_before: api.rowsOlder.length > 0,
+          });
           return;
         }
         case "/chat/turnstream": {
@@ -227,6 +233,7 @@ beforeEach(() => {
   api.frames = null;
   api.rowsBefore = [];
   api.rowsAfter = [];
+  api.rowsOlder = [];
   api.sent = false;
 });
 
@@ -409,6 +416,27 @@ describe("Project Assistant turn", () => {
     expect(
       api.requests.filter((r) => r.path === "/rpc/chat.load"),
     ).toHaveLength(1);
+  });
+
+  // A row older than the newest page is found by reading back with
+  // before_seq rather than given up on.
+  it("pages back for an omitted body that is not on the newest page", async () => {
+    api.frames = TOOL_TURN_FRAMES.map((frame) =>
+      frame.kind === "tool_output"
+        ? { ...frame, output: undefined, body_omitted: true }
+        : frame,
+    );
+    api.rowsAfter = TOOL_TURN_ROWS.filter((row) => row.role !== "tool");
+    api.rowsOlder = TOOL_TURN_ROWS.filter((row) => row.role === "tool");
+
+    const { chat, sends } = await runTurn({});
+
+    expect(chat.status).toBe("ready");
+    expect(sends).toBe(1);
+    expect(visibleParts(assistantOf(chat))).toEqual(EXPECTED_TOOL_TURN);
+    const loads = api.requests.filter((r) => r.path === "/rpc/chat.load");
+    expect(loads).toHaveLength(2);
+    expect(loads[1]!.query.get("before_seq")).toBe("1");
   });
 
   it("falls back to polling chat.load when streaming is refused", async () => {
