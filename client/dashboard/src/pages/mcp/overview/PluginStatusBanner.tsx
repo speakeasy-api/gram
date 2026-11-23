@@ -90,8 +90,10 @@ function WritablePluginStatusBanner({
   // auto-sync without a manual refresh. The poll is silent: a spinner keyed
   // to it would reappear every 5s beside the status and never settle. Saving
   // shows its own spinner on the Publish button.
+  // A failed status read hides the sync state; it must not take the page down.
   const { data: publishStatus } = usePublishStatus(scope, undefined, {
     refetchInterval: 5_000,
+    throwOnError: false,
   });
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);

@@ -216,8 +216,11 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const { data: pluginsData } = usePlugins(pluginScope, undefined, {
     enabled: canReadPlugins,
   });
+  // Only the readiness row reads this; a failed status read leaves that row
+  // unknown rather than taking down every tab of the server.
   const { data: publishStatus } = usePublishStatus(pluginScope, undefined, {
     enabled: canReadPlugins,
+    throwOnError: false,
   });
   const isCanonical = !!mcpServer && isCanonicalHostedWrapper(mcpServer);
   // The same load the detail page does, so it is shared from the cache; it
