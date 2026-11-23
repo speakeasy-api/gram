@@ -535,11 +535,9 @@ func (s *Service) validateNewClientIssuers(
 	return issuer, nil
 }
 
-// finalizeClientCreate binds a freshly created client to each
-// user_session_issuer, synchronizes its associations and typed state, records
-// the create audit event, commits the
-// transaction, and returns the API view. Shared by the manual and CIMD create
-// paths, which differ only in how the row is inserted.
+// finalizeClientCreate captures unambiguous server placements before recording
+// the audit snapshot and returning the same issuer inventory as a detail read.
+// Manual and CIMD creation share this transaction flow.
 func (s *Service) finalizeClientCreate(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -551,7 +549,16 @@ func (s *Service) finalizeClientCreate(
 	userIssuerIDs []uuid.UUID,
 	templateID uuid.NullUUID,
 ) (*types.RemoteSessionClient, error) {
-	snapshot, err := mv.BuildRemoteSessionClientView(created, userIssuerIDs)
+	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, userIssuerIDs, created.ID); err != nil {
+		return nil, bindingSyncError(ctx, logger, err)
+	}
+	placed, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ID: created.ID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read created remote session client placements").LogError(ctx, logger)
+	}
+	snapshot, err := mv.BuildRemoteSessionClientView(created, placed.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -585,17 +592,11 @@ func (s *Service) finalizeClientCreate(
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote session client creation").LogError(ctx, logger)
 	}
 
-	// A successful binding write must include its captured associations and
-	// typed state. On failure the caller rolls back the entire DB mutation.
-	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, userIssuerIDs, created.ID); err != nil {
-		return nil, bindingSyncError(ctx, logger, err)
-	}
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	view, err := s.clientView(created, userIssuerIDs)
+	view, err := s.clientView(created, placed.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
