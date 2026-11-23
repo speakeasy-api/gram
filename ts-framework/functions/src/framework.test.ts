@@ -1014,6 +1014,13 @@ test("resource meta flows through to manifest", () => {
       meta: { ui: { csp } },
     })
     .resource({
+      name: "direct",
+      uri: "resource://direct",
+      description: "Direct resource with meta",
+      content: "hello",
+      meta: { owner: "docs" },
+    })
+    .resource({
       name: "plain",
       uri: "resource://plain",
       description: "No meta",
@@ -1023,6 +1030,8 @@ test("resource meta flows through to manifest", () => {
   const manifest = g.manifest();
   const chart = manifest.resources?.find((r) => r.name === "chart");
   expect(chart?.meta).toEqual({ ui: { csp } });
+  const direct = manifest.resources?.find((r) => r.name === "direct");
+  expect(direct?.meta).toEqual({ owner: "docs" });
   const plain = manifest.resources?.find((r) => r.name === "plain");
   expect(plain).not.toHaveProperty("meta");
 });
