@@ -240,8 +240,8 @@ func InferenceExecuteCheck(projectID string) Check {
 // rewritten when new default capabilities are introduced. Explicit exclusions
 // still win over either allow alternative.
 func (e *Engine) RequirePluginWrite(ctx context.Context, organizationID, projectID string) error {
-	return e.RequireAnyUnblocked(ctx,
+	return e.Require(ctx, AnyUnblocked(
 		Check{Scope: ScopePluginWrite, ResourceKind: ResourceKindProject, ResourceID: projectID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationDefault},
 		Check{Scope: ScopeOrgAdmin, ResourceKind: ResourceKindOrg, ResourceID: organizationID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationDefault},
-	)
+	))
 }

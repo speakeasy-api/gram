@@ -107,7 +107,7 @@ type SkillTargetInventory interface {
 // got back.
 type SkillAuthorizer interface {
 	PrepareContext(ctx context.Context) (context.Context, error)
-	RequireAnyUnblocked(ctx context.Context, checks ...authz.Check) error
+	Require(ctx context.Context, checks ...authz.Check) error
 }
 
 // SkillProjectResolver turns the project slug a caller names into the project
@@ -1145,7 +1145,7 @@ func (s *SkillsService) requireSkillRead(ctx context.Context, project ResolvedPr
 	if skillID != "" {
 		checks = append(checks, authz.Skill(authz.SkillIDFrom(skillID)).Read())
 	}
-	return s.grants.RequireAnyUnblocked(ctx, checks...)
+	return s.grants.Require(ctx, authz.AnyUnblocked(checks...))
 }
 
 // UndistributeSkillInput names exactly one target on the same terms as
