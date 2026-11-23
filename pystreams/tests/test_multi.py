@@ -170,6 +170,7 @@ async def test_next_instance_equal_to_current_builds_an_unarmed_client(
         await multi_mod.multi(
             service_version=None,
             environment="local",
+            partition="us",
             git_sha=None,
             log_level="INFO",
             pretty_log=False,
