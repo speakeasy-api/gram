@@ -2785,3 +2785,17 @@ UPDATE network_ingress_certificate_states
 SET updated_at = updated_at - interval '1 hour'
 WHERE network_ingress_id = @network_ingress_id
   AND state_key = 'issuance-lease';
+
+-- name: ClearFunctionsAccessOrganizationFixture :exec
+-- Test-only fixture: reproduces a function runner key written before
+-- functions_access had an organization_id.
+UPDATE functions_access SET organization_id = NULL WHERE id = @id;
+
+-- name: SoftDeleteFunctionsAccessFixture :exec
+-- Test-only fixture: soft-deletes a function runner key.
+UPDATE functions_access SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: GetFunctionsAccessOrganizationFixture :one
+-- Test-only fixture: reads a function runner key's organization, soft-deleted
+-- or not.
+SELECT organization_id, updated_at FROM functions_access WHERE id = @id;

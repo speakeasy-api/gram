@@ -346,12 +346,19 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 const createDeploymentFunctionsAccess = `-- name: CreateDeploymentFunctionsAccess :one
 INSERT INTO functions_access (
     project_id
+  , organization_id
   , deployment_id
   , function_id
   , encryption_key
   , bearer_format
 ) VALUES (
     $1
+  , (
+      SELECT p.organization_id
+      FROM projects AS p
+      JOIN organization_metadata AS om ON om.id = p.organization_id
+      WHERE p.id = $1
+    )
   , $2
   , $3
   , $4
@@ -368,6 +375,9 @@ type CreateDeploymentFunctionsAccessParams struct {
 	BearerFormat  pgtype.Text
 }
 
+// organization_id is the project's organization. The lookup joins
+// organization_metadata, which the column references, so a project whose
+// organization has no metadata row stores NULL instead of failing the deploy.
 func (q *Queries) CreateDeploymentFunctionsAccess(ctx context.Context, arg CreateDeploymentFunctionsAccessParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createDeploymentFunctionsAccess,
 		arg.ProjectID,
