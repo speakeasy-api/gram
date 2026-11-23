@@ -93,7 +93,7 @@ func testSyncedRoleDeletionPluginAssignments(t *testing.T, scope string) {
 		t.Helper()
 		stub := newWorkOSClientWithEvents([][]events.Event{{{ID: eventID, Event: eventType, CreatedAt: now, Data: payload}}})
 		if scope == "organization" {
-			result, err := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil).Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+			result, err := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil).Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 			require.NoError(t, err)
 			require.Equal(t, eventID, result.LastEventID)
 		} else {

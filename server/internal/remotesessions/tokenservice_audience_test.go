@@ -92,6 +92,7 @@ func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pg
 		policy,
 		nil,
 		cache.NoopCache,
+		cache.NoopEvictableCache,
 		mustURL(t, "http://localhost"),
 	)
 

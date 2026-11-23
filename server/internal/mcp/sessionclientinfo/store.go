@@ -25,6 +25,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 )
 
 // DefaultLiveRecordCap bounds the identities tracked per MCP server. Matches
@@ -60,14 +62,14 @@ type Store struct {
 // NewStore builds a store bounded at cap records per MCP server. A cap of zero
 // or less takes DefaultLiveRecordCap.
 //
-// A nil client yields a store that records nothing and finds nothing, so
-// callers never have to test for one — an environment without Redis simply
-// reports every caller as unknown.
-func NewStore(redisClient *redis.Client, recordCap int) *Store {
+// A wrapper around a nil client yields a store that records nothing and finds
+// nothing, so callers never have to test for one — an environment without
+// Redis simply reports every caller as unknown.
+func NewStore(redisClient redisrole.EvictableClient, recordCap int) *Store {
 	if recordCap <= 0 {
 		recordCap = DefaultLiveRecordCap
 	}
-	return &Store{redis: redisClient, cap: recordCap}
+	return &Store{redis: redisClient.Client, cap: recordCap}
 }
 
 // scope is the key fragment shared by an MCP server's record keys and its live

@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -552,6 +553,7 @@ func NewService(
 	siteURL *url.URL,
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
+	evictableCache cache.EvictableCache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	billingTracker billing.Tracker,
@@ -579,6 +581,7 @@ func NewService(
 	tunnelGatewayCIDRs []string,
 	callerAssertions *mcpauthz.Issuer,
 	redisClient *redis.Client,
+	evictableClient redisrole.EvictableClient,
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
 	codeExecutor codemode.Executor,
@@ -620,7 +623,7 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
-	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
+	sessionClientInfo := sessionclientinfo.NewStore(evictableClient, 0)
 	shutdownDrain := remoteProxyManager.ShutdownDrain()
 	if shutdownDrain == nil {
 		shutdownDrain = shutdowndrain.New()
@@ -681,7 +684,7 @@ func NewService(
 			meterProvider,
 			gateway.ToolCallSourceMCP,
 			enc,
-			cacheImpl,
+			evictableCache,
 			guardianPolicy,
 			funcCaller,
 			platformSvc,
@@ -690,7 +693,7 @@ func NewService(
 		oauthRepo:              oauth_repo.New(db),
 		billingTracker:         billingTracker,
 		billingRepository:      billingRepository,
-		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), evictableCache, cache.SuffixNone),
 		telemLogger:            telemLogger,
 		toolCallLogger:         toolCallLogger,
 		vectorToolStore:        vectorToolStore,
@@ -739,7 +742,7 @@ func NewService(
 		userSessionRefreshReplayCoordination: cacheImpl,
 		sessionPolicyCache: cache.NewTypedObjectCache[sessionPolicyEntry](
 			logger.With(attr.SlogCacheNamespace("session_policy")),
-			cacheImpl,
+			evictableCache,
 			cache.SuffixNone,
 		),
 		sessionLiveness: newSessionLivenessMemo(),

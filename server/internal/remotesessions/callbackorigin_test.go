@@ -186,7 +186,7 @@ func TestHandleClientMetadataDocument_PinsNullClientURLsToOutboundOrigin(t *test
 	// The server URL has moved; the client's identity has not.
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, ti.redisCache, mustURL(t, movedOrigin),
+	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, ti.redisCache, ti.evictableCache, mustURL(t, movedOrigin),
 		remotesessions.WithCallbackOrigins(remotesessions.CallbackOrigins{Outbound: mustURL(t, cimdServerURL), Registration: nil}))
 	rec := httptest.NewRecorder()
 	require.NoError(t, mgr.HandleClientMetadataDocument(rec, cimdDocumentRequest(t, created.ID, false)))

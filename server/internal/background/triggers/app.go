@@ -230,7 +230,7 @@ func NewApp(
 	siteURL *url.URL,
 	platformHosts map[string]string,
 	slackClient *slackclient.SlackClient,
-	cacheImpl cache.Cache,
+	cacheImpl cache.EvictableCache,
 	identities AssistantIdentityLifecycle,
 	dispatchers ...Dispatcher,
 ) *App {

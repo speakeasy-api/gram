@@ -70,6 +70,7 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 		policy,
 		nil,
 		cache.NoopCache,
+		cache.NoopEvictableCache,
 		mustURL(t, "http://localhost"),
 	)
 

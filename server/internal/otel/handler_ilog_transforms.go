@@ -33,7 +33,7 @@ func NewLogTransformHandler(
 	meterProvider metric.MeterProvider,
 	logPublisher gcp.Publisher[*otelv1.LogRecord],
 	replicaDB database.DBTX,
-	cacheImpl cache.Cache,
+	cacheImpl cache.EvictableCache,
 ) *LogTransformHandler {
 	logger = logger.With(attr.SlogComponent("log-transform-handler"))
 

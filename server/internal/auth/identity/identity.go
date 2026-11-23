@@ -161,7 +161,7 @@ type Resolver struct {
 func NewResolver(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
-	redisClient cache.Cache,
+	redisClient cache.EvictableCache,
 	idpBaseURL string,
 	idpClientID string,
 	idpClient IDPClient,

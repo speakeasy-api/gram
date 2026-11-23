@@ -75,6 +75,7 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 				policy,
 				nil,
 				cache.NoopCache,
+				cache.NoopEvictableCache,
 				mustURL(t, "http://localhost"),
 			)
 
@@ -172,6 +173,7 @@ func TestBuildAuthorizationUrl_OrgLevelIssuer(t *testing.T) {
 		policy,
 		nil,
 		cache.NoopCache,
+		cache.NoopEvictableCache,
 		mustURL(t, "http://localhost"),
 	)
 

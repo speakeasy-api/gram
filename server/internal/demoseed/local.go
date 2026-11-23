@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
@@ -30,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 )
 
 // Fixed local-only material. These are deliberately well-known constants, not
@@ -103,7 +103,7 @@ type LocalFixturesOptions struct {
 // registry entries, platform assets, and system roles are global.
 // Call it only after Run has completed with LocalSpec: the seed deletes and
 // recreates the org's memberships, so adopting you has to come after it.
-func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, cache *redis.Client, opts LocalFixturesOptions) error {
+func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, cache redisrole.EvictableClient, opts LocalFixturesOptions) error {
 	spec := LocalSpec()
 	logger = logger.With(attr.SlogComponent("demoseed.local"), attr.SlogOrganizationID(spec.OrgID))
 
@@ -348,8 +348,8 @@ func resolveDeveloper(ctx context.Context, email string) (developer, error) {
 // bustLocalCaches drops the cached entitlement and user-info entries the
 // fixtures just invalidated. Best effort: a stale cache only means a running
 // server needs a restart, so a failure is logged rather than returned.
-func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Client, orgID, userID string) {
-	if cache == nil {
+func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache redisrole.EvictableClient, orgID, userID string) {
+	if cache.Client == nil {
 		return
 	}
 

@@ -153,7 +153,7 @@ func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, f
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, conn))
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, testenv.NewEvictableCache(t, redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, conn))
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -236,7 +236,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		tracerProvider,
 		conn,
 		sessionManager,
-		cache.NewRedisCacheAdapter(redisClient),
+		testenv.NewEvictableCache(t, redisClient),
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		auditLogger,
 		ghConfig,

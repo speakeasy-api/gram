@@ -1033,6 +1033,7 @@ func TestIssuerMetadataRefresh_NoteUse_ListClientsRefreshesTheIssuerItRenders(t 
 		policy,
 		nil,
 		ti.redisCache,
+		ti.evictableCache,
 		mustURL(t, "http://localhost"),
 		remotesessions.WithIssuerMetadataRefresher(refresher),
 	)

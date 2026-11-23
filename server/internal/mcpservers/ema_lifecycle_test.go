@@ -92,7 +92,7 @@ func TestEMA_NormalGatewayOptInAddsExistingServerReach(t *testing.T) {
 	require.Empty(t, links)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, redisClient)
+	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, testenv.NewEvictableCache(t, redisClient))
 	require.NoError(t, features.SetFeatureEnabled(ctx, auth.ActiveOrganizationID, productfeatures.FeatureOrganizationGatewayDisabled, false))
 	links, err = q.ListBackfillLinkedServersFixture(ctx, id)
 	require.NoError(t, err)

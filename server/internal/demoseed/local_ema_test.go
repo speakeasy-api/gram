@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -256,7 +257,7 @@ func TestLocalFixturesWireEnterpriseSignIn(t *testing.T) {
 			idp.mu.Unlock()
 		}
 		seedLocalPostgres(ctx, t, db, spec)
-		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, nil, opts))
+		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, redisrole.EvictableClient{}, opts))
 
 		server, err := q.GetRemoteMCPServerURLFixture(ctx, s.det("remotemcp-ema-tracker"))
 		require.NoError(t, err)

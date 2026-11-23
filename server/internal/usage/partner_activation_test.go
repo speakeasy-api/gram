@@ -49,7 +49,7 @@ func testPartnerPrivateNetworkingActivation(t *testing.T, partner, staffDisabled
 	}
 	redisClient := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
-	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, redisClient)
+	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, testenv.NewEvictableCache(t, redisClient))
 	service.productFeatures = features
 	enabled, err := features.IsFeatureEnabled(t.Context(), stripeWebhookOrganizationID, productfeatures.FeatureNetworkIngress)
 	require.NoError(t, err)

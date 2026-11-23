@@ -84,7 +84,7 @@ func runOrgEvents(t *testing.T, conn *pgxpool.Pool, workosOrgID string, page ...
 	t.Helper()
 
 	stub := newWorkOSClientWithEvents([][]events.Event{page})
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err := activity.Do(t.Context(), activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 }

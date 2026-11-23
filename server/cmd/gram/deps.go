@@ -91,6 +91,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -474,6 +475,45 @@ type redisClientOptions struct {
 	enableTracing bool
 }
 
+// redisStores holds one Redis client and one cache adapter per role. Every
+// process builds it once and passes the role each component needs.
+type redisStores struct {
+	// Sessions is the client for state that must survive memory pressure. It
+	// is also the client for every health check.
+	Sessions *redis.Client
+
+	// SessionsCache is the cache adapter over Sessions.
+	SessionsCache *cache.RedisCacheAdapter
+
+	// Evictable is the client for key families that rebuild on a miss. It
+	// wraps the Sessions client itself.
+	Evictable redisrole.EvictableClient
+
+	// EvictableCache is the cache adapter over Evictable. It checks every key
+	// against the declared evictable prefixes.
+	EvictableCache *cache.EvictableRedisAdapter
+}
+
+// newRedisStores connects to Redis and builds the clients and adapters of
+// both roles. Both roles use the one sessions client, so every command goes
+// to the instance it goes to without the split.
+func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, opts redisClientOptions) (*redisStores, error) {
+	sessions, err := newRedisClient(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	guard := redisrole.NewGuard(logger, meterProvider, redisrole.GuardReport)
+	evictable := redisrole.EvictableClient{Client: sessions}
+
+	return &redisStores{
+		Sessions:       sessions,
+		SessionsCache:  cache.NewRedisCacheAdapter(sessions),
+		Evictable:      evictable,
+		EvictableCache: cache.NewEvictableRedisAdapter(evictable, guard),
+	}, nil
+}
+
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
 	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
@@ -655,7 +695,7 @@ func newBillingProvider(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	guardianPolicy *guardian.Policy,
-	redisClient *redis.Client,
+	stores *redisStores,
 	posthogClient *posthog.Posthog,
 	stripeClient stripeclient.Client,
 	db *pgxpool.Pool,
@@ -692,7 +732,7 @@ func newBillingProvider(
 			}),
 		)
 
-		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
+		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, stores.SessionsCache, stores.EvictableCache, catalog, c.String("polar-webhook-secret"))
 		tracker := tracking.New(pclient, posthogClient, logger)
 		return pclient, tracker, nil
 	case c.String("environment") == "local":
@@ -954,7 +994,7 @@ func newAdminOpenRouter(
 	tracerProvider trace.TracerProvider,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
-	redisClient *redis.Client,
+	stores *redisStores,
 	c *cli.Context,
 	staffOrg staff.Organization,
 ) admin.AdminOpenRouter {
@@ -982,7 +1022,7 @@ func newAdminOpenRouter(
 		db,
 		env,
 		provisioningKey,
-		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
+		productfeatures.NewClient(logger, tracerProvider, db, stores.EvictableCache),
 		nil,
 		encryptionClient,
 		staffOrg,
@@ -1205,7 +1245,7 @@ func newTelemetryLogger(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
-	cacheImpl cache.Cache,
+	cacheImpl cache.EvictableCache,
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
@@ -1235,7 +1275,7 @@ func newTriggersApp(
 	siteURL *url.URL,
 	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
-	cacheImpl cache.Cache,
+	cacheImpl cache.EvictableCache,
 	identities *assistantidentity.Service,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)

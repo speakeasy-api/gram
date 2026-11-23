@@ -304,6 +304,10 @@ type ChallengeManager struct {
 	refresher   *RefreshService
 	serverURL   *url.URL
 
+	// probes caches upstream probe results (endpoint resource and federated
+	// metadata) that rebuild on a miss.
+	probes cache.EvictableCache
+
 	// origins pins the redirect_uri and client identity URLs each client was
 	// registered with, independent of serverURL.
 	origins CallbackOrigins
@@ -545,6 +549,7 @@ func NewChallengeManager(
 	policy *guardian.Policy,
 	tunnels *tunnelrouting.HTTPClient,
 	cacheImpl cache.Cache,
+	probeCache cache.EvictableCache,
 	serverURL *url.URL,
 	options ...ChallengeManagerOption,
 ) *ChallengeManager {
@@ -563,6 +568,7 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		locks:          cacheImpl,
+		probes:         probeCache,
 		connections:    nil,
 		refresher:      nil,
 		issuerMetadata: nil,

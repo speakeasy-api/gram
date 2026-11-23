@@ -116,7 +116,7 @@ func seedChainedCatalogFixtureClient(t *testing.T, ctx context.Context, conn *pg
 	require.NoError(t, err)
 	baseURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
-	sessions := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), policy, nil, cache.NewRedisCacheAdapter(redisClient), baseURL)
+	sessions := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), policy, nil, cache.NewRedisCacheAdapter(redisClient), testenv.NewEvictableCache(t, redisClient), baseURL)
 
 	return chainedCatalogFixture{
 		principal: principal, projectID: project.ID, remoteID: remote.ID, remoteURL: remoteURL,

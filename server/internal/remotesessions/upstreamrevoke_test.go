@@ -734,6 +734,7 @@ func newDisconnectChallengeManager(t *testing.T, ti *testInstance) *remotesessio
 		policy,
 		nil,
 		cache.NoopCache,
+		cache.NoopEvictableCache,
 		mustURL(t, "http://localhost"),
 	)
 }

@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 )
 
 // Turn frames are the events a dashboard needs to render an assistant turn
@@ -82,15 +84,15 @@ type TurnStream struct {
 	client *redis.Client
 }
 
-// NewTurnStream returns a stream over the supplied Redis client. A nil client
+// NewTurnStream returns a stream over the evictable Redis client. A nil client
 // yields a nil TurnStream whose Publish is a no-op, so a deployment without
 // Redis degrades to a dashboard that shows the reply when it lands rather than
 // failing turns.
-func NewTurnStream(client *redis.Client) *TurnStream {
-	if client == nil {
+func NewTurnStream(client redisrole.EvictableClient) *TurnStream {
+	if client.Client == nil {
 		return nil
 	}
-	return &TurnStream{client: client}
+	return &TurnStream{client: client.Client}
 }
 
 // Reset removes the previous turn's frames while preserving the stream's ID

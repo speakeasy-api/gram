@@ -215,7 +215,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
-	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, nil, locks, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, policy, nil, locks, testenv.NewEvictableCache(t, redisClient), serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(keys)))
 	chainer := New(logger, db, upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), challenges, remotesessions.NewDelegationService(db, challenges), keys, locks)
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)

@@ -46,7 +46,7 @@ func newEnforcedCallerFixture(t *testing.T, pool *pgxpool.Pool) *enforcedCallerF
 	f := newAuthClientFixture(t, pool)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, cache.NoopEvictableCache, &url.URL{Scheme: "http", Host: "localhost"})
 	f.service.metrics = mcpmetrics.NewMetrics(testenv.NewMeterProvider(t).Meter("test"), testenv.NewLogger(t))
 	f.enforce()
 	fixture := &enforcedCallerFixture{authClientFixture: f, signIn: uuid.New(), consentedUnder: uuid.New()}

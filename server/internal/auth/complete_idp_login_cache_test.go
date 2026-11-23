@@ -22,7 +22,7 @@ import (
 
 // Only user-info writes fail; reads and sync's cache invalidation still use Redis.
 type failingUserInfoSetCache struct {
-	cache.Cache
+	cache.EvictableCache
 	failedSets int
 }
 
@@ -31,7 +31,7 @@ func (c *failingUserInfoSetCache) Set(ctx context.Context, key string, value any
 		c.failedSets++
 		return errors.New("user-info SET unavailable")
 	}
-	if err := c.Cache.Set(ctx, key, value, ttl); err != nil {
+	if err := c.EvictableCache.Set(ctx, key, value, ttl); err != nil {
 		return fmt.Errorf("set backing cache: %w", err)
 	}
 	return nil
@@ -56,7 +56,7 @@ func TestCompleteIDPLogin_MembershipGateIgnoresStaleCacheRepopulation(t *testing
 			logger := testenv.NewLogger(t)
 			redisClient, err := infra.NewRedisClient(t, 0)
 			require.NoError(t, err)
-			backingCache := cache.NewRedisCacheAdapter(redisClient)
+			backingCache := testenv.NewEvictableCache(t, redisClient)
 			suffix := testenv.NewCacheSuffix(t, cache.Suffix("login-cache-repopulation"))
 			userInfoCache := cache.NewTypedObjectCache[sessions.CachedUserInfo](logger, backingCache, suffix)
 			pylonClient, err := pylon.NewPylon(logger, "")
@@ -107,7 +107,7 @@ func TestCompleteIDPLogin_UserInfoCacheWriteFailureIsBestEffort(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	backingCache := cache.NewRedisCacheAdapter(redisClient)
+	backingCache := testenv.NewEvictableCache(t, redisClient)
 	suffix := testenv.NewCacheSuffix(t, cache.Suffix("login-cache-failure"))
 	userInfoCache := cache.NewTypedObjectCache[sessions.CachedUserInfo](logger, backingCache, suffix)
 	stale, err := inst.identityResolver.BuildUserInfoFromDB(ctx, gramUserID)
@@ -117,7 +117,7 @@ func TestCompleteIDPLogin_UserInfoCacheWriteFailureIsBestEffort(t *testing.T) {
 	_, err = userInfoCache.Get(ctx, sessions.UserInfoCacheKey(gramUserID))
 	require.NoError(t, err, "stale user info is cached before login")
 
-	failingCache := &failingUserInfoSetCache{Cache: backingCache}
+	failingCache := &failingUserInfoSetCache{EvictableCache: backingCache}
 	pylonClient, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
 	resolver := identity.NewResolver(logger, testenv.NewTracerProvider(t), failingCache,

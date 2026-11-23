@@ -70,7 +70,7 @@ func TestProcessWorkOSOrganizationEvents_AdvancesCursor(t *testing.T) {
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
 		WorkOSOrganizationID: workosOrgID,
@@ -104,7 +104,7 @@ func TestProcessWorkOSOrganizationEvents_ResumesFromCursor(t *testing.T) {
 		{{ID: "event_01HZNEXT", Event: "organization.updated", CreatedAt: time.Now(), Data: newOrgEventPayload(t, workosOrgID)}},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
 		WorkOSOrganizationID: workosOrgID,
@@ -137,7 +137,7 @@ func TestProcessWorkOSOrganizationEvents_FullPageHasMore(t *testing.T) {
 	}
 
 	stub := newWorkOSClientWithEvents([][]events.Event{page})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ func TestProcessWorkOSOrganizationEvents_EmptyPage(t *testing.T) {
 	const workosOrgID = "org_01HZTESTEMPTY"
 
 	stub := newWorkOSClientWithEvents([][]events.Event{nil})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -186,7 +186,7 @@ func TestProcessWorkOSOrganizationEvents_CreatesOrgAndUpdatesWorkOSExternalIDWhe
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -226,7 +226,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameH
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZNOSLUG", res.LastEventID)
@@ -265,7 +265,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameY
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZONECHAR", res.LastEventID)
@@ -310,7 +310,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateSeedsLoggingDefaults(
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZSEEDDEFAULTS", res.LastEventID)
@@ -355,7 +355,7 @@ func TestProcessWorkOSOrganizationEvents_ExistingOrgUpdateDoesNotSeedLoggingDefa
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZSKIPDEFAULTS", res.LastEventID)
@@ -385,7 +385,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationExternalIDMissingLocallyCre
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZMISSINGEXTERNAL", res.LastEventID)
@@ -430,7 +430,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateHandlesConcurrentInse
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZCONCURRENT", res.LastEventID)
@@ -471,7 +471,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateAddsHashForTakenSlug(
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZTAKENSLUG", res.LastEventID)
@@ -520,7 +520,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateConflictSkipsStaleEve
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZ0001", res.LastEventID)
@@ -571,7 +571,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testin
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -623,7 +623,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdatePreservesExistingSlug
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZSLUG1", res.LastEventID)
@@ -667,7 +667,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateDoesNotRemapExistingW
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZREMAP", res.LastEventID)
@@ -708,7 +708,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateRelinksExternalIDMatc
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: newWorkosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZRELINK", res.LastEventID)
@@ -747,7 +747,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateWithoutExternalIDKeep
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZNOEXTERNAL", res.LastEventID)
@@ -797,7 +797,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateSkippedWhenStale(t *t
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -845,7 +845,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSetsDisabled(t *test
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -898,7 +898,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateDoesNotClearDisabled(
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -1020,7 +1020,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *test
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -1080,7 +1080,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSkippedWhenStale(t *
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -1203,7 +1203,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 	const workosOrgID = "org_01HZMEMFILTER"
 
 	stub := newWorkOSClientWithEvents([][]events.Event{nil})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1260,7 +1260,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipKnownUserSyncsRoles(t *testin
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEM1", "mem_01HZKNOWN", workosOrgID, workosUserID, updatedAt, "member"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1307,7 +1307,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownUserStillSyncsRoles(t 
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEMUNK", "mem_01HZUNKNOWN", workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1354,7 +1354,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 			newWorkOSMembershipEvent(t, "organization_membership.deleted", "event_01HZDEL2", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC)),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1421,7 +1421,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *test
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZREJOIN3", secondMembershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 14, 0, 0, 0, time.UTC)),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1455,7 +1455,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *t
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEMUNKORG", "mem_01HZUNKNOWNORG", workosOrgID, "user_01HZUNKNOWNORG", time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1490,7 +1490,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipMultipleRolesCreatesMultipleA
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMULTI1", "mem_01HZMULTI", workosOrgID, workosUserID, updatedAt, "admin", "builder", "viewer"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1538,7 +1538,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipMultipleRolesUnknownUserOptim
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMULTIUNK", "mem_01HZMULTIUNK", workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "editor", "reviewer"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1605,7 +1605,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionActivatedSetsSSOEnabled(t *te
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOACT", workosOrgID)},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1636,7 +1636,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionDeactivatedClearsSSOEnabled(t
 			newWorkOSConnectionEvent(t, "connection.deactivated", "event_01HZSSO2", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1666,7 +1666,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionDeletedClearsSSOEnabled(t *te
 			newWorkOSConnectionEvent(t, "connection.deleted", "event_01HZSSO4", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1698,7 +1698,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionEventEmptyOrgIDSkips(t *testi
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{{ID: "event_01HZSSONULL", Event: "connection.activated", CreatedAt: time.Now(), Data: data}},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1724,7 +1724,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionActivatedIdempotent(t *testin
 			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSO6", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1755,7 +1755,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncActivatedSetsSCIMEnabled(t *testin
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMACT", workosOrgID)},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1785,7 +1785,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncDeletedClearsSCIMEnabled(t *testin
 			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZSCIM4", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1816,7 +1816,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncEventEmptyOrgIDSkips(t *testing.T)
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{{ID: "event_01HZSCIMNULL", Event: "dsync.activated", CreatedAt: time.Now(), Data: data}},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1841,7 +1841,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncActivatedIdempotent(t *testing.T) 
 			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIM6", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1878,7 +1878,7 @@ func TestProcessWorkOSOrganizationEvents_SSOAndSCIMFullLifecycle(t *testing.T) {
 			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZL4", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1912,7 +1912,7 @@ func TestProcessWorkOSOrganizationEvents_StaleConnectionEventSkipped(t *testing.
 			newWorkOSConnectionEvent(t, "connection.deactivated", "event_01HZSSOSTALE1", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1949,7 +1949,7 @@ func TestProcessWorkOSOrganizationEvents_StaleDSyncEventSkipped(t *testing.T) {
 			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZSCIMSTALE1", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1976,7 +1976,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionEventUnknownOrgNoError(t *tes
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOUNK", workosOrgID)},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1995,7 +1995,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncEventUnknownOrgNoError(t *testing.
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMUNK", workosOrgID)},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -2024,7 +2024,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleSkippedForUnknownOrg(t 
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	// Cursor still advances — we don't replay events for orgs that don't yet
@@ -2057,6 +2057,10 @@ func (c *captureCache) Delete(ctx context.Context, key string) error {
 	c.deleted = append(c.deleted, key)
 	return nil
 }
+
+// EvictableRole lets the capture stand in for the evictable cache that holds
+// user info.
+func (*captureCache) EvictableRole() {}
 
 func (c *captureCache) Deleted() []string {
 	c.mu.Lock()
@@ -2135,7 +2139,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipInactiveStatusDeprovisions(t 
 		},
 	})
 	capturingCache := newCaptureCache()
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, capturingCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, capturingCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -2197,7 +2201,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t 
 			newWorkOSMembershipEventWithStatus(t, "organization_membership.updated", "event_01HZREACT3", membershipID, workosOrgID, workosUserID, "active", time.Date(2026, 5, 6, 14, 0, 0, 0, time.UTC), "member"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -2248,7 +2252,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateRecordsNewOrganizatio
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	activity.SetNewOrganizationDefaultHost(conv.ToPGText("https://ai.example.test"))
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -2274,7 +2278,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateWithoutNewOrganizatio
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 

@@ -64,6 +64,7 @@ type speakeasyLiveFixture struct {
 	resource             string
 	policy               *guardian.Policy
 	sharedCache          cache.Cache
+	probeCache           cache.EvictableCache
 	challenges           *remotesessions.ChallengeManager
 	chainer              *Chainer
 	calls                *atomic.Int32
@@ -238,13 +239,14 @@ func newSpeakeasyLiveFixture(t *testing.T) *speakeasyLiveFixture {
 	policy, err := guardian.NewUnsafePolicy(tp, nil, guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 	sharedCache := cache.NewRedisCacheAdapter(redisClient)
-	challenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.enc, policy, nil, sharedCache, base)
+	probeCache := testenv.NewEvictableCache(t, redisClient)
+	challenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.enc, policy, nil, sharedCache, probeCache, base)
 	chainer := New(logger, f.db, f.chainer.tokens, challenges, nil, nil, sharedCache)
 	chainer.SetSpeakeasyIssuer(gate, signer, flags)
 	chainer.SetResourceResolver(challenges.ResolveEMAResource)
 	return &speakeasyLiveFixture{
 		f: f, logger: logger, tp: tp, mp: mp, flags: flags, gate: gate, signer: signer, keys: keys, base: base, ring: ring, account: account,
-		status: status, publicJWK: publicJSON, signIn: signIn, remoteID: remoteID, clientID: clientID, resource: endpoint.URL, policy: policy, sharedCache: sharedCache, challenges: challenges, chainer: chainer,
+		status: status, publicJWK: publicJSON, signIn: signIn, remoteID: remoteID, clientID: clientID, resource: endpoint.URL, policy: policy, sharedCache: sharedCache, probeCache: probeCache, challenges: challenges, chainer: chainer,
 		calls: calls, metadataCalls: metadataCalls, metadataUnavailable: metadataUnavailable, revokeDuringExchange: revokeDuringExchange,
 		rejectRedemption: rejectRedemption, checkExchange: checkExchange,
 	}
@@ -256,7 +258,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	f, ctx, logger, tp, mp := lf.f, t.Context(), lf.logger, lf.tp, lf.mp
 	flags, gate, signer, signIn := lf.flags, lf.gate, lf.signer, lf.signIn
 	base, ring, account, keys := lf.base, lf.ring, lf.account, lf.keys
-	remoteID, policy, sharedCache, challenges, chainer := lf.remoteID, lf.policy, lf.sharedCache, lf.challenges, lf.chainer
+	remoteID, policy, sharedCache, probeCache, challenges, chainer := lf.remoteID, lf.policy, lf.sharedCache, lf.probeCache, lf.challenges, lf.chainer
 	calls, metadataCalls, metadataUnavailable, revokeDuringExchange, checkExchange := lf.calls, lf.metadataCalls, lf.metadataUnavailable, lf.revokeDuringExchange, lf.checkExchange
 	// First consent can resolve a parent resource without a prior MCP request,
 	// and runs the live exchange for the consent sign-in.
@@ -276,7 +278,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.EqualValues(t, 1, metadataCalls.Load())
 	// A second replica reads the shared result while discovery is unavailable.
 	metadataUnavailable.Store(true)
-	otherChallenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.enc, policy, nil, sharedCache, base)
+	otherChallenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.enc, policy, nil, sharedCache, probeCache, base)
 	chainer.SetResourceResolver(otherChallenges.ResolveEMAResource)
 	require.True(t, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Succeeded())
 	require.EqualValues(t, 1, calls.Load(), "a repeat consent check reuses the consent credential")

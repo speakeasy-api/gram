@@ -606,6 +606,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		policy,
 		options.tunnels,
 		cache.NewRedisCacheAdapter(redisClient),
+		testenv.NewEvictableCache(t, redisClient),
 		mustURL(t, conv.Default(options.serverURL, "http://localhost")),
 		managerOptions...,
 	)

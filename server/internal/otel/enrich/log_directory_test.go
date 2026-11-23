@@ -20,7 +20,7 @@ func TestEnrichLogDirectoryIncludesCachedUserEnrichment(t *testing.T) {
 	emailDigest := sha256.Sum256([]byte(email))
 	emailHash := hex.EncodeToString(emailDigest[:])
 
-	enricher := NewLogDirectory(testenv.NewLogger(t), nil, testenv.NewMemoryCache())
+	enricher := NewLogDirectory(testenv.NewLogger(t), nil, testenv.NewEvictableMemoryCache())
 	require.NoError(t, enricher.cache.Store(t.Context(), cachedUserEnrichment{
 		OrganizationID: organizationID,
 		EmailHash:      emailHash,
@@ -54,7 +54,7 @@ func TestEnrichLogDirectoryResolvesSubaddress(t *testing.T) {
 
 	db := newTestDatabase(t)
 	seed := seedUserEnrichment(t, db)
-	enricher := NewLogDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+	enricher := NewLogDirectory(testenv.NewLogger(t), db, cache.NoopEvictableCache)
 	record := (&otelv1.InboundLogRecord_builder{
 		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{OrganizationId: new(seed.organizationID)}).Build(),
 		Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("user.email", "user+log@example.invalid")},
@@ -72,7 +72,7 @@ func TestEnrichLogDirectoryPrefersRawSubaddress(t *testing.T) {
 	db := newTestDatabase(t)
 	canonical := seedUserEnrichment(t, db)
 	raw := seedSubaddressUserEnrichment(t, db, canonical.organizationID)
-	enricher := NewLogDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+	enricher := NewLogDirectory(testenv.NewLogger(t), db, cache.NoopEvictableCache)
 	record := (&otelv1.InboundLogRecord_builder{
 		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{OrganizationId: new(raw.organizationID)}).Build(),
 		Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("user.email", raw.email)},

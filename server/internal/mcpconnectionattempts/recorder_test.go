@@ -702,7 +702,7 @@ func realFeatures(t *testing.T) *productfeatures.Client {
 	require.NoError(t, err)
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	return productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, client)
+	return productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testenv.NewEvictableCache(t, client))
 }
 
 func realLogsCheck(features *productfeatures.Client) func(context.Context, string) (bool, error) {

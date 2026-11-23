@@ -93,7 +93,7 @@ var _ remotesessions.ClientCredentialSource = (*Minter)(nil)
 // New builds a minter over the challenge manager's egress, tunnel and client
 // assertion configuration. store holds credentials, recent failures and the
 // single-flight leases; without lease support, every miss mints.
-func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, endpoints *remotesessions.ChallengeManager, store cache.Cache) *Minter {
+func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, endpoints *remotesessions.ChallengeManager, store cache.EvictableCache) *Minter {
 	logger = logger.With(attr.SlogComponent("client_credentials"))
 	leases, _ := store.(cache.LeaseCache)
 

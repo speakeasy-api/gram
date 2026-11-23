@@ -167,7 +167,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 	require.NoError(t, err)
 
 	tracer := testenv.NewTracerProvider(t)
-	features := productfeatures.NewClient(logger, tracer, pool, redis)
+	features := productfeatures.NewClient(logger, tracer, pool, testenv.NewEvictableCache(t, redis))
 	reader.WithAnalytics(NewAnalyticsService(logger, &stubAnalyticsEngine{}, flags, slugs, reader, budget, features))
 	management := sigint.NewService(logger, tracer, pool, &sessions.Manager{}, engine, auditLogger, features)
 	signalAuthoring := NewSignalAuthoringService(management, reader, engine, key)

@@ -107,9 +107,9 @@ func (m *ChallengeManager) loadFederatedMetadata(ctx context.Context, organizati
 		return rfc8414Document{}, err
 	}
 	key := federatedMetadataCacheKey(organizationID, issuer)
-	if m.locks != nil {
+	if m.probes != nil {
 		var entry federatedMetadataCacheEntry
-		if m.locks.Get(ctx, key, &entry) == nil && entry.ExpiresAt.After(time.Now()) {
+		if m.probes.Get(ctx, key, &entry) == nil && entry.ExpiresAt.After(time.Now()) {
 			entry.restoreScopePresence()
 			if err := m.validateFederatedMetadataHosts(ctx, issuer, entry.Document); err != nil {
 				return rfc8414Document{}, err
@@ -128,9 +128,9 @@ func (m *ChallengeManager) loadFederatedMetadata(ctx context.Context, organizati
 	if err := m.validateFederatedMetadataHosts(ctx, issuer, doc); err != nil {
 		return rfc8414Document{}, err
 	}
-	if m.locks != nil {
+	if m.probes != nil {
 		// Cache write failure does not invalidate successfully validated discovery.
-		_ = m.locks.Set(ctx, key, federatedMetadataCacheEntry{Document: doc, ExpiresAt: time.Now().Add(federatedMetadataTTL), ScopesOmitted: doc.ScopesSupported == nil}, federatedMetadataTTL)
+		_ = m.probes.Set(ctx, key, federatedMetadataCacheEntry{Document: doc, ExpiresAt: time.Now().Add(federatedMetadataTTL), ScopesOmitted: doc.ScopesSupported == nil}, federatedMetadataTTL)
 	}
 	return doc, nil
 }

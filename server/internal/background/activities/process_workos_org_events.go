@@ -88,14 +88,14 @@ type ProcessWorkOSOrganizationEvents struct {
 	newOrganizationDefaultHost pgtype.Text
 }
 
-func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache, identityMap IdentityMapRefreshSignaler) *ProcessWorkOSOrganizationEvents {
+func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache, evictableCache cache.EvictableCache, identityMap IdentityMapRefreshSignaler) *ProcessWorkOSOrganizationEvents {
 	revokedTokens := revokedTokenCache{cache: cache.NewTypedObjectCache[chatsessions.RevokedToken](logger.With(attr.SlogCacheNamespace("chat_session_revoked")), cacheAdapter, cache.SuffixNone)}
 	return &ProcessWorkOSOrganizationEvents{
 		db:            db,
 		logger:        logger,
 		workosClient:  workosClient,
 		identityMap:   identityMap,
-		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
+		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), evictableCache, cache.SuffixNone),
 		revokedTokens: revokedTokens,
 		deliverer:     signins.NewDeliverer(logger, noop.NewMeterProvider(), db, revokedTokens, workosClient, nil),
 		flags:         nil,

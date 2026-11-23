@@ -151,7 +151,7 @@ func runOrganizationWebhook(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 	stub := workos.NewStubClient()
 	stub.SetEventPages([][]events.Event{{event}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
 		WorkOSOrganizationID: workosOrgID,
 		SinceEventID:         nil,

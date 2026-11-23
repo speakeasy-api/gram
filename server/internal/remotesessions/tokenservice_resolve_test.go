@@ -47,6 +47,7 @@ func newResolveManager(t *testing.T, conn *pgxpool.Pool, enc *encryption.Client)
 		policy,
 		nil,
 		cache.NoopCache,
+		cache.NoopEvictableCache,
 		mustURL(t, "http://localhost"),
 	)
 }

@@ -57,8 +57,8 @@ func (m *ChallengeManager) ResolveEMAResource(ctx context.Context, organizationI
 	if err != nil || !resource.Discovered {
 		ttl = emaResourceFailureTTL
 	}
-	if m.locks != nil && ctx.Err() == nil {
-		if cacheErr := m.locks.Set(ctx, key, entry, ttl); cacheErr != nil {
+	if m.probes != nil && ctx.Err() == nil {
+		if cacheErr := m.probes.Set(ctx, key, entry, ttl); cacheErr != nil {
 			m.logger.WarnContext(ctx, "cache endpoint authorization resource", attr.SlogError(cacheErr))
 		}
 	}
@@ -82,7 +82,7 @@ func (m *ChallengeManager) CachedEMAResource(ctx context.Context, organizationID
 func (m *ChallengeManager) cachedEMAResource(ctx context.Context, key string) (protectedresource.EndpointResource, bool, error) {
 	var none protectedresource.EndpointResource
 	var entry emaResourceCacheEntry
-	if m.locks == nil || m.locks.Get(ctx, key, &entry) != nil {
+	if m.probes == nil || m.probes.Get(ctx, key, &entry) != nil {
 		return none, false, nil
 	}
 	if entry.Invalid {

@@ -89,7 +89,7 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 	notifier := &recordingTrialNotifier{inactive: nil}
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	productFeatures := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
+	productFeatures := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testenv.NewEvictableCache(t, redisClient))
 
 	return ctx, &trialTestInstance{
 		conn:            conn,
@@ -116,6 +116,6 @@ func newTrialFeatureCache(t *testing.T, conn *pgxpool.Pool) (*miniredis.Miniredi
 	redisServer := miniredis.RunT(t)
 	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr(), MaxRetries: -1})
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
-	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
+	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testenv.NewEvictableCache(t, redisClient))
 	return redisServer, features
 }

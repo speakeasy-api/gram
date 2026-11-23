@@ -10,7 +10,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -21,7 +20,7 @@ func TestHookClientsCacheRefreshWithoutPageVisit(t *testing.T) {
 	server := miniredis.RunT(t)
 	rc := redis.NewClient(&redis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { require.NoError(t, rc.Close()) })
-	storage := cache.NewRedisCacheAdapter(rc)
+	storage := testenv.NewEvictableCache(t, rc)
 	reads := &atomic.Int32{}
 	reader := stubHookClientsReader{
 		sessions:  []telemetry.HookClientSessionRow{{OrganizationID: "example", Day: "2026-11-03", Machines: 2}},
@@ -54,7 +53,7 @@ func TestHookClientsCacheRefreshReturnsCacheFailure(t *testing.T) {
 	rc := redis.NewClient(&redis.Options{Addr: server.Addr(), MaxRetries: -1})
 	t.Cleanup(func() { require.NoError(t, rc.Close()) })
 	server.SetError("cache unavailable")
-	warmer := NewHookClientsCache(testenv.NewLogger(t), cache.NewRedisCacheAdapter(rc), stubHookClientsReader{}, nil)
+	warmer := NewHookClientsCache(testenv.NewLogger(t), testenv.NewEvictableCache(t, rc), stubHookClientsReader{}, nil)
 	require.ErrorContains(t, warmer.Refresh(t.Context()), "cache unavailable")
 }
 
@@ -63,7 +62,7 @@ func TestHookClientsCacheRefreshPreservesSnapshotOnReadFailure(t *testing.T) {
 	server := miniredis.RunT(t)
 	rc := redis.NewClient(&redis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { require.NoError(t, rc.Close()) })
-	warmer := NewHookClientsCache(testenv.NewLogger(t), cache.NewRedisCacheAdapter(rc), stubHookClientsReader{}, nil)
+	warmer := NewHookClientsCache(testenv.NewLogger(t), testenv.NewEvictableCache(t, rc), stubHookClientsReader{}, nil)
 	require.NoError(t, warmer.Refresh(t.Context()))
 	before, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
 	require.NoError(t, err)
@@ -83,7 +82,7 @@ func TestHookClientsCacheRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.
 	devices := deviceagentversions.NewStore(rc)
 	recordedAt := time.Now()
 	require.NoError(t, devices.Record(t.Context(), "example", "machine", "1.0.0", recordedAt))
-	warmer := NewHookClientsCache(testenv.NewLogger(t), cache.NewRedisCacheAdapter(rc), stubHookClientsReader{}, devices)
+	warmer := NewHookClientsCache(testenv.NewLogger(t), testenv.NewEvictableCache(t, rc), stubHookClientsReader{}, devices)
 	require.NoError(t, warmer.Refresh(t.Context()))
 	before, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
 	require.NoError(t, err)
@@ -122,7 +121,7 @@ func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *test
 		sessions:  []telemetry.HookClientSessionRow{{OrganizationID: "example", Day: "2026-11-03", Machines: 2}},
 		inference: []telemetry.InferenceHookTrafficRow{{OrganizationID: "example", Day: "2026-11-03", Users: 1}},
 	}
-	warmer := NewHookClientsCache(testenv.NewLogger(t), cache.NewRedisCacheAdapter(rc), reader, devices)
+	warmer := NewHookClientsCache(testenv.NewLogger(t), testenv.NewEvictableCache(t, rc), reader, devices)
 	require.NoError(t, warmer.Refresh(t.Context()))
 	before, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
 	require.NoError(t, err)

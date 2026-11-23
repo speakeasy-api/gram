@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/dailyoutcomes"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
@@ -203,16 +204,17 @@ func newDemoSeedCommand() *cli.Command {
 			// A missing or unreachable cache is not fatal: the fixtures just
 			// cannot bust the feature/user caches, so a running server may
 			// serve stale entitlements until it is restarted.
-			redisClient, err := newRedisClient(ctx, redisClientOptions{
+			var evictable redisrole.EvictableClient
+			stores, err := newRedisStores(ctx, logger, otel.GetMeterProvider(), redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
 				enableTracing: false,
 			})
 			if err != nil {
 				logger.WarnContext(ctx, "local seed could not reach redis; restart the server if features look stale", attr.SlogError(err))
-				redisClient = nil
 			} else {
-				defer o11y.NoLogDefer(redisClient.Close)
+				defer o11y.NoLogDefer(stores.Sessions.Close)
+				evictable = stores.Evictable
 			}
 
 			// The fixtures warn when a stale mise.local.toml is shadowing the
@@ -230,7 +232,7 @@ func newDemoSeedCommand() *cli.Command {
 				slack.Slack = slackapi.NewClient("", guardian.NewDefaultPolicy(otel.GetTracerProvider()).Client())
 			}
 
-			if err := demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{
+			if err := demoseed.RunLocalFixtures(ctx, logger, db, blob, evictable, demoseed.LocalFixturesOptions{
 				DeveloperEmail: c.String("local-user-email"),
 				SiteURL:        siteURL,
 				Environment:    c.String("environment"),

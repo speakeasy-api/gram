@@ -40,7 +40,7 @@ type Service struct {
 	auth      *auth.Auth
 	authz     *authz.Engine
 	sessions  *sessions.Manager
-	cacheImpl cache.Cache
+	cacheImpl cache.EvictableCache
 	catalog   *CatalogService
 	// callbackOrigins resolves new-client redirect URIs shown in setup guides.
 	callbackOrigins remotesessions.CallbackOrigins
@@ -49,7 +49,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheImpl cache.Cache, catalog *CatalogService, authzEngine *authz.Engine, callbackOrigin *url.URL) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, cacheImpl cache.EvictableCache, catalog *CatalogService, authzEngine *authz.Engine, callbackOrigin *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("external_mcp"))
 
 	return &Service{

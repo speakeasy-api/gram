@@ -80,7 +80,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -156,7 +156,7 @@ func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -228,7 +228,7 @@ func TestListServers_FetchesAllPagesAndDeduplicates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -265,7 +265,7 @@ func TestListServers_FiltersBySearchInMemory(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -469,7 +469,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -517,7 +517,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -566,7 +566,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -616,7 +616,7 @@ func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -667,7 +667,7 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -749,6 +749,9 @@ type registryTestCache struct {
 }
 
 var _ cache.Cache = (*registryTestCache)(nil)
+
+// EvictableRole lets the fake stand in for the evictable cache.
+func (*registryTestCache) EvictableRole() {}
 
 func newRegistryTestCache() *registryTestCache {
 	return &registryTestCache{
@@ -910,7 +913,7 @@ func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopEvictableCache)
 	client.httpClient = server.Client()
 	registry := Registry{ID: uuid.New(), URL: server.URL}
 

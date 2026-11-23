@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -82,7 +81,7 @@ func newMCPRiskEvaluator(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	enc *encryption.Client,
-	redisClient *redis.Client,
+	stores *redisStores,
 	features feature.Provider,
 	enforcementDispatcher risk.EnforcementDispatcher,
 	completions gramopenrouter.CompletionClient,
@@ -97,7 +96,7 @@ func newMCPRiskEvaluator(
 	if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
 		piiScanner = ra.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 	}
-	judgeLimiter := gramopenrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+	judgeLimiter := gramopenrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(stores.Sessions))
 	piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completions, guardianPolicy, provisioner, db).Classify)
 	promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completions, judgeLimiter).Evaluate)
 	celEngine, err := celenv.New()
@@ -129,7 +128,7 @@ func newMCPRiskEvaluator(
 		logger,
 		tracerProvider,
 		meterProvider,
-		policycore.NewWithToolAnnotations(db, mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))),
+		policycore.NewWithToolAnnotations(db, mcpservers.NewToolDispositionCache(logger, db, stores.EvictableCache)),
 		risk.NewMCPPolicyScanner(scanner, shadowMCPClient),
 		publishers.RiskFindings,
 		mcpriskscan.DefaultPolicyConfig,

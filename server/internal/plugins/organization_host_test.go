@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -59,7 +58,7 @@ func newOrganizationHostPluginsService(t *testing.T, ti *testInstance) *plugins.
 		NewOrganizationDefaultHost: nil,
 	})
 
-	return plugins.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), audit.NewLogger(), nil, "local", testConfiguredServerURL, nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, ti.conn)).
+	return plugins.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, testenv.NewEvictableCache(t, redisClient), authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), audit.NewLogger(), nil, "local", testConfiguredServerURL, nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, ti.conn)).
 		WithOrganizationHosts(resolver)
 }
 

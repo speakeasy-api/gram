@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -28,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
@@ -101,7 +99,7 @@ type platformMCPConfig struct {
 	TracerProvider        trace.TracerProvider
 	Mux                   goahttp.Muxer
 	DB                    *pgxpool.Pool
-	Redis                 *redis.Client
+	Stores                *redisStores
 	ServerURL             *url.URL
 	DashboardURL          *url.URL
 	Environment           string
@@ -295,7 +293,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if config.RegistryDiscoveryEnabled {
 		fixtureConfig.SetRegistryPrefix("/platform-mcp/local-fixture/registry")
 	}
-	fixtureRegistry := externalmcp.NewRegistryClient(config.Logger, config.TracerProvider, config.GuardianPolicy, cache.NewRedisCacheAdapter(config.Redis)).WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
+	fixtureRegistry := externalmcp.NewRegistryClient(config.Logger, config.TracerProvider, config.GuardianPolicy, config.Stores.EvictableCache).WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
 	if err := fixtureRegistry.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
 		return AssistantSurface{}, fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
 	}
@@ -307,7 +305,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
-		Cache:         cache.NewRedisCacheAdapter(config.Redis),
+		Cache:         config.Stores.SessionsCache,
 		Store:         oauthStore,
 		Identity:      config.Identity,
 		Gate:          gate,
@@ -363,7 +361,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		localfixture.NewClientConfigurator(fixtureConfig, fixtureOAuth, config.DB, config.GuardianPolicy),
 	).WithIdentityChaining(chaining)
 	adapters := platformmcp.NewProviderAdapters([]platformmcp.ProviderAdapter{fixtureAdapter})
-	limitStore := ratelimit.NewRedisStore(config.Redis)
+	limitStore := ratelimit.NewRedisStore(config.Stores.Sessions)
 	newBudget := func(connectionName, organizationName string) platformmcp.OperationBudget {
 		return platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, connectionName, ratelimit.PerMinute(5), ratelimit.WithMetrics(config.MeterProvider)),
@@ -1141,7 +1139,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
 		BaseURL:       config.ServerURL,
 		Environment:   config.Environment,
-		Cache:         cache.NewRedisCacheAdapter(config.Redis),
+		Cache:         config.Stores.SessionsCache,
 		Store:         oauthStore,
 		Identity:      config.Identity,
 		Gate:          gate,
@@ -1177,7 +1175,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	store = store.WithServerIcons(config.ServerIcons)
 	registrationGate := platformmcp.NewCatalogRegistrationGate(gate)
 	adapters := platformmcp.NewProviderAdapters(nil)
-	limitStore := ratelimit.NewRedisStore(config.Redis)
+	limitStore := ratelimit.NewRedisStore(config.Stores.Sessions)
 	newBudget := func(connectionName, organizationName string) platformmcp.OperationBudget {
 		return platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, connectionName, ratelimit.PerMinute(5), ratelimit.WithMetrics(config.MeterProvider)),

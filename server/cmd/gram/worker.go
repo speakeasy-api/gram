@@ -459,7 +459,7 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 
-			redisClient, err := newRedisClient(ctx, redisClientOptions{
+			stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
 				enableTracing: c.Bool("redis-enable-tracing"),
@@ -467,6 +467,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
+			redisClient := stores.Sessions
 
 			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
 			if err != nil {
@@ -523,7 +524,7 @@ func newWorkerCommand() *cli.Command {
 			featureFlags := newFeatureFlags(ctx, c, logger, posthogClient)
 			authz.SetUpstreamSelectorWriteGate(feature.UpstreamSelectorWrites(featureFlags))
 
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, stores.EvictableCache)
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
@@ -594,7 +595,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, stores, posthogClient, stripeClient, db, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -674,7 +675,7 @@ func newWorkerCommand() *cli.Command {
 
 			telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
-			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
+			telemetryLogger, shutdown := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, stores.EvictableCache, chDB, logsEnabled, toolIOLogsEnabled, telemetryLogPublisher)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
@@ -719,7 +720,7 @@ func newWorkerCommand() *cli.Command {
 			// deferred drain below.
 			spendUsageTrigger := spendrules.NewUsageTrigger(
 				logger,
-				cache.NewRedisCacheAdapter(redisClient),
+				stores.SessionsCache,
 				&background.TemporalSpendRuleEvaluator{TemporalEnv: temporalEnv},
 				spendrules.UsageSignalCooldown,
 			)
@@ -769,7 +770,7 @@ func newWorkerCommand() *cli.Command {
 			identityResolver := identity.NewResolver(
 				logger,
 				tracerProvider,
-				cache.NewRedisCacheAdapter(redisClient),
+				stores.EvictableCache,
 				c.String("idp-base-url"),
 				c.String("idp-client-id"),
 				idpClient,
@@ -789,7 +790,7 @@ func newWorkerCommand() *cli.Command {
 			// the HTTP server), so the dashboard site URL used for Slack link
 			// unfurls is not needed here.
 			assistantIdentities := newAssistantIdentities(c, auditLogger)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, stores.EvictableCache, assistantIdentities)
 			speakeasySlackDirectory := newSpeakeasySlackDirectory(c, db, encryptionClient, guardianPolicy, auditLogger)
 			triggerApp.SetSpeakeasySlackTokens(speakeasySlackDirectory)
 
@@ -797,7 +798,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("configure principal credential signer: %w", err)
 			}
-			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalcredential.New(platformSigner, db), cache.NewRedisCacheAdapter(redisClient))
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalcredential.New(platformSigner, db), stores.SessionsCache)
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 
@@ -826,13 +827,13 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
+			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, stores.EvictableCache)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
-			assistantsCore.SetTurnStream(chat.NewTurnStream(redisClient))
-			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, redisClient, serverURL); err != nil {
+			assistantsCore.SetTurnStream(chat.NewTurnStream(stores.Evictable))
+			if err := installKitLocalRuntimeFromCLI(logger, c, assistantsCore, db, auditLogger, stores.Evictable, serverURL); err != nil {
 				return err
 			}
 			assistantsCore.SetAssetStorage(assetStorage)
@@ -865,7 +866,7 @@ func newWorkerCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
-			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
+			remoteSessionsCache := stores.SessionsCache
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
 			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 			if err != nil {
@@ -903,7 +904,7 @@ func newWorkerCommand() *cli.Command {
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
-				FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), telemetry.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
+				FleetHealthCache:               admin.NewHookClientsCache(logger, stores.EvictableCache, telemetry.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
 				HookFleetMetrics:               newHookFleetMetrics(ctx, logger, meterProvider, db, meterReadConn),
 				CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL), productFeatures, telemetry.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 				MemoryEvals:                    evalrun.NewRunner(logger, db, chatClient),
@@ -948,6 +949,7 @@ func newWorkerCommand() *cli.Command {
 				TelemetryRepo:                  telemetryrepo.New(chDB),
 				TriggersApp:                    triggerApp,
 				CacheAdapter:                   remoteSessionsCache,
+				EvictableCache:                 stores.EvictableCache,
 				IssuerMetadataRefresher:        issuerMetadataRefresher,
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
 				Connections:                    connectionRecorder,

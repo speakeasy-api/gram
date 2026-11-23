@@ -20,7 +20,7 @@ type logDirectory struct {
 	loads     singleflight.Group
 }
 
-func NewLogDirectory(logger *slog.Logger, replicaDB database.DBTX, cacheImpl cache.Cache) *logDirectory {
+func NewLogDirectory(logger *slog.Logger, replicaDB database.DBTX, cacheImpl cache.EvictableCache) *logDirectory {
 	logger = logger.With(attr.SlogComponent("enrich-log-directory"))
 	return &logDirectory{
 		logger:    logger,

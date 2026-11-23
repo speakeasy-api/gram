@@ -56,7 +56,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 	resolver := identity.NewResolver(
 		logger,
 		tracerProvider,
-		cache.NewRedisCacheAdapter(redisClient),
+		NewEvictableCache(t, redisClient),
 		srv.URL,
 		"test-client-id",
 		idpClient,

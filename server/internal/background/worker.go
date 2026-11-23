@@ -157,6 +157,9 @@ type WorkerOptions struct {
 	StripeClient      stripeclient.Client
 	RedisClient       *redis.Client
 	CacheAdapter      cache.Cache
+	// EvictableCache stores key families that rebuild on a miss, such as the
+	// cached user info that WorkOS events invalidate.
+	EvictableCache    cache.EvictableCache
 	EmailService      *email.Service
 	PosthogClient     *posthog.Posthog
 	FunctionsDeployer functions.Deployer
@@ -296,6 +299,7 @@ func ForDeploymentProcessing(
 		TelemetryRepo:                  nil,
 		TriggersApp:                    nil,
 		CacheAdapter:                   nil,
+		EvictableCache:                 nil,
 		IssuerMetadataRefresher:        nil,
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
@@ -399,6 +403,7 @@ func NewTemporalWorker(
 		TelemetryRepo:                  nil,
 		TriggersApp:                    nil,
 		CacheAdapter:                   nil,
+		EvictableCache:                 nil,
 		IssuerMetadataRefresher:        nil,
 		RemoteSessionAssertionSigner:   nil,
 		Connections:                    nil,
@@ -467,6 +472,7 @@ func NewTemporalWorker(
 			TelemetryRepo:                  conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
 			TriggersApp:                    conv.Default(o.TriggersApp, opts.TriggersApp),
 			CacheAdapter:                   conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			EvictableCache:                 conv.Default(o.EvictableCache, opts.EvictableCache),
 			IssuerMetadataRefresher:        conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			RemoteSessionAssertionSigner:   conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
 			Connections:                    conv.Default(o.Connections, opts.Connections),
@@ -591,6 +597,7 @@ func NewTemporalWorker(
 		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
+		opts.EvictableCache,
 		opts.EmailService,
 		opts.AssistantsCore,
 		opts.PIScanner,

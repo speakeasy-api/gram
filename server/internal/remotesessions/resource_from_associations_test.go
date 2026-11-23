@@ -77,6 +77,7 @@ func newFlaggedResolveManager(t *testing.T, fx sharedIssuerFixture, enabled bool
 		policy,
 		nil,
 		cache.NoopCache,
+		cache.NoopEvictableCache,
 		mustURL(t, "http://localhost"),
 		remotesessions.WithFeatureFlags(flags),
 	)

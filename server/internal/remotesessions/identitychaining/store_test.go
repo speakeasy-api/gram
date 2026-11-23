@@ -91,7 +91,7 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
-	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), db, enc, policy, nil, nil, serverURL)
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), db, enc, policy, nil, nil, nil, serverURL)
 	delegation := remotesessions.NewDelegationService(db, challenges)
 	chainer := &Chainer{Governor: Governor{logger: logger, db: db, tokens: upstreamtokens.WithoutOrganizationEncryption(logger, db, enc), delegation: delegation, now: time.Now}, challenges: nil, keys: nil, locks: nil}
 	return chainStoreFixture{

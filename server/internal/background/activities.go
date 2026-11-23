@@ -244,6 +244,7 @@ func NewActivities(
 	telemetryRepo *telemetryrepo.Queries,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
+	evictableCache cache.EvictableCache,
 	emailService *email.Service,
 	assistantsCore *assistants.ServiceCore,
 	piScanner *promptinjection.Scanner,
@@ -407,7 +408,7 @@ func NewActivities(
 
 	conversionPolicyReconciler, _ := openrouterProvisioner.(activities.ConversionPolicyReconciler)
 
-	processWorkOSOrganizationEvents := activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh)
+	processWorkOSOrganizationEvents := activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, evictableCache, identityMapRefresh)
 	processWorkOSOrganizationEvents.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 	processWorkOSOrganizationEvents.SetSignInEnforcement(features, meterProvider, signInEpochs)
 

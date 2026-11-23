@@ -197,7 +197,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 	require.NoError(t, err)
 
 	tracer := testenv.NewTracerProvider(t)
-	features := productfeatures.NewClient(logger, tracer, pool, redis)
+	features := productfeatures.NewClient(logger, tracer, pool, testenv.NewEvictableCache(t, redis))
 	management := sigint.NewService(logger, tracer, pool, &sessions.Manager{}, liveEngine, auditLogger, features)
 	signalAuthoring := NewSignalAuthoringService(management, reader, liveEngine, key)
 

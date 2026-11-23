@@ -233,7 +233,7 @@ func (f fixture) newMinter(t *testing.T) *Minter {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	store := cache.NewRedisCacheAdapter(redisClient)
+	store := testenv.NewEvictableCache(t, redisClient)
 
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
@@ -241,7 +241,7 @@ func (f fixture) newMinter(t *testing.T) *Minter {
 	serverURL, err := url.Parse("https://gram.example.test")
 	require.NoError(t, err)
 
-	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), f.db, f.enc, policy, nil, store, serverURL, remotesessions.WithTokenEndpointAssertionSigner(f.signer))
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), f.db, f.enc, policy, nil, cache.NewRedisCacheAdapter(redisClient), store, serverURL, remotesessions.WithTokenEndpointAssertionSigner(f.signer))
 
 	return New(logger, f.db, f.enc, challenges, store)
 }

@@ -77,6 +77,7 @@ func setupResourceDanceFixture(t *testing.T, resource string, slugSuffix string,
 		policy,
 		tunnels,
 		ti.redisCache,
+		ti.evictableCache,
 		mustURL(t, "http://localhost"),
 	)
 

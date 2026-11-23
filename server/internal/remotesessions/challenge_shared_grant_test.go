@@ -573,6 +573,7 @@ func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerF
 		policy,
 		nil,
 		cache.NoopCache,
+		cache.NoopEvictableCache,
 		mustURL(t, "http://localhost"),
 	)
 

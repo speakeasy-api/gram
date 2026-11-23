@@ -84,6 +84,7 @@ func newClientCredentialManager(t *testing.T, conn *pgxpool.Pool, enc *encryptio
 		policy,
 		nil,
 		cache.NoopCache,
+		cache.NoopEvictableCache,
 		mustURL(t, "http://localhost"),
 		remotesessions.WithClientCredentialSource(func(*remotesessions.ChallengeManager) remotesessions.ClientCredentialSource {
 			return source

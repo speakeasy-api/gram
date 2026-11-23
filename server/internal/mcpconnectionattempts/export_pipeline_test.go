@@ -135,7 +135,7 @@ func TestExportPipeline_RealRecordReachesASensitiveExcludedDestinationUnredacted
 	require.Len(t, inbound(), 1, "otelpub accepted the record")
 
 	normalizedPublisher, normalized := capturePublisher[*otelv1.LogRecord](t)
-	transform := otelsvc.NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), normalizedPublisher, db, cache.NoopCache)
+	transform := otelsvc.NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), normalizedPublisher, db, cache.NoopEvictableCache)
 	require.NoError(t, transform.Handle(ctx, inbound()[0], gcp.MessageMetadata{}))
 	require.Len(t, normalized(), 1)
 

@@ -12,6 +12,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/stretchr/testify/require"
@@ -29,7 +30,7 @@ func TestMethodDispatchByRevision(t *testing.T) {
 					req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.NumberID(7), Method: method,
 						Params: json.RawMessage(`{"protocolVersion":"` + version + `"}`)}
 					logger := testenv.NewLogger(t)
-					service := &Service{logger: logger, sessionClientInfo: sessionclientinfo.NewStore(nil, 1),
+					service := &Service{logger: logger, sessionClientInfo: sessionclientinfo.NewStore(redisrole.EvictableClient{Client: nil}, 1),
 						toolsetsRepo: toolsets_repo.New(failingDBTX{}), mcpMetadataRepo: metadata_repo.New(failingDBTX{})}
 					if method == mcpversions.MethodServerDiscover {
 						// A discovery path must not invoke the session store.

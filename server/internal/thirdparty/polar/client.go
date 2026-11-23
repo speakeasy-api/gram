@@ -18,7 +18,6 @@ import (
 	"github.com/polarsource/polar-go/models/apierrors"
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	polarOperations "github.com/polarsource/polar-go/models/operations"
-	"github.com/redis/go-redis/v9"
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -88,7 +87,7 @@ type Client struct {
 var _ billing.Tracker = (*Client)(nil)
 var _ billing.Repository = (*Client)(nil)
 
-func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
+func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, sessionsCache cache.Cache, evictableCache cache.EvictableCache, catalog *Catalog, webhookSecret string) *Client {
 	client := guardianPolicy.PooledClient()
 	// Polar serializes /quantities meter queries per-meter on their side, so
 	// during degraded periods individual calls can take well over a minute.
@@ -101,9 +100,9 @@ func NewClient(guardianPolicy *guardian.Policy, polarClient *polargo.Polar, bear
 		httpClient:         client,
 		bearerToken:        bearerToken,
 		catalog:            catalog,
-		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		productCache:       cache.NewTypedObjectCache[Product](logger.With(attr.SlogCacheNamespace("polar-product")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		periodUsageStorage: cache.NewTypedObjectCache[PolarPeriodUsageState](logger.With(attr.SlogCacheNamespace("polar-period-usage-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), evictableCache, cache.SuffixNone),
+		productCache:       cache.NewTypedObjectCache[Product](logger.With(attr.SlogCacheNamespace("polar-product")), evictableCache, cache.SuffixNone),
+		periodUsageStorage: cache.NewTypedObjectCache[PolarPeriodUsageState](logger.With(attr.SlogCacheNamespace("polar-period-usage-state")), sessionsCache, cache.SuffixNone),
 		webhookSecret:      webhookSecret,
 	}
 }

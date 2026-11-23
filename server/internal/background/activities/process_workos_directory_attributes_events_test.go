@@ -105,7 +105,7 @@ func TestProcessWorkOSOrganizationEvents_UpsertsDirectoryGroupAndAdvancesOrganiz
 		{ID: "event_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, groupID, "Platform")},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_seed", res.SinceEventID)
@@ -152,7 +152,7 @@ func TestProcessWorkOSOrganizationEvents_SkipsStaleDirectoryGroupEvent(t *testin
 		{ID: "event_0001", Event: "dsync.group.updated", CreatedAt: directorySyncTime(), Data: directoryGroupEventDataWithUpdatedAt(workosOrgID, groupID, "Old Name", "2026-05-12T10:00:00Z")},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_0001", res.LastEventID)
@@ -205,7 +205,7 @@ func TestProcessWorkOSOrganizationEvents_OpensAndClosesDirectoryMembership(t *te
 		{ID: "event_membership_added", Event: "dsync.group.user_added", CreatedAt: time.Now(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_membership_added", res.LastEventID)
@@ -277,7 +277,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipForUnknownGroupCreatesGroupAn
 		{ID: "event_unknown_group_user_added", Event: "dsync.group.user_added", CreatedAt: time.Now(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_cursor_past_group_history", workosClient.EventCalls()[0].After, "only events after the cursor are fetched")
@@ -333,7 +333,7 @@ func TestProcessWorkOSOrganizationEvents_RemoveMissingDirectoryMembershipNoops(t
 		{ID: "event_missing_membership_removed", Event: "dsync.group.user_removed", CreatedAt: directorySyncTime(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_missing_membership_removed", res.LastEventID)
@@ -391,7 +391,7 @@ func TestProcessWorkOSOrganizationEvents_DeleteDirectoryGroupClosesAndPreventsRe
 		{ID: "event_0001", Event: "dsync.group.deleted", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, groupID, "Platform")},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_0001", res.LastEventID)
@@ -440,7 +440,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserEventsStoreNames(t *testin
 		{ID: "event_unnamed", Event: "dsync.user.updated", CreatedAt: time.Now(), Data: unnamed},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -500,7 +500,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 
 	capturingCache := newCaptureCache()
 	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, capturingCache, signals)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, capturingCache, signals)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -595,7 +595,7 @@ func deactivateDirectoryUserWithSignIn(t *testing.T, flag string) {
 		{ID: "event_0003", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 13, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "inactive", "2026-05-12T13:00:00Z")},
 	}})
 	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, newCaptureCache(), signals)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, newCaptureCache(), signals)
 	flags := &feature.InMemory{}
 	switch flag {
 	case "on":
@@ -648,7 +648,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserReactivationRestoresDirect
 		{ID: "event_0003", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 14, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "active", "2026-05-12T14:00:00Z")},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_0003", res.LastEventID)
@@ -683,7 +683,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserStatelessUpdateDoesNotResu
 		{ID: "event_0003", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 14, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithoutState(workosOrgID, directoryUserID, email, "2026-05-12T14:00:00Z")},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_0003", res.LastEventID)
@@ -722,7 +722,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryEventsRaiseReviewItemsInTheirO
 		{ID: "event_0001", Event: "dsync.group.created", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, "directory_group_review", "Platform")},
 		{ID: "event_0002", Event: "dsync.user.created", CreatedAt: time.Now(), Data: directoryUserEventDataWithState(workosOrgID, "directory_user_review", "dsync.review@example.com", "active", "2026-05-12T12:00:00Z")},
 	}})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 

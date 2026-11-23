@@ -68,7 +68,7 @@ type Client struct {
 	flags feature.Provider
 }
 
-func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, serverURL *url.URL) *Client {
+func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.EvictableCache, serverURL *url.URL) *Client {
 	logger = logger.With(attr.SlogComponent("shadowmcp"))
 	return &Client{
 		logger:    logger,

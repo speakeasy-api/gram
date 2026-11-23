@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -33,7 +34,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipCreatedInvalidatesUserInfoCac
 		},
 	})
 	capturingCache := newCaptureCache()
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, capturingCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, capturingCache, nil)
 
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)

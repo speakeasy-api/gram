@@ -256,7 +256,7 @@ func NewService(
 	sessions *sessions.Manager,
 	serverURL *url.URL,
 	siteURL *url.URL,
-	cacheAdapter cache.Cache,
+	cacheAdapter cache.EvictableCache,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	metaInstallAdmission func(context.Context, string) error,

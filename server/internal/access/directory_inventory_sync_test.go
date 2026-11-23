@@ -33,7 +33,7 @@ func TestService_SyncDirectoryGroups_RejectsInventoryAcrossDirectoryDeletion(t *
 			data, err := json.Marshal(map[string]any{"id": "directory_deleted", "organization_id": mockidp.MockOrgID, "updated_at": at})
 			require.NoError(t, err)
 			stub := thirdpartyworkos.NewStubClient()
-			activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), ti.conn, stub, cache.NoopCache, nil)
+			activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), ti.conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 			if replay {
 				_, err := workosrepo.New(ti.conn).SetOrganizationSyncLastEventID(ctx, workosrepo.SetOrganizationSyncLastEventIDParams{WorkosOrganizationID: mockidp.MockOrgID, LastEventID: "event_deleted"})
 				require.NoError(t, err)

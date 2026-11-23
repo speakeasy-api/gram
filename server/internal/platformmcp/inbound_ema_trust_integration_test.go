@@ -104,7 +104,7 @@ func newInboundEMAServicesFixture(t *testing.T, maxConns int32) (context.Context
 		environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn)), policy, nil, audit.NewLogger(), serverURL,
 		remotesessions.NewIdentityCommitter(logger, conn, enc, clientsecretstest.New(t, conn, enc), audit.NewLogger(), serverURL, policy, nil, nil),
 		remotesessions.NewRefreshService(logger, meter, conn, enc, policy, nil, cache.NewRedisCacheAdapter(redisClient)),
-		productfeatures.NewClient(logger, tracer, conn, redisClient), nil)
+		productfeatures.NewClient(logger, tracer, conn, testenv.NewEvictableCache(t, redisClient)), nil)
 
 	issuer, err := usersessionsrepo.New(conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
 		OrganizationID:               conv.ToPGText(principal.OrganizationID),

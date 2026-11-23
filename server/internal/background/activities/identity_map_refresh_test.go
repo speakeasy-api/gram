@@ -63,7 +63,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipSignalsIdentityMapRefresh(t *
 	}})
 
 	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, signals)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache, cache.NoopEvictableCache, signals)
 
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)

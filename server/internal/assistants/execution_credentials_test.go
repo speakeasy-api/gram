@@ -61,7 +61,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	require.NoError(t, err)
 	base, err := url.Parse("http://localhost")
 	require.NoError(t, err)
-	sessions := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, enc, policy, nil, cache.NoopCache, base)
+	sessions := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), db, enc, policy, nil, cache.NoopCache, cache.NoopEvictableCache, base)
 	q := remoterepo.New(db)
 	issuer, err := usersessionsrepo.New(db).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{ProjectID: project, OrganizationID: conv.ToPGText("org-test"), Slug: "turn-user-sessions", AuthnChallengeMode: "interactive", SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true}})
 	require.NoError(t, err)

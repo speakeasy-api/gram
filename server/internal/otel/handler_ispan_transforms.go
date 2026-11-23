@@ -33,7 +33,7 @@ func NewSpanTransformHandler(
 	meterProvider metric.MeterProvider,
 	spanPublisher gcp.Publisher[*otelv1.Span],
 	replicaDB database.DBTX,
-	cacheImpl cache.Cache,
+	cacheImpl cache.EvictableCache,
 ) *SpanTransformHandler {
 	logger = logger.With(attr.SlogComponent("span-transform-handler"))
 	in := enrich.NewInstruments(logger, meterProvider)

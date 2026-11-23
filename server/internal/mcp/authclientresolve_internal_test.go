@@ -1079,7 +1079,7 @@ func TestResolveAccessTokensServesAnAuthClientWithoutTheSignInLink(t *testing.T)
 	ctx := t.Context()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, cache.NoopEvictableCache, &url.URL{Scheme: "http", Host: "localhost"})
 
 	consentedUnder, serverSignIn := uuid.New(), uuid.New()
 	for _, id := range []uuid.UUID{consentedUnder, serverSignIn} {
@@ -1128,7 +1128,7 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 	ctx := t.Context()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+	f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, cache.NoopEvictableCache, &url.URL{Scheme: "http", Host: "localhost"})
 	flags := new(feature.InMemory)
 	flags.SetFlag(feature.FlagAuthClientResolver, f.orgID, true)
 	f.service.features = flags

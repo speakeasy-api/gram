@@ -56,7 +56,7 @@ func TestDirectorySourceLifecycleDeletionAndRestoration(t *testing.T) {
 	roleURN := "role:organization:" + role.ID.String()
 	queries := directoryrepo.New(conn)
 	stub := workos.NewStubClient()
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	apply := func(es ...events.Event) {
 		t.Helper()
 		stub.SetEventPages([][]events.Event{es})
@@ -266,7 +266,7 @@ func TestDirectoryDeletionFallsBackToProfileInSurvivingDirectory(t *testing.T) {
 		withDepartment(sourceLifecycleEvent(t, "dsync.user.created", "event_001", workosOrgID, "directory_a", "directory_user_a", "", at.Add(time.Minute)), "Engineering"),
 		withDepartment(sourceLifecycleEvent(t, "dsync.user.created", "event_002", workosOrgID, "directory_b", "directory_user_b", "", at), "Sales"),
 	}})
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, []string{roleURNs["Engineering"]}, effectiveRoles())
@@ -288,7 +288,7 @@ func TestDirectorySourceLifecycleConflictingTenantDoesNotBlockEvents(t *testing.
 		sourceLifecycleEvent(t, "dsync.group.created", "event_001", "org_original_tenant", "directory_original", "shared_group_id", "Original", at),
 		sourceLifecycleEvent(t, "dsync.user.created", "event_002", "org_original_tenant", "directory_original", "shared_user_id", "", at),
 	}})
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: "org_original_tenant"})
 	require.NoError(t, err)
 	inactive := sourceLifecycleEvent(t, "dsync.user.updated", "event_015", "org_event_tenant", "directory_conflicting", "shared_user_id", "", at.Add(time.Hour))
@@ -336,7 +336,7 @@ func TestDirectoryDeletionWaitsForAttributionTransaction(t *testing.T) {
 		sourceLifecycleEvent(t, "dsync.group.created", "event_001", workosOrgID, "", "attribution_group", "Group", at),
 		sourceLifecycleEvent(t, "dsync.user.created", "event_002", workosOrgID, "", "attribution_user", "", at),
 	}})
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	tx := testenv.BeginTx(t, ctx, conn)
@@ -391,7 +391,7 @@ func TestOlderListedGroupFillsAttributionWithoutReplacingEventState(t *testing.T
 	stub := newWorkOSClientWithEvents([][]events.Event{{
 		sourceLifecycleEvent(t, "dsync.group.created", "event_001", workosOrgID, "", "listed_group", "Current", at.Add(time.Hour)),
 	}})
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	queries := directoryrepo.New(conn)
@@ -434,7 +434,7 @@ func TestDirectoryDeletionLargeFixture(t *testing.T) {
 	_, err = fixtures.SeedDirectoryGroupsFixture(ctx, testrepo.SeedDirectoryGroupsFixtureParams{OrganizationID: orgID, IDPrefix: "large_group_", DirectoryID: conv.ToPGText("large_directory"), WorkosCreatedAt: conv.ToPGTimestamptz(directorySyncTime()), RowCount: 2000})
 	require.NoError(t, err)
 	stub := newWorkOSClientWithEvents([][]events.Event{{sourceLifecycleEvent(t, "dsync.deleted", "event_020", workosOrgID, "", "large_directory", "", directorySyncTime().Add(time.Hour))}})
-	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, cache.NoopEvictableCache, nil)
 	start := time.Now()
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)

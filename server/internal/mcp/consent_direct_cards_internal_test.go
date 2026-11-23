@@ -61,7 +61,7 @@ func TestDirectConsentConnectionCards(t *testing.T) {
 			}
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 			require.NoError(t, err)
-			f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})
+			f.service.remoteChallengeMgr = remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, f.service.enc, policy, nil, cache.NoopCache, cache.NoopEvictableCache, &url.URL{Scheme: "http", Host: "localhost"})
 			signIn := uuid.New()
 			require.NoError(t, f.q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: signIn, ProjectID: validUUID(f.projectID), Slug: "usi-" + signIn.String()[:8]}))
 			if tc.issuerLinked {

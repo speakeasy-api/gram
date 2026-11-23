@@ -71,6 +71,7 @@ func TestBuildAuthorizationUrl_AudienceResolution(t *testing.T) {
 				policy,
 				nil,
 				cache.NoopCache,
+				cache.NoopEvictableCache,
 				mustURL(t, "http://localhost"),
 			)
 

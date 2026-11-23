@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -86,7 +85,7 @@ func TestFederatedMetadataScopePresenceCache(t *testing.T) {
 			rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 			t.Cleanup(func() { require.NoError(t, rc.Close()) })
 			p := federatedFixture(t)
-			m := &ChallengeManager{policy: federatedPublicPolicy(t), locks: cache.NewRedisCacheAdapter(rc)}
+			m := &ChallengeManager{policy: federatedPublicPolicy(t), probes: testenv.NewEvictableCache(t, rc)}
 			body, err := json.Marshal(p.metadata)
 			require.NoError(t, err)
 			var fields map[string]json.RawMessage
@@ -136,7 +135,7 @@ func TestFederatedMetadataCache(t *testing.T) {
 	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
 	p := federatedFixture(t)
-	m := &ChallengeManager{policy: federatedPublicPolicy(t), locks: cache.NewRedisCacheAdapter(redisClient)}
+	m := &ChallengeManager{policy: federatedPublicPolicy(t), probes: testenv.NewEvictableCache(t, redisClient)}
 	calls := 0
 	doer := federatedHTTPDoerFunc(func(r *http.Request) (*http.Response, error) {
 		calls++
@@ -171,7 +170,7 @@ func TestFederatedMetadataCache(t *testing.T) {
 	key := federatedMetadataCacheKey(p.organizationID, p.issuer)
 	require.Equal(t, federatedMetadataTTL, mr.TTL(key))
 	var entry federatedMetadataCacheEntry
-	require.NoError(t, m.locks.Get(t.Context(), key, &entry))
+	require.NoError(t, m.probes.Get(t.Context(), key, &entry))
 	require.Empty(t, entry.Document.raw)
 	encoded, err := json.Marshal(entry)
 	require.NoError(t, err)

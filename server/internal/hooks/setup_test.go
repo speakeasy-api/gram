@@ -214,7 +214,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
 	identitySignals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, testenv.NewEvictableCache(t, redisClient), serverURL)
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	spendCelEngine, err := spendcelenv.New()
 	require.NoError(t, err)
