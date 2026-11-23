@@ -1023,7 +1023,10 @@ export function ChatConversation(): ReactElement {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    // A viewport height, not h-full: the dock's wrapper column above this
+    // page is sized by its content (the document scrolls), so h-full would
+    // let a long transcript grow the page and carry the composer with it.
+    <div className="flex h-[calc(100vh-var(--banner-offset,0px))] flex-col">
       {/* h-(--header-height) + px-8: same row height and content inset as
           Page.Header, so this header's rule lines up with the sidebar's. */}
       <header className="border-border flex h-(--header-height) shrink-0 items-center gap-3 border-b px-8">
