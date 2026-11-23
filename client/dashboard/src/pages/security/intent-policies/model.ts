@@ -84,7 +84,7 @@ export const LOW_CONFIDENCE = 0.75;
 /** Guardrail label keys the session timeline reads. */
 const SECRET_LABELS = ["carries_secret", "touches_credential_store"];
 const EFFECT_CLASS_LABEL = "effect_class";
-const RUNS_OR_SENDS = ["exec", "outbound"];
+const RUNS_OR_SENDS = ["exec_task", "exec_program", "outbound"];
 
 /** "m:ss", or "h:mm:ss" past an hour, for an elapsed number of seconds. */
 export function formatClock(seconds: number): string {

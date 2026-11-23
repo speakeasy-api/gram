@@ -33,7 +33,7 @@ func TestRenderStateIsSharedAndUntrustedShaped(t *testing.T) {
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(state, &decoded))
-	require.Len(t, decoded["grounding"], 8)
+	require.Len(t, decoded["grounding"], 10)
 	require.Equal(t, "/work", decoded["working_directory"])
 	action, ok := decoded["action"].(map[string]any)
 	require.True(t, ok)
@@ -49,7 +49,7 @@ func TestRenderStateIsSharedAndUntrustedShaped(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, string(state), string(encoded))
 	// Five effect classes plus six other labels.
-	require.Len(t, req.Questions, 11)
+	require.Len(t, req.Questions, 15)
 }
 
 func TestJevEvaluatorFoldsAnswers(t *testing.T) {
@@ -61,12 +61,20 @@ func TestJevEvaluatorFoldsAnswers(t *testing.T) {
 		noulAnswer("effect_class.write_local", 0.2),
 		noulAnswer("effect_class.outbound", 0.05),
 		noulAnswer("effect_class.destructive", 0.95),
-		noulAnswer("effect_class.exec", 0.3),
+		noulAnswer("effect_class.exec_task", 0.1),
+		noulAnswer("effect_class.exec_program", 0.3),
 		noulAnswer(intentpolicy.LabelCarriesSecret, 0.02),
 		noulAnswer(intentpolicy.LabelExecutesRemoteCodeInline, 0.01),
 		noulAnswer(intentpolicy.LabelTouchesCredentialStore, 0.03),
 		noulAnswer(intentpolicy.LabelTouchesPersistence, 0.04),
 		noulAnswer(intentpolicy.LabelHistoryRewrite, 0.01),
+		noulAnswer(intentpolicy.LabelCarriesPersonalData, 0.02),
+		noulAnswer(intentpolicy.LabelPublishesArtifact, 0.01),
+		{Key: intentpolicy.LabelDestructiveTarget, Answer: &classifier.Answer{Noul: nil, Score: nil, Choice: &classifier.ChoiceAnswer{
+			Selected:     intentpolicy.TargetWorkspace,
+			Distribution: []classifier.Probability{{Option: intentpolicy.TargetNone, Value: 0.05}, {Option: intentpolicy.TargetScratch, Value: 0.05}, {Option: intentpolicy.TargetWorkspace, Value: 0.8}, {Option: intentpolicy.TargetShared, Value: 0.05}, {Option: intentpolicy.TargetUnknown, Value: 0.05}},
+			Confidence:   nil,
+		}}, Failure: nil},
 		{Key: intentpolicy.LabelEffectCoverage, Answer: &classifier.Answer{Noul: nil, Score: nil, Choice: &classifier.ChoiceAnswer{
 			Selected:     intentpolicy.CoverageUnderstood,
 			Distribution: []classifier.Probability{{Option: intentpolicy.CoverageUnderstood, Value: 0.8}, {Option: intentpolicy.CoveragePartiallyUnderstood, Value: 0.15}, {Option: intentpolicy.CoverageUnknown, Value: 0.05}},
@@ -124,17 +132,20 @@ func TestParseGeminiLabels(t *testing.T) {
 	t.Parallel()
 
 	raw := `{
-		"effect_class": {"value": ["exec", "read"], "confidence": 0.8, "rationale": "Runs a script."},
+		"effect_class": {"value": ["exec_program", "read"], "confidence": 0.8, "rationale": "Runs a script."},
 		"carries_secret": {"value": false, "confidence": 0.9, "rationale": "No credential."},
 		"executes_remote_code_inline": {"value": false, "confidence": 0.9, "rationale": "Local."},
 		"touches_credential_store": {"value": false, "confidence": 0.9, "rationale": "No."},
 		"touches_persistence": {"value": false, "confidence": 0.9, "rationale": "No."},
 		"history_rewrite": {"value": false, "confidence": 0.9, "rationale": "No."},
+		"carries_personal_data": {"value": false, "confidence": 0.9, "rationale": "No."},
+		"destructive_target": {"value": "none", "confidence": 0.9, "rationale": "Not destructive."},
+		"publishes_artifact": {"value": false, "confidence": 0.9, "rationale": "No."},
 		"effect_coverage": {"value": "unknown", "confidence": 1.4, "rationale": "Opaque script."}
 	}`
 	labels, err := intentpolicy.ParseGeminiLabels(intentpolicy.DefaultGuardrail().Questions, []byte(raw))
 	require.NoError(t, err)
-	require.Equal(t, []string{"read", "exec"}, labels[intentpolicy.LabelEffectClass].Value)
+	require.Equal(t, []string{"read", "exec_program"}, labels[intentpolicy.LabelEffectClass].Value)
 	require.Equal(t, "Runs a script.", labels[intentpolicy.LabelEffectClass].Rationale)
 	require.Equal(t, -1, labels[intentpolicy.LabelEffectCoverage].Rank)
 	require.InDelta(t, 1.0, labels[intentpolicy.LabelEffectCoverage].Probability, 1e-9)

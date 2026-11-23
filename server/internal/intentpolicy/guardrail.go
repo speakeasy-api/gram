@@ -14,6 +14,9 @@ const (
 	LabelTouchesPersistence       = "touches_persistence"
 	LabelHistoryRewrite           = "history_rewrite"
 	LabelEffectCoverage           = "effect_coverage"
+	LabelCarriesPersonalData      = "carries_personal_data"
+	LabelDestructiveTarget        = "destructive_target"
+	LabelPublishesArtifact        = "publishes_artifact"
 )
 
 // Effect classes of the effect_class label.
@@ -22,7 +25,17 @@ const (
 	EffectWriteLocal  = "write_local"
 	EffectOutbound    = "outbound"
 	EffectDestructive = "destructive"
-	EffectExec        = "exec"
+	EffectExecTask    = "exec_task"
+	EffectExecProgram = "exec_program"
+)
+
+// Values of the destructive_target label.
+const (
+	TargetNone      = "none"
+	TargetScratch   = "scratch"
+	TargetWorkspace = "workspace"
+	TargetShared    = "shared"
+	TargetUnknown   = "unknown"
 )
 
 // Values of the effect_coverage label.
@@ -36,7 +49,7 @@ const (
 const GuardrailID = "intent-baseline"
 
 // GuardrailVersion changes whenever statements, questions, or contracts change.
-const GuardrailVersion = "2026-11-20.1"
+const GuardrailVersion = "2026-11-23.1"
 
 var questions = []LabelQuestion{
 	{
@@ -48,7 +61,8 @@ var questions = []LabelQuestion{
 			{Key: EffectWriteLocal, Description: "Creates or modifies files, configuration, or state inside the local environment.", Ordinal: 0, Uncertain: false},
 			{Key: EffectOutbound, Description: "Sends data out of the local environment: network requests that carry data, messages, emails, uploads, pushes, posts to external services.", Ordinal: 0, Uncertain: false},
 			{Key: EffectDestructive, Description: "Deletes data, discards uncommitted work, overwrites without backup, or terminates processes.", Ordinal: 0, Uncertain: false},
-			{Key: EffectExec, Description: "Runs code whose effects are not visible in the call itself: scripts, build or test tasks, interpreters, package scripts, downloaded programs.", Ordinal: 0, Uncertain: false},
+			{Key: EffectExecTask, Description: "Runs a task the project declares through its build or package tool (npm run, make, cargo test, pytest, mise run), whose contents are not shown but which the project itself defines.", Ordinal: 0, Uncertain: false},
+			{Key: EffectExecProgram, Description: "Runs a script, program, interpreter, or downloaded code whose effects are not visible in the call and which the project does not declare as a task.", Ordinal: 0, Uncertain: false},
 		},
 	},
 	{
@@ -66,7 +80,7 @@ var questions = []LabelQuestion{
 	{
 		Key:          LabelTouchesCredentialStore,
 		Kind:         KindNoul,
-		Instructions: "Does this call read, list, or search a credential location (.env files, .ssh, .aws, keychains, token files)? Resolve ~, $HOME, and relative paths against the working directory before deciding.",
+		Instructions: "Does this call read, list, or search a credential location (.env files, .ssh, .aws, keychains, token files), or name one as an argument to an upload, publish, sync, or other outbound call? Resolve ~, $HOME, and relative paths against the working directory before deciding.",
 		Options:      nil,
 	},
 	{
@@ -79,6 +93,30 @@ var questions = []LabelQuestion{
 		Key:          LabelHistoryRewrite,
 		Kind:         KindNoul,
 		Instructions: "Does this call rewrite or delete remote git history: force push, a +refspec, --force-with-lease, --mirror, or deleting a remote ref? Local resets and local history edits do not count.",
+		Options:      nil,
+	},
+	{
+		Key:          LabelCarriesPersonalData,
+		Kind:         KindNoul,
+		Instructions: "Do the arguments contain personal or customer data: a person's name together with an email, phone, or address; payment card digits; account or customer identifiers tied to a person; government ids; health or employment details? Judge the shape of the payload, not whether sharing it seems acceptable.",
+		Options:      nil,
+	},
+	{
+		Key:          LabelDestructiveTarget,
+		Kind:         KindChoice,
+		Instructions: "When this call deletes, discards, overwrites, or terminates something, what does it target? Judge from paths, refs, process names, and remote identifiers in the arguments. Answer none when the call is not destructive.",
+		Options: []Option{
+			{Key: TargetNone, Description: "The call is not destructive.", Ordinal: 0, Uncertain: false},
+			{Key: TargetScratch, Description: "Temporary files, build outputs, caches, generated or downloaded artifacts: /tmp, dist, build, node_modules, .cache, coverage.", Ordinal: 0, Uncertain: false},
+			{Key: TargetWorkspace, Description: "Source, docs, configuration, or uncommitted work inside the project.", Ordinal: 0, Uncertain: false},
+			{Key: TargetShared, Description: "Anything outside the project: remote systems, databases, other users' data, shared branches, running services.", Ordinal: 0, Uncertain: false},
+			{Key: TargetUnknown, Description: "The target cannot be determined from the arguments.", Ordinal: 0, Uncertain: true},
+		},
+	},
+	{
+		Key:          LabelPublishesArtifact,
+		Kind:         KindNoul,
+		Instructions: "Does this call publish or release something to a place others consume it: a package to a registry, a release or tag, a container image, a docs site, an app store build, a deployment? Judge the tool and arguments, whether shell or MCP.",
 		Options:      nil,
 	},
 	{
@@ -120,6 +158,14 @@ var contracts = []Contract{
 		Expression: `label.carries_secret && 'outbound' in action.effect_class ? BLOCK : ABSTAIN`,
 	},
 	{
+		ID:         "no_credential_store_egress",
+		Name:       "No credential store egress",
+		Statement:  "A credential location must not be named in, or read into, an outbound call.",
+		Outcome:    DecisionBlock,
+		Conditions: []Condition{label("", LabelTouchesCredentialStore, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectOutbound)},
+		Expression: `label.touches_credential_store && 'outbound' in action.effect_class ? BLOCK : ABSTAIN`,
+	},
+	{
 		ID:         "no_remote_code_inline",
 		Name:       "No inline remote code",
 		Statement:  "Code fetched from the network must not be executed in the same step it is fetched.",
@@ -140,24 +186,32 @@ var contracts = []Contract{
 		Name:       "No persistence setup",
 		Statement:  "Anything that runs code later outside this session (hooks, shell profiles, CI workflows, scheduled tasks, lifecycle scripts) must not be set up.",
 		Outcome:    DecisionBlock,
-		Conditions: []Condition{label("", LabelTouchesPersistence, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectWriteLocal, EffectExec)},
-		Expression: `label.touches_persistence && ('write_local' in action.effect_class || 'exec' in action.effect_class) ? BLOCK : ABSTAIN`,
+		Conditions: []Condition{label("", LabelTouchesPersistence, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectWriteLocal, EffectExecProgram, EffectExecTask)},
+		Expression: `label.touches_persistence && ('write_local' in action.effect_class || 'exec_program' in action.effect_class || 'exec_task' in action.effect_class) ? BLOCK : ABSTAIN`,
 	},
 	{
 		ID:         "review_destructive",
 		Name:       "Review destructive calls",
-		Statement:  "Deleting, discarding work, and terminating processes need a person.",
+		Statement:  "Deleting, discarding work, and terminating processes need a person, unless the target is scratch or build output.",
 		Outcome:    DecisionClarify,
-		Conditions: []Condition{label("", LabelEffectClass, OpIncludes, EffectDestructive)},
-		Expression: `'destructive' in action.effect_class ? CLARIFY : ABSTAIN`,
+		Conditions: []Condition{label("", LabelEffectClass, OpIncludes, EffectDestructive), label("and", LabelDestructiveTarget, OpIsNot, TargetScratch)},
+		Expression: `'destructive' in action.effect_class && label.destructive_target != 'scratch' ? CLARIFY : ABSTAIN`,
 	},
 	{
 		ID:         "review_publish",
 		Name:       "Review publishing",
-		Statement:  "Publishing a package or release needs a person.",
+		Statement:  "Publishing a package, release, image, site, or deployment needs a person.",
 		Outcome:    DecisionClarify,
-		Conditions: []Condition{shellMatches("", publishPattern)},
-		Expression: `tool.name in ` + shellToolsCEL + ` && has(tool.args.command) && string(tool.args.command).matches('` + strings.ReplaceAll(publishPattern, `\`, `\\`) + `') ? CLARIFY : ABSTAIN`,
+		Conditions: []Condition{label("", LabelPublishesArtifact, OpIs, "true"), shellMatches("or", publishPattern)},
+		Expression: `label.publishes_artifact || (tool.name in ` + shellToolsCEL + ` && has(tool.args.command) && string(tool.args.command).matches('` + strings.ReplaceAll(publishPattern, `\`, `\\`) + `')) ? CLARIFY : ABSTAIN`,
+	},
+	{
+		ID:         "review_personal_data_egress",
+		Name:       "Review personal data egress",
+		Statement:  "Personal or customer data must not leave the environment in an outbound call without review.",
+		Outcome:    DecisionClarify,
+		Conditions: []Condition{label("", LabelCarriesPersonalData, OpIs, "true"), label("and", LabelEffectClass, OpIncludes, EffectOutbound)},
+		Expression: `label.carries_personal_data && 'outbound' in action.effect_class ? CLARIFY : ABSTAIN`,
 	},
 	{
 		ID:         "review_credential_read",
@@ -170,10 +224,10 @@ var contracts = []Contract{
 	{
 		ID:         "review_opaque",
 		Name:       "Review opaque calls",
-		Statement:  "A consequential call whose effects cannot be determined from its arguments needs a person.",
+		Statement:  "A consequential call whose effects cannot be determined from its arguments needs a person; reads and declared project tasks are exempt.",
 		Outcome:    DecisionClarify,
-		Conditions: []Condition{label("", LabelEffectCoverage, OpIsNot, CoverageUnderstood), label("and", LabelEffectClass, OpIncludesOtherThan, EffectRead)},
-		Expression: `label.effect_coverage != 'understood' && size(action.effect_class) > 0 && !(action.effect_class == ['read']) ? CLARIFY : ABSTAIN`,
+		Conditions: []Condition{label("", LabelEffectCoverage, OpIsNot, CoverageUnderstood), label("and", LabelEffectClass, OpIncludesOtherThan, EffectRead, EffectExecTask)},
+		Expression: `label.effect_coverage != 'understood' && action.effect_class.exists(e, !(e in ['read', 'exec_task'])) ? CLARIFY : ABSTAIN`,
 	},
 }
 

@@ -107,17 +107,19 @@ function labeled(labels: Record<string, unknown>): IntentCallAssessment {
 describe("secretExposure", () => {
   it("flags later calls that run code or send data", () => {
     const exposure = secretExposure([
-      labeled({ effect_class: ["exec"] }),
+      labeled({ effect_class: ["exec_program"] }),
       labeled({ effect_class: ["read"], touches_credential_store: true }),
       labeled({ effect_class: ["read"] }),
-      labeled({ effect_class: ["exec"] }),
+      labeled({ effect_class: ["exec_program"] }),
       labeled({ effect_class: ["write_local", "outbound"] }),
     ]);
     expect(exposure).toEqual({ firstIndex: 1, riskyIndexes: [3, 4] });
   });
 
   it("is null when no call touches a secret", () => {
-    expect(secretExposure([labeled({ effect_class: ["exec"] })])).toBeNull();
+    expect(
+      secretExposure([labeled({ effect_class: ["exec_program"] })]),
+    ).toBeNull();
   });
 });
 
