@@ -22,7 +22,10 @@ const state = vi.hoisted(() => ({
   success: undefined as undefined | (() => Promise<void>),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ canWriteProjectMCPServers: () => state.canWrite }),
+  useRBAC: () => ({
+    canWriteProjectMCPServers: (projectId: string) =>
+      projectId === "project-test" && state.canWrite,
+  }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: (props: {
