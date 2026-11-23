@@ -90,12 +90,9 @@ function grantCoversResource(
 }
 
 /**
- * True when the role itself blocks the scope on the requested resource: it
- * holds any block that takes the scope away, on a selector that matches the
- * request. For mcp:write that is mcp:blocked_write or mcp:blocked_read, since
- * a block on read also takes write away. The permission the role grants
- * elsewhere would not apply there, so the role is no answer to the request.
- * Without a resource only an unrestricted block counts.
+ * Whether the role blocks the scope where it is requested, so its own grant
+ * would not apply there. A block on read also takes write away, so mcp:write
+ * is blocked by mcp:blocked_read too.
  */
 function roleBlocksScope(
   role: Role,

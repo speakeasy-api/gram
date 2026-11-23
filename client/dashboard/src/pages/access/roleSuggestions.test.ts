@@ -181,8 +181,6 @@ describe("rolesCoveringScope", () => {
   });
 
   it("leaves out a role whose broader block takes the scope away", () => {
-    // A block on mcp:read also takes mcp:write away, so a role that grants
-    // mcp:write but blocks mcp:read is no answer to a request for mcp:write.
     const roles = [
       role("writer-read-blocked", [
         { scope: "mcp:write", selectors: undefined },
