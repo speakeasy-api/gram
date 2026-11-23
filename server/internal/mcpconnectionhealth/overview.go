@@ -37,7 +37,7 @@ func (s *Service) GetSignInSummary(ctx context.Context, payload *gen.GetSignInSu
 	if payload.Bucket != nil {
 		bucket = attemptlog.Bucket(*payload.Bucket)
 	}
-	buckets, err := attemptlog.SignIns(ctx, s.ch, scope, bucket, now)
+	buckets, err := attemptlog.SignIns(ctx, s.ch, scope, bucket, stringValues(payload.Steps), now)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "summarize sign-ins").LogError(ctx, s.logger)
 	}

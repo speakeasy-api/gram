@@ -340,13 +340,59 @@ func TestSignIns_CountsSignInsAndRenewalsPerBucket(t *testing.T) {
 
 	s := f.scope()
 	s.From, s.To = hour.Add(-time.Hour), hour.Add(2*time.Hour)
-	buckets, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketHour, f.now)
+	buckets, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketHour, nil, f.now)
 	require.NoError(t, err)
 	require.Len(t, buckets, 3)
 	require.Zero(t, buckets[0].SignInsSucceeded+buckets[0].RenewalsDidNot)
 	require.Equal(t, uint64(1), buckets[1].SignInsSucceeded)
 	require.Equal(t, uint64(0), buckets[1].SignInsDidNot)
 	require.Equal(t, uint64(3), buckets[1].RenewalsDidNot)
+}
+
+func TestSignIns_StepsKeepOnlyAttemptsThatEndedThereLikeTheLogs(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	hour := f.now.Truncate(time.Hour).Add(-3 * time.Hour)
+	signedIn := f.attempt(f.org, f.project, f.server, hour.Add(5*time.Minute))
+	f.row(signedIn, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, true, time.Second)
+	refused := f.attempt(f.org, f.project, f.server, hour.Add(6*time.Minute))
+	f.row(refused, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeNotOrgMember, true, time.Second)
+	// Signed in to Speakeasy, then the service failed: it ended at the service's sign-in.
+	service := f.attempt(f.org, f.project, f.server, hour.Add(7*time.Minute))
+	f.row(service, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Second)
+	f.row(service, mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderOAuthInvalidGrant, true, 2*time.Second)
+	renewal := f.attempt(f.org, f.project, f.server, hour.Add(8*time.Minute))
+	f.row(renewal, mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeInvalidGrant, true, time.Second)
+	// Still signing in: the logs list it, the summary waits for its end.
+	live := f.attempt(f.org, f.project, f.server, f.now.Add(-10*time.Minute))
+	f.row(live, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, false, time.Second)
+	f.insert()
+
+	s := f.scope()
+	s.From, s.To = hour, hour.Add(time.Hour)
+	steps := []string{string(attemptlog.StepSignIn), string(attemptlog.StepSignInRenewal)}
+	buckets, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketHour, steps, f.now)
+	require.NoError(t, err)
+	require.Len(t, buckets, 1)
+	require.Equal(t, attemptlog.SignInBucket{Start: hour, SignInsSucceeded: 1, SignInsDidNot: 1}, buckets[0])
+
+	counts, err := attemptlog.Count(t.Context(), f.ch, s, attemptlog.Filters{Steps: steps, Outcomes: []string{"connected", "failed", "blocked", "declined", "didnt_finish"}}, f.now)
+	require.NoError(t, err)
+	require.Equal(t, buckets[0].SignInsSucceeded+buckets[0].SignInsDidNot+buckets[0].RenewalsSucceeded+buckets[0].RenewalsDidNot, counts.Total)
+	withLive := s
+	withLive.To = f.now.Add(time.Minute)
+	logs, err := attemptlog.Count(t.Context(), f.ch, withLive, attemptlog.Filters{Steps: steps}, f.now)
+	require.NoError(t, err)
+	require.Equal(t, counts.Total+1, logs.Total)
+
+	none, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketHour, []string{string(attemptlog.StepConnect)}, f.now)
+	require.NoError(t, err)
+	require.Equal(t, attemptlog.SignInBucket{Start: hour}, none[0])
+
+	all, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketHour, nil, f.now)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), all[0].SignInsDidNot)
+	require.Equal(t, uint64(1), all[0].RenewalsDidNot)
 }
 
 func TestDenied_CountsPeopleAndNetworks(t *testing.T) {
@@ -381,7 +427,7 @@ func TestSignIns_SixHourBucketsStartOnUTCBoundaries(t *testing.T) {
 
 	s := f.scope()
 	s.From, s.To = day, day.Add(24*time.Hour)
-	buckets, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketSixHours, f.now)
+	buckets, err := attemptlog.SignIns(t.Context(), f.ch, s, attemptlog.BucketSixHours, nil, f.now)
 	require.NoError(t, err)
 	require.Len(t, buckets, 4)
 	require.True(t, buckets[1].Start.Equal(day.Add(6*time.Hour)))
