@@ -127,12 +127,25 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 
 	tasks := make([]deployFunctionRunnerTask, 0, len(depfuncs))
 	stop := false
+	// keyErr is the first preflight error that a retry may clear, such as an
+	// organization key that KMS could not reach, or that the customer has to
+	// fix. It is returned as is, so Do retries the deployment or reports why
+	// the key cannot be used, instead of the generic preflight failure.
+	var keyErr error
 	for _, fnc := range depfuncs {
-		if task, err := d.preflightFunction(ctx, logger, args, fnc, creds, assetURLs); err != nil {
+		task, err := d.preflightFunction(ctx, logger, args, fnc, creds, assetURLs)
+		if err != nil {
 			stop = true
-		} else {
-			tasks = append(tasks, task)
+			var serr *oops.ShareableError
+			if keyErr == nil && errors.As(err, &serr) && (serr.IsTemporary(ctx) || serr.Code == oops.CodeFailedPrecondition) {
+				keyErr = err
+			}
+			continue
 		}
+		tasks = append(tasks, task)
+	}
+	if keyErr != nil {
+		return keyErr
 	}
 	if stop {
 		return oops.E(oops.CodeInvalid, nil, "one or more functions failed preflight checks").LogError(ctx, d.logger)
