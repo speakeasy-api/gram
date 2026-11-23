@@ -166,8 +166,9 @@ func TestOfClassifiesKnownFamilies(t *testing.T) {
 	for _, key := range sessions {
 		t.Run("sessions/"+key, func(t *testing.T) {
 			t.Parallel()
-			role, _ := redisrole.Of(key)
+			role, prefix := redisrole.Of(key)
 			require.Equal(t, redisrole.RoleSessions, role)
+			require.Equal(t, "unclassified", prefix, "the metric and log label for a sessions key")
 		})
 	}
 }
