@@ -286,7 +286,7 @@ type beforeCAS struct {
 	once func()
 }
 
-func (d *beforeCAS) Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error) {
+func (d *beforeCAS) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	if d.once != nil {
 		f := d.once
 		d.once = nil

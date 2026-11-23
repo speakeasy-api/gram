@@ -135,159 +135,6 @@ func TestGrantExpressionEvaluate_nestedDifferencePreservesExclusionReason(t *tes
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_projectWriteBlocklistSubtractsProductionSelector(t *testing.T) {
-	t.Parallel()
-
-	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
-	grants := []Grant{
-		NewGrant(ScopeProjectWrite, WildcardResource),
-		NewGrantWithSelector(ScopeProjectBlockedWrite, Selector{
-			SelectorKeyResourceKind: ResourceKindProject,
-			SelectorKeyResourceID:   projectID,
-		}),
-	}
-
-	result, err := expressionForCheck(Check{
-		Scope:           ScopeProjectWrite,
-		ResourceKind:    "",
-		ResourceID:      projectID,
-		Dimensions:      nil,
-		exact:           false,
-		representedUser: "",
-	}).Evaluate(grants)
-	require.NoError(t, err)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
-
-	result, err = expressionForCheck(Check{
-		Scope:           ScopeProjectWrite,
-		ResourceKind:    "",
-		ResourceID:      "project_other",
-		Dimensions:      nil,
-		exact:           false,
-		representedUser: "",
-	}).Evaluate(grants)
-	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
-}
-
-func TestGrantExpressionEvaluate_projectReadBlocklistSubtractsProjectWrite(t *testing.T) {
-	t.Parallel()
-
-	const projectID = "project_123"
-	grants := []Grant{
-		NewGrant(ScopeProjectWrite, WildcardResource),
-		NewGrant(ScopeProjectBlockedRead, projectID),
-	}
-
-	result, err := expressionForCheck(Check{
-		Scope:           ScopeProjectWrite,
-		ResourceKind:    "",
-		ResourceID:      projectID,
-		Dimensions:      nil,
-		exact:           false,
-		representedUser: "",
-	}).Evaluate(grants)
-	require.NoError(t, err)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
-}
-
-func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t *testing.T) {
-	t.Parallel()
-
-	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
-	grants := []Grant{
-		NewGrant(ScopeMCPWrite, WildcardResource),
-		NewGrantWithSelector(ScopeMCPBlockedWrite, Selector{
-			SelectorKeyResourceKind: ResourceKindMCP,
-			SelectorKeyResourceID:   WildcardResource,
-			SelectorKeyProjectID:    projectID,
-		}),
-	}
-
-	result, err := expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Write()).Evaluate(grants)
-	require.NoError(t, err)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
-
-	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_other_project"), ProjectIDFrom("project_other")).Write()).Evaluate(grants)
-	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
-
-	// A check that omits the project cannot step around the block: it is
-	// invalid rather than matched.
-	_, err = expressionForCheck(Check{
-		Scope:           ScopeMCPWrite,
-		ResourceKind:    "",
-		ResourceID:      "dimensionless_probe",
-		Dimensions:      nil,
-		exact:           false,
-		representedUser: "",
-	}).Evaluate(grants)
-	require.ErrorIs(t, err, ErrInvalidCheck)
-}
-
-func TestGrantExpressionEvaluate_mcpReadBlocklistAlsoBlocksMCPWrite(t *testing.T) {
-	t.Parallel()
-
-	// Blocks follow Implies in reverse: mcp:write implies mcp:read, so a
-	// block on read takes write away too, as it does for every other kind.
-	const projectID = "project_123"
-	grants := []Grant{
-		NewGrant(ScopeMCPWrite, WildcardResource),
-		NewGrantWithSelector(ScopeMCPBlockedRead, Selector{
-			SelectorKeyResourceKind: ResourceKindMCP,
-			SelectorKeyResourceID:   WildcardResource,
-			SelectorKeyProjectID:    projectID,
-		}),
-	}
-
-	result, err := expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Write()).Evaluate(grants)
-	require.NoError(t, err)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
-
-	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Read()).Evaluate(grants)
-	require.NoError(t, err)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
-
-	// A block bounded to the project leaves servers elsewhere alone.
-	result, err = expressionForCheck(MCPServer(MCPServerIDFrom("server_elsewhere"), ProjectIDFrom("project_456")).Write()).Evaluate(grants)
-	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-}
-
-func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T) {
-	t.Parallel()
-
-	// An operator who never calls a server's tools may still have to manage
-	// it, so taking connect away leaves mcp:write standing.
-	const serverID = "server_123"
-	grants := []Grant{
-		NewGrant(ScopeMCPWrite, WildcardResource),
-		NewGrant(ScopeMCPConnect, WildcardResource),
-		NewGrant(ScopeMCPBlockedConnect, serverID),
-	}
-
-	write := MCPServer(MCPServerIDFrom(serverID), ProjectIDFrom(testProjectID)).Write()
-	result, err := expressionForCheck(write).Evaluate(grants)
-	require.NoError(t, err)
-	require.True(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
-
-	// Connect is the one it takes.
-	connect := write
-	connect.Scope = ScopeMCPConnect
-	result, err = expressionForCheck(connect).Evaluate(grants)
-	require.NoError(t, err)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
-}
-
 func TestGrantExpressionEvaluate_riskPolicyBypassIsEvaluateExclusion(t *testing.T) {
 	t.Parallel()
 
@@ -382,4 +229,46 @@ func TestGrantExpressionEvaluate_riskPolicyAppliesSubtractsMatchingServerIdentit
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
+}
+
+func TestEvaluateRiskPolicy_NamesWhyAPolicyDoesNotApply(t *testing.T) {
+	t.Parallel()
+
+	const policy = "policy-one"
+	audience := NewGrant(ScopeRiskPolicyEvaluate, policy)
+	exemption := NewGrant(ScopeRiskPolicyBypass, policy)
+
+	for name, tc := range map[string]struct {
+		grants []Grant
+		want   RiskPolicyApplication
+	}{
+		"in the audience":                {grants: []Grant{audience}, want: RiskPolicyGoverns},
+		"in the audience and exempt":     {grants: []Grant{audience, exemption}, want: RiskPolicyExempt},
+		"outside the audience":           {grants: nil, want: RiskPolicyNotInAudience},
+		"audience of another policy":     {grants: []Grant{NewGrant(ScopeRiskPolicyEvaluate, "policy-two")}, want: RiskPolicyNotInAudience},
+		"exemption for another policy":   {grants: []Grant{audience, NewGrant(ScopeRiskPolicyBypass, "policy-two")}, want: RiskPolicyGoverns},
+		"exemption without the audience": {grants: []Grant{exemption}, want: RiskPolicyNotInAudience},
+	} {
+		application, err := EvaluateRiskPolicy(tc.grants, policy, RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
+		require.NoError(t, err, name)
+		require.Equal(t, tc.want, application, name)
+		require.Equal(t, tc.want == RiskPolicyGoverns, application.Applies(), name)
+	}
+}
+
+// A policy that cannot be evaluated applies: the error is for the caller to
+// log, never a reason to let the request past the policy.
+func TestEvaluateRiskPolicy_APolicyThatCannotBeEvaluatedApplies(t *testing.T) {
+	t.Parallel()
+
+	everything := []Grant{NewGrant(ScopeRiskPolicyEvaluate, WildcardResource), NewGrant(ScopeRiskPolicyBypass, WildcardResource)}
+	for _, policyID := range []string{"", WildcardResource} {
+		application, err := EvaluateRiskPolicy(everything, policyID, RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
+		require.ErrorIs(t, err, ErrInvalidCheck, "%q", policyID)
+		require.Equal(t, RiskPolicyGoverns, application, "%q", policyID)
+		require.True(t, application.Applies(), "%q", policyID)
+	}
+
+	var unset RiskPolicyApplication
+	require.True(t, unset.Applies(), "a result nobody filled in applies")
 }

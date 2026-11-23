@@ -6,7 +6,7 @@ import { useCanManageIssuerClients } from "./useCanManageIssuerClients";
 
 /**
  * Opens the register sheet for one MCP Authentication Provider. Hidden from
- * anyone who cannot register agents against it, as other write controls are.
+ * anyone who cannot register clients against it, as other write controls are.
  */
 export function RegisterClientAction({
   issuerId,
@@ -20,7 +20,7 @@ export function RegisterClientAction({
   return (
     <>
       <Button size="sm" icon="plus" onClick={() => setOpen(true)}>
-        <Button.Text>Register agent</Button.Text>
+        <Button.Text>Register OAuth client</Button.Text>
       </Button>
       <RegisterClientSheet
         issuerId={issuerId}

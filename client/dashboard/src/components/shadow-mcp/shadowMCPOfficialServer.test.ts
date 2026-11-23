@@ -60,7 +60,7 @@ describe("shadowMCPOfficialServerDescription", () => {
         officialServer: official,
       }),
     ).toBe(
-      "Linked to “Linear”. Direct connections are blocked and agents are sent there.",
+      "Official server: “Linear”. Direct connections are blocked and agents are sent there.",
     );
   });
 

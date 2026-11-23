@@ -39,6 +39,7 @@ function verbsFor(server: McpServer, canWrite: boolean): Verb[] {
 
 /**
  * MCP server candidates, one per /mcp listing row, each opening its server page; enabling a hosted server opens that page too.
+ * Each server with an Inspect tab also gets an "Inspect" action that opens it.
  *
  * Verbs are gated per server (`hasScope("mcp:write", <grant resource>)`),
  * the same check the server's own pages apply, so a grant scoped to some
@@ -134,8 +135,8 @@ export function useMcpServerCandidates({
     const setVisibility = (server: McpServer, verb: Verb) =>
       applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
 
-    return servers.map(({ server }): LauncherCandidate => {
-      return {
+    return servers.flatMap(({ server }): LauncherCandidate[] => {
+      const candidate: LauncherCandidate = {
         id: `mcp:${server.id}`,
         kind: "mcp_server",
         title: mcpServerDisplayName(server),
@@ -160,6 +161,19 @@ export function useMcpServerCandidates({
           routes.mcp.details.overview.goTo(mcpServerRouteParam(server));
         },
       };
+      // An unproxied server has no Inspect tab (its page redirects there to
+      // Overview), so it gets no Inspect action either.
+      if (server.unproxiedMcpServerId) return [candidate];
+      const inspect: LauncherCandidate = {
+        ...candidate,
+        id: `mcp-inspect:${server.id}`,
+        title: `${candidate.title} · Inspect`,
+        detail: "Inspect · tools you get and why others are missing",
+        keywords: [...candidate.keywords, "inspect", "tools", "debug"],
+        verbs: ["open"],
+        run: () => routes.mcp.details.inspect.goTo(mcpServerRouteParam(server)),
+      };
+      return [candidate, inspect];
     });
   }, [mcpServersData, hasScope, routes, queryClient, client, updateMcpServer]);
 }

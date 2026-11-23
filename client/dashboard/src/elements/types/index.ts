@@ -463,19 +463,6 @@ export interface ElementsConfig {
   api?: ApiConfig;
 
   /**
-   * Error tracking configuration.
-   * By default, errors are reported to help improve the Elements library.
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   errorTracking: {
-   *     enabled: false, // Opt out of error reporting
-   *   },
-   * }
-   */
-  errorTracking?: ErrorTrackingConfigOption;
-
-  /**
    * Configuration for the chat thread display and behavior.
    *
    * @example
@@ -487,17 +474,6 @@ export interface ElementsConfig {
    * }
    */
   thread?: ThreadConfig;
-}
-
-/**
- * Configuration for error tracking.
- */
-export interface ErrorTrackingConfigOption {
-  /**
-   * Set to false to disable error reporting.
-   * @default true
-   */
-  enabled?: boolean;
 }
 
 /**

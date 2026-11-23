@@ -16,8 +16,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -31,30 +29,15 @@ import (
 // change a handful of times per hooks release, so this covers several releases.
 const RecentChangesLimit = 25
 
-// canaryOrganizationSlugs always receive the current hooks generator version,
-// bypassing pins. This lives in code rather than in the pin table so that our
-// own team can never be stranded on a stale hooks version by a missing or
-// mistaken pin.
-var canaryOrganizationSlugs = map[string]bool{
-	"speakeasy-team": true,
-}
-
-// IsCanary reports whether the organization always receives the current hooks
-// generator version.
-func IsCanary(organizationSlug string) bool {
-	return canaryOrganizationSlugs[organizationSlug]
-}
-
-// CanaryOrganizationSlugs lists the canary organizations in a stable order.
-func CanaryOrganizationSlugs() []string {
-	return slices.Sorted(maps.Keys(canaryOrganizationSlugs))
-}
-
 // Source names where an organization's effective pin comes from.
 type Source string
 
 const (
-	// SourceCanary means the organization is a canary and ignores pins.
+	// SourceCanary means the organization is the deployment's staff
+	// organization, which always receives the current hooks generator version
+	// and ignores pins. It is configuration rather than a pin so that our own
+	// team can never be stranded on a stale hooks version by a missing or
+	// mistaken pin.
 	SourceCanary Source = "canary"
 
 	// SourceOrganization means the organization's own override applies.

@@ -5,11 +5,6 @@ type Flag string
 const (
 	// FlagChannels gates the Channels rollout for an organization.
 	FlagChannels Flag = "channels"
-	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
-	// based") risk policy MVP. While set, only opted-in organizations can
-	// create or update nl-type risk policies and have them enforced. The
-	// dashboard gates the matching UI behind the same key.
-	FlagPromptPolicies Flag = "gram-prompt-policies"
 	// FlagToolApprovals gates creating require_approval risk policies (tool
 	// approvals) and the dashboard's approval wizard and Tool approvals tab.
 	// Evaluated server-side on policy create and update and in the dashboard;
@@ -199,16 +194,6 @@ const (
 	// keeps serving. Server-evaluated; target everyone to pause the platform,
 	// or an organization group to pause one organization.
 	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
-
-	// FlagWorkloadPlatformGitHubActions offers the GitHub Actions workload
-	// platform to an organization before its catalog entry is enabled, so it
-	// can be tried in production. Evaluated server-side when the platform
-	// catalog is listed (workloadpolicy), so the catalog reports the entry as
-	// enabled and the picker, Command K and preselected setup links offer it.
-	// Targeted by PostHog organization group (org slug). Fails closed: off,
-	// missing or failing, the entry stays "Coming soon". Removed once the entry
-	// is enabled.
-	FlagWorkloadPlatformGitHubActions Flag = "workload-platform-github-actions"
 
 	// FlagAuthClientResolver makes the typed auth client resolver
 	// authoritative for an organization's direct proxied servers. Off, the

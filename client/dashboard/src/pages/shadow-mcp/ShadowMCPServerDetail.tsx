@@ -197,7 +197,7 @@ function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
         className={SUMMARY_TILE_CLASS}
         description={
           officialState
-            ? "Linked to an official server"
+            ? "Agents are sent to the official server"
             : shadowMCPInventoryStatusDescription(server)
         }
       />

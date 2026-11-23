@@ -18,9 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -117,7 +117,8 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
 	}
 	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), Disabled: true, DisableCauses: []string{"trial_demotion", "billing_inactive", "admin_lock"}}))
-	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyProviderPayloadFixture(ctx, testrepo.SetOpenRouterAPIKeyProviderPayloadFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), ProviderPayload: conv.ToPGText(providerSentinel)}))
+	_, err := conn.Exec(ctx, "UPDATE openrouter_api_keys SET key = $1 WHERE organization_id = $2 AND key_type = $3", providerSentinel, orgID, string(openrouter.KeyTypeChat)) //nolint:glint // notestingrawsql: writes the retired plaintext column, which sqlc no longer exposes
+	require.NoError(t, err)
 
 	payloadSessionToken := sessionSentinel
 	result, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID, AdminSessionToken: &payloadSessionToken})
@@ -179,7 +180,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	require.Equal(t, false, internalAfter["stored_disabled"])
 	require.Equal(t, false, internalAfter["effective_disabled"])
 	require.Equal(t, true, internalAfter["key_access_changed"])
-	floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
+	floor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, orgID, "enterprise", false)
 	require.True(t, ok)
 	require.EqualValues(t, floor, chatAfter["monthly_credits"])
 	require.EqualValues(t, floor, internalAfter["monthly_credits"])

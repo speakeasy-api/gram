@@ -609,7 +609,7 @@ export function RemoteMcpIdentitySectionBody({
   // that card says so rather than a banner underneath the choice.
   const noneWarning =
     noneProbeStatus === "authentication-required"
-      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose User Identity or a shared credential."
+      ? "This server answers with an authentication challenge. With no identity configured, requests to it will keep failing — choose user identity or a shared credential."
       : null;
   const cards = identityModeCards(upstreamName);
 
@@ -923,7 +923,7 @@ export function RemoteMcpIdentitySectionBody({
             ) : null}
             {userEditIncomplete ? (
               <Text small warning>
-                Finish the User Identity change, or cancel it, to save.
+                Finish the user identity change, or cancel it, to save.
               </Text>
             ) : null}
             {repointLookupPending ? (
