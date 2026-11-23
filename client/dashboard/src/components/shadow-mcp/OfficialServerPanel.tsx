@@ -255,7 +255,7 @@ function PendingLabel({
       <span className={cn(pending && "invisible")}>{children}</span>
       {pending ? (
         <span className="absolute inset-0 flex items-center justify-center">
-          <Spinner className="mr-0 size-4" />
+          <Spinner className="mr-0 size-4 motion-reduce:animate-none" />
         </span>
       ) : null}
     </span>
