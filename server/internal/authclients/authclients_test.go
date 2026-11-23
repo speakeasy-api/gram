@@ -311,6 +311,25 @@ func TestSetHostedNoUpstreamRequiresExactServerWriteAndPreservesSignIn(t *testin
 		require.Equal(t, id == server, row.RequiresUpstreamAuth.Valid)
 		require.False(t, row.RequiresUpstreamAuth.Bool)
 	}
+	otherOrg, otherProject := seedOtherOrganization(t, ctx, ti.conn)
+	other := uuid.New()
+	require.NoError(t, q.SeedToolsetFixture(ctx, authclientbackfill.SeedToolsetFixtureParams{ID: other, OrganizationID: otherOrg, ProjectID: otherProject, Name: "other", Slug: "other"}))
+	require.NoError(t, q.SeedHostedMCPServerFixture(ctx, authclientbackfill.SeedHostedMCPServerFixtureParams{ID: other, ProjectID: otherProject, Slug: conv.ToPGText("other"), ToolsetID: conv.ToNullUUID(other)}))
+	_, err = ti.service.SetMcpServerUpstreamAuthRequirement(admin, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: other.String(), RequiresUpstreamAuth: false})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	provider, registration := uuid.New(), uuid.New()
+	require.NoError(t, q.SeedRemoteSessionIssuerFixture(ctx, authclientbackfill.SeedRemoteSessionIssuerFixtureParams{ID: provider, ProjectID: conv.ToNullUUID(ti.projectID), Slug: "hosted-provider", Issuer: "https://provider.example.com", Name: conv.ToPGText("Hosted provider")}))
+	require.NoError(t, q.SeedRemoteSessionClientFixture(ctx, authclientbackfill.SeedRemoteSessionClientFixtureParams{ID: registration, ProjectID: conv.ToNullUUID(ti.projectID), OrganizationID: conv.ToPGText(ti.organizationID), RemoteSessionIssuerID: provider, ClientID: "hosted-client", CredentialOwner: "subject", TokenEndpointAuthMethod: conv.ToPGText("none")}))
+	_, err = q.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: ti.projectID, OrganizationID: ti.organizationID, McpServerID: server, RemoteSessionClientID: registration})
+	require.NoError(t, err)
+	require.NoError(t, q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: server, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}}))
+	_, err = ti.service.SetMcpServerUpstreamAuthRequirement(admin, payload)
+	requireOopsCode(t, err, oops.CodeConflict)
+	stored, err := testrepo.New(ti.conn).GetMCPServerRequiresUpstreamAuthFixture(ctx, server)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, stored)
+
 	require.EqualValues(t, 1, auditCount(t, ti, audit.ActionMcpServerUpstreamAuthRequirementUpdate))
 }
 

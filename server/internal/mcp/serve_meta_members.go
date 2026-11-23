@@ -111,12 +111,13 @@ type metaMember struct {
 	typedRegistrations bool
 }
 
+// hostedConsentPresentationKey allows consent rendering to name a blocked member.
+type hostedConsentPresentationKey struct{}
+
 // memberStatus is the list_servers connection state. Hosted members execute
 // in-process, so they are always available. A tunneled member's liveness is
 // one route-store read; a remote member's would be a credentialed network
 // probe per listing, so it stays unknown until cached health exists.
-type hostedConsentPresentationKey struct{}
-
 func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 	switch {
 	case member.backend == metaMemberBackendHosted:
@@ -643,6 +644,7 @@ func (s *Service) admitMetaMembers(
 			if err != nil {
 				logger.WarnContext(ctx, "hosted member upstream assignment unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
 				if ctx.Value(hostedConsentPresentationKey{}) == true {
+					member.upstreamUnavailable = errHostedConsentSetupIncomplete
 					ready = append(ready, member)
 				}
 				continue

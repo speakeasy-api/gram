@@ -165,7 +165,10 @@ function StandardAuthenticationSectionBody({
   const associations = useServerClientAssociations(
     { mcpServerId: serverId ?? "" },
     undefined,
-    { enabled: !!serverId && issuerConfigured, throwOnError: false },
+    {
+      enabled: !!serverId && (issuerConfigured || target.hosted === true),
+      throwOnError: false,
+    },
   );
   const attachedIssuerIds = useMemo(
     () => [
@@ -261,21 +264,6 @@ function StandardAuthenticationSectionBody({
             }
           />
         )}
-        {target.hosted &&
-          serverId &&
-          !gatewayId &&
-          associations.data?.associations.length === 0 && (
-            <RequireScope scope="org:admin" level="section">
-              <RequireScope
-                scope="mcp:write"
-                resourceId={serverId}
-                projectId={target.projectId}
-                level="section"
-              >
-                <HostedNoUpstreamAction key={serverId} serverId={serverId} />
-              </RequireScope>
-            </RequireScope>
-          )}
         {/* Last: its footer Save closes the panel. */}
         <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
       </>
@@ -295,6 +283,21 @@ function StandardAuthenticationSectionBody({
             isError={effectiveIssuersQuery.isError}
           />
           {authenticationFields}
+          {target.hosted &&
+            serverId &&
+            !gatewayId &&
+            associations.data?.associations.length === 0 && (
+              <RequireScope scope="org:admin" level="section">
+                <RequireScope
+                  scope="mcp:write"
+                  resourceId={serverId}
+                  projectId={target.projectId}
+                  level="section"
+                >
+                  <HostedNoUpstreamAction key={serverId} serverId={serverId} />
+                </RequireScope>
+              </RequireScope>
+            )}
         </div>
       </SettingsSection.Panel>
 
@@ -390,7 +393,7 @@ function HostedNoUpstreamAction({
       <FieldLabel>Upstream authentication</FieldLabel>
       <FieldDescription>
         {mutation.isSuccess
-          ? "No upstream authentication required. Users still sign in to this server."
+          ? "No upstream authentication required. The server’s user sign-in settings are unchanged."
           : "Assign an authorization server above, or confirm that this server does not need upstream authentication. This does not turn off user sign-in."}
       </FieldDescription>
       {!mutation.isSuccess && (

@@ -371,11 +371,42 @@ func (s *Service) gatewayConsent(
 	if err != nil {
 		return nil, nil, err
 	}
+	// Use the exact registration reachability check, without looking at any
+	// sibling or depending on a card (self-owned clients have no card).
+	byProject := make(map[uuid.UUID][]uuid.UUID)
+	for _, member := range members {
+		if member.backend == metaMemberBackendHosted {
+			for id := range member.associatedClients {
+				byProject[member.projectID] = append(byProject[member.projectID], id)
+			}
+		}
+	}
+	for project, ids := range byProject {
+		clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, project, endpoint.OrganizationID, ids)
+		if err != nil {
+			return nil, nil, fmt.Errorf("read hosted gateway consent registrations: %w", err)
+		}
+		live := make(map[uuid.UUID]bool, len(clients))
+		for _, client := range clients {
+			live[client.ID] = true
+		}
+		for i := range members {
+			member := &members[i]
+			if member.projectID == project && member.backend == metaMemberBackendHosted {
+				for id := range member.associatedClients {
+					if !live[id] {
+						member.associatedClients = nil
+						member.upstreamUnavailable = errHostedConsentSetupIncomplete
+					}
+				}
+			}
+		}
+	}
 	view := gatewayServersView(members, cards)
 	// Rendering may name an admitted server with incomplete setup. It must
 	// not become a candidate for the tool inventory or an approval.
 	view.members = slices.DeleteFunc(slices.Clone(members), func(member metaMember) bool {
-		return member.backend == metaMemberBackendHosted && member.associatedClients == nil
+		return member.upstreamUnavailable == errHostedConsentSetupIncomplete
 	})
 	if challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindUser {
 		view.CanHide = true
@@ -409,7 +440,7 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
 		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: guardian.AddressFine, signInAddress: false, cause: mcpconnectionattempts.Code{}, upstreamHost: "", Auth: nil}
-		if member.backend == metaMemberBackendHosted && member.associatedClients == nil {
+		if member.upstreamUnavailable == errHostedConsentSetupIncomplete {
 			server.Status = gatewayServerNotSetUp
 			server.cause = mcpconnectionattempts.CodeUpstreamSignInNotSetUp
 			view.Servers = append(view.Servers, server)
@@ -443,6 +474,9 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 	for i := range v.Servers {
 		server := &v.Servers[i]
+		if server.HostedSetupNotice() != "" {
+			continue
+		}
 		server.Status = gatewayServerUnavailable
 		for _, outcome := range outcomes {
 			if outcome.Slug == server.Slug {

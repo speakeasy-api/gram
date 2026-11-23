@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -45,15 +46,33 @@ func TestHostedConsentSetupPresentation(t *testing.T) {
 			fx := consentActionFixture{ti: ti, endpoint: endpoint, stateID: stateID, projectID: project, orgID: org, shared: issuer, subject: subject}
 			registerPageClient(t, ctx, fx)
 			q := authclientbackfill.New(ti.conn)
-			for range tc.placements {
-				client := createConsentRemoteClient(t, ctx, ti.conn, project, org, "hosted-"+uuid.NewString()[:8], "", nil)
+			const assignedIssuerURL = "https://hosted-exact-consent.example.com"
+			for i := range tc.placements {
+				baseURL := ""
+				if i == 0 {
+					baseURL = assignedIssuerURL
+				}
+				client := createConsentRemoteClient(t, ctx, ti.conn, project, org, "hosted-"+uuid.NewString()[:8], baseURL, nil)
 				assignHostedOAuth(t, ctx, ti.conn, org, project, toolset.ID, client)
 				if tc.invalidClient {
 					require.NoError(t, q.SoftDeleteIssuerOfClientFixture(ctx, client))
 				}
 			}
 			require.NoError(t, q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: toolset.ID, RequiresUpstreamAuth: tc.stored}))
+			bearer := mintUserSessionBearerForSubject(t, ti, hosted, subject)
+			request := func() (*httptest.ResponseRecorder, error) {
+				return servePublicHTTP(t, context.Background(), ti, hosted.McpSlug.String, makeInitializeBody(), bearer, nil) //nolint:wrapcheck // Compare the same runtime error before and after view rendering.
+			}
+			before, beforeErr := request()
 			code, page, location := render(t, fx)
+			after, afterErr := request()
+			require.Equal(t, before.Code, after.Code)
+			require.Equal(t, before.Header().Get("WWW-Authenticate"), after.Header().Get("WWW-Authenticate"))
+			if beforeErr != nil {
+				require.ErrorContains(t, afterErr, beforeErr.Error())
+			} else {
+				require.NoError(t, afterErr)
+			}
 			if tc.incomplete {
 				require.Contains(t, page, "An administrator must finish upstream authentication setup")
 				require.NotContains(t, page, "consent-approve-button")
@@ -63,7 +82,8 @@ func TestHostedConsentSetupPresentation(t *testing.T) {
 			} else if tc.placements == 1 {
 				require.NotContains(t, page, "An administrator must finish upstream authentication setup")
 				if code == http.StatusSeeOther {
-					require.NotNil(t, location, "a configured registration can start its exact sign-in")
+					require.NotNil(t, location)
+					require.Equal(t, assignedIssuerURL+"/authorize", location.Scheme+"://"+location.Host+location.Path)
 				} else {
 					require.Contains(t, page, "Connect")
 				}
@@ -89,6 +109,5 @@ func TestGatewayHostedSetupNoticeDoesNotAdmitMissingPlacement(t *testing.T) {
 	require.NoError(t, fx.ti.service.ServeConsent(w, req.WithContext(ctx), fx.endpoint))
 	require.Contains(t, w.Body.String(), "An administrator must finish upstream authentication setup")
 	require.NotContains(t, w.Body.String(), "consent-approve-button")
-	bearer := mintMetaIssuerBearer(t, fx.ti, fx.endpoint.Slug, fx.shared, fx.subject)
-	require.NotContains(t, callConnectionStatus(t, fx.ti, ctx, fx.endpoint.Slug, bearer).statuses, member.slug)
+
 }

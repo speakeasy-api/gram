@@ -133,9 +133,11 @@ func (s *Service) hostedConsentRegistrations(ctx context.Context, endpoint *Reso
 	return registrations, nil
 }
 
+var errHostedConsentSetupIncomplete = errors.New("hosted upstream authentication setup is incomplete")
+
 const hostedSetupNotice = "An administrator must finish upstream authentication setup for this server."
 
-// hostedConsentSetupIncomplete reads the exact placement for display. A single
+// hostedConsentSetupIncomplete is the consent gate for incomplete hosted setup. A single
 // reachable registration needs sign-in even when stored intent is NULL. This
 // does not infer or persist intent for the runtime.
 func (s *Service) hostedConsentSetupIncomplete(ctx context.Context, org string, projectID, serverID uuid.UUID) (bool, error) {

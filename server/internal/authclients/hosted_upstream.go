@@ -38,7 +38,7 @@ func (s *Service) setHostedNoUpstream(ctx context.Context, logger *slog.Logger, 
 	}
 	if err := setHostedNoUpstream(ctx, tx, auth.ActiveOrganizationID, projectID, serverID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeConflict, nil, "Detach the server's assigned registration before selecting no upstream authentication.").LogWarn(ctx, logger)
+			return nil, oops.E(oops.CodeConflict, nil, "No-upstream authentication could not be saved for this server. Reload settings and check its registration.").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "save hosted authentication setup").LogError(ctx, logger)
 	}
@@ -50,7 +50,7 @@ func (s *Service) setHostedNoUpstream(ctx context.Context, logger *slog.Logger, 
 		if err := s.audit.LogHostedNoUpstreamAuthentication(ctx, tx, audit.LogHostedNoUpstreamAuthenticationEvent{
 			OrganizationID: auth.ActiveOrganizationID, ProjectID: projectID,
 			Actor: urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID), ActorDisplayName: auth.Email,
-			ServerID: serverID, ServerName: conv.FromPGTextOrEmpty[string](server.Name), PreviousRequirement: before,
+			McpServerURN: urn.NewMcpServer(serverID), ServerName: conv.FromPGTextOrEmpty[string](server.Name), ServerSlug: conv.FromPGTextOrEmpty[string](server.Slug), PreviousRequirement: before,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit hosted authentication update").LogError(ctx, logger)
 		}

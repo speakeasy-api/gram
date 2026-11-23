@@ -326,8 +326,9 @@ type LogHostedNoUpstreamAuthenticationEvent struct {
 	ProjectID           uuid.UUID
 	Actor               urn.Principal
 	ActorDisplayName    *string
-	ServerID            uuid.UUID
+	McpServerURN        urn.McpServer
 	ServerName          string
+	ServerSlug          string
 	PreviousRequirement *bool
 }
 
@@ -345,8 +346,8 @@ func (l *Logger) LogHostedNoUpstreamAuthentication(ctx context.Context, dbtx rep
 		IsInternal: false, OrganizationID: event.OrganizationID,
 		ProjectID: conv.ToNullUUID(event.ProjectID), ActorID: event.Actor.ID, ActorType: string(event.Actor.Type),
 		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
-		Action: string(ActionMcpServerUpstreamAuthRequirementUpdate), SubjectID: event.ServerID.String(), SubjectType: string(subjectTypeMcpServer),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.ServerName), SubjectSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionMcpServerUpstreamAuthRequirementUpdate), SubjectID: event.McpServerURN.ID.String(), SubjectType: string(subjectTypeMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ServerName), SubjectSlug: conv.ToPGTextEmpty(event.ServerSlug),
 		BeforeSnapshot: before, AfterSnapshot: after, Metadata: nil,
 	}})
 }
