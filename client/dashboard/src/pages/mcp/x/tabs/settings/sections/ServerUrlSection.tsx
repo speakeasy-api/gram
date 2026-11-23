@@ -313,7 +313,6 @@ export function ServerUrlSection({
                         <div>
                           <Button
                             variant="secondary"
-                            aria-label="Add hosted address"
                             onClick={() => setAddingPlatform(true)}
                           >
                             <Button.LeftIcon>

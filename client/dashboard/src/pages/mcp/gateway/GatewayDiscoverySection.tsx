@@ -117,7 +117,7 @@ export function GatewayDiscoverySection({
                     "Agents get one tool that finds and calls the others in Python.",
                   disabled: !codeModeSelectable,
                   badge: codeModeSelectable ? undefined : (
-                    <Text muted small className="font-normal">
+                    <Text as="span" muted small className="font-normal">
                       {notEnabled
                         ? "Not enabled for your organization. Contact Speakeasy to turn it on."
                         : requiresSignIn

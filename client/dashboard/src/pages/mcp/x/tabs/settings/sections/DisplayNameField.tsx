@@ -3,14 +3,6 @@ import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 
-// Iterating a string walks code points, so an emoji counts once; .length would
-// count UTF-16 units.
-function codePointLength(value: string): number {
-  let count = 0;
-  for (const _ of value) count++;
-  return count;
-}
-
 /** The display name input servers and gateways share on their settings tab. */
 export function DisplayNameField({
   id,
@@ -27,7 +19,10 @@ export function DisplayNameField({
   placeholder: string;
   /** The failed save's message, when the last save failed. */
   error?: string;
-  /** Stops typing past this many characters, and shows a live count. */
+  /**
+   * Stops typing past this many characters, and shows a live count in the
+   * same UTF-16 units the input enforces.
+   */
   maxLength?: number;
   /** Set when the draft is over the limit: warns rather than blocks typing. */
   overLimitMessage?: string;
@@ -56,7 +51,7 @@ export function DisplayNameField({
           id={`${id}-count`}
           className="block text-right tabular-nums"
         >
-          {`${codePointLength(value)}/${maxLength}`}
+          {`${value.length}/${maxLength}`}
         </Text>
       ) : null}
       {overLimit ? (

@@ -55,7 +55,10 @@ import {
   IdentityChainingSection,
 } from "./sections/authentication/IdentityChainingSection";
 import { GeneralSection } from "./sections/GeneralSection";
-import { UpstreamUrlSection } from "./sections/UpstreamUrlSection";
+import {
+  MCP_UPSTREAM_URL_SECTION_ID,
+  UpstreamUrlSection,
+} from "./sections/UpstreamUrlSection";
 import {
   UPSTREAM_CREDENTIALS_SECTION_ID,
   UpstreamCredentialsSection,
@@ -103,6 +106,7 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_AGENT_SETUP_SECTION_ID,
   IDENTITY_CHAINING_SECTION_ID,
   MCP_SESSIONS_SECTION_ID,
+  MCP_UPSTREAM_URL_SECTION_ID,
   UPSTREAM_CREDENTIALS_SECTION_ID,
   MCP_VISIBILITY_SECTION_ID,
   ...SETTINGS_GROUP_IDS,
