@@ -158,7 +158,7 @@ const breadcrumbSubstitutions = {
   add: "Add Server",
   "from-existing-source": "From Existing Source",
   openapi: "OpenAPI",
-  remote: MCP_SERVER_KIND_LABEL.remote,
+  remote: "Remote MCP",
   tunneled: MCP_SERVER_KIND_LABEL.tunneled,
   unproxied: MCP_SERVER_KIND_LABEL.unproxied,
   "ai-integrations": "AI Integrations",
