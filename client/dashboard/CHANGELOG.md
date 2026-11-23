@@ -1,5 +1,37 @@
 # dashboard
 
+## 0.154.1
+
+### Patch Changes
+
+- 9a5d737: The MCP Authentication Provider's Connections tab button that registers a client by hand now reads "Register OAuth client" instead of "Register agent", and its sheet explains that it is for MCP clients that can't register themselves through dynamic client registration (DCR) or a client ID metadata document (CIMD). The old wording read as creating a new agent identity.
+
+## 0.154.0
+
+### Minor Changes
+
+- eacd2ef: Read deployment-specific dashboard settings (PostHog, Datadog RUM, tunnel host, custom domain target, Pylon app and first-party hosts) from runtime configuration supplied by the deployment instead of matching the browser host against a list of production hosts, so one dashboard image serves every partition. Removes the unused Elements Datadog RUM error tracking.
+
+## 0.153.0
+
+### Minor Changes
+
+- 2a23053: Roles & Permissions has an Access Requests tab listing members' pending requests. Reviewing one, or opening it from the email or Slack link, lets an administrator approve it for 1, 2 or 4 hours or until the end of the day, deny it, or assign a role. A member who has asked sees their request as pending on the page they were blocked on, and access that can't be given temporarily tells them to ask an administrator instead.
+
+### Patch Changes
+
+- a62cd80: A member waiting on an access request now sees the page open up as soon as an administrator decides it, wherever they asked: a banner, the popover on a disabled button such as Create MCP server, or a full page. Previously, closing the popover stopped the check until the page was reloaded.
+- b1c1e0c: An agent's MCP sign-in tab no longer marks every personal server "Could not check connection" for an admin previewing roles: reading an agent's attached connections now follows the same permission check as the rest of the agent's pages. A viewer who may not see the agent's attached connection is told so plainly, and that server is no longer counted on the tab.
+- a6fc982: `keys.list` can now return one page at a time. Send `limit` (1 to 100) to get a page, then pass the returned `next_cursor` as `cursor` to get the next one. Keys come newest first. Send `search` to only return keys whose name contains that text, ignoring case. Callers that send no `limit` still get every key in one response, as before. The dashboard's API Keys page now loads 50 keys at a time with a "Load more" button and searches on the server, so it stays fast for organizations with thousands of keys.
+- 427498d: Setting up Enterprise Managed Auth on an MCP Authentication Provider now asks for one thing: the identity provider's issuer URL. "Set up EMA" opens the field in place, with no choice between providers and no trip to the Okta page. An Okta org URL such as `https://acme.okta.com` works, and a pasted Okta admin console URL is read as the org URL.
+- 07717cf: On an MCP server's Team access page, giving someone connect access to a set of tool annotations, such as "Read-only", now works when they hold no connect access yet. The choice used to save as blocks on the other annotations only, which left the person with no access at all.
+- 95c9bbb: The MCP server Overview keeps its labels while usage loads, so only the figures shimmer, and coming back to the tab within a few minutes shows the last figures at once instead of reloading them.
+- e01f674: Changing the time range on the MCP server Overview shows the loading state in the top-tools lists until the new range arrives, instead of the previous range's tools.
+- a92b906: The dashboard no longer records screen sessions. PostHog session recording and Datadog session replay are switched off, and the Claire de Fermat tracking pixel is removed. Product analytics events and Datadog performance and error monitoring are unchanged.
+- cba49d7: Opening an MCP server's pages no longer creates a client session for the viewer. The readiness check only asks an issuer-gated server whether it answers after you connect your account in Inspect.
+- 8e5b454: Access requests can now be stored and decided. With the access requests rollout on, requesting access records a pending request that an organization administrator can approve as a temporary grant or deny, through the new listAccessRequests, decideAccessRequest and withdrawAccessRequest endpoints. Scopes that cannot be given temporarily can no longer be requested while the rollout is on. Administrators are still emailed.
+- b93dd41: A tool with no annotations is now classified as unannotated. A rule with no annotation limit still covers it, a rule limited to read-only tools no longer does, and a tool that says it is both read-only and destructive is treated as destructive. The access, agents and Platform MCP APIs accept `unannotated` as a rule's annotation, and the role editor classifies tools the same way the server does and keeps a rule's unannotated selectors when another annotation is edited.
+
 ## 0.152.0
 
 ### Minor Changes

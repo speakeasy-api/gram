@@ -68,11 +68,15 @@ func TestUnannotatedToolCall(t *testing.T) {
 		},
 		"unknown, generated ref": {
 			call: ref.ToolCall("uncatalogued", ""),
-			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": false, "unannotated blocked": true},
+			// A block limited to a disposition takes away a call whose disposition
+			// is unknown, since it could be any of them.
+			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": false, "unannotated blocked": false},
 		},
 		"unknown, constructed": {
 			call: mcpToolCallCheck(server.String(), mcpToolCallDimensions{Tool: "uncatalogued", Disposition: "", ProjectID: project.String()}),
-			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": false, "unannotated blocked": true},
+			// A block limited to a disposition takes away a call whose disposition
+			// is unknown, since it could be any of them.
+			want: map[string]bool{"unlimited": true, "read-only": false, "unannotated by name": false, "unannotated blocked": false},
 		},
 	}
 

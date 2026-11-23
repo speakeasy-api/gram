@@ -1612,28 +1612,20 @@ describe("usePolicyCandidates", () => {
     },
   ];
 
-  // The Guardrails page lists prompt-based policies only behind
-  // gram-prompt-policies; the palette must not offer what the page hides.
-  it("hides prompt-based policies while the feature flag is off", () => {
+  it("lists standard and prompt-based policies", () => {
     mocks.scopes = ["org:admin"];
     mocks.policies = policies;
     const { result } = renderCandidates();
 
-    expect(byKind(result.current, "policy").map((c) => c.title)).toEqual([
-      "Block secrets",
-    ]);
-  });
-
-  it("lists prompt-based policies once the feature flag is on", () => {
-    mocks.scopes = ["org:admin"];
-    mocks.flags = ["gram-prompt-policies"];
-    mocks.policies = policies;
-    const { result } = renderCandidates();
-
-    expect(byKind(result.current, "policy").map((c) => c.title)).toEqual([
+    const [standard, promptBased] = byKind(result.current, "policy");
+    expect([standard?.title, promptBased?.title]).toEqual([
       "Block secrets",
       "No customer data",
     ]);
+    expect(standard?.keywords).not.toContain("prompt-based");
+    expect(promptBased?.keywords).toEqual(
+      expect.arrayContaining(["prompt", "prompt-based"]),
+    );
   });
 });
 

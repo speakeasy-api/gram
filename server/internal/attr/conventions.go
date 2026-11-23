@@ -705,6 +705,10 @@ const (
 	// told apart without revealing the key.
 	EncryptionKeyFingerprintKey = attribute.Key("gram.encryption.key_fingerprint")
 
+	// PartitionKey is the Speakeasy partition (an independent production
+	// deployment, such as us or eu) that emitted the telemetry.
+	PartitionKey = attribute.Key("gram.partition")
+
 	// OrgEncryptionUseCaseKey is the organization encryption use case a value
 	// or key belongs to, such as oauth-session-tokens.
 	OrgEncryptionUseCaseKey = attribute.Key("gram.orgencryption.use_case")
@@ -2771,6 +2775,14 @@ func OAuthStoredToken[V ~string](v V) attribute.KeyValue {
 
 func SlogEncryptionKeyFingerprint(v string) slog.Attr {
 	return slog.String(string(EncryptionKeyFingerprintKey), v)
+}
+
+func Partition[V ~string](v V) attribute.KeyValue {
+	return PartitionKey.String(string(v))
+}
+
+func SlogPartition[V ~string](v V) slog.Attr {
+	return slog.String(string(PartitionKey), string(v))
 }
 
 func OrgEncryptionUseCase[V ~string](v V) attribute.KeyValue {

@@ -7223,6 +7223,43 @@ COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
 
+-- A non-partial unique index supplies the composite message ownership target.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_project_id_id_key
+ON chat_messages (project_id, id);
+
+-- Encrypted transcript shadows retain the lifecycle of their source message.
+CREATE TABLE IF NOT EXISTS chat_message_transcripts (
+  message_id UUID NOT NULL,
+  project_id UUID NOT NULL,
+  organization_id TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  source_hash BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_message_transcripts_pkey PRIMARY KEY (message_id),
+  CONSTRAINT chat_message_transcripts_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_source_hash_check CHECK (octet_length(source_hash) = 32)
+);
+
+COMMENT ON COLUMN chat_message_transcripts.message_id IS 'Source message identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.project_id IS 'Owning project identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organization identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
+@access: opaque-restricted';
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Unkeyed freshness digest of sensitive transcript fields.
+@access: opaque-restricted';
+COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS chat_message_transcripts_project_id_idx ON chat_message_transcripts (project_id);
+CREATE INDEX IF NOT EXISTS chat_message_transcripts_organization_id_idx ON chat_message_transcripts (organization_id);
+
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
 -- Transcript readers and keyset pages order by (created_at, seq) within a

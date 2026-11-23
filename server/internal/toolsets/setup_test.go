@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
@@ -210,7 +211,7 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f, staff.Organization{})
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
 		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, auditLogger),

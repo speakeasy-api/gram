@@ -354,6 +354,7 @@ func newWorkerCommand() *cli.Command {
 		},
 	)
 
+	flags = append(flags, staffFlags()...)
 	flags = append(flags, catalogPromotionFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, customDomainFlags()...)
@@ -364,6 +365,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, orgEncryptionFlags()...)
+	flags = append(flags, transcriptShadowFlag())
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
@@ -391,6 +393,10 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
+			}
 
 			serviceName := "gram-worker"
 			serviceEnv := c.String("environment")
@@ -415,6 +421,7 @@ func newWorkerCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -448,6 +455,9 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			redisClient, err := newRedisClient(ctx, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
@@ -506,7 +516,7 @@ func newWorkerCommand() *cli.Command {
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, staffOrg).
 					WithDistributionAdmission(admission.NewGuard())
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
@@ -585,7 +595,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg)
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -860,6 +870,9 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+				return err
+			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
@@ -914,6 +927,7 @@ func newWorkerCommand() *cli.Command {
 				SiteURL:                        siteURL,
 				ServerURL:                      serverURL,
 				OrgHosts:                       orgHosts,
+				StaffOrganization:              staffOrg,
 				BillingTracker:                 billingTracker,
 				BillingRepository:              billingRepo,
 				StripeClient:                   stripeClient,

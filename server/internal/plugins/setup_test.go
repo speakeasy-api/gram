@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -151,7 +152,7 @@ func newTestPluginsServiceWithOptions(t *testing.T, lockTimeout time.Duration, f
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", features, nil, staff.Organization{})
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -242,6 +243,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		"https://app.getgram.ai",
 		features,
 		publisher,
+		staff.Organization{},
 	)
 
 	return ctx, &testInstance{
@@ -273,6 +275,7 @@ func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.Git
 		"local",
 		"https://app.getgram.ai",
 		features,
+		staff.Organization{},
 	)
 }
 
