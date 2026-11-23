@@ -51,6 +51,10 @@ type NodeSpec struct {
 	// StartTimeout bounds how long the node may take to come online.
 	StartTimeout time.Duration
 
+	// Port is the UDP port for WireGuard and peer traffic; zero lets tsnet
+	// pick one.
+	Port uint16
+
 	// CertificateEvents, when set, is told the outcome of every certificate
 	// request the node makes.
 	CertificateEvents func(ctx context.Context, operation CertificateOperation, result CertificateResult)
