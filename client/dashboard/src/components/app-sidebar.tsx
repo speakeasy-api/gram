@@ -24,7 +24,6 @@ import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { RequireScope } from "./require-scope";
-import { useConnectionHealthFlag } from "@/pages/mcp-sessions/connection-health/flag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import {
   ScopeGatedNavGroup,
@@ -104,8 +103,6 @@ export function AppSidebar({
   const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
-  // Connection health is in beta, so MCP Sessions moves under In Beta with it.
-  const connectionHealthOn = useConnectionHealthFlag() === "on";
   const isAgentManagementEnabled = navAccess.has(routes.identities.agents.url);
   const isSignalsIntelligenceEnabled = navAccess.has(
     routes.signalsIntelligence.url,
@@ -173,9 +170,10 @@ export function AppSidebar({
         ...(isUserSessionsEnabled
           ? [
               {
-                item: connectionHealthOn
-                  ? { ...routes.mcpSessions, stage: "beta" as const }
-                  : routes.mcpSessions,
+                // Carries the beta stage while connection health is on.
+                item:
+                  navAccess.get(routes.mcpSessions.url)?.route ??
+                  routes.mcpSessions,
                 ...accessFor(routes.mcpSessions),
               },
             ]
