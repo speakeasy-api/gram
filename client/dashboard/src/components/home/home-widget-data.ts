@@ -28,7 +28,7 @@ export function dailyCost(buckets: readonly Bucket[]): number[] {
 export type Mover = { name: string; prev: number; curr: number; delta: number };
 
 // The project overview returns at most this many top servers.
-export const TOP_SERVERS_CAP = 10;
+const TOP_SERVERS_CAP = 10;
 
 /**
  * Servers ranked by the size of their week-over-week change. The inputs are
