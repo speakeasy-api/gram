@@ -14,6 +14,9 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -66,6 +69,9 @@ type privateIngressRuntime struct {
 	Runtime  *mcpServerRuntime
 	cleanup  []func(context.Context) error
 
+	// MeterReadings publishes metering readings, including MCP bandwidth.
+	MeterReadings gcp.Publisher[*meteringv1.MeterReading]
+
 	// TokenReviewer verifies attestation tokens: Kubernetes TokenReview in a
 	// cluster, or the HMAC-signed local tokens in local development.
 	TokenReviewer netingress.TokenReviewer
@@ -90,7 +96,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err := validatePrivateIngressTemporalConfig(c); err != nil {
 		return nil, err
 	}
-	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Runtime: nil, cleanup: nil, TokenReviewer: nil}
+	r := &privateIngressRuntime{DB: nil, Redis: nil, Temporal: nil, Runtime: nil, cleanup: nil, MeterReadings: nil, TokenReviewer: nil}
 	defer func() {
 		if err != nil {
 			r.Close(ctx)
@@ -219,6 +225,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	r.cleanup = append(r.cleanup, stop)
+	r.MeterReadings = publishers.MeterReadings
 	enforcementDispatcher, enforcementShutdown := newRiskEnforcementDispatcher(
 		ctx,
 		logger,
