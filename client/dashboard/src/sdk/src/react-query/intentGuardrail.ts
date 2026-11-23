@@ -59,7 +59,7 @@ export type IntentGuardrailQueryError =
  * getGuardrail intentPolicies
  *
  * @remarks
- * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires a Speakeasy platform admin.
+ * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.
  */
 export function useIntentGuardrail(
   request?: GetIntentGuardrailRequest | undefined,
@@ -85,7 +85,7 @@ export function useIntentGuardrail(
  * getGuardrail intentPolicies
  *
  * @remarks
- * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires a Speakeasy platform admin.
+ * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.
  */
 export function useIntentGuardrailSuspense(
   request?: GetIntentGuardrailRequest | undefined,

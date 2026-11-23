@@ -10,7 +10,6 @@ const testState = vi.hoisted(() => ({
   projectId: "project_a",
   orgMemoryEnabled: false,
   assistantsAvailable: true,
-  isPlatformAdmin: false,
   featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
     isSuccess: true,
@@ -29,7 +28,6 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: testState.projectId }),
   useOrganization: () => ({ id: "organization_a" }),
-  useIsPlatformAdmin: () => testState.isPlatformAdmin,
 }));
 
 vi.mock("./useAssistantsAvailability", () => ({
@@ -52,7 +50,6 @@ function unavailableFeatureFlag(
 
 beforeEach(() => {
   testState.projectId = "project_a";
-  testState.isPlatformAdmin = false;
   testState.orgMemoryEnabled = false;
   testState.assistantsAvailable = true;
   testState.productFeatures = {
@@ -62,6 +59,7 @@ beforeEach(() => {
   testState.featureFlags = {
     [FEATURE_FLAGS.channels]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
+    [FEATURE_FLAGS.intentPolicies]: unavailableFeatureFlag("loading"),
   };
 });
 
@@ -212,16 +210,18 @@ describe("useProjectNavRoutes", () => {
     ).toEqual(["org:admin"]);
   });
 
-  it("lists Intent-based policies for platform admins only", () => {
+  it("lists Intent-based policies only when the org rollout flag is on", () => {
     expect(
       renderNav().result.current.map((entry) => entry.route.title),
     ).not.toContain("Intent-based policies");
 
-    testState.isPlatformAdmin = true;
+    testState.featureFlags[FEATURE_FLAGS.intentPolicies] = {
+      status: "enabled",
+    };
     const entry = renderNav().result.current.find(
       (e) => e.route.title === "Intent-based policies",
     );
-    expect(entry?.scope).toEqual([]);
+    expect(entry?.scope).toEqual(["chat:read"]);
   });
 
   it("leaves Approval Requests out of nav", () => {
@@ -268,6 +268,7 @@ describe("useProjectNavRoutes", () => {
       testState.featureFlags = {
         [FEATURE_FLAGS.channels]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
+        [FEATURE_FLAGS.intentPolicies]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderNav();
@@ -310,6 +311,7 @@ describe("useProjectNavRoutes", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.channels]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
+      [FEATURE_FLAGS.intentPolicies]: { status: "enabled" },
     };
 
     const { result } = renderNav();
@@ -320,6 +322,7 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.explore.href());
     expect(navRoutes).toContain(routes.deployments.href());
     expect(navRoutes).toContain(routes.riskEvents.href());
+    expect(navRoutes).toContain(routes.intentPolicies.href());
   });
 
   it("uses assistant read on the active project for assistant surfaces", () => {

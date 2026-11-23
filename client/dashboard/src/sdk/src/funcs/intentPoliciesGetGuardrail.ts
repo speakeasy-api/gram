@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getGuardrail intentPolicies
  *
  * @remarks
- * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires a Speakeasy platform admin.
+ * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.
  */
 export function intentPoliciesGetGuardrail(
   client: GramCore,

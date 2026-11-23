@@ -17,7 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/intentpolicies"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -80,10 +80,20 @@ const geminiBenign = `{
 	"touches_credential_store": {"value": false, "confidence": 0.9, "rationale": "None."},
 	"touches_persistence": {"value": false, "confidence": 0.9, "rationale": "None."},
 	"history_rewrite": {"value": false, "confidence": 0.9, "rationale": "None."},
+	"carries_personal_data": {"value": false, "confidence": 0.9, "rationale": "None."},
+	"destructive_target": {"value": "none", "confidence": 0.9, "rationale": "Not destructive."},
+	"publishes_artifact": {"value": false, "confidence": 0.9, "rationale": "None."},
 	"effect_coverage": {"value": "understood", "confidence": 0.9, "rationale": "Clear."}
 }`
 
 func newTestService(t *testing.T, jev classifier.Classifier) (context.Context, *intentpolicies.Service) {
+	t.Helper()
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagIntentPolicies, feature.AnyDistinctID, true)
+	return newTestServiceWithFlags(t, jev, flags)
+}
+
+func newTestServiceWithFlags(t *testing.T, jev classifier.Classifier, flags feature.Provider) (context.Context, *intentpolicies.Service) {
 	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -96,24 +106,20 @@ func newTestService(t *testing.T, jev classifier.Classifier) (context.Context, *
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
-	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
+	// Analyzing reads chat transcripts and uploading writes a chat; neither
+	// comes with the Admin role.
+	ctx = authztest.WithAdminGrants(authztest.InitAuthContext(t, ctx, conn, sessionManager),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+		authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource),
+	)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	writer, shutdown := chat.NewChatMessageWriter(logger, conn, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
-	svc, err := intentpolicies.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, writer, geminiStub{CompletionClient: nil, body: geminiBenign}, jev)
+	svc, err := intentpolicies.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, writer, geminiStub{CompletionClient: nil, body: geminiBenign}, jev)
 	require.NoError(t, err)
 	return ctx, svc
-}
-
-func withAdmin(t *testing.T, ctx context.Context) context.Context {
-	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtxCopy := *authCtx
-	authCtxCopy.IsAdmin = true
-	return contextvalues.SetAuthContext(ctx, &authCtxCopy)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

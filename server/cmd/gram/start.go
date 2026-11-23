@@ -1840,7 +1840,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			intentPoliciesSvc, err := intentpolicies.NewService(logger, tracerProvider, db, sessionManager, authzEngine, chatWriter, completionsClient, intentPoliciesClassifier)
+			intentPoliciesSvc, err := intentpolicies.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, chatWriter, completionsClient, intentPoliciesClassifier)
 			if err != nil {
 				return fmt.Errorf("create intent policies service: %w", err)
 			}

@@ -20746,9 +20746,9 @@ func intentPoliciesUsage() {
 	fmt.Fprintln(os.Stderr, `Staff-only retroactive analysis of recorded tool calls against the intent-based guardrail. Read-only apart from storing uploaded transcripts; nothing is enforced.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] intent-policies COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-guardrail: Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires a Speakeasy platform admin.`)
-	fmt.Fprintln(os.Stderr, `    analyze-session: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires a Speakeasy platform admin.`)
-	fmt.Fprintln(os.Stderr, `    upload-transcript: Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires a Speakeasy platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-guardrail: Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.`)
+	fmt.Fprintln(os.Stderr, `    analyze-session: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the intent-policies rollout for the organization.`)
+	fmt.Fprintln(os.Stderr, `    upload-transcript: Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the intent-policies rollout for the organization.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s intent-policies COMMAND --help\n", os.Args[0])
@@ -20762,7 +20762,7 @@ func intentPoliciesGetGuardrailUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires a Speakeasy platform admin.`)
+	fmt.Fprintln(os.Stderr, `Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -20783,7 +20783,7 @@ func intentPoliciesAnalyzeSessionUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires a Speakeasy platform admin.`)
+	fmt.Fprintln(os.Stderr, `Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the intent-policies rollout for the organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -20805,7 +20805,7 @@ func intentPoliciesUploadTranscriptUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires a Speakeasy platform admin.`)
+	fmt.Fprintln(os.Stderr, `Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the intent-policies rollout for the organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

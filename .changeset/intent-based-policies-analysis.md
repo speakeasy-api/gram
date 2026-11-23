@@ -3,4 +3,4 @@
 "dashboard": minor
 ---
 
-Add a staff-only Intent-based policies page that replays a stored or uploaded session and shows which tool calls the intent guardrail would permit, ask about, or block.
+Add an Intent-based policies page, rolled out per organization, that replays a stored or uploaded session and shows which tool calls the intent guardrail would permit, ask about, or block.

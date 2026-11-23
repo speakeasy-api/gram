@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * uploadTranscript intentPolicies
  *
  * @remarks
- * Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires a Speakeasy platform admin.
+ * Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the intent-policies rollout for the organization.
  */
 export function intentPoliciesUploadTranscript(
   client: GramCore,

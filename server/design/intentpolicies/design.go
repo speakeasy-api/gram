@@ -14,7 +14,7 @@ var _ = Service("intentPolicies", func() {
 	shared.DeclareErrorResponses()
 
 	Method("getGuardrail", func() {
-		Description("Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires a Speakeasy platform admin.")
+		Description("Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -36,7 +36,7 @@ var _ = Service("intentPolicies", func() {
 	})
 
 	Method("analyzeSession", func() {
-		Description("Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires a Speakeasy platform admin.")
+		Description("Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the intent-policies rollout for the organization.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -76,7 +76,7 @@ var _ = Service("intentPolicies", func() {
 	})
 
 	Method("uploadTranscript", func() {
-		Description("Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires a Speakeasy platform admin.")
+		Description("Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the intent-policies rollout for the organization.")
 
 		Payload(func() {
 			security.SessionPayload()

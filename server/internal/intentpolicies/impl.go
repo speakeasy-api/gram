@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/intentpolicy"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -45,6 +46,8 @@ type Service struct {
 	logger     *slog.Logger
 	db         *pgxpool.Pool
 	auth       *auth.Auth
+	authz      *authz.Engine
+	features   feature.Provider
 	chatWriter *chat.ChatMessageWriter
 	completion openrouter.CompletionClient
 	jev        *intentpolicy.JevEvaluator
@@ -64,6 +67,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	features feature.Provider,
 	chatWriter *chat.ChatMessageWriter,
 	completion openrouter.CompletionClient,
 	jevClassifier classifier.Classifier,
@@ -79,6 +83,8 @@ func NewService(
 		logger:     logger,
 		db:         db,
 		auth:       auth.New(logger, db, sessions, authzEngine),
+		authz:      authzEngine,
+		features:   features,
 		chatWriter: chatWriter,
 		completion: completion,
 		jev:        intentpolicy.NewJevEvaluator(jevClassifier),
@@ -101,20 +107,32 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) requireStaff(ctx context.Context) (*contextvalues.AuthContext, *slog.Logger, error) {
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+// authorize admits a caller whose organization has the intent-policies
+// rollout and who passes check for the active project.
+func (s *Service) authorize(ctx context.Context, check func(authz.ProjectID) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, s.logger, oops.C(oops.CodeUnauthorized)
+	}
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagIntentPolicies, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 	if err != nil {
+		logger.WarnContext(ctx, "evaluate intent-policies flag", attr.SlogError(err))
+	}
+	if evaluation != feature.EvaluationEnabled {
+		return nil, logger, oops.C(oops.CodeNotFound)
+	}
+
+	if err := s.authz.Require(ctx, check(authz.ProjectIDOf(*authCtx.ProjectID))); err != nil {
 		return nil, logger, err
 	}
-	if authCtx.ProjectID == nil {
-		return nil, logger, oops.C(oops.CodeUnauthorized)
-	}
-	return authCtx, logger.With(attr.SlogProjectID(authCtx.ProjectID.String())), nil
+	return authCtx, logger, nil
 }
 
 // GetGuardrail returns the built-in guardrail.
 func (s *Service) GetGuardrail(ctx context.Context, _ *gen.GetGuardrailPayload) (*gen.IntentGuardrail, error) {
-	if _, _, err := s.requireStaff(ctx); err != nil {
+	if _, _, err := s.authorize(ctx, func(p authz.ProjectID) authz.Check { return authz.Project(p).Read() }); err != nil {
 		return nil, err
 	}
 	return buildGuardrailView(s.guardrail), nil
@@ -122,7 +140,7 @@ func (s *Service) GetGuardrail(ctx context.Context, _ *gen.GetGuardrailPayload) 
 
 // AnalyzeSession labels and decides every tool call of one session.
 func (s *Service) AnalyzeSession(ctx context.Context, payload *gen.AnalyzeSessionPayload) (*gen.IntentSessionAnalysis, error) {
-	authCtx, logger, err := s.requireStaff(ctx)
+	authCtx, logger, err := s.authorize(ctx, func(p authz.ProjectID) authz.Check { return authz.Chats(p).Read() })
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +216,7 @@ func (s *Service) AnalyzeSession(ctx context.Context, payload *gen.AnalyzeSessio
 
 // UploadTranscript stores a transcript as a chat in the caller's project.
 func (s *Service) UploadTranscript(ctx context.Context, payload *gen.UploadTranscriptPayload) (*gen.UploadTranscriptResult, error) {
-	authCtx, logger, err := s.requireStaff(ctx)
+	authCtx, logger, err := s.authorize(ctx, func(p authz.ProjectID) authz.Check { return authz.Chats(p).Write() })
 	if err != nil {
 		return nil, err
 	}

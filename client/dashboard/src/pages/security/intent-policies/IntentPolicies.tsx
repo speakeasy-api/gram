@@ -11,7 +11,8 @@ import {
   TabsContent,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useSdkClient } from "@/contexts/Sdk";
 import { handleError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -63,7 +64,7 @@ const EVALUATOR_OPTIONS = [
 ];
 
 export default function IntentPolicies(): JSX.Element {
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const flag = useFeatureFlag(FEATURE_FLAGS.intentPolicies);
   return (
     <Page>
       <Page.Header>
@@ -79,11 +80,11 @@ export default function IntentPolicies(): JSX.Element {
             calls it would permit, ask about, or block. Nothing is enforced.
           </Page.Section.Description>
           <Page.Section.Body>
-            {isPlatformAdmin ? (
+            {flag.status === "loading" ? null : flag.status === "enabled" ? (
               <Workbench />
             ) : (
               <Text muted className="py-8 text-center">
-                This page is available to platform admins only.
+                Intent-based policies aren't enabled for this organization.
               </Text>
             )}
           </Page.Section.Body>

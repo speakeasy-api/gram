@@ -1,9 +1,5 @@
 import { useMemo } from "react";
-import {
-  useIsPlatformAdmin,
-  useOrganization,
-  useProject,
-} from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -59,11 +55,12 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isAssistantsAvailable = useAssistantsAvailable();
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const intentPoliciesFlag = useFeatureFlag(FEATURE_FLAGS.intentPolicies);
 
   // Explore is opt-in while it is dogfooded: the flag is released to the
   // organizations trying it, and everyone else never sees the page.
   const isExploreEnabled = exploreFlag.status === "enabled";
+  const isIntentPoliciesEnabled = intentPoliciesFlag.status === "enabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -123,9 +120,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.shadowMCP, scope: ["org:admin"] as Scope[] },
-      // Staff only: authorization is the server's platform-admin check.
-      ...(isPlatformAdmin
-        ? [{ route: routes.intentPolicies, scope: [] as Scope[] }]
+      // Rollout-gated per org; the server enforces the same flag and chat RBAC.
+      ...(isIntentPoliciesEnabled
+        ? [{ route: routes.intentPolicies, scope: ["chat:read"] as Scope[] }]
         : []),
       { route: routes.costs, scope: observe },
       ...(isExploreEnabled
@@ -157,7 +154,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     isAssistantsAvailable,
     isExploreEnabled,
     isOrgMemoryEnabled,
-    isPlatformAdmin,
+    isIntentPoliciesEnabled,
     isSignalsIntelligenceEnabled,
   ]);
 }
