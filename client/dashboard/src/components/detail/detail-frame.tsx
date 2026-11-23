@@ -75,7 +75,7 @@ export function DetailFrame({
   children: ReactNode;
 }): JSX.Element {
   const headerBand =
-    header === undefined ? null : (
+    header == null ? null : (
       <DetailHeaderBand compact={fill}>{header}</DetailHeaderBand>
     );
   const tabLinks = tabs.map((tab) => (
@@ -105,7 +105,7 @@ export function DetailFrame({
         <div className="mx-auto flex h-12 w-full max-w-[1334px] items-center gap-4 px-4 sm:px-8">
           {strip}
         </div>
-      ) : tabsAside !== undefined ? (
+      ) : tabsAside != null ? (
         <div className="mx-auto flex w-full max-w-[1334px] items-center gap-4 px-4 sm:px-8">
           <div className="flex min-w-0 flex-1 gap-7 overflow-x-auto">
             {tabLinks}
