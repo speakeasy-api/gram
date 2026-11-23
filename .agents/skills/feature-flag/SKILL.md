@@ -187,7 +187,13 @@ Then:
 
 1. Replace every read with the kept behavior: `feature.<Name>()` helpers, `EvaluateFlag`, `IsFlagEnabled`, `FlagVariant`, `useFeatureFlag(FEATURE_FLAGS.<key>)`, and string-literal reads of the key. Go to definition and find references from the `Flag` constant and from any helper in `server/internal/feature/` that wraps it, so no caller is missed.
 2. Delete the branch you did not keep, the helper, the `Flag` constant, and the `FEATURE_FLAGS` key. Remove the key from the local defaults too: `server/flags.csv` and the development variant maps in `client/dashboard/src/contexts/Telemetry.tsx`.
-3. Tests that assert the kept behavior must keep passing **unchanged**. Delete only tests that exercise the removed branch, such as a "flag off falls back to X" case. If a test of the kept behavior fails, you kept the wrong branch or dropped a step the flag used to enable. Fix the code, never the test's expectations.
+3. Tests that assert the kept behavior must keep passing **unchanged**. Delete only tests that exercise the removed branch, such as a "flag off falls back to X" case. Tests start with every flag off, so a test that never mentions the flag may still cover only the removed branch. When a test fails after the removal, find which of these it is:
+   - You kept the wrong branch or dropped a step the flag used to enable. Fix the code.
+   - The test's setup only builds the data the off path reads (for example, rows the enabled path joins through are never created). Add that data to the setup.
+   - The test asserts the off path's result. Delete it, like any other test of the removed branch.
+
+   Never change an assertion about the kept behavior to make it pass.
+
 4. Leave data-model cleanup to a later change. Columns, tables or backfills that only the removed branch used stay in place.
 5. Do not archive or edit the PostHog flag in the same change. Archive it once the change is deployed and nothing still evaluates the key.
 
