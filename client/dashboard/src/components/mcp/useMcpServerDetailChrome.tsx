@@ -1,4 +1,3 @@
-import { PluginStatusBanner } from "@/pages/mcp/overview/PluginStatusBanner";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   pluginServerRef,
@@ -18,9 +17,9 @@ import {
   type McpServerReachability,
   useMcpServerReachability,
 } from "./useMcpServerReachability";
-import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import {
   type SetupProvider,
+  guidedSetupStatus,
   setupProviderForUrl,
 } from "@/pages/mcp/x/setup/provider-setup";
 import { useOrganization, useProject } from "@/contexts/Auth";
@@ -37,6 +36,7 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import {
   useCustomDomains,
+  platformEndpointSlug,
   useMcpEndpointAddresses,
   useResolvedMcpServerUrl,
 } from "@/hooks/useToolsetUrl";
@@ -76,6 +76,7 @@ import {
   Database,
   MessageSquareText,
   ShieldCheck,
+  WandSparkles,
   Wrench,
 } from "lucide-react";
 import {
@@ -107,7 +108,6 @@ const GUARDRAILS_TAB: McpDetailTabDef<TabValue> = {
  * per-scope rules), readiness checks, status control, and URLs.
  */
 export function useMcpServerDetailChrome(): McpDetailChrome | null {
-  const providerSetupRollout = useProviderSetupRollout();
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -198,6 +198,9 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     mcpServerId: mcpServer?.id,
     projectId: mcpServer?.projectId,
     userSessionIssuerId: mcpServer?.userSessionIssuerId,
+    platformSlug: platformEndpointSlug(endpoints),
+    publicTunnel:
+      !!mcpServer?.tunneledMcpServerId && mcpServer.visibility === "public",
     // Private-only servers aren't reached on the hosted URL, which may be
     // turned off on purpose, so probing it would report a working server down.
     enabled:
@@ -238,7 +241,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   const pluginRef: HostedServerRef | undefined = mcpServer
     ? pluginServerRef(mcpServer, canonicalToolset)
     : undefined;
-  // Same membership rule as the header's plugin card.
+  // Same membership rule as Settings' Plugins section.
   const memberPlugins = pluginRef
     ? (pluginsData?.plugins ?? []).filter((plugin) =>
         plugin.servers?.some((s) => serverMatchesRef(s, pluginRef)),
@@ -321,18 +324,14 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   // reads the same however the queries race.
   const setupProvider = setupProviderForUrl(upstreamUrl);
   const showSetup =
-    providerSetupRollout === "enabled" &&
     !!mcpServer?.remoteMcpServerId &&
     (!!setupProvider || !!setupGuide) &&
     hasScope("mcp:write", mcpServer.id);
   // A provider with a guided setup is set up there, not in Settings: until
-  // Speakeasy can sign in to it, the Authentication step and Overview send
-  // the admin to the Setup tab.
+  // someone completes it (or after Settings restarts it), Overview and the
+  // header send the admin to the Setup page.
   const needsSetup =
-    showSetup &&
-    !!setupProvider &&
-    !authReadiness.loading &&
-    !authReadiness.ready;
+    showSetup && guidedSetupStatus(mcpServer, upstreamUrl) === "pending";
   const setupHref = mcpServerTabHref(routes, idOrSlug, "setup");
   const setupName = setupProvider ? SETUP_PROVIDER_NAME[setupProvider] : "";
   const checks: McpReadinessCheck[] = mcpServer
@@ -433,7 +432,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       ]
     : [];
 
-  // A provider with only a written guide is set up on the Setup tab too,
+  // A provider with only a written guide is set up on the Setup page too,
   // after Authentication: most guides need the redirect URL or credentials
   // it sets up. The step stays open until someone marks the guide done.
   const setupGuideDoneAt = mcpServer?.setupGuideCompletedAt;
@@ -550,6 +549,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
       isRemoteBacked || isTunneledBacked,
       authReadiness,
       `${settingsHref}#${SETTINGS_GROUPS.identity.id}`,
+      needsSetup ? setupHref : undefined,
     ),
     readinessChecks,
     setupHref: showSetup ? setupHref : undefined,
@@ -557,13 +557,10 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
     // with no upstream has no guide to point at.
     installLinks: effectiveInstallPageLinks,
     overviewSetup: needsSetup ? (
-      <SetupPrompt name={setupName} href={setupHref} />
+      <SetupPrompt name={setupName} href={setupHref} icon={WandSparkles} />
     ) : (
       overviewSetupGuide
     ),
-    overviewBanner: pluginRef ? (
-      <PluginStatusBanner variant="banner" server={pluginRef} />
-    ) : undefined,
     items,
   };
 }
@@ -592,7 +589,18 @@ function identitySummary(
   signsInUpstream: boolean,
   auth: McpServerAuthenticationReadiness,
   href: string,
+  /** Guided setup collects the missing credentials, so send the admin there. */
+  setupHref?: string,
 ): McpDetailChrome["identity"] {
+  const setupPending: McpDetailChrome["identity"] = setupHref
+    ? {
+        label: "Setup pending",
+        href: setupHref,
+        warn: true,
+        tone: "warning",
+        opens: "Open setup",
+      }
+    : undefined;
   // The header always shows this row, so every state has words: one that
   // can't be settled yet says so rather than dropping the row.
   if (!signsInUpstream) return { label: "Not used", href };
@@ -617,6 +625,7 @@ function identitySummary(
         };
       }
     }
+    if (setupPending) return setupPending;
     const presentation = enumPresentation(
       UPSTREAM_AUTH_STATUS,
       data.status,
@@ -636,6 +645,7 @@ function identitySummary(
   if (auth.unavailable || auth.identityUnavailable) {
     return { label: "Couldn't check", href, warn: true, tone: "warning" };
   }
+  if (setupPending && !auth.passThroughAuthorization) return setupPending;
   return {
     label: auth.passThroughAuthorization
       ? "Needs cleanup"
@@ -754,6 +764,12 @@ function serverUrlCheck({
         return {
           description: "Couldn't check that the server answers.",
           ready: null,
+        };
+      case "unverified":
+        return {
+          description:
+            "Endpoint is set. Connect your account in Inspect to check that the server answers.",
+          ready: true,
         };
       case "unreachable":
         return {

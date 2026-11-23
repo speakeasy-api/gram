@@ -70,6 +70,7 @@ function server(): ShadowMCPInventoryServer {
     canonicalServerUrl: "https://tracker.example.com/mcp",
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastSeen: new Date("2026-01-02T10:00:00Z"),
+    blockedCallCount: 0,
     observedUseCount: 13,
     requestCount: 0,
     serverName: "Tracker",
@@ -122,7 +123,7 @@ describe("MakeOfficialSheet", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Make official" }));
 
-    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    expect(await screen.findByText("Official server set")).toBeTruthy();
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         url: "https://tracker.example.com/mcp",
@@ -134,7 +135,6 @@ describe("MakeOfficialSheet", () => {
     expect(mocks.save).toHaveBeenCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: "server-1",
-      allowDirectAccess: false,
     });
     const open = screen.getByRole("link", { name: "Open" });
     expect(open.getAttribute("href")).toBe(
@@ -173,7 +173,9 @@ describe("MakeOfficialSheet", () => {
     // how to link it instead of reporting a failed link.
     expect(mocks.save).not.toHaveBeenCalled();
     expect(screen.getByText("Server added")).toBeTruthy();
-    expect(screen.getByText(/then link it from this page/)).toBeTruthy();
+    expect(
+      screen.getByText(/then make it official from this page/),
+    ).toBeTruthy();
     expect(screen.queryByText(/The link could not be saved/)).toBeNull();
   });
 });

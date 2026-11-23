@@ -105,6 +105,12 @@ func TestRecordAuthorizationDecisionBoundsUnknownValues(t *testing.T) {
 	require.Equal(t, boundedUnknownValue, attrs["gram.authorization.reason"])
 }
 
+func TestBoundedReasonKeepsTheConnectionOwnerMismatchReason(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, string(repo.ReasonConnectionOwnerMismatch), boundedReason(repo.ReasonConnectionOwnerMismatch))
+}
+
 func decisionAttributeMap(attrs []attribute.KeyValue) map[string]string {
 	result := make(map[string]string, len(attrs))
 	for _, attr := range attrs {

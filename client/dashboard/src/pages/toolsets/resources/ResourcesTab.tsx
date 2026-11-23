@@ -26,6 +26,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
+import { useFunctionsAvailable } from "@/hooks/useFunctionsAvailability";
 import { ResourcesEmptyState } from "./ResourcesEmptyState";
 
 export function ResourcesTabContent({
@@ -38,6 +39,7 @@ export function ResourcesTabContent({
   const { data: resourcesResponse } = useListResources({});
   const allResources = resourcesResponse?.resources ?? [];
   const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const functionsAvailable = useFunctionsAvailable();
 
   const { data: deployment } = useLatestDeployment();
 
@@ -93,18 +95,19 @@ export function ResourcesTabContent({
       !currentResourceUrns.includes(r.resourceUrn),
   );
 
-  // With nothing left to pick, adding a resource means writing a function.
+  // With nothing left to pick, adding a resource means writing a function,
+  // which a deployment without Functions cannot do.
   const addAction =
     availableResources.length > 0 ? (
       <ResourceSelectPopover
         availableResources={availableResources}
         onSelect={(resourceUrn) => addResourceToToolset(resourceUrn)}
       />
-    ) : (
+    ) : functionsAvailable ? (
       <Button size="sm" onClick={() => setInstructionsOpen(true)}>
         Add resource
       </Button>
-    );
+    ) : null;
 
   const columns: Column<Resource>[] = [
     {
@@ -154,9 +157,15 @@ export function ResourcesTabContent({
       {functionResources.length === 0 ? (
         <ResourcesEmptyState
           action={
-            <RequireScope scope="mcp:write" level="component">
-              {addAction}
-            </RequireScope>
+            addAction ? (
+              <RequireScope scope="mcp:write" level="component">
+                {addAction}
+              </RequireScope>
+            ) : (
+              // EmptyState falls back to a catalog link when no action is
+              // given, which would be the wrong next step here.
+              <></>
+            )
           }
         />
       ) : (
@@ -165,9 +174,11 @@ export function ResourcesTabContent({
             <Text small muted>
               Agents connected to this server can read these resources.
             </Text>
-            <RequireScope scope="mcp:write" level="component">
-              {addAction}
-            </RequireScope>
+            {addAction && (
+              <RequireScope scope="mcp:write" level="component">
+                {addAction}
+              </RequireScope>
+            )}
           </Stack>
           <Table
             columns={columns}

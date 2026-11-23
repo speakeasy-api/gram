@@ -5,21 +5,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   scope: undefined as unknown,
+  description: undefined as unknown,
+  hideDock: vi.fn(),
+}));
+
+vi.mock("@/components/insights-context", () => ({
+  useHideInsightsDock: state.hideDock,
 }));
 
 vi.mock("@/components/page-templates", () => ({
   ResourceListPage: ({
     title,
+    description,
     scope,
     primaryAction,
     children,
   }: {
     title: string;
+    description?: string;
     scope: unknown;
     primaryAction?: ReactNode;
     children: ReactNode;
   }) => {
     state.scope = scope;
+    state.description = description;
     return (
       <div>
         <h1>{title}</h1>
@@ -34,8 +43,8 @@ vi.mock("@/pages/security/MCPApprovalsTab", () => ({
   MCPApprovalsTab: () => <div>MCP server inventory</div>,
 }));
 
-vi.mock("@/components/shadow-mcp/ShadowMCPModeControl", () => ({
-  ShadowMCPModeControl: () => <div>mode control</div>,
+vi.mock("@/components/shadow-mcp/ShadowMCPPolicySummary", () => ({
+  ShadowMCPPolicySummary: () => <div>policy summary</div>,
 }));
 
 import ShadowMCP from "./ShadowMCP";
@@ -44,6 +53,8 @@ afterEach(cleanup);
 
 beforeEach(() => {
   state.scope = undefined;
+  state.description = undefined;
+  state.hideDock.mockClear();
 });
 
 describe("ShadowMCP", () => {
@@ -59,17 +70,33 @@ describe("ShadowMCP", () => {
     expect(state.scope).toBe("org:admin");
   });
 
-  it("puts the default for undecided servers in the header, with no policy to set up", () => {
+  it("states the policy above the inventory instead of a header toggle", () => {
     render(
       <MemoryRouter>
         <ShadowMCP />
       </MemoryRouter>,
     );
 
-    expect(screen.getByTestId("primary-action").textContent).toBe(
-      "mode control",
-    );
+    const summary = screen.getByText("policy summary");
+    const inventory = screen.getByText("MCP server inventory");
+    expect(
+      summary.compareDocumentPosition(inventory) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByTestId("primary-action").textContent).toBe("");
     expect(screen.queryByRole("link", { name: "Set up policy" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Edit policy" })).toBeNull();
+  });
+
+  it("keeps the header to one short line and hides the Project Assistant", () => {
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
+
+    expect(state.description).toBe(
+      "Decide which MCP servers your team's agents may connect to.",
+    );
+    expect(state.hideDock).toHaveBeenCalled();
   });
 });

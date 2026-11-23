@@ -3,8 +3,10 @@
 
 -- name: CreatePlugin :one
 -- A NULL auto_sync_enabled means the plugin's changes publish automatically.
-INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled)
-VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'), sqlc.narg('auto_sync_enabled'))
+-- A NULL auto_add_servers_enabled leaves automatic server adding off.
+INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled, auto_add_servers_enabled)
+VALUES (@organization_id, @project_id, @name, @slug, sqlc.narg('description'), sqlc.narg('auto_sync_enabled'),
+  COALESCE(sqlc.narg('auto_add_servers_enabled')::boolean, FALSE))
 RETURNING *;
 
 -- name: CreateDefaultPlugin :one
@@ -180,12 +182,14 @@ WHERE project_id = @project_id
 ORDER BY slug ASC;
 
 -- name: UpdatePlugin :one
--- A NULL auto_sync_enabled argument keeps the plugin's current setting.
+-- A NULL auto_sync_enabled or auto_add_servers_enabled argument keeps the
+-- plugin's current setting.
 UPDATE plugins
 SET name = @name,
     slug = @slug,
     description = sqlc.narg('description'),
     auto_sync_enabled = COALESCE(sqlc.narg('auto_sync_enabled')::boolean, auto_sync_enabled),
+    auto_add_servers_enabled = COALESCE(sqlc.narg('auto_add_servers_enabled')::boolean, auto_add_servers_enabled),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
@@ -945,19 +949,36 @@ SELECT COALESCE(
   ''
 )::text AS user_id;
 
--- name: GetGitHubConnectionByMarketplaceToken :one
--- Resolves a marketplace proxy URL token to the upstream connection. The token
--- is the auth credential — there's no project scope to apply ahead of it.
+-- name: GetGitHubConnectionByMarketplaceTokenHash :one
+-- Resolves a marketplace proxy URL token, by its hash, to the upstream
+-- connection. The token is the auth credential, so there's no project scope to
+-- apply ahead of it.
 SELECT *
 FROM plugin_github_connections
-WHERE marketplace_token = @marketplace_token;
+WHERE marketplace_token_hash = @marketplace_token_hash;
+
+-- name: ResolveGitHubConnectionByMarketplaceToken :one
+-- Resolves a marketplace proxy URL token to the upstream connection by the
+-- token's hash or, until the marketplace token backfill moves it, through the
+-- deprecated plaintext marketplace_token column. One statement reads one
+-- snapshot, so a token the backfill moves during a request still resolves.
+-- plaintext_token reports which form matched. The token is the auth
+-- credential, so there's no project scope to apply ahead of it.
+SELECT sqlc.embed(plugin_github_connections), (plugin_github_connections.marketplace_token_hash IS NULL)::boolean AS plaintext_token
+FROM plugin_github_connections
+WHERE plugin_github_connections.marketplace_token_hash = @marketplace_token_hash
+   OR (
+       plugin_github_connections.marketplace_token_hash IS NULL
+       AND plugin_github_connections.marketplace_token = @marketplace_token::text
+   )
+LIMIT 1;
 
 -- name: UpsertGitHubConnection :one
--- Inserts or refreshes a project's GitHub connection. The marketplace_token
--- argument is the candidate token to use if no token is currently set; on
--- conflict the existing token is preserved via COALESCE so callers can pass a
--- freshly-generated token on every publish without overwriting prior state.
--- Token rotation goes through a separate query. published_mcp_fingerprints,
+-- Inserts or refreshes a project's GitHub connection. It never writes the
+-- marketplace token. When the connection has no token yet, the publish path
+-- stores one through package marketplacetokens, in the same transaction.
+-- organization_id is the project's organization; an existing value is kept, so
+-- a connection never moves to another organization's key. published_mcp_fingerprints,
 -- published_hooks_version, and published_hooks_config record the per-plugin MCP
 -- content hashes, the hooks generator version, and the hook-output-affecting
 -- config just published; all are always overwritten so subsequent rollout runs
@@ -966,13 +987,13 @@ WHERE marketplace_token = @marketplace_token;
 -- browser-login toggle). published_hooks_config also records, under
 -- published_marketplace_name, the marketplace name the repo was published under,
 -- which freezes the project's marketplace name.
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
-VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
+INSERT INTO plugin_github_connections (project_id, organization_id, installation_id, repo_owner, repo_name, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
+VALUES (@project_id, sqlc.narg('organization_id'), @installation_id, @repo_owner, @repo_name, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
+      organization_id = COALESCE(plugin_github_connections.organization_id, EXCLUDED.organization_id),
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
-      marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
       published_hooks_version = EXCLUDED.published_hooks_version,
       published_hooks_config = EXCLUDED.published_hooks_config,
@@ -1285,17 +1306,21 @@ ORDER BY p.id;
 
 -- name: ListRoleDeliveryPlugins :many
 -- Organization-scoped role event discovery; locks and writes retain exact project scope.
+-- Only plugins that opted in to automatic server adding take part.
 SELECT p.id, p.project_id
 FROM plugins p JOIN projects project ON project.id = p.project_id
 WHERE p.organization_id = @organization_id AND project.organization_id = @organization_id
   AND p.deleted IS FALSE AND project.deleted IS FALSE
+  AND p.auto_add_servers_enabled IS TRUE
   AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id
     AND a.organization_id = @organization_id AND a.principal_urn = @principal_urn)
 ORDER BY p.project_id, p.id;
 
 -- name: ListProjectRoleDeliveryPluginsForUpdate :many
+-- Only plugins that opted in to automatic server adding take part.
 SELECT p.id FROM plugins p
 WHERE p.organization_id = @organization_id AND p.project_id = @project_id AND p.deleted IS FALSE
+  AND p.auto_add_servers_enabled IS TRUE
   AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id AND a.organization_id = @organization_id
     AND (a.principal_urn LIKE 'role:organization:%' OR a.principal_urn LIKE 'role:global:%'))
 ORDER BY p.id FOR UPDATE OF p;
@@ -1436,7 +1461,7 @@ UPDATE toolset_versions SET deleted_at = clock_timestamp() WHERE toolset_id = @t
 -- name: LockPluginForAssignments :one
 -- Locks one exact live plugin. Dashboard and Platform MCP assignment writes
 -- share this lock so concurrent replacements are serialized.
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = @id
   AND organization_id = @organization_id

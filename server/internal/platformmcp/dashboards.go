@@ -121,7 +121,7 @@ func (s *DashboardsService) scope(ctx context.Context, principal Principal, proj
 		return ctx, zero, ErrForbidden
 	}
 
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+	if err := s.engine.Require(ctx, authz.Project(authz.ProjectIDOf(id)).Read()); err != nil {
 		return ctx, zero, ErrForbidden
 	}
 

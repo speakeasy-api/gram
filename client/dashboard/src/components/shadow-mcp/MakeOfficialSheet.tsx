@@ -155,7 +155,6 @@ export function MakeOfficialSheet({
           await link.save({
             serverUrl: server.canonicalServerUrl,
             mcpServerId: mcpServer.id,
-            allowDirectAccess: false,
           });
         } catch {
           linkFailed = true;
@@ -198,7 +197,7 @@ export function MakeOfficialSheet({
           <SheetDescription>
             {created
               ? shadowMCPCreatedDescription(created, shadowName)
-              : `Speakeasy serves ${shadowName} and links it as the official version. Direct connections are then blocked, and agents are sent to the official server.`}
+              : `Speakeasy serves ${shadowName} and makes it the official version. Direct connections are then blocked, and agents are sent to the official server.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -346,8 +345,8 @@ export function CreatedSummary({
             </Text>
             <Text muted small>
               {created.linkFailed
-                ? `Added, but not yet linked to ${shadowName}.`
-                : `Linked to ${shadowName}`}
+                ? `Added, but not yet the official version of ${shadowName}.`
+                : `Official version of ${shadowName}`}
             </Text>
           </div>
         </div>
@@ -372,18 +371,19 @@ export function CreatedSummary({
           >
             Finish setup
           </a>
-          , turn the server on, then link it from this page.
+          , turn the server on, then make it official from this page.
         </Alert>
       ) : (
         <Text muted small>
           Open it to check its tools and try it in the Playground. Back on this
-          page you can switch the link off while you test, or remove it.
+          page you can stop using it as official and make it official again
+          later.
         </Text>
       )}
       {created.linkFailed && !created.setupRequired ? (
         <Alert variant="error" dismissible={false}>
-          The link could not be saved. Link it from this server&apos;s page
-          under Advanced.
+          It could not be made official. Make it official from this
+          server&apos;s page under Advanced.
         </Alert>
       ) : null}
     </Stack>

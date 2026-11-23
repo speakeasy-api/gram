@@ -24,7 +24,7 @@ import {
 import { mcpServerRouteParam } from "@/lib/sources";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { getServerURL, mcpConnectionUrl } from "@/lib/utils";
-import { PlaygroundChat } from "@/pages/playground/PlaygroundChat";
+import { InspectChat } from "@/pages/mcp/inspect-chat/InspectChat";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
@@ -741,12 +741,10 @@ function GatewayInspectConnection({
         }
         chat={
           chatUrl && data && !inspection.isError ? (
-            <PlaygroundChat
+            <InspectChat
               mcpUrl={chatUrl}
               gatewayToken={token.accessToken}
               model={DEFAULT_MODEL}
-              compact
-              environmentSlug={null}
             />
           ) : undefined
         }

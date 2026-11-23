@@ -81,6 +81,16 @@ func (l *onceLog) first(key string) bool {
 	return true
 }
 
+// forget drops key, so its next occurrence is first again.
+func (l *onceLog) forget(key string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.seen.Remove(key)
+}
+
 // mandatoryShadow evaluates one request's mandatory checks beside today's
 // decisions, admitting the caller once. A nil shadow records nothing.
 type mandatoryShadow struct {
@@ -124,7 +134,7 @@ func withMandatoryAdmission(ctx context.Context) context.Context {
 	if shared, ok := ctx.Value(mandatoryAdmissionKey{}).(*mandatoryAdmission); ok && shared.authCtx == authCtx {
 		return ctx
 	}
-	return context.WithValue(ctx, mandatoryAdmissionKey{}, &mandatoryAdmission{authCtx: authCtx}) //nolint:exhaustruct // filled once on first use
+	return context.WithValue(ctx, mandatoryAdmissionKey{}, &mandatoryAdmission{authCtx: authCtx}) //nolint:exhaustruct_v5 // filled once on first use
 }
 
 // admitMandatoryShadow admits the caller for the shadow, reusing the

@@ -573,7 +573,7 @@ var PluginAudienceModel = Type("PluginAudience", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "auto_created", "auto_sync_enabled", "agent_plugins_v1_compatible", "created_at", "updated_at")
+	Required("id", "name", "slug", "auto_created", "auto_sync_enabled", "auto_add_servers_enabled", "agent_plugins_v1_compatible", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -585,6 +585,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
 	Attribute("auto_created", Boolean, "Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.")
 	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically, based on the MCP servers those roles can use. When false, only manual changes alter the plugin's server list.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
@@ -608,6 +609,7 @@ var CreatePluginForm = Type("CreatePluginForm", func() {
 	Attribute("slug", String, "Optional URL-safe identifier. Auto-generated from name if omitted.")
 	Attribute("description", String, "Optional description.")
 	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically. Defaults to false.")
 })
 
 var UpdatePluginForm = Type("UpdatePluginForm", func() {
@@ -620,6 +622,7 @@ var UpdatePluginForm = Type("UpdatePluginForm", func() {
 	Attribute("slug", String, "Updated slug.")
 	Attribute("description", String, "Updated description.")
 	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.")
+	Attribute("auto_add_servers_enabled", Boolean, "Whether the plugin's role audiences add and remove its MCP servers automatically. Omit to keep the current setting. Turning it on adds the MCP servers its assigned roles can use now, except ones an admin removed before.")
 })
 
 var AddPluginServerForm = Type("AddPluginServerForm", func() {

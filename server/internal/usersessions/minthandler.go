@@ -117,7 +117,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 
 	// Authorization mirrors the runtime gate: minting a bearer grants runtime
 	// access, so the endpoint requires the same mcp:connect permission.
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, target.resourceID, authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(target.resourceID), authz.ProjectIDOf(*authCtx.ProjectID)).Connect()); err != nil {
 		return nil, fmt.Errorf("authorize MCP session mint: %w", mcpaccess.ServerPermissionDenied(err, ""))
 	}
 
@@ -240,6 +240,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		PickedClientIds:     []uuid.UUID{},
 		PickedAuthClientIds: nil,
 		ScopeMcpServerIds:   nil,
+		ExcludeMcpServerIds: nil,
 		TypedOnly:           enforced,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)

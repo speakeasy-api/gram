@@ -83,6 +83,7 @@ type ShadowMCPTargetSummary struct {
 	LastSeen           string                  `json:"last_seen,omitempty"`
 	LastCalled         string                  `json:"last_called,omitempty"`
 	ObservedUseCount   int                     `json:"observed_use_count"`
+	BlockedCallCount   int                     `json:"blocked_call_count"`
 	UserCount          SubjectCount            `json:"user_count"`
 	Access             ShadowMCPAccessSummary  `json:"access"`
 	Review             *ShadowMCPReviewSummary `json:"review,omitempty"`
@@ -90,30 +91,34 @@ type ShadowMCPTargetSummary struct {
 	TargetReference    string                  `json:"target_reference"`
 	ReferenceExpiresAt string                  `json:"reference_expires_at"`
 
-	// OfficialServer is the project MCP server linked as this server's
+	// OfficialServer is the project MCP server that is this server's
 	// official version. Remote targets only.
-	OfficialServer *ShadowMCPOfficialServerLink `json:"official_server,omitempty" jsonschema:"the project MCP server linked as this server's official version; while link_state is on, direct use is blocked and agents are sent to it"`
+	OfficialServer *ShadowMCPOfficialServerLink `json:"official_server,omitempty" jsonschema:"the project MCP server that is this server's official version; while it is official and has an address, direct use is blocked wherever a Shadow MCP policy applies and agents are sent to it"`
 
 	// SuggestedOfficialServer is a project MCP server that proxies to the
-	// same upstream, offered while nothing is linked.
-	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer `json:"suggested_official_server,omitempty" jsonschema:"a project MCP server that serves the same upstream, offered as the server to link while nothing is linked"`
+	// same upstream, offered while no server is official.
+	SuggestedOfficialServer *ShadowMCPSuggestedOfficialServer `json:"suggested_official_server,omitempty" jsonschema:"a project MCP server that serves the same upstream, offered as the server to make official while none is"`
+
+	// OfficialChoice is the administrator's choice of official server.
+	// Remote targets only.
+	OfficialChoice string `json:"official_choice,omitempty" jsonschema:"automatic: no administrator choice, so a project MCP server that proxies to this URL is official when automatic links are on; server: an administrator made official_server official; keep_shadow: an administrator keeps this server in direct use, so no server is official; remote targets only"`
 
 	// OfficialLinkVersion is the token set_shadow_mcp_official_server takes
 	// as expected_version. Remote targets only.
 	OfficialLinkVersion string `json:"official_link_version,omitempty" jsonschema:"opaque version to pass as expected_version to set_shadow_mcp_official_server; remote targets only"`
 }
 
-// ShadowMCPOfficialServerLink is a Shadow MCP server's link to its official
-// version.
+// ShadowMCPOfficialServerLink is the project MCP server that is a Shadow MCP
+// server's official version.
 type ShadowMCPOfficialServerLink struct {
-	MCPID     string `json:"mcp_id" jsonschema:"the linked MCP server's ID, as find_mcp returns it"`
+	MCPID     string `json:"mcp_id" jsonschema:"the official MCP server's ID, as find_mcp returns it"`
 	Name      string `json:"name"`
 	Slug      string `json:"slug,omitempty"`
-	LinkState string `json:"link_state" jsonschema:"on: direct use is blocked and agents are sent to the official server; off: the link is kept but direct use follows the ordinary Shadow MCP rules"`
+	Automatic bool   `json:"automatic" jsonschema:"true when the server is official because it proxies to this URL; false when an administrator made it official"`
 }
 
-// ShadowMCPSuggestedOfficialServer is a project MCP server that can be
-// linked as a Shadow MCP server's official version.
+// ShadowMCPSuggestedOfficialServer is a project MCP server that can be made
+// a Shadow MCP server's official version.
 type ShadowMCPSuggestedOfficialServer struct {
 	MCPID string `json:"mcp_id" jsonschema:"the MCP server's ID, to pass as mcp_id to set_shadow_mcp_official_server"`
 	Name  string `json:"name"`
@@ -404,10 +409,11 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 	result := ShadowMCPTargetSummary{
 		Display: display, TargetKind: kind, ObservationState: observationState,
 		FirstSeen: "", LastSeen: "", LastCalled: "", ObservedUseCount: max(row.ObservedUseCount, 0),
-		UserCount: NewSubjectCount(int64(row.UserCount)),
-		Access:    ShadowMCPAccessSummary{State: row.AccessSummary.State, AllowedFor: row.AccessSummary.AllowedFor, BlockedFor: row.AccessSummary.BlockedFor, BlockingDefault: row.AccessSummary.BlockingDefault, Decision: "", DecisionCoverage: row.AccessSummary.DecisionCoverage},
-		Review:    nil, DecisionVersion: "", TargetReference: reference, ReferenceExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
-		OfficialServer: nil, SuggestedOfficialServer: nil, OfficialLinkVersion: "",
+		BlockedCallCount: max(row.BlockedCallCount, 0),
+		UserCount:        NewSubjectCount(int64(row.UserCount)),
+		Access:           ShadowMCPAccessSummary{State: row.AccessSummary.State, AllowedFor: row.AccessSummary.AllowedFor, BlockedFor: row.AccessSummary.BlockedFor, BlockingDefault: row.AccessSummary.BlockingDefault, Decision: "", DecisionCoverage: row.AccessSummary.DecisionCoverage},
+		Review:           nil, DecisionVersion: "", TargetReference: reference, ReferenceExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
+		OfficialServer: nil, SuggestedOfficialServer: nil, OfficialChoice: "", OfficialLinkVersion: "",
 	}
 	if kind == shadowTargetKindServerURL {
 		if err := s.projectOfficialLink(project, row, &result); err != nil {
@@ -446,18 +452,26 @@ func (s *ShadowInventoryService) projectTarget(principal Principal, project Reso
 	return result, nil
 }
 
-// projectOfficialLink adds a remote target's official server link, the
-// suggested server while nothing is linked, and the link's version.
+// projectOfficialLink adds a remote target's official server, the
+// administrator's choice, the suggested server while none is official, and
+// the version of the choice.
 func (s *ShadowInventoryService) projectOfficialLink(project ResolvedProject, row *accessgen.ShadowMCPInventoryServer, result *ShadowMCPTargetSummary) error {
-	link := officiallink.Link{MCPServerID: uuid.Nil, AllowDirectAccess: false}
+	choice := officiallink.Choice{Kind: officiallink.ChoiceAutomatic, MCPServerID: uuid.Nil}
 	if official := row.OfficialServer; official != nil {
 		id, err := uuid.Parse(official.McpServerID)
 		if err != nil {
 			return ErrShadowInventoryUnavailable
 		}
-		link = officiallink.Link{MCPServerID: id, AllowDirectAccess: official.DirectAccessAllowed}
-		result.OfficialServer = &ShadowMCPOfficialServerLink{MCPID: id.String(), Name: official.Name, Slug: conv.PtrValOr(official.Slug, ""), LinkState: shadowOfficialLinkState(link)}
+		automatic := conv.PtrValOr(official.Automatic, false)
+		result.OfficialServer = &ShadowMCPOfficialServerLink{MCPID: id.String(), Name: official.Name, Slug: conv.PtrValOr(official.Slug, ""), Automatic: automatic}
+		if !automatic {
+			choice = officiallink.Choice{Kind: officiallink.ChoiceServer, MCPServerID: id}
+		}
 	}
+	if conv.PtrValOr(row.OfficialServerDeclined, false) {
+		choice = officiallink.Choice{Kind: officiallink.ChoiceKeepShadow, MCPServerID: uuid.Nil}
+	}
+	result.OfficialChoice = choice.Kind
 	if suggested := row.SuggestedOfficialServer; suggested != nil && result.OfficialServer == nil {
 		result.SuggestedOfficialServer = &ShadowMCPSuggestedOfficialServer{MCPID: suggested.McpServerID, Name: suggested.Name, Slug: conv.PtrValOr(suggested.Slug, "")}
 	}
@@ -467,7 +481,7 @@ func (s *ShadowInventoryService) projectOfficialLink(project ResolvedProject, ro
 		// carries no version to change it with.
 		return nil
 	}
-	version, err := s.versions.encodeSetting(shadowOfficialLinkVersionDomain, shadowOfficialLinkVersionState(project.ID, key, link))
+	version, err := s.versions.encodeSetting(shadowOfficialLinkVersionDomain, shadowOfficialLinkVersionState(project.ID, key, choice))
 	if err != nil {
 		return ErrShadowInventoryUnavailable
 	}

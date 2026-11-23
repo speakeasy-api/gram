@@ -46,7 +46,6 @@ func newPublishingToolsetsService(t *testing.T, connected bool) (context.Context
 			InstallationID:           1,
 			RepoOwner:                "marketplace-owner",
 			RepoName:                 "marketplace-repo",
-			MarketplaceToken:         pgtype.Text{},
 			PublishedMcpFingerprints: nil,
 			PublishedHooksVersion:    pgtype.Text{},
 			PublishedHooksConfig:     nil,

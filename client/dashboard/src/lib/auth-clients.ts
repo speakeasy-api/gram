@@ -94,6 +94,9 @@ export function otherServers(
   return client.servers.filter((server) => server.id !== mcpServerId);
 }
 
-export function serverLabel(server: AuthClient["servers"][number]): string {
+export function serverLabel(server: {
+  name?: string | undefined;
+  slug?: string | undefined;
+}): string {
   return server.name?.trim() || server.slug?.trim() || "Unnamed server";
 }

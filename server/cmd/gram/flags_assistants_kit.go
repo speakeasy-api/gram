@@ -3,6 +3,7 @@ package gram
 import (
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 
@@ -45,13 +46,19 @@ func assistantKitRuntimeFlags() []cli.Flag {
 	}
 }
 
-func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL) error {
+func installKitLocalRuntimeFromCLI(logger *slog.Logger, c *cli.Context, core *assistants.ServiceCore, db *pgxpool.Pool, auditLogger *audit.Logger, redisClient *redis.Client, serverURL *url.URL) error {
 	if c.String("assistant-kit-image") == "" {
 		return nil
 	}
 	base, err := assistantRuntimeConfigFromCLI(c, serverURL)
 	if err != nil {
 		return err
+	}
+	// Partitions can share Kit settings while one of them runs with
+	// assistants off, so the settings are ignored rather than rejected.
+	if base.Provider == assistants.RuntimeProviderDisabled {
+		logger.WarnContext(c.Context, "ignoring Kit settings: the assistant runtime provider is disabled")
+		return nil
 	}
 	if base.Provider == assistants.RuntimeProviderLocal && c.String("environment") != "local" {
 		return fmt.Errorf("local Kit requires the local environment")

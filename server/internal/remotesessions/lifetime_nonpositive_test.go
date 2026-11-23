@@ -71,7 +71,7 @@ func requireNoToken(t *testing.T, ctx context.Context, env syntheticExpiryEnv) {
 func storeGrantDeadlines(t *testing.T, ctx context.Context, env syntheticExpiryEnv, access, refresh, authorization pgtype.Timestamptz) {
 	t.Helper()
 	row := activeSession(t, ctx, env)
-	_, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	_, err := env.q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             row.SubjectUrn,
 		UserSessionIssuerID:    row.UserSessionIssuerID,
 		RemoteSessionClientID:  row.RemoteSessionClientID,

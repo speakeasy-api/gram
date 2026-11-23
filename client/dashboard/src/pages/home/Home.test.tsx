@@ -2,6 +2,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+const state = vi.hoisted(() => ({ assistantsAvailable: true }));
+vi.mock("@/hooks/useAssistantsAvailability", () => ({
+  useAssistantsAvailable: () => state.assistantsAvailable,
+}));
 vi.mock("@/components/project/ProjectDashboard", () => ({
   ProjectDashboard: () => <div data-testid="project-dashboard" />,
 }));
@@ -41,6 +45,7 @@ import Home from "./Home.tsx";
 
 afterEach(() => {
   cleanup();
+  state.assistantsAvailable = true;
 });
 
 describe("Home", () => {
@@ -51,6 +56,17 @@ describe("Home", () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId("chat-landing")).toBeTruthy();
+    expect(screen.getByTestId("project-dashboard")).toBeTruthy();
+  });
+
+  it("leaves out Ask anything on a deployment without assistants", () => {
+    state.assistantsAvailable = false;
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("chat-landing")).toBeNull();
     expect(screen.getByTestId("project-dashboard")).toBeTruthy();
   });
 });

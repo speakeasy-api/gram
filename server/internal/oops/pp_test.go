@@ -1,4 +1,4 @@
-package oops
+package oops_test
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func startRecordedSpan(t *testing.T) (context.Context, *tracetest.SpanRecorder) {
@@ -29,7 +31,7 @@ func TestShareableError_Log_LogsAtError(t *testing.T) {
 	logger, logBuf := captureLogger()
 	ctx, recorder := startRecordedSpan(t)
 
-	_ = E(CodeNotFound, nil, "resource not found").LogError(ctx, logger)
+	_ = oops.E(oops.CodeNotFound, nil, "resource not found").LogError(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -53,7 +55,7 @@ func TestShareableError_Log_ClientCanceledLogsAtInfo(t *testing.T) {
 
 	// Wrap context.Canceled to prove detection is by sentinel, not identity.
 	cause := fmt.Errorf("list tool variations: %w", context.Canceled)
-	_ = E(CodeUnexpected, cause, "failed to list tool variations").LogError(ctx, logger)
+	_ = oops.E(oops.CodeUnexpected, cause, "failed to list tool variations").LogError(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -76,7 +78,7 @@ func TestShareableError_Log_AppCanceledWithLiveContextLogsAtError(t *testing.T) 
 	ctx, recorder := startRecordedSpan(t)
 
 	cause := fmt.Errorf("errgroup sibling: %w", context.Canceled)
-	_ = E(CodeUnexpected, cause, "failed to fan out").LogError(ctx, logger)
+	_ = oops.E(oops.CodeUnexpected, cause, "failed to fan out").LogError(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -94,7 +96,7 @@ func TestShareableError_Log_DeadlineExceededLogsAtError(t *testing.T) {
 	ctx, recorder := startRecordedSpan(t)
 
 	cause := fmt.Errorf("query row: %w", context.DeadlineExceeded)
-	_ = E(CodeUnexpected, cause, "query failed").LogError(ctx, logger)
+	_ = oops.E(oops.CodeUnexpected, cause, "query failed").LogError(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -111,7 +113,7 @@ func TestShareableError_LogWarn_LogsAtWarn(t *testing.T) {
 	logger, logBuf := captureLogger()
 	ctx, recorder := startRecordedSpan(t)
 
-	_ = E(CodeUnauthorized, errors.New("bad signature"), "unauthorized").LogWarn(ctx, logger)
+	_ = oops.E(oops.CodeUnauthorized, errors.New("bad signature"), "unauthorized").LogWarn(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -134,7 +136,7 @@ func TestShareableError_LogWarn_ClientCanceledLogsAtInfo(t *testing.T) {
 	cancel()
 
 	cause := fmt.Errorf("authorize token: %w", context.Canceled)
-	_ = E(CodeUnauthorized, cause, "unauthorized").LogWarn(ctx, logger)
+	_ = oops.E(oops.CodeUnauthorized, cause, "unauthorized").LogWarn(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -154,7 +156,7 @@ func TestShareableError_LogWarn_AppCanceledWithLiveContextLogsAtWarn(t *testing.
 	ctx, recorder := startRecordedSpan(t)
 
 	cause := fmt.Errorf("errgroup sibling: %w", context.Canceled)
-	_ = E(CodeUnauthorized, cause, "unauthorized").LogWarn(ctx, logger)
+	_ = oops.E(oops.CodeUnauthorized, cause, "unauthorized").LogWarn(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -171,7 +173,7 @@ func TestShareableError_LogInfo_LogsAtInfo(t *testing.T) {
 	logger, logBuf := captureLogger()
 	ctx, recorder := startRecordedSpan(t)
 
-	_ = E(CodeNotFound, nil, "resource not found").LogInfo(ctx, logger)
+	_ = oops.E(oops.CodeNotFound, nil, "resource not found").LogInfo(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -193,7 +195,7 @@ func TestShareableError_LogInfo_ClientCanceledLogsAtInfo(t *testing.T) {
 	cancel()
 
 	cause := fmt.Errorf("authorize token: %w", context.Canceled)
-	_ = E(CodeUnauthorized, cause, "unauthorized").LogInfo(ctx, logger)
+	_ = oops.E(oops.CodeUnauthorized, cause, "unauthorized").LogInfo(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -212,14 +214,14 @@ func TestShareableError_HTTPStatus_Canceled(t *testing.T) {
 	cancel()
 	liveCtx := t.Context()
 
-	canceled := E(CodeUnexpected, fmt.Errorf("query row: %w", context.Canceled), "boom")
+	canceled := oops.E(oops.CodeUnexpected, fmt.Errorf("query row: %w", context.Canceled), "boom")
 	require.Equal(t, 499, canceled.HTTPStatus(canceledCtx), "client disconnect maps to 499")
 	require.Equal(t, http.StatusInternalServerError, canceled.HTTPStatus(liveCtx), "a canceled cause with a live request context stays a 500")
 
-	deadline := E(CodeUnexpected, fmt.Errorf("query row: %w", context.DeadlineExceeded), "boom")
+	deadline := oops.E(oops.CodeUnexpected, fmt.Errorf("query row: %w", context.DeadlineExceeded), "boom")
 	require.Equal(t, http.StatusInternalServerError, deadline.HTTPStatus(canceledCtx))
 
-	plain := E(CodeUnexpected, errors.New("boom"), "boom")
+	plain := oops.E(oops.CodeUnexpected, errors.New("boom"), "boom")
 	require.Equal(t, http.StatusInternalServerError, plain.HTTPStatus(canceledCtx))
 }
 
@@ -229,12 +231,12 @@ func TestShareableError_AsGoa_ClientCanceledIsNotFault(t *testing.T) {
 	canceledCtx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	canceled := E(CodeUnexpected, fmt.Errorf("query row: %w", context.Canceled), "boom").AsGoa(canceledCtx)
+	canceled := oops.E(oops.CodeUnexpected, fmt.Errorf("query row: %w", context.Canceled), "boom").AsGoa(canceledCtx)
 	require.False(t, canceled.Fault, "client cancellation must not be a server fault")
 	require.False(t, canceled.Temporary, "client cancellation must not be retryable")
-	require.Equal(t, string(CodeCanceled), canceled.Name)
+	require.Equal(t, string(oops.CodeCanceled), canceled.Name)
 
-	plain := E(CodeUnexpected, errors.New("boom"), "boom").AsGoa(canceledCtx)
+	plain := oops.E(oops.CodeUnexpected, errors.New("boom"), "boom").AsGoa(canceledCtx)
 	require.True(t, plain.Fault, "a genuine unexpected error must remain a server fault")
 }
 
@@ -243,36 +245,36 @@ func TestShareableError_AsGoa_AppCanceledWithLiveContextIsFault(t *testing.T) {
 
 	// context.Canceled cause but the request context is still live: an
 	// application-initiated cancellation that must keep its 500 fault behavior.
-	appCanceled := E(CodeUnexpected, fmt.Errorf("errgroup sibling: %w", context.Canceled), "boom").AsGoa(t.Context())
+	appCanceled := oops.E(oops.CodeUnexpected, fmt.Errorf("errgroup sibling: %w", context.Canceled), "boom").AsGoa(t.Context())
 	require.True(t, appCanceled.Fault, "application-initiated cancellation must remain a server fault")
 	require.True(t, appCanceled.Temporary, "an unexpected error stays retryable")
-	require.Equal(t, string(CodeUnexpected), appCanceled.Name)
+	require.Equal(t, string(oops.CodeUnexpected), appCanceled.Name)
 }
 
 func TestDetailAppendsHiddenCausesAcrossJoinedBranches(t *testing.T) {
 	t.Parallel()
 
-	require.Empty(t, Detail(nil))
+	require.Empty(t, oops.Detail(nil))
 
 	// A chain with no ShareableError renders exactly as Error() does.
 	plain := fmt.Errorf("outer: %w", errors.New("inner"))
-	require.Equal(t, "outer: inner", Detail(plain))
+	require.Equal(t, "outer: inner", oops.Detail(plain))
 
 	// A ShareableError with no cause has nothing hidden.
-	require.Equal(t, "bare", Detail(E(CodeUnexpected, nil, "bare")))
+	require.Equal(t, "bare", oops.Detail(oops.E(oops.CodeUnexpected, nil, "bare")))
 
 	first := fmt.Errorf(
 		"poll: %w",
-		E(CodeUnexpected, fmt.Errorf("process page: %w", errors.New("connection refused")), "sync data"),
+		oops.E(oops.CodeUnexpected, fmt.Errorf("process page: %w", errors.New("connection refused")), "sync data"),
 	)
-	second := E(CodeUnexpected, errors.New("database unavailable"), "record schedule failure")
+	second := oops.E(oops.CodeUnexpected, errors.New("database unavailable"), "record schedule failure")
 	joined := errors.Join(first, second)
 
 	require.Equal(
 		t,
 		"poll: sync data\nrecord schedule failure"+
 			" [hidden: sync data: process page: connection refused; record schedule failure: database unavailable]",
-		Detail(joined),
+		oops.Detail(joined),
 	)
 }
 
@@ -282,28 +284,28 @@ func TestDetailKeepsDuplicateBranchTextsDistinct(t *testing.T) {
 	// Sibling branches with identical public text must each keep their own
 	// hidden cause; positional text substitution used to garble this case.
 	joined := errors.Join(
-		E(CodeUnexpected, errors.New("timeout"), "insert rows"),
-		E(CodeUnexpected, errors.New("connection refused"), "insert rows"),
+		oops.E(oops.CodeUnexpected, errors.New("timeout"), "insert rows"),
+		oops.E(oops.CodeUnexpected, errors.New("connection refused"), "insert rows"),
 	)
 
 	require.Equal(
 		t,
 		"insert rows\ninsert rows [hidden: insert rows: timeout; insert rows: connection refused]",
-		Detail(joined),
+		oops.Detail(joined),
 	)
 }
 
 func TestDetailRecursesIntoNestedShareableCauses(t *testing.T) {
 	t.Parallel()
 
-	inner := E(CodeUnexpected, errors.New("connection refused"), "insert rows")
-	outer := E(CodeUnexpected, fmt.Errorf("process page: %w", inner), "sync data")
+	inner := oops.E(oops.CodeUnexpected, errors.New("connection refused"), "insert rows")
+	outer := oops.E(oops.CodeUnexpected, fmt.Errorf("process page: %w", inner), "sync data")
 
 	// Each boundary contributes its own entry, so the innermost cause is not
 	// lost behind the outer boundary's truncated rendering of it.
 	require.Equal(
 		t,
 		"sync data [hidden: sync data: process page: insert rows; insert rows: connection refused]",
-		Detail(outer),
+		oops.Detail(outer),
 	)
 }

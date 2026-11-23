@@ -61,6 +61,11 @@ type ReconcileResult struct {
 	Requeue bool
 }
 
+// ReconcileCodeDeletionPending reports a teardown waiting for provider
+// resources to finish deleting. It is retryable and usually clears within
+// seconds.
+const ReconcileCodeDeletionPending = "deletion_pending"
+
 // ReconcileError deliberately has no wrapped cause or provider-supplied message.
 type ReconcileError struct {
 	// Code is a bounded diagnostic suitable for orchestration history.
@@ -434,7 +439,7 @@ func providerFailure(err error, code string) *ReconcileError {
 	case errors.Is(err, k8s.ErrNetworkIngressProviderAPIUnavailable):
 		return reconcileFailure(k8s.NetworkIngressErrorProviderAPIUnavailable)
 	case errors.Is(err, k8s.ErrNetworkIngressDeletionPending):
-		return reconcileFailure("deletion_pending")
+		return reconcileFailure(ReconcileCodeDeletionPending)
 	case errors.Is(err, k8s.ErrNetworkIngressReplacementPending):
 		return reconcileFailure("replacement_pending")
 	case errors.Is(err, k8s.ErrNetworkIngressInvalidDesiredState):

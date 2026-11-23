@@ -1,4 +1,3 @@
-import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
@@ -10,7 +9,7 @@ import { useFetchOrganizationRemoteSessionIssuerMetadataMutation } from "@gram/c
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import { emaReturnHref, oktaIssuerUrl, type EmaReturn } from "./oktaEma";
+import { oktaIssuerUrl } from "./oktaEma";
 import { oktaViewHref } from "./tabs";
 
 /** What the deployment and the organization's Okta connection allow. */
@@ -26,12 +25,10 @@ export type ConnectionState =
  */
 export function OktaOverview({
   connection,
-  emaReturn,
   mcpAuthenticationHref,
 }: {
   connection: ConnectionState;
-  emaReturn: EmaReturn | undefined;
-  /** Where EMA is set up when nothing sent the admin here; none hides it. */
+  /** Where EMA is set up; none hides the link. */
   mcpAuthenticationHref: string | undefined;
 }): JSX.Element {
   const inputId = useId();
@@ -67,23 +64,6 @@ export function OktaOverview({
 
   return (
     <div className="flex flex-col gap-8">
-      {emaReturn && (
-        <Alert variant="info" dismissible={false}>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="flex-1">
-              Setting up Enterprise Managed Auth for {emaReturn.providerName}.
-              Check your Okta domain below, then use it for{" "}
-              {emaReturn.providerName}.
-            </span>
-            <Button variant="secondary" size="sm" asChild>
-              <Link to={emaReturn.path}>
-                <Button.Text>Back to {emaReturn.providerName}</Button.Text>
-              </Link>
-            </Button>
-          </div>
-        </Alert>
-      )}
-
       <form
         className="flex max-w-2xl flex-col gap-2"
         onSubmit={(event) => {
@@ -153,24 +133,14 @@ export function OktaOverview({
             })}
             description="People arrive at your MCP servers already signed in through Okta. Speakeasy checks the identity Okta vouches for with Okta's published signing keys, so no Okta app or API access is needed."
             action={
-              emaReady && checkedIssuer ? (
-                emaReturn ? (
-                  <Button size="sm" asChild>
-                    <Link to={emaReturnHref(emaReturn, checkedIssuer)}>
-                      <Button.Text>
-                        Use for {emaReturn.providerName}
-                      </Button.Text>
-                    </Link>
-                  </Button>
-                ) : mcpAuthenticationHref ? (
-                  <Button variant="secondary" size="sm" asChild>
-                    <Link to={mcpAuthenticationHref}>
-                      <Button.Text>
-                        Choose an MCP Authentication Provider
-                      </Button.Text>
-                    </Link>
-                  </Button>
-                ) : null
+              emaReady && mcpAuthenticationHref ? (
+                <Button variant="secondary" size="sm" asChild>
+                  <Link to={mcpAuthenticationHref}>
+                    <Button.Text>
+                      Choose an MCP Authentication Provider
+                    </Button.Text>
+                  </Link>
+                </Button>
               ) : null
             }
           />
@@ -187,7 +157,7 @@ export function OktaOverview({
                   size="sm"
                   asChild
                 >
-                  <Link to={oktaViewHref("setup", undefined, emaReturn)}>
+                  <Link to={oktaViewHref("setup")}>
                     <Button.Text>
                       {connection.kind === "connected"
                         ? "Manage connection"
@@ -209,9 +179,7 @@ export function OktaOverview({
             action={
               connection.kind === "connected" ? (
                 <Button variant="secondary" size="sm" asChild>
-                  <Link
-                    to={oktaViewHref("cross-app-access", undefined, emaReturn)}
-                  >
+                  <Link to={oktaViewHref("cross-app-access")}>
                     <Button.Text>Review access</Button.Text>
                   </Link>
                 </Button>

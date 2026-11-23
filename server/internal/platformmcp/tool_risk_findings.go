@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP schemas rely on documented optional zero values.
+//nolint:exhaustruct_v5 // MCP schemas rely on documented optional zero values.
 package platformmcp
 
 import (

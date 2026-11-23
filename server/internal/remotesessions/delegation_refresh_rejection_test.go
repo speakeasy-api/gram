@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -90,7 +91,7 @@ func rejectionFixture(t *testing.T, locks cache.Cache) (*delegationAdapterFixtur
 	p.client.ClientSecretEncrypted.String, err = s.enc.Encrypt([]byte("secret-client"))
 	require.NoError(t, err)
 	logs := &bytes.Buffer{}
-	manager := &ChallengeManager{enc: s.enc, policy: policy, logger: slog.New(slog.NewJSONHandler(logs, nil)), locks: locks}
+	manager := &ChallengeManager{enc: s.enc, secrets: clientsecrets.WithoutOrganizationEncryption(testenv.NewLogger(t), s.db, s.enc), policy: policy, logger: slog.New(slog.NewJSONHandler(logs, nil)), locks: locks}
 	s.refreshIdentity = manager.RefreshFederatedIdentity
 	s.refreshPaused = manager.federatedClientPaused
 	start := time.Now().UTC().Truncate(time.Microsecond).Add(-refusalRetryWait)

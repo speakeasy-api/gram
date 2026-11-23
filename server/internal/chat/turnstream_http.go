@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -18,10 +19,10 @@ import (
 // HandleTurnStream serves a chat's turn frames as SSE. The dashboard opens one
 // of these per turn and renders from it instead of polling chat.load.
 //
-// `after` is the cursor of the last frame the client applied. On a reconnect it
-// is what makes the stream lossless: the handler replays everything published
-// since that cursor before tailing. Omitted, the client gets the retained
-// history from the start, which is what joining a turn late wants.
+// `after` is the cursor of the last frame the client applied. The handler
+// replays after it before tailing, or rejects a stale cursor so the client can
+// reload the chat. Use `after=0` to replay all retained frames. Omit `after` to
+// tail only new frames.
 //
 // Frames are `data: {...}` objects carrying their own `cursor`. The stream ends
 // after a terminal frame, when the client disconnects, or when it reaches the
@@ -43,12 +44,7 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return err
 	}
 	if s.turnStream == nil {
@@ -75,6 +71,9 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 	}
 
 	frames, err := s.turnStream.Subscribe(ctx, chatID, r.URL.Query().Get("after"))
+	if errors.Is(err, ErrTurnReplayUnavailable) {
+		return oops.E(oops.CodeConflict, err, "reload chat to resume the turn")
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "subscribe to turn frames").LogError(ctx, s.logger)
 	}

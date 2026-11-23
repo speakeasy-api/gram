@@ -61,7 +61,7 @@ func (m *Manager) GenerateToken(ctx context.Context, claims ChatSessionClaims, e
 // revocation lookup. Dashboard session epochs are checked by Authorize;
 // ValidateToken alone does not establish permission to access a resource.
 func (m *Manager) ValidateToken(ctx context.Context, tokenString string) (claims *ChatSessionClaims, invalidToken bool, err error) {
-	//nolint:exhaustruct // no point in setting all the claims fields
+	//nolint:exhaustruct_v5 // no point in setting all the claims fields
 	token, err := jwt.ParseWithClaims(tokenString, &ChatSessionClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])

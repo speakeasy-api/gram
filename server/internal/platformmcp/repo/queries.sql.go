@@ -2900,9 +2900,9 @@ const getPlatformMCPLifecycle = `-- name: GetPlatformMCPLifecycle :one
 WITH default_project AS (
     SELECT id
     FROM projects
-    WHERE organization_id = $1
-      AND slug = 'default'
-      AND deleted IS FALSE
+    WHERE projects.organization_id = $1
+      AND projects.slug = 'default'
+      AND projects.deleted IS FALSE
     LIMIT 1
 )
 SELECT
@@ -3177,6 +3177,7 @@ SELECT
     p.description,
     p.auto_created,
     p.auto_sync_enabled,
+    p.auto_add_servers_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3241,6 +3242,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 	Description             pgtype.Text
 	AutoCreated             bool
 	AutoSyncEnabled         pgtype.Bool
+	AutoAddServersEnabled   bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -3261,6 +3263,7 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 		&i.Description,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.IsDefault,
 		&i.ServerCount,
 		&i.SkillCount,
@@ -3800,7 +3803,7 @@ SELECT
     -- The project predicate is load-bearing, not tidiness. mcp_servers.
     -- toolset_id has no composite constraint pairing it with project_id, so a
     -- server in another project can front this toolset. Each id here is
-    -- authorized with authz.MCPCheck(ScopeMCPWrite, id, <this project>), and
+    -- authorized with authz.MCPServer(id, <this project>).Write(), and
     -- that check injects the project as a selector dimension so a
     -- project-scoped grant matches — which means a project-wide mcp:write in
     -- THIS project would wave through a server id belonging to another one.
@@ -5408,7 +5411,7 @@ JOIN projects
   AND projects.deleted IS FALSE
 JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-  AND gc.marketplace_token IS NOT NULL
+  AND (gc.marketplace_token_hash IS NOT NULL OR gc.marketplace_token IS NOT NULL)
 WHERE p.project_id = $1
   AND p.organization_id = $2
   AND p.deleted IS FALSE
@@ -6292,6 +6295,7 @@ SELECT
     p.description,
     p.auto_created,
     p.auto_sync_enabled,
+    p.auto_add_servers_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -6360,6 +6364,7 @@ type ListPlatformMCPPluginInventoryRow struct {
 	Description             pgtype.Text
 	AutoCreated             bool
 	AutoSyncEnabled         pgtype.Bool
+	AutoAddServersEnabled   bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -6400,6 +6405,7 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 			&i.Description,
 			&i.AutoCreated,
 			&i.AutoSyncEnabled,
+			&i.AutoAddServersEnabled,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,
@@ -8671,7 +8677,7 @@ JOIN projects
   AND projects.deleted IS FALSE
 JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-  AND gc.marketplace_token IS NOT NULL
+  AND (gc.marketplace_token_hash IS NOT NULL OR gc.marketplace_token IS NOT NULL)
 WHERE p.project_id = $1
   AND p.organization_id = $2
   AND p.deleted IS FALSE

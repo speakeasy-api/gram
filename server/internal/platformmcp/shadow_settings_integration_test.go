@@ -2,9 +2,10 @@ package platformmcp
 
 import (
 	"context"
-	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -44,6 +45,7 @@ func newShadowSettingsHarness(t *testing.T, name string) shadowSettingsHarness {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPShadowAccessDecisions, principal.OrganizationID, true)
+	flags.SetFlag(feature.FlagShadowMCPAutoLink, principal.OrganizationID, true)
 	references, err := newSubjectReferenceCodec(name + "-key")
 	require.NoError(t, err)
 	versions, err := newShadowDecisionVersionCodec(name + "-key")
@@ -183,7 +185,7 @@ func TestShadowDefaultAccessCreatesNarrowsAndRemovesTheManagedPolicy(t *testing.
 
 	policyID := h.blockingPolicies(t)[0].ID
 	cleaner := &recordingResultsCleaner{}
-	h.service.WithResultsCleaner(cleaner, slog.New(slog.DiscardHandler))
+	h.service.WithResultsCleaner(cleaner, testenv.NewLogger(t))
 	deletesBefore := auditCount(t, t.Context(), h.conn, audit.ActionRiskPolicyDelete)
 	allowed, err := h.service.SetDefaultAccess(ctx, h.principal, SetShadowMCPDefaultAccessInput{ProjectID: h.project.ID.String(), Mode: "allowed", ExpectedVersion: h.defaultAccess(t).Version, IdempotencyKey: "allow-by-default", Confirmed: true})
 	require.NoError(t, err)
@@ -284,24 +286,22 @@ func seedShadowOfficialServer(t *testing.T, conn *pgxpool.Pool, projectID uuid.U
 	return server.ID
 }
 
-func (h shadowSettingsHarness) linkVersion(t *testing.T) string {
+func (h shadowSettingsHarness) linkVersion(t *testing.T, automaticLinks bool) string {
 	t.Helper()
 	key, err := officiallink.Key(shadowSettingsTargetURL)
 	require.NoError(t, err)
-	link, err := officiallink.Read(t.Context(), h.conn, h.project.ID, key)
-	require.NoError(t, err)
-	version, err := h.shadow.versions.encodeSetting(shadowOfficialLinkVersionDomain, shadowOfficialLinkVersionState(h.project.ID, key, link))
+	version, err := h.shadow.versions.encodeSetting(shadowOfficialLinkVersionDomain, shadowOfficialLinkVersionState(h.project.ID, key, h.choice(t).Visible(automaticLinks)))
 	require.NoError(t, err)
 	return version
 }
 
-func (h shadowSettingsHarness) link(t *testing.T) officiallink.Link {
+func (h shadowSettingsHarness) choice(t *testing.T) officiallink.Choice {
 	t.Helper()
 	key, err := officiallink.Key(shadowSettingsTargetURL)
 	require.NoError(t, err)
-	link, err := officiallink.Read(t.Context(), h.conn, h.project.ID, key)
+	choice, err := officiallink.Read(t.Context(), h.conn, h.project.ID, key)
 	require.NoError(t, err)
-	return link
+	return choice
 }
 
 func (h shadowSettingsHarness) targetReference(t *testing.T, kind, key string) string {
@@ -311,7 +311,7 @@ func (h shadowSettingsHarness) targetReference(t *testing.T, kind, key string) s
 	return reference
 }
 
-func TestShadowOfficialServerLinksSwitchesAndRemoves(t *testing.T) {
+func TestShadowOfficialServerMakesOfficialKeepsShadowAndRestoresAutomatic(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -325,64 +325,89 @@ func TestShadowOfficialServerLinksSwitchesAndRemoves(t *testing.T) {
 	call := func(action, mcpID, version, key string, confirmed bool) (SetShadowMCPOfficialServerOutput, error) {
 		return h.service.SetOfficialServer(ctx, h.principal, SetShadowMCPOfficialServerInput{ProjectID: h.project.ID.String(), TargetReference: target, Action: action, MCPID: mcpID, ExpectedVersion: version, IdempotencyKey: key, Confirmed: confirmed})
 	}
+	automatic := officiallink.Choice{Kind: officiallink.ChoiceAutomatic, MCPServerID: uuid.Nil}
+	chosen := officiallink.Choice{Kind: officiallink.ChoiceServer, MCPServerID: official}
+	kept := officiallink.Choice{Kind: officiallink.ChoiceKeepShadow, MCPServerID: uuid.Nil}
+	audits := func(action audit.Action) int64 { return auditCount(t, t.Context(), h.conn, action) }
 
-	initial := h.linkVersion(t)
-	_, err = call("link", official.String(), initial, "link", false)
+	initial := h.linkVersion(t, true)
+	_, err = call("make_official", official.String(), initial, "make-official", false)
 	requireShadowSettingCode(t, err, "confirmation_required")
-	require.False(t, h.link(t).Linked())
+	require.Equal(t, automatic, h.choice(t))
 
-	setsBefore := auditCount(t, t.Context(), h.conn, audit.ActionShadowMCPOfficialServerSet)
-	linked, err := call("link", official.String(), initial, "link", true)
+	createsBefore := audits(audit.ActionShadowMCPOfficialServerCreate)
+	made, err := call("make_official", official.String(), initial, "make-official", true)
 	require.NoError(t, err)
-	require.Equal(t, "changed", linked.ResultCategory)
-	require.Equal(t, "on", linked.LinkState)
-	require.Equal(t, official.String(), linked.MCPID)
-	require.Equal(t, "complete", linked.StateStatus)
-	require.Equal(t, officiallink.Link{MCPServerID: official, AllowDirectAccess: false}, h.link(t))
-	require.Equal(t, setsBefore+1, auditCount(t, t.Context(), h.conn, audit.ActionShadowMCPOfficialServerSet))
-	record, err := audittest.LatestAuditLogByAction(ctx, h.conn, audit.ActionShadowMCPOfficialServerSet)
+	require.Equal(t, "changed", made.ResultCategory)
+	require.Equal(t, "server", made.Choice)
+	require.Equal(t, official.String(), made.MCPID)
+	require.Equal(t, "complete", made.StateStatus)
+	require.Equal(t, chosen, h.choice(t))
+	require.Equal(t, createsBefore+1, audits(audit.ActionShadowMCPOfficialServerCreate))
+	record, err := audittest.LatestAuditLogByAction(ctx, h.conn, audit.ActionShadowMCPOfficialServerCreate)
 	require.NoError(t, err)
 	require.Equal(t, shadowSettingsTargetURL, record.SubjectDisplay)
 
-	replayed, err := call("link", official.String(), initial, "link", true)
+	replayed, err := call("make_official", official.String(), initial, "make-official", true)
 	require.NoError(t, err)
 	require.True(t, replayed.Receipt.Replayed)
-	_, err = call("remove", "", initial, "stale-remove", true)
+	_, err = call("automatic", "", initial, "stale-automatic", true)
 	requireShadowSettingCode(t, err, "conflict")
-	require.True(t, h.link(t).Linked())
+	require.Equal(t, chosen, h.choice(t))
 
-	off, err := call("switch_off", "", h.linkVersion(t), "switch-off", true)
+	updatesBefore := audits(audit.ActionShadowMCPOfficialServerUpdate)
+	keep, err := call("keep_shadow", "", h.linkVersion(t, true), "keep-shadow", true)
 	require.NoError(t, err)
-	require.Equal(t, "off", off.LinkState)
-	require.Equal(t, officiallink.Link{MCPServerID: official, AllowDirectAccess: true}, h.link(t))
-	on, err := call("switch_on", "", h.linkVersion(t), "switch-on", true)
+	require.Equal(t, "keep_shadow", keep.Choice)
+	require.Empty(t, keep.MCPID)
+	require.Equal(t, kept, h.choice(t))
+	again, err := call("make_official", official.String(), h.linkVersion(t, true), "make-official-again", true)
 	require.NoError(t, err)
-	require.Equal(t, "on", on.LinkState)
-	require.Equal(t, setsBefore+3, auditCount(t, t.Context(), h.conn, audit.ActionShadowMCPOfficialServerSet))
+	require.Equal(t, "changed", again.ResultCategory)
+	require.Equal(t, updatesBefore+2, audits(audit.ActionShadowMCPOfficialServerUpdate))
 
-	same, err := call("link", official.String(), h.linkVersion(t), "link-again", true)
+	same, err := call("make_official", official.String(), h.linkVersion(t, true), "make-official-same", true)
 	require.NoError(t, err)
 	require.Equal(t, "unchanged", same.ResultCategory)
-	require.Equal(t, setsBefore+3, auditCount(t, t.Context(), h.conn, audit.ActionShadowMCPOfficialServerSet))
+	require.Equal(t, updatesBefore+2, audits(audit.ActionShadowMCPOfficialServerUpdate))
 
-	_, err = call("link", disabled.String(), h.linkVersion(t), "link-disabled", true)
+	_, err = call("make_official", disabled.String(), h.linkVersion(t, true), "make-disabled", true)
 	requireShadowSettingCode(t, err, "invalid_request")
-	_, err = call("link", foreign.String(), h.linkVersion(t), "link-foreign", true)
+	_, err = call("make_official", foreign.String(), h.linkVersion(t, true), "make-foreign", true)
 	requireShadowSettingCode(t, err, "not_found")
-	_, err = call("link", uuid.NewString(), h.linkVersion(t), "link-missing", true)
+	_, err = call("make_official", uuid.NewString(), h.linkVersion(t, true), "make-missing", true)
 	requireShadowSettingCode(t, err, "not_found")
-	require.Equal(t, officiallink.Link{MCPServerID: official, AllowDirectAccess: false}, h.link(t))
+	require.Equal(t, chosen, h.choice(t))
 
-	removed, err := call("remove", "", h.linkVersion(t), "remove", true)
+	deletesBefore := audits(audit.ActionShadowMCPOfficialServerDelete)
+	restored, err := call("automatic", "", h.linkVersion(t, true), "automatic", true)
 	require.NoError(t, err)
-	require.Equal(t, "none", removed.LinkState)
-	require.Empty(t, removed.MCPID)
-	require.False(t, h.link(t).Linked())
-	require.Equal(t, setsBefore+4, auditCount(t, t.Context(), h.conn, audit.ActionShadowMCPOfficialServerSet))
+	require.Equal(t, "automatic", restored.Choice)
+	require.Empty(t, restored.MCPID)
+	require.Equal(t, automatic, h.choice(t))
+	require.Equal(t, deletesBefore+1, audits(audit.ActionShadowMCPOfficialServerDelete))
+	nothing, err := call("automatic", "", h.linkVersion(t, true), "automatic-again", true)
+	require.NoError(t, err)
+	require.Equal(t, "unchanged", nothing.ResultCategory)
+	require.Equal(t, deletesBefore+1, audits(audit.ActionShadowMCPOfficialServerDelete))
 
-	// With nothing linked there is no link to switch.
-	_, err = call("switch_off", "", h.linkVersion(t), "switch-off-unlinked", true)
-	requireShadowSettingCode(t, err, "invalid_request")
+	// Keeping the server in direct use brings the removed row back.
+	createsBefore = audits(audit.ActionShadowMCPOfficialServerCreate)
+	_, err = call("keep_shadow", "", h.linkVersion(t, true), "keep-shadow-again", true)
+	require.NoError(t, err)
+	require.Equal(t, kept, h.choice(t))
+	require.Equal(t, createsBefore+1, audits(audit.ActionShadowMCPOfficialServerCreate))
+
+	// Without automatic links the inventory does not report a kept server,
+	// so the version it hands out matches no choice and the write applies.
+	flags, ok := h.service.flags.(*feature.InMemory)
+	require.True(t, ok)
+	flags.SetFlag(feature.FlagShadowMCPAutoLink, h.principal.OrganizationID, false)
+	_, err = call("make_official", official.String(), h.linkVersion(t, true), "make-official-flag-off-stale", true)
+	requireShadowSettingCode(t, err, "conflict")
+	_, err = call("make_official", official.String(), h.linkVersion(t, false), "make-official-flag-off", true)
+	require.NoError(t, err)
+	require.Equal(t, chosen, h.choice(t))
 }
 
 func TestShadowOfficialServerRefusesLocalCommands(t *testing.T) {
@@ -392,11 +417,11 @@ func TestShadowOfficialServerRefusesLocalCommands(t *testing.T) {
 	h := newShadowSettingsHarness(t, "platform_shadow_official_server_stdio")
 	official := seedShadowOfficialServer(t, h.conn, h.project.ID, "Company Tools", "private")
 	_, err := h.service.SetOfficialServer(ctx, h.principal, SetShadowMCPOfficialServerInput{
-		ProjectID: h.project.ID.String(), TargetReference: h.targetReference(t, shadowTargetKindStdioCommand, "local-command"), Action: "link", MCPID: official.String(),
-		ExpectedVersion: h.linkVersion(t), IdempotencyKey: "link-stdio", Confirmed: true,
+		ProjectID: h.project.ID.String(), TargetReference: h.targetReference(t, shadowTargetKindStdioCommand, "local-command"), Action: "make_official", MCPID: official.String(),
+		ExpectedVersion: h.linkVersion(t, true), IdempotencyKey: "make-official-stdio", Confirmed: true,
 	})
 	requireShadowSettingCode(t, err, "invalid_request")
-	count, err := audittest.AuditLogCountByAction(ctx, h.conn, audit.ActionShadowMCPOfficialServerSet)
+	count, err := audittest.AuditLogCountByAction(ctx, h.conn, audit.ActionShadowMCPOfficialServerCreate)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -410,6 +435,6 @@ func TestShadowSettingsRequireTheRolloutFlag(t *testing.T) {
 	_, err := h.service.SetDefaultAccess(ctx, h.principal, SetShadowMCPDefaultAccessInput{ProjectID: h.project.ID.String(), Mode: "blocked", ExpectedVersion: h.defaultAccess(t).Version, IdempotencyKey: "flag-off", Confirmed: true})
 	requireShadowSettingCode(t, err, "feature_unavailable")
 	require.Empty(t, h.blockingPolicies(t))
-	_, err = h.service.SetOfficialServer(ctx, h.principal, SetShadowMCPOfficialServerInput{ProjectID: h.project.ID.String(), TargetReference: h.targetReference(t, shadowTargetKindServerURL, shadowSettingsTargetURL), Action: "remove", ExpectedVersion: h.linkVersion(t), IdempotencyKey: "flag-off", Confirmed: true})
+	_, err = h.service.SetOfficialServer(ctx, h.principal, SetShadowMCPOfficialServerInput{ProjectID: h.project.ID.String(), TargetReference: h.targetReference(t, shadowTargetKindServerURL, shadowSettingsTargetURL), Action: "automatic", ExpectedVersion: h.linkVersion(t, true), IdempotencyKey: "flag-off", Confirmed: true})
 	requireShadowSettingCode(t, err, "feature_unavailable")
 }

@@ -10,41 +10,17 @@ type Check struct {
 	Dimensions map[string]string
 }
 
-func EnvironmentCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceID: resourceID, Dimensions: map[string]string{"project_id": projectID}}
-}
-
-func MCPCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceID: resourceID, Dimensions: map[string]string{"project_id": projectID}}
-}
-
-func AssistantCheck(scope Scope, resourceID, projectID string) Check {
-	return Check{Scope: scope, ResourceID: resourceID, Dimensions: map[string]string{"project_id": projectID}}
-}
-
-func ChatReadCheck(resourceID string) Check {
-	return Check{Scope: "chat:read", ResourceID: resourceID}
-}
-
-func ChatWriteCheck(resourceID string) Check {
-	return Check{Scope: "chat:write", ResourceID: resourceID}
-}
-
-func HooksIngestCheck(organizationID, projectID string) Check {
-	return Check{Scope: "org:hooks_ingest", ResourceID: organizationID, Dimensions: map[string]string{"project_id": projectID}}
-}
-
-func MCPToolCallCheck(toolsetID, projectID, tool, disposition string) Check {
-	return Check{Scope: "mcp:connect", ResourceID: toolsetID, Dimensions: map[string]string{"project_id": projectID, "tool": tool, "disposition": disposition}}
-}
-
 func InferenceExecuteCheck(projectID string) Check {
 	return Check{Scope: "inference:execute", ResourceID: projectID}
 }
 
-type EnvironmentID string
+type EnvironmentID struct{ id string }
 
-type ProjectID string
+func EnvironmentIDFrom(id string) EnvironmentID { return EnvironmentID{id: id} }
+
+type ProjectID struct{ id string }
+
+func ProjectIDFrom(id string) ProjectID { return ProjectID{id: id} }
 
 type EnvironmentRef struct {
 	id      EnvironmentID
@@ -56,10 +32,5 @@ func Environment(id EnvironmentID, project ProjectID) EnvironmentRef {
 }
 
 func (r EnvironmentRef) Read() Check {
-	return EnvironmentCheck("environment:read", string(r.id), string(r.project))
-}
-
-// MCPCheck as a method is not the constructor the rule bans.
-func (r EnvironmentRef) MCPCheck() Check {
-	return Check{Scope: "mcp:read", ResourceID: string(r.id)}
+	return Check{Scope: "environment:read", ResourceID: r.id.id, Dimensions: map[string]string{"project_id": r.project.id}}
 }

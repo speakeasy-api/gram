@@ -1088,7 +1088,7 @@ func TestResolveAccessTokensServesAnAuthClientWithoutTheSignInLink(t *testing.T)
 	subject := urn.NewUserSubject("user_tokens")
 	accessEnc, err := f.service.enc.Encrypt([]byte("upstream-token"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(pool).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   consentedUnder,
 		RemoteSessionClientID: f.registration,
@@ -1152,7 +1152,7 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 
 	accessEnc, err := f.service.enc.Encrypt([]byte("upstream-token"))
 	require.NoError(t, err)
-	_, err = remotesessionsrepo.New(pool).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+	_, err = remotesessionsrepo.New(pool).UpsertRemoteSessionFixture(ctx, remotesessionsrepo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   consentedUnder,
 		RemoteSessionClientID: f.registration,
@@ -1297,7 +1297,7 @@ func TestAuthClientConsentUsesSharedResolver(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, authClientNoAccess, denied.outcome)
 		member := metaMember{serverID: f.serverID}
-		f.service.applyMemberAuthClient(t.Context(), &member, denied, nil)
+		f.service.applyMemberAuthClient(t.Context(), "org", &member, denied, nil)
 		var forbidden *oops.ShareableError
 		require.ErrorAs(t, member.upstreamUnavailable, &forbidden)
 		require.Equal(t, oops.CodeForbidden, forbidden.Code)

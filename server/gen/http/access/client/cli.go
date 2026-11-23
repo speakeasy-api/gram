@@ -959,6 +959,48 @@ func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerPr
 	return v, nil
 }
 
+// BuildFindShadowMCPInventoryServersPayload builds the payload for the access
+// findShadowMCPInventoryServers endpoint from CLI flags.
+func BuildFindShadowMCPInventoryServersPayload(accessFindShadowMCPInventoryServersProjectID string, accessFindShadowMCPInventoryServersServerUrls string, accessFindShadowMCPInventoryServersSessionToken string) (*access.FindShadowMCPInventoryServersPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessFindShadowMCPInventoryServersProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverUrls []string
+	{
+		err = json.Unmarshal([]byte(accessFindShadowMCPInventoryServersServerUrls), &serverUrls)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for serverUrls, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(serverUrls) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("server_urls", serverUrls, len(serverUrls), 1, true))
+		}
+		if len(serverUrls) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("server_urls", serverUrls, len(serverUrls), 50, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessFindShadowMCPInventoryServersSessionToken != "" {
+			sessionToken = &accessFindShadowMCPInventoryServersSessionToken
+		}
+	}
+	v := &access.FindShadowMCPInventoryServersPayload{}
+	v.ProjectID = projectID
+	v.ServerUrls = serverUrls
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildUpdateShadowMCPInventoryServerNamePayload builds the payload for the
 // access updateShadowMCPInventoryServerName endpoint from CLI flags.
 func BuildUpdateShadowMCPInventoryServerNamePayload(accessUpdateShadowMCPInventoryServerNameBody string, accessUpdateShadowMCPInventoryServerNameSessionToken string) (*access.UpdateShadowMCPInventoryServerNamePayload, error) {
@@ -1002,7 +1044,7 @@ func BuildSetShadowMCPOfficialServerPayload(accessSetShadowMCPOfficialServerBody
 	{
 		err = json.Unmarshal([]byte(accessSetShadowMCPOfficialServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_direct_access\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"keep_shadow\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
@@ -1020,10 +1062,10 @@ func BuildSetShadowMCPOfficialServerPayload(accessSetShadowMCPOfficialServerBody
 		}
 	}
 	v := &access.SetShadowMCPOfficialServerPayload{
-		ProjectID:         body.ProjectID,
-		ServerURL:         body.ServerURL,
-		McpServerID:       body.McpServerID,
-		AllowDirectAccess: body.AllowDirectAccess,
+		ProjectID:   body.ProjectID,
+		ServerURL:   body.ServerURL,
+		McpServerID: body.McpServerID,
+		KeepShadow:  body.KeepShadow,
 	}
 	v.SessionToken = sessionToken
 
@@ -2051,6 +2093,102 @@ func BuildRevokeTemporaryGrantPayload(accessRevokeTemporaryGrantBody string, acc
 		}
 	}
 	v := &access.RevokeTemporaryGrantPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListAccessRequestsPayload builds the payload for the access
+// listAccessRequests endpoint from CLI flags.
+func BuildListAccessRequestsPayload(accessListAccessRequestsStatus string, accessListAccessRequestsMine string, accessListAccessRequestsSessionToken string) (*access.ListAccessRequestsPayload, error) {
+	var err error
+	var status *string
+	{
+		if accessListAccessRequestsStatus != "" {
+			status = &accessListAccessRequestsStatus
+		}
+	}
+	var mine bool
+	{
+		if accessListAccessRequestsMine != "" {
+			mine, err = strconv.ParseBool(accessListAccessRequestsMine)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for mine, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListAccessRequestsSessionToken != "" {
+			sessionToken = &accessListAccessRequestsSessionToken
+		}
+	}
+	v := &access.ListAccessRequestsPayload{}
+	v.Status = status
+	v.Mine = mine
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDecideAccessRequestPayload builds the payload for the access
+// decideAccessRequest endpoint from CLI flags.
+func BuildDecideAccessRequestPayload(accessDecideAccessRequestBody string, accessDecideAccessRequestSessionToken string) (*access.DecideAccessRequestPayload, error) {
+	var err error
+	var body DecideAccessRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessDecideAccessRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"approve\": false,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ExpiresAt != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessDecideAccessRequestSessionToken != "" {
+			sessionToken = &accessDecideAccessRequestSessionToken
+		}
+	}
+	v := &access.DecideAccessRequestPayload{
+		ID:        body.ID,
+		Approve:   body.Approve,
+		ExpiresAt: body.ExpiresAt,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildWithdrawAccessRequestPayload builds the payload for the access
+// withdrawAccessRequest endpoint from CLI flags.
+func BuildWithdrawAccessRequestPayload(accessWithdrawAccessRequestBody string, accessWithdrawAccessRequestSessionToken string) (*access.WithdrawAccessRequestPayload, error) {
+	var err error
+	var body WithdrawAccessRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessWithdrawAccessRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessWithdrawAccessRequestSessionToken != "" {
+			sessionToken = &accessWithdrawAccessRequestSessionToken
+		}
+	}
+	v := &access.WithdrawAccessRequestPayload{
 		ID: body.ID,
 	}
 	v.SessionToken = sessionToken

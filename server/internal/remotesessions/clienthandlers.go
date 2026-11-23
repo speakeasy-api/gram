@@ -179,7 +179,7 @@ func (s *Service) GetNewClientCallbackURL(ctx context.Context, _ *gen.GetNewClie
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -228,7 +228,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -280,15 +280,6 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, err
 	}
 
-	var secretCiphertext pgtype.Text
-	if hasSecret {
-		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(encrypted)
-	}
-
 	callbackBaseURL, err := s.newClientCallbackBaseURL(ctx, authCtx.ActiveOrganizationID, owner)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization callback origin").LogError(ctx, logger)
@@ -328,6 +319,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 	}
 
 	legacyCallbackURL := false
+	var secretTemplate *clientTemplate
 	if templateID.Valid {
 		template, err := loadClientTemplate(ctx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, templateID.UUID, issuerID, clientID)
 		if err == nil {
@@ -337,7 +329,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 			return nil, identityOopsError(err, "read template remote session client").LogError(ctx, logger)
 		}
 		if !hasSecret {
-			secretCiphertext = template.secretEncrypted
+			secretTemplate = &template
 			if payload.ClientSecretExpiresAt == nil {
 				provenance.clientSecretExpiresAt = template.clientSecretExpiresAt
 			}
@@ -355,7 +347,6 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		OrganizationID:                  conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:           issuerID,
 		ClientID:                        clientID,
-		ClientSecretEncrypted:           secretCiphertext,
 		ClientIDIssuedAt:                provenance.clientIDIssuedAt,
 		ClientSecretExpiresAt:           provenance.clientSecretExpiresAt,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
@@ -373,6 +364,21 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
 	}
 
+	switch {
+	case hasSecret:
+		created, err = s.secrets.Set(ctx, dbtx, created.ID, clientOwner(created), []byte(*payload.ClientSecret), provenance.clientSecretExpiresAt)
+	case secretTemplate != nil:
+		var copied bool
+		var row repo.RemoteSessionClient
+		row, copied, err = s.secrets.Copy(ctx, dbtx, secretTemplate.owner, secretTemplate.secret, created.ID, clientOwner(created), provenance.clientSecretExpiresAt)
+		if copied {
+			created = row
+		}
+	}
+	if err != nil {
+		return nil, clientSecretWriteError(ctx, logger, err)
+	}
+
 	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, scope, created, userIssuerIDs, templateID)
 }
 
@@ -388,7 +394,7 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -612,7 +618,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -673,16 +679,9 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, err
 	}
 
-	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
-		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
-		if encErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
-		}
-		secretCiphertext = conv.ToPGText(encrypted)
-	}
+	newSecret := payload.ClientSecret != nil && *payload.ClientSecret != ""
 
-	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, secretCiphertext.Valid, payload.LegacyCallbackURL)); err != nil {
+	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, newSecret, payload.LegacyCallbackURL)); err != nil {
 		return nil, err
 	}
 
@@ -702,8 +701,6 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	updated, err := txRepo.UpdateRemoteSessionClient(ctx, repo.UpdateRemoteSessionClientParams{
 		ClientID:                        newClientID,
 		DisplayName:                     updatedDisplayName(payload.DisplayName),
-		ClientSecretEncrypted:           secretCiphertext,
-		ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
@@ -718,6 +715,15 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 			return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session client").LogError(ctx, logger)
+	}
+
+	// A replaced secret takes no expiry: the update carries none, and keeping
+	// the old secret's deadline would flag the new secret as expired.
+	if newSecret {
+		updated, err = s.secrets.Set(ctx, dbtx, updated.ID, clientOwner(updated), []byte(*payload.ClientSecret), pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false})
+		if err != nil {
+			return nil, clientSecretWriteError(ctx, logger, err)
+		}
 	}
 
 	// Sessions obtained through the old client_id hold tokens the issuer bound
@@ -768,7 +774,7 @@ func (s *Service) ListRemoteSessionClients(ctx context.Context, payload *gen.Lis
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -822,7 +828,7 @@ func (s *Service) GetRemoteSessionClient(ctx context.Context, payload *gen.GetRe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return nil, err
 	}
 
@@ -863,7 +869,7 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -951,7 +957,7 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return nil, err
 	}
 
@@ -1153,7 +1159,7 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write()); err != nil {
 		return err
 	}
 

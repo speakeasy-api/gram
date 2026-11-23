@@ -197,7 +197,16 @@ func NewTransitions(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Lo
 
 // Get returns a use case's transition state, cached for transitionCacheTTL.
 func (t *Transitions) Get(ctx context.Context, organizationID string, useCase UseCase) (Transition, error) {
-	if err := useCase.validate(); err != nil {
+	return t.GetIn(ctx, t.db, organizationID, useCase)
+}
+
+// GetIn is Get for a caller inside a transaction: a cache miss reads through
+// db, so the caller never waits for a second connection to read transition
+// state while it holds one. The value read refreshes the process's cache, so
+// db must read committed state: a READ COMMITTED transaction or the pool, never
+// a REPEATABLE READ or SERIALIZABLE snapshot.
+func (t *Transitions) GetIn(ctx context.Context, db repo.DBTX, organizationID string, useCase UseCase) (Transition, error) {
+	if err := useCase.validateTransition(); err != nil {
 		return Transition{}, err
 	}
 
@@ -205,17 +214,23 @@ func (t *Transitions) Get(ctx context.Context, organizationID string, useCase Us
 		return cached, nil
 	}
 
-	return t.GetFresh(ctx, organizationID, useCase)
+	return t.GetFreshIn(ctx, db, organizationID, useCase)
 }
 
 // GetFresh reads a use case's transition state from the database and
 // refreshes the cache.
 func (t *Transitions) GetFresh(ctx context.Context, organizationID string, useCase UseCase) (Transition, error) {
-	if err := useCase.validate(); err != nil {
+	return t.GetFreshIn(ctx, t.db, organizationID, useCase)
+}
+
+// GetFreshIn is GetFresh reading through db, such as the caller's
+// transaction.
+func (t *Transitions) GetFreshIn(ctx context.Context, db repo.DBTX, organizationID string, useCase UseCase) (Transition, error) {
+	if err := useCase.validateTransition(); err != nil {
 		return Transition{}, err
 	}
 
-	row, err := repo.New(t.db).GetEncryptionTransition(ctx, repo.GetEncryptionTransitionParams{OrganizationID: organizationID, UseCase: string(useCase)})
+	row, err := repo.New(db).GetEncryptionTransition(ctx, repo.GetEncryptionTransitionParams{OrganizationID: organizationID, UseCase: string(useCase)})
 	var transition Transition
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -234,8 +249,8 @@ func (t *Transitions) GetFresh(ctx context.Context, organizationID string, useCa
 	return transition, nil
 }
 
-// List returns the organization's transition state for every registered use
-// case, uncached, for the admin API.
+// List returns the organization's transition state for every use case with
+// storage migration support, uncached, for the admin API.
 func (t *Transitions) List(ctx context.Context, organizationID string) ([]Transition, error) {
 	rows, err := repo.New(t.db).ListEncryptionTransitions(ctx, organizationID)
 	if err != nil {
@@ -249,6 +264,9 @@ func (t *Transitions) List(ctx context.Context, organizationID string) ([]Transi
 
 	transitions := make([]Transition, 0, len(registeredUseCases))
 	for _, useCase := range registeredUseCases {
+		if useCase.validateTransition() != nil {
+			continue
+		}
 		row, ok := byUseCase[useCase]
 		if !ok {
 			transitions = append(transitions, noTransition(organizationID, useCase))
@@ -614,7 +632,7 @@ func (t *Transitions) change(ctx context.Context, organizationID string, useCase
 }
 
 func (t *Transitions) requireWritable(useCase UseCase) error {
-	if err := useCase.validate(); err != nil {
+	if err := useCase.validateTransition(); err != nil {
 		return err
 	}
 	if t.audit == nil || t.provisioner == nil {

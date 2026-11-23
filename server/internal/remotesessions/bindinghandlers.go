@@ -60,9 +60,9 @@ func bindingHuman(ctx context.Context) (*contextvalues.AuthContext, error) {
 	if _, ok := contextvalues.GetActingSurface(ctx); ok {
 		return nil, oops.C(oops.CodeForbidden)
 	}
-	if _, ok := contextvalues.GetRBACScopeOverride(ctx); ok {
-		return nil, oops.C(oops.CodeForbidden)
-	}
+	// A platform admin's role preview (X-Gram-Scope-Override) is not refused
+	// here: the binding authorizer checks it together with the live grants, so
+	// it can only narrow what this person may do, as on every other agent page.
 	return auth, nil
 }
 

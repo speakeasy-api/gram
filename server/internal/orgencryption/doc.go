@@ -9,6 +9,11 @@
 // plaintext DEK is cached in memory for DataKeyCacheTTL; key management also
 // calls KMS to verify a KEK before using it.
 //
+// ForIn uses a caller-owned writable READ COMMITTED transaction instead of
+// acquiring another pooled connection. Its TTL caches are private to that
+// Encryptor, so uncommitted state never enters the process cache. Each bound
+// Encryptor unwraps its first DEK again, even when the process cache is warm.
+//
 // Every ciphertext binds the organization, the use case and the column it is
 // stored in as associated data, so a value cannot be moved to another
 // organization, consumer or column and still decrypt.
@@ -44,10 +49,12 @@
 // # Fencing
 //
 // Transition state is cached per process, and a writer can hold a Decision
-// across a provider call, so every feature statement that writes or clears
-// either copy of a value fences itself on the generation it decided under. It
-// adds this predicate, comparing against the row's own organization column
-// rather than a caller parameter so a row of another organization never
+// across a provider call, so every feature statement that stores either copy
+// of a value, or clears one copy and not the other, fences itself on the
+// generation it decided under. A statement that clears both copies of a value
+// needs no fence: erasing is correct under any transition state. A fenced
+// statement adds this predicate, comparing against the row's own organization
+// column rather than a caller parameter so a row of another organization never
 // passes:
 //
 //	AND COALESCE((

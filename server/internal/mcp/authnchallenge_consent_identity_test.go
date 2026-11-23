@@ -31,7 +31,7 @@ func grantScopedTo(t *testing.T, ctx context.Context, fx consentActionFixture, c
 	t.Helper()
 	encrypted, err := fx.ti.enc.Encrypt([]byte("token-" + clientID.String()))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSessionFixture(ctx, remotesessions_repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:             fx.subject,
 		UserSessionIssuerID:    fx.shared,
 		RemoteSessionClientID:  clientID,

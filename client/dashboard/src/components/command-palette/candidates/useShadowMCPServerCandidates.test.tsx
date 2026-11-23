@@ -1,5 +1,6 @@
+import { waitForHookState as waitFor } from "@/test/waitForHookState";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -46,7 +47,8 @@ vi.mock("@gram/client/react-query/shadowMCPInventory.core.js", () => ({
       mocks.requests.push(request);
       const page = mocks.pages[(request.cursor as string | undefined) ?? ""];
       if (page instanceof Error) throw page;
-      return page ?? { servers: [] };
+      // The SDK wraps each page of a paginated operation in `result`.
+      return { result: page ?? { servers: [] } };
     },
   }),
 }));

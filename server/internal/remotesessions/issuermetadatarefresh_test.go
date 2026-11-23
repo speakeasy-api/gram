@@ -641,7 +641,7 @@ func TestIssuerMetadataRefresh_RefreshIncompatibleWithTrustedClientBacksOff(t *t
 		TokenEndpointAuthMethodsSupported: []string{oauthwire.AuthMethodClientSecretBasic},
 	})
 	require.NoError(t, err)
-	client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := repo.New(ti.conn).CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:                       uuid.NullUUID{},
 		OrganizationID:                  conv.ToPGText(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:           issuer.ID,

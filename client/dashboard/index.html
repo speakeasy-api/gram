@@ -29,6 +29,10 @@
          and /shared/* pages are tokenized capability URLs. -->
     <meta name="robots" content="noindex, nofollow" />
     <meta name="gram-admin-server-url" content="${GRAM_ADMIN_SERVER_URL}" />
+    <!-- Deployment-specific settings (telemetry, tunnel host, first-party
+         hosts, ...) as JSON, substituted at container start by
+         42-dashboard-config.sh. See src/lib/runtime-config.ts. -->
+    <meta name="gram-dashboard-config" content="${GRAM_DASHBOARD_CONFIG}" />
 
     <meta property="og:title" content="Speakeasy AI Control Plane" />
     <meta
@@ -61,11 +65,6 @@
     <link
       rel="preconnect"
       href="https://browser-intake-datadoghq.com"
-      crossorigin
-    />
-    <link
-      rel="preconnect"
-      href="https://static.clairedefermat.com"
       crossorigin
     />
     <!-- Fonts live in src/fonts (not public/) so they build to hashed

@@ -8,15 +8,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
-// The agent runtime scope registry is derived from the authz model. Its
-// version-by-version contents are pinned by the authz derived-tables golden;
-// this test pins the tombstones this package names.
+// The agent runtime scope registry is derived from the authz registry. Its
+// version-by-version contents are pinned by the generated agent eligibility
+// table in authz; this test pins the tombstones this package names.
 func TestRuntimeScopeDefinitions_TombstonesComeFromModel(t *testing.T) {
 	t.Parallel()
 
-	require.Contains(t, authz.Model.Retired, scopeMCPApprovalReadTombstone)
-	require.Contains(t, authz.Model.Retired, scopeMCPApprovalDecideTombstone)
-	for _, retired := range authz.Model.Retired {
+	var retiredScopes []authz.Scope
+	for scope, eligibility := range authz.AgentEligibilityByScope() {
+		if eligibility.Retired {
+			retiredScopes = append(retiredScopes, scope)
+		}
+	}
+	require.Contains(t, retiredScopes, scopeMCPApprovalReadTombstone)
+	require.Contains(t, retiredScopes, scopeMCPApprovalDecideTombstone)
+	for _, retired := range retiredScopes {
 		lifecycle, ok := RuntimeScopeLifecycleFor(retired)
 		require.True(t, ok, "%s: not registered", retired)
 		require.Equal(t, RuntimeScopeLifecycleRetired, lifecycle)

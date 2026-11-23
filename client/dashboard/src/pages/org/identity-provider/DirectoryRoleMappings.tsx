@@ -51,7 +51,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { Spinner } from "@/components/ui/Spinner";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";

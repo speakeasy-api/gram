@@ -1,4 +1,4 @@
-//nolint:exhaustruct // Generated repository parameter types intentionally use documented zero-value optional fields.
+//nolint:exhaustruct_v5 // Generated repository parameter types intentionally use documented zero-value optional fields.
 package platformmcp
 
 import (
@@ -165,6 +165,11 @@ type Plugin struct {
 	// hand, and a plugin never published stays out of the marketplace until
 	// then. Member reads omit it.
 	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
+
+	// AutoAddServersEnabled reports whether the plugin's role audiences add and
+	// remove its MCP servers automatically. When false, role and access changes
+	// leave its server list alone. Member reads omit it.
+	AutoAddServersEnabled *bool `json:"auto_add_servers_enabled,omitempty"`
 
 	DistributionAdmission *DistributionAdmission `json:"distribution_admission,omitempty"`
 }
@@ -743,9 +748,7 @@ func (s *PluginsService) IsOrganizationAdmin(ctx context.Context, principal Prin
 	if !ok {
 		return false, ErrUnavailable
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	})
+	allowed, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	if err != nil {
 		return false, fmt.Errorf("authorize plugin inventory access: %w", err)
 	}
@@ -756,7 +759,7 @@ func (s *PluginsService) ListAssignedPlugins(ctx context.Context, principal Prin
 	if !s.valid() || s.authorization == nil {
 		return ListPluginsOutput{}, ErrUnavailable
 	}
-	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
+	if err := s.authorization.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Read()); err != nil {
 		return ListPluginsOutput{}, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
@@ -810,7 +813,7 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 	if strings.TrimSpace(input.Plugin) == "" {
 		return GetPluginOutput{}, ErrPluginNotFound
 	}
-	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
+	if err := s.authorization.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Read()); err != nil {
 		return GetPluginOutput{}, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
@@ -1315,6 +1318,7 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 		},
 		Publication:           publication,
 		AutoSyncEnabled:       new(plugindelivery.PluginAutoSyncEnabled(row.AutoSyncEnabled)),
+		AutoAddServersEnabled: new(row.AutoAddServersEnabled),
 		DistributionAdmission: nil,
 	}
 }

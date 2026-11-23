@@ -14,12 +14,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/officiallink"
 )
 
-// SetShadowMCPOfficialServer links one Shadow MCP server to its official
-// version, switches the link off or on, or removes it. Without
-// mcp_server_id and with allow_direct_access false, the link is removed,
-// which leaves the Shadow MCP server unmanaged so another server can be
-// linked. Without mcp_server_id and with allow_direct_access true, the
-// request is rejected: switching a link off needs the linked server.
+// SetShadowMCPOfficialServer overrides, or stops overriding, the automatic
+// link of one Shadow MCP server to the project server that proxies to its
+// URL. With mcp_server_id that server is linked; with keep_shadow nothing is
+// linked; adding a removed override back restores its row. With neither,
+// the override is soft-deleted and the automatic link applies again. Every
+// change is recorded in the audit log; a request that changes nothing
+// records nothing.
 func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.SetShadowMCPOfficialServerPayload) error {
 	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
 	if err != nil {
@@ -42,16 +43,15 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	result, err := officiallink.NewWriter(s.audit).SetInTransaction(ctx, dbtx, officiallink.SetInput{
-		OrganizationID:    ac.ActiveOrganizationID,
-		ProjectID:         projectID,
-		ServerURL:         inventoryURL.CanonicalURL,
-		MCPServerID:       chosen,
-		KeepLinkedServer:  false,
-		AllowDirectAccess: payload.AllowDirectAccess,
-		ActorUserID:       ac.UserID,
-		Actor:             temporaryGrantActor(ctx, ac.UserID),
-		ActorDisplayName:  ac.Email,
-		ValidateLocked:    nil,
+		OrganizationID:   ac.ActiveOrganizationID,
+		ProjectID:        projectID,
+		ServerURL:        inventoryURL.CanonicalURL,
+		MCPServerID:      chosen,
+		KeepShadow:       conv.PtrValOr(payload.KeepShadow, false),
+		ActorUserID:      ac.UserID,
+		Actor:            temporaryGrantActor(ctx, ac.UserID),
+		ActorDisplayName: ac.Email,
+		ValidateLocked:   nil,
 	})
 	switch {
 	case errors.Is(err, officiallink.ErrInvalidServerURL):
@@ -60,17 +60,17 @@ func (s *Service) SetShadowMCPOfficialServer(ctx context.Context, payload *gen.S
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, s.logger)
 	case errors.Is(err, officiallink.ErrMCPServerDisabled):
 		return oops.E(oops.CodeBadRequest, err, "the chosen mcp server is disabled").LogError(ctx, s.logger)
-	case errors.Is(err, officiallink.ErrLinkedServerRequired):
-		return oops.E(oops.CodeBadRequest, err, "switching a link off needs the linked mcp server").LogError(ctx, s.logger)
+	case errors.Is(err, officiallink.ErrKeepShadowWithServer):
+		return oops.E(oops.CodeBadRequest, err, "keep_shadow cannot be combined with mcp_server_id").LogError(ctx, s.logger)
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "save shadow mcp official server choice").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "save shadow mcp official server").LogError(ctx, s.logger)
 	}
 	if !result.Changed {
 		return nil
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit shadow mcp official server choice").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "commit shadow mcp official server change").LogError(ctx, s.logger)
 	}
 	return nil
 }

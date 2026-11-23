@@ -463,19 +463,6 @@ export interface ElementsConfig {
   api?: ApiConfig;
 
   /**
-   * Error tracking configuration.
-   * By default, errors are reported to help improve the Elements library.
-   *
-   * @example
-   * const config: ElementsConfig = {
-   *   errorTracking: {
-   *     enabled: false, // Opt out of error reporting
-   *   },
-   * }
-   */
-  errorTracking?: ErrorTrackingConfigOption;
-
-  /**
    * Configuration for the chat thread display and behavior.
    *
    * @example
@@ -487,17 +474,6 @@ export interface ElementsConfig {
    * }
    */
   thread?: ThreadConfig;
-}
-
-/**
- * Configuration for error tracking.
- */
-export interface ErrorTrackingConfigOption {
-  /**
-   * Set to false to disable error reporting.
-   * @default true
-   */
-  enabled?: boolean;
 }
 
 /**
@@ -1071,7 +1047,7 @@ export interface ComposerConfig {
 
   /**
    * When true, disable send until the MCP tool list has settled with at least
-   * one tool. Used by the Playground so a tools/list 401 or empty result
+   * one tool. Used by the MCP Inspect chat so a tools/list 401 or empty result
    * cannot produce a confident "no tools" model reply.
    */
   requireMcpTools?: boolean;

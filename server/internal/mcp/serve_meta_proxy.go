@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -294,6 +295,9 @@ type memberUnavailableError struct {
 
 	// session is the refresh failure when the outage hit a person's connection.
 	session error
+
+	// address is a sign-in provider address Speakeasy did not dial, which no retry fixes.
+	address guardian.AddressFailure
 }
 
 func (e memberUnavailableError) Unwrap() error { return e.memberDiscoveryError }
@@ -302,6 +306,7 @@ func newMemberUnavailableError(message string, session error) memberUnavailableE
 	return memberUnavailableError{
 		memberDiscoveryError: memberDiscoveryError{metaMemberError: &metaMemberError{message: message}, status: 0, retryable: false, retryAfter: 0},
 		session:              session,
+		address:              guardian.AddressFine,
 	}
 }
 
@@ -425,7 +430,7 @@ func (s *Service) routeMetaMember(
 	gate.servedCredentials = map[uuid.UUID]contextvalues.UpstreamCredential{}
 	tokens, skipped, err := s.resolveMemberTokensSkipping(ctx, &gate, member)
 	if err != nil {
-		return memberDial{}, "", err
+		return memberDial{}, "", withMemberConnectLink(err, member, gate.memberCallerURL(member))
 	}
 
 	switch {
@@ -643,6 +648,9 @@ func (r *memberResponseRecorder) Flush() {}
 // callerIdentity is the stable per-caller key member dispatch pins tunnel
 // affinity on; falls back through the identities the gate resolved.
 func (g *metaGateContext) callerIdentity() string {
+	if g.caller.kind == gatewayCallerAgent || g.caller.kind == gatewayCallerWorkload {
+		return g.caller.principal.String()
+	}
 	for _, id := range []string{g.sessionID, g.userID, g.externalUserID, g.apiKeyID} {
 		if id != "" {
 			return id
@@ -668,7 +676,7 @@ func (s *Service) executeProxiedMemberTool(
 	ctx = s.memberServerContext(ctx, logger, gate, member)
 	// A proxied member's tool-call log is written by the remotemcp interceptor,
 	// which never sees the gate, so carry the caller's identity down to it.
-	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
+	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct_v5 // only the record's identity fields matter here
 		projectID:       member.projectID,
 		sessionID:       gate.sessionID,
 		clientInfoScope: metaClientInfoScope(gate.metaServerID),
@@ -709,7 +717,7 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
-			s.recordMemberFailure(ctx, gate, member, failure.code, memberUpstreamHost(err))
+			s.recordMemberFailure(ctx, gate, member, failure.code, mcpconnectionattempts.Provider(memberUpstreamHost(err)))
 		}
 		// The gateway logs this failure only when the call never reached
 		// the upstream interceptor.
@@ -797,8 +805,13 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	}
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
+		cut := listingCutOff(ctx, tokenEndpointAnswered(err))
 		// Member-scoped errors stay detectable through the %w chain.
-		return nil, fmt.Errorf("dial meta MCP member: %w", err)
+		err = fmt.Errorf("dial meta MCP member: %w", err)
+		if cut {
+			err = listingCutError{err}
+		}
+		return nil, err
 	}
 
 	// One deadline and one upstream session cover the whole pagination.
@@ -879,7 +892,11 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	}
 
 	// Rebuild entries from the kept set, matching the hosted path's output.
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete}
+	var instructions string
+	if handshake := session.InitializeResult(); handshake != nil {
+		instructions = handshake.Instructions
+	}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, instructions: instructions}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)

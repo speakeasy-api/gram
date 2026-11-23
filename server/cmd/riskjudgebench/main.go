@@ -116,7 +116,7 @@ func main() {
 		concurrency     = flag.Int("concurrency", 6, "max concurrent judge calls")
 		temperature     = flag.Float64("temperature", 0.0, "sampling temperature (judge default is 0)")
 		timeout         = flag.Duration("timeout", 30*time.Second, "per-call timeout (prod judgeTimeout is 10s)")
-		orgID           = flag.String("org", constants.SpeakeasyTeamOrganizationID, "OrgID label (default: speakeasy-team)")
+		orgID           = flag.String("org", constants.USSpeakeasyTeamOrganizationID, "OrgID label (default: speakeasy-team)")
 		outFile         = flag.String("out", "server/cmd/riskjudgebench/results.json", "write raw per-call results here ('' to skip)")
 		reasoningEffort = flag.String("reasoning-effort", ppopenrouter.JudgeReasoningEffort, "reasoning effort sent with each call; \"low\" matches production. Pass \"none\" to disable reasoning, which the Gemini 3.5 generation rejects with a 400")
 	)

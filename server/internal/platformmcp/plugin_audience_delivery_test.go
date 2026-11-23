@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"testing"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -28,6 +31,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Role delivery", "role-delivery")
+	enableAutoAddServers(t, ctx, conn, plugin)
 	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, LimitValue: 10})
 	require.NoError(t, err)
 	require.NotEmpty(t, servers)
@@ -47,7 +51,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil).WithPublicationRequests(true)
+	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, conn)).WithPublicationRequests(true)
 	service := testPluginTargets(conn).WithAuthorization(engine).WithServerRemoval(delivery).
 		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget()).
 		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: true})
@@ -120,6 +124,7 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Role signal", "role-signal")
+	enableAutoAddServers(t, ctx, conn, plugin)
 	servers, err := platformrepo.New(conn).ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, LimitValue: 10})
 	require.NoError(t, err)
 	require.NotEmpty(t, servers)
@@ -171,4 +176,15 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	require.False(t, unchanged.Receipt.Replayed)
 	require.Equal(t, "not_requested", unchanged.PublishSignal)
 	require.Len(t, signaler.recorded(), 1, "a replay or an unchanged audience must not signal again")
+}
+
+// enableAutoAddServers opts a seeded plugin in to automatic server adding, so
+// role audiences deliver servers to it.
+func enableAutoAddServers(t *testing.T, ctx context.Context, conn *pgxpool.Pool, plugin pluginsrepo.Plugin) {
+	t.Helper()
+	_, err := pluginsrepo.New(conn).UpdatePlugin(ctx, pluginsrepo.UpdatePluginParams{
+		ID: plugin.ID, OrganizationID: plugin.OrganizationID, ProjectID: plugin.ProjectID, Name: plugin.Name, Slug: plugin.Slug,
+		Description: plugin.Description, AutoSyncEnabled: pgtype.Bool{}, AutoAddServersEnabled: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
 }

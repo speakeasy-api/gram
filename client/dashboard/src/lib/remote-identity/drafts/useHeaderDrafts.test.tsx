@@ -1,3 +1,4 @@
+import { waitForHookState } from "@/test/waitForHookState";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook } from "@testing-library/react";
@@ -249,7 +250,7 @@ describe("useHeaderDrafts", () => {
     });
 
     // The writes have settled, but the refresh has not replaced the rows yet.
-    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    await waitForHookState(() => expect(mocks.create).toHaveBeenCalledTimes(1));
     expect(result.current.readOnly).toBe(true);
     expect(result.current.saving).toBe(true);
     await act(async () => {

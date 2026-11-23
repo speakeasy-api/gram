@@ -168,7 +168,7 @@ func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 // other credential whose user claim is attribution rather than proof: an
 // assistant, agent or workload token, a chat-session token minted from an API
 // key, or a consent-discovery sign-in. Only a validated user session, a
-// chat-session token minted from a dashboard session (the playground), or a
+// chat-session token minted from a dashboard session (the MCP Inspect chat), or a
 // request no MCP credential stamped (a dashboard session), names the caller.
 func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs) (scope mcpskills.Scope, ok bool) {
 	// The dispatcher leaves attribution to the handlers, and it must not turn
@@ -200,7 +200,7 @@ func hostedSkillScope(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 // any, proves is calling, or empty when it proves none. Unstamped requests
 // did not come through an MCP credential, so the auth context's user is the
 // caller. A chat session counts only when it was minted from a signed-in
-// dashboard session (the playground), and then names the minting user as
+// dashboard session (the MCP Inspect chat), and then names the minting user as
 // recorded by its validator.
 func skillRecipientUserID(ctx context.Context, authUserID string) string {
 	identity, ok := mcpidentity.FromContext(ctx)

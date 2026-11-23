@@ -467,6 +467,7 @@ JOIN principal_remote_session_bindings AS target
   ON target.project_id = source.project_id
  AND target.principal_id = source.principal_id
  AND target.remote_session_client_id = source.remote_session_client_id
+ AND target.remote_session_id <> source.remote_session_id
  AND target.user_session_issuer_id = $1
  AND target.revoked_at IS NULL
 WHERE source.user_session_issuer_id = $2
@@ -491,6 +492,9 @@ type CountUserSessionIssuerPrincipalBindingConflictsParams struct {
 	OrganizationID string
 }
 
+// An agent attached to the same client on both issuers blocks the merge only
+// when the two attachments use different logins: merging would silently swap
+// the agent's credential. On the same login the target's attachment is kept.
 func (q *Queries) CountUserSessionIssuerPrincipalBindingConflicts(ctx context.Context, arg CountUserSessionIssuerPrincipalBindingConflictsParams) (int32, error) {
 	row := q.db.QueryRow(ctx, countUserSessionIssuerPrincipalBindingConflicts, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	var column_1 int32
@@ -3453,18 +3457,39 @@ func (q *Queries) ListMCPServersOnClaimingOrganizationIssuerForMigration(ctx con
 	return items, nil
 }
 
-const listMergeableCimdClientPairs = `-- name: ListMergeableCimdClientPairs :many
+const listMergeableClientPairs = `-- name: ListMergeableClientPairs :many
 
-SELECT source.id AS source_client_id, target.id AS target_client_id
+SELECT source.id AS source_client_id, target.id AS target_client_id, source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
   ON target.user_session_issuer_id = $1
  AND target.client_id = source.client_id
- AND target.client_id_metadata_uri IS NOT NULL
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = $2
-  AND source.client_id_metadata_uri IS NOT NULL
   AND source.deleted IS FALSE
+  AND (
+    (source.client_id_metadata_uri IS NOT NULL AND target.client_id_metadata_uri IS NOT NULL)
+    OR (
+      source.client_id_metadata_uri IS NULL
+      AND target.client_id_metadata_uri IS NULL
+      AND source.assistant_runtime_id IS NULL
+      AND source.assistant_trigger_workload_binding_id IS NULL
+      AND target.assistant_runtime_id IS NULL
+      AND target.assistant_trigger_workload_binding_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_sessions AS session
+        WHERE session.user_session_client_id = source.id
+          AND session.deleted IS FALSE
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_session_consents AS consent
+        WHERE consent.user_session_client_id = source.id
+          AND consent.deleted IS FALSE
+      )
+    )
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM issuance_selection_profiles AS profile
@@ -3483,38 +3508,49 @@ WHERE source.user_session_issuer_id = $2
         OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
       )
   )
-ORDER BY source.id
+ORDER BY source.client_id
 `
 
-type ListMergeableCimdClientPairsParams struct {
+type ListMergeableClientPairsParams struct {
 	TargetIssuerID uuid.UUID
 	SourceIssuerID uuid.UUID
 	OrganizationID string
 }
 
-type ListMergeableCimdClientPairsRow struct {
+type ListMergeableClientPairsRow struct {
 	SourceClientID uuid.UUID
 	TargetClientID uuid.UUID
+	ClientID       string
 }
 
-// Merging a source CIMD client into the target issuer's client for the same
-// metadata document URL. ListMergeableCimdClientPairs decides which clients
-// merge; the steps after it each take one pair and run in order, each seeing
-// the previous step's writes.
-// Pairs each live source client resolved from a Client ID Metadata Document
-// with the target issuer's live client for the same document URL. A source
-// client an issuance selection profile pins to the source issuer is left out:
-// the profile's foreign key keeps it on that issuer.
-func (q *Queries) ListMergeableCimdClientPairs(ctx context.Context, arg ListMergeableCimdClientPairsParams) ([]ListMergeableCimdClientPairsRow, error) {
-	rows, err := q.db.Query(ctx, listMergeableCimdClientPairs, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+// Merging a source client into the target issuer's client for the same
+// client_id. ListMergeableClientPairs decides which clients merge; the steps
+// after it each take one pair and run in order, each seeing the previous
+// step's writes.
+// Pairs each live source client with the target issuer's live client for the
+// same client_id when both rows describe one client:
+//
+//   - Both were resolved from the same Client ID Metadata Document. Their
+//     sessions and consents move onto the target's row.
+//   - Both were registered through dynamic client registration, which mints
+//     a random client_id, so a shared one means a single registration was
+//     copied onto both issuers. The source copy merges only while nothing
+//     uses it: no live session, no live consent, and no assistant binding.
+//     Its secret hash differs from the target's only by its bcrypt salt, but
+//     that cannot be verified, so a copy something signs in through blocks.
+//
+// A source client an issuance selection profile pins to the source issuer is
+// left out: the profile's foreign key keeps it on that issuer.
+func (q *Queries) ListMergeableClientPairs(ctx context.Context, arg ListMergeableClientPairsParams) ([]ListMergeableClientPairsRow, error) {
+	rows, err := q.db.Query(ctx, listMergeableClientPairs, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMergeableCimdClientPairsRow
+	var items []ListMergeableClientPairsRow
 	for rows.Next() {
-		var i ListMergeableCimdClientPairsRow
-		if err := rows.Scan(&i.SourceClientID, &i.TargetClientID); err != nil {
+		var i ListMergeableClientPairsRow
+		if err := rows.Scan(&i.SourceClientID, &i.TargetClientID, &i.ClientID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3878,7 +3914,7 @@ SELECT rs.id,
        rs.authorization_expires_at,
        -- Cast so sqlc types this as bool rather than interface{}; the token
        -- itself is never projected, only whether a refresh grant exists.
-       (rs.refresh_token_encrypted IS NOT NULL)::boolean AS has_refresh_token,
+       ((rs.refresh_token_encrypted IS NOT NULL OR rs.refresh_token_org_encrypted IS NOT NULL))::boolean AS has_refresh_token,
        rs.auto_refresh,
        rs.last_used_at,
        rs.scopes
@@ -4724,8 +4760,8 @@ func (q *Queries) ListUserSessionIssuerCimdClientsByIssuerID(ctx context.Context
 	return items, nil
 }
 
-const listUserSessionIssuerClientIDConflicts = `-- name: ListUserSessionIssuerClientIDConflicts :many
-SELECT source.client_id
+const listUserSessionIssuerDuplicateClients = `-- name: ListUserSessionIssuerDuplicateClients :many
+SELECT source.id AS source_client_id, source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
   ON target.user_session_issuer_id = $1
@@ -4733,17 +4769,6 @@ JOIN user_session_clients AS target
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = $2
   AND source.deleted IS FALSE
-  AND NOT (
-    source.client_id_metadata_uri IS NOT NULL
-    AND target.client_id_metadata_uri IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM issuance_selection_profiles AS profile
-      WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-        AND profile.user_session_client_id = source.id
-        AND profile.deleted IS FALSE
-    )
-  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -4758,29 +4783,33 @@ WHERE source.user_session_issuer_id = $2
 ORDER BY source.client_id
 `
 
-type ListUserSessionIssuerClientIDConflictsParams struct {
+type ListUserSessionIssuerDuplicateClientsParams struct {
 	TargetIssuerID uuid.UUID
 	SourceIssuerID uuid.UUID
 	OrganizationID string
 }
 
-// A client_id on both issuers blocks migration unless both rows were resolved
-// from the same Client ID Metadata Document: those describe one client and
-// merge onto the target's row. A source CIMD row that an issuance selection
-// profile pins to the source issuer cannot be merged and still blocks.
-func (q *Queries) ListUserSessionIssuerClientIDConflicts(ctx context.Context, arg ListUserSessionIssuerClientIDConflictsParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuerClientIDConflicts, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+type ListUserSessionIssuerDuplicateClientsRow struct {
+	SourceClientID uuid.UUID
+	ClientID       string
+}
+
+// Lists each live source client whose client_id the target issuer also holds.
+// A duplicate blocks consolidation unless ListMergeableClientPairs pairs it
+// with the target's row, so that query alone decides which duplicates merge.
+func (q *Queries) ListUserSessionIssuerDuplicateClients(ctx context.Context, arg ListUserSessionIssuerDuplicateClientsParams) ([]ListUserSessionIssuerDuplicateClientsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuerDuplicateClients, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListUserSessionIssuerDuplicateClientsRow
 	for rows.Next() {
-		var client_id string
-		if err := rows.Scan(&client_id); err != nil {
+		var i ListUserSessionIssuerDuplicateClientsRow
+		if err := rows.Scan(&i.SourceClientID, &i.ClientID); err != nil {
 			return nil, err
 		}
-		items = append(items, client_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -5971,6 +6000,8 @@ reachable AS (
     WHERE s.deleted IS FALSE
       AND ($5::uuid[] IS NULL
            OR s.id = ANY($5::uuid[]))
+      AND ($6::uuid[] IS NULL
+           OR NOT s.id = ANY($6::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -5989,9 +6020,9 @@ reachable AS (
 ),
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
-    SELECT unnest($6::uuid[]) AS mcp_server_id,
-           unnest($7::uuid[]) AS remote_session_client_id,
-           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
+    SELECT unnest($7::uuid[]) AS mcp_server_id,
+           unnest($8::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest($9::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -6006,7 +6037,7 @@ eligible AS (
       ON link.remote_session_client_id = a.remote_session_client_id
      AND link.user_session_issuer_id = $4
     WHERE a.deleted IS FALSE
-      AND NOT $9::boolean
+      AND NOT $10::boolean
     UNION ALL
     SELECT l.mcp_server_id,
            ac.remote_session_client_id
@@ -6031,7 +6062,7 @@ eligible AS (
      AND binding.user_session_issuer_id = $4
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
-      AND $9::boolean
+      AND $10::boolean
     GROUP BY l.mcp_server_id, ac.remote_session_client_id
     HAVING count(DISTINCT ac.id) = 1
 ),
@@ -6073,7 +6104,7 @@ decided AS (
                LIMIT 1
              )
            ) END AS remote_session_client_id,
-           CASE WHEN $9::boolean THEN NOT EXISTS (
+           CASE WHEN $10::boolean THEN NOT EXISTS (
              SELECT 1
              FROM mcp_server_auth_clients AS l
              JOIN mcp_auth_clients AS ac
@@ -6262,6 +6293,7 @@ type RecordUpstreamClientSelectionsParams struct {
 	Source              string
 	UserSessionIssuerID uuid.UUID
 	ScopeMcpServerIds   []uuid.UUID
+	ExcludeMcpServerIds []uuid.UUID
 	PickedMcpServerIds  []uuid.UUID
 	PickedClientIds     []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
@@ -6271,7 +6303,10 @@ type RecordUpstreamClientSelectionsParams struct {
 // Records, for one inbound credential, the upstream OAuth client it uses for
 // every MCP server it can reach, or an explicit no-auth choice. A NULL
 // scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
-// recording to those servers, and an empty array records nothing. An existing
+// recording to those servers, and an empty array records nothing.
+// exclude_mcp_server_ids leaves those servers without a row whatever else
+// would decide them, for servers issuance deferred until the person connects
+// them. An existing
 // client choice is never replaced. An existing no-auth choice is replaced
 // only once the server has an associated client and one is decided for the
 // credential: the no-auth choice is unusable by then, and recording the
@@ -6344,6 +6379,7 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 		arg.Source,
 		arg.UserSessionIssuerID,
 		arg.ScopeMcpServerIds,
+		arg.ExcludeMcpServerIds,
 		arg.PickedMcpServerIds,
 		arg.PickedClientIds,
 		arg.PickedAuthClientIds,
@@ -8103,6 +8139,66 @@ func (q *Queries) UpdatePlatformMCPRegistrationsToUserSessionIssuer(ctx context.
 	return result.RowsAffected(), nil
 }
 
+const updatePrincipalRemoteSessionBindingsToUserSessionIssuer = `-- name: UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer :execrows
+UPDATE principal_remote_session_bindings AS binding
+SET user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+FROM remote_sessions AS session, remote_session_clients AS client
+WHERE binding.user_session_issuer_id = $2
+  AND binding.organization_id = $3::text
+  AND session.id = binding.remote_session_id
+  AND session.deleted IS FALSE
+  AND client.id = binding.remote_session_client_id
+  AND client.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    WHERE link.remote_session_client_id = binding.remote_session_client_id
+      AND link.user_session_issuer_id = $1
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM principal_remote_session_bindings AS target
+    WHERE target.project_id = binding.project_id
+      AND target.principal_id = binding.principal_id
+      AND target.remote_session_client_id = binding.remote_session_client_id
+      AND target.remote_session_id = binding.remote_session_id
+      AND target.user_session_issuer_id = $1
+      AND target.revoked_at IS NULL
+  )
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
+`
+
+type UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+// Moves agents' attachments with the issuer they were made on. An attachment
+// need not share its connection's issuer, so moving the connections does not
+// move it. Only live connections of live clients the target now binds come
+// along, as only live connections move; the rest leave with the source's
+// client bindings. So does an attachment the target already holds on the same
+// login, so the agent keeps exactly one active attachment for it.
+func (q *Queries) UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer(ctx context.Context, arg UpdatePrincipalRemoteSessionBindingsToUserSessionIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updatePrincipalRemoteSessionBindingsToUserSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateReconnectSessionPolicy = `-- name: UpdateReconnectSessionPolicy :many
 UPDATE user_sessions AS us SET tool_selection = $1, updated_at = clock_timestamp()
 WHERE COALESCE(us.credential_id, us.id) = $2::uuid
@@ -8346,6 +8442,65 @@ func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg Updat
 		arg.ClientJwksUri,
 		arg.CacheTtlSeconds,
 		arg.ClientIDMetadataEtag,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantTriggerWorkloadBindingID,
+		&i.AssistantRuntimeID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateUserSessionClientRedirectURIs = `-- name: UpdateUserSessionClientRedirectURIs :one
+UPDATE user_session_clients AS cli
+SET redirect_uris = $1,
+    updated_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cli.id = $2
+  AND iss.id = cli.user_session_issuer_id
+  AND (iss.project_id = $3::uuid OR (iss.project_id IS NULL AND iss.organization_id = $4::text))
+  AND cli.client_id_metadata_uri IS NULL
+  AND cli.deleted IS FALSE
+RETURNING cli.id, cli.assistant_trigger_workload_binding_id, cli.assistant_runtime_id, cli.project_id, cli.organization_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+`
+
+type UpdateUserSessionClientRedirectURIsParams struct {
+	RedirectUris   []string
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Replaces an operator-managed client's redirect URIs. CIMD rows are
+// excluded: their redirect URIs come from the metadata document and would be
+// overwritten on the next re-read.
+func (q *Queries) UpdateUserSessionClientRedirectURIs(ctx context.Context, arg UpdateUserSessionClientRedirectURIsParams) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, updateUserSessionClientRedirectURIs,
+		arg.RedirectUris,
 		arg.ID,
 		arg.ProjectID,
 		arg.OrganizationID,

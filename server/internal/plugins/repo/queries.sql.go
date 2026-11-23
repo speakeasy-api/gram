@@ -238,7 +238,7 @@ func (q *Queries) CountLivePluginServersByMCPServerIDFixture(ctx context.Context
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateDefaultPluginParams struct {
@@ -262,6 +262,7 @@ func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPlug
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -272,23 +273,26 @@ func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPlug
 
 const createPlugin = `-- name: CreatePlugin :one
 
-INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled, auto_add_servers_enabled)
+VALUES ($1, $2, $3, $4, $5, $6,
+  COALESCE($7::boolean, FALSE))
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreatePluginParams struct {
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Name            string
-	Slug            string
-	Description     pgtype.Text
-	AutoSyncEnabled pgtype.Bool
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	Name                  string
+	Slug                  string
+	Description           pgtype.Text
+	AutoSyncEnabled       pgtype.Bool
+	AutoAddServersEnabled pgtype.Bool
 }
 
 // Queries for managing plugins (project-scoped distributable MCP server bundles).
 // plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
 // A NULL auto_sync_enabled means the plugin's changes publish automatically.
+// A NULL auto_add_servers_enabled leaves automatic server adding off.
 func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, createPlugin,
 		arg.OrganizationID,
@@ -297,6 +301,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 		arg.Slug,
 		arg.Description,
 		arg.AutoSyncEnabled,
+		arg.AutoAddServersEnabled,
 	)
 	var i Plugin
 	err := row.Scan(
@@ -309,6 +314,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -567,7 +573,7 @@ func (q *Queries) GatewayDistributedToPrincipal(ctx context.Context, arg Gateway
 }
 
 const getDefaultPlugin = `-- name: GetDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -596,6 +602,7 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -605,7 +612,7 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 }
 
 const getDefaultPluginForUpdate = `-- name: GetDefaultPluginForUpdate :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -635,6 +642,7 @@ func (q *Queries) GetDefaultPluginForUpdate(ctx context.Context, arg GetDefaultP
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -683,7 +691,7 @@ func (q *Queries) GetGatewayForPluginServer(ctx context.Context, arg GetGatewayF
 }
 
 const getGitHubConnection = `-- name: GetGitHubConnection :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, organization_id, marketplace_token_hash, marketplace_token_encrypted, marketplace_token_org_encrypted, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 FROM plugin_github_connections
 WHERE project_id = $1
 `
@@ -698,6 +706,10 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.OrganizationID,
+		&i.MarketplaceTokenHash,
+		&i.MarketplaceTokenEncrypted,
+		&i.MarketplaceTokenOrgEncrypted,
 		&i.PublishedFingerprint,
 		&i.PublishedMcpFingerprints,
 		&i.PublishedHooksVersion,
@@ -708,16 +720,17 @@ func (q *Queries) GetGitHubConnection(ctx context.Context, projectID uuid.UUID) 
 	return i, err
 }
 
-const getGitHubConnectionByMarketplaceToken = `-- name: GetGitHubConnectionByMarketplaceToken :one
-SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
+const getGitHubConnectionByMarketplaceTokenHash = `-- name: GetGitHubConnectionByMarketplaceTokenHash :one
+SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, organization_id, marketplace_token_hash, marketplace_token_encrypted, marketplace_token_org_encrypted, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 FROM plugin_github_connections
-WHERE marketplace_token = $1
+WHERE marketplace_token_hash = $1
 `
 
-// Resolves a marketplace proxy URL token to the upstream connection. The token
-// is the auth credential — there's no project scope to apply ahead of it.
-func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, marketplaceToken pgtype.Text) (PluginGithubConnection, error) {
-	row := q.db.QueryRow(ctx, getGitHubConnectionByMarketplaceToken, marketplaceToken)
+// Resolves a marketplace proxy URL token, by its hash, to the upstream
+// connection. The token is the auth credential, so there's no project scope to
+// apply ahead of it.
+func (q *Queries) GetGitHubConnectionByMarketplaceTokenHash(ctx context.Context, marketplaceTokenHash pgtype.Text) (PluginGithubConnection, error) {
+	row := q.db.QueryRow(ctx, getGitHubConnectionByMarketplaceTokenHash, marketplaceTokenHash)
 	var i PluginGithubConnection
 	err := row.Scan(
 		&i.ID,
@@ -726,6 +739,10 @@ func (q *Queries) GetGitHubConnectionByMarketplaceToken(ctx context.Context, mar
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.OrganizationID,
+		&i.MarketplaceTokenHash,
+		&i.MarketplaceTokenEncrypted,
+		&i.MarketplaceTokenOrgEncrypted,
 		&i.PublishedFingerprint,
 		&i.PublishedMcpFingerprints,
 		&i.PublishedHooksVersion,
@@ -852,7 +869,7 @@ func (q *Queries) GetOrganizationName(ctx context.Context, id string) (string, e
 }
 
 const getPlugin = `-- name: GetPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -879,6 +896,7 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -888,7 +906,7 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 }
 
 const getPluginForUpdate = `-- name: GetPluginForUpdate :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -917,6 +935,7 @@ func (q *Queries) GetPluginForUpdate(ctx context.Context, arg GetPluginForUpdate
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1009,7 +1028,7 @@ func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginSer
 
 const getPluginWithCounts = `-- name: GetPluginWithCounts :one
 SELECT
-  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.auto_add_servers_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -1065,6 +1084,7 @@ func (q *Queries) GetPluginWithCounts(ctx context.Context, arg GetPluginWithCoun
 		&i.Plugin.IsDefault,
 		&i.Plugin.AutoCreated,
 		&i.Plugin.AutoSyncEnabled,
+		&i.Plugin.AutoAddServersEnabled,
 		&i.Plugin.CreatedAt,
 		&i.Plugin.UpdatedAt,
 		&i.Plugin.DeletedAt,
@@ -1109,7 +1129,7 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 }
 
 const getProspectiveDefaultPlugin = `-- name: GetProspectiveDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -1137,6 +1157,7 @@ func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspe
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1356,7 +1377,7 @@ func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrgani
 }
 
 const listActivePluginsForProject = `-- name: ListActivePluginsForProject :many
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1390,6 +1411,7 @@ func (q *Queries) ListActivePluginsForProject(ctx context.Context, arg ListActiv
 			&i.IsDefault,
 			&i.AutoCreated,
 			&i.AutoSyncEnabled,
+			&i.AutoAddServersEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2315,7 +2337,7 @@ func (q *Queries) ListPluginSkillsForProject(ctx context.Context, arg ListPlugin
 
 const listPlugins = `-- name: ListPlugins :many
 SELECT
-  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.auto_add_servers_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -2351,22 +2373,23 @@ type ListPluginsParams struct {
 }
 
 type ListPluginsRow struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	Name            string
-	Slug            string
-	Description     pgtype.Text
-	IsDefault       pgtype.Bool
-	AutoCreated     bool
-	AutoSyncEnabled pgtype.Bool
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
-	ServerCount     int64
-	SkillCount      int64
-	AssignmentCount int64
+	ID                    uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	Name                  string
+	Slug                  string
+	Description           pgtype.Text
+	IsDefault             pgtype.Bool
+	AutoCreated           bool
+	AutoSyncEnabled       pgtype.Bool
+	AutoAddServersEnabled bool
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+	ServerCount           int64
+	SkillCount            int64
+	AssignmentCount       int64
 }
 
 func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]ListPluginsRow, error) {
@@ -2388,6 +2411,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 			&i.IsDefault,
 			&i.AutoCreated,
 			&i.AutoSyncEnabled,
+			&i.AutoAddServersEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2407,7 +2431,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 }
 
 const listPluginsForGlobalRoleDeletion = `-- name: ListPluginsForGlobalRoleDeletion :many
-SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted
+SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.auto_add_servers_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted
 FROM plugins p
 JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
 WHERE pa.principal_urn = $1
@@ -2435,6 +2459,7 @@ func (q *Queries) ListPluginsForGlobalRoleDeletion(ctx context.Context, principa
 			&i.IsDefault,
 			&i.AutoCreated,
 			&i.AutoSyncEnabled,
+			&i.AutoAddServersEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2451,7 +2476,7 @@ func (q *Queries) ListPluginsForGlobalRoleDeletion(ctx context.Context, principa
 }
 
 const listPluginsForRoleDeletion = `-- name: ListPluginsForRoleDeletion :many
-SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted
+SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.auto_add_servers_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted
 FROM plugins p
 JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
 WHERE pa.organization_id = $1
@@ -2485,6 +2510,7 @@ func (q *Queries) ListPluginsForRoleDeletion(ctx context.Context, arg ListPlugin
 			&i.IsDefault,
 			&i.AutoCreated,
 			&i.AutoSyncEnabled,
+			&i.AutoAddServersEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2756,6 +2782,7 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg L
 const listProjectRoleDeliveryPluginsForUpdate = `-- name: ListProjectRoleDeliveryPluginsForUpdate :many
 SELECT p.id FROM plugins p
 WHERE p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
+  AND p.auto_add_servers_enabled IS TRUE
   AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id AND a.organization_id = $1
     AND (a.principal_urn LIKE 'role:organization:%' OR a.principal_urn LIKE 'role:global:%'))
 ORDER BY p.id FOR UPDATE OF p
@@ -2766,6 +2793,7 @@ type ListProjectRoleDeliveryPluginsForUpdateParams struct {
 	ProjectID      uuid.UUID
 }
 
+// Only plugins that opted in to automatic server adding take part.
 func (q *Queries) ListProjectRoleDeliveryPluginsForUpdate(ctx context.Context, arg ListProjectRoleDeliveryPluginsForUpdateParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listProjectRoleDeliveryPluginsForUpdate, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -2791,6 +2819,7 @@ SELECT p.id, p.project_id
 FROM plugins p JOIN projects project ON project.id = p.project_id
 WHERE p.organization_id = $1 AND project.organization_id = $1
   AND p.deleted IS FALSE AND project.deleted IS FALSE
+  AND p.auto_add_servers_enabled IS TRUE
   AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id
     AND a.organization_id = $1 AND a.principal_urn = $2)
 ORDER BY p.project_id, p.id
@@ -2807,6 +2836,7 @@ type ListRoleDeliveryPluginsRow struct {
 }
 
 // Organization-scoped role event discovery; locks and writes retain exact project scope.
+// Only plugins that opted in to automatic server adding take part.
 func (q *Queries) ListRoleDeliveryPlugins(ctx context.Context, arg ListRoleDeliveryPluginsParams) ([]ListRoleDeliveryPluginsRow, error) {
 	rows, err := q.db.Query(ctx, listRoleDeliveryPlugins, arg.OrganizationID, arg.PrincipalUrn)
 	if err != nil {
@@ -3064,7 +3094,7 @@ func (q *Queries) LockPlatformCleanupMemberships(ctx context.Context, arg LockPl
 }
 
 const lockPluginForAssignments = `-- name: LockPluginForAssignments :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -3080,18 +3110,19 @@ type LockPluginForAssignmentsParams struct {
 }
 
 type LockPluginForAssignmentsRow struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	IsDefault      pgtype.Bool
-	AutoCreated    bool
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                    uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	Name                  string
+	Slug                  string
+	Description           pgtype.Text
+	IsDefault             pgtype.Bool
+	AutoCreated           bool
+	AutoAddServersEnabled bool
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
 }
 
 // Locks one exact live plugin. Dashboard and Platform MCP assignment writes
@@ -3108,6 +3139,7 @@ func (q *Queries) LockPluginForAssignments(ctx context.Context, arg LockPluginFo
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3244,7 +3276,7 @@ WHERE organization_id = $1
   AND project_id = $2
   AND slug = 'default'
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type PromoteToDefaultPluginParams struct {
@@ -3270,6 +3302,7 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3441,6 +3474,58 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const resolveGitHubConnectionByMarketplaceToken = `-- name: ResolveGitHubConnectionByMarketplaceToken :one
+SELECT plugin_github_connections.id, plugin_github_connections.project_id, plugin_github_connections.installation_id, plugin_github_connections.repo_owner, plugin_github_connections.repo_name, plugin_github_connections.marketplace_token, plugin_github_connections.organization_id, plugin_github_connections.marketplace_token_hash, plugin_github_connections.marketplace_token_encrypted, plugin_github_connections.marketplace_token_org_encrypted, plugin_github_connections.published_fingerprint, plugin_github_connections.published_mcp_fingerprints, plugin_github_connections.published_hooks_version, plugin_github_connections.published_hooks_config, plugin_github_connections.created_at, plugin_github_connections.updated_at, (plugin_github_connections.marketplace_token_hash IS NULL)::boolean AS plaintext_token
+FROM plugin_github_connections
+WHERE plugin_github_connections.marketplace_token_hash = $1
+   OR (
+       plugin_github_connections.marketplace_token_hash IS NULL
+       AND plugin_github_connections.marketplace_token = $2::text
+   )
+LIMIT 1
+`
+
+type ResolveGitHubConnectionByMarketplaceTokenParams struct {
+	MarketplaceTokenHash pgtype.Text
+	MarketplaceToken     string
+}
+
+type ResolveGitHubConnectionByMarketplaceTokenRow struct {
+	PluginGithubConnection PluginGithubConnection
+	PlaintextToken         bool
+}
+
+// Resolves a marketplace proxy URL token to the upstream connection by the
+// token's hash or, until the marketplace token backfill moves it, through the
+// deprecated plaintext marketplace_token column. One statement reads one
+// snapshot, so a token the backfill moves during a request still resolves.
+// plaintext_token reports which form matched. The token is the auth
+// credential, so there's no project scope to apply ahead of it.
+func (q *Queries) ResolveGitHubConnectionByMarketplaceToken(ctx context.Context, arg ResolveGitHubConnectionByMarketplaceTokenParams) (ResolveGitHubConnectionByMarketplaceTokenRow, error) {
+	row := q.db.QueryRow(ctx, resolveGitHubConnectionByMarketplaceToken, arg.MarketplaceTokenHash, arg.MarketplaceToken)
+	var i ResolveGitHubConnectionByMarketplaceTokenRow
+	err := row.Scan(
+		&i.PluginGithubConnection.ID,
+		&i.PluginGithubConnection.ProjectID,
+		&i.PluginGithubConnection.InstallationID,
+		&i.PluginGithubConnection.RepoOwner,
+		&i.PluginGithubConnection.RepoName,
+		&i.PluginGithubConnection.MarketplaceToken,
+		&i.PluginGithubConnection.OrganizationID,
+		&i.PluginGithubConnection.MarketplaceTokenHash,
+		&i.PluginGithubConnection.MarketplaceTokenEncrypted,
+		&i.PluginGithubConnection.MarketplaceTokenOrgEncrypted,
+		&i.PluginGithubConnection.PublishedFingerprint,
+		&i.PluginGithubConnection.PublishedMcpFingerprints,
+		&i.PluginGithubConnection.PublishedHooksVersion,
+		&i.PluginGithubConnection.PublishedHooksConfig,
+		&i.PluginGithubConnection.CreatedAt,
+		&i.PluginGithubConnection.UpdatedAt,
+		&i.PlaintextToken,
 	)
 	return i, err
 }
@@ -3880,31 +3965,35 @@ SET name = $1,
     slug = $2,
     description = $3,
     auto_sync_enabled = COALESCE($4::boolean, auto_sync_enabled),
+    auto_add_servers_enabled = COALESCE($5::boolean, auto_add_servers_enabled),
     updated_at = clock_timestamp()
-WHERE id = $5
-  AND organization_id = $6
-  AND project_id = $7
+WHERE id = $6
+  AND organization_id = $7
+  AND project_id = $8
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, auto_add_servers_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginParams struct {
-	Name            string
-	Slug            string
-	Description     pgtype.Text
-	AutoSyncEnabled pgtype.Bool
-	ID              uuid.UUID
-	OrganizationID  string
-	ProjectID       uuid.UUID
+	Name                  string
+	Slug                  string
+	Description           pgtype.Text
+	AutoSyncEnabled       pgtype.Bool
+	AutoAddServersEnabled pgtype.Bool
+	ID                    uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
 }
 
-// A NULL auto_sync_enabled argument keeps the plugin's current setting.
+// A NULL auto_sync_enabled or auto_add_servers_enabled argument keeps the
+// plugin's current setting.
 func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, updatePlugin,
 		arg.Name,
 		arg.Slug,
 		arg.Description,
 		arg.AutoSyncEnabled,
+		arg.AutoAddServersEnabled,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -3920,6 +4009,7 @@ func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plu
 		&i.IsDefault,
 		&i.AutoCreated,
 		&i.AutoSyncEnabled,
+		&i.AutoAddServersEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3975,36 +4065,36 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 }
 
 const upsertGitHubConnection = `-- name: UpsertGitHubConnection :one
-INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
+INSERT INTO plugin_github_connections (project_id, organization_id, installation_id, repo_owner, repo_name, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (project_id) DO UPDATE
   SET installation_id = EXCLUDED.installation_id,
+      organization_id = COALESCE(plugin_github_connections.organization_id, EXCLUDED.organization_id),
       repo_owner = EXCLUDED.repo_owner,
       repo_name = EXCLUDED.repo_name,
-      marketplace_token = COALESCE(plugin_github_connections.marketplace_token, EXCLUDED.marketplace_token),
       published_mcp_fingerprints = EXCLUDED.published_mcp_fingerprints,
       published_hooks_version = EXCLUDED.published_hooks_version,
       published_hooks_config = EXCLUDED.published_hooks_config,
       updated_at = clock_timestamp()
-RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
+RETURNING id, project_id, installation_id, repo_owner, repo_name, marketplace_token, organization_id, marketplace_token_hash, marketplace_token_encrypted, marketplace_token_org_encrypted, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 `
 
 type UpsertGitHubConnectionParams struct {
 	ProjectID                uuid.UUID
+	OrganizationID           pgtype.Text
 	InstallationID           int64
 	RepoOwner                string
 	RepoName                 string
-	MarketplaceToken         pgtype.Text
 	PublishedMcpFingerprints []byte
 	PublishedHooksVersion    pgtype.Text
 	PublishedHooksConfig     []byte
 }
 
-// Inserts or refreshes a project's GitHub connection. The marketplace_token
-// argument is the candidate token to use if no token is currently set; on
-// conflict the existing token is preserved via COALESCE so callers can pass a
-// freshly-generated token on every publish without overwriting prior state.
-// Token rotation goes through a separate query. published_mcp_fingerprints,
+// Inserts or refreshes a project's GitHub connection. It never writes the
+// marketplace token. When the connection has no token yet, the publish path
+// stores one through package marketplacetokens, in the same transaction.
+// organization_id is the project's organization; an existing value is kept, so
+// a connection never moves to another organization's key. published_mcp_fingerprints,
 // published_hooks_version, and published_hooks_config record the per-plugin MCP
 // content hashes, the hooks generator version, and the hook-output-affecting
 // config just published; all are always overwritten so subsequent rollout runs
@@ -4016,10 +4106,10 @@ type UpsertGitHubConnectionParams struct {
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.InstallationID,
 		arg.RepoOwner,
 		arg.RepoName,
-		arg.MarketplaceToken,
 		arg.PublishedMcpFingerprints,
 		arg.PublishedHooksVersion,
 		arg.PublishedHooksConfig,
@@ -4032,6 +4122,10 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 		&i.RepoOwner,
 		&i.RepoName,
 		&i.MarketplaceToken,
+		&i.OrganizationID,
+		&i.MarketplaceTokenHash,
+		&i.MarketplaceTokenEncrypted,
+		&i.MarketplaceTokenOrgEncrypted,
 		&i.PublishedFingerprint,
 		&i.PublishedMcpFingerprints,
 		&i.PublishedHooksVersion,

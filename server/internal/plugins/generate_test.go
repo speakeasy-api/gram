@@ -2141,9 +2141,9 @@ func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
 // events. Pin the whole shape — flat ZIP layout, TOML wiring, schema
 // validation, and which credentials ride in which file.
 // allowVibeHooks adds the vibe provider to the pinned release's provider list
-// for the duration of the test. No release carries it yet — the gate opens
-// only when pin-hooks-release pins one — so tests that call this must not be
-// parallel (the list is a package var).
+// for the duration of the test, so the test opens the gate whatever the
+// checked-in pin carries. Tests that call this must not be parallel (the list
+// is a package var).
 func allowVibeHooks(t *testing.T) {
 	t.Helper()
 	SetReleasedHooksProvidersForTest(t, append(append([]string{}, hooksReleaseProviders...), VibeProviderSlugForTest))
@@ -2466,12 +2466,13 @@ func TestHooksConfigHashIgnoresPublishedMarketplaceName(t *testing.T) {
 	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(restamped))
 }
 
-// The vibe gate is closed at the checked-in pin: no pinned release carries
-// the vibe provider yet, so the Vibe observability package is skipped without
-// failing the whole publish, and availability reports false. Not parallel:
-// reads the package var that allowVibeHooks tests write.
-func TestGenerateHooksFilesSkipsVibeUntilReleaseCarriesProvider(t *testing.T) { //nolint:paralleltest // Reads releasedHooksProviders, which sibling tests write.
-	require.NotContains(t, hooksReleaseProviders, VibeProviderSlugForTest, "checked-in pin must not list vibe before a release carries it")
+// When the pinned release does not carry the vibe provider, the Vibe
+// observability package is skipped without failing the whole publish, and
+// availability reports false. The test closes the gate itself, so it holds
+// whatever the checked-in pin carries. Not parallel: writes the
+// releasedHooksProviders package var.
+func TestGenerateHooksFilesSkipsVibeWhenReleaseLacksProvider(t *testing.T) { //nolint:paralleltest // Writes the releasedHooksProviders package var.
+	SetReleasedHooksProvidersForTest(t, slices.DeleteFunc(slices.Clone(hooksReleaseProviders), func(p string) bool { return p == VibeProviderSlugForTest }))
 
 	cfg := GenerateConfig{
 		OrgName:     "Acme",
@@ -4661,7 +4662,7 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 		"Directory groups cannot narrow it",
 		"blocks servers people use today",
 		"`confirmed: false`",
-		"Local commands cannot be linked",
+		"Local commands cannot have an official server",
 		"never guess an ID",
 		"obtain confirmation again",
 	} {
@@ -5062,6 +5063,181 @@ func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
 	require.Len(t, cfg.Hooks, len(CopilotObservabilityHookEvents))
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
+}
+
+type installFailureReport struct {
+	key, project string
+	body         map[string]any
+}
+
+func installFailureServer(t *testing.T, download http.HandlerFunc) (*httptest.Server, chan installFailureReport) {
+	t.Helper()
+	reports := make(chan installFailureReport, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rpc/hooks.ingest" {
+			download(w, r)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode report: %v", err)
+		}
+		reports <- installFailureReport{key: r.Header.Get("Gram-Key"), project: r.Header.Get("Gram-Project"), body: body}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(server.Close)
+	return server, reports
+}
+
+func writeInstallFailureConfig(t *testing.T, serverURL, apiKey string) string {
+	t.Helper()
+	config, err := renderHooksConfig(GenerateConfig{ServerURL: serverURL, ProjectSlug: "default", HooksAPIKey: apiKey})
+	require.NoError(t, err)
+	path := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(path, config, 0o600))
+	return path
+}
+
+func TestHooksBootstrapReportsInstallFailures(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nexit 0\n"))
+
+	for _, tt := range []struct {
+		name     string
+		download http.HandlerFunc
+		cause    string
+	}{
+		{name: "checksum mismatch", download: func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(archive) }, cause: "checksum_mismatch"},
+		{name: "download failure", download: func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) }, cause: "download"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			server, reports := installFailureServer(t, tt.download)
+			config := writeInstallFailureConfig(t, server.URL, "gram_test_key")
+			script := renderHooksBootstrapForRelease("0.3.46", map[string]hooksBinaryTarget{
+				target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+			}, false, "releases.test")
+
+			out, err := runHooksBootstrap(t, script, t.TempDir(), "payload", "--config="+config, "agenthooks", "run", "--provider=claude")
+			require.Error(t, err, string(out))
+
+			var report installFailureReport
+			select {
+			case report = <-reports:
+			default:
+				require.FailNow(t, "no install failure report was sent", string(out))
+			}
+			require.Equal(t, "gram_test_key", report.key)
+			require.Equal(t, "default", report.project)
+			require.Equal(t, "hook.ingest.v1", report.body["schema_version"])
+			event, _ := report.body["event"].(map[string]any)
+			require.Equal(t, "client.install_failed", event["type"])
+			data, _ := report.body["data"].(map[string]any)
+			install, _ := data["install_failure"].(map[string]any)
+			require.Equal(t, tt.cause, install["cause"])
+			require.Equal(t, "0.3.46", install["version"])
+			require.Equal(t, runtime.GOOS, install["os"])
+			require.Equal(t, runtime.GOARCH, install["arch"])
+			require.Equal(t, "claude", install["harness"])
+			require.Equal(t, event["occurred_at"], install["attempted_at"])
+		})
+	}
+}
+
+func TestHooksBootstrapReportsInstallFailureOncePerHour(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	server, reports := installFailureServer(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	config := writeInstallFailureConfig(t, server.URL, "gram_test_key")
+	script := renderHooksBootstrapForRelease("0.3.46", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+	}, false, "releases.test")
+	cache := t.TempDir()
+
+	for range 3 {
+		out, err := runHooksBootstrap(t, script, cache, "payload", "--config="+config, "agenthooks", "run", "--provider=claude")
+		require.Error(t, err, string(out))
+	}
+	require.Len(t, reports, 1)
+}
+
+func TestHooksBootstrapSkipsInstallFailureReportWithoutKey(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	server, reports := installFailureServer(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	config := writeInstallFailureConfig(t, server.URL, "")
+	script := renderHooksBootstrapForRelease("0.3.46", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+	}, true, "releases.test")
+
+	out, err := runHooksBootstrap(t, script, t.TempDir(), "payload", "--config="+config, "agenthooks", "run", "--provider=claude")
+	require.NoError(t, err, string(out))
+	require.Contains(t, string(out), "download failed")
+	require.Empty(t, reports)
+}
+
+func TestHooksPowerShellBootstrapReportsInstallFailures(t *testing.T) {
+	t.Parallel()
+	script := string(renderHooksPowerShellBootstrap(GenerateConfig{ServerURL: "https://app.example.com"}))
+	require.Contains(t, script, `function Send-InstallFailure`)
+	require.Contains(t, script, `Exit-InstallFailure "download failed" "download"`)
+	require.Contains(t, script, `Exit-InstallFailure "downloaded archive checksum mismatch" "checksum_mismatch"`)
+	require.Contains(t, script, `type = "client.install_failed"`)
+	require.Contains(t, script, `-TimeoutSec 3 -MaximumRedirection 0`)
+}
+
+func TestHooksBootstrapRejectsUnsafeReportURL(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	server, reports := installFailureServer(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	disguised := strings.Replace(server.URL, "http://", "http://localhost:pw@", 1)
+	config := writeInstallFailureConfig(t, disguised, "gram_test_key")
+	script := renderHooksBootstrapForRelease("0.3.46", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+	}, false, "releases.test")
+
+	out, err := runHooksBootstrap(t, script, t.TempDir(), "payload", "--config="+config, "agenthooks", "run", "--provider=claude")
+	require.Error(t, err, string(out))
+	require.Empty(t, reports)
+}
+
+func TestHooksBootstrapReportsInstallFailureWithWget(t *testing.T) {
+	t.Parallel()
+	_, err := exec.LookPath("wget")
+	require.NoError(t, err, "wget is required for this test")
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nexit 0\n"))
+	server, reports := installFailureServer(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(archive) })
+	config := writeInstallFailureConfig(t, server.URL, "gram_test_key")
+	script := renderHooksBootstrapForRelease("0.3.46", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: strings.Repeat("0", 64)},
+	}, false, "releases.test")
+
+	path := hooksBootstrapToolPath(t)
+	if err := os.Remove(filepath.Join(path, "curl")); err != nil {
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
+	for _, tool := range []string{"wget", "sed", "head", "date", "timeout", "cat", "find"} {
+		if resolved, err := exec.LookPath(tool); err == nil {
+			require.NoError(t, os.Symlink(resolved, filepath.Join(path, tool)))
+		}
+	}
+
+	out, err := runHooksBootstrapWithEnv(t, script, []string{"SPEAKEASY_AI_HOOKS_HOME=" + t.TempDir(), "PATH=" + path}, "payload", "--config="+config, "agenthooks", "run", "--provider=claude")
+	require.Error(t, err, string(out))
+
+	var report installFailureReport
+	select {
+	case report = <-reports:
+	default:
+		require.FailNow(t, "no install failure report was sent", string(out))
+	}
+	require.Equal(t, "gram_test_key", report.key)
+	require.Equal(t, "default", report.project)
+	data, _ := report.body["data"].(map[string]any)
+	install, _ := data["install_failure"].(map[string]any)
+	require.Equal(t, "checksum_mismatch", install["cause"])
 }
 
 func TestHooksVersionPolicy(t *testing.T) {

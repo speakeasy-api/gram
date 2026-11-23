@@ -308,6 +308,31 @@ func TestProviderHealth_BlockedStopIsNotAFailure(t *testing.T) {
 	require.Empty(t, report.Abandoned)
 }
 
+// Address rows keep the configured host, and still never count as the provider's failures.
+func TestProviderHealth_AddressRowsWithAHostAreNotCounted(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "account.box.com")
+	orgs := []string{"org-" + uuid.NewString(), "org-" + uuid.NewString(), "org-" + uuid.NewString()}
+	for i := range 6 {
+		code := CodeAddressNotAllowed
+		if i%2 == 1 {
+			code = CodeAddressNotFound
+		}
+		attempt := f.attempt(orgs[i%len(orgs)], 10*time.Minute)
+		f.write(attempt, f.step(StepProviderRefresh, code, true))
+		row, err := RowAt(attempt, StepProviderRefresh, code, true, attempt.StartedAt(), Provider("https://account.box.com/oauth"))
+		require.NoError(t, err)
+		require.Equal(t, "account.box.com", row.ProviderHost)
+	}
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, ProviderNormal, report.Status)
+	require.Equal(t, uint64(6), report.Counts.Attempts, "the host is kept, so the attempts are the provider's")
+	require.Zero(t, report.Counts.Failures)
+	require.Zero(t, report.Counts.Organizations)
+}
+
 func TestProviderHealth_RelabelsStoredDailyProviders(t *testing.T) {
 	t.Parallel()
 
@@ -359,4 +384,35 @@ func TestProviderHealth_FewSignInAbandonsStayNormal(t *testing.T) {
 
 	report := f.read(time.Hour, 0)
 	require.Equal(t, ProviderNormal, report.Status, "one organization's closed tabs cannot trip it")
+}
+
+// A gateway listing's failure leaves provider health as it was; the call failing in the same outage counts once.
+func TestProviderHealth_ListingFailuresAreNotCounted(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.cloudflare.com")
+	org, member := "org-"+uuid.NewString(), uuid.New()
+	failed := func(step Step, final bool) func(Attempt, time.Time) (Row, error) {
+		return func(a Attempt, at time.Time) (Row, error) {
+			return RowAt(a, step, CodeProviderServerError, final, at, Provider("https://"+f.provider+"/mcp"), Member(member))
+		}
+	}
+	gateway := func() Attempt {
+		return AttemptAt(uuid.New(), f.now.Add(-10*time.Minute), GatewayScope(org, uuid.New(), uuid.New(), AppDCR))
+	}
+	f.write(gateway(), failed(StepDiscoveryMember, true))
+	listingOnly := f.read(time.Hour, 0)
+	require.Zero(t, listingOnly.Counts.Attempts, "a listing alone names no provider")
+	require.Empty(t, listingOnly.Failures)
+
+	f.write(gateway(), failed(StepMCPRequest, true))
+	// A sign-in attempt that stopped on a failed listing is the sign-in provider's attempt, not its failure.
+	f.write(f.attempt(org, 90*time.Minute), f.step(StepProviderSignIn, ResultSignedIn, false), failed(StepDiscoveryMember, false))
+	report := f.read(time.Hour, 0)
+	require.Equal(t, uint64(2), report.Counts.Attempts, "the call and the sign-in, not the listing")
+	require.Equal(t, uint64(1), report.Counts.Failures, "the call alone")
+	require.ElementsMatch(t, []ProviderFailure{
+		{Step: StepMCPRequest.String(), Reason: CodeProviderServerError.String(), Attempts: 1},
+		{Step: StepDiscoveryMember.String(), Reason: CodeProviderServerError.String(), Attempts: 1},
+	}, report.Failures, "how attempts ended, which the sign-in's listing did as before")
 }

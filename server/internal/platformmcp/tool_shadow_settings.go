@@ -1,4 +1,4 @@
-//nolint:exhaustruct // MCP manifests intentionally rely on optional zero values.
+//nolint:exhaustruct_v5 // MCP manifests intentionally rely on optional zero values.
 package platformmcp
 
 import (
@@ -16,20 +16,21 @@ func registerShadowSettingsTools(reg *Registrar, service *ShadowMCPSettingsServi
 	defaultAccess := &mcp.Tool{
 		Name:  operationSetShadowMCPDefaultAccess,
 		Title: "Set a Project's Shadow MCP Default Access",
-		Description: "Choose what a project does with an MCP server nobody decided on, as the Shadow MCP page's mode switch does. allowed: every server connects unless an administrator denies it; the managed Shadow MCP policy is removed, and denials and official server links still apply. blocked: every server nobody approved is blocked, including servers people use today; it creates or edits the managed Shadow MCP policy, for everyone or, with role references from list_plugin_assignments, only for those roles. " +
+		Description: "Choose what a project does with an MCP server nobody decided on, as the Shadow MCP page's mode switch does. allowed: every server connects unless an administrator denies it; the managed Shadow MCP policy is removed, and denials and official servers still apply. blocked: every server nobody approved is blocked, including servers people use today; it creates or edits the managed Shadow MCP policy, for everyone or, with role references from list_plugin_assignments, only for those roles. " +
 			"Refused unchanged when a Guardrails policy holds the setting (default_access.held_by is shadow_ai or guardrails); that policy is changed in Guardrails. Requires default_access.version from list_shadow_mcp_inventory or get_shadow_mcp_review as expected_version and a stable idempotency key; call it with confirmed false to preview the change without writing, then with confirmed true after the user approves. The policy, its audience, the audit record and the receipt commit together, and the result carries the default access read after the write.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)},
 	}
 	officialServer := &mcp.Tool{
 		Name:  operationSetShadowMCPOfficialServer,
-		Title: "Link a Shadow MCP Server to Its Official Server",
-		Description: "Manage the link from one remote Shadow MCP server to the project MCP server that is its official version. link: make mcp_id (from find_mcp, or suggested_official_server.mcp_id) the official version; agents connecting to the Shadow MCP server directly are then blocked and sent to the official server, whatever the default access. switch_off: keep the link but let direct use follow the ordinary Shadow MCP rules. switch_on: block direct use again. remove: delete the link. " +
-			"The target is the opaque target_reference from list_shadow_mcp_inventory or get_shadow_mcp_review; local commands cannot be linked, and the MCP server must be live and turned on in the same project. Requires the target's official_link_version as expected_version and a stable idempotency key; call it with confirmed false to preview the change without writing, then with confirmed true after the user approves. The link, the audit record and the receipt commit together, and the result carries the target's review read after the write.",
+		Title: "Choose a Shadow MCP Server's Official Server",
+		Description: "Choose which project MCP server is the official version of one remote Shadow MCP server, as the Shadow MCP page's Make official sheet does. While a server is official and has an address, agents that connect to the Shadow MCP server directly are blocked wherever a Shadow MCP policy applies and sent to the official server. " +
+			"make_official: make mcp_id (from find_mcp, or suggested_official_server.mcp_id) the official version, replacing any automatic choice. keep_shadow: keep using the Shadow MCP server directly, so no server is official, not even one that proxies to its URL. automatic: remove the administrator's choice, so a project MCP server that proxies to the URL is official again when automatic links are on. " +
+			"The target is the opaque target_reference from list_shadow_mcp_inventory or get_shadow_mcp_review; local commands cannot have an official server, and the MCP server must be live and turned on in the same project. Requires the target's official_link_version as expected_version and a stable idempotency key; call it with confirmed false to preview the change without writing, then with confirmed true after the user approves. The choice, the audit record and the receipt commit together, and the result carries the target's review read after the write.",
 		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), IdempotentHint: true, OpenWorldHint: new(false)},
 	}
 	if service == nil || !service.valid() {
 		defaultAccess.Description = "Set what a project does with an MCP server nobody decided on. This is not switched on for your organization yet."
-		officialServer.Description = "Link a Shadow MCP server to its official MCP server. This is not switched on for your organization yet."
+		officialServer.Description = "Choose a Shadow MCP server's official MCP server. This is not switched on for your organization yet."
 		addTool(reg, defaultAccess, meta, unavailableShadowSettingsTool[SetShadowMCPDefaultAccessInput, SetShadowMCPDefaultAccessOutput])
 		addTool(reg, officialServer, meta, unavailableShadowSettingsTool[SetShadowMCPOfficialServerInput, SetShadowMCPOfficialServerOutput])
 		return

@@ -88,7 +88,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
@@ -102,10 +105,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"golang.org/x/oauth2"
 
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/redisswitch"
 )
 
 func noopShutdown(context.Context) error { return nil }
@@ -470,7 +475,7 @@ type redisClientOptions struct {
 
 func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
 	db := 0
-	redisClient := redis.NewClient(&redis.Options{
+	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
 		Addr:            opts.redisAddr,
 		Password:        opts.redisPassword,
 		DB:              db,
@@ -478,7 +483,10 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 		ReadTimeout:     300 * time.Millisecond,
 		WriteTimeout:    1 * time.Second,
 		DisableIdentity: true,
-	})
+	}, redisswitch.DefaultRole, redisswitch.NextFromEnv())
+	if err != nil {
+		return nil, fmt.Errorf("create redis client: %w", err)
+	}
 
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis connection failed: %w", err)
@@ -947,6 +955,7 @@ func newAdminOpenRouter(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	c *cli.Context,
+	staffOrg staff.Organization,
 ) admin.AdminOpenRouter {
 	env := c.String("environment")
 	if env == "local" {
@@ -975,6 +984,7 @@ func newAdminOpenRouter(
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
 		encryptionClient,
+		staffOrg,
 	)
 }
 
@@ -1028,7 +1038,10 @@ func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*
 	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
-	case "local":
+	case functions.ProviderDisabled:
+		warnIgnoredFunctionsFlags(ctx, c, logger, "functions-tigris-bucket-uri", "functions-tigris-key", "functions-tigris-secret")
+		return nil, nilShutdown, nil
+	case functions.ProviderLocal:
 		tmpDir, err := os.MkdirTemp("", "gram-tigris-")
 		if err != nil {
 			return nil, nilShutdown, fmt.Errorf("create temp dir for mock tigris store: %w", err)
@@ -1052,7 +1065,7 @@ func newTigrisStore(ctx context.Context, c *cli.Context, logger *slog.Logger) (*
 		store := assets.NewFSBlobStore(logger, root)
 
 		return assets.NewTigrisStore(store), shutdown, nil
-	case "flyio":
+	case functions.ProviderFlyIO:
 		tigrisBucketURI := c.String("functions-tigris-bucket-uri")
 		tigrisKey := c.String("functions-tigris-key")
 		tigrisSecret := c.String("functions-tigris-secret")
@@ -1096,7 +1109,10 @@ func newFunctionOrchestrator(
 	nilShutdown := noopShutdown
 
 	switch provider := c.String("functions-provider"); provider {
-	case "local":
+	case functions.ProviderDisabled:
+		warnIgnoredFunctionsFlags(c.Context, c, logger, "functions-flyio-api-token", "functions-flyio-org")
+		return functions.Disabled{}, nilShutdown, nil
+	case functions.ProviderLocal:
 		codeRootDir := filepath.Clean(c.String("functions-local-runner-root"))
 		if codeRootDir == "" {
 			return nil, nilShutdown, fmt.Errorf("--functions-local-runner-root must be set in local environment")
@@ -1113,7 +1129,7 @@ func newFunctionOrchestrator(
 		}
 
 		return functions.NewLocalRunner(logger, tracerProvider, codeRootDir, serverURL, assetStore), nilShutdown, nil
-	case "flyio":
+	case functions.ProviderFlyIO:
 		surl := c.String("server-url")
 		tokenstr := c.String("functions-flyio-api-token")
 		ociImage := c.String("functions-runner-oci-image")
@@ -1737,7 +1753,7 @@ func newPersistentLocalKMSClient(alg jose.SignatureAlgorithm) (*gcpkms.LocalSign
 // in-process client kmsSigningClients hands the assertion signer, so a revoked
 // key version is refused by both and the signing algorithm agrees; managed keys
 // are RS256, so any other configured local algorithm leaves the feature off.
-func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory, auditLogger *audit.Logger, serverURL *url.URL) (*identityproviderconnections.Provisioner, error) {
+func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory, auditLogger *audit.Logger, clientSecrets *clientsecrets.Secrets, serverURL *url.URL) (*identityproviderconnections.Provisioner, error) {
 	rawCredentialID := strings.TrimSpace(c.String(identityProviderSigningCredentialIDFlag))
 	if rawCredentialID == "" {
 		logger.WarnContext(ctx, "identity provider connections are unavailable: no signing credential configured")
@@ -1780,7 +1796,7 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 		}
 	}
 
-	provisioner, err := identityproviderconnections.NewProvisioner(logger, db, gcpIdentity, kmsClients, auditLogger, identityproviderconnections.Config{
+	provisioner, err := identityproviderconnections.NewProvisioner(logger, db, gcpIdentity, kmsClients, auditLogger, clientSecrets, identityproviderconnections.Config{
 		KeyRing:               keyRing,
 		SigningCredentialID:   credentialID,
 		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
@@ -1927,19 +1943,27 @@ func newKMSEncryptionClients(ctx context.Context, logger *slog.Logger, c *cli.Co
 // environment dev and opt out explicitly.
 var orgEncryptionOptionalEnvironments = []string{"local", "test"}
 
-// orgEncryptionDeps is a process's organization encryption. Both fields are nil
-// when organization encryption is off, and every consumer then fails closed.
+// orgEncryptionDeps is a process's organization encryption. Service and
+// Provisioner are nil when organization encryption is off; Transitions is
+// always set, so consumers serve platform_key and fail closed otherwise.
 type orgEncryptionDeps struct {
 	// Service encrypts and decrypts organization data.
 	Service *orgencryption.Service
 
 	// Provisioner mints, switches and retires organization keys.
 	Provisioner *orgencryption.Provisioner
+
+	// Transitions reads each organization's transition state, which decides
+	// whether a use case seals with the platform key or the organization's
+	// key. It is set even when organization encryption is off: the process
+	// then serves organizations in platform_key and fails closed for the rest.
+	Transitions *orgencryption.Transitions
 }
 
-// newOrgEncryption builds the organization encryption service and
-// provisioner. It returns the zero value when organization encryption is off,
-// and an error when it is misconfigured or required but not configured.
+// newOrgEncryption builds the organization encryption service, provisioner
+// and transition state. Service and Provisioner are nil when organization
+// encryption is off, and it returns an error when organization encryption is
+// misconfigured or required but not configured.
 func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, auditLogger *audit.Logger) (orgEncryptionDeps, error) {
 	environment := c.String("environment")
 	rawCredentialID := strings.TrimSpace(c.String(orgEncryptionCredentialIDFlag))
@@ -1949,7 +1973,7 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 			return orgEncryptionDeps{}, errors.New("organization encryption is disabled but a platform credential is configured: unset GRAM_ORG_ENCRYPTION_DISABLED or GRAM_ORG_ENCRYPTION_CREDENTIAL_ID")
 		}
 		logger.WarnContext(ctx, "organization encryption is disabled by configuration")
-		return orgEncryptionDeps{Service: nil, Provisioner: nil}, nil
+		return orgEncryptionDeps{Service: nil, Provisioner: nil, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, nil)}, nil
 	}
 
 	if rawCredentialID == "" {
@@ -1957,7 +1981,7 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 			return orgEncryptionDeps{}, fmt.Errorf("organization encryption is required in the %q environment: set GRAM_ORG_ENCRYPTION_CREDENTIAL_ID, or set GRAM_ORG_ENCRYPTION_DISABLED to run without it", environment)
 		}
 		logger.WarnContext(ctx, "organization encryption is unavailable: no platform credential configured")
-		return orgEncryptionDeps{Service: nil, Provisioner: nil}, nil
+		return orgEncryptionDeps{Service: nil, Provisioner: nil, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, nil)}, nil
 	}
 
 	credentialID, err := uuid.Parse(rawCredentialID)
@@ -2000,7 +2024,37 @@ func newOrgEncryption(ctx context.Context, logger *slog.Logger, c *cli.Context, 
 
 	logger.InfoContext(ctx, "organization encryption is enabled")
 
-	return orgEncryptionDeps{Service: service, Provisioner: provisioner}, nil
+	return orgEncryptionDeps{Service: service, Provisioner: provisioner, Transitions: newOrgEncryptionTransitions(logger, db, auditLogger, provisioner)}, nil
+}
+
+// newOrgEncryptionTransitions builds the process's transition state. A nil
+// provisioner leaves the process able to read state but not change it.
+func newOrgEncryptionTransitions(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, provisioner *orgencryption.Provisioner) *orgencryption.Transitions {
+	return orgencryption.NewTransitions(logger, db, auditLogger, provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: 0})
+}
+
+// Cipher builds a cipher that seals and opens values moving from the platform
+// key to organization keys, sharing the process's transition state cache.
+func (d orgEncryptionDeps) Cipher(logger *slog.Logger, platform *encryption.Client) *orgencryption.Cipher {
+	return orgencryption.NewCipher(logger, platform, d.Service, d.Transitions)
+}
+
+// ClientSecrets builds the seal and storage seam for remote session client
+// secrets over the process's organization encryption.
+func (d orgEncryptionDeps) ClientSecrets(logger *slog.Logger, platform *encryption.Client) *clientsecrets.Secrets {
+	return clientsecrets.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// UpstreamTokens builds the stored upstream OAuth token seam over the
+// process's organization encryption and transition state.
+func (d orgEncryptionDeps) UpstreamTokens(logger *slog.Logger, platform *encryption.Client) *upstreamtokens.Tokens {
+	return upstreamtokens.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// MarketplaceTokens builds the plugin marketplace token seam over the
+// process's organization encryption and transition state.
+func (d orgEncryptionDeps) MarketplaceTokens(logger *slog.Logger, platform *encryption.Client) *marketplacetokens.Tokens {
+	return marketplacetokens.New(logger, d.Cipher(logger, platform), platform)
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.

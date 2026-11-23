@@ -91,8 +91,8 @@ func TestEngineRequireAny_mapsDeniedToForbidden(t *testing.T) {
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeMCPConnect, "tool_a")})
 
 	err := engine.RequireAny(ctx,
-		MCPCheck(ScopeMCPConnect, "tool_b", testProjectID),
-		MCPCheck(ScopeMCPConnect, "tool_c", testProjectID),
+		MCPServer(MCPServerIDFrom("tool_b"), ProjectIDFrom(testProjectID)).Connect(),
+		MCPServer(MCPServerIDFrom("tool_c"), ProjectIDFrom(testProjectID)).Connect(),
 	)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -221,8 +221,8 @@ func TestEngineFilter_mcpWriteBlocklistExcludesProjectScopedResources(t *testing
 	})
 
 	resourceIDs, err := engine.Filter(ctx, []Check{
-		MCPCheck(ScopeMCPWrite, "server_in_project", projectID),
-		MCPCheck(ScopeMCPWrite, "server_other_project", "project_other"),
+		MCPServer(MCPServerIDFrom("server_in_project"), ProjectIDFrom(projectID)).Write(),
+		MCPServer(MCPServerIDFrom("server_other_project"), ProjectIDFrom("project_other")).Write(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"server_other_project"}, resourceIDs)
@@ -252,8 +252,8 @@ func TestEngineFilter_withDimensions(t *testing.T) {
 
 	// Only tool_1 matches the grant — one resource ID returned.
 	results, err := engine.Filter(ctx, []Check{
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "tool_1", Disposition: "", ProjectID: testProjectID}),
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "tool_2", Disposition: "", ProjectID: testProjectID}),
+		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("tool_1", ""),
+		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("tool_2", ""),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolsetA"}, results)
@@ -275,8 +275,8 @@ func TestEngineFilter_withDisposition(t *testing.T) {
 
 	// read_only disposition matches, destructive does not.
 	results, err := engine.Filter(ctx, []Check{
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "safe_tool", Disposition: "read_only", ProjectID: testProjectID}),
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "risky_tool", Disposition: "destructive", ProjectID: testProjectID}),
+		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("safe_tool", "read_only"),
+		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("risky_tool", "destructive"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"toolsetA"}, results)
@@ -291,8 +291,8 @@ func TestEngineFilter_serverLevelGrantAllowsAllDimensions(t *testing.T) {
 
 	// Server-level grant (no tool/disposition keys) allows everything.
 	results, err := engine.Filter(ctx, []Check{
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "any_tool", Disposition: "destructive", ProjectID: testProjectID}),
-		MCPToolCallCheck("toolsetA", MCPToolCallDimensions{Tool: "other_tool", Disposition: "read_only", ProjectID: testProjectID}),
+		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("any_tool", "destructive"),
+		MCPServer(MCPServerIDFrom("toolsetA"), ProjectIDFrom(testProjectID)).ToolCall("other_tool", "read_only"),
 	})
 	require.NoError(t, err)
 	require.Len(t, results, 2)
@@ -314,8 +314,8 @@ func TestEngineFilter_projectScopedGrantMatchesServersInProject(t *testing.T) {
 
 	// Server in proj_A matches; server in proj_B does not.
 	results, err := engine.Filter(ctx, []Check{
-		MCPCheck(ScopeMCPConnect, "serverX", "proj_A"),
-		MCPCheck(ScopeMCPConnect, "serverY", "proj_B"),
+		MCPServer(MCPServerIDFrom("serverX"), ProjectIDFrom("proj_A")).Connect(),
+		MCPServer(MCPServerIDFrom("serverY"), ProjectIDFrom("proj_B")).Connect(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"serverX"}, results)
@@ -336,17 +336,11 @@ func TestEngineRequire_projectScopedGrantAllowsToolsInProject(t *testing.T) {
 	})
 
 	// Tool call on server in proj_A should pass.
-	err := engine.Require(ctx, MCPToolCallCheck("serverX", MCPToolCallDimensions{
-		Tool:      "my_tool",
-		ProjectID: "proj_A",
-	}))
+	err := engine.Require(ctx, MCPServer(MCPServerIDFrom("serverX"), ProjectIDFrom("proj_A")).ToolCall("my_tool", ""))
 	require.NoError(t, err)
 
 	// Tool call on server in proj_B should fail.
-	err = engine.Require(ctx, MCPToolCallCheck("serverY", MCPToolCallDimensions{
-		Tool:      "my_tool",
-		ProjectID: "proj_B",
-	}))
+	err = engine.Require(ctx, MCPServer(MCPServerIDFrom("serverY"), ProjectIDFrom("proj_B")).ToolCall("my_tool", ""))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -367,11 +361,11 @@ func TestEngineRequire_projectScopedMCPReadGrant(t *testing.T) {
 	})
 
 	// mcp:read check for server in proj_A passes.
-	err := engine.Require(ctx, MCPCheck(ScopeMCPRead, "serverX", "proj_A"))
+	err := engine.Require(ctx, MCPServer(MCPServerIDFrom("serverX"), ProjectIDFrom("proj_A")).Read())
 	require.NoError(t, err)
 
 	// mcp:read check for server in proj_B fails.
-	err = engine.Require(ctx, MCPCheck(ScopeMCPRead, "serverY", "proj_B"))
+	err = engine.Require(ctx, MCPServer(MCPServerIDFrom("serverY"), ProjectIDFrom("proj_B")).Read())
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -395,9 +389,9 @@ func TestEngineFilter_projectAndServerGrantsCombine(t *testing.T) {
 	})
 
 	results, err := engine.Filter(ctx, []Check{
-		MCPCheck(ScopeMCPConnect, "serverX", "proj_A"), // matches project grant
-		MCPCheck(ScopeMCPConnect, "serverY", "proj_B"), // no match
-		MCPCheck(ScopeMCPConnect, "serverZ", "proj_B"), // matches server grant
+		MCPServer(MCPServerIDFrom("serverX"), ProjectIDFrom("proj_A")).Connect(), // matches project grant
+		MCPServer(MCPServerIDFrom("serverY"), ProjectIDFrom("proj_B")).Connect(), // no match
+		MCPServer(MCPServerIDFrom("serverZ"), ProjectIDFrom("proj_B")).Connect(), // matches server grant
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"serverX", "serverZ"}, results)
@@ -720,7 +714,7 @@ func TestEngineEvaluate_trueWhenGranted(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeChatRead, WildcardResource)})
 
-	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(ctx, Chat(ChatIDFrom("proj_123")).Read())
 	require.NoError(t, err)
 	require.True(t, allowed)
 }
@@ -730,7 +724,7 @@ func TestEngineEvaluate_falseWhenUnsatisfied(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(ctx, Chat(ChatIDFrom("proj_123")).Read())
 	require.NoError(t, err)
 	require.False(t, allowed)
 }
@@ -739,7 +733,7 @@ func TestEngineEvaluate_errorsWhenGrantsMissing(t *testing.T) {
 	t.Parallel()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 
-	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(enterpriseSessionCtx(t), Chat(ChatIDFrom("proj_123")).Read())
 	require.False(t, allowed)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -759,7 +753,7 @@ func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtxWithOrg(t, orgID), []Grant{NewGrant(ScopeProjectRead, WildcardResource)})
 
-	allowed, err := engine.Evaluate(ctx, ChatReadCheck("proj_123"))
+	allowed, err := engine.Evaluate(ctx, Chat(ChatIDFrom("proj_123")).Read())
 	require.NoError(t, err)
 	require.False(t, allowed)
 
@@ -941,10 +935,10 @@ func TestEngineRequire_assistantProjectGrantCoversProjectAssistants(t *testing.T
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{projectAssistantGrant(ScopeAssistantWrite, "project_a")})
 
-	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
-	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_2", "project_a")))
-	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "project_a", "project_a")))
-	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_3", "project_b")))
+	require.NoError(t, engine.Require(ctx, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Write()))
+	require.NoError(t, engine.Require(ctx, Assistant(AssistantIDFrom("assistant_2"), ProjectIDFrom("project_a")).Read()))
+	require.NoError(t, engine.Require(ctx, Assistants(ProjectIDFrom("project_a")).Write()))
+	requireForbidden(t, engine.Require(ctx, Assistant(AssistantIDFrom("assistant_3"), ProjectIDFrom("project_b")).Read()))
 }
 
 func TestEngineRequire_assistantGrantNarrowedToOneAssistant(t *testing.T) {
@@ -952,15 +946,15 @@ func TestEngineRequire_assistantGrantNarrowedToOneAssistant(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeAssistantWrite, "assistant_1")})
 
-	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
-	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
-	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_2", "project_a")))
+	require.NoError(t, engine.Require(ctx, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Write()))
+	require.NoError(t, engine.Require(ctx, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Read()))
+	requireForbidden(t, engine.Require(ctx, Assistant(AssistantIDFrom("assistant_2"), ProjectIDFrom("project_a")).Write()))
 	// Project-level operations such as creating an assistant need a project-wide grant.
-	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "project_a", "project_a")))
+	requireForbidden(t, engine.Require(ctx, Assistants(ProjectIDFrom("project_a")).Write()))
 
 	allowed, err := engine.Filter(ctx, []Check{
-		AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a"),
-		AssistantCheck(ScopeAssistantRead, "assistant_2", "project_a"),
+		Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Read(),
+		Assistant(AssistantIDFrom("assistant_2"), ProjectIDFrom("project_a")).Read(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{"assistant_1"}, allowed)
@@ -974,18 +968,18 @@ func TestEngineRequire_assistantBlocklistExpansion(t *testing.T) {
 		NewGrant(ScopeAssistantBlockedWrite, "assistant_1"),
 	})
 
-	require.NoError(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantWrite, "assistant_2", "project_a")))
-	require.NoError(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
-	requireForbidden(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+	require.NoError(t, engine.Require(blockedWriteCtx, Assistant(AssistantIDFrom("assistant_2"), ProjectIDFrom("project_a")).Write()))
+	require.NoError(t, engine.Require(blockedWriteCtx, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Read()))
+	requireForbidden(t, engine.Require(blockedWriteCtx, Assistant(AssistantIDFrom("assistant_1"), ProjectIDFrom("project_a")).Write()))
 
 	blockedProjectCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeAssistantWrite, WildcardResource),
 		projectAssistantGrant(ScopeAssistantBlockedRead, "project_a"),
 	})
 	for _, scope := range []Scope{ScopeAssistantRead, ScopeAssistantWrite} {
-		requireForbidden(t, engine.Require(blockedProjectCtx, AssistantCheck(scope, "assistant_1", "project_a")))
+		requireForbidden(t, engine.Require(blockedProjectCtx, assistantCheck(scope, "assistant_1", "project_a")))
 	}
-	require.NoError(t, engine.Require(blockedProjectCtx, AssistantCheck(ScopeAssistantRead, "assistant_9", "project_b")))
+	require.NoError(t, engine.Require(blockedProjectCtx, Assistant(AssistantIDFrom("assistant_9"), ProjectIDFrom("project_b")).Read()))
 }
 
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {

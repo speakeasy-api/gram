@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
+	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -33,16 +34,11 @@ const (
 	operationSetShadowMCPDefaultAccess  = "set_shadow_mcp_default_access"
 	operationSetShadowMCPOfficialServer = "set_shadow_mcp_official_server"
 
-	shadowOfficialLinkVersionDomain = "shadow_official_link"
+	shadowOfficialLinkVersionDomain = "shadow_official_choice"
 
-	shadowOfficialLinkActionLink      = "link"
-	shadowOfficialLinkActionSwitchOff = "switch_off"
-	shadowOfficialLinkActionSwitchOn  = "switch_on"
-	shadowOfficialLinkActionRemove    = "remove"
-
-	shadowOfficialLinkOn   = "on"
-	shadowOfficialLinkOff  = "off"
-	shadowOfficialLinkNone = "none"
+	shadowOfficialActionMakeOfficial = "make_official"
+	shadowOfficialActionKeepShadow   = "keep_shadow"
+	shadowOfficialActionAutomatic    = "automatic"
 
 	shadowSettingChanged   = "changed"
 	shadowSettingUnchanged = "unchanged"
@@ -94,7 +90,7 @@ func (s *ShadowMCPSettingsService) cleanPolicyResults(ctx context.Context, proje
 }
 
 func NewShadowMCPSettingsService(db *pgxpool.Pool, shadow *ShadowInventoryService, audiences shadowDecisionAudienceResolver, policies *policycore.Core, links *officiallink.Writer, flags feature.Provider, organizations OrganizationSlugResolver, budget OperationBudget) *ShadowMCPSettingsService {
-	return &ShadowMCPSettingsService{db: db, shadow: shadow, audiences: audiences, policies: policies, links: links, flags: flags, organizations: organizations, budget: budget, now: time.Now}
+	return &ShadowMCPSettingsService{db: db, shadow: shadow, audiences: audiences, policies: policies, links: links, flags: flags, organizations: organizations, budget: budget, now: time.Now, cleaner: nil, cleanerLogger: nil}
 }
 
 func (s *ShadowMCPSettingsService) valid() bool {
@@ -138,8 +134,8 @@ type SetShadowMCPOfficialServerInput struct {
 	// ProjectID replaces ProjectSlug before the handler runs: the ID of the project it names.
 	ProjectID       string `json:"-"`
 	TargetReference string `json:"target_reference" jsonschema:"short-lived opaque target reference of a remote Shadow MCP server, returned by list_shadow_mcp_inventory or get_shadow_mcp_review"`
-	Action          string `json:"action" jsonschema:"link: make mcp_id the official version and block direct use; switch_off: keep the link but stop blocking direct use; switch_on: block direct use again; remove: delete the link"`
-	MCPID           string `json:"mcp_id,omitempty" jsonschema:"for link only: the project MCP server's ID from find_mcp, or suggested_official_server.mcp_id from the inventory"`
+	Action          string `json:"action" jsonschema:"make_official: make mcp_id the official version; keep_shadow: keep the Shadow MCP server in direct use, so no server is official, not even automatically; automatic: remove the administrator's choice so the automatic choice applies again"`
+	MCPID           string `json:"mcp_id,omitempty" jsonschema:"for make_official only: the project MCP server's ID from find_mcp, or suggested_official_server.mcp_id from the inventory"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"official_link_version of this target from the list_shadow_mcp_inventory or get_shadow_mcp_review read immediately before this write"`
 	IdempotencyKey  string `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact change"`
 	Confirmed       bool   `json:"confirmed" jsonschema:"set true only after the user confirms the exact project, target, action and MCP server"`
@@ -147,9 +143,9 @@ type SetShadowMCPOfficialServerInput struct {
 
 type ShadowOfficialLinkReceiptResult struct {
 	Action         string `json:"action"`
-	LinkState      string `json:"link_state" jsonschema:"on, off, or none when no server is linked"`
-	MCPID          string `json:"mcp_id,omitempty"`
-	ResultCategory string `json:"result_category" jsonschema:"changed, or unchanged when the link already matched"`
+	Choice         string `json:"choice" jsonschema:"the administrator's choice after the write: server, keep_shadow, or automatic"`
+	MCPID          string `json:"mcp_id,omitempty" jsonschema:"the server made official, when choice is server"`
+	ResultCategory string `json:"result_category" jsonschema:"changed, or unchanged when the choice already matched"`
 }
 
 type SetShadowMCPOfficialServerOutput struct {
@@ -168,30 +164,18 @@ type normalizedShadowOfficialLink struct {
 }
 
 type shadowOfficialLinkVersionStateValue struct {
-	ProjectID         string `json:"project_id"`
-	ServerKey         string `json:"server_key"`
-	MCPServerID       string `json:"mcp_server_id,omitempty"`
-	AllowDirectAccess bool   `json:"allow_direct_access,omitempty"`
+	ProjectID   string `json:"project_id"`
+	ServerKey   string `json:"server_key"`
+	Choice      string `json:"choice"`
+	MCPServerID string `json:"mcp_server_id,omitempty"`
 }
 
-func shadowOfficialLinkVersionState(projectID uuid.UUID, key string, link officiallink.Link) shadowOfficialLinkVersionStateValue {
-	state := shadowOfficialLinkVersionStateValue{ProjectID: projectID.String(), ServerKey: key, MCPServerID: "", AllowDirectAccess: false}
-	if link.Linked() {
-		state.MCPServerID = link.MCPServerID.String()
-		state.AllowDirectAccess = link.AllowDirectAccess
+func shadowOfficialLinkVersionState(projectID uuid.UUID, key string, choice officiallink.Choice) shadowOfficialLinkVersionStateValue {
+	state := shadowOfficialLinkVersionStateValue{ProjectID: projectID.String(), ServerKey: key, Choice: choice.Kind, MCPServerID: ""}
+	if choice.Kind == officiallink.ChoiceServer {
+		state.MCPServerID = choice.MCPServerID.String()
 	}
 	return state
-}
-
-func shadowOfficialLinkState(link officiallink.Link) string {
-	switch {
-	case !link.Linked():
-		return shadowOfficialLinkNone
-	case link.AllowDirectAccess:
-		return shadowOfficialLinkOff
-	default:
-		return shadowOfficialLinkOn
-	}
 }
 
 // SetDefaultAccess switches a project between allowed and blocked by
@@ -272,7 +256,7 @@ func (s *ShadowMCPSettingsService) previewDefaultAccess(ctx context.Context, pri
 	if currentMode == mode {
 		change = "keeps this project " + mode + " by default"
 	}
-	consequence := "Every MCP server connects unless an administrator denies it; denials and official server links still apply."
+	consequence := "Every MCP server connects unless an administrator denies it; denials and official servers still apply."
 	if mode == shadowDefaultAccessBlocked {
 		consequence = "Every MCP server nobody approved is blocked for everyone, including servers people use today, until an administrator approves it."
 		if len(references) > 0 {
@@ -485,9 +469,10 @@ func (s *ShadowMCPSettingsService) updateBlockedByDefaultAudience(ctx context.Co
 	return updated, nil
 }
 
-// SetOfficialServer links a remote Shadow MCP server to a project MCP
-// server, switches the link off or on, or removes it, through the same write
-// path as the dashboard.
+// SetOfficialServer makes a project MCP server a remote Shadow MCP server's
+// official version, keeps the Shadow MCP server in direct use, or hands it
+// back to the automatic choice, through the same write path as the
+// dashboard.
 func (s *ShadowMCPSettingsService) SetOfficialServer(ctx context.Context, principal Principal, input SetShadowMCPOfficialServerInput) (SetShadowMCPOfficialServerOutput, error) {
 	input.ProjectID = strings.TrimSpace(input.ProjectID)
 	input.TargetReference = strings.TrimSpace(input.TargetReference)
@@ -498,20 +483,20 @@ func (s *ShadowMCPSettingsService) SetOfficialServer(ctx context.Context, princi
 	if input.ProjectID == "" || input.TargetReference == "" || input.ExpectedVersion == "" || !validShadowSettingKey(input.IdempotencyKey) {
 		return SetShadowMCPOfficialServerOutput{}, shadowDecisionInvalid("The Shadow MCP official server request is invalid.")
 	}
-	if !slices.Contains([]string{shadowOfficialLinkActionLink, shadowOfficialLinkActionSwitchOff, shadowOfficialLinkActionSwitchOn, shadowOfficialLinkActionRemove}, input.Action) {
-		return SetShadowMCPOfficialServerOutput{}, shadowDecisionInvalid("Action must be link, switch_off, switch_on or remove.")
+	if !slices.Contains(shadowOfficialActions(), input.Action) {
+		return SetShadowMCPOfficialServerOutput{}, shadowDecisionInvalid("Action must be make_official, keep_shadow or automatic.")
 	}
 	chosen := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if input.Action == shadowOfficialLinkActionLink {
+	if input.Action == shadowOfficialActionMakeOfficial {
 		id, err := uuid.Parse(input.MCPID)
 		if err != nil {
-			return SetShadowMCPOfficialServerOutput{}, shadowDecisionInvalid("Link needs the mcp_id of a project MCP server from find_mcp.")
+			return SetShadowMCPOfficialServerOutput{}, shadowDecisionInvalid("make_official needs the mcp_id of a project MCP server from find_mcp.")
 		}
 		chosen = uuid.NullUUID{UUID: id, Valid: true}
 		input.MCPID = id.String()
 	}
-	if input.Action != shadowOfficialLinkActionLink && input.MCPID != "" {
-		return SetShadowMCPOfficialServerOutput{}, shadowDecisionInvalid("Only link takes an mcp_id; switch_off, switch_on and remove act on the current link.")
+	if input.Action != shadowOfficialActionMakeOfficial && input.MCPID != "" {
+		return SetShadowMCPOfficialServerOutput{}, shadowDecisionInvalid("Only make_official takes an mcp_id; keep_shadow and automatic name no server.")
 	}
 	if !s.valid() || principal.OrganizationID == "" || principal.UserID == "" {
 		return SetShadowMCPOfficialServerOutput{}, shadowDecisionUnavailable(nil)
@@ -524,7 +509,13 @@ func (s *ShadowMCPSettingsService) SetOfficialServer(ctx context.Context, princi
 		return SetShadowMCPOfficialServerOutput{}, err
 	}
 	if !input.Confirmed {
-		return SetShadowMCPOfficialServerOutput{}, shadowDecisionError("confirmation_required", "Nothing was changed. Confirming "+shadowOfficialLinkActionSummary(input.Action)+" Show this to the user with the Shadow MCP server and the MCP server it names, then resend the same inputs with confirmed: true.", ErrShadowDecisionInvalid)
+		return SetShadowMCPOfficialServerOutput{}, shadowDecisionError("confirmation_required", "Nothing was changed. Confirming "+shadowOfficialActionSummary(input.Action)+" Show this to the user with the Shadow MCP server and any MCP server it names, then resend the same inputs with confirmed: true.", ErrShadowDecisionInvalid)
+	}
+	// The inventory reports a kept Shadow MCP server only while automatic
+	// links are on, so the version is checked against the same view.
+	automaticLinks, err := policyflags.ProjectFlagChecked(ctx, slog.New(slog.DiscardHandler), riskrepo.New(s.db), s.flags, principal.OrganizationID, project.ID, feature.FlagShadowMCPAutoLink)
+	if err != nil {
+		return SetShadowMCPOfficialServerOutput{}, shadowDecisionUnavailable(err)
 	}
 	normalized := normalizedShadowOfficialLink{ProjectID: project.ID.String(), TargetReference: input.TargetReference, Action: input.Action, MCPID: input.MCPID, ExpectedVersion: input.ExpectedVersion}
 	receipt, err := executeShadowSettingReceipt(ctx, s.db, s.now, principal, project, operationSetShadowMCPOfficialServer, input.IdempotencyKey, normalized, chargeShadowAccessWrite(s.budget, principal), validShadowOfficialLinkReceipt,
@@ -534,21 +525,20 @@ func (s *ShadowMCPSettingsService) SetOfficialServer(ctx context.Context, princi
 				return ShadowOfficialLinkReceiptResult{}, shadowDecisionNotFound()
 			}
 			if targetKind != shadowTargetKindServerURL {
-				return ShadowOfficialLinkReceiptResult{}, shadowDecisionInvalid("Only a remote Shadow MCP server can have an official server. Local commands cannot be linked.")
+				return ShadowOfficialLinkReceiptResult{}, shadowDecisionInvalid("Only a remote Shadow MCP server can have an official server. Local commands cannot be made official.")
 			}
 			result, err := s.links.SetInTransaction(ctx, tx, officiallink.SetInput{
-				OrganizationID:    principal.OrganizationID,
-				ProjectID:         project.ID,
-				ServerURL:         targetKey,
-				MCPServerID:       chosen,
-				KeepLinkedServer:  input.Action == shadowOfficialLinkActionSwitchOff || input.Action == shadowOfficialLinkActionSwitchOn,
-				AllowDirectAccess: input.Action == shadowOfficialLinkActionSwitchOff,
-				ActorUserID:       principal.UserID,
-				Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-				ActorDisplayName:  nil,
-				ValidateLocked: func(key string, link officiallink.Link) error {
-					if !s.shadow.versions.matchSetting(shadowOfficialLinkVersionDomain, input.ExpectedVersion, shadowOfficialLinkVersionState(project.ID, key, link)) {
-						return shadowDecisionError("conflict", "The Shadow MCP server's official link changed after it was read. Read it again and retry with the new version.", ErrShadowDecisionConflict)
+				OrganizationID:   principal.OrganizationID,
+				ProjectID:        project.ID,
+				ServerURL:        targetKey,
+				MCPServerID:      chosen,
+				KeepShadow:       input.Action == shadowOfficialActionKeepShadow,
+				ActorUserID:      principal.UserID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+				ActorDisplayName: nil,
+				ValidateLocked: func(key string, current officiallink.Choice) error {
+					if !s.shadow.versions.matchSetting(shadowOfficialLinkVersionDomain, input.ExpectedVersion, shadowOfficialLinkVersionState(project.ID, key, current.Visible(automaticLinks))) {
+						return shadowDecisionError("conflict", "The Shadow MCP server's official server changed after it was read. Read it again and retry with the new version.", ErrShadowDecisionConflict)
 					}
 					return nil
 				},
@@ -560,8 +550,8 @@ func (s *ShadowMCPSettingsService) SetOfficialServer(ctx context.Context, princi
 			if result.Changed {
 				category = shadowSettingChanged
 			}
-			receiptResult := ShadowOfficialLinkReceiptResult{Action: input.Action, LinkState: shadowOfficialLinkState(result.After), MCPID: "", ResultCategory: category}
-			if result.After.Linked() {
+			receiptResult := ShadowOfficialLinkReceiptResult{Action: input.Action, Choice: result.After.Kind, MCPID: "", ResultCategory: category}
+			if result.After.Kind == officiallink.ChoiceServer {
 				receiptResult.MCPID = result.After.MCPServerID.String()
 			}
 			return receiptResult, nil
@@ -582,16 +572,18 @@ func (s *ShadowMCPSettingsService) SetOfficialServer(ctx context.Context, princi
 	return output, nil
 }
 
-func shadowOfficialLinkActionSummary(action string) string {
+func shadowOfficialActions() []string {
+	return []string{shadowOfficialActionMakeOfficial, shadowOfficialActionKeepShadow, shadowOfficialActionAutomatic}
+}
+
+func shadowOfficialActionSummary(action string) string {
 	switch action {
-	case shadowOfficialLinkActionLink:
-		return "makes the chosen MCP server this Shadow MCP server's official version: agents that connect to the Shadow MCP server directly are blocked and sent to the official server, whatever the default access."
-	case shadowOfficialLinkActionSwitchOff:
-		return "switches the link off: the official server stays linked, but direct use of the Shadow MCP server follows the ordinary Shadow MCP rules again."
-	case shadowOfficialLinkActionSwitchOn:
-		return "switches the link back on: direct use of the Shadow MCP server is blocked again and agents are sent to the official server."
+	case shadowOfficialActionMakeOfficial:
+		return "makes the chosen MCP server this Shadow MCP server's official version: while it has an address, agents that connect to the Shadow MCP server directly are blocked wherever a Shadow MCP policy applies and sent to the official server."
+	case shadowOfficialActionKeepShadow:
+		return "keeps the Shadow MCP server in direct use: no server is official, not even one that proxies to its URL, and direct use follows the ordinary Shadow MCP rules."
 	default:
-		return "removes the link: the Shadow MCP server has no official version, and direct use follows the ordinary Shadow MCP rules."
+		return "removes the administrator's choice: a project MCP server that proxies to this URL becomes official automatically, when automatic links are on; otherwise no server is official."
 	}
 }
 
@@ -673,9 +665,9 @@ func validShadowDefaultAccessReceipt(result ShadowDefaultAccessReceiptResult) bo
 }
 
 func validShadowOfficialLinkReceipt(result ShadowOfficialLinkReceiptResult) bool {
-	return slices.Contains([]string{shadowOfficialLinkActionLink, shadowOfficialLinkActionSwitchOff, shadowOfficialLinkActionSwitchOn, shadowOfficialLinkActionRemove}, result.Action) &&
-		slices.Contains([]string{shadowOfficialLinkOn, shadowOfficialLinkOff, shadowOfficialLinkNone}, result.LinkState) &&
-		(result.LinkState == shadowOfficialLinkNone) == (result.MCPID == "") &&
+	return slices.Contains(shadowOfficialActions(), result.Action) &&
+		slices.Contains([]string{officiallink.ChoiceServer, officiallink.ChoiceKeepShadow, officiallink.ChoiceAutomatic}, result.Choice) &&
+		(result.Choice == officiallink.ChoiceServer) == (result.MCPID != "") &&
 		(result.ResultCategory == shadowSettingChanged || result.ResultCategory == shadowSettingUnchanged)
 }
 
@@ -710,10 +702,10 @@ func mapShadowOfficialLinkError(err error) error {
 		return shadowDecisionError("not_found", "That MCP server is not live in this project. Call find_mcp in the same project and use its id.", ErrShadowDecisionNotFound)
 	case errors.Is(err, officiallink.ErrMCPServerDisabled):
 		return shadowDecisionInvalid("That MCP server is disabled, so it cannot be the official version. Turn it on first, or choose another server.")
-	case errors.Is(err, officiallink.ErrLinkedServerRequired):
-		return shadowDecisionInvalid("This Shadow MCP server has no official server linked, so there is no link to switch. Use link with an mcp_id first.")
+	case errors.Is(err, officiallink.ErrKeepShadowWithServer):
+		return shadowDecisionInvalid("keep_shadow names no server; use make_official to choose one.")
 	case errors.Is(err, officiallink.ErrInvalidServerURL):
-		return shadowDecisionInvalid("This Shadow MCP server cannot be linked.")
+		return shadowDecisionInvalid("This Shadow MCP server cannot have an official server.")
 	default:
 		return shadowDecisionUnavailable(err)
 	}

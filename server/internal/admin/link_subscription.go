@@ -161,7 +161,7 @@ func (s *Service) activateManuallyLinkedPaygTx(ctx context.Context, tx pgx.Tx, o
 			return fmt.Errorf("seed PAYG access entitlements: %w", err)
 		}
 	} else {
-		converted, err := usage.ConvertEnterpriseTrialToPaygTx(ctx, tx, org.ID, trial, local, s.audit, time.Now(), usage.BillingActor{Principal: actor, DisplayName: display}, "stripe_manual_link")
+		converted, err := usage.ConvertEnterpriseTrialToPaygTx(ctx, tx, org.ID, trial, local, s.audit, time.Now(), usage.BillingActor{Principal: actor, DisplayName: display}, "stripe_manual_link", s.staffOrg)
 		if err != nil {
 			return fmt.Errorf("convert enterprise trial for manual subscription activation: %w", err)
 		}

@@ -4,10 +4,8 @@ import { LabeledValue } from "@/components/setup-steps/StepBlocks";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { IssuerLink } from "@/lib/remote-identity/components/ProviderLink";
 import { useOrgRoutes } from "@/routes";
@@ -16,8 +14,8 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import { useId, useState } from "react";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import {
   lookUpProvider,
@@ -32,8 +30,6 @@ import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
 const INTRO =
   "Let people arrive already signed in through your company's identity provider. An agent or app holding an identity token from it connects without a second sign-in. Everyone else signs in as they do today.";
 
-type Choice = "okta" | "another";
-
 /**
  * Enterprise Managed Auth for one MCP Authentication Provider: which
  * identity provider's sign-in it accepts. Only an organization-wide provider
@@ -44,22 +40,13 @@ export function EnterpriseManagedAuthSection({
 }: {
   issuer: UserSessionIssuer;
 }): JSX.Element {
-  const [searchParams] = useSearchParams();
-  // Set when Okta's page sends the admin back with the issuer to trust.
-  const returnedIssuer = searchParams.get("ema");
   const [editing, setEditing] = useState(false);
 
   let body: JSX.Element;
   if (issuer.projectId !== "") {
     body = <ProjectSpecific issuer={issuer} />;
-  } else if (returnedIssuer && !issuer.trustedRemoteSessionClientId) {
-    // Browser sign-in bound to the current identity provider pins EMA to it,
-    // so a return link may not swap it here; TurnedOn says where to change it.
-    body = <ConfirmReturned issuer={issuer} address={returnedIssuer} />;
   } else if (editing) {
-    body = (
-      <ChooseProvider issuer={issuer} onCancel={() => setEditing(false)} />
-    );
+    body = <SetUp issuer={issuer} onDone={() => setEditing(false)} />;
   } else if (issuer.trustedRemoteSessionIssuerId) {
     body = (
       <TurnedOn
@@ -217,91 +204,6 @@ function TurnedOn({
   );
 }
 
-function ChooseProvider({
-  issuer,
-  onCancel,
-}: {
-  issuer: UserSessionIssuer;
-  onCancel: () => void;
-}): JSX.Element {
-  const [choice, setChoice] = useState<Choice>("okta");
-  const [continued, setContinued] = useState(false);
-  const orgRoutes = useOrgRoutes();
-  const { pathname } = useLocation();
-
-  if (continued && choice === "another") {
-    return (
-      <AnotherProvider
-        issuer={issuer}
-        onBack={() => setContinued(false)}
-        onDone={onCancel}
-      />
-    );
-  }
-
-  const oktaHref = `${orgRoutes.identity.href()}?${new URLSearchParams({
-    tab: "identity-providers",
-    provider: "okta",
-    emaFor: issuer.slug,
-    emaReturn: pathname,
-  }).toString()}`;
-
-  return (
-    <>
-      <div className="flex flex-col gap-4 px-6 py-5">
-        <Text>Which identity provider signs your people in?</Text>
-        <RadioCardGroup
-          aria-label="Identity provider"
-          orientation="horizontal"
-          value={choice}
-          onValueChange={(value) => setChoice(value as Choice)}
-          showIndicator={false}
-        >
-          <RadioCard
-            value="okta"
-            title="Okta"
-            leading={<Icon name="key-round" className="mt-0.5 size-5" />}
-          >
-            Guided. Speakeasy checks your Okta domain and finds everything EMA
-            needs.
-          </RadioCard>
-          <RadioCard
-            value="another"
-            title="Another identity provider"
-            leading={<Icon name="fingerprint" className="mt-0.5 size-5" />}
-          >
-            Any OpenID Connect provider that publishes its signing keys.
-          </RadioCard>
-          <RadioCard
-            value="speakeasy"
-            title="Speakeasy"
-            disabled
-            leading={<Icon name="lock" className="mt-0.5 size-5" />}
-          >
-            Already how people sign in here.
-          </RadioCard>
-        </RadioCardGroup>
-      </div>
-      <div className="bg-muted/30 flex justify-end gap-2 border-t px-6 py-4">
-        <Button variant="tertiary" onClick={onCancel}>
-          <Button.Text>Cancel</Button.Text>
-        </Button>
-        {choice === "okta" ? (
-          <Button asChild>
-            <Link to={oktaHref}>
-              <Button.Text>Continue with Okta</Button.Text>
-            </Link>
-          </Button>
-        ) : (
-          <Button onClick={() => setContinued(true)}>
-            <Button.Text>Continue</Button.Text>
-          </Button>
-        )}
-      </div>
-    </>
-  );
-}
-
 function useLookUp() {
   const client = useGramContext();
   return useMutation<FoundProvider, Error, string>({
@@ -357,13 +259,12 @@ function lookupMessage(error: Error | null): string | null {
     : "Couldn't look up this provider. Try again.";
 }
 
-function AnotherProvider({
+/** One field: the identity provider's issuer URL, looked up, then trusted. */
+function SetUp({
   issuer,
-  onBack,
   onDone,
 }: {
   issuer: UserSessionIssuer;
-  onBack: () => void;
   onDone: () => void;
 }): JSX.Element {
   const inputId = useId();
@@ -382,12 +283,12 @@ function AnotherProvider({
             lookUp.mutate(address);
           }}
         >
-          <Label htmlFor={inputId}>Identity provider address</Label>
+          <Label htmlFor={inputId}>Issuer URL</Label>
           <div className="flex gap-2">
             <Input
               id={inputId}
               value={address}
-              placeholder="https://login.example.com"
+              placeholder="https://acme.okta.com"
               onChange={(value: string) => {
                 setAddress(value);
                 // A lookup describes the address it ran on; once the field
@@ -406,7 +307,8 @@ function AnotherProvider({
             </Button>
           </div>
           <Text small muted>
-            The issuer your provider names in its identity tokens.
+            The issuer your identity provider names in its identity tokens. For
+            Okta, your Okta org URL.
           </Text>
           {lookUp.isError ? (
             <Text small className="text-destructive">
@@ -422,8 +324,8 @@ function AnotherProvider({
         ) : null}
       </div>
       <div className="bg-muted/30 flex justify-end gap-2 border-t px-6 py-4">
-        <Button variant="tertiary" onClick={onBack}>
-          <Button.Text>Back</Button.Text>
+        <Button variant="tertiary" onClick={onDone}>
+          <Button.Text>Cancel</Button.Text>
         </Button>
         <Button
           disabled={!found || turnOn.isPending}
@@ -463,68 +365,6 @@ function FoundDetails({
           </Text>
         </div>
       ) : null}
-    </>
-  );
-}
-
-/** Back from Okta's page: confirm the issuer it found, then turn EMA on. */
-function ConfirmReturned({
-  issuer,
-  address,
-}: {
-  issuer: UserSessionIssuer;
-  address: string;
-}): JSX.Element {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const lookUp = useLookUp();
-  const done = () => void navigate(pathname, { replace: true });
-  const turnOn = useTurnOn(issuer, done);
-  const { mutate } = lookUp;
-
-  useEffect(() => {
-    mutate(address);
-  }, [address, mutate]);
-
-  const found = lookUp.data;
-  return (
-    <>
-      <div className="flex flex-col gap-4 px-6 py-5">
-        <Text>Turn on Enterprise Managed Auth with {address}?</Text>
-        {lookUp.isPending ? (
-          <Text small muted>
-            Checking {address}…
-          </Text>
-        ) : null}
-        {lookUp.isError ? (
-          <Text small className="text-destructive">
-            {lookupMessage(lookUp.error)}
-          </Text>
-        ) : null}
-        {found ? <FoundDetails issuer={issuer} found={found} /> : null}
-        {turnOn.isError ? (
-          <Text small className="text-destructive">
-            {emaChangeError("on")}
-          </Text>
-        ) : null}
-      </div>
-      <div className="bg-muted/30 flex justify-end gap-2 border-t px-6 py-4">
-        <Button variant="tertiary" onClick={done}>
-          <Button.Text>Cancel</Button.Text>
-        </Button>
-        <RequireScope scope="org:admin" level="component">
-          {({ disabled }) => (
-            <Button
-              disabled={disabled || !found || turnOn.isPending}
-              onClick={() => found && turnOn.mutate(found)}
-            >
-              <Button.Text>
-                {turnOn.isPending ? "Turning on" : "Turn on EMA"}
-              </Button.Text>
-            </Button>
-          )}
-        </RequireScope>
-      </div>
     </>
   );
 }

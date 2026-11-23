@@ -206,7 +206,7 @@ func seedRevocableSession(
 		secretPG = conv.ToPGText(ciphertext)
 	}
 
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -238,7 +238,7 @@ func seedRevocableSession(
 	}
 
 	subject := urn.NewUserSubject("revoke-subject-" + slug)
-	session, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+	session, err := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuer,
 		RemoteSessionClientID: client.ID,
@@ -311,7 +311,7 @@ func seedRevocableClient(
 	secretCiphertext, err := enc.Encrypt([]byte("s3cret"))
 	require.NoError(t, err)
 
-	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	client, err := q.CreateRemoteSessionClientFixture(ctx, repo.CreateRemoteSessionClientFixtureParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID:   issuer.ID,
@@ -340,7 +340,7 @@ func seedRevocableClient(
 		require.NoError(t, encErr)
 
 		subject := urn.NewUserSubject("revoke-subject-" + suffix)
-		session, sessErr := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		session, sessErr := q.UpsertRemoteSessionFixture(ctx, repo.UpsertRemoteSessionFixtureParams{
 			SubjectUrn:            subject,
 			UserSessionIssuerID:   userIssuer,
 			RemoteSessionClientID: client.ID,

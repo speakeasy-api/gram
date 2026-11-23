@@ -36,18 +36,17 @@ func (s *Service) enforceShadowMCPToolAccess(
 	// Onboarding takes effect at once: when the project serves an official
 	// version of this server, the direct connection is blocked whatever the
 	// policy's default and whatever access was granted to the direct URL
-	// before. The block message sends the agent to the official version. An
-	// administrator can keep direct connections under the ordinary rules
-	// instead, for example while the official server is tested.
-	if official, ok := s.shadowMCPOfficialServer(ctx, organizationID, projectID, evidence.FullURL); ok && !official.DirectAccessAllowed {
+	// before. The block message sends the agent to the official version.
+	if official, ok := s.shadowMCPOfficialServer(ctx, organizationID, projectID, evidence.FullURL); ok {
 		s.logger.InfoContext(ctx, "shadow-mcp call blocked: an official version of the server exists",
 			attr.SlogEvent("shadow_mcp_official_server_redirect"),
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProjectID(projectID),
 			attr.SlogRiskPolicyID(policy.ID),
 			attr.SlogValueAny(map[string]any{
-				"official_mcp_server_id": official.MCPServerID.String(),
-				"tool_name":              toolName,
+				"official_mcp_server_id":  official.MCPServerID.String(),
+				"official_link_automatic": official.Automatic,
+				"tool_name":               toolName,
 			}),
 		)
 		return shadowMCPOfficialServerDetail(official, evidence.FullURL), true
@@ -95,9 +94,15 @@ func (s *Service) enforceShadowMCPToolAccess(
 }
 
 // shadowMCPOfficialServerDetail is the audit reason for a direct call blocked
-// because the project serves an official version of the server.
+// because the project serves an official version of the server. It says
+// whether the link was automatic or an administrator's choice, so the audit
+// trail shows why the call was redirected.
 func shadowMCPOfficialServerDetail(official shadowmcp.OfficialServer, fullURL string) string {
-	return fmt.Sprintf("MCP server has an official version %q; direct use is blocked (URL: %s)", official.Name, fullURL)
+	how := "chosen by an administrator"
+	if official.Automatic {
+		how = "chosen automatically because it proxies to this URL"
+	}
+	return fmt.Sprintf("MCP server has an official version %q, %s; direct use is blocked (URL: %s)", official.Name, how, fullURL)
 }
 
 func (s *Service) canBypassPolicy(

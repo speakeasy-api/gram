@@ -9,11 +9,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/orgencryptiontest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets/clientsecretstest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
@@ -24,14 +31,14 @@ func tokenConfig(t *testing.T, bc *basicConnection) okta.Config {
 	t.Helper()
 	row, err := idprepo.New(bc.conn).GetManagedClient(t.Context(), idprepo.GetManagedClientParams{OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID)})
 	require.NoError(t, err)
-	return okta.Config{AudienceFormat: string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint), ClientID: row.RemoteSessionClient.ClientID, RemoteSessionClientID: row.RemoteSessionClient.ID, OrganizationID: bc.orgID, AuthMethod: remotesessions.TokenEndpointAuthMethodBasic, ClientSecretEncrypted: row.RemoteSessionClient.ClientSecretEncrypted.String, Credentials: oktacredentials.Provider{DB: bc.conn, ConnectionID: bc.connectionID}}
+	return okta.Config{AudienceFormat: string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint), ClientID: row.RemoteSessionClient.ClientID, RemoteSessionClientID: row.RemoteSessionClient.ID, OrganizationID: bc.orgID, AuthMethod: remotesessions.TokenEndpointAuthMethodBasic, Credentials: oktacredentials.Provider{DB: bc.conn, Secrets: clientsecretstest.New(t, bc.conn, bc.enc), ConnectionID: bc.connectionID}}
 }
 
 func tokenFactory(t *testing.T, bc *basicConnection) okta.ClientFactory {
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	return okta.NewClientFactory(testenv.NewLogger(t), policy, nil, bc.enc)
+	return okta.NewClientFactory(testenv.NewLogger(t), policy, nil)
 }
 
 // tokenServer answers every token exchange with a DPoP token, or a Bearer
@@ -82,7 +89,7 @@ func TestWorkerTokenCredentialLivenessAndBinding(t *testing.T) {
 	// This client was constructed before withdrawal but has never acquired a token.
 	stale, err := tokenFactory(t, bc).Client(cfg)
 	require.NoError(t, err)
-	_, err = idprepo.New(bc.conn).ClearManagedClientSecret(ctx, idprepo.ClearManagedClientSecretParams{ID: cfg.RemoteSessionClientID, OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID)})
+	_, err = clientsecretstest.New(t, bc.conn, bc.enc).Clear(ctx, bc.conn, cfg.RemoteSessionClientID, clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
 	require.NoError(t, err)
 	before := exchanges.Load()
 	_, err = stale.ListApps(ctx, okta.ListAppsRequest{})
@@ -109,7 +116,7 @@ func TestWorkerCachedBearerStopsAfterVerificationPins(t *testing.T) {
 	// A verification in another process observes binding and commits the pin
 	// while the worker's Bearer token is unexpired.
 	tx := testenv.BeginTx(t, ctx, bc.conn)
-	lease, err := oktacredentials.Provider{Tx: tx, ConnectionID: bc.connectionID}.Acquire(ctx, cfg)
+	lease, err := oktacredentials.Provider{Tx: tx, Secrets: clientsecretstest.New(t, bc.conn, bc.enc), ConnectionID: bc.connectionID}.Acquire(ctx, cfg)
 	require.NoError(t, err)
 	require.NoError(t, lease.Observe(ctx, true))
 	lease.Close()
@@ -133,11 +140,11 @@ func TestTokenCredentialLeaseSerializesWithdrawal(t *testing.T) {
 	defer lease.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
-	_, err = idprepo.New(bc.conn).ClearManagedClientSecret(ctx, idprepo.ClearManagedClientSecretParams{ID: cfg.RemoteSessionClientID, OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID)})
+	_, err = clientsecretstest.New(t, bc.conn, bc.enc).Clear(ctx, bc.conn, cfg.RemoteSessionClientID, clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
 	require.Error(t, err, "withdrawal must wait until token exchange finishes")
 	require.NoError(t, lease.Observe(t.Context(), true))
 	lease.Close()
-	_, err = idprepo.New(bc.conn).ClearManagedClientSecret(t.Context(), idprepo.ClearManagedClientSecretParams{ID: cfg.RemoteSessionClientID, OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID)})
+	_, err = clientsecretstest.New(t, bc.conn, bc.enc).Clear(t.Context(), bc.conn, cfg.RemoteSessionClientID, clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
 	require.NoError(t, err)
 }
 
@@ -149,17 +156,18 @@ func TestTokenCredentialVerificationUsesUncommittedReplacement(t *testing.T) {
 	q := idprepo.New(tx)
 	_, err := q.LockOktaIdentityProviderConnection(t.Context(), idprepo.LockOktaIdentityProviderConnectionParams{ID: bc.connectionID, OrganizationID: bc.orgID})
 	require.NoError(t, err)
-	replacement, err := bc.enc.Encrypt([]byte("replacement-secret"))
+	replaced, err := clientsecretstest.New(t, bc.conn, bc.enc).Set(t.Context(), tx, cfg.RemoteSessionClientID, clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}), []byte("replacement-secret"), pgtype.Timestamptz{})
 	require.NoError(t, err)
-	_, err = q.SetManagedClientSecret(t.Context(), idprepo.SetManagedClientSecretParams{ID: cfg.RemoteSessionClientID, OrganizationID: conv.ToPGText(bc.orgID), IdentityProviderConnectionID: conv.ToNullUUID(bc.connectionID), ClientSecretEncrypted: conv.ToPGText(replacement)})
-	require.NoError(t, err)
-	cfg.Credentials = oktacredentials.Provider{Tx: tx, ConnectionID: bc.connectionID}
+	require.True(t, replaced.ClientSecretEncrypted.Valid)
+	cfg.Credentials = oktacredentials.Provider{Tx: tx, Secrets: clientsecretstest.New(t, bc.conn, bc.enc), ConnectionID: bc.connectionID}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	lease, err := cfg.Credentials.Acquire(ctx, cfg)
 	require.NoError(t, err)
 	defer lease.Close()
-	require.Equal(t, replacement, lease.EncryptedSecret())
+	secret, err := lease.ClientSecret(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "replacement-secret", secret)
 	require.NoError(t, lease.Observe(ctx, true))
 	require.NoError(t, tx.Commit(ctx), "the provider must not commit the caller's transaction")
 }
@@ -185,7 +193,7 @@ func TestTokenCredentialWaiterObservesCommittedBinding(t *testing.T) {
 	}
 	result := make(chan acquisition, 1)
 	go func() {
-		p := oktacredentials.Provider{Tx: tx, ConnectionID: bc.connectionID}
+		p := oktacredentials.Provider{Tx: tx, Secrets: clientsecretstest.New(t, bc.conn, bc.enc), ConnectionID: bc.connectionID}
 		l, acquireErr := p.Acquire(ctx, cfg)
 		result <- acquisition{lease: l, err: acquireErr}
 	}()
@@ -209,7 +217,7 @@ func TestVerificationWriteCannotClearObservedBinding(t *testing.T) {
 	bc := newBasicConnection(t, t.Context())
 	cfg := tokenConfig(t, bc)
 	tx := testenv.BeginTx(t, t.Context(), bc.conn)
-	provider := oktacredentials.Provider{Tx: tx, ConnectionID: bc.connectionID}
+	provider := oktacredentials.Provider{Tx: tx, Secrets: clientsecretstest.New(t, bc.conn, bc.enc), ConnectionID: bc.connectionID}
 	lease, err := provider.Acquire(t.Context(), cfg)
 	require.NoError(t, err)
 	defer lease.Close()
@@ -220,4 +228,44 @@ func TestVerificationWriteCannotClearObservedBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, row.DpopRequired)
 	require.NoError(t, tx.Commit(t.Context()))
+}
+
+func TestTokenCredentialOpensTheOrganizationKeyCopy(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	bc := newBasicConnection(t, ctx)
+	cfg := tokenConfig(t, bc)
+
+	// The organization starts in org_kms, so the platform-key copy stored
+	// before cannot be opened any more.
+	fixture := orgencryptiontest.New(t, bc.conn)
+	transitions := orgencryption.NewTransitions(testenv.NewLogger(t), bc.conn, audit.NewLogger(), fixture.Provisioner, orgencryption.TransitionsConfig{ClearSettleDelay: time.Millisecond})
+	_, err := transitions.StartInOrgKMS(ctx, bc.orgID, orgencryption.UseCaseOAuthClientSecrets, orgencryption.SystemActor())
+	require.NoError(t, err)
+	secrets := clientsecrets.New(testenv.NewLogger(t), orgencryption.NewCipher(testenv.NewLogger(t), bc.enc, fixture.Service, transitions), bc.enc)
+	provider := oktacredentials.Provider{DB: bc.conn, Secrets: secrets, ConnectionID: bc.connectionID}
+
+	openSecret := func(t *testing.T) (string, error) {
+		t.Helper()
+		lease, err := provider.Acquire(ctx, cfg)
+		require.NoError(t, err)
+		defer lease.Close()
+		return lease.ClientSecret(ctx)
+	}
+
+	_, err = openSecret(t)
+	require.ErrorIs(t, err, okta.ErrClientSecretUndecryptable, "only the platform-key copy remains in org_kms")
+
+	owner := clientsecrets.OwnerOf(conv.ToPGText(bc.orgID), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	stored, err := secrets.Set(ctx, bc.conn, cfg.RemoteSessionClientID, owner, []byte("organization-secret"), pgtype.Timestamptz{})
+	require.NoError(t, err)
+	require.False(t, stored.ClientSecretEncrypted.Valid)
+	secret, err := openSecret(t)
+	require.NoError(t, err)
+	require.Equal(t, "organization-secret", secret)
+
+	require.NoError(t, fixture.Provisioner.Suspend(ctx, bc.orgID, "customer disabled the key", orgencryption.SystemActor()))
+	_, err = openSecret(t)
+	require.ErrorIs(t, err, okta.ErrClientSecretKeyUnavailable, "a suspended key is retryable, not a secret to replace")
+	require.NotErrorIs(t, err, okta.ErrClientSecretUndecryptable)
 }

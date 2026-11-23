@@ -760,12 +760,11 @@ WHERE issuer.id = @user_session_issuer_id
   )
   AND session.deleted IS FALSE;
 
--- name: ListUserSessionIssuerClientIDConflicts :many
--- A client_id on both issuers blocks migration unless both rows were resolved
--- from the same Client ID Metadata Document: those describe one client and
--- merge onto the target's row. A source CIMD row that an issuance selection
--- profile pins to the source issuer cannot be merged and still blocks.
-SELECT source.client_id
+-- name: ListUserSessionIssuerDuplicateClients :many
+-- Lists each live source client whose client_id the target issuer also holds.
+-- A duplicate blocks consolidation unless ListMergeableClientPairs pairs it
+-- with the target's row, so that query alone decides which duplicates merge.
+SELECT source.id AS source_client_id, source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
   ON target.user_session_issuer_id = @target_issuer_id
@@ -773,17 +772,6 @@ JOIN user_session_clients AS target
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = @source_issuer_id
   AND source.deleted IS FALSE
-  AND NOT (
-    source.client_id_metadata_uri IS NOT NULL
-    AND target.client_id_metadata_uri IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM issuance_selection_profiles AS profile
-      WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-        AND profile.user_session_client_id = source.id
-        AND profile.deleted IS FALSE
-    )
-  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -797,26 +785,57 @@ WHERE source.user_session_issuer_id = @source_issuer_id
   )
 ORDER BY source.client_id;
 
--- Merging a source CIMD client into the target issuer's client for the same
--- metadata document URL. ListMergeableCimdClientPairs decides which clients
--- merge; the steps after it each take one pair and run in order, each seeing
--- the previous step's writes.
+-- Merging a source client into the target issuer's client for the same
+-- client_id. ListMergeableClientPairs decides which clients merge; the steps
+-- after it each take one pair and run in order, each seeing the previous
+-- step's writes.
 
--- name: ListMergeableCimdClientPairs :many
--- Pairs each live source client resolved from a Client ID Metadata Document
--- with the target issuer's live client for the same document URL. A source
--- client an issuance selection profile pins to the source issuer is left out:
--- the profile's foreign key keeps it on that issuer.
-SELECT source.id AS source_client_id, target.id AS target_client_id
+-- name: ListMergeableClientPairs :many
+-- Pairs each live source client with the target issuer's live client for the
+-- same client_id when both rows describe one client:
+--
+--   - Both were resolved from the same Client ID Metadata Document. Their
+--     sessions and consents move onto the target's row.
+--   - Both were registered through dynamic client registration, which mints
+--     a random client_id, so a shared one means a single registration was
+--     copied onto both issuers. The source copy merges only while nothing
+--     uses it: no live session, no live consent, and no assistant binding.
+--     Its secret hash differs from the target's only by its bcrypt salt, but
+--     that cannot be verified, so a copy something signs in through blocks.
+--
+-- A source client an issuance selection profile pins to the source issuer is
+-- left out: the profile's foreign key keeps it on that issuer.
+SELECT source.id AS source_client_id, target.id AS target_client_id, source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
   ON target.user_session_issuer_id = @target_issuer_id
  AND target.client_id = source.client_id
- AND target.client_id_metadata_uri IS NOT NULL
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = @source_issuer_id
-  AND source.client_id_metadata_uri IS NOT NULL
   AND source.deleted IS FALSE
+  AND (
+    (source.client_id_metadata_uri IS NOT NULL AND target.client_id_metadata_uri IS NOT NULL)
+    OR (
+      source.client_id_metadata_uri IS NULL
+      AND target.client_id_metadata_uri IS NULL
+      AND source.assistant_runtime_id IS NULL
+      AND source.assistant_trigger_workload_binding_id IS NULL
+      AND target.assistant_runtime_id IS NULL
+      AND target.assistant_trigger_workload_binding_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_sessions AS session
+        WHERE session.user_session_client_id = source.id
+          AND session.deleted IS FALSE
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_session_consents AS consent
+        WHERE consent.user_session_client_id = source.id
+          AND consent.deleted IS FALSE
+      )
+    )
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM issuance_selection_profiles AS profile
@@ -835,7 +854,7 @@ WHERE source.user_session_issuer_id = @source_issuer_id
         OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
       )
   )
-ORDER BY source.id;
+ORDER BY source.client_id;
 
 -- name: MoveDuplicateConsentResourcesToClient :execrows
 -- Where the same subject approved the same upstream set through both clients,
@@ -926,12 +945,16 @@ WHERE client.id = @source_client_id
   AND client.deleted IS FALSE;
 
 -- name: CountUserSessionIssuerPrincipalBindingConflicts :one
+-- An agent attached to the same client on both issuers blocks the merge only
+-- when the two attachments use different logins: merging would silently swap
+-- the agent's credential. On the same login the target's attachment is kept.
 SELECT COUNT(*)::int
 FROM principal_remote_session_bindings AS source
 JOIN principal_remote_session_bindings AS target
   ON target.project_id = source.project_id
  AND target.principal_id = source.principal_id
  AND target.remote_session_client_id = source.remote_session_client_id
+ AND target.remote_session_id <> source.remote_session_id
  AND target.user_session_issuer_id = @target_issuer_id
  AND target.revoked_at IS NULL
 WHERE source.user_session_issuer_id = @source_issuer_id
@@ -1124,6 +1147,51 @@ WHERE session.user_session_issuer_id = @source_issuer_id
 -- name: DeleteSourceRemoteSessionClientIssuerLinks :execrows
 DELETE FROM remote_session_client_user_session_issuers AS link
 WHERE link.user_session_issuer_id = @source_issuer_id
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: UpdatePrincipalRemoteSessionBindingsToUserSessionIssuer :execrows
+-- Moves agents' attachments with the issuer they were made on. An attachment
+-- need not share its connection's issuer, so moving the connections does not
+-- move it. Only live connections of live clients the target now binds come
+-- along, as only live connections move; the rest leave with the source's
+-- client bindings. So does an attachment the target already holds on the same
+-- login, so the agent keeps exactly one active attachment for it.
+UPDATE principal_remote_session_bindings AS binding
+SET user_session_issuer_id = @target_issuer_id,
+    updated_at = clock_timestamp()
+FROM remote_sessions AS session, remote_session_clients AS client
+WHERE binding.user_session_issuer_id = @source_issuer_id
+  AND binding.organization_id = @organization_id::text
+  AND session.id = binding.remote_session_id
+  AND session.deleted IS FALSE
+  AND client.id = binding.remote_session_client_id
+  AND client.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS link
+    WHERE link.remote_session_client_id = binding.remote_session_client_id
+      AND link.user_session_issuer_id = @target_issuer_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM principal_remote_session_bindings AS target
+    WHERE target.project_id = binding.project_id
+      AND target.principal_id = binding.principal_id
+      AND target.remote_session_client_id = binding.remote_session_client_id
+      AND target.remote_session_id = binding.remote_session_id
+      AND target.user_session_issuer_id = @target_issuer_id
+      AND target.revoked_at IS NULL
+  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -1888,6 +1956,21 @@ FROM user_session_issuers AS iss
 WHERE cli.id = @id
   AND iss.id = cli.user_session_issuer_id
   AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND cli.deleted IS FALSE
+RETURNING cli.*;
+
+-- name: UpdateUserSessionClientRedirectURIs :one
+-- Replaces an operator-managed client's redirect URIs. CIMD rows are
+-- excluded: their redirect URIs come from the metadata document and would be
+-- overwritten on the next re-read.
+UPDATE user_session_clients AS cli
+SET redirect_uris = @redirect_uris,
+    updated_at = clock_timestamp()
+FROM user_session_issuers AS iss
+WHERE cli.id = @id
+  AND iss.id = cli.user_session_issuer_id
+  AND (iss.project_id = @project_id::uuid OR (iss.project_id IS NULL AND iss.organization_id = @organization_id::text))
+  AND cli.client_id_metadata_uri IS NULL
   AND cli.deleted IS FALSE
 RETURNING cli.*;
 
@@ -2718,7 +2801,7 @@ SELECT rs.id,
        rs.authorization_expires_at,
        -- Cast so sqlc types this as bool rather than interface{}; the token
        -- itself is never projected, only whether a refresh grant exists.
-       (rs.refresh_token_encrypted IS NOT NULL)::boolean AS has_refresh_token,
+       ((rs.refresh_token_encrypted IS NOT NULL OR rs.refresh_token_org_encrypted IS NOT NULL))::boolean AS has_refresh_token,
        rs.auto_refresh,
        rs.last_used_at,
        rs.scopes
@@ -2916,7 +2999,10 @@ ORDER BY tb.original_trigger_id;
 -- Records, for one inbound credential, the upstream OAuth client it uses for
 -- every MCP server it can reach, or an explicit no-auth choice. A NULL
 -- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
--- recording to those servers, and an empty array records nothing. An existing
+-- recording to those servers, and an empty array records nothing.
+-- exclude_mcp_server_ids leaves those servers without a row whatever else
+-- would decide them, for servers issuance deferred until the person connects
+-- them. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
 -- only once the server has an associated client and one is decided for the
 -- credential: the no-auth choice is unusable by then, and recording the
@@ -2988,6 +3074,8 @@ reachable AS (
     WHERE s.deleted IS FALSE
       AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
            OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
+      AND (sqlc.narg('exclude_mcp_server_ids')::uuid[] IS NULL
+           OR NOT s.id = ANY(sqlc.narg('exclude_mcp_server_ids')::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id

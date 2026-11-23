@@ -92,12 +92,17 @@ func TestShadowSettingVersionsTrackStateAndDomain(t *testing.T) {
 	require.False(t, codec.matchSetting(shadowOfficialLinkVersionDomain, version, current.versionState(projectID)))
 
 	key := "https://shadow.example.test/mcp"
-	unlinked := shadowOfficialLinkVersionState(projectID, key, officiallink.Link{MCPServerID: uuid.Nil, AllowDirectAccess: false})
-	linkVersion, err := codec.encodeSetting(shadowOfficialLinkVersionDomain, unlinked)
+	automatic := officiallink.Choice{Kind: officiallink.ChoiceAutomatic, MCPServerID: uuid.Nil}
+	linkVersion, err := codec.encodeSetting(shadowOfficialLinkVersionDomain, shadowOfficialLinkVersionState(projectID, key, automatic))
 	require.NoError(t, err)
-	linked := shadowOfficialLinkVersionState(projectID, key, officiallink.Link{MCPServerID: uuid.New(), AllowDirectAccess: false})
-	require.False(t, codec.matchSetting(shadowOfficialLinkVersionDomain, linkVersion, linked))
-	require.False(t, codec.matchSetting(shadowOfficialLinkVersionDomain, linkVersion, shadowOfficialLinkVersionState(projectID, key+"/other", officiallink.Link{MCPServerID: uuid.Nil, AllowDirectAccess: false})))
+	chosen := officiallink.Choice{Kind: officiallink.ChoiceServer, MCPServerID: uuid.New()}
+	require.False(t, codec.matchSetting(shadowOfficialLinkVersionDomain, linkVersion, shadowOfficialLinkVersionState(projectID, key, chosen)))
+	kept := officiallink.Choice{Kind: officiallink.ChoiceKeepShadow, MCPServerID: uuid.Nil}
+	require.False(t, codec.matchSetting(shadowOfficialLinkVersionDomain, linkVersion, shadowOfficialLinkVersionState(projectID, key, kept)))
+	// Without automatic links, keeping a server in direct use has no effect
+	// and reads as no choice, as the inventory reports it.
+	require.True(t, codec.matchSetting(shadowOfficialLinkVersionDomain, linkVersion, shadowOfficialLinkVersionState(projectID, key, kept.Visible(false))))
+	require.False(t, codec.matchSetting(shadowOfficialLinkVersionDomain, linkVersion, shadowOfficialLinkVersionState(projectID, key+"/other", automatic)))
 }
 
 func TestShadowSettingsRefuseInvalidRequestsBeforeAnyRead(t *testing.T) {
@@ -128,9 +133,10 @@ func TestShadowSettingsRefuseInvalidRequestsBeforeAnyRead(t *testing.T) {
 		input SetShadowMCPOfficialServerInput
 	}{
 		{name: "unknown action", input: SetShadowMCPOfficialServerInput{ProjectID: "project", TargetReference: "t", Action: "replace", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true}},
-		{name: "link without a server", input: SetShadowMCPOfficialServerInput{ProjectID: "project", TargetReference: "t", Action: "link", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true}},
-		{name: "switch with a server", input: SetShadowMCPOfficialServerInput{ProjectID: "project", TargetReference: "t", Action: "switch_off", MCPID: uuid.NewString(), ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true}},
-		{name: "missing target", input: SetShadowMCPOfficialServerInput{ProjectID: "project", Action: "remove", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true}},
+		{name: "make official without a server", input: SetShadowMCPOfficialServerInput{ProjectID: "project", TargetReference: "t", Action: "make_official", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true}},
+		{name: "keep shadow with a server", input: SetShadowMCPOfficialServerInput{ProjectID: "project", TargetReference: "t", Action: "keep_shadow", MCPID: uuid.NewString(), ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true}},
+		{name: "removed action", input: SetShadowMCPOfficialServerInput{ProjectID: "project", TargetReference: "t", Action: "switch_off", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true}},
+		{name: "missing target", input: SetShadowMCPOfficialServerInput{ProjectID: "project", Action: "automatic", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true}},
 	} {
 		t.Run("official server "+test.name, func(t *testing.T) {
 			t.Parallel()
@@ -144,7 +150,7 @@ func TestShadowSettingsRefuseInvalidRequestsBeforeAnyRead(t *testing.T) {
 
 	_, err := service.SetDefaultAccess(t.Context(), principal, SetShadowMCPDefaultAccessInput{ProjectID: "project", Mode: "blocked", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true})
 	require.ErrorIs(t, err, ErrShadowDecisionUnavailable)
-	_, err = service.SetOfficialServer(t.Context(), principal, SetShadowMCPOfficialServerInput{ProjectID: "project", TargetReference: "t", Action: "remove", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true})
+	_, err = service.SetOfficialServer(t.Context(), principal, SetShadowMCPOfficialServerInput{ProjectID: "project", TargetReference: "t", Action: "automatic", ExpectedVersion: "v", IdempotencyKey: "key", Confirmed: true})
 	require.ErrorIs(t, err, ErrShadowDecisionUnavailable)
 }
 
@@ -157,10 +163,12 @@ func TestShadowSettingsReceiptsAreClosed(t *testing.T) {
 	require.False(t, validShadowDefaultAccessReceipt(ShadowDefaultAccessReceiptResult{Mode: "blocked", Audience: "everyone", Roles: nil, ResultCategory: "created"}))
 	require.False(t, validShadowDefaultAccessReceipt(ShadowDefaultAccessReceiptResult{Mode: "blocked", Audience: "everyone", Roles: []ShadowDecisionAudience{}, ResultCategory: "decided"}))
 
-	require.True(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "link", LinkState: "on", MCPID: uuid.NewString(), ResultCategory: "changed"}))
-	require.True(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "remove", LinkState: "none", MCPID: "", ResultCategory: "unchanged"}))
-	require.False(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "remove", LinkState: "none", MCPID: uuid.NewString(), ResultCategory: "changed"}))
-	require.False(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "link", LinkState: "on", MCPID: "", ResultCategory: "changed"}))
+	require.True(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "make_official", Choice: "server", MCPID: uuid.NewString(), ResultCategory: "changed"}))
+	require.True(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "automatic", Choice: "automatic", MCPID: "", ResultCategory: "unchanged"}))
+	require.True(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "keep_shadow", Choice: "keep_shadow", MCPID: "", ResultCategory: "changed"}))
+	require.False(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "automatic", Choice: "automatic", MCPID: uuid.NewString(), ResultCategory: "changed"}))
+	require.False(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "make_official", Choice: "server", MCPID: "", ResultCategory: "changed"}))
+	require.False(t, validShadowOfficialLinkReceipt(ShadowOfficialLinkReceiptResult{Action: "link", Choice: "server", MCPID: uuid.NewString(), ResultCategory: "changed"}))
 }
 
 func TestUnavailableShadowSettingsToolsKeepTheirContract(t *testing.T) {
@@ -206,8 +214,9 @@ func TestUnavailableShadowSettingsToolsKeepTheirContract(t *testing.T) {
 	require.JSONEq(t, `{"code":"feature_unavailable","feature":"shadow_mcp_settings","message":"Shadow MCP access decisions are not enabled or are temporarily unavailable."}`, text.Text)
 }
 
-// The inventory carries a remote target's link and the version that guards
-// it, and offers the suggested server only while nothing is linked.
+// The inventory carries a remote target's official server, the
+// administrator's choice and the version that guards it, and offers the
+// suggested server only while no server is official.
 func TestShadowInventoryProjectsOfficialLink(t *testing.T) {
 	t.Parallel()
 
@@ -217,14 +226,31 @@ func TestShadowInventoryProjectsOfficialLink(t *testing.T) {
 	project := ResolvedProject{ID: uuid.New(), Name: "Default", Slug: "default"}
 	officialID := uuid.New()
 	row := stubOfficialInventoryRow("https://linked.example.test/mcp")
-	row.OfficialServer = &accessgen.ShadowMCPOfficialServer{McpServerID: officialID.String(), Name: "Company Tools", Slug: new("company-tools"), DirectAccessAllowed: true}
+	row.OfficialServer = &accessgen.ShadowMCPOfficialServer{McpServerID: officialID.String(), Name: "Company Tools", Slug: new("company-tools"), Automatic: new(false)}
 	row.SuggestedOfficialServer = &accessgen.ShadowMCPSuggestedOfficialServer{McpServerID: uuid.NewString(), Name: "Other"}
 
 	var summary ShadowMCPTargetSummary
 	require.NoError(t, service.projectOfficialLink(project, row, &summary))
-	require.Equal(t, &ShadowMCPOfficialServerLink{MCPID: officialID.String(), Name: "Company Tools", Slug: "company-tools", LinkState: "off"}, summary.OfficialServer)
+	require.Equal(t, &ShadowMCPOfficialServerLink{MCPID: officialID.String(), Name: "Company Tools", Slug: "company-tools", Automatic: false}, summary.OfficialServer)
+	require.Equal(t, "server", summary.OfficialChoice)
 	require.Nil(t, summary.SuggestedOfficialServer)
-	require.True(t, codec.matchSetting(shadowOfficialLinkVersionDomain, summary.OfficialLinkVersion, shadowOfficialLinkVersionState(project.ID, "https://linked.example.test/mcp", officiallink.Link{MCPServerID: officialID, AllowDirectAccess: true})))
+	require.True(t, codec.matchSetting(shadowOfficialLinkVersionDomain, summary.OfficialLinkVersion, shadowOfficialLinkVersionState(project.ID, "https://linked.example.test/mcp", officiallink.Choice{Kind: officiallink.ChoiceServer, MCPServerID: officialID})))
+
+	// A server official because it proxies to the URL is not a choice.
+	automaticRow := stubOfficialInventoryRow("https://auto.example.test/mcp")
+	automaticRow.OfficialServer = &accessgen.ShadowMCPOfficialServer{McpServerID: officialID.String(), Name: "Company Tools", Automatic: new(true)}
+	summary = ShadowMCPTargetSummary{}
+	require.NoError(t, service.projectOfficialLink(project, automaticRow, &summary))
+	require.True(t, summary.OfficialServer.Automatic)
+	require.Equal(t, "automatic", summary.OfficialChoice)
+	require.True(t, codec.matchSetting(shadowOfficialLinkVersionDomain, summary.OfficialLinkVersion, shadowOfficialLinkVersionState(project.ID, "https://auto.example.test/mcp", officiallink.Choice{Kind: officiallink.ChoiceAutomatic, MCPServerID: uuid.Nil})))
+
+	declined := stubOfficialInventoryRow("https://kept.example.test/mcp")
+	declined.OfficialServerDeclined = new(true)
+	summary = ShadowMCPTargetSummary{}
+	require.NoError(t, service.projectOfficialLink(project, declined, &summary))
+	require.Nil(t, summary.OfficialServer)
+	require.Equal(t, "keep_shadow", summary.OfficialChoice)
 
 	unlinked := stubOfficialInventoryRow("https://unlinked.example.test/mcp/")
 	suggestedID := uuid.NewString()
@@ -233,7 +259,8 @@ func TestShadowInventoryProjectsOfficialLink(t *testing.T) {
 	require.NoError(t, service.projectOfficialLink(project, unlinked, &summary))
 	require.Nil(t, summary.OfficialServer)
 	require.Equal(t, &ShadowMCPSuggestedOfficialServer{MCPID: suggestedID, Name: "Proxy", Slug: ""}, summary.SuggestedOfficialServer)
-	require.True(t, codec.matchSetting(shadowOfficialLinkVersionDomain, summary.OfficialLinkVersion, shadowOfficialLinkVersionState(project.ID, "https://unlinked.example.test/mcp", officiallink.Link{MCPServerID: uuid.Nil, AllowDirectAccess: false})))
+	require.Equal(t, "automatic", summary.OfficialChoice)
+	require.True(t, codec.matchSetting(shadowOfficialLinkVersionDomain, summary.OfficialLinkVersion, shadowOfficialLinkVersionState(project.ID, "https://unlinked.example.test/mcp", officiallink.Choice{Kind: officiallink.ChoiceAutomatic, MCPServerID: uuid.Nil})))
 }
 
 func stubOfficialInventoryRow(canonicalURL string) *accessgen.ShadowMCPInventoryServer {

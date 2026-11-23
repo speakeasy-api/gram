@@ -212,6 +212,8 @@ func workloadGrantStageUnavailable(reason string, err error) error {
 	return &workloadGrantError{reason: reason, outcome: workloadGrantUnavailable, retryAfter: workloadGrantUnavailableRetryAfter, err: err}
 }
 
+var errGatewayMachineAccessDisabled = errors.New("gateway machine access is disabled")
+
 // presentedWorkload is what an assertion claims before and after verification:
 // the iss and sub it presented, and the issuer row iss resolved to once it
 // has. It is what a rejection log line records.
@@ -396,7 +398,14 @@ func (s *Service) workloadAssertionGrantAdvertised(endpoint *ResolvedMcpEndpoint
 	if s.workloadGrant == nil {
 		return false
 	}
-	_, ok := agentAuthorizationTarget(endpoint)
+	if _, ok := agentAuthorizationTarget(endpoint); ok {
+		return true
+	}
+	gateway, err := gatewayTargetFromEndpoint(endpoint)
+	if err != nil {
+		return false
+	}
+	_, ok := gateway.authorizationTarget(endpoint.ProjectID)
 	return ok
 }
 
@@ -466,6 +475,22 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 	}
 	target, ok := agentAuthorizationTarget(endpoint)
+	if gateway, gatewayErr := gatewayTargetFromEndpoint(endpoint); gatewayErr == nil {
+		target, ok = gateway.authorizationTarget(endpoint.ProjectID)
+		if ok {
+			enabled, rolloutErr := s.gatewayMachineAccess(ctx, gateway)
+			if rolloutErr != nil {
+				refusal := workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", rolloutErr)
+				refuseWorkloadGrantRow(ctx, t, refusal)
+				return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
+			}
+			if !enabled {
+				refusal := refuseWorkloadGrant("gateway_machine_access_disabled", errGatewayMachineAccessDisabled)
+				refuseWorkloadGrantRow(ctx, t, refusal)
+				return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
+			}
+		}
+	}
 	if !ok {
 		refusal := refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy"))
 		refuseWorkloadGrantRow(ctx, t, refusal)
@@ -642,6 +667,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
+		DeferredServerIDs:      nil,
 		Catalog:                nil,
 		TypedOnly:              false,
 	}
@@ -762,8 +788,14 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 	if err == nil && grant.endpoint != nil {
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
+	if err == nil && grant.endpoint != nil {
+		authorizationCtx, err = s.requireGatewayWorkloadMember(authorizationCtx, logger, grant.endpoint)
+	}
 	if err == nil && grant.session.Audience == InferenceResource {
 		err = s.authz.Require(authorizationCtx, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))
+	}
+	if _, ok := errors.AsType[*workloadGrantError](err); ok {
+		return nil, err
 	}
 	switch {
 	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
@@ -780,8 +812,9 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		return nil, workloadGrantStageUnavailable("upstream_choice_unavailable", err)
 	}
 	if grant.choosesUpstream && grant.endpoint != nil {
-		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject}
-		upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients, grant.session.TypedOnly)
+		caller := headlessCaller{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID: uuid.NullUUID{UUID: grant.presented.issuerID, Valid: true}, workloadSubject: grant.presented.subject, connectsLater: false}
+		// A workload cannot connect later, so nothing is deferred.
+		upstreamPicks, authClientPicks, _, err := s.headlessAuthClientPicks(authorizationCtx, grant.endpoint, subject, caller, grant.requestedAuthClients, grant.session.TypedOnly)
 		if err != nil {
 			if _, ok := errors.AsType[*oops.OAuthError](err); ok {
 				// The workload was admitted, so naming why its choice failed
@@ -812,6 +845,9 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		err = s.recheckWorkloadGrantAuthorization(authorizationCtx, grant)
 	}
 	if err != nil {
+		if _, ok := errors.AsType[*workloadGrantError](err); ok {
+			return nil, err
+		}
 		if errors.Is(err, errCredentialRejected) || isCredentialDenial(err) {
 			return nil, refuseWorkloadGrant("agent_admission_denied", err)
 		}
@@ -871,6 +907,35 @@ func (s *Service) writeWorkloadGrantRefusal(ctx context.Context, w http.Response
 	}
 }
 
+// A gateway-bound workload session must reach at least one member. Gateway
+// entry and member authorization remain separate decisions: the endpoint grant
+// admits the gateway, while the normal member snapshot applies visibility and
+// each member's own mcp:connect authorization.
+func (s *Service) requireGatewayWorkloadMember(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, error) {
+	gateway, err := gatewayTargetFromEndpoint(endpoint)
+	if err != nil {
+		return ctx, nil
+	}
+	if _, ok := gateway.authorizationTarget(endpoint.ProjectID); !ok {
+		return ctx, nil
+	}
+
+	ctx = authz.WithoutCredentialCeiling(ctx)
+	var members []metaMember
+	if endpoint.IsProjectGateway() {
+		ctx, members, _, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint.OrganizationID, false, uuid.Nil, endpoint.ProjectID)
+	} else {
+		ctx, members, err = s.resolveEndpointMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, endpoint)
+	}
+	if err != nil {
+		return ctx, workloadGrantStageUnavailable("gateway_member_admission_unavailable", err)
+	}
+	if len(members) == 0 {
+		return ctx, refuseWorkloadGrant("gateway_no_reachable_members", errors.New("workload reaches no gateway member"))
+	}
+	return ctx, nil
+}
+
 // retryAfterSeconds renders a Retry-After delay in whole seconds, never less
 // than one.
 func retryAfterSeconds(d time.Duration) string {
@@ -883,11 +948,24 @@ func retryAfterSeconds(d time.Duration) string {
 func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant workloadGrantIssuance) error {
 	var checks []authz.Check
 	if grant.endpoint != nil {
-		target, ok := agentAuthorizationTarget(grant.endpoint)
-		if !ok {
-			return errCredentialRejected
+		if gateway, gatewayErr := gatewayTargetFromEndpoint(grant.endpoint); gatewayErr == nil {
+			if _, ok := gateway.authorizationTarget(grant.endpoint.ProjectID); !ok {
+				return errCredentialRejected
+			}
+			enabled, err := s.gatewayMachineAccess(ctx, gateway)
+			if err != nil {
+				return workloadGrantStageUnavailable("gateway_machine_access_rollout_unavailable", err)
+			}
+			if !enabled {
+				return refuseWorkloadGrant("gateway_machine_access_disabled", errGatewayMachineAccessDisabled)
+			}
+		} else {
+			target, ok := agentAuthorizationTarget(grant.endpoint)
+			if !ok {
+				return errCredentialRejected
+			}
+			checks = append(checks, target.connectCheck())
 		}
-		checks = append(checks, target.connectCheck())
 	}
 	if grant.session.Audience == InferenceResource {
 		checks = append(checks, authz.InferenceExecuteCheck(grant.session.ProjectID.String()))

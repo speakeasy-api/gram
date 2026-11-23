@@ -16,21 +16,72 @@ import (
 
 // Client is the "userSessionClients" service client.
 type Client struct {
-	ListUserSessionClientsEndpoint       goa.Endpoint
-	GetUserSessionClientEndpoint         goa.Endpoint
-	RefreshUserSessionClientCIMDEndpoint goa.Endpoint
-	RevokeUserSessionClientEndpoint      goa.Endpoint
+	CreateUserSessionClientEndpoint             goa.Endpoint
+	UpdateUserSessionClientRedirectURIsEndpoint goa.Endpoint
+	ListUserSessionClientsEndpoint              goa.Endpoint
+	GetUserSessionClientEndpoint                goa.Endpoint
+	RefreshUserSessionClientCIMDEndpoint        goa.Endpoint
+	RevokeUserSessionClientEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "userSessionClients" service client given the
 // endpoints.
-func NewClient(listUserSessionClients, getUserSessionClient, refreshUserSessionClientCIMD, revokeUserSessionClient goa.Endpoint) *Client {
+func NewClient(createUserSessionClient, updateUserSessionClientRedirectURIs, listUserSessionClients, getUserSessionClient, refreshUserSessionClientCIMD, revokeUserSessionClient goa.Endpoint) *Client {
 	return &Client{
-		ListUserSessionClientsEndpoint:       listUserSessionClients,
-		GetUserSessionClientEndpoint:         getUserSessionClient,
-		RefreshUserSessionClientCIMDEndpoint: refreshUserSessionClientCIMD,
-		RevokeUserSessionClientEndpoint:      revokeUserSessionClient,
+		CreateUserSessionClientEndpoint:             createUserSessionClient,
+		UpdateUserSessionClientRedirectURIsEndpoint: updateUserSessionClientRedirectURIs,
+		ListUserSessionClientsEndpoint:              listUserSessionClients,
+		GetUserSessionClientEndpoint:                getUserSessionClient,
+		RefreshUserSessionClientCIMDEndpoint:        refreshUserSessionClientCIMD,
+		RevokeUserSessionClientEndpoint:             revokeUserSessionClient,
 	}
+}
+
+// CreateUserSessionClient calls the "createUserSessionClient" endpoint of the
+// "userSessionClients" service.
+// CreateUserSessionClient may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateUserSessionClient(ctx context.Context, p *CreateUserSessionClientPayload) (res *CreateUserSessionClientResult, err error) {
+	var ires any
+	ires, err = c.CreateUserSessionClientEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CreateUserSessionClientResult), nil
+}
+
+// UpdateUserSessionClientRedirectURIs calls the
+// "updateUserSessionClientRedirectURIs" endpoint of the "userSessionClients"
+// service.
+// UpdateUserSessionClientRedirectURIs may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateUserSessionClientRedirectURIs(ctx context.Context, p *UpdateUserSessionClientRedirectURIsPayload) (res *types.UserSessionClient, err error) {
+	var ires any
+	ires, err = c.UpdateUserSessionClientRedirectURIsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.UserSessionClient), nil
 }
 
 // ListUserSessionClients calls the "listUserSessionClients" endpoint of the

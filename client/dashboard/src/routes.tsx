@@ -123,11 +123,6 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  playground: {
-    title: "Playground",
-    url: "playground",
-    icon: "message-circle",
-  },
   integrations: {
     title: "Integrations",
     url: "integrations",
@@ -839,11 +834,6 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  sdks: {
-    title: "SDKs",
-    url: "sdks",
-    icon: "code",
-  },
   deployments: {
     title: "Deployments",
     url: "deployments",
@@ -1388,6 +1378,10 @@ const ORG_ROUTE_STRUCTURE = {
       challenges: {
         title: "Roles & Permissions",
         url: "challenges",
+      },
+      requests: {
+        title: "Roles & Permissions",
+        url: "requests",
       },
     },
   },

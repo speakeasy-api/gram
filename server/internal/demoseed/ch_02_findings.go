@@ -166,10 +166,19 @@ func (s *seeder) chfShadowTelemetry(ctx context.Context, ch driver.Conn) error {
 		if failed {
 			result = `,"gram.hook.error":"` + chfShadowErrors[hash64("sherr", n)%4] + `"`
 		}
+		// The Shadow MCP policy stopped a share of the calls before they ran.
+		// Blocks cluster on the servers that reach production data and on
+		// Notion, whose review is still waiting, so the blocked-calls column
+		// ranks a few servers well ahead of the rest.
+		event := "PostToolUse"
+		if chfShadowBlocked(sidx, n) {
+			event = "PreToolUse"
+			result = `,"gram.hook.block_reason":"MCP server is not approved for this project"`
+		}
 		user := demoUsers[chfShadowUserDraw[hash64("shu", n)%8]-1]
 		attrs := `{"gram.event.source":"hook"` +
 			`,"gram.hook.source":"claude-code"` +
-			`,"gram.hook.event":"PostToolUse"` +
+			`,"gram.hook.event":"` + event + `"` +
 			`,"gram.tool.name":"` + tool + `"` +
 			`,"gram.mcp.server_url":"` + chfShadowServers[sidx-1] + `"` +
 			result +
@@ -189,6 +198,18 @@ func (s *seeder) chfShadowTelemetry(ctx context.Context, ch driver.Conn) error {
 		})
 	}
 	return s.chfInsertTelemetry(ctx, ch, "shadow mcp telemetry", rows)
+}
+
+// chfShadowBlocked reports whether the seeded shadow call n to server sidx
+// (1-based) was blocked by the Shadow MCP policy.
+func chfShadowBlocked(sidx int, n int) bool {
+	switch sidx {
+	case 12, 15:
+		return hash64("shblk", n)%3 != 0
+	case 2, 10, 13:
+		return hash64("shblk", n)%2 == 0
+	}
+	return false
 }
 
 type chfDetection struct {
@@ -403,6 +424,36 @@ func (s *seeder) chfAuthzChallenges(ctx context.Context, ch driver.Conn) error {
 				uint32(3+n%5),
 			); err != nil {
 				return fmt.Errorf("append authz challenge: %w", err)
+			}
+		}
+
+		// The assistant's agent refused another member's personal Linear
+		// connection: the agent's Permissions tab lists these under failed
+		// checks. The recorded selector names the server, never the
+		// connection's owner.
+		agentURN := "agent:" + s.det("assistant-agent").String()
+		client := s.det("auth-client-linear").String()
+		refusedSelector := `{"client_type":"remote_session","mcp_server_id":"` + s.det("mcpserver-linear").String() +
+			`","project_id":"` + proj + `","resource_id":"` + client + `","resource_kind":"mcp_auth_client"}`
+		for n := range 3 {
+			if err := b.Append(
+				now.Add(-time.Duration(1+n*9)*time.Hour),
+				s.orgID(),
+				proj,
+				md5Hex(s.name("chal-auth-"+strconv.Itoa(n))),
+				md5Hex(s.name("chalspan-auth-" + strconv.Itoa(n)))[:16],
+				"req_"+md5Hex(s.name("chalreq-auth-" + strconv.Itoa(n)))[:16],
+				agentURN, "agent", (*string)(nil), (*string)(nil), (*string)(nil),
+				[]string{},
+				"require",
+				"deny", "connection_owner_mismatch", "mcp:auth", "mcp_auth_client", client,
+				refusedSelector,
+				[]string{"mcp:auth"},
+				[]string{"mcp:auth"}, []string{"mcp_auth_client"}, []string{client}, []string{refusedSelector},
+				[]string{}, []string{}, []string{}, []string{},
+				uint32(3),
+			); err != nil {
+				return fmt.Errorf("append refused auth client challenge: %w", err)
 			}
 		}
 		return nil
@@ -1026,12 +1077,12 @@ func (s *seeder) chfGatewayGoneCalls(ctx context.Context, ch driver.Conn) error 
 
 // chfGatewayHooks: what the Claude Code hooks record when an agent calls the
 // gateway itself — hook rows whose gram.mcp.server_url is the gateway endpoint
-// URL. The tool usage classifier matches that URL to the gateway, so Tool Logs
-// and Insights show them as the gateway rather than as an unknown (shadow) MCP
-// server.
+// URL on this deployment's own host. The tool usage classifier matches that URL
+// to the gateway, so Tool Logs and Insights show them as the gateway rather
+// than as an unknown (shadow) MCP server.
 func (s *seeder) chfGatewayHooks(ctx context.Context, ch driver.Conn) error {
 	gatewaySlug := s.spec.OrgSlug + "-gateway"
-	gatewayURL := "https://app.getgram.ai/mcp/" + gatewaySlug
+	gatewayURL := s.serverURL.JoinPath("mcp", gatewaySlug).String()
 	rows := make([]chfTelemetryRow, 0, 40)
 	for n := range 40 {
 		i := n + 1

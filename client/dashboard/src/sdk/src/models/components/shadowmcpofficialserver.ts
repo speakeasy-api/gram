@@ -9,13 +9,17 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.
+ * The official, Speakeasy-served version of a Shadow MCP server: a project MCP server that proxies to its URL, or one an administrator chose.
  */
 export type ShadowMCPOfficialServer = {
   /**
-   * True while the link is switched off: direct connections to the Shadow MCP server follow the ordinary Shadow MCP rules instead of being blocked.
+   * True when the server was made official automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
    */
-  directAccessAllowed: boolean;
+  automatic?: boolean | undefined;
+  /**
+   * Deprecated: official servers no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.
+   */
+  directAccessAllowed?: boolean | undefined;
   /**
    * The gateway that serves the official server, when url is a gateway's address.
    */
@@ -41,7 +45,8 @@ export const ShadowMCPOfficialServer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    direct_access_allowed: z.boolean(),
+    automatic: z.optional(z.boolean()),
+    direct_access_allowed: z.optional(z.boolean()),
     gateway_name: z.optional(z.string()),
     mcp_server_id: z.string(),
     name: z.string(),

@@ -153,9 +153,12 @@ type GenerateConfig struct {
 // fields are fixed sentinels so only generator changes register, never data.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:          "Hooks Check",
-		OrgEmail:         "hooks-check@example.com",
-		OrgID:            "org-hooks-check",
+		OrgName:  "Hooks Check",
+		OrgEmail: "hooks-check@example.com",
+		OrgID:    "org-hooks-check",
+		// A fixed sentinel like the other fields; this output is only diffed,
+		// never published. Changing it changes every rendered file and so
+		// forces a hooksGeneratorVersion bump.
 		ServerURL:        "https://app.getgram.ai",
 		APIKey:           fingerprintAPIKeySentinel,
 		HooksAPIKey:      fingerprintHooksKeySentinel,
@@ -205,9 +208,12 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 // directories on demand.
 func DogfoodPluginFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:          "",
-		OrgEmail:         "",
-		OrgID:            "",
+		OrgName:  "",
+		OrgEmail: "",
+		OrgID:    "",
+		// The bootstrap downloads the pinned speakeasy-hooks release from this
+		// host, so it must be a deployment that serves hooks releases. The
+		// relay's server URL still comes from SPEAKEASY_AI_HOOKS_* at run time.
 		ServerURL:        "https://app.getgram.ai",
 		APIKey:           "",
 		HooksAPIKey:      "",
@@ -403,7 +409,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "64"
+const hooksGeneratorVersion = "66"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits

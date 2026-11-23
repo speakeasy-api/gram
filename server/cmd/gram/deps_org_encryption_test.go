@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -35,6 +36,10 @@ func TestNewOrgEncryptionOffWithoutBuilding(t *testing.T) {
 			require.NoError(t, err)
 			require.Nil(t, deps.Service)
 			require.Nil(t, deps.Provisioner)
+			require.NotNil(t, deps.Transitions, "a process without organization encryption still reads transition state, to serve platform_key and fail closed otherwise")
+
+			_, err = deps.Transitions.Enroll(t.Context(), "org_test", orgencryption.UseCaseOAuthClientSecrets, orgencryption.SystemActor())
+			require.Error(t, err, "a process without organization encryption cannot change transition state")
 		})
 	}
 }
@@ -135,6 +140,7 @@ func TestNewOrgEncryptionBuildsServiceAndProvisioner(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, deps.Service)
 	require.NotNil(t, deps.Provisioner)
+	require.NotNil(t, deps.Transitions)
 }
 
 // TestOrgEncryptionFlagsOnOAuthCredentialProcesses checks that each process

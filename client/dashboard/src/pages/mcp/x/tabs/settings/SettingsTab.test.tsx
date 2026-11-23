@@ -60,6 +60,9 @@ vi.mock("./sections/authentication/IdentityChainingSection", () => ({
 vi.mock("./sections/DangerZoneSection", () => ({
   DangerZoneSection: () => <h2>Danger Zone</h2>,
 }));
+vi.mock("./sections/RestartSetupSection", () => ({
+  RestartSetupSection: () => <h2>Guided setup</h2>,
+}));
 vi.mock("./sections/HeadersSection", () => ({
   HeadersSection: () => <h2>Custom Headers</h2>,
 }));
@@ -117,13 +120,16 @@ vi.mock("./sections/AgentSetupSection", () => ({
 
 // The source rows the tab fetches for the sections that edit them. Only the
 // enabled query resolves, the same way the real hooks behave.
+const sourceUrl = vi.hoisted(() => ({
+  value: "https://mcp.example.com/mcp",
+}));
 function sourceRow(id: string) {
   return (
     _args: unknown,
     _options: unknown,
     query?: { enabled?: boolean },
   ) => ({
-    data: query?.enabled ? { id } : undefined,
+    data: query?.enabled ? { id, url: sourceUrl.value } : undefined,
     isError: false,
   });
 }
@@ -192,6 +198,41 @@ afterEach(() => {
 });
 
 describe("SettingsTab", () => {
+  it("adds a Guided setup area above Danger zone once guided setup is done", () => {
+    sourceUrl.value = "https://mcp.slack.com/mcp";
+    const areas = renderAreas(
+      server({
+        remoteMcpServerId: "remote-source-1",
+        setupGuideCompletedAt: new Date(),
+      }),
+    );
+    sourceUrl.value = "https://mcp.example.com/mcp";
+    expect(areas["Guided setup"]).toEqual(["Guided setup"]);
+    const names = Object.keys(areas);
+    expect(names.indexOf("Guided setup")).toBe(
+      names.indexOf("Danger zone") - 1,
+    );
+  });
+
+  it.each([
+    ["guided setup is not done", "https://mcp.slack.com/mcp", undefined],
+    [
+      "the provider has no guided setup",
+      "https://mcp.example.com/mcp",
+      new Date(),
+    ],
+  ])(
+    "has no Guided setup area when %s",
+    (_case, url, setupGuideCompletedAt) => {
+      sourceUrl.value = url;
+      const areas = renderAreas(
+        server({ remoteMcpServerId: "remote-source-1", setupGuideCompletedAt }),
+      );
+      sourceUrl.value = "https://mcp.example.com/mcp";
+      expect(areas["Guided setup"]).toBeUndefined();
+    },
+  );
+
   it("groups Remote MCP settings into areas", () => {
     expect(
       renderAreas(

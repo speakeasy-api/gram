@@ -496,6 +496,36 @@ func (q *Queries) AdminGetIssuerFixture(ctx context.Context, id uuid.UUID) (Admi
 	return i, err
 }
 
+const adminGetMCPServerSourceToolset = `-- name: AdminGetMCPServerSourceToolset :one
+SELECT t.slug, COALESCE(s.tool_variations_group_id, t.tool_variations_group_id, '00000000-0000-0000-0000-000000000000'::uuid)::uuid AS variations_group_id
+FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id AND p.deleted IS FALSE
+JOIN organization_metadata o ON o.id = p.organization_id AND o.disabled_at IS NULL
+LEFT JOIN toolsets t ON t.id = s.toolset_id AND t.project_id = p.id
+    AND t.organization_id = o.id AND t.deleted IS FALSE
+WHERE s.id = $1 AND s.project_id = $2
+    AND o.id = $3 AND s.deleted IS FALSE
+    AND (s.toolset_id IS NULL OR t.id IS NOT NULL)
+`
+
+type AdminGetMCPServerSourceToolsetParams struct {
+	ServerID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type AdminGetMCPServerSourceToolsetRow struct {
+	Slug              pgtype.Text
+	VariationsGroupID uuid.UUID
+}
+
+func (q *Queries) AdminGetMCPServerSourceToolset(ctx context.Context, arg AdminGetMCPServerSourceToolsetParams) (AdminGetMCPServerSourceToolsetRow, error) {
+	row := q.db.QueryRow(ctx, adminGetMCPServerSourceToolset, arg.ServerID, arg.ProjectID, arg.OrganizationID)
+	var i AdminGetMCPServerSourceToolsetRow
+	err := row.Scan(&i.Slug, &i.VariationsGroupID)
+	return i, err
+}
+
 const adminGetMcpServerAuth = `-- name: AdminGetMcpServerAuth :one
 SELECT
     m.id,
@@ -1364,6 +1394,54 @@ func (q *Queries) AdminListIssuerRemoteSessionClients(ctx context.Context, userS
 			&i.IssuerMetadataFetchedAt,
 			&i.IssuerMetadataLastErrorAt,
 			&i.IssuerJwksLastErrorAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListMCPServerOpenAPISources = `-- name: AdminListMCPServerOpenAPISources :many
+SELECT DISTINCT a.id, a.name, a.url, a.content_type
+FROM http_tool_definitions h
+JOIN deployments_openapiv3_assets d ON d.id = h.openapiv3_document_id
+JOIN assets a ON a.id = d.asset_id
+WHERE h.id = ANY($1::uuid[]) AND h.project_id = $2
+    AND a.project_id = $2 AND a.deleted IS FALSE
+    AND h.deleted IS FALSE
+ORDER BY a.name, a.id
+`
+
+type AdminListMCPServerOpenAPISourcesParams struct {
+	ToolIds   []uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type AdminListMCPServerOpenAPISourcesRow struct {
+	ID          uuid.UUID
+	Name        string
+	Url         string
+	ContentType string
+}
+
+func (q *Queries) AdminListMCPServerOpenAPISources(ctx context.Context, arg AdminListMCPServerOpenAPISourcesParams) ([]AdminListMCPServerOpenAPISourcesRow, error) {
+	rows, err := q.db.Query(ctx, adminListMCPServerOpenAPISources, arg.ToolIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListMCPServerOpenAPISourcesRow
+	for rows.Next() {
+		var i AdminListMCPServerOpenAPISourcesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Url,
+			&i.ContentType,
 		); err != nil {
 			return nil, err
 		}

@@ -163,12 +163,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextvalues.AuthContext, error) {
+func (s *Service) authorize(ctx context.Context, permission func(authz.OrgRef) authz.Check) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return nil, err
 	}
 	return authCtx, nil
@@ -185,7 +185,7 @@ func (s *Service) requireExpansion(ctx context.Context, organizationID string) e
 }
 
 func (s *Service) GetIngress(ctx context.Context, _ *gen.GetIngressPayload) (*gen.NetworkIngressResult, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +256,7 @@ func validateHostname(hostname string) error {
 }
 
 func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 }
 
 func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +429,7 @@ func (s *Service) UpdateIngress(ctx context.Context, payload *gen.UpdateIngressP
 }
 
 func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCredentialsPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +471,7 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 }
 
 func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPayload) (*gen.NetworkIngressDeleteImpact, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -488,7 +488,7 @@ func (s *Service) GetDeleteImpact(ctx context.Context, _ *gen.GetDeleteImpactPay
 }
 
 func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload) error {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return err
 	}
@@ -541,7 +541,7 @@ func (s *Service) DeleteIngress(ctx context.Context, _ *gen.DeleteIngressPayload
 }
 
 func (s *Service) CheckHealth(ctx context.Context, _ *gen.CheckHealthPayload) (*gen.NetworkIngress, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeOrgAdmin)
+	authCtx, err := s.authorize(ctx, authz.OrgRef.Admin)
 	if err != nil {
 		return nil, err
 	}

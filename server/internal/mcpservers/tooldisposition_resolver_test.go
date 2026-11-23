@@ -38,8 +38,8 @@ func TestToolDispositionResolver_DerivesFromMetadata(t *testing.T) {
 		Tools: []*gen.ToolMetadataForm{
 			{ToolName: "list_items", Title: nil, ReadOnlyHint: new(true), DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
 			{ToolName: "delete_item", Title: nil, ReadOnlyHint: new(false), DestructiveHint: new(true), IdempotentHint: nil, OpenWorldHint: nil},
-			// Reviewed with no behavior class (every hint unset): omitted from the
-			// map, since an absent key reads as the empty disposition anyway.
+			// Reviewed with no behavior class (every hint unset): recorded as
+			// unannotated, so only a tool missing from the map is unknown.
 			{ToolName: "ping", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
 		},
 		SessionToken:     nil,
@@ -53,6 +53,7 @@ func TestToolDispositionResolver_DerivesFromMetadata(t *testing.T) {
 	require.Equal(t, map[string]string{
 		"list_items":  "read_only",
 		"delete_item": "destructive",
+		"ping":        "unannotated",
 	}, got)
 
 	annotations, err := ti.dispositions.ToolAnnotations(
@@ -196,8 +197,8 @@ func TestToolCatalog_RecordMissingToolsAddsOnlyNewToolsAndAuditsAsSystem(t *test
 	require.Equal(t, map[string]string{
 		"edited":      "read_only",
 		"delete_item": "destructive",
-		"ping":        "",
-	}, catalog, "existing entries keep their labels and a tool with no hints is still recorded")
+		"ping":        "unannotated",
+	}, catalog, "existing entries keep their labels and a tool with no hints is recorded as unannotated")
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
 	require.NoError(t, err)
