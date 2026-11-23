@@ -3,11 +3,15 @@
 package demoseed
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
 )
 
@@ -54,4 +58,46 @@ func testServerClientChoices(t *testing.T, spec Spec) {
 		require.NotEmpty(t, report.Pairs, "the seed must leave server choices to check")
 		require.Equal(t, report.Credentials, report.FullyCovered)
 	}
+}
+
+// A connection health sign-in's choice on a server outside the provider fails postflight.
+func TestMisassignedChoicesCoverConnectionHealthSessions(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	spec := DefaultSpec()
+	seedLocalPostgres(ctx, t, db, spec)
+
+	s := &seeder{spec: spec, now: time.Now()}
+	q := repo.New(db)
+	params := repo.PostflightIDMisassignedUpstreamClientChoicesParams{
+		OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
+		OrgNoAuthServerIds: s.healthServerIDs(),
+		ProjectID:          s.projectID(),
+		HealthIssuerID:     s.healthIssuer(),
+		LinearServerID:     s.det("mcpserver-linear"),
+		LinearClientID:     s.det("remote-identity-client-linear"),
+		SlackServerID:      s.det("mcpserver-slack"),
+	}
+	// The upstream auth migration moves some seeded choices to auth clients, so compare counts.
+	before, err := q.PostflightIDMisassignedUpstreamClientChoices(ctx, params)
+	require.NoError(t, err)
+
+	session := uuid.Nil
+	for n, held := range s.healthSessions() {
+		if held.deleted == nil {
+			session = s.det("health-session-" + strconv.Itoa(n))
+			break
+		}
+	}
+	require.NotEqual(t, uuid.Nil, session, "the seed holds a connection health sign-in")
+	require.NoError(t, q.ServersInsertUpstreamClientChoice(ctx, repo.ServersInsertUpstreamClientChoiceParams{
+		ID: uuid.New(), ProjectID: s.projectID(), OrgID: s.orgID(),
+		CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: session, McpServerID: s.det("mcpserver-linear"),
+		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Source: upstreamclients.SelectionSourceIssuance,
+	}))
+	after, err := q.PostflightIDMisassignedUpstreamClientChoices(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after, "a connection health sign-in's choice on another server is misassigned")
 }

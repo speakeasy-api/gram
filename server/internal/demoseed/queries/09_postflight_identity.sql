@@ -282,15 +282,24 @@ WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
 -- Count live choices outside the intended set: the Example OAuth server
 -- through its main client, the Example Shared Credential server with no
 -- upstream authentication, and the organization gateway's choices of each
--- server's associated client, each on a seeded session.
+-- server's associated client, each on a seeded session. Connection health
+-- sign-ins may only choose no upstream sign-in on the provider's own servers.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
 WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'user_session'
-  AND u.credential_id NOT IN (SELECT id FROM user_sessions WHERE user_session_issuer_id = @health_issuer_id::uuid)
   AND NOT (
-    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
+    EXISTS (SELECT 1 FROM user_sessions hs
+            JOIN mcp_servers hm ON hm.id = u.mcp_server_id AND hm.project_id = u.project_id
+            WHERE hs.id = u.credential_id AND hs.deleted IS FALSE
+              AND hs.user_session_issuer_id = @health_issuer_id::uuid
+              AND hm.user_session_issuer_id = @health_issuer_id::uuid)
+    AND u.no_auth AND u.remote_session_client_id IS NULL
+  )
+  AND NOT (
+    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE
+            AND s.user_session_issuer_id IS DISTINCT FROM @health_issuer_id::uuid)
     AND (
       (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
       OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)

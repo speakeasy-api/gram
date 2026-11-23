@@ -87,7 +87,9 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 Onboarding selection: the seed persists 11 explicit task rows, 9 visible, with a customized Security preset. The wizard shows 9 tasks; domain verification, single sign-on, and directory sync are nested steps of Set up identity provider. Distribute servers is included and Anthropic admin controls is deferred. In Admin, open the organization's Overview and select **Customize onboarding**, or select **Onboarding** in its sidebar. With no playbook assigned, the page explains that saved task selections and catalog defaults still control onboarding. Verify the recorded vendor/plan and device-management stack, edit a draft of wizard steps, then discard it; saved task status and assignment must remain unchanged. Shared templates are staff-managed and are not seeded. The in-page template menu also includes three built-in presets: Anthropic Enterprise Rollout, Coding-Agent Observability, and Managed MCP Distribution. Select a preset, review its editable steps, then discard; choosing or reviewing a preset must not write data. Presets reuse the live step catalog and require no seed entities. This navigation/editor change reuses the existing task and stack fixtures.
 
 The ordinary MCP connection inventory totals 11 sessions: five on the Connections
-issuer and six across Example OAuth, Example Shared Credential, and Multi-Server Gateway. The project-scoped
+issuer and six across Example OAuth, Example Shared Credential, and Multi-Server Gateway. The connection
+health provider's held sign-ins (about 24) come on top of these, so the project's MCP Sessions show
+11 plus those. The project-scoped
 managed-agent session below is checked separately, not counted as a twelfth MCP
 connection.
 
