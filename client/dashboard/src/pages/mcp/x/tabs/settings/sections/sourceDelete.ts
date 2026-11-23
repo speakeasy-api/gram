@@ -51,6 +51,35 @@ export function sourceDeleteSpec(
   }
 }
 
+/** What a server with no name is called wherever a delete lists it. */
+const UNNAMED_SERVER_LABEL = "Unnamed server";
+
+// "A", "A and B", "A, B, and C", "A, B, and 2 more": the servers a cascade
+// takes with it, short enough for a card. The dialog lists every one.
+export function nameList(servers: Pick<McpServer, "name">[]): string {
+  const names = servers.map((server) => server.name || UNNAMED_SERVER_LABEL);
+  if (names.length <= 2) return names.join(" and ");
+  if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
+  return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
+}
+
+// What the user types to delete a source-backed server: its name, or for an
+// unnamed one the source's own address or name, never a generic word.
+export function sourceBackedConfirmName(
+  serverName: string | undefined,
+  target: SourceBackedDeleteTarget,
+): string {
+  const name = serverName?.trim();
+  if (name) return name;
+  switch (target.kind) {
+    case "remote":
+    case "unproxied":
+      return target.source.url;
+    case "tunneled":
+      return target.source.name;
+  }
+}
+
 type LinkedMcpServersFilter =
   | { remoteMcpServerId: string }
   | { tunneledMcpServerId: string }

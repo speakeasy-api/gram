@@ -5,6 +5,7 @@ import { useDeleteTunneledMcpSource } from "@/pages/sources/tunneled-mcp/hooks";
 import { useDeleteUnproxiedMcpSource } from "@/pages/sources/unproxied-mcp/hooks";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import {
+  sourceBackedConfirmName,
   sourceDeleteSpec,
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
@@ -64,7 +65,7 @@ export function DeleteSourceBackedServerDialogContent({
   return (
     <RemoveMcpSourceDialogContent
       {...sourceDeleteSpec(target)}
-      serverName={mcpServer.name || "MCP server"}
+      serverName={sourceBackedConfirmName(mcpServer.name, target)}
       linkedMcpServers={otherServers}
       isPending={mutation.isPending}
       errorMessage={mutation.isError ? mutation.error.message : undefined}
