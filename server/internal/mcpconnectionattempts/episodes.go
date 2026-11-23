@@ -155,7 +155,7 @@ func readEpisodeAttempts(ctx context.Context, ch driver.Conn, organizationID str
 	if err != nil {
 		return nil, err
 	}
-	rows, err := ch.Query(failingReadContext(ctx), `SELECT * EXCEPT (sign_ins) FROM (SELECT`+episodeColumns+` FROM `+eventsTable+
+	rows, err := ch.Query(failingReadContext(ctx), `SELECT * EXCEPT (sign_ins) FROM (SELECT`+episodeColumns+` FROM `+EventsTable+
 		` WHERE organization_id = ? AND `+where+` AND event_time <= fromUnixTimestamp64Nano(?) GROUP BY organization_id, attempt_id HAVING subject != ''`+episodeHaving+`)`,
 		append(append([]any{organizationID}, args...), now.UnixNano())...)
 	if err != nil {

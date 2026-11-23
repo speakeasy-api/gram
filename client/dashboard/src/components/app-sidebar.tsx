@@ -168,7 +168,15 @@ export function AppSidebar({
             ]
           : []),
         ...(isUserSessionsEnabled
-          ? [{ item: routes.mcpSessions, ...accessFor(routes.mcpSessions) }]
+          ? [
+              {
+                // Carries the beta stage while connection health is on.
+                item:
+                  navAccess.get(routes.mcpSessions.url)?.route ??
+                  routes.mcpSessions,
+                ...accessFor(routes.mcpSessions),
+              },
+            ]
           : []),
         {
           item: routes.remoteIdentityProviders,

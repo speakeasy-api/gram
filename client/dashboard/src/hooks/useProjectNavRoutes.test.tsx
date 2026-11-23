@@ -22,7 +22,8 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: (flag: string) => testState.featureFlags[flag],
+  useFeatureFlag: (flag: string): FeatureFlagResult =>
+    testState.featureFlags[flag] ?? { status: "missing" },
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -145,6 +146,20 @@ describe("useProjectNavRoutes", () => {
     testState.projectId = "project_b";
     rerender();
     expect(sessions()?.resourceId).toBe("project_b");
+  });
+
+  it("marks MCP Sessions as beta only while connection health is on", () => {
+    const { result, rerender } = renderNav();
+    const stage = () =>
+      result.current.find(
+        (entry) => entry.route.href() === routes.mcpSessions.href(),
+      )?.route.stage;
+    expect(stage()).toBeUndefined();
+    testState.featureFlags[FEATURE_FLAGS.mcpConnectionHealth] = {
+      status: "enabled",
+    };
+    rerender();
+    expect(stage()).toBe("beta");
   });
 
   it("keeps Agent Sessions discoverable for members who can read their own history", () => {
