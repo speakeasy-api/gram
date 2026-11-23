@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -129,9 +131,12 @@ func scopeAllowsSelectorKey(scope Scope, key string) bool {
 //   - unknown keys are rejected
 func ValidateSelector(scope Scope, sel Selector) error {
 	kind, hasKind := sel[SelectorKeyResourceKind]
-	_, hasID := sel[SelectorKeyResourceID]
+	resourceID, hasID := sel[SelectorKeyResourceID]
 	if !hasKind || !hasID {
 		return fmt.Errorf("selector must include both resource_kind and resource_id")
+	}
+	if strings.EqualFold(resourceID, uuid.Nil.String()) {
+		return fmt.Errorf("resource_id must name a resource, got the nil UUID")
 	}
 
 	expectedKind := ResourceKindForScope(scope)
