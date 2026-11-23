@@ -12,6 +12,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -1726,35 +1727,8 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		return &gen.RequestAccessResult{SentToCount: 0, Request: storedView}, nil
 	}
 
-	// Build the manage access link. The query params let the dashboard open a
-	// pre-filled grant dialog for the requester and scope. Resolve an MCP's
-	// project from the tenant-qualified resource rather than trusting browser
-	// state or a client-supplied project id.
-	manageAccessLink := ""
-	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
-		accessURL := siteURL.JoinPath(org.Slug, "access", "roles")
-		q := url.Values{}
-		q.Set("grant_user", ac.UserID)
-		q.Set("scope", payload.Scope)
-		if storedView != nil {
-			q.Set("request", storedView.ID)
-		}
-		if payload.ResourceID != nil && *payload.ResourceID != "" {
-			q.Set("resource_id", *payload.ResourceID)
-			if strings.HasPrefix(payload.Scope, "mcp:") {
-				projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, *payload.ResourceID)
-				if resolveErr != nil {
-					logger.WarnContext(ctx, "could not resolve MCP project for access request link",
-						attr.SlogError(resolveErr),
-					)
-				} else {
-					q.Set("project_id", projectID)
-				}
-			}
-		}
-		accessURL.RawQuery = q.Encode()
-		manageAccessLink = accessURL.String()
-	}
+	resourceID := conv.PtrValOr(payload.ResourceID, "")
+	manageAccessLink := s.manageAccessLink(ctx, logger, org.Slug, org.DefaultHost, "roles", ac.ActiveOrganizationID, ac.UserID, payload.Scope, resourceID, storedView)
 
 	// Name the permission the way the role editor does, so the admin reads
 	// "View tool logs" rather than a slug. An unknown slug is sent as is.
@@ -1806,6 +1780,41 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	)
 
 	return &gen.RequestAccessResult{SentToCount: sentCount, Request: storedView}, nil
+}
+
+// manageAccessLink builds the dashboard link on an Access page tab that opens
+// a pre-filled grant dialog for the requester and scope, and the stored
+// request when there is one. An MCP's project is resolved from the
+// tenant-qualified resource rather than trusting browser state or a
+// client-supplied project id. It is empty when the deployment has no site
+// URL.
+func (s *Service) manageAccessLink(ctx context.Context, logger *slog.Logger, orgSlug string, defaultHost pgtype.Text, tab, organizationID, requesterUserID, scope, resourceID string, stored *gen.AccessRequest) string {
+	siteURL := s.orgHosts.SiteURL(defaultHost)
+	if siteURL == nil {
+		return ""
+	}
+	accessURL := siteURL.JoinPath(orgSlug, "access", tab)
+	q := url.Values{}
+	q.Set("grant_user", requesterUserID)
+	q.Set("scope", scope)
+	if stored != nil {
+		q.Set("request", stored.ID)
+	}
+	if resourceID != "" {
+		q.Set("resource_id", resourceID)
+		if strings.HasPrefix(scope, "mcp:") {
+			projectID, resolveErr := s.resourceProjectID(ctx, organizationID, resourceID)
+			if resolveErr != nil {
+				logger.WarnContext(ctx, "could not resolve MCP project for access request link",
+					attr.SlogError(resolveErr),
+				)
+			} else {
+				q.Set("project_id", projectID)
+			}
+		}
+	}
+	accessURL.RawQuery = q.Encode()
+	return accessURL.String()
 }
 
 // ListIdentityAccess returns the MCP servers and skills accessible to a user

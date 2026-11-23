@@ -25,8 +25,9 @@ const rolesDeleteAccessRequests = `-- name: RolesDeleteAccessRequests :exec
 DELETE FROM access_requests WHERE organization_id = $1
 `
 
-// Access requests: one pending, one denied, so the Access Requests tab and
-// the grant dialog's approval choices have something to show. Messages
+// Access requests: two pending (one with a requested duration) and one
+// denied, so the Access Requests tab and the
+// grant dialog's approval choices have something to show. Messages
 // cascade with their request.
 func (q *Queries) RolesDeleteAccessRequests(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesDeleteAccessRequests, organizationID)
@@ -257,27 +258,30 @@ func (q *Queries) RolesInsertAIScanTargets(ctx context.Context, organizationID s
 const rolesInsertAccessRequest = `-- name: RolesInsertAccessRequest :exec
 INSERT INTO access_requests
   (id, organization_id, requester_user_id, scope, selector, resource_name, message,
-   status, decided_by_user_id, decided_via, decided_at, expires_at, created_at, updated_at)
+   status, decided_by_user_id, decided_via, decided_at, requested_duration_seconds,
+   requested_until, expires_at, created_at, updated_at)
 VALUES
   ($1, $2, $3, $4, $5, $6, $7,
    $8, $9, $10, $11,
-   $12, $13, $13)
+   $12, $13, $14, $15, $15)
 `
 
 type RolesInsertAccessRequestParams struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	RequesterUserID string
-	Scope           string
-	Selector        []byte
-	ResourceName    pgtype.Text
-	Message         pgtype.Text
-	Status          string
-	DecidedByUserID pgtype.Text
-	DecidedVia      pgtype.Text
-	DecidedAt       pgtype.Timestamptz
-	ExpiresAt       pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
+	ID                       uuid.UUID
+	OrganizationID           string
+	RequesterUserID          string
+	Scope                    string
+	Selector                 []byte
+	ResourceName             pgtype.Text
+	Message                  pgtype.Text
+	Status                   string
+	DecidedByUserID          pgtype.Text
+	DecidedVia               pgtype.Text
+	DecidedAt                pgtype.Timestamptz
+	RequestedDurationSeconds pgtype.Int4
+	RequestedUntil           pgtype.Timestamptz
+	ExpiresAt                pgtype.Timestamptz
+	CreatedAt                pgtype.Timestamptz
 }
 
 func (q *Queries) RolesInsertAccessRequest(ctx context.Context, arg RolesInsertAccessRequestParams) error {
@@ -293,6 +297,8 @@ func (q *Queries) RolesInsertAccessRequest(ctx context.Context, arg RolesInsertA
 		arg.DecidedByUserID,
 		arg.DecidedVia,
 		arg.DecidedAt,
+		arg.RequestedDurationSeconds,
+		arg.RequestedUntil,
 		arg.ExpiresAt,
 		arg.CreatedAt,
 	)

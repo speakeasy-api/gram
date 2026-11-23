@@ -23,6 +23,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
+	"github.com/speakeasy-api/gram/server/internal/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
@@ -100,6 +101,14 @@ type Service struct {
 	// it unlimited.
 	connectionsLimiter *ratelimit.Limiter
 
+	// accessRequests lists the organization's pending access requests for
+	// listPendingAccessRequests. Nil answers it not found.
+	accessRequests *access.Service
+
+	// accessRequestsLimiter bounds listPendingAccessRequests per member. Nil
+	// leaves it unlimited.
+	accessRequestsLimiter *ratelimit.Limiter
+
 	// claudePlugins renders getClaudeObservabilityPlugin's ZIP. Nil reports
 	// the plugin as unavailable.
 	claudePlugins ClaudeObservabilityPlugins
@@ -174,6 +183,8 @@ func NewService(
 		agentVersions:                nil,
 		connectionStatuses:           nil,
 		connectionsLimiter:           nil,
+		accessRequests:               nil,
+		accessRequestsLimiter:        nil,
 		crashReportLimiter:           nil,
 		crashReports:                 nil,
 		crashReportCredentialLimiter: nil,

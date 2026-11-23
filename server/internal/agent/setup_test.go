@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -91,6 +92,10 @@ type testInstance struct {
 	deviceAgentTokens *deviceagenttoken.Issuer
 	// redis backs rate limiters a test attaches to the service.
 	redis *redis.Client
+	// sessions and authz are the dependencies an access service attached to
+	// the agent service is built from.
+	sessions *sessions.Manager
+	authz    *authz.Engine
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -152,6 +157,8 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		blobs:             blobs,
 		deviceAgentTokens: deviceAgentTokens,
 		redis:             redisClient,
+		sessions:          sessionManager,
+		authz:             authzEngine,
 	}
 }
 

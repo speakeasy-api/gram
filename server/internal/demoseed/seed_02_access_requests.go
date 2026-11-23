@@ -15,12 +15,13 @@ import (
 
 // demoAccessRequestCount is how many access requests the seed writes, for
 // the postflight.
-const demoAccessRequestCount = 2
+const demoAccessRequestCount = 3
 
-// seedRolesAccessRequests gives the Access Requests tab a pending request to
+// seedRolesAccessRequests gives the Access Requests tab pending requests to
 // review and a denied one in its history: Amara asks for the demo project's
-// tool logs, and Lucas, an admin, denied Hana's request to view environments,
-// which hold secret values. Neither holds the scope they asked for.
+// tool logs, Priya asks to connect to Linear for two hours, and Lucas, an
+// admin, denied Hana's request to view environments, which hold secret
+// values. None holds the scope they asked for.
 func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 	org := s.orgID()
 	if err := s.q.RolesDeleteAccessRequests(ctx, org); err != nil {
@@ -35,38 +36,65 @@ func (s *seeder) seedRolesAccessRequests(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("encode demo access request selector: %w", err)
 	}
+	linearSelector, err := json.Marshal(authz.NewSelector(authz.ScopeMCPConnect, s.det("mcpserver-linear").String()))
+	if err != nil {
+		return fmt.Errorf("encode demo access request selector: %w", err)
+	}
 	noDecision := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	noDuration := pgtype.Int4{Int32: 0, Valid: false}
+	noDeadline := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 
 	requests := []repo.RolesInsertAccessRequestParams{
 		{
-			ID:              s.det("access-request-pending"),
-			OrganizationID:  org,
-			RequesterUserID: s.userID("amara"),
-			Scope:           "log:read",
-			Selector:        projectSelector,
-			ResourceName:    conv.ToPGText("Default"),
-			Message:         conv.ToPGText("A customer reported a failed refund call this morning; I need the tool logs to see what the agent sent."),
-			Status:          "pending",
-			DecidedByUserID: conv.ToPGTextEmpty(""),
-			DecidedVia:      conv.ToPGTextEmpty(""),
-			DecidedAt:       noDecision,
-			ExpiresAt:       conv.ToPGTimestamptz(s.now.Add(20 * time.Hour)),
-			CreatedAt:       conv.ToPGTimestamptz(s.now.Add(-4 * time.Hour)),
+			ID:                       s.det("access-request-pending"),
+			OrganizationID:           org,
+			RequesterUserID:          s.userID("amara"),
+			Scope:                    "log:read",
+			Selector:                 projectSelector,
+			ResourceName:             conv.ToPGText("Default"),
+			Message:                  conv.ToPGText("A customer reported a failed refund call this morning; I need the tool logs to see what the agent sent."),
+			Status:                   "pending",
+			DecidedByUserID:          conv.ToPGTextEmpty(""),
+			DecidedVia:               conv.ToPGTextEmpty(""),
+			DecidedAt:                noDecision,
+			RequestedDurationSeconds: noDuration,
+			RequestedUntil:           noDeadline,
+			ExpiresAt:                conv.ToPGTimestamptz(s.now.Add(20 * time.Hour)),
+			CreatedAt:                conv.ToPGTimestamptz(s.now.Add(-4 * time.Hour)),
 		},
 		{
-			ID:              s.det("access-request-denied"),
-			OrganizationID:  org,
-			RequesterUserID: s.userID("hana"),
-			Scope:           string(authz.ScopeEnvironmentRead),
-			Selector:        environmentSelector,
-			ResourceName:    conv.ToPGTextEmpty(""),
-			Message:         conv.ToPGText("Want to check which credentials the billing server is configured with."),
-			Status:          "denied",
-			DecidedByUserID: conv.ToPGText(s.userID("lucas")),
-			DecidedVia:      conv.ToPGText("slack"),
-			DecidedAt:       conv.ToPGTimestamptz(s.now.Add(-46 * time.Hour)),
-			ExpiresAt:       conv.ToPGTimestamptz(s.now.Add(-24 * time.Hour)),
-			CreatedAt:       conv.ToPGTimestamptz(s.now.Add(-48 * time.Hour)),
+			ID:                       s.det("access-request-duration"),
+			OrganizationID:           org,
+			RequesterUserID:          s.userID("priya"),
+			Scope:                    string(authz.ScopeMCPConnect),
+			Selector:                 linearSelector,
+			ResourceName:             conv.ToPGText("Linear"),
+			Message:                  conv.ToPGText("Blocked connecting to Linear while triaging this sprint's bugs."),
+			Status:                   "pending",
+			DecidedByUserID:          conv.ToPGTextEmpty(""),
+			DecidedVia:               conv.ToPGTextEmpty(""),
+			DecidedAt:                noDecision,
+			RequestedDurationSeconds: pgtype.Int4{Int32: int32((2 * time.Hour) / time.Second), Valid: true},
+			RequestedUntil:           noDeadline,
+			ExpiresAt:                conv.ToPGTimestamptz(s.now.Add(23 * time.Hour)),
+			CreatedAt:                conv.ToPGTimestamptz(s.now.Add(-1 * time.Hour)),
+		},
+		{
+			ID:                       s.det("access-request-denied"),
+			OrganizationID:           org,
+			RequesterUserID:          s.userID("hana"),
+			Scope:                    string(authz.ScopeEnvironmentRead),
+			Selector:                 environmentSelector,
+			ResourceName:             conv.ToPGTextEmpty(""),
+			Message:                  conv.ToPGText("Want to check which credentials the billing server is configured with."),
+			Status:                   "denied",
+			DecidedByUserID:          conv.ToPGText(s.userID("lucas")),
+			DecidedVia:               conv.ToPGText("slack"),
+			DecidedAt:                conv.ToPGTimestamptz(s.now.Add(-46 * time.Hour)),
+			RequestedDurationSeconds: noDuration,
+			RequestedUntil:           noDeadline,
+			ExpiresAt:                conv.ToPGTimestamptz(s.now.Add(-24 * time.Hour)),
+			CreatedAt:                conv.ToPGTimestamptz(s.now.Add(-48 * time.Hour)),
 		},
 	}
 	for _, request := range requests {

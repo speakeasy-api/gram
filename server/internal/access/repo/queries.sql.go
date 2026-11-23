@@ -1347,22 +1347,24 @@ func (q *Queries) HasPermanentPrincipalGrants(ctx context.Context, arg HasPerman
 }
 
 const insertAccessRequest = `-- name: InsertAccessRequest :one
-INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO access_requests (organization_id, requester_user_id, scope, selector, resource_name, message, challenge_ids, requested_duration_seconds, requested_until, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (organization_id, requester_user_id, scope, selector) WHERE deleted IS FALSE AND status = 'pending'
 DO NOTHING
 RETURNING id, organization_id, requester_user_id, scope, selector, resource_name, message, status, decided_by_user_id, decided_via, decided_at, temporary_grant_id, challenge_ids, requested_duration_seconds, requested_until, expires_at, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertAccessRequestParams struct {
-	OrganizationID  string
-	RequesterUserID string
-	Scope           string
-	Selector        []byte
-	ResourceName    pgtype.Text
-	Message         pgtype.Text
-	ChallengeIds    []string
-	ExpiresAt       pgtype.Timestamptz
+	OrganizationID           string
+	RequesterUserID          string
+	Scope                    string
+	Selector                 []byte
+	ResourceName             pgtype.Text
+	Message                  pgtype.Text
+	ChallengeIds             []string
+	RequestedDurationSeconds pgtype.Int4
+	RequestedUntil           pgtype.Timestamptz
+	ExpiresAt                pgtype.Timestamptz
 }
 
 // Stores a pending request. Returns no row when the requester already has a
@@ -1376,6 +1378,8 @@ func (q *Queries) InsertAccessRequest(ctx context.Context, arg InsertAccessReque
 		arg.ResourceName,
 		arg.Message,
 		arg.ChallengeIds,
+		arg.RequestedDurationSeconds,
+		arg.RequestedUntil,
 		arg.ExpiresAt,
 	)
 	var i AccessRequest

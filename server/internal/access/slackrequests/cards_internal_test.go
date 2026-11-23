@@ -13,17 +13,19 @@ import (
 
 func testInput(status string) cardInput {
 	return cardInput{
-		RequestID:       uuid.New(),
-		Status:          status,
-		RequesterName:   "Ada Member",
-		PermissionLabel: "View chats",
-		PermissionScope: "chat:read",
-		ResourceName:    "",
-		Message:         "Investigating a <report>",
-		DeciderName:     "Grace Admin",
-		ExpiresAt:       time.Now().Add(time.Hour),
-		GrantExpiresAt:  time.Now().Add(2 * time.Hour),
-		DashboardURL:    "https://app.speakeasy.test/org/access/roles?request=x",
+		RequestID:         uuid.New(),
+		Status:            status,
+		RequesterName:     "Ada Member",
+		PermissionLabel:   "View chats",
+		PermissionScope:   "chat:read",
+		ResourceName:      "",
+		Message:           "Investigating a <report>",
+		DeciderName:       "Grace Admin",
+		ExpiresAt:         time.Now().Add(time.Hour),
+		GrantExpiresAt:    time.Now().Add(2 * time.Hour),
+		DashboardURL:      "https://app.speakeasy.test/org/access/roles?request=x",
+		RequestedDuration: 0,
+		RequestedUntil:    time.Time{},
 	}
 }
 
@@ -90,10 +92,10 @@ func TestEndOfDayIsHiddenWhenTheDayIsNearlyOver(t *testing.T) {
 	loc := time.FixedZone("test", -5*60*60)
 
 	morning := time.Date(2026, 11, 17, 9, 0, 0, 0, loc)
-	require.Equal(t, time.Date(2026, 11, 17, 23, 59, 0, 0, loc), endOfDay(morning, loc))
+	require.Equal(t, time.Date(2026, 11, 17, 23, 59, 0, 0, loc), access.EndOfDay(morning, loc))
 
 	late := time.Date(2026, 11, 17, 23, 52, 0, 0, loc)
-	require.True(t, endOfDay(late, loc).IsZero())
+	require.True(t, access.EndOfDay(late, loc).IsZero())
 }
 
 func TestEndOfDayIsHiddenWhenItIsMoreThanADayAway(t *testing.T) {
@@ -104,10 +106,10 @@ func TestEndOfDayIsHiddenWhenItIsMoreThanADayAway(t *testing.T) {
 	// 1 November 2026 gains an hour in New York, so 23:59 is 24h29m after
 	// half past midnight: longer than a temporary grant can last.
 	justAfterMidnight := time.Date(2026, 11, 1, 0, 30, 0, 0, loc)
-	require.True(t, endOfDay(justAfterMidnight, loc).IsZero())
+	require.True(t, access.EndOfDay(justAfterMidnight, loc).IsZero())
 
 	afternoon := time.Date(2026, 11, 1, 14, 0, 0, 0, loc)
-	require.Equal(t, time.Date(2026, 11, 1, 23, 59, 0, 0, loc), endOfDay(afternoon, loc))
+	require.Equal(t, time.Date(2026, 11, 1, 23, 59, 0, 0, loc), access.EndOfDay(afternoon, loc))
 }
 
 func TestWindowValues(t *testing.T) {
@@ -139,4 +141,68 @@ func TestRequesterOutcome(t *testing.T) {
 	}
 	_, ok := requesterOutcome(testInput(access.AccessRequestStatusWithdrawn))
 	require.False(t, ok, "a requester who withdrew needs no DM")
+}
+
+// fieldTexts lists the texts of a card's detail fields.
+func fieldTexts(card slackdm.Message) []string {
+	texts := []string{}
+	for _, block := range card.Blocks {
+		for _, field := range block.Fields {
+			texts = append(texts, field.Text)
+		}
+	}
+	return texts
+}
+
+func TestPendingCardShowsAndPreselectsTheRequestedDuration(t *testing.T) {
+	t.Parallel()
+	in := testInput(access.AccessRequestStatusPending)
+	in.RequestedDuration = 2 * time.Hour
+	endOfDay := time.Now().Add(6 * time.Hour)
+
+	require.Contains(t, fieldTexts(pendingCard(in, endOfDay)), "*Asked for*\n2 hours")
+	require.Equal(t, "2 hours", actionElements(t, in, endOfDay)[0].InitialOption.Text.Text, "the menu opens on what was asked for")
+
+	in.RequestedDuration = 3 * time.Hour
+	require.Equal(t, "2 hours", actionElements(t, in, endOfDay)[0].InitialOption.Text.Text, "the longest window within the ask")
+	require.Contains(t, fieldTexts(pendingCard(in, endOfDay)), "*Asked for*\n3 hours")
+
+	in.RequestedDuration = 0
+	require.Equal(t, "1 hour", actionElements(t, in, endOfDay)[0].InitialOption.Text.Text)
+	for _, text := range fieldTexts(pendingCard(in, endOfDay)) {
+		require.NotContains(t, text, "Asked", "no ask, no field")
+	}
+}
+
+func TestPendingCardOffersTheRequestersDeadlineAsEndOfDay(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 23, 15, 0, 0, 0, time.UTC)
+	loc := time.FixedZone("test", -5*60*60)
+	in := testInput(access.AccessRequestStatusPending)
+	in.RequestedUntil = time.Date(2026, 11, 23, 23, 0, 0, 0, time.UTC)
+
+	deadline := cardEndOfDay(in, now, loc)
+	require.Equal(t, in.RequestedUntil, deadline, "End of day is the requester's own deadline")
+	require.Contains(t, fieldTexts(pendingCard(in, deadline)), "*Asked until*\n"+slackdm.Date(in.RequestedUntil))
+	menu := actionElements(t, in, deadline)[0]
+	require.Equal(t, "End of day", menu.InitialOption.Text.Text, "the menu opens on End of day")
+	window, chosen, ok := parseWindow(menu.InitialOption.Value)
+	require.True(t, ok)
+	require.Equal(t, endOfDayKey, window)
+	require.Equal(t, in.RequestedUntil.Unix(), chosen.Unix(), "approving End of day gives access until the time asked for")
+
+	in.RequestedUntil = now.Add(5 * time.Minute)
+	require.Equal(t, access.EndOfDay(now, loc), cardEndOfDay(in, now, loc), "a deadline too close falls back to the reader's end of day")
+	in.RequestedUntil = time.Time{}
+	require.Equal(t, access.EndOfDay(now, loc), cardEndOfDay(in, now, loc))
+}
+
+func TestDecidedCardLeavesOutTheRequestedDuration(t *testing.T) {
+	t.Parallel()
+	in := testInput(access.AccessRequestStatusApproved)
+	in.RequestedDuration = time.Hour
+	in.RequestedUntil = time.Now().Add(time.Hour)
+	for _, text := range fieldTexts(decidedCard(in)) {
+		require.NotContains(t, text, "Asked")
+	}
 }
