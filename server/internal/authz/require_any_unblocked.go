@@ -2,8 +2,6 @@ package authz
 
 import (
 	"context"
-
-	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 )
 
 // RequireAnyUnblocked accepts any allow alternative, but rejects explicit
@@ -18,48 +16,7 @@ import (
 // from a role or user:all does not reject a check that a direct grant naming
 // the concrete resource satisfies.
 func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error {
-	checks, refused := e.withoutOtherOrganization(ctx, checks)
-	if len(checks) == 0 && len(refused) > 0 {
-		return e.mapError(ctx, Denied(refused[0].Scope, refused[0].selector()))
-	}
-	enforce, err := e.ShouldEnforce(ctx)
-	if err != nil {
-		return err
-	}
-	if !enforce {
-		return e.RequireAny(ctx, checks...)
-	}
-	if len(checks) == 0 {
-		return e.mapError(ctx, ErrNoChecks)
-	}
-	authorization, ok := grantAuthorizationFromContext(ctx)
-	if !ok {
-		return e.mapError(ctx, ErrMissingGrants)
-	}
-	for _, check := range checks {
-		if err := validateRequireInput(check); err != nil {
-			return e.mapError(ctx, err)
-		}
-	}
-	blocked, err := firstUnoverriddenExclusion(authorization, checks)
-	if err != nil {
-		return e.mapError(ctx, err)
-	}
-	if blocked != nil {
-		challengeLogger{
-			Operation:            authzrepo.OperationRequireAny,
-			Outcome:              authzrepo.OutcomeDeny,
-			Reason:               authzrepo.ReasonDenyGrant,
-			Checks:               checks,
-			Focus:                blocked,
-			Matches:              nil,
-			EvaluatedGrantCount:  uint32(authorization.grantCount()), //nolint:gosec // grant count is small
-			FilterCandidateCount: 0,
-			FilterAllowedCount:   0,
-		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
-		return e.mapError(ctx, Denied(blocked.Scope, blocked.selector()))
-	}
-	return e.RequireAny(ctx, checks...)
+	return e.Require(ctx, AnyOf(checks...))
 }
 
 // firstUnoverriddenExclusion returns the first check an exclusion rejects,

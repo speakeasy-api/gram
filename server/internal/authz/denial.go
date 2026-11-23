@@ -3,8 +3,6 @@ package authz
 import (
 	"context"
 	"errors"
-	"maps"
-	"slices"
 	"sync"
 )
 
@@ -97,94 +95,18 @@ const (
 	ReasonNotGranted Reason = "not_granted"
 )
 
-// DenialReasons evaluates each check against the prepared grants and returns
-// why each is refused, aligned with the input order. It records no authz
-// challenge, because it only labels decisions that [Engine.FindMatched] or
-// [Engine.Require] already make, and it reads only the grants already on the
-// context.
-//
-// When RBAC is not enforced every check is authorized except auth-client
-// checks, which are not granted, and checks are not validated, matching
-// [Engine.FindMatched] and [Engine.Require].
+// DenialReasons returns why each check is refused, aligned with the input
+// order, without recording a challenge. It is the Reason of each of
+// Decide's decisions, kept until its caller moves to Decide.
 func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]Reason, error) {
-	reasons := make([]Reason, len(checks))
-	enforce, err := e.ShouldEnforce(ctx)
+	d, err := e.decideAll(ctx, checks, false)
 	if err != nil {
 		return nil, err
 	}
-	if !enforce {
-		for i, c := range checks {
-			if !unenforcedAllows(c) {
-				reasons[i] = ReasonNotGranted
-			}
-		}
-		return reasons, nil
+	reasons := make([]Reason, len(checks))
+	for i, decision := range d.Each {
+		reasons[i] = decision.Reason
 	}
-
-	authorization, ok := grantAuthorizationFromContext(ctx)
-	if !ok {
-		return nil, e.mapError(ctx, ErrMissingGrants)
-	}
-
-	for i, c := range checks {
-		if err := validateInput(c); err != nil {
-			return nil, e.mapError(ctx, err)
-		}
-		evaluation, err := authorization.evaluate(c)
-		if err != nil {
-			return nil, e.mapError(ctx, err)
-		}
-		switch {
-		case evaluation.Grant != nil:
-			reasons[i] = ReasonNone
-		case evaluation.Denied:
-			reasons[i] = ReasonBlocked
-		default:
-			reasons[i] = ReasonNotGranted
-		}
-		if reasons[i] != ReasonNotGranted {
-			continue
-		}
-
-		disposition, hasDisposition := c.Dimensions[SelectorKeyDisposition]
-		if !hasDisposition {
-			continue
-		}
-
-		if disposition != DispositionReadOnly {
-			asReadOnly := c
-			asReadOnly.Dimensions = maps.Clone(c.Dimensions)
-			asReadOnly.Dimensions[SelectorKeyDisposition] = DispositionReadOnly
-			evaluation, err = authorization.evaluate(asReadOnly)
-			if err != nil {
-				return nil, e.mapError(ctx, err)
-			}
-			if evaluation.Grant != nil {
-				reasons[i] = ReasonReadOnly
-				continue
-			}
-		}
-
-		// Refused only for its disposition when some other disposition, with
-		// every other value unchanged, would be allowed.
-		for _, other := range slices.Sorted(maps.Keys(validDispositions)) {
-			if other == disposition || other == DispositionReadOnly {
-				continue
-			}
-			asOther := c
-			asOther.Dimensions = maps.Clone(c.Dimensions)
-			asOther.Dimensions[SelectorKeyDisposition] = other
-			evaluation, err = authorization.evaluate(asOther)
-			if err != nil {
-				return nil, e.mapError(ctx, err)
-			}
-			if evaluation.Grant != nil {
-				reasons[i] = ReasonDisposition
-				break
-			}
-		}
-	}
-
 	return reasons, nil
 }
 
