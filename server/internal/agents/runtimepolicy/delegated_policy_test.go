@@ -25,7 +25,7 @@ func TestNewDelegatedPolicyV1CanonicalizesAndClosesImplications(t *testing.T) {
 
 	runtime := policy.RuntimeGrants()
 	require.Len(t, runtime, 4)
-	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPToolCallCheck("server-one", authz.MCPToolCallDimensions{Tool: "tool-one", ProjectID: "project-one"})))
+	require.True(t, authz.GrantsSatisfy(runtime, authz.MCPServer(authz.MCPServerIDFrom("server-one"), authz.ProjectIDFrom("project-one")).ToolCall("tool-one", "")))
 	require.True(t, authz.GrantsSatisfy(runtime, authz.Check{Scope: authz.ScopeProjectRead, ResourceID: "project-one"}))
 
 	encoded, err := EncodeDelegatedPolicy(DelegatedPolicyVersion1, policy)
@@ -162,10 +162,11 @@ func TestDelegatedPolicyV3AdmitsAssistantScopes(t *testing.T) {
 	require.NoError(t, err)
 	decoded, err := DecodeDelegatedPolicy(DelegatedPolicyVersion3, encoded)
 	require.NoError(t, err)
-	for _, scope := range []authz.Scope{authz.ScopeAssistantWrite, authz.ScopeAssistantRead} {
-		allowed, err := authz.GrantsAuthorize(decoded.RuntimeGrants(), authz.AssistantCheck(scope, assistant.Selector.ResourceID(), "22222222-2222-4222-8222-222222222222"))
+	ref := authz.Assistant(authz.AssistantIDFrom(assistant.Selector.ResourceID()), authz.ProjectIDFrom("22222222-2222-4222-8222-222222222222"))
+	for _, check := range []authz.Check{ref.Write(), ref.Read()} {
+		allowed, err := authz.GrantsAuthorize(decoded.RuntimeGrants(), check)
 		require.NoError(t, err)
-		require.True(t, allowed, scope)
+		require.True(t, allowed, check.Scope)
 	}
 }
 

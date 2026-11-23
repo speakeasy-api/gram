@@ -308,6 +308,38 @@ func (r Registry) DeriveCatalog() []CatalogEntry {
 	return entries
 }
 
+// ScopeOpenKeys lists, for one scope, the grant keys each kind of check may
+// leave out. The generator writes each as an authz openKeys, field for field.
+type ScopeOpenKeys struct {
+	Probe          []string
+	Connection     []string
+	PolicyAudience []string
+}
+
+// DeriveOpenKeys maps each permission's scope that opens a key to the keys it
+// opens. Blocks open none: matching an exclusion never leaves a key out.
+func (r Registry) DeriveOpenKeys() map[Scope]ScopeOpenKeys {
+	out := make(map[Scope]ScopeOpenKeys)
+	for _, s := range r.Scopes() {
+		if s.Block || len(s.Permission.Open) == 0 {
+			continue
+		}
+		var keys ScopeOpenKeys
+		for _, open := range s.Permission.Open {
+			switch open.On {
+			case OpenOnProbe:
+				keys.Probe = open.Keys
+			case OpenOnConnection:
+				keys.Connection = open.Keys
+			case OpenOnPolicyAudience:
+				keys.PolicyAudience = open.Keys
+			}
+		}
+		out[s.Scope] = keys
+	}
+	return out
+}
+
 // DeriveAgentEligibility maps every scope, root and retired ones included, to
 // the registry version it became agent-safe in (0 for never), and whether it
 // is retired.

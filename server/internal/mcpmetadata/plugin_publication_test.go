@@ -63,7 +63,6 @@ func newPublishingMetadataService(t *testing.T) (context.Context, publishingMeta
 		InstallationID:           1,
 		RepoOwner:                "marketplace-owner",
 		RepoName:                 "marketplace-repo",
-		MarketplaceToken:         pgtype.Text{},
 		PublishedMcpFingerprints: nil,
 		PublishedHooksVersion:    pgtype.Text{},
 		PublishedHooksConfig:     nil,

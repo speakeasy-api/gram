@@ -189,6 +189,10 @@ type Service struct {
 	// upstreamIssuerParityLog dedupes upstream issuer disagreement and
 	// re-consent forecast logs.
 	upstreamIssuerParityLog *onceLog
+
+	// authClientRefusals dedupes the refused mcp:auth checks recorded as
+	// authorization challenges.
+	authClientRefusals *onceLog
 	// prepareMandatory replaces authz PrepareMandatory for the shadow when
 	// set; tests use it to observe admissions.
 	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
@@ -656,6 +660,7 @@ func NewService(
 		features:                  features,
 		mandatoryShadowLog:        newOnceLog(),
 		upstreamIssuerParityLog:   newOnceLog(),
+		authClientRefusals:        newOnceLog(),
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
@@ -1400,7 +1405,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// identity-auth chain below must be skipped or it would re-reject the JWT
 	// it doesn't recognise.
 	callerAlreadyGated := cfg.callerGated
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, cfg.rbacResourceID.String(), toolset.ProjectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(cfg.rbacResourceID), authz.ProjectIDOf(toolset.ProjectID)).Connect()
 
 	isHostedToolsCall := req.Method == mcpversions.MethodToolsCall && cfg.mcpServerID != nil
 	resolvePendingIssuerGate := func() error {

@@ -206,7 +206,7 @@ func (t *Transitions) Get(ctx context.Context, organizationID string, useCase Us
 // db must read committed state: a READ COMMITTED transaction or the pool, never
 // a REPEATABLE READ or SERIALIZABLE snapshot.
 func (t *Transitions) GetIn(ctx context.Context, db repo.DBTX, organizationID string, useCase UseCase) (Transition, error) {
-	if err := useCase.validate(); err != nil {
+	if err := useCase.validateTransition(); err != nil {
 		return Transition{}, err
 	}
 
@@ -226,7 +226,7 @@ func (t *Transitions) GetFresh(ctx context.Context, organizationID string, useCa
 // GetFreshIn is GetFresh reading through db, such as the caller's
 // transaction.
 func (t *Transitions) GetFreshIn(ctx context.Context, db repo.DBTX, organizationID string, useCase UseCase) (Transition, error) {
-	if err := useCase.validate(); err != nil {
+	if err := useCase.validateTransition(); err != nil {
 		return Transition{}, err
 	}
 
@@ -249,8 +249,8 @@ func (t *Transitions) GetFreshIn(ctx context.Context, db repo.DBTX, organization
 	return transition, nil
 }
 
-// List returns the organization's transition state for every registered use
-// case, uncached, for the admin API.
+// List returns the organization's transition state for every use case with
+// storage migration support, uncached, for the admin API.
 func (t *Transitions) List(ctx context.Context, organizationID string) ([]Transition, error) {
 	rows, err := repo.New(t.db).ListEncryptionTransitions(ctx, organizationID)
 	if err != nil {
@@ -264,6 +264,9 @@ func (t *Transitions) List(ctx context.Context, organizationID string) ([]Transi
 
 	transitions := make([]Transition, 0, len(registeredUseCases))
 	for _, useCase := range registeredUseCases {
+		if useCase.validateTransition() != nil {
+			continue
+		}
 		row, ok := byUseCase[useCase]
 		if !ok {
 			transitions = append(transitions, noTransition(organizationID, useCase))
@@ -629,7 +632,7 @@ func (t *Transitions) change(ctx context.Context, organizationID string, useCase
 }
 
 func (t *Transitions) requireWritable(useCase UseCase) error {
-	if err := useCase.validate(); err != nil {
+	if err := useCase.validateTransition(); err != nil {
 		return err
 	}
 	if t.audit == nil || t.provisioner == nil {

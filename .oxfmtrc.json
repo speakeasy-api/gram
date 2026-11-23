@@ -26,6 +26,7 @@
     "/server/internal/mcp/consent_assets/**",
     "/server/internal/consentpage/assets/**",
     "/server/**/fixtures/**",
+    "/server/internal/authz/testdata/decision_snapshot.json",
     "/server/**/*.golden.yaml",
     "/server/gen/**",
     "/server/**/*_gen.yaml",

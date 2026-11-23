@@ -86,7 +86,7 @@ const (
 	ScopeCategoryWorkload      ScopeCategory = "workload"
 )
 
-// ScopeCategories lists every category in presentation order.
+// ScopeCategories is in presentation order.
 var ScopeCategories = []ScopeCategory{
 	ScopeCategoryOrg,
 	ScopeCategoryProject,

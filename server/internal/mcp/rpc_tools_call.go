@@ -263,11 +263,7 @@ func handleToolsCall(
 			return nil, oops.E(oops.CodeUnexpected, err, "read tool annotations for authorization").LogError(ctx, logger)
 		}
 		disposition := toolDisposition(ctx, logger, params.Name, baseTool.Annotations)
-		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
-			Tool:        params.Name,
-			Disposition: disposition,
-			ProjectID:   payload.projectID.String(),
-		})); err != nil {
+		if err := authzEngine.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(payload.mcpConnectResourceID(toolset.ID)), authz.ProjectIDOf(payload.projectID)).ToolCall(params.Name, disposition)); err != nil {
 			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 		}
 	}
