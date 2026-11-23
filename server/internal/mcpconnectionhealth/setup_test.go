@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,7 +50,7 @@ type testInstance struct {
 	service *mcpconnectionhealth.Service
 	conn    *pgxpool.Pool
 	ch      driver.Conn
-	flags   *feature.InMemory
+	flags   *targetedFlag
 	logsOn  *atomic.Bool
 	org     string
 	project uuid.UUID
@@ -76,8 +78,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagMCPConnectionHealth, authCtx.ActiveOrganizationID, true)
+	flags := &targetedFlag{}
+	flags.targetOrganizations(authCtx.OrganizationSlug)
 	logsOn := &atomic.Bool{}
 	logsOn.Store(true)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
@@ -114,6 +116,119 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		server:  server.ID,
 		now:     time.Now().UTC(),
 	}
+}
+
+// flagCall is one evaluation the service asked for.
+type flagCall struct {
+	distinctID       string
+	personProperties map[string]string
+}
+
+// targetedFlag models PostHog for FlagMCPConnectionHealth. The flag is EITHER a
+// group flag (organization slugs, person ignored) OR a person flag (emails,
+// groups ignored). The local check decides a person flag only from a supplied
+// email; the organization check (EvaluateFlag) sends no email, so a person
+// flag there looks the distinct ID up as a stored person. delegate, when set,
+// replaces the model with a real provider.
+type targetedFlag struct {
+	mu        sync.Mutex
+	orgSlugs  []string
+	emails    []string
+	noLocal   bool
+	err       error
+	delegate  feature.Provider
+	local     []flagCall
+	evaluated []flagCall
+}
+
+func (f *targetedFlag) targetOrganizations(slugs ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.orgSlugs, f.emails = slugs, nil
+}
+
+func (f *targetedFlag) targetPeople(emails ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.orgSlugs, f.emails = nil, emails
+}
+
+// withoutLocalEvaluation models a provider with no personal API key.
+func (f *targetedFlag) withoutLocalEvaluation() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.noLocal = true
+}
+
+func (f *targetedFlag) fail(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.err = err
+}
+
+func (f *targetedFlag) use(provider feature.Provider) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.delegate = provider
+}
+
+// calls returns and clears the local and organization evaluations so far.
+func (f *targetedFlag) calls() (local, evaluated []flagCall) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	local, evaluated = f.local, f.evaluated
+	f.local, f.evaluated = nil, nil
+	return local, evaluated
+}
+
+func (f *targetedFlag) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.local = append(f.local, flagCall{distinctID: distinctID, personProperties: personProperties})
+	if f.delegate != nil {
+		return f.delegate.IsFlagEnabledLocal(ctx, flag, distinctID, groups, personProperties) //nolint:wrapcheck // Test double.
+	}
+	if flag != feature.FlagMCPConnectionHealth || f.noLocal {
+		return false, nil
+	}
+	if f.err != nil {
+		return false, f.err
+	}
+	if f.emails != nil {
+		email, supplied := personProperties["email"]
+		return supplied && slices.Contains(f.emails, email), nil
+	}
+	return slices.Contains(f.orgSlugs, groups["organization"]), nil
+}
+
+func (f *targetedFlag) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.evaluated = append(f.evaluated, flagCall{distinctID: distinctID, personProperties: nil})
+	if f.delegate != nil {
+		return feature.EvaluateFlag(ctx, f.delegate, flag, distinctID, groups) //nolint:wrapcheck // Test double.
+	}
+	switch {
+	case flag != feature.FlagMCPConnectionHealth:
+		return feature.EvaluationIndeterminate, nil
+	case f.err != nil:
+		return feature.EvaluationIndeterminate, f.err
+	case f.emails != nil && slices.Contains(f.emails, distinctID), f.emails == nil && slices.Contains(f.orgSlugs, groups["organization"]):
+		return feature.EvaluationEnabled, nil
+	default:
+		return feature.EvaluationDisabled, nil
+	}
+}
+
+func (f *targetedFlag) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
+	if f.delegate != nil {
+		return f.delegate.IsFlagEnabled(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
+	}
+	return false, nil
+}
+
+func (*targetedFlag) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+	return nil, nil
 }
 
 // insert writes one finished attempt per step and result.
