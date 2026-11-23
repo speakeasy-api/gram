@@ -1,0 +1,19 @@
+server/internal/chat/queries.sql
+  s_5d8afeea7d7532::t_91a0d1bbea9a64 1993-1995
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b17fc3553278361d0be7fede045d3f5c0e5b21e6",
+  "prompts": {},
+  "sessions": {
+    "s_5d8afeea7d7532": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f553444d-a6f3-494d-8475-5cd56f07da4c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
