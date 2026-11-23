@@ -516,6 +516,12 @@ type ServiceCore struct {
 	// redirect_uri. Authorization servers store both, so it stays fixed when
 	// the server URL moves. Set by SetOutboundCallbackOrigin.
 	outboundOrigin *url.URL
+
+	// managedCeilingsRepaired holds the IDs of assistants whose managed
+	// ceilings this process has repaired, or found not to need them, so a turn
+	// reaches the database for the repair at most once per assistant per
+	// process.
+	managedCeilingsRepaired sync.Map
 }
 
 func NewServiceCore(
@@ -575,6 +581,7 @@ func NewServiceCore(
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
 		outboundOrigin:              nil,
+		managedCeilingsRepaired:     sync.Map{},
 	}
 }
 
