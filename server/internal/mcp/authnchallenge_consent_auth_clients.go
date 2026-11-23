@@ -291,18 +291,6 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 			continue
 		}
 		selectConsentAuthClient(auth, picked[server.id], remembered[server.id])
-		selected := auth.Selected()
-		if selected == nil || selected.ID == picked[server.id] || !selected.registrationID.Valid {
-			continue
-		}
-		// Sharing a registration does not make two typed offers equivalent.
-		// A remembered choice may prefill other reviews, but it is not an
-		// explicit pick for this review when both offers are usable.
-		if slices.ContainsFunc(auth.Options, func(other consentAuthClientOption) bool {
-			return other.ID != selected.ID && other.Usable() && other.registrationID == selected.registrationID
-		}) {
-			selected.Selected = false
-		}
 	}
 	return choices, nil
 }
@@ -361,20 +349,32 @@ func selectConsentAuthClient(auth *consentServerAuth, picked, remembered uuid.UU
 	slices.SortStableFunc(auth.Options, func(a, b consentAuthClientOption) int {
 		return cmp.Or(cmp.Compare(preselectionRank(a.Type), preselectionRank(b.Type)), cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID.String(), b.ID.String()))
 	})
+	selectOption := func(option *consentAuthClientOption) {
+		// Sharing a registration does not make two typed offers equivalent.
+		// A remembered choice may prefill other reviews, but it is not an
+		// explicit pick for this review when both offers are usable.
+		if option.ID != picked && option.registrationID.Valid && slices.ContainsFunc(auth.Options, func(other consentAuthClientOption) bool {
+			return other.ID != option.ID && other.Usable() && other.registrationID == option.registrationID
+		}) {
+			return
+		}
+		option.Selected = true
+	}
+
 	for _, want := range []uuid.UUID{picked, remembered} {
 		if want == uuid.Nil {
 			continue
 		}
 		for i := range auth.Options {
 			if auth.Options[i].ID == want && auth.Options[i].Usable() {
-				auth.Options[i].Selected = true
+				selectOption(&auth.Options[i])
 				return
 			}
 		}
 	}
 	for i := range auth.Options {
 		if auth.Options[i].Usable() {
-			auth.Options[i].Selected = true
+			selectOption(&auth.Options[i])
 			return
 		}
 	}
