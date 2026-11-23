@@ -6,32 +6,72 @@ import (
 )
 
 // commandsWithoutKeys are commands the guard never inspects: connection
-// setup, server introspection and transaction framing.
+// setup, server administration and introspection, and transaction framing.
 var commandsWithoutKeys = map[string]struct{}{
-	"auth":    {},
-	"client":  {},
-	"command": {},
-	"discard": {},
-	"echo":    {},
-	"exec":    {},
-	"hello":   {},
-	"info":    {},
-	"multi":   {},
-	"ping":    {},
-	"quit":    {},
-	"script":  {},
-	"select":  {},
-	"unwatch": {},
+	"auth":     {},
+	"client":   {},
+	"command":  {},
+	"config":   {},
+	"dbsize":   {},
+	"discard":  {},
+	"echo":     {},
+	"exec":     {},
+	"flushall": {},
+	"flushdb":  {},
+	"hello":    {},
+	"info":     {},
+	"multi":    {},
+	"ping":     {},
+	"quit":     {},
+	"script":   {},
+	"select":   {},
+	"time":     {},
+	"unwatch":  {},
 }
 
 // commandsWithKeyArguments take only keys after the command name.
 var commandsWithKeyArguments = map[string]struct{}{
-	"del":    {},
-	"exists": {},
-	"mget":   {},
-	"touch":  {},
-	"unlink": {},
-	"watch":  {},
+	"del":         {},
+	"exists":      {},
+	"mget":        {},
+	"pfcount":     {},
+	"sdiff":       {},
+	"sdiffstore":  {},
+	"sinter":      {},
+	"sinterstore": {},
+	"sunion":      {},
+	"sunionstore": {},
+	"touch":       {},
+	"unlink":      {},
+	"watch":       {},
+}
+
+// commandsWithTwoKeys take a source and a destination key first.
+var commandsWithTwoKeys = map[string]struct{}{
+	"blmove":     {},
+	"brpoplpush": {},
+	"copy":       {},
+	"lmove":      {},
+	"rename":     {},
+	"renamenx":   {},
+	"rpoplpush":  {},
+	"smove":      {},
+}
+
+// blockingPopCommands take keys followed by a timeout.
+var blockingPopCommands = map[string]struct{}{
+	"blpop":    {},
+	"brpop":    {},
+	"bzpopmax": {},
+	"bzpopmin": {},
+}
+
+// subcommandsWithKey take a subcommand and then a key; the other
+// subcommands of their command address no key.
+var subcommandsWithKey = map[string]map[string]struct{}{
+	"memory": {"usage": {}},
+	"object": {"encoding": {}, "freq": {}, "idletime": {}, "refcount": {}},
+	"xinfo":  {"consumers": {}, "groups": {}, "stream": {}},
 }
 
 // commandKeys returns the keys a command addresses, as far as they can be
@@ -52,12 +92,35 @@ func commandKeys(args []any) []string {
 	if _, all := commandsWithKeyArguments[name]; all {
 		return argStrings(args[1:])
 	}
+	if _, two := commandsWithTwoKeys[name]; two {
+		return argStrings(args[1:min(3, len(args))])
+	}
+	if _, blocking := blockingPopCommands[name]; blocking {
+		if len(args) < 3 {
+			return nil
+		}
+		return argStrings(args[1 : len(args)-1])
+	}
+	if subcommands, ok := subcommandsWithKey[name]; ok {
+		return subcommandKey(args, subcommands)
+	}
 
 	switch name {
 	case "eval", "evalsha", "eval_ro", "evalsha_ro", "fcall", "fcall_ro":
-		return scriptKeys(args)
-	case "xread", "xreadgroup":
-		return streamKeys(args)
+		return countedKeys(args, 2)
+	case "zunionstore", "zinterstore", "zdiffstore":
+		return append(argStrings(args[1:min(2, len(args))]), countedKeys(args, 2)...)
+	case "mset", "msetnx":
+		return everyOtherArgument(args[1:])
+	case "bitop":
+		if len(args) < 3 {
+			return nil
+		}
+		return argStrings(args[2:])
+	case "xread":
+		return streamKeys(args[1:])
+	case "xreadgroup":
+		return streamKeys(afterGroup(args[1:]))
 	case "scan":
 		return scanPattern(args)
 	}
@@ -72,10 +135,9 @@ func commandKeys(args []any) []string {
 	return []string{key}
 }
 
-// scriptKeys reads the numkeys argument of EVAL-style commands:
-// EVAL script numkeys key [key ...] arg [arg ...].
-func scriptKeys(args []any) []string {
-	const numKeysIndex = 2
+// countedKeys reads the numkeys argument at numKeysIndex and the keys after
+// it: EVAL script numkeys key ... and ZUNIONSTORE dest numkeys key ....
+func countedKeys(args []any, numKeysIndex int) []string {
 	if len(args) <= numKeysIndex {
 		return nil
 	}
@@ -85,6 +147,46 @@ func scriptKeys(args []any) []string {
 	}
 	end := min(numKeysIndex+1+numKeys, len(args))
 	return argStrings(args[numKeysIndex+1 : end])
+}
+
+// subcommandKey returns the key of SUBCOMMAND KEY shapes, or no key for a
+// subcommand that addresses none.
+func subcommandKey(args []any, withKey map[string]struct{}) []string {
+	if len(args) < 3 {
+		return nil
+	}
+	subcommand, ok := argString(args[1])
+	if !ok {
+		return nil
+	}
+	if _, keyed := withKey[strings.ToLower(subcommand)]; !keyed {
+		return nil
+	}
+	return argStrings(args[2:3])
+}
+
+// everyOtherArgument returns the keys of KEY VALUE [KEY VALUE ...] lists.
+func everyOtherArgument(args []any) []string {
+	keys := make([]string, 0, (len(args)+1)/2)
+	for i := 0; i < len(args); i += 2 {
+		if key, ok := argString(args[i]); ok {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+// afterGroup drops XREADGROUP's GROUP group consumer, whose names may be any
+// word, including "streams".
+func afterGroup(args []any) []any {
+	const groupTokens = 3
+	for i, arg := range args {
+		token, ok := argString(arg)
+		if ok && strings.EqualFold(token, "group") {
+			return args[min(i+groupTokens, len(args)):]
+		}
+	}
+	return args
 }
 
 // streamKeys returns the stream names of XREAD and XREADGROUP: the first half
@@ -103,7 +205,8 @@ func streamKeys(args []any) []string {
 
 // scanPattern returns the MATCH pattern of a SCAN. Matching is on the head of
 // the pattern, so a family prefix followed by a glob classifies as that
-// family. A SCAN without MATCH addresses no family and is not checked.
+// family. A SCAN without MATCH, or whose pattern starts with a glob, names no
+// family and is not checked.
 func scanPattern(args []any) []string {
 	for i := 0; i+1 < len(args); i++ {
 		token, ok := argString(args[i])
@@ -111,7 +214,7 @@ func scanPattern(args []any) []string {
 			continue
 		}
 		pattern, ok := argString(args[i+1])
-		if !ok {
+		if !ok || pattern == "" || strings.ContainsAny(pattern[:1], `*?[\`) {
 			return nil
 		}
 		return []string{pattern}

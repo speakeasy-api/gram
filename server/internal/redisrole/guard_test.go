@@ -122,14 +122,37 @@ func TestGuardReportRunsCommandAndCountsIt(t *testing.T) {
 func TestParseGuardMode(t *testing.T) {
 	t.Parallel()
 
-	mode, err := redisrole.ParseGuardMode("")
-	require.NoError(t, err)
-	require.Equal(t, redisrole.GuardReport, mode)
+	tests := []struct {
+		value   string
+		want    redisrole.GuardMode
+		wantErr bool
+	}{
+		{value: "", want: redisrole.GuardReport, wantErr: false},
+		{value: "report", want: redisrole.GuardReport, wantErr: false},
+		{value: "enforce", want: redisrole.GuardEnforce, wantErr: false},
+		{value: "off", want: redisrole.GuardReport, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run("value="+tc.value, func(t *testing.T) {
+			t.Parallel()
+			mode, err := redisrole.ParseGuardMode(tc.value)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, mode)
 
-	mode, err = redisrole.ParseGuardMode("enforce")
-	require.NoError(t, err)
-	require.Equal(t, redisrole.GuardEnforce, mode)
+			roundTrip, err := redisrole.ParseGuardMode(mode.String())
+			require.NoError(t, err)
+			require.Equal(t, mode, roundTrip)
+		})
+	}
+}
 
-	_, err = redisrole.ParseGuardMode("off")
-	require.Error(t, err)
+func TestZeroGuardModeReports(t *testing.T) {
+	t.Parallel()
+
+	var zero redisrole.GuardMode
+	require.Equal(t, redisrole.GuardReport, zero)
 }

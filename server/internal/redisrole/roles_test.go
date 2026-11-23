@@ -69,9 +69,12 @@ func TestOfClassifiesKnownFamilies(t *testing.T) {
 		"userInfoSnapshot:org:user:",
 	}
 	for _, key := range evictable {
-		role, prefix := redisrole.Of(key)
-		require.Equal(t, redisrole.RoleEvictable, role, "key %q", key)
-		require.True(t, strings.HasPrefix(key, prefix), "key %q matched %q", key, prefix)
+		t.Run("evictable/"+key, func(t *testing.T) {
+			t.Parallel()
+			role, prefix := redisrole.Of(key)
+			require.Equal(t, redisrole.RoleEvictable, role)
+			require.True(t, strings.HasPrefix(key, prefix), "matched %q", prefix)
+		})
 	}
 
 	sessions := []string{
@@ -161,8 +164,11 @@ func TestOfClassifiesKnownFamilies(t *testing.T) {
 		"gram:redis-switch:state:default",
 	}
 	for _, key := range sessions {
-		role, _ := redisrole.Of(key)
-		require.Equal(t, redisrole.RoleSessions, role, "key %q", key)
+		t.Run("sessions/"+key, func(t *testing.T) {
+			t.Parallel()
+			role, _ := redisrole.Of(key)
+			require.Equal(t, redisrole.RoleSessions, role)
+		})
 	}
 }
 
@@ -181,8 +187,11 @@ func TestScriptedPairsShareARole(t *testing.T) {
 		{"userInfo:user", "feature:org:feature"},
 	}
 	for _, pair := range pairs {
-		first, _ := redisrole.Of(pair[0])
-		second, _ := redisrole.Of(pair[1])
-		require.Equal(t, first, second, "%q and %q", pair[0], pair[1])
+		t.Run(pair[0]+" with "+pair[1], func(t *testing.T) {
+			t.Parallel()
+			first, _ := redisrole.Of(pair[0])
+			second, _ := redisrole.Of(pair[1])
+			require.Equal(t, first, second)
+		})
 	}
 }

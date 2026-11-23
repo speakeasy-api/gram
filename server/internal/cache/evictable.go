@@ -11,7 +11,6 @@ import (
 var (
 	_ EvictableCache       = (*EvictableRedisAdapter)(nil)
 	_ CompareAndSwapCache  = (*EvictableRedisAdapter)(nil)
-	_ MarkingConsumeCache  = (*EvictableRedisAdapter)(nil)
 	_ ConditionalCache     = (*EvictableRedisAdapter)(nil)
 	_ RenewableLeaseCache  = (*EvictableRedisAdapter)(nil)
 	_ evictableLeaseClaims = (*EvictableRedisAdapter)(nil)
@@ -40,6 +39,9 @@ type evictableLeaseClaims interface {
 // method checks that its keys carry a declared evictable prefix before the
 // command is sent; in enforce mode a key of the sessions role returns
 // redisrole.ErrWrongRole.
+//
+// It does not implement MarkingConsumeCache: the markers that operation sets
+// are sessions-role keys, so no evictable family can use it.
 type EvictableRedisAdapter struct {
 	inner *RedisCacheAdapter
 	guard *redisrole.Guard
@@ -78,13 +80,6 @@ func (e *EvictableRedisAdapter) GetAndDelete(ctx context.Context, key string, va
 		return err
 	}
 	return e.inner.GetAndDelete(ctx, key, value)
-}
-
-func (e *EvictableRedisAdapter) GetAndDeleteMarking(ctx context.Context, key, marker string, markerTTL time.Duration, value any) error {
-	if err := e.check(ctx, "getdel_marking", key, marker); err != nil {
-		return err
-	}
-	return e.inner.GetAndDeleteMarking(ctx, key, marker, markerTTL, value)
 }
 
 func (e *EvictableRedisAdapter) Set(ctx context.Context, key string, value any, ttl time.Duration) error {

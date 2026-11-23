@@ -104,10 +104,6 @@ func TestEvictableAdapterRefusesSessionsKeysInEnforce(t *testing.T) {
 	for method, err := range evictableOperations(t.Context(), evictable, "sessions:v2:sid:") {
 		require.ErrorIs(t, err, redisrole.ErrWrongRole, method)
 	}
-
-	var value string
-	err := evictable.GetAndDeleteMarking(t.Context(), "toolset:a:", "connectionAttemptEnded:a", time.Minute, &value)
-	require.ErrorIs(t, err, redisrole.ErrWrongRole)
 }
 
 func TestEvictableAdapterLetsSessionsKeysThroughInReport(t *testing.T) {
@@ -134,5 +130,25 @@ func TestEvictableAdapterSupportsOptionalInterfaces(t *testing.T) {
 	_, ok = store.(cache.ConditionalCache)
 	require.True(t, ok)
 	_, ok = store.(cache.MarkingConsumeCache)
-	require.True(t, ok)
+	require.False(t, ok, "marking consume sets a sessions-role marker, so the evictable adapter must not offer it")
+}
+
+// TestTypedGetAndDeleteMarkingOnEvictableAdapterOnlyDeletes pins the typed
+// cache's fallback: without MarkingConsumeCache it consumes the key and sets
+// no marker.
+func TestTypedGetAndDeleteMarkingOnEvictableAdapterOnlyDeletes(t *testing.T) {
+	t.Parallel()
+
+	sessions, evictable := newEvictablePair(t, redisrole.GuardEnforce)
+	objects := cache.NewTypedObjectCache[conditionalTestObject](testenv.NewLogger(t), evictable, cache.SuffixNone)
+	require.NoError(t, objects.Store(t.Context(), conditionalTestObject{Key: "toolset:a", Value: "v"}))
+
+	got, err := objects.GetAndDeleteMarking(t.Context(), "toolset:a", "connectionAttemptEnded:a", time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, "v", got.Value)
+
+	var marker string
+	require.Error(t, sessions.Get(t.Context(), "connectionAttemptEnded:a", &marker))
+	_, err = objects.Get(t.Context(), "toolset:a")
+	require.Error(t, err)
 }

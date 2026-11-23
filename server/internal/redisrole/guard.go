@@ -17,15 +17,32 @@ import (
 )
 
 // GuardMode selects what the guard does with a key sent to the wrong role.
-type GuardMode string
+// Its field is unexported, so a mode is GuardReport, GuardEnforce or the zero
+// value, which reports; no other mode can reach a guard.
+type GuardMode struct {
+	enforce bool
+}
 
-const (
+var (
 	// GuardReport lets the command run, logs it and counts it.
-	GuardReport GuardMode = "report"
+	GuardReport = GuardMode{enforce: false}
 
 	// GuardEnforce refuses the command with ErrWrongRole without sending it.
-	GuardEnforce GuardMode = "enforce"
+	GuardEnforce = GuardMode{enforce: true}
 )
+
+const (
+	guardReportName  = "report"
+	guardEnforceName = "enforce"
+)
+
+// String returns the mode's name as ParseGuardMode reads it.
+func (m GuardMode) String() string {
+	if m.enforce {
+		return guardEnforceName
+	}
+	return guardReportName
+}
 
 // ErrWrongRole is returned in enforce mode for a key sent to the client or
 // adapter of the other role.
@@ -42,13 +59,13 @@ const (
 
 // ParseGuardMode reads a guard mode name. An empty value selects report.
 func ParseGuardMode(value string) (GuardMode, error) {
-	switch GuardMode(value) {
-	case "", GuardReport:
+	switch value {
+	case "", guardReportName:
 		return GuardReport, nil
-	case GuardEnforce:
+	case guardEnforceName:
 		return GuardEnforce, nil
 	default:
-		return "", fmt.Errorf("unknown redis role guard mode %q", value)
+		return GuardReport, fmt.Errorf("unknown redis role guard mode %q", value)
 	}
 }
 
@@ -108,7 +125,7 @@ func (g *Guard) Check(ctx context.Context, role Role, command, key string) error
 		))
 	}
 
-	if g.mode == GuardEnforce {
+	if g.mode.enforce {
 		return fmt.Errorf("%w: %s key %q on the %s role", ErrWrongRole, keyRole, keyHead(key), role)
 	}
 
