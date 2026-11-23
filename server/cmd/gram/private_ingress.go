@@ -24,9 +24,12 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
 )
@@ -114,7 +117,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 			defer func() { _ = runShutdown(logger, ctx, []func(context.Context) error{stopControl}) }()
 			return servePrivateIngress(ctx, privateIngressServerDependencies{
 				Logger: logger, MeterProvider: otel.GetMeterProvider(), DB: deps.DB,
-				TokenReviewer: deps.TokenReviewer, Runtime: deps.Runtime,
+				TokenReviewer: deps.TokenReviewer, Runtime: deps.Runtime, MeterReadings: deps.MeterReadings,
 				GatewayNamespace: c.String("netingress-gateway-namespace"), GatewayServiceAccount: c.String("netingress-gateway-service-account"),
 			}, c.String("netingress-address"), c.String("netingress-tls-cert-file"), c.String("netingress-tls-key-file"))
 		},
@@ -196,6 +199,10 @@ type privateIngressServerDependencies struct {
 	DB            *pgxpool.Pool
 	Runtime       *mcpServerRuntime
 
+	// MeterReadings receives the MCP bandwidth readings for runtime exchanges
+	// admitted through the private listener.
+	MeterReadings gcp.Publisher[*meteringv1.MeterReading]
+
 	// TokenReviewer verifies the attestation token on every private request.
 	TokenReviewer netingress.TokenReviewer
 
@@ -218,26 +225,15 @@ func servePrivateIngress(
 	if deps.Runtime == nil {
 		return errors.New("private network ingress listener requires an MCP server runtime")
 	}
+	if deps.MeterReadings == nil {
+		return errors.New("private network ingress listener requires a meter readings publisher")
+	}
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return fmt.Errorf("load private network ingress TLS certificate: %w", err)
 	}
 
 	telemetry := netingress.NewTelemetry(deps.Logger, deps.MeterProvider)
-	mux := goahttp.NewMuxer()
-	mux.Use(middleware.NetworkServingPolicyVersion)
-	mux.Use(netingress.RouteGuard)
-	mux.Use(middleware.DropInboundOTelBaggage)
-	mux.Use(func(h http.Handler) http.Handler {
-		return otelhttp.NewHandler(h, "http",
-			otelhttp.WithServerName("gram-netingress"),
-			otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
-		)
-	})
-	mux.Use(middleware.RouteLabelerMiddleware)
-	mux.Use(middleware.MCPProtocolVersionTelemetry)
-	mux.Use(middleware.NewHTTPLoggingMiddleware(deps.Logger))
-	mux.Use(middleware.NewRecovery(deps.Logger))
 	verifier := netingress.NewAttestationVerifier(
 		deps.TokenReviewer,
 		netingress.NewIngressLookup(deps.DB),
@@ -250,13 +246,9 @@ func servePrivateIngress(
 			return fmt.Errorf("configure tailnet gateway principal: %w", err)
 		}
 	}
-	mux.Use(netingress.Middleware(
-		verifier,
-		netingress.IdentityParsers{netingress.ProviderTailscale: netingress.TailscaleIdentityParser{}},
-		telemetry,
-	))
-	mux.Use(middleware.SessionMiddleware)
-	mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
+	mux := newPrivateIngressHandler(deps.Logger, telemetry, verifier, deps.MeterReadings, func(mux goahttp.Muxer) {
+		mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
+	})
 
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
@@ -299,4 +291,42 @@ func servePrivateIngress(
 	}
 	<-shutdownDone
 	return nil
+}
+
+// newPrivateIngressHandler builds the private listener's middleware chain
+// around the routes attach registers.
+func newPrivateIngressHandler(
+	logger *slog.Logger,
+	telemetry *netingress.Telemetry,
+	verifier netingress.WorkloadVerifier,
+	meterReadings gcp.Publisher[*meteringv1.MeterReading],
+	attach func(goahttp.Muxer),
+) goahttp.Muxer {
+	mux := goahttp.NewMuxer()
+	mux.Use(middleware.NetworkServingPolicyVersion)
+	mux.Use(netingress.RouteGuard)
+	mux.Use(middleware.DropInboundOTelBaggage)
+	mux.Use(func(h http.Handler) http.Handler {
+		return otelhttp.NewHandler(h, "http",
+			otelhttp.WithServerName("gram-netingress"),
+			otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
+		)
+	})
+	mux.Use(middleware.RouteLabelerMiddleware)
+	mux.Use(middleware.MCPProtocolVersionTelemetry)
+	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
+	mux.Use(middleware.NewRecovery(logger))
+	mux.Use(netingress.Middleware(
+		verifier,
+		netingress.IdentityParsers{netingress.ProviderTailscale: netingress.TailscaleIdentityParser{}},
+		telemetry,
+	))
+	// Inside recovery and below netingress.Middleware, so panics and rejected
+	// admissions are not billable and the request origin is set when readings
+	// are attributed. Nothing outside this boundary consumes request bodies or
+	// rewrites successful responses.
+	mux.Use(metering.NewMCPBandwidthMiddleware(logger, meterReadings))
+	mux.Use(middleware.SessionMiddleware)
+	attach(mux)
+	return mux
 }
