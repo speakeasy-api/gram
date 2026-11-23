@@ -6657,6 +6657,11 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   -- never returned by the API. Nullable while pre-encryption rows are
   -- migrated; reads prefer this column and fall back to key.
   key_encrypted TEXT,
+  -- The same upstream OpenRouter key sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  key_org_encrypted TEXT,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -6676,6 +6681,7 @@ COMMENT ON COLUMN openrouter_api_keys.organization_id IS '@access: confidential'
 COMMENT ON COLUMN openrouter_api_keys.key_type IS '@access: confidential';
 COMMENT ON COLUMN openrouter_api_keys.key IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN openrouter_api_keys.key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.key_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.monthly_credits IS '@access: restricted';
 COMMENT ON COLUMN openrouter_api_keys.disabled IS '@access: confidential';
@@ -9781,7 +9787,13 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   provider TEXT NOT NULL,
   project_id uuid NOT NULL,
   external_organization_id TEXT,
-  api_key_encrypted TEXT NOT NULL,
+  api_key_encrypted TEXT,
+  -- The same credential as api_key_encrypted (an API key, or the Anthropic
+  -- webhook signing-secret JSON) sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. api_key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  api_key_org_encrypted TEXT,
   enabled boolean NOT NULL DEFAULT true,
   -- Billing mode for the provider org this integration covers. Dashboard cost
   -- figures are derived from token usage (tokens x published API price), which
@@ -9814,6 +9826,7 @@ COMMENT ON COLUMN ai_integration_configs.provider IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.project_id IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.external_organization_id IS '@access: restricted';
 COMMENT ON COLUMN ai_integration_configs.api_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN ai_integration_configs.api_key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN ai_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.billing_mode IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.id IS '@access: confidential';
@@ -13840,7 +13853,12 @@ CREATE TABLE IF NOT EXISTS model_provider_keys (
   project_id uuid NOT NULL,
   slot TEXT NOT NULL,
   provider TEXT NOT NULL,
-  api_key_encrypted TEXT NOT NULL,
+  api_key_encrypted TEXT,
+  -- The same key as api_key_encrypted sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. api_key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  api_key_org_encrypted TEXT,
   enabled boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -13857,6 +13875,7 @@ COMMENT ON COLUMN model_provider_keys.project_id IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.slot IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.provider IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.api_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN model_provider_keys.api_key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN model_provider_keys.enabled IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.created_at IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.updated_at IS '@access: confidential';
