@@ -769,8 +769,7 @@ export function AddServersSheet({
   const canWrite =
     !permissionsLoading &&
     canWriteMCPServer({ serverId: gatewayId, projectId });
-  const canCreate =
-    !permissionsLoading && canWriteProjectMCPServers(projectId);
+  const canCreate = !permissionsLoading && canWriteProjectMCPServers(projectId);
   const functionsAvailable = useFunctionsAvailable();
   const canWriteProject =
     !permissionsLoading && hasScope("project:write", projectId);
