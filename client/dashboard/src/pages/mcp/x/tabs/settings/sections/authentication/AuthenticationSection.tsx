@@ -1,5 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateAllMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
+import {
+  invalidateAllMcpServerAuthentication,
+  useMcpServerAuthentication,
+} from "@gram/client/react-query/mcpServerAuthentication.js";
 import { useSetMcpServerUpstreamAuthRequirementMutation } from "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -410,6 +413,11 @@ function HostedNoUpstreamAction({
   // The legacy proxied setter is deprecated. This operation still owns the
   // exact hosted no-upstream decision; typed offer mutations cannot save it.
   const queryClient = useQueryClient();
+  const authentication = useMcpServerAuthentication(
+    { mcpServerId: serverId },
+    undefined,
+    { throwOnError: false },
+  );
   const mutation = useSetMcpServerUpstreamAuthRequirementMutation({
     onSuccess: async () => {
       await Promise.all([
@@ -418,19 +426,21 @@ function HostedNoUpstreamAction({
       ]);
     },
   });
+  const noUpstream =
+    mutation.isSuccess || authentication.data?.status === "no_auth_required";
   return (
     <Field>
       <FieldLabel>Upstream authentication</FieldLabel>
       <FieldDescription>
-        {mutation.isSuccess
+        {noUpstream
           ? "No upstream authentication required. The server’s user sign-in settings are unchanged."
           : "Assign an authorization server above, or confirm that this server does not need upstream authentication. This does not turn off user sign-in."}
       </FieldDescription>
-      {!mutation.isSuccess && (
+      {!noUpstream && (
         <Button
           type="button"
           variant="secondary"
-          disabled={mutation.isPending}
+          disabled={mutation.isPending || authentication.isLoading}
           onClick={() =>
             mutation.mutate({
               request: {

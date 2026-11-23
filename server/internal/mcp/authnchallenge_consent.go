@@ -1393,7 +1393,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeForbidden, nil, hostedSetupNotice).LogWarn(ctx, logger)
 		}
 	}
-	if action == "approve" && endpoint.MetaMcpServerID.Valid {
+	if (action == "approve" || action == "approve_agent") && endpoint.MetaMcpServerID.Valid {
 		view, _, err := s.gatewayConsent(ctx, endpoint, challengeState, nil, "")
 		if err != nil {
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)

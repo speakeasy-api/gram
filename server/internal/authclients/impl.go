@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -314,6 +315,28 @@ func (s *Service) GetMcpServerAuthentication(ctx context.Context, payload *gen.G
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
+	if server.ToolsetID.Valid {
+		placements, err := upstreamclientsrepo.New(s.db).ListHostedUpstreamAssignments(ctx, upstreamclientsrepo.ListHostedUpstreamAssignmentsParams{
+			OrganizationID: authCtx.ActiveOrganizationID, ServerIds: []uuid.UUID{server.ID},
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "get hosted upstream setup").LogError(ctx, logger)
+		}
+		status := StatusSetupIncomplete
+		if len(placements) == 1 {
+			placement := placements[0]
+			switch {
+			case placement.RegistrationID.Valid && placement.UserSessionIssuerID.Valid:
+				status = StatusConfigured
+			case !placement.RegistrationID.Valid && placement.RequiresUpstreamAuth.Valid && !placement.RequiresUpstreamAuth.Bool:
+				status = StatusNoAuthRequired
+			}
+		}
+		return &types.McpServerAuthentication{
+			McpServerID: server.ID.String(), ProjectID: server.ProjectID.String(), Public: server.Visibility == visibility.Public,
+			RequiresUpstreamAuth: status == StatusConfigured, Status: status, Clients: []*types.AuthClient{},
+		}, nil
+	}
 	return s.serverAuthentication(ctx, queries, authCtx.ActiveOrganizationID, server.ID, server.ProjectID, server.Visibility, server.UpstreamAuthPending, logger)
 }
 

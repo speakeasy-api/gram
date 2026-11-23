@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -113,4 +114,12 @@ func TestGatewayHostedSetupNoticeDoesNotAdmitMissingPlacement(t *testing.T) {
 	approval, err := postApproveResult(t, ctx, fx)
 	require.ErrorContains(t, err, "An administrator must finish upstream authentication setup")
 	require.Empty(t, approval.Header().Get("Location"))
+
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve_agent"}, "agent_id": {uuid.NewString()}, "tool_filtering": {"off"}}
+	req = httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w = httptest.NewRecorder()
+	err = fx.ti.service.ServeConsent(w, req.WithContext(ctx), fx.endpoint)
+	require.ErrorContains(t, err, "An administrator must finish upstream authentication setup")
+	require.Empty(t, w.Header().Get("Location"))
 }

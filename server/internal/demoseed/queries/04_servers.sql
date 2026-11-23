@@ -64,8 +64,8 @@ ON CONFLICT (project_id,mcp_server_id) DO NOTHING;
 -- same toolset shows up as a duplicate in every server picker.
 -- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, visibility)
-SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+                         user_session_issuer_id, visibility, requires_upstream_auth)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility, FALSE
 FROM (VALUES
   (@toolset_1::uuid, @support_mcp_slug::text, NULL::uuid, 'public')
 ) AS v(toolset_id, slug, user_session_issuer_id, visibility)

@@ -1960,7 +1960,7 @@ func (q *Queries) RemoveGlobalClientAssociations(ctx context.Context, remoteSess
 
 const requireHostedUpstreamAssignment = `-- name: RequireHostedUpstreamAssignment :exec
 UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
+SET requires_upstream_auth = TRUE, updated_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND toolset_id IS NOT NULL AND NOT deleted
 `
 

@@ -404,7 +404,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			FocusServer:              "",
 		}
 		hosted, err := s.recheckHostedRemoteSession(ctx, logger, endpoint, state, sess, row.OrganizationIds)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) && !errors.Is(err, errRemoteSessionUnroutable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) && !errors.Is(err, errRemoteSessionRecheckRateLimited) && !errors.Is(err, errRemoteSessionVerdictNotRecorded) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) && !errors.Is(err, errRemoteSessionUnroutable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) && !errors.Is(err, errRemoteSessionRecheckRateLimited) && !errors.Is(err, errRemoteSessionVerdictNotRecorded) && !errors.Is(err, errHostedValidationPlacementChanged) {
 			logger.ErrorContext(ctx, "check exact hosted placement for remote session re-check", attr.SlogError(err))
 			continue
 		}

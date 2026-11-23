@@ -7,6 +7,7 @@ import type { AuthTarget } from "./authTarget";
 const {
   attachSheet,
   saveNoUpstream,
+  useMcpServerAuthentication,
   deniedScopes,
   useServerClientAssociations,
   useRemoteSessionIssuersByIds,
@@ -15,6 +16,7 @@ const {
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
   saveNoUpstream: vi.fn(),
+  useMcpServerAuthentication: vi.fn(),
   deniedScopes: new Set<string>(),
   useServerClientAssociations: vi.fn(),
   useRemoteSessionIssuersByIds: vi.fn(),
@@ -34,6 +36,12 @@ vi.mock(
     }),
   }),
 );
+
+vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
+  useMcpServerAuthentication: (...args: unknown[]) =>
+    useMcpServerAuthentication(...args),
+  invalidateAllMcpServerAuthentication: vi.fn(),
+}));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
   useUserSessionIssuer: (...args: unknown[]) => useUserSessionIssuer(...args),
@@ -186,6 +194,7 @@ vi.mock("./CimdCustomClientsField", () => ({
 }));
 
 beforeEach(() => {
+  useMcpServerAuthentication.mockReturnValue({});
   useRemoteSessionIssuersByIds.mockImplementation((ids: string[]) => ({
     items: ids.map((id) => ({ id })),
     isLoading: false,
@@ -237,6 +246,22 @@ describe("AuthenticationSectionBody", () => {
         },
       },
     });
+  });
+
+  it("shows a saved no-upstream decision after reload", () => {
+    useServerClientAssociations.mockReturnValue({ data: { associations: [] } });
+    useMcpServerAuthentication.mockReturnValue({
+      data: { status: "no_auth_required" },
+    });
+    render(
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
+    );
+    expect(
+      screen.getByText(/No upstream authentication required/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "No upstream authentication" }),
+    ).toBeNull();
   });
 
   it.each(["non-hosted", "assigned", "gateway", "org:admin", "mcp:write"])(

@@ -296,6 +296,14 @@ func TestSetHostedNoUpstreamRequiresExactServerWriteAndPreservesSignIn(t *testin
 		return server
 	}
 	server, sibling := seed("hosted-target"), seed("hosted-sibling")
+	reader := withOrgGrants(t, ctx, authz.ScopeOrgRead)
+	readStatus := func(id uuid.UUID) string {
+		t.Helper()
+		result, err := ti.service.GetMcpServerAuthentication(reader, &gen.GetMcpServerAuthenticationPayload{McpServerID: id.String()})
+		require.NoError(t, err)
+		return result.Status
+	}
+	require.Equal(t, authclients.StatusSetupIncomplete, readStatus(server))
 	payload := &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.String(), RequiresUpstreamAuth: false}
 	_, err := ti.service.SetMcpServerUpstreamAuthRequirement(withOrgGrants(t, ctx, authz.ScopeOrgAdmin), payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -303,6 +311,8 @@ func TestSetHostedNoUpstreamRequiresExactServerWriteAndPreservesSignIn(t *testin
 	got, err := ti.service.SetMcpServerUpstreamAuthRequirement(admin, payload)
 	require.NoError(t, err)
 	require.Equal(t, authclients.StatusNoAuthRequired, got.Status)
+	require.Equal(t, authclients.StatusNoAuthRequired, readStatus(server))
+	require.Equal(t, authclients.StatusSetupIncomplete, readStatus(sibling))
 	rows := mcpserversrepo.New(ti.conn)
 	for _, id := range []uuid.UUID{server, sibling} {
 		row, err := rows.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: id, ProjectID: ti.projectID})
