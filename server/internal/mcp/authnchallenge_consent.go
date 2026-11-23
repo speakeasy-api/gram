@@ -280,6 +280,11 @@ type consentTemplateData struct {
 	// answer only means identity chaining has not run yet, so approval
 	// proceeds with the unrestricted default.
 	ConsentToolsDeferred bool
+	// Browser recovery may reuse these exact service-card credentials. The
+	// form target is optional for ambiguous legacy or nonpersonal clients.
+	ConsentReconnectFormID  string
+	ConsentReconnectClients []string
+	ConsentFlowID           string
 	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
 	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked or
@@ -1107,7 +1112,15 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	accountSwitch := slices.ContainsFunc(cards, func(card remoteSessionCard) bool { return card.Chained }) &&
 		s.accountSwitchEnabled(ctx, endpoint.OrganizationID)
+	var reconnectFormID string
+	var reconnectClients []string
+	if showToolsIsland && gateway == nil && endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid {
+		reconnectFormID, reconnectClients = consentReconnectTargets(upstreamAuth, cards)
+	}
 	data := consentTemplateData{
+		ConsentReconnectFormID:  reconnectFormID,
+		ConsentReconnectClients: reconnectClients,
+		ConsentFlowID:           consentDiscoveryFlowID(challengeState.FlowID),
 		AccountSwitch:           accountSwitch,
 		GatewayDefaultMode:      gatewayDefaultMode,
 		CodeModeUnavailable:     codeModeUnavailable,

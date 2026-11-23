@@ -64,6 +64,7 @@ type consentAuthClientOption struct {
 	// ConnectClientID is the consent card that connects or reconnects a
 	// personal client, when State asks for it.
 	ConnectClientID string
+	ReconnectFormID string
 
 	// Selected marks the option the page preselects or the person picked.
 	Selected bool
@@ -422,6 +423,12 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 			return nil, errConsentNoUsableConnection
 		}
 		return nil, nil
+	}
+	// The same posted choice is rechecked even if a different credential is
+	// now ready. An admitted personal choice with a definitively missing or
+	// rejected grant has a better recovery than another reload of this page.
+	if consentPreviewGrantMissing(auth, picked, cards) {
+		return nil, errors.Join(errConsentConfigurationChanged, errConsentPreviewGrantMissing)
 	}
 	if !auth.Approvable() {
 		return nil, errConsentConfigurationChanged

@@ -286,8 +286,9 @@ func renderConsentReuse(w http.ResponseWriter, endpoint *ResolvedMcpEndpoint, st
 		ToolsURL string
 		State    string
 		CSRF     string
+		FlowID   string
 		Script   string
-	}{Styles: consentpage.Styles, Fallback: consentFullPageURL(endpoint, state), Path: endpoint.consentPath(), ToolsURL: endpoint.consentPath() + "/mcp", State: state.ID, CSRF: state.CSRFToken, Script: consentToolsScriptURL}); err != nil {
+	}{Styles: consentpage.Styles, Fallback: consentFullPageURL(endpoint, state), Path: endpoint.consentPath(), ToolsURL: endpoint.consentPath() + "/mcp", State: state.ID, CSRF: state.CSRFToken, FlowID: consentDiscoveryFlowID(state.FlowID), Script: consentToolsScriptURL}); err != nil {
 		return fmt.Errorf("render saved consent check: %w", err)
 	}
 	return nil

@@ -16,6 +16,7 @@ import {
   ConsentToolsApp,
   type ConsentToolsAppProps,
 } from "./ConsentToolsApp";
+import { CONSENT_INVENTORY_DEADLINE_MS } from "./consentInventory";
 import { parsePrefillBootstrap } from "./prefill";
 
 const listTools = vi.fn();
@@ -99,6 +100,7 @@ function formFieldValues(name: string): string[] {
 }
 
 beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   connect.mockResolvedValue(undefined);
   close.mockResolvedValue(undefined);
   terminateSession.mockResolvedValue(undefined);
@@ -117,6 +119,9 @@ afterEach(() => {
   document.body.innerHTML = "";
   document.documentElement.removeAttribute("data-consent-chain-rejected");
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("ConsentToolsApp", () => {
@@ -278,8 +283,194 @@ describe("ConsentToolsApp", () => {
   it("keeps approval disabled and offers retry on failure", async () => {
     listTools.mockRejectedValue(new Error("boom"));
     const { button } = renderApp();
-    await screen.findByText("Retry");
+    await screen.findByText("Retry loading tools");
     expect(button.disabled).toBe(true);
+  });
+
+  it("retries on request, clears the error, and binds the fresh capture", async () => {
+    listTools.mockRejectedValueOnce(new Error("private upstream response"));
+    const user = userEvent.setup();
+    const { button } = renderApp({ flowID: "flow-1" });
+    await user.click(
+      await screen.findByRole("button", { name: "Retry loading tools" }),
+    );
+    await screen.findByRole("radio", { name: /^All tools/ });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(button.disabled).toBe(false);
+    const first =
+      transportCtor.mock.calls[0]![1].requestInit.headers[
+        "Gram-Consent-Inventory-Attempt"
+      ];
+    const second =
+      transportCtor.mock.calls[1]![1].requestInit.headers[
+        "Gram-Consent-Inventory-Attempt"
+      ];
+    expect(second).not.toBe(first);
+    expect(formFieldValues("tool_inventory_id")).toEqual([second]);
+    expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+      "Consent inventory could not load",
+      {
+        flowID: "flow-1",
+        stage: "tools/list",
+        reason: "invalid_inventory",
+      },
+    );
+  });
+
+  function failWithRecovery(recovery: "reconnect" | "restart") {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("private upstream response", {
+            status: recovery === "restart" ? 400 : 401,
+            headers: { "X-Gram-Consent-Recovery": recovery },
+          }),
+      ),
+    );
+    connect.mockImplementationOnce(async () => {
+      const [url, opts] = transportCtor.mock.lastCall!;
+      await opts.fetch(url, { method: "POST" });
+    });
+  }
+
+  it("reconnects through the selected service form with its connect submitter", async () => {
+    failWithRecovery("reconnect");
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <form id="selected-connector">
+        <button type="submit" name="action" value="refresh">Refresh</button>
+        <button type="submit" name="action" value="connect">Connect</button>
+      </form>
+    `,
+    );
+    const form = document.querySelector<HTMLFormElement>(
+      "#selected-connector",
+    )!;
+    const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+    form.addEventListener("submit", onSubmit);
+    const { button } = renderApp({ reconnectFormId: form.id });
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Reconnect service" }),
+    );
+    expect(onSubmit.mock.calls[0]?.[0].submitter).toBe(
+      form.querySelector('[value="connect"]'),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Continue with all tools" }),
+    ).toBeNull();
+    expect(connect).toHaveBeenCalledOnce();
+    expect(button.disabled).toBe(true);
+  });
+
+  it("offers restart instructions when a reconnect form is unavailable", async () => {
+    failWithRecovery("reconnect");
+    renderApp({ reconnectFormId: "unavailable-connector" });
+    await screen.findByText(/return to the client app/i);
+    expect(
+      screen.queryByRole("button", { name: "Reconnect service" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Retry loading tools" }),
+    ).toBeTruthy();
+  });
+
+  it("does not reconnect the initial connector when another identity is selected", async () => {
+    failWithRecovery("reconnect");
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <input type="radio" name="auth_client" value="original" form="consent-approve-form" data-reconnect-form-id="original-connector" />
+      <input type="radio" name="auth_client" value="current" form="consent-approve-form" checked />
+      <form id="original-connector">
+        <button type="submit" name="action" value="connect">Connect</button>
+      </form>
+    `,
+    );
+    renderApp({ reconnectFormId: "original-connector" });
+    await screen.findByText(/If a connection option is available above/);
+    expect(
+      screen.queryByRole("button", { name: "Reconnect service" }),
+    ).toBeNull();
+  });
+
+  it("does not offer inline reconnect for an unhinted HTTP 409", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <form id="selected-connector">
+        <button type="submit" name="action" value="connect">Connect</button>
+      </form>
+    `,
+    );
+    renderApp({ reconnectFormId: "selected-connector" });
+    await screen.findByText("The upstream service is not connected.");
+    expect(
+      screen.queryByRole("button", { name: "Reconnect service" }),
+    ).toBeNull();
+  });
+
+  it("keeps a bare unauthorized response blocked without calling it expiry", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(401, "unauthorized"));
+    const { button } = renderApp();
+    await screen.findByText(/verify access to this server/);
+    expect(
+      screen.queryByText(/authorization request is no longer valid/i),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Continue with all tools" }),
+    ).toBeNull();
+    expect(button.disabled).toBe(true);
+  });
+
+  it("does not offer to retry, reload, or broaden an expired flow", async () => {
+    failWithRecovery("restart");
+    const { button } = renderApp({ inventoryDeferred: true });
+    await screen.findByText(
+      /Return to the client app and start the connection again/,
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: /Retry|Reload|Continue with all tools/,
+      }),
+    ).toBeNull();
+    expect(connect).toHaveBeenCalledOnce();
+    expect(button.disabled).toBe(true);
+  });
+
+  it("times out across paginated discovery and does not apply a late result", async () => {
+    vi.useFakeTimers();
+    let finishPage:
+      | ((page: { tools: []; nextCursor?: string }) => void)
+      | undefined;
+    listTools
+      .mockResolvedValueOnce({
+        tools: [{ name: "get_thing" }],
+        nextCursor: "next",
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishPage = resolve;
+          }),
+      );
+    const { button } = renderApp({ flowID: "flow-1" });
+    await act(() => vi.advanceTimersByTimeAsync(CONSENT_INVENTORY_DEADLINE_MS));
+    expect(screen.getByRole("alert").textContent).toContain("took too long");
+    expect(listTools).toHaveBeenCalledWith({ cursor: "next" });
+    await act(async () => finishPage?.({ tools: [] }));
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+    expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+      "Consent inventory could not load",
+      {
+        flowID: "flow-1",
+        stage: "tools/list",
+        reason: "timeout",
+      },
+    );
   });
 
   it("requires a page reload when configuration changes, even for deferred inventory", async () => {
@@ -291,9 +482,11 @@ describe("ConsentToolsApp", () => {
       "This server’s configuration changed. Reload this page to review access.",
     );
     expect(screen.getByRole("button", { name: "Reload page" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Give access to all tools" }),
+      screen.queryByRole("button", { name: "Retry loading tools" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Continue with all tools" }),
     ).toBeNull();
     expect(button.disabled).toBe(true);
   });
@@ -318,7 +511,7 @@ describe("ConsentToolsApp", () => {
     expect(formFieldValues("tool_filtering")).toEqual([]);
 
     await user.click(
-      screen.getByRole("button", { name: "Give access to all tools" }),
+      screen.getByRole("button", { name: "Continue with all tools" }),
     );
     expect(button.disabled).toBe(false);
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
@@ -329,7 +522,7 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     const { button } = renderApp();
     await user.click(
-      await screen.findByRole("button", { name: "Give access to all tools" }),
+      await screen.findByRole("button", { name: "Continue with all tools" }),
     );
     expect(button.disabled).toBe(false);
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
@@ -343,7 +536,7 @@ describe("ConsentToolsApp", () => {
     expect(button.disabled).toBe(false);
     expect(button.dataset["consentSelfReady"]).toBe("true");
     expect(screen.getByRole("button", { name: "Load tools" })).toBeTruthy();
-    expect(screen.queryByText("Retry")).toBeNull();
+    expect(screen.queryByText("Retry loading tools")).toBeNull();
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
     expect(formFieldValues("tool_inventory_id")).toEqual([]);
   });
@@ -398,7 +591,7 @@ describe("ConsentToolsApp", () => {
   it("keeps other failures blocking even when the inventory may be deferred", async () => {
     connect.mockRejectedValue(new StreamableHTTPError(503, "unavailable"));
     const { button } = renderApp({ inventoryDeferred: true });
-    await screen.findByText("Retry");
+    await screen.findByText("Retry loading tools");
     expect(button.disabled).toBe(true);
   });
 
@@ -972,7 +1165,7 @@ describe("gateway consent catalogs", () => {
     await screen.findByRole("alert");
     expect(button.disabled).toBe(true);
     expect(
-      screen.queryByRole("button", { name: /Give access to all tools/i }),
+      screen.queryByRole("button", { name: /Continue with all tools/i }),
     ).toBeNull();
     expect(formFieldValues("tool_inventory_id")).toEqual([]);
   });

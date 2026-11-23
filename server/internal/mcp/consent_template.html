@@ -300,6 +300,7 @@
                 form="consent-approve-form"
                 value="{{.ID}}"
                 id="auth-client-{{.ID}}"
+                {{if .ReconnectFormID}}data-reconnect-form-id="{{.ReconnectFormID}}"{{end}}
                 class="mt-1"
                 {{if .Selected}}checked{{end}}
                 {{if not .Usable}}disabled{{end}}
@@ -316,7 +317,7 @@
           </ul>
         </fieldset>
         {{else}}{{with .Selected}}
-        <input type="hidden" name="auth_client" form="consent-approve-form" value="{{.ID}}" />
+        <input type="hidden" name="auth_client" form="consent-approve-form" value="{{.ID}}" {{if .ReconnectFormID}}data-reconnect-form-id="{{.ReconnectFormID}}"{{end}} />
         {{end}}{{end}}{{end}}
 
         {{if .RemoteSessionCards}}
@@ -748,6 +749,15 @@
         </div>
         {{end}}
         {{if .ShowToolsIsland}}
+        {{range .ConsentReconnectClients}}
+        <form id="consent-reconnect-{{.}}" method="POST" action="{{$.ConsentPath}}/remote-session">
+          <input type="hidden" name="state" value="{{$.State}}" />
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
+          <input type="hidden" name="client_id" value="{{.}}" />
+          <button type="submit" name="action" value="connect" class="hidden" tabindex="-1" aria-hidden="true">Reconnect</button>
+          <input type="hidden" name="auto_refresh" value="{{if $.AutoRefreshOn}}on{{else}}off{{end}}" data-auto-refresh-input />
+        </form>
+        {{end}}
         <div data-agent-self-only class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <h2 class="text-eyebrow">Tool access</h2>
@@ -758,6 +768,8 @@
             data-state="{{.State}}"
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
+            data-flow-id="{{.ConsentFlowID}}"
+            {{if .ConsentReconnectFormID}}data-reconnect-form-id="{{.ConsentReconnectFormID}}"{{end}}
             data-approve-button-id="consent-approve-button"
             data-gateway="{{if or .ShowDiscoveryMode .CatalogChanges}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"

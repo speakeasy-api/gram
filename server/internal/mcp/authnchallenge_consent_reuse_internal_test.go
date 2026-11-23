@@ -117,10 +117,11 @@ func TestConsentBrowserProofCannotBeTransferredBetweenFlows(t *testing.T) {
 func TestRenderConsentReuse(t *testing.T) {
 	t.Parallel()
 	endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "example"}
-	state := AuthnChallengeState{ID: "preview-state", CSRFToken: "preview-csrf"}
+	state := AuthnChallengeState{ID: "preview-state", CSRFToken: "preview-csrf", FlowID: uuid.NewString()}
 	w := httptest.NewRecorder()
 	require.NoError(t, renderConsentReuse(w, endpoint, state))
 	require.Contains(t, w.Body.String(), "Checking sign-in status...")
+	require.Contains(t, w.Body.String(), `data-flow-id="`+state.FlowID+`"`)
 	require.Contains(t, w.Body.String(), "Review access")
 	require.NotContains(t, w.Body.String(), "Give access")
 	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))

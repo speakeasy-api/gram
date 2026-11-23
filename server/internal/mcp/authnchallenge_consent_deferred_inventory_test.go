@@ -290,7 +290,11 @@ func TestConsentPage_LinkedServiceDoesNotDeferToolInventory(t *testing.T) {
 	setConsentGovernor(t, fx, issuer)
 	grant(t, ctx, fx, fx.clientA, consentChainedUpstream)
 
-	require.Contains(t, renderToolsIsland(t, fx), inventoryNotDeferredAttr)
+	page := renderToolsIsland(t, fx)
+	require.Contains(t, page, inventoryNotDeferredAttr)
+	formID := "consent-reconnect-" + fx.clientA.String()
+	require.Contains(t, page, `data-reconnect-form-id="`+formID+`"`)
+	require.Contains(t, page, `id="`+formID+`"`)
 }
 
 func TestConsentPage_UnconnectedUnchainedServicesDoNotDefer(t *testing.T) {

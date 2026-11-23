@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import {
   fetchConsentInventory,
+  loadConsentInventory,
   parseGatewayInventoryBootstrap,
 } from "./consentInventory";
 
@@ -122,6 +123,76 @@ it.each([false, true])(
     }
     // Cleanup must not replace the original discovery error.
     expect(await outcome).toEqual({ error: deadline.signal.reason });
+  },
+);
+
+it("honors Retry-After and retries only once with a fresh attempt", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const attempts: (string | null)[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input, init?: RequestInit) => {
+      attempts.push(
+        new Headers(init?.headers).get("Gram-Consent-Inventory-Attempt"),
+      );
+      return new Response(null, {
+        status: 429,
+        headers: { "Retry-After": "1" },
+      });
+    }),
+  );
+  const outcome = loadConsentInventory({
+    toolsUrl: "/consent/mcp",
+    state: "state",
+    csrfToken: "csrf",
+  }).catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(999);
+  expect(attempts).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await outcome).toMatchObject({
+    stage: "initialize",
+    reason: "http",
+    status: 429,
+  });
+  expect(new Set(attempts).size).toBe(2);
+  expect(attempts).toHaveLength(2);
+});
+
+it.each([
+  { status: 503, retryAfter: "8" },
+  { status: 401, retryAfter: "0" },
+  { status: 403, retryAfter: "0" },
+  { status: 500, retryAfter: "0" },
+])(
+  "does not automatically retry HTTP $status with Retry-After $retryAfter",
+  async ({ status, retryAfter }) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetch = vi.fn(
+      async () =>
+        new Response("sensitive response", {
+          status,
+          headers: { "Retry-After": retryAfter },
+        }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      loadConsentInventory({
+        toolsUrl: "/consent/mcp",
+        state: "state",
+        csrfToken: "csrf",
+        flowID: "flow-2",
+      }),
+    ).rejects.toMatchObject({ stage: "initialize", reason: "http", status });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+      "Consent inventory could not load",
+      {
+        flowID: "flow-2",
+        stage: "initialize",
+        reason: `http_${status}`,
+      },
+    );
   },
 );
 

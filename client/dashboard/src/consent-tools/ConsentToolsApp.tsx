@@ -1,6 +1,5 @@
-import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { AlertTriangle, Check, Minus } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import {
@@ -11,7 +10,10 @@ import { cn } from "@/lib/utils";
 
 import type { ConsentSelection } from "./prefill";
 import {
-  fetchConsentInventory,
+  ConsentInventoryFailure,
+  loadConsentInventory,
+  reportConsentInventoryFailure,
+  RESTART_CONSENT_MESSAGE,
   type ConsentInventory,
   type ConsentTool,
   type RoleHiddenTools,
@@ -23,6 +25,8 @@ export interface ConsentToolsAppProps {
   csrfToken: string;
   formId: string;
   approveButtonId: string;
+  reconnectFormId?: string;
+  flowID?: string;
   consentEnabled: boolean;
   /** Gateway choices bind to a complete member inventory. */
   gateway?: boolean;
@@ -96,14 +100,19 @@ type ConsentPhase =
   | { name: "loading" }
   | {
       name: "error";
-      conflict: boolean;
+      recovery:
+        | "retry"
+        | "connect"
+        | "reconnect"
+        | "restart"
+        | "reload"
+        | "blocked";
       message: string;
-      reload?: boolean;
-      permanent?: boolean;
+      canContinue?: boolean;
     }
   | { name: "deferred" }
   | { name: "unrestricted"; message: string }
-  | { name: "ready"; inventory: ConsentInventory };
+  | { name: "ready"; inventory: ConsentInventory & { attempt: string } };
 
 /**
  * ConsentGroup identifies one left-rail entry: the whole inventory, one
@@ -133,7 +142,7 @@ const CHAIN_REJECTED_ATTRIBUTE = "data-consent-chain-rejected";
 
 const CHAIN_REJECTED_PHASE: ConsentPhase = {
   name: "error",
-  conflict: true,
+  recovery: "connect",
   message:
     "Your identity provider couldn't connect this service, so its tools can't load.",
 };
@@ -157,43 +166,89 @@ const SHORT_GROUP_LABELS: Record<ToolAnnotation, string> = {
 };
 
 function errorPhase(
-  err: unknown,
+  failure: ConsentInventoryFailure,
   canDefer: boolean,
   hasPrefill: boolean,
 ): ConsentPhase {
-  const status = err instanceof StreamableHTTPError ? err.code : undefined;
-  if (status === 412) {
+  const { status, recovery } = failure;
+  if (recovery === "restart") {
     return {
       name: "error",
-      conflict: false,
-      message:
-        "This server’s configuration changed. Reload this page to review access.",
-      reload: true,
+      recovery: "restart",
+      message: RESTART_CONSENT_MESSAGE,
     };
   }
-  // The server could not capture the inventory for selection (too many
-  // tools or unsupported definitions). A required capture cannot be approved.
+  if (!recovery && status === 409 && canDefer) return { name: "deferred" };
+  if (recovery === "reconnect" || status === 409) {
+    return {
+      name: "error",
+      recovery: recovery === "reconnect" ? "reconnect" : "connect",
+      message: "The upstream service is not connected.",
+    };
+  }
+  if (status === 412 || failure.stage === "bootstrap") {
+    return {
+      name: "error",
+      recovery: "reload",
+      message:
+        failure.stage === "bootstrap"
+          ? "Tool access could not be initialized. Reload this page to review access."
+          : "This server’s configuration changed. Reload this page to review access.",
+    };
+  }
+  if (status === 401 || status === 403 || status === 410) {
+    return {
+      name: "error",
+      recovery: "blocked",
+      message:
+        "Couldn’t verify access to this server’s tools. Check the connection above or contact your administrator.",
+    };
+  }
+  // A stored selection must not be replaced by all tools without a choice.
   if (status === 413 || status === 422) {
     return hasPrefill
       ? {
           name: "error",
-          conflict: false,
-          permanent: true,
+          recovery: "blocked",
+          canContinue: true,
           message: UNSUPPORTED_MESSAGE,
         }
       : { name: "unrestricted", message: UNSUPPORTED_MESSAGE };
   }
-  if (status === 409 && canDefer) {
-    return { name: "deferred" };
-  }
-  if (status === 409) {
-    return {
-      name: "error",
-      conflict: true,
-      message: "The upstream service is not connected.",
-    };
-  }
-  return { name: "error", conflict: false, message: GENERIC_ERROR_MESSAGE };
+  return {
+    name: "error",
+    recovery: "retry",
+    canContinue: true,
+    message:
+      failure.reason === "timeout"
+        ? "Loading this server’s tools took too long."
+        : GENERIC_ERROR_MESSAGE,
+  };
+}
+
+function reconnectSubmitter(
+  approvalFormId: string,
+  authClient: string,
+  fallbackFormId?: string,
+): HTMLButtonElement | undefined {
+  const selected = selectedAuthInput(approvalFormId);
+  // The consent shell can change identities without reloading. Never use the
+  // root's initial reconnect form for a different selected connector.
+  if ((selected?.value ?? "") !== authClient) return undefined;
+  const reconnectId = selected
+    ? selected.dataset["reconnectFormId"]
+    : fallbackFormId;
+  const form = reconnectId ? document.getElementById(reconnectId) : null;
+  if (!(form instanceof HTMLFormElement)) return undefined;
+  return Array.from(form.elements).find(
+    (element): element is HTMLButtonElement =>
+      element instanceof HTMLButtonElement &&
+      element.type === "submit" &&
+      element.name === "action" &&
+      element.value === "connect" &&
+      !element.matches(":disabled") &&
+      !element.closest("[hidden]"),
+  );
 }
 
 function groupLabel(group: ConsentGroup): string {
@@ -217,7 +272,7 @@ function initialAccessMode(
   return gateway ? "cached" : "all";
 }
 
-function selectedAuthClient(formId: string): string {
+function selectedAuthInput(formId: string): HTMLInputElement | undefined {
   for (const input of document.querySelectorAll<HTMLInputElement>(
     'input[name="auth_client"]',
   )) {
@@ -225,14 +280,14 @@ function selectedAuthClient(formId: string): string {
       (input.form?.id === formId || input.getAttribute("form") === formId) &&
       (input.type === "hidden" || (input.type === "radio" && input.checked))
     )
-      return input.value;
+      return input;
   }
-  return "";
+  return undefined;
 }
 
 export function ConsentToolsApp(props: ConsentToolsAppProps): JSX.Element {
   const [authClient, setAuthClient] = useState(() =>
-    props.gateway ? "" : selectedAuthClient(props.formId),
+    props.gateway ? "" : (selectedAuthInput(props.formId)?.value ?? ""),
   );
   useLayoutEffect(() => {
     if (props.gateway) return;
@@ -242,7 +297,9 @@ export function ConsentToolsApp(props: ConsentToolsAppProps): JSX.Element {
         return;
       // The controls live outside React. Commit the reset before another
       // native listener can submit a snapshot captured for the old identity.
-      flushSync(() => setAuthClient(selectedAuthClient(props.formId)));
+      flushSync(() =>
+        setAuthClient(selectedAuthInput(props.formId)?.value ?? ""),
+      );
     };
     document.addEventListener("change", onChange, true);
     return () => document.removeEventListener("change", onChange, true);
@@ -262,6 +319,8 @@ function ConsentToolsSelection({
   csrfToken,
   formId,
   approveButtonId,
+  reconnectFormId,
+  flowID,
   consentEnabled,
   gateway = false,
   gatewayInventory,
@@ -271,9 +330,14 @@ function ConsentToolsSelection({
   authClient,
 }: ConsentToolsAppProps & { authClient: string }): JSX.Element {
   const [loadPhase, setPhase] = useState<ConsentPhase>({ name: "loading" });
-  const [attemptID, setAttemptID] = useState(
-    () => gatewayInventory?.attempt ?? crypto.randomUUID(),
-  );
+  const [loadGeneration, setLoadGeneration] = useState(0);
+  const focusTarget = useRef<HTMLDivElement>(null);
+  const focusRecovery = useRef(false);
+  const retry = () => {
+    focusRecovery.current = true;
+    setPhase({ name: "loading" });
+    setLoadGeneration((generation) => generation + 1);
+  };
   const [mode, setMode] = useState<ToolAccessMode>(
     initialAccessMode(prefill, gateway),
   );
@@ -292,20 +356,26 @@ function ConsentToolsSelection({
     const controller = new AbortController();
     setPhase({ name: "loading" });
     const load = async () => {
-      let inventory: ConsentInventory;
+      let inventory: ConsentInventory & { attempt: string };
       if (gateway) {
-        if (!gatewayInventory)
-          throw new Error("Gateway inventory is missing; reload consent.");
+        if (!gatewayInventory) {
+          const failure = new ConsentInventoryFailure(
+            "bootstrap",
+            "missing_inventory",
+          );
+          reportConsentInventoryFailure(failure, flowID);
+          throw failure;
+        }
         inventory = gatewayInventory;
       } else {
-        inventory = await fetchConsentInventory(
+        inventory = await loadConsentInventory({
           toolsUrl,
           state,
           csrfToken,
-          attemptID,
-          controller.signal,
+          signal: controller.signal,
           authClient,
-        );
+          flowID,
+        });
       }
       if (cancelled) return;
       if (prefill === null) {
@@ -340,11 +410,13 @@ function ConsentToolsSelection({
       setPhase({ name: "ready", inventory });
     };
     load().catch((err: unknown) => {
-      // A stored narrower selection must never be replaced by all tools.
+      // A stored narrower selection requires an explicit choice to widen.
       if (!cancelled) {
         setPhase(
           errorPhase(
-            err,
+            err instanceof ConsentInventoryFailure
+              ? err
+              : new ConsentInventoryFailure("initialize", "invalid_inventory"),
             !gateway && inventoryDeferred && prefill === null,
             prefill !== null,
           ),
@@ -357,7 +429,8 @@ function ConsentToolsSelection({
     };
   }, [
     authClient,
-    attemptID,
+    loadGeneration,
+    flowID,
     toolsUrl,
     state,
     csrfToken,
@@ -398,6 +471,11 @@ function ConsentToolsSelection({
       }
     }
   }, [approveButtonId, approveReady]);
+  useLayoutEffect(() => {
+    if (!focusRecovery.current) return;
+    focusTarget.current?.focus();
+    if (phase.name !== "loading") focusRecovery.current = false;
+  }, [phase.name]);
 
   const tools = useMemo(
     (): ConsentTool[] => (phase.name === "ready" ? phase.inventory.tools : []),
@@ -430,9 +508,11 @@ function ConsentToolsSelection({
   if (phase.name === "loading") {
     return (
       <div
+        ref={focusTarget}
+        tabIndex={-1}
         role="status"
         aria-live="polite"
-        className="border-border text-muted-foreground border px-3 py-3 text-sm"
+        className="consent-recovery-focus border-border text-muted-foreground border px-3 py-3 text-sm"
       >
         Loading available tools…
       </div>
@@ -442,8 +522,10 @@ function ConsentToolsSelection({
   if (phase.name === "deferred") {
     return (
       <div
+        ref={focusTarget}
+        tabIndex={-1}
         role="status"
-        className="border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
+        className="consent-recovery-focus border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
       >
         <p>
           Tools load after you give access. This connection starts with all
@@ -455,7 +537,7 @@ function ConsentToolsSelection({
           Signed in to the service separately?{" "}
           <button
             type="button"
-            onClick={() => setAttemptID(crypto.randomUUID())}
+            onClick={retry}
             className="text-primary hover:underline"
           >
             Load tools
@@ -468,65 +550,103 @@ function ConsentToolsSelection({
   if (phase.name === "unrestricted") {
     return (
       <div
+        ref={focusTarget}
+        tabIndex={-1}
         role="status"
-        className="border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
+        className="consent-recovery-focus border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
       >
         <p>
-          {phase.message} This connection starts with all tools available to
-          you.
+          {phase.message} Tool selection is off.{" "}
+          {consentEnabled && "Choose Give access to finish."}
         </p>
         <input type="hidden" name="tool_filtering" value="off" form={formId} />
         <button
           type="button"
-          onClick={() => setAttemptID(crypto.randomUUID())}
-          className="text-primary hover:underline"
+          onClick={retry}
+          className="consent-recovery-button"
         >
-          Load tools again
+          Retry loading tools
         </button>
       </div>
     );
   }
 
   if (phase.name === "error") {
+    const recovery =
+      gateway && phase.recovery === "retry" ? "reload" : phase.recovery;
+    const canReconnect =
+      recovery === "reconnect" &&
+      !!reconnectSubmitter(formId, authClient, reconnectFormId);
+    const connectionHelp =
+      recovery === "connect" || (recovery === "reconnect" && !canReconnect);
     return (
       <div
-        role="alert"
-        className="border-border space-y-1 border px-3 py-3 text-sm"
+        ref={focusTarget}
+        tabIndex={-1}
+        className="consent-recovery-focus border-border space-y-2 border px-3 py-3 text-sm"
       >
-        <p className="text-muted-foreground flex items-center gap-1.5">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {phase.message}
-        </p>
-        {phase.conflict && (
-          <p className="text-muted-foreground">
-            Connect the service above, then retry.
+        <div role="alert" className="text-muted-foreground space-y-1">
+          <p className="flex items-center gap-1.5">
+            <AlertTriangle
+              aria-hidden="true"
+              className="h-3.5 w-3.5 shrink-0"
+            />
+            {phase.message}
           </p>
-        )}
-        <div className="flex flex-wrap gap-x-3">
-          {!phase.permanent && (
+          {connectionHelp && (
+            <p>
+              If a connection option is available above, use it first.
+              Otherwise, return to the client app and start the connection
+              again.
+            </p>
+          )}
+          {!gateway && consentEnabled && phase.canContinue && (
+            <p>
+              You can continue without reviewing or selecting individual tools.
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-2">
+          {canReconnect && (
             <button
               type="button"
               onClick={() => {
-                if (phase.reload || gateway) window.location.reload();
-                else setAttemptID(crypto.randomUUID());
+                const button = reconnectSubmitter(
+                  formId,
+                  authClient,
+                  reconnectFormId,
+                );
+                if (button?.form) button.form.requestSubmit(button);
+                else retry();
               }}
-              className="text-primary hover:underline"
+              className="consent-recovery-button"
             >
-              {phase.reload || gateway ? "Reload page" : "Retry"}
+              Reconnect service
             </button>
           )}
-          {/* Tool selection is optional: an inventory that will not load
-              must not stop the user from giving access with all tools. A
-              changed configuration needs a reload before any approval. */}
-          {!gateway && !phase.conflict && !phase.reload && (
+          {(recovery === "retry" ||
+            connectionHelp ||
+            recovery === "reload") && (
             <button
               type="button"
-              onClick={() =>
-                setPhase({ name: "unrestricted", message: phase.message })
+              onClick={
+                recovery === "reload" ? () => window.location.reload() : retry
               }
-              className="text-primary hover:underline"
+              className="consent-recovery-button"
             >
-              Give access to all tools
+              {recovery === "reload" ? "Reload page" : "Retry loading tools"}
+            </button>
+          )}
+          {!gateway && consentEnabled && phase.canContinue && (
+            <button
+              type="button"
+              onClick={() => {
+                focusRecovery.current = true;
+                setPhase({ name: "unrestricted", message: phase.message });
+              }}
+              className="consent-recovery-button"
+            >
+              Continue with all tools
             </button>
           )}
         </div>
@@ -715,7 +835,13 @@ function ConsentToolsSelection({
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      ref={focusTarget}
+      tabIndex={-1}
+      role="group"
+      aria-label="Tool access"
+      className="consent-recovery-focus flex flex-col gap-3"
+    >
       <ToolAccessModeChoice
         mode={mode}
         gateway={gateway}
@@ -916,7 +1042,7 @@ function ConsentToolsSelection({
       )}
       <ApprovalFormFields
         formId={formId}
-        inventoryID={attemptID}
+        inventoryID={phase.inventory.attempt}
         allGrant={allGrant}
         catalogMode={gateway ? catalogMode : undefined}
         snapshotAnnotations={snapshotAnnotations}

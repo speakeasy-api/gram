@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -58,6 +59,13 @@ const (
 	consentAuthClientHeader = "Gram-Consent-Auth-Client"
 )
 
+// Consent recovery hints are authored by this transport, not relayed from upstream.
+const (
+	consentRecoveryHeader    = "X-Gram-Consent-Recovery"
+	consentRecoveryReconnect = "reconnect"
+	consentRecoveryRestart   = "restart"
+)
+
 // consentMCPBodyLimit bounds inbound consent transport bodies.
 const consentMCPBodyLimit = 64 << 10
 
@@ -92,7 +100,7 @@ func (s *Service) HandleConsentMCP(w http.ResponseWriter, r *http.Request) error
 }
 
 // ServeConsentMCP is the post-resolution handler.
-func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) (retErr error) {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
@@ -139,12 +147,15 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	// TTL and must not consume the state the approve POST needs.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) && r.Method == http.MethodPost {
+			w.Header().Set(consentRecoveryHeader, consentRecoveryRestart)
+		}
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid consent browser binding")
 	}
-	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
+	logger = logger.With(attr.SlogOAuthFlowID(consentDiscoveryFlowID(challengeState.FlowID)))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
@@ -153,6 +164,17 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeBadRequest, nil, "invalid consent csrf token").LogWarn(ctx, logger)
+	}
+	if r.Method == http.MethodPost {
+		defer func() {
+			if retErr == nil {
+				return
+			}
+			var failure *oops.ShareableError
+			if !errors.As(retErr, &failure) || failure.Code != oops.CodeConflict {
+				logger.WarnContext(ctx, "consent tool discovery failed", "stage", "transport")
+			}
+		}()
 	}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return oops.E(oops.CodeBadRequest, nil, "authn challenge subject is not resolved").LogWarn(ctx, logger)
@@ -357,7 +379,7 @@ func (s *Service) serveConsentProxiedMCP(
 	ctx, cancel := context.WithTimeout(r.Context(), consentUpstreamTimeout)
 	defer cancel()
 	r = r.WithContext(ctx)
-	logger := endpoint.LogWith(s.logger)
+	logger := endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(consentDiscoveryFlowID(challengeState.FlowID)))
 
 	if !serverRow.RemoteMcpServerID.Valid && !serverRow.TunneledMcpServerID.Valid {
 		return oops.E(oops.CodeUnexpected, nil, "mcp server backend is not proxied").LogError(ctx, logger)
@@ -377,6 +399,9 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	auth, err := s.consentDirectPreviewAuth(ctx, endpoint, challengeState, postedAuthClient)
 	if err != nil {
+		if errors.Is(err, errConsentPreviewGrantMissing) {
+			return s.consentNoUpstreamTokenError(w, r, logger, endpoint, challengeState, true)
+		}
 		if errors.Is(err, errConsentConfigurationChanged) {
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
 		}
@@ -422,7 +447,6 @@ func (s *Service) serveConsentProxiedMCP(
 		!errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) &&
 		(auth == nil || auth.outcome == authClientLegacy) &&
 		s.identityChainer != nil && s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID)
-	noToken := err
 	if chain {
 		err = nil
 	}
@@ -437,7 +461,7 @@ func (s *Service) serveConsentProxiedMCP(
 			return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
 		}
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
-			return s.consentNoUpstreamTokenError(ctx, logger, endpoint, challengeState, err)
+			return s.consentNoUpstreamTokenError(w, r, logger, endpoint, challengeState, !errors.Is(err, remotesessions.ErrChosenClientUnbound))
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
@@ -479,7 +503,7 @@ func (s *Service) serveConsentProxiedMCP(
 	switch {
 	case err != nil && chain:
 		// Unauthorized subjects keep the pre-chaining answer and never reach the exchange.
-		return s.consentNoUpstreamTokenError(ctx, logger, endpoint, challengeState, noToken)
+		return s.consentNoUpstreamTokenError(w, r, logger, endpoint, challengeState, false)
 	case err != nil:
 		return fmt.Errorf("authorize consent transport access: %w", err)
 	}
@@ -487,7 +511,9 @@ func (s *Service) serveConsentProxiedMCP(
 	if chain {
 		chained := s.consentChainedUpstreamToken(ctx, logger, endpoint, challengeState, chosenClient)
 		if chained == nil {
-			return s.consentNoUpstreamTokenError(ctx, logger, endpoint, challengeState, noToken)
+			// A failed exchange can be transient; it is not evidence the person
+			// should reconnect their interactive grant.
+			return s.consentNoUpstreamTokenError(w, r, logger, endpoint, challengeState, false)
 		}
 		upstreamToken = *chained
 	}
@@ -536,8 +562,15 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	renewal := s.renewClientCredentialOnRejection(p, logger, upstreamToken)
 	rejectSurvivingClientCredentialRejection(w, p, logger, upstreamToken, renewal)
+	personalToken := ""
+	if !chain && upstreamToken.CredentialOwner == remotesessions.CredentialOwnerSubject {
+		personalToken = upstreamToken.Token
+	}
+	observeConsentUpstreamResponse(p, w, logger, r.Method == http.MethodPost, personalToken)
 
-	p.UserRequestInterceptors = append([]proxy.UserRequestInterceptor{consentMethodAllowlistInterceptor{}}, p.UserRequestInterceptors...)
+	discoveryObserver := &consentMethodAllowlistInterceptor{logger: logger}
+	p.UserRequestInterceptors = append([]proxy.UserRequestInterceptor{discoveryObserver}, p.UserRequestInterceptors...)
+	p.RemoteMessageInterceptors = append([]proxy.RemoteMessageInterceptor{discoveryObserver}, p.RemoteMessageInterceptors...)
 	p.ToolsListResponseInterceptors = append(p.ToolsListResponseInterceptors, &consentInventoryCaptureInterceptor{service: s, draft: &draft})
 
 	// The build above passes a nil selection (consent must see the full
@@ -614,17 +647,22 @@ func (s *Service) consentTransportDeferred(ctx context.Context, logger *slog.Log
 
 // consentMethodAllowlistInterceptor rejects every JSON-RPC message outside
 // the consent method surface before it reaches upstream.
-type consentMethodAllowlistInterceptor struct{}
+type consentMethodAllowlistInterceptor struct {
+	logger        *slog.Logger
+	toolsListID   jsonrpc.ID
+	failureLogged bool
+}
 
-var _ proxy.UserRequestInterceptor = consentMethodAllowlistInterceptor{}
+var _ proxy.UserRequestInterceptor = (*consentMethodAllowlistInterceptor)(nil)
+var _ proxy.RemoteMessageInterceptor = (*consentMethodAllowlistInterceptor)(nil)
 
 // Name implements proxy.UserRequestInterceptor.
-func (consentMethodAllowlistInterceptor) Name() string { return "consent-method-allowlist" }
+func (*consentMethodAllowlistInterceptor) Name() string { return "consent-method-allowlist" }
 
 // InterceptUserRequest implements proxy.UserRequestInterceptor. Client-to-
 // server responses are rejected too: nothing on the consent surface issues
 // server-initiated requests.
-func (consentMethodAllowlistInterceptor) InterceptUserRequest(_ context.Context, req *proxy.UserRequest) error {
+func (i *consentMethodAllowlistInterceptor) InterceptUserRequest(_ context.Context, req *proxy.UserRequest) error {
 	if req == nil {
 		return fmt.Errorf("consent transport received no parsed request")
 	}
@@ -637,6 +675,22 @@ func (consentMethodAllowlistInterceptor) InterceptUserRequest(_ context.Context,
 				Data:    nil,
 			}
 		}
+		if rpcReq.Method == mcpversions.MethodToolsList {
+			i.toolsListID = rpcReq.ID
+		}
+	}
+	return nil
+}
+
+// InterceptRemoteMessage distinguishes an upstream tools/list RPC rejection
+// from an HTTP error. Only log a correlated response, once per discovery POST,
+// and never log the upstream error message, code, data, or request ID.
+func (i *consentMethodAllowlistInterceptor) InterceptRemoteMessage(ctx context.Context, msg *proxy.RemoteMessage) error {
+	resp, ok := msg.Message.(*jsonrpc.Response)
+	status := msg.RemoteHTTPResponse.StatusCode
+	if !i.failureLogged && status >= 200 && status < 300 && i.toolsListID.IsValid() && ok && resp.Error != nil && resp.ID.Raw() == i.toolsListID.Raw() {
+		i.failureLogged = true
+		i.logger.WarnContext(ctx, "consent tool discovery failed", "stage", "tools_list_jsonrpc", attr.SlogHTTPResponseStatusCode(status))
 	}
 	return nil
 }
@@ -913,14 +967,45 @@ func consentJSONRPCID(id json.RawMessage) json.RawMessage {
 }
 
 // consentNoUpstreamTokenError is the conflict a consent transport answers when no upstream credential is available yet.
-func (s *Service) consentNoUpstreamTokenError(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, err error) error {
-	conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
+func (s *Service) consentNoUpstreamTokenError(w http.ResponseWriter, r *http.Request, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, reconnect bool) error {
+	ctx := r.Context()
+	conflict := oops.E(oops.CodeConflict, nil, "connect the upstream service before choosing tools")
 	if s.consentTransportDeferred(ctx, logger, endpoint, challengeState) {
 		// Expected before approval: chaining mints the token afterwards.
 		logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
 		return conflict
 	}
+	if reconnect && r.Method == http.MethodPost {
+		w.Header().Set(consentRecoveryHeader, consentRecoveryReconnect)
+		logger = logger.With("recovery", consentRecoveryReconnect)
+	}
 	return conflict.LogWarn(ctx, logger)
+}
+
+func observeConsentUpstreamResponse(p *proxy.Proxy, w http.ResponseWriter, logger *slog.Logger, discovery bool, personalToken string) {
+	intercept := p.UpstreamResponseInterceptor
+	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+		// Never let an upstream response supply its own browser recovery hint.
+		resp.Header.Del(consentRecoveryHeader)
+		if intercept != nil {
+			if err := intercept(ctx, resp); err != nil {
+				return err
+			}
+		}
+		if !discovery || resp.StatusCode < 400 {
+			return nil
+		}
+		recovery := ""
+		// A redirect can strip the credential before the final response. Only
+		// an explicit rejection of the bearer we actually sent can reconnect it.
+		if resp.StatusCode == http.StatusUnauthorized && personalToken != "" && resp.Request != nil &&
+			resp.Request.Header.Get("Authorization") == "Bearer "+personalToken {
+			recovery = consentRecoveryReconnect
+			w.Header().Set(consentRecoveryHeader, recovery)
+		}
+		logger.WarnContext(ctx, "consent tool discovery failed", "stage", "upstream", attr.SlogHTTPResponseStatusCode(resp.StatusCode), "recovery", recovery)
+		return nil
+	}
 }
 
 // consentDiscoveryContext binds discovery to the challenge's human authorizer.

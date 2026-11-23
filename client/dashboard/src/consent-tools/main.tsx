@@ -2,8 +2,11 @@ import { createRoot } from "react-dom/client";
 
 import { ConsentToolsApp, type ConsentToolsAppProps } from "./ConsentToolsApp";
 import {
-  fetchConsentInventory,
+  ConsentInventoryFailure,
+  loadConsentInventory,
   parseGatewayInventoryBootstrap,
+  reportConsentInventoryFailure,
+  RESTART_CONSENT_MESSAGE,
 } from "./consentInventory";
 import { parsePrefillBootstrap } from "./prefill";
 import "./consent-tools.css";
@@ -45,6 +48,8 @@ function readBootstrap(el: HTMLElement): ConsentToolsAppProps | null {
     csrfToken,
     formId,
     approveButtonId,
+    reconnectFormId: el.dataset["reconnectFormId"],
+    flowID: el.dataset["flowId"],
     consentEnabled: consentEnabled === "true",
     gateway: el.dataset["gateway"] === "true",
     inventoryDeferred: inventoryDeferred === "true",
@@ -62,6 +67,11 @@ if (mount) {
   } else {
     // Approval stays disabled (the server renders the button disabled and
     // only the app enables it), so a broken bootstrap fails closed.
+    reportConsentInventoryFailure(
+      new ConsentInventoryFailure("bootstrap", "missing_inventory"),
+      mount.dataset["flowId"],
+    );
+    mount.setAttribute("role", "alert");
     mount.textContent =
       "Tool access could not be initialized. Reload the page to continue.";
   }
@@ -89,17 +99,30 @@ async function checkSavedConsent(form: HTMLFormElement): Promise<void> {
   )
     return;
   try {
-    const attempt = crypto.randomUUID();
-    await fetchConsentInventory(
+    const { attempt } = await loadConsentInventory({
       toolsUrl,
-      state.value,
-      csrf.value,
-      attempt,
-      AbortSignal.timeout(10000),
-    );
+      state: state.value,
+      csrfToken: csrf.value,
+      flowID: form.dataset["flowId"],
+    });
     inventory.value = attempt;
     form.requestSubmit();
-  } catch {
+  } catch (err) {
+    if (err instanceof ConsentInventoryFailure && err.recovery === "restart") {
+      const status = document.querySelector("p[data-consent-auto-check]");
+      if (status) {
+        status.setAttribute("role", "alert");
+        status.textContent = RESTART_CONSENT_MESSAGE;
+      }
+      document
+        .querySelectorAll("h1 [data-consent-auto-check]")
+        .forEach((element) => {
+          if (element instanceof HTMLSpanElement)
+            element.textContent = "Authorization expired";
+          else element.remove();
+        });
+      return;
+    }
     window.location.replace(fallback);
   }
 }
