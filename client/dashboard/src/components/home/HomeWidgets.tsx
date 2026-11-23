@@ -11,29 +11,30 @@ import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useOrganization } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { ToolUsageIdentity } from "@/components/tool-usage-identity";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/pages/costs/Sparkline";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { telemetryGetToolUsageUsers } from "@gram/client/funcs/telemetryGetToolUsageUsers";
 import { useAccessRequests } from "@gram/client/react-query/accessRequests.js";
-import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
-import { formatDistanceToNowStrict } from "date-fns/formatDistanceToNowStrict";
-import { ChevronRight } from "lucide-react";
+import { Bot, ChevronRight, User } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-// A session counts as live when its last message is this recent.
-const LIVE_WINDOW_MS = 5 * 60 * 1000;
+// Rows in the most active list.
+const MOST_ACTIVE_LIMIT = 5;
 // Widgets live in fixed-height grid rows on wide screens: the card clips and
 // its body scrolls.
 const WIDGET_CLASS = "min-h-0 overflow-hidden";
@@ -104,7 +105,7 @@ export function HomeWidgets({
       <NeedsAttention className={classNames[0]} />
       <SpendWidget className={classNames[1]} />
       <MoversWidget className={classNames[2]} />
-      <LiveSessionsWidget className={classNames[3]} />
+      <MostActiveWidget className={classNames[3]} />
       <HeatmapWidget className={classNames[4]} />
     </>
   );
@@ -374,83 +375,96 @@ function Delta({ prev, curr }: { prev: number; curr: number }): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Live sessions
+// Most active identities
 
-function LiveSessionsWidget({
-  className,
-}: {
-  className?: string;
-}): JSX.Element {
+function MostActiveWidget({ className }: { className?: string }): JSX.Element {
+  const client = useGramContext();
   const routes = useRoutes();
-  const chats = useListChats(
-    {
-      excludeSourceKind: "setup",
-      sortBy: "last_message_timestamp",
-      sortOrder: "desc",
-      limit: 5,
-    },
-    undefined,
-    { refetchInterval: 30_000, throwOnError: false },
+  const { projectSlug } = useSlugs();
+  const { from, to } = useWeekWindow();
+  const logs = useLogsEnabled();
+  const users = useQuery({
+    queryKey: ["home", "most-active", projectSlug, to.toISOString()],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageUsers(client, {
+          getToolUsageSummaryPayload: { from, to },
+        }),
+      ),
+    enabled: logs.enabled,
+    throwOnError: false,
+  });
+
+  const top = useMemo(
+    () =>
+      [...(users.data?.users ?? [])]
+        .sort((a, b) => b.eventCount - a.eventCount)
+        .slice(0, MOST_ACTIVE_LIMIT),
+    [users.data],
   );
-  const rows = chats.data?.chats ?? [];
-  const now = Date.now();
-  const liveCount = rows.filter(
-    (c) => now - c.lastMessageTimestamp.getTime() < LIVE_WINDOW_MS,
-  ).length;
+  // Agent rows carry only an id; names come from the agents this viewer can
+  // read, and an agent they can't read shows unlinked.
+  const agents = useReadableAgents(top.some((r) => r.userKind === "agent_id"));
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((a) => [a.id, a]),
+      ),
+    [agents.data, agents.isError],
+  );
+
+  const pending = logs.pending || (logs.enabled && users.isPending);
 
   return (
     <Card.Dashboard
-      title={liveCount > 0 ? `Live now · ${liveCount}` : "Recent sessions"}
-      tooltip="The latest agent sessions in this project. Live means a message in the last 5 minutes."
+      title="Most active"
+      tooltip="The people and agents that made the most tool calls in this project in the last 7 days."
       className={cn(WIDGET_CLASS, className)}
       bodyClassName={cn(WIDGET_BODY_CLASS, "p-0")}
-      action={<ViewAllLink to={routes.agentSessions.href()} />}
+      action={<ViewAllLink to={routes.identities.people.href()} />}
     >
-      {chats.isPending ? (
+      {!logs.pending && !logs.enabled ? (
+        <LogsOff />
+      ) : pending ? (
         <ListSkeleton />
-      ) : rows.length === 0 ? (
+      ) : top.length === 0 ? (
         <p className="text-muted-foreground px-6 py-5 text-sm">
-          No agent sessions yet.
+          No one has used this project's tools this week.
         </p>
       ) : (
         <ul className="divide-y">
-          {rows.map((c) => {
-            const live =
-              now - c.lastMessageTimestamp.getTime() < LIVE_WINDOW_MS;
-            const agent =
-              c.assistantName ?? c.agentName ?? c.originatingClient ?? "Agent";
-            const who = c.accountEmail ?? c.externalUserId;
-            const meta = [agent, who, `${c.numMessages} messages`]
-              .filter(Boolean)
-              .join(" · ");
+          {top.map((row) => {
+            const isAgent = row.userKind === "agent_id";
+            const agent = isAgent ? agentsById.get(row.userKey) : undefined;
+            // The id lets the assistant look up an agent the viewer can't name.
+            const name = isAgent
+              ? `the agent ${agent?.name ?? row.userKey}`
+              : row.userLabel;
+            const Icon = isAgent ? Bot : User;
             return (
-              <li key={c.id}>
-                <ActionRow
-                  prompt={`Summarize the agent session "${c.title || "Untitled"}" (chat ${c.id}): what was asked, which tools ran, and whether anything went wrong.`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "mt-1.5 size-2 shrink-0 rounded-full",
-                      live ? "bg-success-default animate-pulse" : "bg-border",
-                    )}
+              <li
+                key={`${row.userKind}:${row.userKey}`}
+                className="group hover:bg-muted/50 flex items-center gap-3 px-6 py-3"
+              >
+                <Icon
+                  aria-label={isAgent ? "Agent" : "Person"}
+                  className="text-muted-foreground size-4 shrink-0"
+                />
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  <ToolUsageIdentity
+                    kind={row.userKind}
+                    identityKey={row.userKey}
+                    label={row.userLabel}
+                    agent={agent}
                   />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">
-                      {c.title || "Untitled session"}
-                    </span>
-                    <span className="text-muted-foreground block truncate text-xs">
-                      {meta}
-                    </span>
-                  </span>
-                  <span className="text-muted-foreground shrink-0 text-xs">
-                    {live
-                      ? "live"
-                      : formatDistanceToNowStrict(c.lastMessageTimestamp, {
-                          addSuffix: true,
-                        })}
-                  </span>
-                </ActionRow>
+                </span>
+                <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
+                  {row.eventCount.toLocaleString()} calls
+                </span>
+                <AskButton
+                  className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+                  prompt={`What has ${name} been doing in this project this week? Which tools and MCP servers did they use, and did anything fail?`}
+                />
               </li>
             );
           })}
@@ -589,13 +603,22 @@ function ActionRow({
   );
 }
 
-function AskButton({ prompt }: { prompt: string }): JSX.Element {
+function AskButton({
+  prompt,
+  className,
+}: {
+  prompt: string;
+  className?: string;
+}): JSX.Element {
   const { sendPrompt } = useInsightsState();
   return (
     <button
       type="button"
       onClick={() => sendPrompt(prompt)}
-      className="text-muted-foreground hover:text-foreground text-xs"
+      className={cn(
+        "text-muted-foreground hover:text-foreground shrink-0 text-xs",
+        className,
+      )}
     >
       Ask ›
     </button>
