@@ -1,5 +1,17 @@
 # dashboard
 
+## 0.154.2
+
+### Patch Changes
+
+- 4401be3: When upstream auth enforcement refuses a call because the caller may not use a connection, the refusal now shows under failed authorization checks on the agent's or person's Permissions tab and in Roles & Permissions. A personal connection used by anyone other than its owner is listed with the reason "This connection belongs to another member and works only for them." The record names the server and the connection, never the connection's owner or upstream account. The Platform MCP `list_agent_authorization_checks` tool lists these refusals with the server they happened on.
+- bed51b1: Full-page Project Assistant conversations now fill the window, with the composer pinned to the bottom instead of scrolling with the transcript.
+- 204fe8c: Make prompt-based risk policies available to every project without a feature flag.
+- 05c5f3f: The tool narrowing dialog on an MCP server's Team Access tab now counts each tool once, under the one annotation access is checked against, so an OpenAPI GET that is also idempotent and open-world counts only as read-only. A selected annotation stays visible even when no tool carries it, so it can still be cleared.
+- 96b0aa3: Consolidating one MCP Authentication Provider into another no longer refuses when both hold a copy of the same dynamically registered OAuth client and nothing signs in through the source's copy. That copy is retired in favor of the target's, the same way clients resolved from one Client ID Metadata Document already merge. A copy that has a sign-in or approval (even an expired sign-in), that belongs to an assistant, or that an issuance selection profile pins, still blocks. The consolidation preview lists merged client IDs in the new `merged_client_ids` field, the dashboard says how many clients merge, and the consolidation audit event records them.
+- 2d3daed: Shadow MCP official servers now use "Make official" wording instead of "link", so the action says what it does: direct connections are blocked and agents are sent to the official server. This covers the Shadow MCP page, the catalog and server setup flows, the audit log, API descriptions and the hook block reason.
+- bed51b1: Keep the assistant's working indicator on screen for the whole turn. The chat no longer looks idle after the assistant finishes a paragraph and before its next step starts, or while it writes the heading for its first batch of tool calls.
+
 ## 0.154.1
 
 ### Patch Changes
