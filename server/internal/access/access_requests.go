@@ -95,7 +95,7 @@ func (s *Service) AccessRequestsEnabled(ctx context.Context, organizationID, org
 	if s.features == nil {
 		return false
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagAccessRequests, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
+	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagAccessRequests, organizationID, feature.OrgProjectGroups(organizationSlug, ""), nil)
 	if err != nil {
 		s.logger.WarnContext(ctx, "evaluate access requests flag", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
 	}

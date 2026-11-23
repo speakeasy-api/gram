@@ -87,6 +87,7 @@ func TestPosthogEvaluateFlag(t *testing.T) {
 				testFeatureFlag,
 				"organization-id",
 				map[string]string{"organization": "organization-slug"},
+				nil,
 			)
 
 			if test.isErr {
@@ -100,6 +101,7 @@ func TestPosthogEvaluateFlag(t *testing.T) {
 				require.Equal(t, string(testFeatureFlag), client.payload.Key)
 				require.Equal(t, "organization-id", client.payload.DistinctId)
 				require.Equal(t, posthoggo.Groups{"organization": "organization-slug"}, client.payload.Groups)
+				require.Nil(t, client.payload.PersonProperties)
 				require.False(t, *client.payload.SendFeatureFlagEvents)
 			}
 		})

@@ -103,9 +103,11 @@ const (
 	// FlagMCPConnectionHealth gates the MCP connection health reads (Connection
 	// Logs, sign-in summary, session activity, denied clients). Evaluated
 	// server-side, where every mcpConnectionHealth method answers not found
-	// without it, and by the dashboard under the same key. Targeted by PostHog
-	// organization group (org slug). Fails closed. A rollout gate, not
-	// authorization. Removed once the pages are GA.
+	// without it, and by the dashboard under the same key. Target it by PostHog
+	// organization group (org slug), or match by users on the person property
+	// "email": signed-in callers are evaluated as their email, the dashboard's
+	// distinct ID, and API keys never match a person. Fails closed. A rollout
+	// gate, not authorization. Removed once the pages are GA.
 	FlagMCPConnectionHealth Flag = "mcp-connection-health"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the

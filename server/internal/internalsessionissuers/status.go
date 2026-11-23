@@ -180,7 +180,7 @@ func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups 
 	if g.paused {
 		return PauseReasonStartup
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, g.flags, feature.FlagInternalSessionIssuerSigningPaused, organizationID, groups)
+	evaluation, err := feature.EvaluateFlag(ctx, g.flags, feature.FlagInternalSessionIssuerSigningPaused, organizationID, groups, nil)
 	switch {
 	case err == nil && evaluation == feature.EvaluationEnabled:
 		return PauseReasonFlagOn
@@ -200,7 +200,7 @@ func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups 
 // flagEnabled evaluates without per-call analytics events: Status runs on
 // every signature and every sweep. Anything but an explicit on is off.
 func (g *Gate) flagEnabled(ctx context.Context, flag feature.Flag, organizationID string, groups map[string]string) (bool, error) {
-	evaluation, err := feature.EvaluateFlag(ctx, g.flags, flag, organizationID, groups)
+	evaluation, err := feature.EvaluateFlag(ctx, g.flags, flag, organizationID, groups, nil)
 	if err != nil {
 		return false, fmt.Errorf("evaluate %s: %w", flag, err)
 	}

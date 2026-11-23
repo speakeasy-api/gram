@@ -215,8 +215,10 @@ func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinct
 // EvaluateFlag resolves a boolean flag to an authoritative enabled/disabled
 // result, or indeterminate when PostHog cannot decide. With a personal API key
 // the SDK evaluates against its cached definitions first and only falls back
-// to a remote request for flags it cannot decide locally.
-func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+// to a remote request for flags it cannot decide locally. personProperties are
+// sent with both, so person conditions decide locally when they name a
+// supplied property.
+func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (feature.Evaluation, error) {
 	if p == nil || p.disabled || p.client == nil {
 		return feature.EvaluationIndeterminate, nil
 	}
@@ -250,6 +252,7 @@ func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctI
 		Key:                   string(flag),
 		DistinctId:            distinctID,
 		Groups:                posthogGroups(groups),
+		PersonProperties:      posthogProperties(personProperties),
 		SendFeatureFlagEvents: &sendFeatureFlagEvents,
 	})
 	if errors.Is(err, posthog.ErrFlagNotFound) {
@@ -322,19 +325,12 @@ func (p *Posthog) FlagVariantLocal(ctx context.Context, flag feature.Flag, disti
 // localFlagPayload asks for a decision from the cached definitions only, with
 // caller-supplied person properties and no $feature_flag_called event.
 func localFlagPayload(flag feature.Flag, distinctID string, groups, personProperties map[string]string) posthog.FeatureFlagPayload {
-	var phPersonProperties posthog.Properties
-	if len(personProperties) > 0 {
-		phPersonProperties = posthog.NewProperties()
-		for key, value := range personProperties {
-			phPersonProperties.Set(key, value)
-		}
-	}
 	sendFeatureFlagEvents := false
 	return posthog.FeatureFlagPayload{
 		Key:                   string(flag),
 		DistinctId:            distinctID,
 		Groups:                posthogGroups(groups),
-		PersonProperties:      phPersonProperties,
+		PersonProperties:      posthogProperties(personProperties),
 		OnlyEvaluateLocally:   true,
 		SendFeatureFlagEvents: &sendFeatureFlagEvents,
 	}
@@ -413,6 +409,17 @@ func posthogGroups(groups map[string]string) posthog.Groups {
 		}
 	}
 	return phGroups
+}
+
+func posthogProperties(properties map[string]string) posthog.Properties {
+	var phProperties posthog.Properties
+	if len(properties) > 0 {
+		phProperties = posthog.NewProperties()
+		for key, value := range properties {
+			phProperties.Set(key, value)
+		}
+	}
+	return phProperties
 }
 
 func (p *Posthog) IdentifyUser(ctx context.Context, distinctID string, personProperties map[string]any) error {

@@ -927,7 +927,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve gateway attachment project").LogError(ctx, s.logger)
 		}
-		state, err := feature.EvaluateFlag(ctx, s.features, feature.FlagGatewayPluginMembership, ac.ActiveOrganizationID, feature.OrgProjectGroups(ac.OrganizationSlug, project.Slug))
+		state, err := feature.EvaluateFlag(ctx, s.features, feature.FlagGatewayPluginMembership, ac.ActiveOrganizationID, feature.OrgProjectGroups(ac.OrganizationSlug, project.Slug), nil)
 		if err != nil || state == feature.EvaluationIndeterminate {
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway plugin attachment is unavailable")
 		}

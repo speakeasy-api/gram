@@ -9,7 +9,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -87,7 +86,7 @@ func TestListAttempts_SaysLoggingIsOff(t *testing.T) {
 func TestListAttempts_NotFoundWhenTheFlagIsOff(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	ti.flags.SetFlag(feature.FlagMCPConnectionHealth, ti.org, false)
+	ti.flags.target(nil, nil)
 
 	_, err := ti.service.ListAttempts(ctx, ti.listPayload())
 	requireOopsCode(t, err, oops.CodeNotFound)

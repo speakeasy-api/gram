@@ -120,7 +120,7 @@ func (p *ProcessWorkOSOrganizationEvents) deprovisionRevokes(ctx context.Context
 		logger.WarnContext(ctx, "sign-in enforcement flags not configured; revoking on deprovisioning")
 		return true
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, p.flags, feature.FlagSignInEnforcement, organizationID, nil)
+	evaluation, err := feature.EvaluateFlag(ctx, p.flags, feature.FlagSignInEnforcement, organizationID, nil, nil)
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "sign-in enforcement flag unavailable; revoking on deprovisioning", attr.SlogError(err))

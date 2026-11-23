@@ -117,7 +117,12 @@ func (s *Service) begin(ctx context.Context) (caller, error) {
 		return caller{}, oops.C(oops.CodeUnauthorized)
 	}
 	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagMCPConnectionHealth, authCtx.ActiveOrganizationID, groups)
+	distinctID, person := authCtx.ActiveOrganizationID, map[string]string(nil)
+	// API keys carry their creator's email, so only a signed-in session is a person.
+	if email := conv.PtrValOr(authCtx.Email, ""); email != "" && contextvalues.HasValidatedGramSession(ctx) {
+		distinctID, person = email, map[string]string{"email": email}
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagMCPConnectionHealth, distinctID, groups, person)
 	if err != nil {
 		s.logger.WarnContext(ctx, "evaluate mcp connection health flag", attr.SlogError(err))
 	}

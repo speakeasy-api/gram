@@ -153,7 +153,7 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	if err != nil || organizationSlug == "" {
 		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(err)
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.mutationFlags, feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug))
+	evaluation, err := feature.EvaluateFlag(ctx, s.mutationFlags, feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug), nil)
 	if err != nil {
 		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(err)
 	}

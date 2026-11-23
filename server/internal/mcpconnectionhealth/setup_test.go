@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,7 +50,7 @@ type testInstance struct {
 	service *mcpconnectionhealth.Service
 	conn    *pgxpool.Pool
 	ch      driver.Conn
-	flags   *feature.InMemory
+	flags   *targetedFlag
 	logsOn  *atomic.Bool
 	org     string
 	project uuid.UUID
@@ -76,8 +78,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagMCPConnectionHealth, authCtx.ActiveOrganizationID, true)
+	flags := &targetedFlag{}
+	flags.target([]string{authCtx.OrganizationSlug}, nil)
 	logsOn := &atomic.Bool{}
 	logsOn.Store(true)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
@@ -114,6 +116,54 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		server:  server.ID,
 		now:     time.Now().UTC(),
 	}
+}
+
+// targetedFlag evaluates FlagMCPConnectionHealth the way a PostHog release
+// condition would: on the organization group key or on the person's email.
+type targetedFlag struct {
+	mu       sync.Mutex
+	orgSlugs []string
+	emails   []string
+	err      error
+}
+
+func (f *targetedFlag) target(orgSlugs, emails []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.orgSlugs, f.emails = orgSlugs, emails
+}
+
+func (f *targetedFlag) fail(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.err = err
+}
+
+func (f *targetedFlag) EvaluateFlag(_ context.Context, flag feature.Flag, _ string, groups, personProperties map[string]string) (feature.Evaluation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch {
+	case flag != feature.FlagMCPConnectionHealth:
+		return feature.EvaluationIndeterminate, nil
+	case f.err != nil:
+		return feature.EvaluationIndeterminate, f.err
+	case slices.Contains(f.orgSlugs, groups["organization"]), slices.Contains(f.emails, personProperties["email"]):
+		return feature.EvaluationEnabled, nil
+	default:
+		return feature.EvaluationDisabled, nil
+	}
+}
+
+func (f *targetedFlag) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
+	return false, nil
+}
+
+func (f *targetedFlag) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
+	return false, nil
+}
+
+func (f *targetedFlag) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+	return nil, nil
 }
 
 // insert writes one finished attempt per step and result.

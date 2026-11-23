@@ -36,11 +36,11 @@ import (
 // pauseFlagFails is a flag provider whose kill-switch lookup errors.
 type pauseFlagFails struct{ *feature.InMemory }
 
-func (p pauseFlagFails) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+func (p pauseFlagFails) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (feature.Evaluation, error) {
 	if flag == feature.FlagInternalSessionIssuerSigningPaused {
 		return feature.EvaluationIndeterminate, errors.New("flag provider unavailable")
 	}
-	return p.InMemory.EvaluateFlag(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
+	return p.InMemory.EvaluateFlag(ctx, flag, distinctID, groups, personProperties) //nolint:wrapcheck // Test double.
 }
 
 type issuerFixture struct {
