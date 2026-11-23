@@ -728,10 +728,6 @@ func unenforcedAllows(check Check) bool {
 	return !check.isAuthClientCheck()
 }
 
-func all(checks []Check, ok func(Check) bool) bool {
-	return !slices.ContainsFunc(checks, func(c Check) bool { return !ok(c) })
-}
-
 func validateInput(c Check) error {
 	if c.anyOf != nil {
 		return InvalidCheck(c.Scope, c.ResourceID)

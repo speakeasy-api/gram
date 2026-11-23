@@ -128,7 +128,8 @@ func (e *Engine) prepare(ctx context.Context, checks []Check, forRequire bool) (
 	if err != nil {
 		return question{}, err
 	}
-	q := question{enforced: enforced, grants: grantAuthorization{}, aboutOtherOrganization: e.aboutOtherOrganization(ctx)}
+	var noGrants grantAuthorization
+	q := question{enforced: enforced, grants: noGrants, aboutOtherOrganization: e.aboutOtherOrganization(ctx)}
 	if !enforced {
 		e.logInvalidUnenforced(ctx, checks)
 		return q, nil
@@ -298,7 +299,7 @@ func (e *Engine) recordBatch(ctx context.Context, q question, decided []Decision
 		Matches:              matches,
 		EvaluatedGrantCount:  uint32(q.grants.grantCount()), //nolint:gosec // grant count is small
 		FilterCandidateCount: uint32(len(decided)),          //nolint:gosec // candidate count is small
-		FilterAllowedCount:   uint32(allowedCount),          //nolint:gosec // allowed count is small
+		FilterAllowedCount:   uint32(allowedCount),
 	}
 	switch {
 	case focus != nil:
