@@ -114,7 +114,7 @@ func (r *Resolver) ResolveKey(ctx context.Context, orgID string, projectID strin
 		return openrouter.ResolvedKey{}, fmt.Errorf("read model provider keys: %w", err)
 	}
 
-	key, err := r.enc.Decrypt(encryptedKey)
+	key, err := r.enc.Decrypt(encryptedKey.String)
 	if err != nil {
 		return openrouter.ResolvedKey{}, fmt.Errorf("decrypt model provider key: %w", err)
 	}

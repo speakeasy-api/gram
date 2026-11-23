@@ -145,7 +145,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
 			shutdownOTel, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
-				ServiceName: serviceName, ServiceVersion: shortGitSHA(), GitSHA: GitSHA,
+				ServiceName: serviceName, ServiceVersion: shortGitSHA(), GitSHA: GitSHA, Partition: PullPartition(ctx),
 				EnableTracing: c.Bool("with-otel-tracing"), EnableMetrics: c.Bool("with-otel-metrics"),
 			})
 			if err != nil {

@@ -686,6 +686,7 @@ func mcpRuntimeFlags() []cli.Flag {
 	flags = append(flags, orgEncryptionFlags()...)
 	flags = append(flags, callbackOriginFlags()...)
 	flags = append(flags, orgDefaultHostFlags()...)
+	flags = append(flags, staffFlags()...)
 	return flags
 }
 
@@ -736,6 +737,7 @@ func newStartCommand() *cli.Command {
 	clickhouseShutdown := noopShutdown
 	clickhouseReadShutdown := noopShutdown
 	flags := append(serverFlags(), clickHouseReadFlags()...)
+	flags = append(flags, transcriptShadowFlag())
 
 	return &cli.Command{
 		Name:  "start",
@@ -780,6 +782,7 @@ func newStartCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -905,6 +908,14 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
+			}
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
+
 			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 			var openRouter interface {
 				openrouter.Provisioner
@@ -924,6 +935,7 @@ func newStartCommand() *cli.Command {
 					productFeatures,
 					billingTracker,
 					encryptionClient,
+					staffOrg,
 				)
 			}
 
@@ -1079,6 +1091,7 @@ func newStartCommand() *cli.Command {
 					AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
+					LoadUserPolicy:                   nil,
 				})
 
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
@@ -1194,8 +1207,12 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
+				return err
+			}
 			clientSecrets := orgEncryption.ClientSecrets(logger, encryptionClient)
 			upstreamTokens := orgEncryption.UpstreamTokens(logger, encryptionClient)
+			marketplaceTokens := orgEncryption.MarketplaceTokens(logger, encryptionClient)
 			identityProviderProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, clientSecrets, callbackOrigins.Outbound)
 			if err != nil {
 				return err
@@ -1297,7 +1314,7 @@ func newStartCommand() *cli.Command {
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			chatRiskFindings := chatfindings.New(db, riskchrepo.New(chReadDB))
-			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
+			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger, staffOrg).
 				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
 				WithRiskFindings(chatRiskFindings).
@@ -1395,7 +1412,7 @@ func newStartCommand() *cli.Command {
 			)
 			if ghClient != nil {
 				marketplaceServer = marketplace.NewServer(
-					marketplace.NewDBResolver(db, ghClient),
+					marketplace.NewDBResolver(logger, db, ghClient),
 					guardianPolicy.Client(),
 					logger,
 				)
@@ -1416,7 +1433,7 @@ func newStartCommand() *cli.Command {
 					return fmt.Errorf("render local Platform MCP marketplace: %w", err)
 				}
 				localMarketplaceServer = marketplace.NewLocalServer(
-					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(db)},
+					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(logger, db)},
 					func(_ context.Context, owner, repo string) (map[string][]byte, error) {
 						if owner != localPlatformMCPMarketplaceOwner || repo != localPlatformMCPMarketplaceRepo {
 							return nil, marketplace.ErrNotFound
@@ -1579,7 +1596,7 @@ func newStartCommand() *cli.Command {
 				WithServerURL(serverURL).
 				WithFeatures(featureFlags)
 			access.Attach(mux, accessService)
-			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens).
+			agentService := agent.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures, serverURL.String(), orgHosts, assetStorage, telemLogger, growthEmitter, deviceAgentTokens, marketplaceTokens).
 				WithWorkloadTokenTargets(mcpService)
 			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
 			agentService.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state", agent.StateReportRate, ratelimit.WithMetrics(meterProvider)))
@@ -1669,9 +1686,9 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			dataexports.Attach(mux, dataexports.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, dataExportRouteTests))
-			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags))
+			deviceintegrations.Attach(mux, deviceintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, guardianPolicy, &background.DeviceIntegrationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}, featureFlags, serverURL))
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
-			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine, staffOrg))
 			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			authService := auth.NewService(
 				logger,
@@ -1742,7 +1759,7 @@ func newStartCommand() *cli.Command {
 					InstallationID: 1,
 				}
 				localMarketplaceServer = marketplace.NewLocalServer(
-					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(db)},
+					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(logger, db)},
 					func(ctx context.Context, owner, repo string) (map[string][]byte, error) {
 						if owner == localPlatformMCPMarketplaceOwner && repo == localPlatformMCPMarketplaceRepo {
 							return localPlatformMCPFiles, nil
@@ -1763,13 +1780,13 @@ func newStartCommand() *cli.Command {
 				logger.InfoContext(ctx, "marketplace proxy: using local fixture repository")
 			}
 
-			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
+			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil, staffOrg))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, staffOrg, marketplaceTokens).
 					WithOrganizationHosts(orgHosts)
 				if localPublisher != nil {
 					if err := restoreLocalPluginRepositories(ctx, logger, db, localPublisher, pluginPublisher); err != nil {
@@ -1795,7 +1812,7 @@ func newStartCommand() *cli.Command {
 			if pluginPublisher != nil {
 				pluginPublisher.WithDistributionAdmission(distributionAdmission)
 			}
-			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler, staffOrg, marketplaceTokens).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithOrganizationHosts(orgHosts)
 			plugins.Attach(mux, pluginsSvc)
 			agentService.WithClaudeObservabilityPlugins(pluginsSvc)
@@ -2154,7 +2171,7 @@ func newStartCommand() *cli.Command {
 				customDomainARecords,
 				customDomainTargetSuffix,
 			).WithPublicationRequests(plugins.PublicationRequests{Enabled: publicationEmit}))
-			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chReadDB), auditLogger, productFeatures, trialEmailNotifier, chReadDB))
+			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chReadDB), auditLogger, productFeatures, trialEmailNotifier, chReadDB, staffOrg))
 			tm.Attach(mux, telemSvc)
 			analytics.Attach(mux, analyticsSvc)
 			widgets.Attach(mux, widgetsSvc)
@@ -2347,6 +2364,7 @@ func newStartCommand() *cli.Command {
 						SiteURL:                        siteURL,
 						ServerURL:                      serverURL,
 						OrgHosts:                       orgHosts,
+						StaffOrganization:              staffOrg,
 						BillingTracker:                 billingTracker,
 						BillingRepository:              billingRepo,
 						StripeClient:                   stripeClient,

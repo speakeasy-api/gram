@@ -12,7 +12,7 @@ import (
 // not bypass an exclusion on the actual resource (or vice versa).
 //
 // Checks carry base scopes, not blocked scopes, and must include the concrete
-// resource dimensions. Exclusions use strict selector matching and never expand
+// resource dimensions. Exclusions match exactly, open no key, and never expand
 // to root. Every admitted policy can exclude; one allow alternative must still
 // be satisfied by all policies, just as with RequireAny. An exclusion inherited
 // from a role or user:all does not reject a check that a direct grant naming
@@ -73,7 +73,8 @@ func firstUnoverriddenExclusion(authorization grantAuthorization, checks []Check
 		if !ok {
 			continue
 		}
-		exclusion := check.WithStrictSelectorMatch()
+		exclusion := check
+		exclusion.exact = true
 		exclusion.Scope = exclusionScope
 		// Preserve the base resource kind, including explicit overrides.
 		if exclusion.ResourceKind == "" {

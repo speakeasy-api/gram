@@ -22,7 +22,7 @@
     "@tailwindcss/vite": "catalog:",
     "@tanstack/charts": "^1.2.1",
     "@tanstack/react-form": "^1.33.5",
-    "@tanstack/react-hotkeys": "^0.23.0",
+    "@tanstack/react-hotkeys": "^0.25.0",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-table": "9.3.1",
