@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// MandatoryPolicySource names the policy or public visibility admission behind a mandatory decision.
 type MandatoryPolicySource string
 
 const (
@@ -27,7 +26,6 @@ const (
 	MandatoryPolicySourceNone MandatoryPolicySource = "none"
 )
 
-// MandatoryDenyReason says why a mandatory decision denied.
 type MandatoryDenyReason string
 
 const (
@@ -60,7 +58,6 @@ type MandatoryDecision struct {
 
 var mandatoryScopes = []Scope{ScopeMCPConnect, ScopeMCPAuth}
 
-// MandatoryCaller is the kind of caller a mandatory decision evaluated.
 type MandatoryCaller string
 
 const (
@@ -94,14 +91,12 @@ type MandatoryAuthorization struct {
 	narrowedProject *uuid.UUID
 }
 
-// Caller is the kind of caller evaluated.
 func (m MandatoryAuthorization) Caller() MandatoryCaller { return m.caller }
 
 // PrincipalID identifies the caller for attribution: a user, API key or
 // credential id. It never grants anything.
 func (m MandatoryAuthorization) PrincipalID() string { return m.principalID }
 
-// OrganizationID is the organization the caller authenticated in.
 func (m MandatoryAuthorization) OrganizationID() string { return m.organizationID }
 
 // RepresentedUserID is the user bound to $represented_user, the same binding
@@ -129,8 +124,6 @@ func (e *Engine) AuthorizeMandatory(ctx context.Context, checks ...Check) (Manda
 	return authorization.Decide(authorization.organizationID, checks...)
 }
 
-// PrepareMandatory admits the caller once for mandatory decisions. It does not
-// change ctx.
 func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, error) {
 	m := MandatoryAuthorization{
 		publicAnonymous: false,
@@ -244,8 +237,7 @@ const (
 const MandatoryPolicySourceVisibility MandatoryPolicySource = "visibility"
 
 // DecideServerAdmission decides mcp:connect on a server in organizationID
-// under its visibility. It adds explicit public admission to mandatory policy evaluation and does
-// no I/O. The shadow uses this boundary; legacy enforcement is unchanged.
+// under its visibility. It does no I/O.
 //
 // A public server admits a caller with no credential: public access needs no
 // policy. Every caller that presents a credential is still decided by its
@@ -356,7 +348,6 @@ func (m MandatoryAuthorization) decideAPIKey(checks []Check) (MandatoryDecision,
 	return evaluateMandatory(m.authorization, MandatoryPolicySourceAPIKey, checks)
 }
 
-// mandatoryCaller classifies an authenticated caller for attribution.
 func mandatoryCaller(ctx context.Context, authCtx *contextvalues.AuthContext) (MandatoryCaller, string) {
 	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok {
 		if mode == contextvalues.APIKeyAuthorizationModeLegacy {
