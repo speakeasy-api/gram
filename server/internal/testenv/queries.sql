@@ -1203,6 +1203,14 @@ UPDATE api_keys
 SET expires_at = @expires_at
 WHERE key_hash = @key_hash;
 
+-- name: SetAPIKeysCreatedAtFixture :exec
+-- Pins created_at on an organization's keys so keys.list paging tests can
+-- force ties on the first half of its (created_at, id) ordering.
+UPDATE api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[]);
+
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
 SELECT count(*) AS mcp_servers FROM assistant_mcp_servers ams
@@ -2584,6 +2592,13 @@ UPDATE principal_grants
 SET expires_at = clock_timestamp()
 WHERE id = @id
   AND expires_at IS NOT NULL;
+
+-- name: LapsePrincipalGrantFixture :exec
+-- Test-only fixture: turns a grant into a temporary grant that has already
+-- lapsed.
+UPDATE principal_grants
+SET expires_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE id = @id;
 
 -- name: GetPrincipalGrantExpiresAtFixture :one
 -- Test-only fixture: reads a grant row's deadline (NULL when permanent).

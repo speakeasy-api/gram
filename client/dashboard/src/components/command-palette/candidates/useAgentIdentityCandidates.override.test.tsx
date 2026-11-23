@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({ fetchAgents: vi.fn() }));
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => true,
   useOrganization: () => ({ id: "org-example", slug: "example" }),
+  useProject: () => ({ id: "project-id", slug: "project-example" }),
   useSession: () => ({ user: { id: "user-example" } }),
 }));
 vi.mock("@/contexts/Sdk", () => ({

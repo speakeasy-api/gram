@@ -1,3 +1,4 @@
+import { DISPOSITION_PRECEDENCE } from "@/pages/access/mcpAccessModel";
 import { supportsAudienceReading } from "./manageAccessState";
 import { enumPresentation } from "@/lib/enum";
 import type {
@@ -143,32 +144,20 @@ export function isUnnarrowed(entry: {
 }
 
 /**
- * The order the runtime reads a tool's hints in, mirroring
- * DispositionFromAnnotations in server/internal/conv/tools.go.
- */
-const DISPOSITION_PRIORITY: readonly ToolAnnotation[] = [
-  "read_only",
-  "destructive",
-  "idempotent",
-  "open_world",
-];
-
-/**
- * The one disposition authorization checks a tool call under: the first of
- * its annotations in the runtime's priority order. A tool can carry several
- * annotations — an OpenAPI GET is read-only, idempotent and open-world at
- * once — but a rule naming annotations is matched against this one alone, so
- * a block on "open-world" does not reach a read-only tool.
+ * The one annotation a rule is matched against for this tool, as the server
+ * picks it. A tool that is both read-only and idempotent counts as read-only,
+ * so a block on idempotent tools does not reach it. Undefined when the tool
+ * carries none.
  */
 export function toolDisposition(
   tool: ToolSelectionTool,
 ): ToolAnnotation | undefined {
-  return DISPOSITION_PRIORITY.find((disposition) =>
+  return DISPOSITION_PRECEDENCE.find((disposition) =>
     tool.annotations.includes(disposition),
   );
 }
 
-/** Whether a rule names this tool, by name or by its disposition. */
+/** Whether a rule names this tool, by name or by annotation. */
 export function coversTool(
   entry: { tools?: string[]; dispositions?: string[] },
   tool: ToolSelectionTool,

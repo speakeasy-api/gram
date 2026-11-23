@@ -155,7 +155,7 @@ type tenancy struct {
 	actorEmail       *string
 }
 
-func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProject *string) (tenancy, error) {
+func (s *Service) resolve(ctx context.Context, permission func(authz.WorkloadCollection) authz.Check, explicitProject *string) (tenancy, error) {
 	selectedProject := explicitProject != nil
 	if selectedProject {
 		if strings.TrimSpace(*explicitProject) == "" {
@@ -188,12 +188,7 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProjec
 	// organization is the resource the check names. There is no per-workload
 	// resource a grant could narrow to, which is why the dashboard treats this
 	// scope as unrestricted.
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        scope,
-		ResourceKind: "",
-		ResourceID:   authCtx.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.Workloads(authz.OrgIDFrom(authCtx.ActiveOrganizationID)))); err != nil {
 		return tenancy{}, err
 	}
 
@@ -266,7 +261,7 @@ func (s *Service) loadPolicy(ctx context.Context, dbtx repo.DBTX, t tenancy) (*g
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +270,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Work
 }
 
 func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsPayload) (*gen.WorkloadPlatformCatalog, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +312,7 @@ func (s *Service) offeredPlatforms(ctx context.Context, t tenancy, platforms []c
 }
 
 func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlowsPayload) (*gen.WorkloadCustomFlows, error) {
-	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput); err != nil {
+	if _, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput); err != nil {
 		return nil, err
 	}
 
@@ -330,7 +325,7 @@ func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlow
 }
 
 func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListTokenEndpointsPayload) (*types.WorkloadTokenEndpoints, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Read, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +526,7 @@ func AdmissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadI
 }
 
 func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +630,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 }
 
 func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -787,7 +782,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 }
 
 func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -935,12 +930,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 // using live membership, ownership, and grants for human assignment requests.
 func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx.Tx, agentID uuid.UUID) error {
 	if _, byKey := contextvalues.APIKeyAuthorization(ctx); byKey {
-		return s.authz.Require(ctx, authz.Check{
-			Scope:        authz.ScopeAgentAuthorize,
-			ResourceKind: authz.ResourceKindAgent,
-			ResourceID:   agentID.String(),
-			Dimensions:   nil,
-		})
+		return s.authz.Require(ctx, authz.Agent(authz.AgentIDOf(agentID)).Authorize())
 	}
 	_, _, err := agentmanagement.NewAuthorizer(s.authz).RequireAgentForUpdate(ctx, dbtx, agentID, agentmanagement.OwnedAgentAuthorize)
 	if err != nil {
@@ -950,7 +940,7 @@ func (s *Service) requireSubjectAgentAuthorization(ctx context.Context, dbtx pgx
 }
 
 func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1139,7 +1129,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 }
 
 func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectPayload) (*gen.WorkloadIdentityPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1338,7 +1328,7 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 }
 
 func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubjectPayload) (*gen.WithdrawnWorkloadSubjectPolicy, error) {
-	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite, payload.ProjectSlugInput)
+	t, err := s.resolve(ctx, authz.WorkloadCollection.Write, payload.ProjectSlugInput)
 	if err != nil {
 		return nil, err
 	}

@@ -481,6 +481,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		var (
 			cursor           *string
 			limit            int
+			projectID        *string
 			search           *string
 			nameOrder        string
 			lifecycle        []string
@@ -512,6 +513,13 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		}
 		if limit > 200 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+		}
+		projectIDRaw := qp.Get("project_id")
+		if projectIDRaw != "" {
+			projectID = &projectIDRaw
+		}
+		if projectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
 		}
 		searchRaw := qp.Get("search")
 		if searchRaw != "" {
@@ -554,7 +562,7 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListPayload(cursor, limit, search, nameOrder, lifecycle, ownerUserIds, registeredAfter, registeredBefore, sessionToken)
+		payload = NewListPayload(cursor, limit, projectID, search, nameOrder, lifecycle, ownerUserIds, registeredAfter, registeredBefore, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

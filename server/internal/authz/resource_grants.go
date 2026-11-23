@@ -8,7 +8,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Resource identifies one resource-scoped permission.
 type Resource struct {
 	OrganizationID string
 	Scope          Scope
@@ -111,10 +110,9 @@ func (r ResourceGrant) uniquePrincipals() []urn.Principal {
 	return principals
 }
 
-// ReplaceGrantAudience replaces the full audience for one exact grant target.
-// This is intentionally distinct from PatchPrincipalGrants: callers use this
-// when they know the complete desired audience, such as switching from
-// user:all to a narrowed user/role set.
+// ReplaceGrantAudience is for callers that know the complete audience, such
+// as switching from user:all to a narrowed set; PatchPrincipalGrants leaves
+// omitted principals alone.
 func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
 		return err
@@ -226,7 +224,6 @@ func ReplaceResourceAudience(ctx context.Context, db repo.DBTX, resource Resourc
 	return nil
 }
 
-// Replace replaces allow grants for one resource-scoped permission.
 func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
 		return err
@@ -266,8 +263,6 @@ func ReplaceGrantsForResource(ctx context.Context, db repo.DBTX, resource Resour
 	return nil
 }
 
-// Grant adds one allow grant per principal without replacing other principals'
-// grants for the same resource.
 func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
 		return err
@@ -292,8 +287,6 @@ func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource Resou
 	return nil
 }
 
-// Revoke removes one exact allow grant per principal without replacing other
-// principals' grants for the same resource.
 func RevokeResourceFromPrincipals(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
 	if err := resource.Validate(); err != nil {
 		return err
@@ -315,7 +308,6 @@ func RevokeResourceFromPrincipals(ctx context.Context, db repo.DBTX, resource Re
 	return nil
 }
 
-// ListGrantsForResource loads grants for one resource-scoped permission.
 func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource) ([]Grant, error) {
 	if err := resource.Validate(); err != nil {
 		return nil, err
@@ -348,10 +340,7 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 	return grants, nil
 }
 
-// ListGrantsForResourceIDs loads grants for a set of resources under one scope
-// in an org in a single query, batching what ListGrantsForResource does for a
-// single resource while staying scoped to the given ids. Callers group the
-// returned grants by Selector.ResourceID() to attribute each grant.
+// Callers group the returned grants by Selector.ResourceID().
 func ListGrantsForResourceIDs(ctx context.Context, db repo.DBTX, organizationID string, scope Scope, resourceIDs []string) ([]Grant, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")

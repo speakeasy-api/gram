@@ -157,7 +157,9 @@ export function StepAuthentication({
                     ? "Checking connection…"
                     : connection.status === "error"
                       ? "Could not check connection"
-                      : "Requires connection";
+                      : connection.status === "forbidden"
+                        ? "Connection not visible to you"
+                        : "Requires connection";
           const missingSignIns = sharedChosen
             ? null
             : missingSignInsSentence(server, connection);
@@ -257,10 +259,12 @@ export function StepAuthentication({
                         (connection?.status === "missing" ||
                           connection?.status === "ready" ||
                           connection?.status === "ended" ||
-                          // A read that failed and is being retried keeps a
-                          // personal connection already picked, rather than
-                          // clearing it as no longer offered.
-                          (connection?.status === "error" &&
+                          // A read that failed and is being retried, or one
+                          // the viewer may not make, keeps a personal
+                          // connection already picked, rather than clearing
+                          // it as no longer offered.
+                          ((connection?.status === "error" ||
+                            connection?.status === "forbidden") &&
                             choice === ACCOUNT_CHOICE))
                       }
                       pickSole
@@ -271,7 +275,13 @@ export function StepAuthentication({
                       }
                     />
                   )}
-                {shared || sharedChosen ? (
+                {connection?.status === "forbidden" && !sharedChosen ? (
+                  <Text small muted className="py-1">
+                    You don't have permission to see which connection this agent
+                    uses for {server.name}. Ask someone who manages the agent to
+                    check it.
+                  </Text>
+                ) : shared || sharedChosen ? (
                   <Text small muted>
                     {sharedChosen
                       ? "The agent's keys use the shared credential chosen above. No personal connection is needed."

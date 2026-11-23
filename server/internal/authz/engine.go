@@ -36,6 +36,9 @@ type EngineOpts struct {
 	AdmitWorkloadSession WorkloadSessionAdmitter
 	// AdmitWorkloadSessionInTx must be configured for atomic workload issuance.
 	AdmitWorkloadSessionInTx WorkloadSessionTxAdmitter
+	// LoadUserPolicy reads a member's live policy for consent to a connection
+	// they attached to an agent. Nil reads it from the database.
+	LoadUserPolicy UserPolicyLoader
 }
 
 // ChallengeLoggingEnabled checks whether authz challenge logging to ClickHouse
@@ -47,6 +50,7 @@ type Engine struct {
 	admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	admitWorkloadSession             WorkloadSessionAdmitter
 	admitWorkloadSessionInTx         WorkloadSessionTxAdmitter
+	loadUserPolicy                   UserPolicyLoader
 	logger                           *slog.Logger
 	db                               *pgxpool.Pool
 	challengeLoggingEnabled          ChallengeLoggingEnabled
@@ -66,12 +70,14 @@ func NewEngine(
 	var admitPrincipalCredentialWithDBTX PrincipalCredentialDBTXAdmitter
 	var admitWorkloadSession WorkloadSessionAdmitter
 	var admitWorkloadSessionInTx WorkloadSessionTxAdmitter
+	var loadUserPolicy UserPolicyLoader
 	if len(opts) > 0 {
 		devMode = opts[0].DevMode
 		admitPrincipalCredential = opts[0].AdmitPrincipalCredential
 		admitPrincipalCredentialWithDBTX = opts[0].AdmitPrincipalCredentialWithDBTX
 		admitWorkloadSession = opts[0].AdmitWorkloadSession
 		admitWorkloadSessionInTx = opts[0].AdmitWorkloadSessionInTx
+		loadUserPolicy = opts[0].LoadUserPolicy
 	}
 
 	authzLogger := logger.With(attr.SlogComponent("authz"))
@@ -81,6 +87,7 @@ func NewEngine(
 		admitPrincipalCredentialWithDBTX: admitPrincipalCredentialWithDBTX,
 		admitWorkloadSession:             admitWorkloadSession,
 		admitWorkloadSessionInTx:         admitWorkloadSessionInTx,
+		loadUserPolicy:                   loadUserPolicy,
 		logger:                           authzLogger,
 		db:                               db,
 		challengeLoggingEnabled:          challengeLogging,
@@ -339,10 +346,12 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 			if evaluation.Denied {
 				return deniedByBlock(check.Scope, check.selector())
 			}
+			e.logMissingKeys(ctx, authorization, check)
 			return Denied(check.Scope, check.selector())
 		}
 		matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 	}
+	e.reportAuthorizerRefusals(ctx, authorization, checks, false)
 
 	challengeLogger{
 		Operation:            authzrepo.OperationRequire,
@@ -419,6 +428,7 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, err)
 	}
 	if decision.allowed() {
+		e.reportAuthorizerRefusals(ctx, authorization, authorization.allowedAlternatives(checks), true)
 		challengeLogger{
 			Operation:            authzrepo.OperationRequireAny,
 			Outcome:              authzrepo.OutcomeAllow,
@@ -451,6 +461,13 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		FilterCandidateCount: 0,
 		FilterAllowedCount:   0,
 	}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
+	unblocked := make([]Check, 0, len(checks))
+	for i, check := range checks {
+		if !decision.blocked[i] {
+			unblocked = append(unblocked, check)
+		}
+	}
+	e.logMissingKeys(ctx, authorization, unblocked...)
 	// The alternatives are equivalent to the handler but not to the person
 	// asking for access: explain the one that grants the least.
 	if suggested, ok := leastPrivilegedAlternative(checks, decision.blocked); ok {
@@ -574,6 +591,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 			return false, nil
 		}
 	}
+	e.reportAuthorizerRefusals(ctx, authorization, checks, false)
 
 	return true, nil
 }
@@ -626,6 +644,9 @@ func (e *Engine) canAnyOf(ctx context.Context, alternatives []Check) (bool, erro
 	decision, err := authorization.decideAnyOf(alternatives)
 	if err != nil {
 		return false, e.mapError(ctx, err)
+	}
+	if decision.allowed() {
+		e.reportAuthorizerRefusals(ctx, authorization, authorization.allowedAlternatives(alternatives), true)
 	}
 	return decision.allowed(), nil
 }
@@ -699,6 +720,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	allowed := make([]string, 0, len(checks))
 	matches := make([]grantMatch, 0, len(checks))
 	anyDenied := false
+	var allowedChecks []Check
 	for _, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -737,9 +759,11 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 		}
 		if evaluation.Grant != nil {
 			allowed = append(allowed, c.ResourceID)
+			allowedChecks = append(allowedChecks, c)
 			matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 		}
 	}
+	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks, false)
 
 	if len(checks) > 0 {
 		outcome := authzrepo.OutcomeDeny
@@ -827,6 +851,7 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 	matches := make([]grantMatch, 0, len(checks))
 	allowedCount := 0
 	anyDenied := false
+	var allowedChecks []Check
 	for i, c := range checks {
 		if err := validateInput(c); err != nil {
 			focus := c
@@ -865,10 +890,12 @@ func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error
 		}
 		if evaluation.Grant != nil {
 			matched[i] = true
+			allowedChecks = append(allowedChecks, c)
 			matches = append(matches, grantMatch{Grant: *evaluation.Grant, ViaCheck: *evaluation.Check})
 			allowedCount++
 		}
 	}
+	e.reportAuthorizerRefusals(ctx, authorization, allowedChecks, false)
 
 	if len(checks) > 0 {
 		outcome := authzrepo.OutcomeDeny
@@ -1005,6 +1032,26 @@ func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
 			"invalid authz check on a path that skips enforcement",
 			attr.SlogResourceID(check.ResourceID),
 			attr.SlogError(err),
+		)
+	}
+}
+
+// logMissingKeys logs an error for each refused check that a grant would have
+// covered had the check carried a key the grant names. A check that leaves
+// out a key never matches, so this is either a call site that should carry
+// the key or a stored grant that names a key its permission does not have.
+func (e *Engine) logMissingKeys(ctx context.Context, authorization grantAuthorization, refused ...Check) {
+	for _, check := range refused {
+		keys := authorization.keysMissingFrom(check)
+		if len(keys) == 0 {
+			continue
+		}
+		e.logger.ErrorContext(
+			ctx,
+			"authz check refused: a grant names a key the check does not carry",
+			attr.SlogResourceID(check.ResourceID),
+			attr.SlogAuthzMissingSelectorKeys(keys),
+			attr.SlogError(Denied(check.Scope, check.selector())),
 		)
 	}
 }

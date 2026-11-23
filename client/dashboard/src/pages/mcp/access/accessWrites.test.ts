@@ -774,6 +774,41 @@ describe("an annotation choice is stored as a block", () => {
       },
     ]);
   });
+
+  // Connect does not come with manage, so blocks alone would leave this row
+  // with no connect at all. The choice is written as the grant, and the
+  // block still keeps out tools that also carry a left-out annotation.
+  it("grants the chosen annotations when nothing else grants connect", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "manage" }),
+    ]);
+
+    const written = narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: [], dispositions: ["read_only"] },
+      undefined,
+    ).entries;
+
+    expect(written).toHaveLength(3);
+    expect(written).toEqual(
+      expect.arrayContaining([
+        { principalUrn: "user:1", level: "manage" },
+        {
+          principalUrn: "user:1",
+          level: "use",
+          tools: [],
+          dispositions: ["read_only"],
+        },
+        {
+          principalUrn: "user:1",
+          level: "blocked",
+          tools: [],
+          dispositions: ["destructive", "idempotent", "open_world"],
+        },
+      ]),
+    );
+  });
 });
 
 describe("subtracting by name without a catalogue", () => {

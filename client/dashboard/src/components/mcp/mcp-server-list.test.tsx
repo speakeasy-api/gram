@@ -205,7 +205,7 @@ describe("MCPServerTableRow", () => {
     expect(hosted.getAttribute("href")).toBe(
       "/org/projects/project/mcp/hosted-wrapper/overview",
     );
-    expect(screen.getByText("Hosted")).toBeTruthy();
+    expect(screen.getByText("Hosted by Speakeasy")).toBeTruthy();
     expect(screen.getByText("mcp.example.com/mcp/hosted")).toBeTruthy();
     expect(screen.getByText("12 tools")).toBeTruthy();
 
@@ -253,7 +253,12 @@ describe("MCPServerCard", () => {
       screen.getByLabelText("Installed from io.example/hosted"),
     ).toBeTruthy();
     expect(screen.getByText("remote-a1")).toBeTruthy();
-    for (const label of ["Hosted", "Remote", "Tunneled", "Unproxied"]) {
+    for (const label of [
+      "Hosted by Speakeasy",
+      "Remote (by URL)",
+      "Tunneled",
+      "Unproxied",
+    ]) {
       expect(screen.getByText(label, { selector: "span" })).toBeTruthy();
     }
     const hrefs = screen

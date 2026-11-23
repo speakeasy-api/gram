@@ -14,17 +14,35 @@ func TestNoRawAuthzChecks(t *testing.T) {
 	analysistest.Run(t, testdata, newNoRawAuthzChecksAnalyzer(noRawAuthzChecksSettings{Disabled: false, Packages: []string{"github.com/speakeasy-api/gram/server/internal/norawauthzchecks"}}), "github.com/speakeasy-api/gram/server/internal/norawauthzchecks")
 }
 
-// The default settings apply the production package list, so a typo or an
-// omission in noRawAuthzChecksPackages fails here.
-func TestNoRawAuthzChecksDefaultPackages(t *testing.T) {
+// By default the rule applies to every package outside internal/authz.
+func TestNoRawAuthzChecksAppliesEverywhereByDefault(t *testing.T) {
 	t.Parallel()
 
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, newNoRawAuthzChecksAnalyzer(noRawAuthzChecksSettings{Disabled: false, Packages: nil}), "github.com/speakeasy-api/gram/server/internal/environments")
 }
 
-// A package that has not migrated is left alone.
-func TestNoRawAuthzChecksSkipsUnmigratedPackages(t *testing.T) {
+// internal/authz builds the typed refs from these literals and is left alone.
+func TestNoRawAuthzChecksSkipsAuthz(t *testing.T) {
+	t.Parallel()
+
+	testdata := analysistest.TestData()
+	results := analysistest.Run(t, testdata, newNoRawAuthzChecksAnalyzer(noRawAuthzChecksSettings{Disabled: false, Packages: nil}), "github.com/speakeasy-api/gram/server/internal/authz")
+	for _, result := range results {
+		require.Empty(t, result.Diagnostics)
+	}
+}
+
+// Only internal/authz itself is exempt: a package under it is checked.
+func TestNoRawAuthzChecksCoversAuthzSubpackages(t *testing.T) {
+	t.Parallel()
+
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, newNoRawAuthzChecksAnalyzer(noRawAuthzChecksSettings{Disabled: false, Packages: nil}), "github.com/speakeasy-api/gram/server/internal/authz/authzsub")
+}
+
+// A package outside the configured prefixes is left alone.
+func TestNoRawAuthzChecksSkipsPackagesOutsideTheList(t *testing.T) {
 	t.Parallel()
 
 	testdata := analysistest.TestData()

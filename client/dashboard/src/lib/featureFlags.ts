@@ -1,4 +1,8 @@
 export const FEATURE_FLAGS = {
+  // Stored access requests: the Access Requests tab, approving a request for
+  // a fixed window, and the pending state on blocked pages. The server
+  // enforces the same key on requestAccess and listAccessRequests.
+  accessRequests: "access-requests",
   inferenceWorkloadSetup: "inference-workload-setup",
   // UI-only visibility; saved runtime selection and backend authorization are independent.
   assistantKitRuntime: "assistant-kit-runtime",
@@ -8,7 +12,6 @@ export const FEATURE_FLAGS = {
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
   explore: "gram-explore",
-  headlessModeSwitcher: "headless-mode-switcher",
   // UI-only rollout gate for the Intune package download on the Windows
   // device agent setup step.
   intunePackageDownload: "intune-package-download",
@@ -19,7 +22,10 @@ export const FEATURE_FLAGS = {
   // UI-only rollout gate for the Sync from Okta option of Add MCP server; the
   // Okta application and suggestion APIs behind it are not gated.
   oktaMcpImport: "okta-mcp-import",
-  promptPolicies: "gram-prompt-policies",
+  // Project-targeted, read server-side under the same key: whether a Shadow
+  // MCP server is linked automatically to the project server that proxies its
+  // URL. Here it only picks the official server panel's actions.
+  shadowMCPAutoLink: "shadow-mcp-auto-link",
   // Org-targeted, read server-side under the same key when a private network
   // connection is created: the tailnet gateway when enabled, the Tailscale
   // operator otherwise. The setup sheet shows the matching steps.

@@ -186,6 +186,7 @@ export function setAgentsData(
     parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      projectId?: string | undefined;
       search?: string | undefined;
       nameOrder?: NameOrder | undefined;
       lifecycle?: Array<Lifecycle> | undefined;
@@ -208,6 +209,7 @@ export function invalidateAgents(
     [parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      projectId?: string | undefined;
       search?: string | undefined;
       nameOrder?: NameOrder | undefined;
       lifecycle?: Array<Lifecycle> | undefined;

@@ -9,10 +9,11 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getKeyByIDForUpdate = `-- name: GetKeyByIDForUpdate :one
-SELECT id, organization_id, project_id, slot, provider, api_key_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
 FROM model_provider_keys
 WHERE id = $1
   AND project_id = $2
@@ -35,6 +36,7 @@ func (q *Queries) GetKeyByIDForUpdate(ctx context.Context, arg GetKeyByIDForUpda
 		&i.Slot,
 		&i.Provider,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -63,14 +65,14 @@ type GetKeyForResolutionParams struct {
 	PreferredSlot string
 }
 
-func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (string, error) {
+func (q *Queries) GetKeyForResolution(ctx context.Context, arg GetKeyForResolutionParams) (pgtype.Text, error) {
 	row := q.db.QueryRow(ctx, getKeyForResolution,
 		arg.ProjectID,
 		arg.Slots,
 		arg.Provider,
 		arg.PreferredSlot,
 	)
-	var api_key_encrypted string
+	var api_key_encrypted pgtype.Text
 	err := row.Scan(&api_key_encrypted)
 	return api_key_encrypted, err
 }
@@ -88,10 +90,10 @@ INSERT INTO model_provider_keys (
   , $2
   , $3
   , $4
-  , $5
+  , $5::text
   , $6
 )
-RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertKeyParams struct {
@@ -120,6 +122,7 @@ func (q *Queries) InsertKey(ctx context.Context, arg InsertKeyParams) (ModelProv
 		&i.Slot,
 		&i.Provider,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -130,7 +133,7 @@ func (q *Queries) InsertKey(ctx context.Context, arg InsertKeyParams) (ModelProv
 }
 
 const listKeysByProject = `-- name: ListKeysByProject :many
-SELECT id, organization_id, project_id, slot, provider, api_key_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
 FROM model_provider_keys
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -153,6 +156,7 @@ func (q *Queries) ListKeysByProject(ctx context.Context, projectID uuid.UUID) ([
 			&i.Slot,
 			&i.Provider,
 			&i.ApiKeyEncrypted,
+			&i.ApiKeyOrgEncrypted,
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -176,7 +180,7 @@ SET enabled = $1
 WHERE id = $2
   AND project_id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type SetKeyEnabledParams struct {
@@ -195,6 +199,7 @@ func (q *Queries) SetKeyEnabled(ctx context.Context, arg SetKeyEnabledParams) (M
 		&i.Slot,
 		&i.Provider,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -210,7 +215,7 @@ SET deleted_at = clock_timestamp()
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteKeyByIDParams struct {
@@ -228,6 +233,7 @@ func (q *Queries) SoftDeleteKeyByID(ctx context.Context, arg SoftDeleteKeyByIDPa
 		&i.Slot,
 		&i.Provider,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -243,7 +249,7 @@ SET deleted_at = clock_timestamp()
 WHERE project_id = $1
   AND slot = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, slot, provider, api_key_encrypted, api_key_org_encrypted, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteKeyBySlotParams struct {
@@ -267,6 +273,7 @@ func (q *Queries) SoftDeleteKeyBySlot(ctx context.Context, arg SoftDeleteKeyBySl
 			&i.Slot,
 			&i.Provider,
 			&i.ApiKeyEncrypted,
+			&i.ApiKeyOrgEncrypted,
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,

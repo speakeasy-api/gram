@@ -12,6 +12,14 @@ import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import type { ReactNode } from "react";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import PluginDetail from "./PluginDetail";
+// The request button looks up the viewer's pending access requests when the
+// rollout is on.
+vi.mock("@gram/client/react-query/accessRequests.js", () => ({
+  useAccessRequests: () => ({
+    data: { requests: [] },
+    refetch: () => Promise.resolve(),
+  }),
+}));
 vi.mock("@gram/client/react-query/requestAccess", () => ({
   useRequestAccessMutation: () => ({ mutateAsync: vi.fn() }),
 }));

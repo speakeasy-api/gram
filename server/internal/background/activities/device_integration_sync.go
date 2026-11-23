@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,9 +23,9 @@ type GetDeviceIntegrationSyncCandidates struct {
 	syncer *deviceintegrations.Syncer
 }
 
-func NewGetDeviceIntegrationSyncCandidates(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, encryptionClient *encryption.Client, guardianPolicy *guardian.Policy, features feature.Provider, growthEmitter *growthsignals.Emitter) *GetDeviceIntegrationSyncCandidates {
+func NewGetDeviceIntegrationSyncCandidates(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, encryptionClient *encryption.Client, guardianPolicy *guardian.Policy, features feature.Provider, growthEmitter *growthsignals.Emitter, serverURL *url.URL) *GetDeviceIntegrationSyncCandidates {
 	return &GetDeviceIntegrationSyncCandidates{
-		syncer: deviceintegrations.NewSyncer(logger, meterProvider, db, encryptionClient, guardianPolicy, features, growthEmitter),
+		syncer: deviceintegrations.NewSyncer(logger, meterProvider, db, encryptionClient, guardianPolicy, features, growthEmitter, serverURL),
 	}
 }
 
@@ -53,9 +54,9 @@ type RunDeviceIntegrationSync struct {
 	syncer *deviceintegrations.Syncer
 }
 
-func NewRunDeviceIntegrationSync(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, encryptionClient *encryption.Client, guardianPolicy *guardian.Policy, features feature.Provider, growthEmitter *growthsignals.Emitter) *RunDeviceIntegrationSync {
+func NewRunDeviceIntegrationSync(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, encryptionClient *encryption.Client, guardianPolicy *guardian.Policy, features feature.Provider, growthEmitter *growthsignals.Emitter, serverURL *url.URL) *RunDeviceIntegrationSync {
 	return &RunDeviceIntegrationSync{
-		syncer: deviceintegrations.NewSyncer(logger, meterProvider, db, encryptionClient, guardianPolicy, features, growthEmitter),
+		syncer: deviceintegrations.NewSyncer(logger, meterProvider, db, encryptionClient, guardianPolicy, features, growthEmitter, serverURL),
 	}
 }
 
