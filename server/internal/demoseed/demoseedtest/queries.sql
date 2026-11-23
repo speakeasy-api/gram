@@ -38,9 +38,9 @@ JOIN user_session_issuers u ON u.id = seed.user_session_issuer_id AND NOT u.dele
 WHERE c.organization_id = sqlc.arg(organization_id) AND c.project_id = sqlc.arg(project_id)::text::uuid
 ORDER BY c.id, u.id LIMIT 1;
 
--- name: HasSeedPersonalOffer :one
-SELECT EXISTS (
- SELECT 1
+-- name: HasExactSeedPersonalOffer :one
+SELECT (COUNT(*) = 1 AND COALESCE(bool_and(registration.id = sqlc.arg(registration_id)::text::uuid), FALSE))::boolean
+
  FROM mcp_server_auth_clients offer
  JOIN mcp_auth_clients client
    ON client.id = offer.auth_client_id
@@ -58,6 +58,4 @@ SELECT EXISTS (
               AND details.organization_id = client.organization_id
               AND details.deleted IS FALSE
         )))
-   AND registration.id = sqlc.arg(registration_id)::text::uuid
-   AND registration.deleted IS FALSE
-);
+   AND registration.deleted IS FALSE;

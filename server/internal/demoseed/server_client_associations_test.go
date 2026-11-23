@@ -36,13 +36,13 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 			{"notion-app", "remote-identity-client-notion-app"},
 			{"ema-wiki", "ema-client-wiki"},
 		} {
-			present, err := queries.HasSeedPersonalOffer(ctx, demoseedtest.HasSeedPersonalOfferParams{
+			present, err := queries.HasExactSeedPersonalOffer(ctx, demoseedtest.HasExactSeedPersonalOfferParams{
 				OrgID:          spec.OrgID,
 				ServerID:       seed.det("mcpserver-" + fixture.server).String(),
 				RegistrationID: seed.det(fixture.registration).String(),
 			})
 			require.NoError(t, err)
-			require.True(t, present, "%s must offer its personal registration", fixture.server)
+			require.True(t, present, "%s must offer exactly its expected personal registration", fixture.server)
 		}
 	}
 }

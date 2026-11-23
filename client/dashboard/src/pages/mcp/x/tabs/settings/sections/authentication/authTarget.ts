@@ -1,3 +1,4 @@
+import { standsInForToolset } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import {
@@ -30,6 +31,7 @@ export type AuthTarget = {
   projectId: string;
   /** Selects the Remote MCP identity surface without changing shared auth UI. */
   kind: "remote-mcp" | "standard";
+  hosted?: boolean;
   /** Resource identifier used by the target's mcp:write check. */
   permissionResourceId: string;
   /** The MCP server row id, when the target is one; differs from permissionResourceId for toolset-backed servers. */
@@ -75,6 +77,7 @@ export function useMcpServerAuthTarget(
       slug: mcpServer.slug ?? "mcp",
       projectId: mcpServer.projectId,
       kind: mcpServer.remoteMcpServerId ? "remote-mcp" : "standard",
+      hosted: standsInForToolset(mcpServer),
       permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
       mcpServerId: mcpServer.id,
       supportsOrganizationIssuers: true,
@@ -118,6 +121,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       slug: toolset.slug,
       projectId: toolset.projectId,
       kind: "standard",
+      hosted: true,
       permissionResourceId: toolset.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,

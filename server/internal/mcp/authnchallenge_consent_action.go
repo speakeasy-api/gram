@@ -196,6 +196,15 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	switch r.PostForm.Get("action") {
 	case "connect":
+		if focusServer != "" && endpoint.MetaMcpServerID.Valid {
+			view, _, err := s.gatewayConsent(ctx, endpoint, challengeState, nil, focusServer)
+			if err != nil {
+				return oops.E(oops.CodeUnavailable, err, "read hosted member setup").LogError(ctx, logger)
+			}
+			if view.Focus != nil && !view.Focus.Hidden && view.Focus.HostedSetupNotice() != "" {
+				return oops.E(oops.CodeBadRequest, nil, hostedSetupNotice).LogWarn(ctx, logger)
+			}
+		}
 		client, cerr := resolveClient()
 		if cerr != nil {
 			return cerr

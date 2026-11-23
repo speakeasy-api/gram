@@ -3,10 +3,12 @@ package mcp_test
 import (
 	"context"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -20,6 +22,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -119,7 +122,12 @@ func TestUpstreamIssuerFlag_HostedGatewayAlwaysUsesItsAssignment(t *testing.T) {
 	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	metaSlug := "meta-hosted-source-" + uuid.NewString()[:8]
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
-	hosted := seedHostedMetaMember(t, ctx, ti, meta.ID, "Hosted member", 0, mcpservers.VisibilityPublic, "alpha_tool")
+	hosted := seedHostedMetaMember(t, ctx, ti, meta.ID, "Hosted member", 0, mcpservers.VisibilityPublic, "initial_fixture_tool")
+	toolset, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: hosted.toolsetID, ProjectID: projectID})
+	require.NoError(t, err)
+	var forwarded atomic.Value
+	upstream := newAuthorizationRecorder(t, &forwarded)
+	toolName := addOAuthSecuredHTTPTool(t, ctx, ti, hostedToolset{Toolset: toolset, McpSlug: pgtype.Text{}, CustomDomainID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{}}, upstream.URL)
 
 	columnClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "hosted-source-column", "", []uuid.UUID{sharedIssuerID})
 	associationClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "hosted-source-association", "", []uuid.UUID{sharedIssuerID})
@@ -154,6 +162,10 @@ func TestUpstreamIssuerFlag_HostedGatewayAlwaysUsesItsAssignment(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		ti.features.SetFlag(feature.FlagUpstreamIssuerFromAssociations, orgID, enabled)
 		require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), metaSlug, bearer).statuses[hosted.slug])
+		forwarded.Store("")
+		text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, hosted.slug+"--"+toolName))
+		require.False(t, isError, "%s", text)
+		require.Equal(t, "Bearer token-association", forwarded.Load())
 	}
 
 }

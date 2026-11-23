@@ -515,6 +515,7 @@ func (s *Service) hostedValidationPlacement(ctx context.Context, logger *slog.Lo
 	if err != nil {
 		return none, err
 	}
+	var selected hostedValidationPlacement
 	for _, member := range members {
 		if member.backend != metaMemberBackendHosted || !member.associatedClients[registrationID] {
 			continue
@@ -525,10 +526,13 @@ func (s *Service) hostedValidationPlacement(ctx context.Context, logger *slog.Lo
 			return none, err
 		}
 		if matches {
-			return p, nil
+			if selected.serverID != uuid.Nil {
+				return none, remotesessions.ErrRemoteSessionMisconfigured
+			}
+			selected = p
 		}
 	}
-	return none, nil
+	return selected, nil
 }
 
 func (s *Service) hostedValidationAssignmentMatches(ctx context.Context, organizationID string, placement hostedValidationPlacement, registrationID uuid.UUID) (bool, error) {
@@ -605,7 +609,7 @@ func (s *Service) verifyHostedRemoteSession(ctx context.Context, logger *slog.Lo
 		return fmt.Errorf("%w: enrich hosted registration: %w", errValidationUnfinished, err)
 	}
 	if err != nil {
-		return fmt.Errorf("%w: enrich hosted registration: %w", errRemoteSessionVerdictNotRecorded, err)
+		return fmt.Errorf("%w: %w", errRemoteSessionVerdictNotRecorded, oops.E(oops.CodeUnexpected, err, "enrich hosted registration").LogError(ctx, logger))
 	}
 	issuer, _ := issuerCardBranding(client, false, s.serverURL)
 	verdict, reason := combineUpstreamVerdict(remotesessions.ValidationOutcomeUnknown, "The provider did not report an inactive sign-in.", upstream, issuer)
@@ -623,7 +627,7 @@ func (s *Service) verifyHostedRemoteSession(ctx context.Context, logger *slog.Lo
 		s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, state, client, target, ref.ID, verdict, noMemberProbe, trigger)
 	}
 	if _, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{Status: verdict, Reason: reason, At: probedAt}); err != nil {
-		return fmt.Errorf("%w: record hosted registration validation: %w", errRemoteSessionVerdictNotRecorded, err)
+		return fmt.Errorf("%w: %w", errRemoteSessionVerdictNotRecorded, oops.E(oops.CodeUnexpected, err, "record hosted registration validation").LogError(ctx, logger))
 	}
 	return nil
 }

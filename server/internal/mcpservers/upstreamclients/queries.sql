@@ -182,7 +182,7 @@ WHERE mcp_server_id = @mcp_server_id::uuid
 
 -- name: RequireHostedUpstreamAssignment :exec
 UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
+SET requires_upstream_auth = TRUE, updated_at = clock_timestamp()
 WHERE id = @server_id AND project_id = @project_id AND toolset_id IS NOT NULL AND NOT deleted;
 
 -- name: ListHostedUpstreamAssignments :many
