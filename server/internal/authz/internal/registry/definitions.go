@@ -10,8 +10,8 @@ package registry
 // generated from this literal (scopes_gen.go), so the definitions must compile
 // without them. Validate rejects any string that names no declared scope.
 //
-// Some permissions keep the scope string and dimensions they were first stored
-// with until scopes are renamed.
+// Some permissions, such as plugin:write and log:read, keep the scope string
+// and dimensions they were first stored with until scopes are renamed.
 var Definitions = Registry{
 	Root: RootPermission{Scope: "root", Agent: AgentUnsafe()},
 	Types: []ResourceType{
@@ -71,7 +71,7 @@ var Definitions = Registry{
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
-					// The one org permission checked per project.
+					// The one org permission checked per project, kept for stored grants.
 					Dimensions:    []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
 					Source:        GrantSourceRoles,
 					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
