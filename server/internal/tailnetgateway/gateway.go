@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -115,6 +116,12 @@ type Config struct {
 	// MaxHosts caps nodes hosted by this pod.
 	MaxHosts int
 
+	// TsnetPortBase, when non-zero, gives each node a fixed UDP port from
+	// [TsnetPortBase, TsnetPortBase+MaxHosts) instead of a random one, so the
+	// pod can publish the range on its node for direct connections. Zero
+	// lets tsnet pick.
+	TsnetPortBase uint16
+
 	// ReconcileTaskQueue names the reconciler queue woken on status changes;
 	// empty disables the wake-up.
 	ReconcileTaskQueue string
@@ -157,6 +164,9 @@ func (c Config) Validate() error {
 	}
 	if c.ApprovalGrace < 0 {
 		return errors.New("tailnet gateway approval grace must not be negative")
+	}
+	if c.TsnetPortBase != 0 && int(c.TsnetPortBase)+c.MaxHosts-1 > math.MaxUint16 {
+		return fmt.Errorf("tailnet gateway tsnet port range %d-%d exceeds %d", c.TsnetPortBase, int(c.TsnetPortBase)+c.MaxHosts-1, math.MaxUint16)
 	}
 	return nil
 }
@@ -330,6 +340,7 @@ type Gateway struct {
 	enc       *orgencryption.Service
 	cfg       Config
 	runtime   NodeRuntime
+	ports     *portPool
 	metrics   *Metrics
 	telemetry *netingress.Telemetry
 	requester *networkingress.OutboxRequester
@@ -363,6 +374,7 @@ func New(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Po
 		enc:       enc,
 		cfg:       cfg,
 		runtime:   runtime,
+		ports:     newPortPool(cfg.TsnetPortBase, cfg.MaxHosts),
 		metrics:   NewMetrics(logger, meterProvider),
 		telemetry: netingress.NewTelemetry(logger, meterProvider),
 		requester: networkingress.NewOutboxRequester(cfg.ReconcileTaskQueue),
@@ -716,18 +728,32 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 		return
 	}
 
+	port, err := g.ports.acquire()
+	if err != nil {
+		// MaxHosts bounds the range, so this means a closed node kept its
+		// port. Back off rather than start on a port nothing publishes.
+		logger.ErrorContext(ctx, "assign tsnet port", attr.SlogError(err))
+		g.fail(ctx, s, "no tsnet port available", false)
+		return
+	}
+	if port != 0 {
+		logger = logger.With(attr.SlogTailnetGatewayTsnetPort(port))
+	}
+
 	g.settle(ctx, s, hold(NodeStatusStarting, ""))
 	startedAt := g.now()
-	node, err := g.runtime.Start(ctx, NodeSpec{
+	started, err := g.runtime.Start(ctx, NodeSpec{
 		IngressID: want.id, OrganizationID: want.organizationID, Slot: g.cfg.Ordinal,
 		Hostname: machineName, ServiceName: want.serviceName, Tag: g.cfg.Tag,
 		AuthKey: authKey, Store: store, StateDir: filepath.Join(g.cfg.StateDir, want.id.String()),
-		ControlURL: g.cfg.ControlURL, StartTimeout: g.cfg.StartTimeout,
+		ControlURL: g.cfg.ControlURL, StartTimeout: g.cfg.StartTimeout, Port: port,
 		CertificateEvents: func(ctx context.Context, operation CertificateOperation, result CertificateResult) {
 			g.metrics.CertificateRequest(ctx, want.organizationSlug, operation, result)
 		},
 	})
 	if err != nil {
+		// A failed Start closes its tsnet server before returning.
+		g.ports.release(port)
 		logger.ErrorContext(ctx, "start tailnet node", attr.SlogError(err))
 		if registered && errors.Is(err, ErrNodeNeedsLogin) {
 			// The reconciler deletes the refused device, resets the slot and
@@ -739,6 +765,7 @@ func (g *Gateway) start(ctx context.Context, s *slot) {
 		g.failRegistration(ctx, s, store, registered, err.Error())
 		return
 	}
+	node := &portNode{Node: started, once: sync.Once{}, release: func() { g.ports.release(port) }}
 	state, err := node.Status(ctx)
 	if err != nil {
 		_ = node.Close(ctx)

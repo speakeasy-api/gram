@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -123,6 +124,12 @@ func newTailnetGatewayCommand() *cli.Command {
 			Usage:   "Maximum tailnet nodes hosted by this pod",
 			Value:   tailnetgateway.DefaultMaxHosts,
 			EnvVars: []string{"GRAM_TAILNET_GATEWAY_MAX_HOSTS"},
+		},
+		&cli.UintFlag{
+			Name:    "tsnet-port-base",
+			Usage:   "First fixed UDP port for tailnet nodes; nodes use [base, base+max-hosts). 0 lets each node pick a random port",
+			Value:   0,
+			EnvVars: []string{"GRAM_TAILNET_GATEWAY_TSNET_PORT_BASE"},
 		},
 		&cli.StringFlag{
 			Name:    "control-url",
@@ -325,6 +332,12 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		return tailnetgateway.Config{}, err
 	}
 
+	portBase := c.Uint("tsnet-port-base")
+	if portBase > math.MaxUint16 {
+		return tailnetgateway.Config{}, fmt.Errorf("tsnet port base %d exceeds %d", portBase, math.MaxUint16)
+	}
+	tsnetPortBase := uint16(portBase)
+
 	config := tailnetgateway.Config{
 		Ordinal:            ordinal,
 		PodName:            podName,
@@ -340,6 +353,7 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		StartTimeout:       c.Duration("start-timeout"),
 		ApprovalGrace:      tailnetgateway.DefaultApprovalGrace,
 		MaxHosts:           c.Int("max-hosts"),
+		TsnetPortBase:      tsnetPortBase,
 		ReconcileTaskQueue: c.String(networkIngressQueueFlag),
 		ControlURL:         c.String("control-url"),
 	}

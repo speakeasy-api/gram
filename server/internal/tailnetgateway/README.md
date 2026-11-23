@@ -32,6 +32,22 @@ per-ingress attestor pods.
   a `tsnet.Server` whose `ipn.StateStore` is backed by
   `network_ingress_node_states`. Restarts reconnect as the same device, so
   customers never see registration churn.
+- Direct connections need a fixed UDP port per node. Kubernetes pod
+  networking rewrites a pod's outbound source port per destination, so a node
+  on a random port reports `MappingVariesByDestIP: true`. A client behind a
+  strict NAT then never gets a direct path and stays on a DERP relay, which
+  is too slow for large responses such as `tools/list`. With
+  `GRAM_TAILNET_GATEWAY_TSNET_PORT_BASE` set, each node in a pod takes its own
+  port from `[base, base+GRAM_TAILNET_GATEWAY_MAX_HOSTS)` and returns it
+  once the node has closed. magicsock then also advertises the STUN-observed
+  address with that local port. The deployment publishes the range as UDP
+  `hostPort`s on nodes with public IPs and opens it in the firewall. Ports are
+  only unique within a pod, since every pod is its own node. The default, 0,
+  lets tsnet pick a random port. Each node's port is logged as
+  `gram.tailnet_gateway.tsnet_port`. tsnet's own log goes to a child logger
+  tagged `gram.component=tsnet`: endpoint and path changes
+  (`magicsock: endpoints changed`, `magicsock: disco: node … now using`) at
+  info, the rest at debug.
 - The node advertises the service with `ListenService` in TCP mode: tsnet
   forwards each connection over loopback with a PROXY protocol header naming
   the tailnet peer, and the gateway terminates TLS itself. It resolves the

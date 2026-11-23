@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -159,13 +160,17 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		UserLogf: func(format string, args ...any) {
 			hostLogger.InfoContext(ctx, fmt.Sprintf(format, args...))
 		},
-		Logf:          logger.Discard,
+		Logf:          backendLogf(hostLogger),
 		Ephemeral:     false,
 		AuthKey:       spec.AuthKey,
 		AdvertiseTags: []string{spec.Tag},
 		ControlURL:    spec.ControlURL,
+		Port:          spec.Port,
 	}
 	if err := srv.Start(); err != nil {
+		// Start can fail after binding the UDP port; close so the caller can
+		// hand the port to another node.
+		_ = srv.Close()
 		return nil, fmt.Errorf("start tsnet node: %w", err)
 	}
 
@@ -592,4 +597,30 @@ func (n *tsnetNode) Close(ctx context.Context) error {
 	})
 
 	return errors.Join(errs...)
+}
+
+// pathLines are the tsnet backend log lines that show how peers reach a node:
+// the public endpoints it advertises and when a peer moves to a direct path.
+// They are the only way to tell a direct connection from one relayed through
+// DERP, so they log at info. The rest of tsnet's backend log is voluminous,
+// including per-peer DERP chatter every few seconds, so it logs at debug.
+var pathLines = []string{
+	"magicsock: endpoints changed:",
+	"magicsock: disco: node ",
+}
+
+// backendLogf sends tsnet's backend log to a child of log tagged as tsnet.
+func backendLogf(log *slog.Logger) logger.Logf {
+	backend := log.With(attr.SlogComponent("tsnet"))
+	return func(format string, args ...any) {
+		line := strings.TrimSpace(fmt.Sprintf(format, args...))
+		level := slog.LevelDebug
+		for _, marker := range pathLines {
+			if strings.Contains(line, marker) {
+				level = slog.LevelInfo
+				break
+			}
+		}
+		backend.Log(context.Background(), level, line)
+	}
 }

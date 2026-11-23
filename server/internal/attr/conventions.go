@@ -516,6 +516,7 @@ const (
 	NetworkIngressKubernetesResourceKey = attribute.Key("gram.network_ingress.kubernetes.resource")
 
 	TailnetGatewaySlotKey         = attribute.Key("gram.tailnet_gateway.slot")
+	TailnetGatewayTsnetPortKey    = attribute.Key("gram.tailnet_gateway.tsnet_port")
 	TailnetGatewayNodeStatusKey   = attribute.Key("gram.tailnet_gateway.node_status")
 	TailnetGatewayOperationKey    = attribute.Key("gram.tailnet_gateway.operation")
 	TailnetGatewayResultKey       = attribute.Key("gram.tailnet_gateway.result")
@@ -2623,6 +2624,10 @@ func SlogNetworkIngressKubernetesResource(v string) slog.Attr {
 func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }
 func SlogTailnetGatewaySlot(v int32) slog.Attr {
 	return slog.Int(string(TailnetGatewaySlotKey), int(v))
+}
+
+func SlogTailnetGatewayTsnetPort(v uint16) slog.Attr {
+	return slog.Int(string(TailnetGatewayTsnetPortKey), int(v))
 }
 
 // TailnetGatewayCertificateExpiresAtKey is when a gateway node's TLS
