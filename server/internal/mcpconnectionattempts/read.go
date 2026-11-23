@@ -14,8 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-// attemptHost leaves out a listing row's host, which is its member's, not the attempt's provider.
-const attemptHost = `if(step = 'discovery_member', '', provider_host)`
+// AttemptHostSQL leaves out a listing row's host, which is its member's, not the attempt's provider.
+const AttemptHostSQL = `if(step = 'discovery_member', '', provider_host)`
 
 // attemptEndingColumns are the columns that decide how an attempt ended, plus its
 // provider (the one on the ending row, else the earliest) and weight. They reduce an
@@ -33,9 +33,9 @@ const attemptEndingColumns = `
 	toString(argMax((step, reason), (event_time, step, reason)).2) AS last_reason,
 	max(event_time) AS last_at,
 	ifNull(nullIf(if(countIf(is_final) > 0,
-			argMinIf(` + attemptHost + `, (event_time, step, outcome, reason, ` + attemptHost + `), is_final),
-			argMax(` + attemptHost + `, (event_time, step, reason, ` + attemptHost + `))), ''),
-		argMinIf(` + attemptHost + `, (event_time, ` + attemptHost + `), ` + attemptHost + ` != '')) AS provider,
+			argMinIf(` + AttemptHostSQL + `, (event_time, step, outcome, reason, ` + AttemptHostSQL + `), is_final),
+			argMax(` + AttemptHostSQL + `, (event_time, step, reason, ` + AttemptHostSQL + `))), ''),
+		argMinIf(` + AttemptHostSQL + `, (event_time, ` + AttemptHostSQL + `), ` + AttemptHostSQL + ` != '')) AS provider,
 	toUInt64(max(repeats)) + 1 AS weight`
 
 // attemptColumns reduces an attempt's rows to one AttemptSummary.
@@ -126,13 +126,13 @@ func (f AttemptFilter) where() (string, []any, error) {
 			window, windowArgs = window+" AND organization_id = ?", append(windowArgs, f.OrganizationID)
 		}
 		conds = append(conds, `(organization_id, subject_urn) IN (
-		SELECT organization_id, subject_urn FROM `+eventsTable+`
+		SELECT organization_id, subject_urn FROM `+EventsTable+`
 		WHERE `+window+` AND subject_urn != ''
-			AND attempt_id IN (SELECT attempt_id FROM `+eventsTable+` WHERE `+window+` AND reason != ''))`)
+			AND attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+window+` AND reason != ''))`)
 		args = append(append(args, windowArgs...), windowArgs...)
 		// A row without the person still belongs to the attempt, so select whole attempts.
 		inner := strings.Join(conds, " AND ")
-		return `attempt_id IN (SELECT attempt_id FROM ` + eventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
+		return `attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
 	}
 	return strings.Join(conds, " AND "), args, nil
 }
@@ -147,7 +147,7 @@ func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, eac
 	if filter.FixCandidatesOnly {
 		having = ` HAVING ` + fixCandidates
 	}
-	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+eventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`+having, args...)
+	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+EventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`+having, args...)
 	if err != nil {
 		return fmt.Errorf("query attempts: %w", err)
 	}
