@@ -105,7 +105,8 @@ const (
 	// server-side, where every mcpConnectionHealth method answers not found
 	// without it, and by the dashboard under the same key. Target by
 	// organization group (org slug) or by person "email" (lowercase); API keys
-	// never match a person. Switch to people only after this server is fully
+	// never match a person, and nobody does without local evaluation (PostHog
+	// personal API key). Switch to people only after this server is fully
 	// deployed, and back before rolling it back; servers follow within about a
 	// minute, so check a listed person and an unlisted member of a previously
 	// enabled organization. Fails closed. A rollout gate, not authorization.
