@@ -56,11 +56,9 @@ type Engine struct {
 	db                               *pgxpool.Pool
 	challengeLoggingEnabled          ChallengeLoggingEnabled
 	isDev                            bool
-	// refuseInvalidChecks makes a skipped caller's invalid check fail, as it
-	// does for an enforced caller. It is on in tests and local dev only.
-	// Example: a handler asks for "project:reed" (a typo) on a path only
-	// legacy API keys reach. In production the check is logged and the
-	// request goes through; the handler's test fails.
+	// refuseInvalidChecks is on in tests and local dev, so a handler bug such
+	// as the typo "project:reed" fails there even on a path only legacy API
+	// keys reach.
 	refuseInvalidChecks bool
 	membership          MembershipFetcher
 }
@@ -1037,12 +1035,8 @@ func validateInput(c Check) error {
 	}
 }
 
-// validateUnenforced checks the input of a caller enforcement skips, such
-// as a legacy API key or a public MCP. In production an invalid check is only
-// logged and the request goes through: the skip allows any valid check
-// anyway, so refusing would only let a bug in a handler break the caller. In
-// tests and local dev the first invalid check is returned, so the handler bug
-// fails there before it ships.
+// validateUnenforced only logs in production: the skip allows any valid check
+// anyway, so refusing would only let a handler bug break the caller.
 func (e *Engine) validateUnenforced(ctx context.Context, checks []Check) error {
 	for _, check := range checks {
 		err := validateInput(check)
