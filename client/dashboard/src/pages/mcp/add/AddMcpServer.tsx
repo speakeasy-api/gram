@@ -186,9 +186,9 @@ export default function AddMcpServer(): JSX.Element {
     {
       href: routes.mcp.add.remote.href(),
       icon: <Cloud className="text-foreground size-10" strokeWidth={1.25} />,
-      title: "Remote (by URL)",
+      title: "Hosted remotely",
       description:
-        "Add a server that already runs elsewhere by its URL. Clients can connect through Speakeasy or straight to it.",
+        "Add a server that already runs elsewhere by its URL, proxied or not.",
     },
     {
       href: routes.mcp.add.tunneled.href(),
@@ -303,7 +303,7 @@ export default function AddMcpServer(): JSX.Element {
       <InputDialog
         open={gatewayDialogOpen}
         onOpenChange={setGatewayDialogOpen}
-        title="Create gateway"
+        title="Create Gateway"
         description="One MCP endpoint fronting a set of MCP servers. Add members after creating it."
         submitButtonText="Create"
         inputs={{

@@ -82,8 +82,8 @@ import { useToolsets } from "../../toolsets/useToolsets";
 import { memberWrappers } from "./ensureToolsetWrapper";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
-  hosted: "Hosted by Speakeasy",
-  proxied: "Remote (by URL)",
+  hosted: "Hosted",
+  proxied: "Proxied",
   disabled: "Disabled",
   unproxied: "Unproxied",
   slugless: "No slug",
@@ -94,26 +94,10 @@ const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
 // backend column names each member's actual kind rather than a flat
 // hosted/proxied split.
 const BACKEND_KIND_PRESENTATION = {
-  hosted: { label: "Hosted by Speakeasy", Icon: Server },
-  remote: { label: "Remote (by URL)", Icon: Globe },
+  hosted: { label: "Hosted", Icon: Server },
+  remote: { label: "Remote", Icon: Globe },
   tunneled: { label: "Tunneled", Icon: Cable },
 } as const;
-
-// Names a member by how Speakeasy reaches it, so the picker and the table use
-// the same words. A member that is excluded keeps its classification (Disabled,
-// No slug), because that is what the user needs to fix.
-function memberKindLabel(
-  server: MemberRow["server"],
-  classification: MemberClassification,
-): string {
-  const kind =
-    classification === "hosted" || classification === "proxied"
-      ? memberBackendKind(server)
-      : undefined;
-  return kind
-    ? BACKEND_KIND_PRESENTATION[kind].label
-    : CLASSIFICATION_LABEL[classification];
-}
 
 function BackendKindTag({ row }: { row: MemberRow }): JSX.Element {
   const kind = memberBackendKind(row.server);
@@ -808,7 +792,7 @@ export function AddServersSheet({
         />
       ),
       slug: server.slug,
-      kindLabel: memberKindLabel(server, classification),
+      kindLabel: CLASSIFICATION_LABEL[classification],
       badge:
         classification === "hosted" || classification === "proxied"
           ? undefined

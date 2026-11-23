@@ -340,8 +340,8 @@ describe("ServerUrlSection", () => {
   it("lets a hosted server add another platform address", () => {
     renderSection(hosted(), [platformEndpoint]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add address" }));
-    expect(screen.getByRole("button", { name: "Add address" })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Add hosted address"));
+    expect(screen.getByLabelText("Add address")).toBeTruthy();
   });
 
   it("lets a private hosted server on a platform ingress add a platform address", () => {
@@ -355,7 +355,7 @@ describe("ServerUrlSection", () => {
       [platformEndpoint],
     );
 
-    expect(screen.getByRole("button", { name: "Add address" })).toBeTruthy();
+    expect(screen.getByLabelText("Add hosted address")).toBeTruthy();
   });
 
   it("asks to disable an enabled hosted server before removing its last address", () => {
@@ -447,7 +447,7 @@ describe("ServerUrlSection", () => {
     renderSection(hosted(), [platformEndpoint]);
     slugValidation.mockClear();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add address" }));
+    fireEvent.click(screen.getByLabelText("Add hosted address"));
     expect(slugValidation).toHaveBeenCalledWith(
       expect.any(String),
       null,

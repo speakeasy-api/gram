@@ -186,7 +186,7 @@ export function useGatewayDetailChrome(): McpDetailChrome | null {
           : []),
         {
           key: "authentication",
-          label: "Sign-in",
+          label: "Authentication",
           description: metaMcpServer.userSessionIssuerId
             ? "User sessions are configured for this gateway."
             : "Anyone who knows the URL can connect. Add an issuer to require sign-in.",

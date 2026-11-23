@@ -36,7 +36,6 @@ export function ServerUsageConfirmation({
             value={state.typed}
             onChange={state.setTyped}
             placeholder={state.confirmValue}
-            mutedPlaceholder
             disabled={disabled}
             aria-label="Type the server name to confirm"
             autoComplete="off"

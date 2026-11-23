@@ -1,4 +1,3 @@
-import { MCP_SERVER_KIND_LABEL } from "@/components/mcp/mcp-server-kind";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   pluginServerRef,
@@ -300,13 +299,13 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
   // but there is no separate page to send anyone to.
   let sourceDescription = "Connect an MCP server as this server's source.";
   if (hosted) {
-    sourceDescription = `${MCP_SERVER_KIND_LABEL.hosted}.`;
+    sourceDescription = "Hosted by Speakeasy.";
   } else if (mcpServer?.remoteMcpServerId) {
-    sourceDescription = `${MCP_SERVER_KIND_LABEL.remote}.`;
+    sourceDescription = "Backed by a remote MCP server.";
   } else if (mcpServer?.tunneledMcpServerId) {
-    sourceDescription = `${MCP_SERVER_KIND_LABEL.tunneled}.`;
+    sourceDescription = "Backed by a tunneled MCP server.";
   } else if (mcpServer?.unproxiedMcpServerId) {
-    sourceDescription = `${MCP_SERVER_KIND_LABEL.unproxied}.`;
+    sourceDescription = "Backed by an unproxied MCP server.";
   }
 
   const settingsHref = mcpServerTabHref(routes, idOrSlug, "settings");
@@ -373,7 +372,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
         }),
         {
           key: "authentication",
-          label: "Sign-in",
+          label: "Authentication",
           // A step may point somewhere more exact, so it comes after.
           href: `${settingsHref}#${MCP_AUTHENTICATION_SECTION_ID}`,
           ...(hosted
@@ -505,7 +504,7 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
           <span className="flex items-center gap-1.5">
             Settings
             <SimpleTooltip
-              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Settings > Sign-in.`}
+              tooltip={`${missingRequiredEnvVars === 1 ? "1 required environment variable is" : `${missingRequiredEnvVars} required environment variables are`} not set, so tool calls that need ${missingRequiredEnvVars === 1 ? "it" : "them"} will fail. Set ${missingRequiredEnvVars === 1 ? "it" : "them"} under Sign-in and identity.`}
             >
               <AlertTriangle
                 className="text-warning h-3.5 w-3.5 shrink-0"
@@ -519,13 +518,13 @@ export function useMcpServerDetailChrome(): McpDetailChrome | null {
 
   if (!mcpServer) return null;
   const kindLabel = isRemoteBacked
-    ? MCP_SERVER_KIND_LABEL.remote
+    ? "Remote MCP"
     : isTunneledBacked
-      ? MCP_SERVER_KIND_LABEL.tunneled
+      ? "Tunneled MCP"
       : isUnproxied
-        ? MCP_SERVER_KIND_LABEL.unproxied
+        ? "Unproxied MCP"
         : hosted
-          ? MCP_SERVER_KIND_LABEL.hosted
+          ? "Hosted MCP"
           : undefined;
 
   return {
@@ -576,7 +575,7 @@ const SETUP_PROVIDER_NAME: Record<SetupProvider, string> = {
 
 // The identity modes' names, as Settings' identity cards call them.
 const IDENTITY_LABEL: Record<IdentityMode, string> = {
-  user: "User identity",
+  user: "User Identity",
   agent: "Shared credential",
   none: "Manual",
 };

@@ -244,7 +244,7 @@ it("treats a hosted server's source as done and its sign-in as Speakeasy's", () 
   state.hostedToolset = HOSTED_TOOLSET;
   renderReadiness();
   expect(readiness("Source")).toBe("true");
-  expect(readiness("Sign-in")).toBe("true");
+  expect(readiness("Authentication")).toBe("true");
 });
 
 it("leaves a hosted server's Authentication open while required variables are missing", () => {
@@ -252,7 +252,7 @@ it("leaves a hosted server's Authentication open while required variables are mi
   state.hostedToolset = HOSTED_TOOLSET;
   state.missingEnvVars = 2;
   renderReadiness();
-  expect(readiness("Sign-in")).toBe("false");
+  expect(readiness("Authentication")).toBe("false");
   expect(screen.getByText(/Set 2 required environment variables/)).toBeTruthy();
 });
 
@@ -260,7 +260,7 @@ it("can't confirm a hosted server's Authentication before its toolset loads", ()
   state.server = HOSTED_SERVER;
   state.hostedToolsetLoading = true;
   renderReadiness();
-  expect(readiness("Sign-in")).toBe("null");
+  expect(readiness("Authentication")).toBe("null");
   expect(
     screen.getByText(/Checking required environment variables/),
   ).toBeTruthy();
@@ -269,7 +269,7 @@ it("can't confirm a hosted server's Authentication before its toolset loads", ()
 it("reports a finished toolset lookup with no match as not found", () => {
   state.server = HOSTED_SERVER;
   renderReadiness();
-  expect(readiness("Sign-in")).toBe("null");
+  expect(readiness("Authentication")).toBe("null");
   expect(screen.getByText(/toolset could not be found/)).toBeTruthy();
 });
 
@@ -320,7 +320,9 @@ it("sends a guide-only provider to the Setup page, as the step after Authenticat
   const labels = screen
     .getAllByRole("listitem")
     .map((item) => item.textContent?.split(":")[0]);
-  expect(labels.indexOf("Set up Linear")).toBe(labels.indexOf("Sign-in") + 1);
+  expect(labels.indexOf("Set up Linear")).toBe(
+    labels.indexOf("Authentication") + 1,
+  );
   expect(readiness("Set up Linear")).toBe("false");
   cleanup();
 

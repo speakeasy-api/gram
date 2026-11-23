@@ -81,7 +81,7 @@ describe("CreationIdentityChoice", () => {
     expect(screen.getByText("Default")).toBeDefined();
     expect(
       screen.getByText(
-        "Linear advertises OAuth sign-in, so user identity is the default.",
+        "Linear advertises OAuth sign-in, so User Identity is the default.",
       ),
     ).toBeDefined();
 

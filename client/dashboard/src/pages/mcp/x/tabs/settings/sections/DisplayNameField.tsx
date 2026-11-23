@@ -19,10 +19,7 @@ export function DisplayNameField({
   placeholder: string;
   /** The failed save's message, when the last save failed. */
   error?: string;
-  /**
-   * Stops typing past this many characters, and shows a live count in the
-   * same UTF-16 units the input enforces.
-   */
+  /** Stops typing past this many characters. */
   maxLength?: number;
   /** Set when the draft is over the limit: warns rather than blocks typing. */
   overLimitMessage?: string;
@@ -41,19 +38,8 @@ export function DisplayNameField({
         placeholder={placeholder}
         maxLength={maxLength}
         aria-invalid={error !== undefined || overLimit}
-        aria-describedby={maxLength !== undefined ? `${id}-count` : undefined}
         className={cn(overLimit && "border-warning-default")}
       />
-      {maxLength !== undefined ? (
-        <Text
-          small
-          muted
-          id={`${id}-count`}
-          className="block text-right tabular-nums"
-        >
-          {`${value.length}/${maxLength}`}
-        </Text>
-      ) : null}
       {overLimit ? (
         <Text small warning className="block">
           {overLimitMessage}

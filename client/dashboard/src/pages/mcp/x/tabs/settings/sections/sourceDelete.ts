@@ -1,4 +1,5 @@
 import { isNotFoundError } from "@/lib/route-errors";
+import { formatTunneledMcpDisplay } from "@/lib/sources";
 import type { Gram } from "@gram/client";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
@@ -17,12 +18,15 @@ export type SourceBackedDeleteTarget =
 export type SourceDeleteSpec = {
   title: string;
   entityDescription: string;
+  confirmLabel: string;
+  confirmValue: string;
   successMessage: string;
   failureMessage: string;
 };
 
-// Copy for the cascade dialog. The user confirms by typing the server's own
-// name, the same as every other delete.
+// Copy and the typed-confirmation value for the cascade dialog. Remote and
+// unproxied sources have no slugified name, so the URL is what gets typed;
+// a tunneled source has nothing but its name.
 export function sourceDeleteSpec(
   target: SourceBackedDeleteTarget,
 ): SourceDeleteSpec {
@@ -30,7 +34,9 @@ export function sourceDeleteSpec(
     case "remote":
       return {
         title: "Delete remote MCP server",
-        entityDescription: "the remote MCP source",
+        entityDescription: "the remote MCP server",
+        confirmLabel: "the server URL",
+        confirmValue: target.source.url,
         successMessage: "Remote MCP server deleted",
         failureMessage: "Failed to delete remote MCP server",
       };
@@ -38,45 +44,20 @@ export function sourceDeleteSpec(
       return {
         title: "Delete tunneled MCP server",
         entityDescription: "the tunneled MCP source",
+        confirmLabel: "the source name",
+        confirmValue: formatTunneledMcpDisplay(target.source),
         successMessage: "Tunneled MCP server deleted",
         failureMessage: "Failed to delete tunneled MCP server",
       };
     case "unproxied":
       return {
         title: "Delete unproxied MCP server",
-        entityDescription: "the unproxied MCP source",
+        entityDescription: "the unproxied MCP server",
+        confirmLabel: "the server URL",
+        confirmValue: target.source.url,
         successMessage: "Unproxied MCP server deleted",
         failureMessage: "Failed to delete unproxied MCP server",
       };
-  }
-}
-
-/** What a server with no name is called wherever a delete lists it. */
-const UNNAMED_SERVER_LABEL = "Unnamed server";
-
-// "A", "A and B", "A, B, and C", "A, B, and 2 more": the servers a cascade
-// takes with it, short enough for a card. The dialog lists every one.
-export function nameList(servers: Pick<McpServer, "name">[]): string {
-  const names = servers.map((server) => server.name || UNNAMED_SERVER_LABEL);
-  if (names.length <= 2) return names.join(" and ");
-  if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
-  return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
-}
-
-// What the user types to delete a source-backed server: its name, or for an
-// unnamed one the source's own address or name, never a generic word.
-export function sourceBackedConfirmName(
-  serverName: string | undefined,
-  target: SourceBackedDeleteTarget,
-): string {
-  const name = serverName?.trim();
-  if (name) return name;
-  switch (target.kind) {
-    case "remote":
-    case "unproxied":
-      return target.source.url.trim();
-    case "tunneled":
-      return target.source.name.trim();
   }
 }
 

@@ -53,7 +53,7 @@ export function UpstreamCredentialsSection({
   return (
     <SettingsSection id={UPSTREAM_CREDENTIALS_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Upstream credentials</SettingsSection.Title>
+        <SettingsSection.Title>Identity</SettingsSection.Title>
         <SettingsSection.Description>
           How Speakeasy signs in to the upstream on a caller&apos;s behalf.
           {canManage ? "" : " Only organization admins can change these."}

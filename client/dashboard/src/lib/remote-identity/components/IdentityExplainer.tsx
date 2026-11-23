@@ -74,7 +74,7 @@ function IdentityExplainerContent(): JSX.Element {
   return (
     <div className="grid gap-6 sm:grid-cols-2">
       <div>
-        <div className="text-eyebrow">User identity</div>
+        <div className="text-eyebrow">User Identity</div>
         <div className="mt-3">
           <Flow
             nodes={[

@@ -15,7 +15,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Network, Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { VerifyRemoteMcpUrlButton } from "@/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import { DisplayNameField } from "./DisplayNameField";
+import { UpstreamUrlField } from "./UpstreamUrlField";
+import {
+  type UpstreamUrlDraft,
+  useUpstreamUrlDraft,
+} from "./useUpstreamUrlDraft";
 import {
   FooterSaveButton,
   SettingsSection,
@@ -35,13 +42,45 @@ function codePointLength(value: string): number {
 }
 
 /**
- * The server's name and icon. A remote server's URL has its own section in
- * Connection. One Save commits whatever changed.
+ * The server's basic facts: its icon and name, plus the remote URL when a
+ * remote source backs it. One Save commits whatever changed.
  */
 export function GeneralSection({
   mcpServer,
+  remoteMcpServer,
 }: {
   mcpServer: McpServer;
+  remoteMcpServer?: RemoteMcpServer;
+}): JSX.Element {
+  if (remoteMcpServer) {
+    return (
+      <RemoteGeneralSection
+        key={remoteMcpServer.id}
+        mcpServer={mcpServer}
+        remoteMcpServer={remoteMcpServer}
+      />
+    );
+  }
+  return <GeneralSectionContent mcpServer={mcpServer} upstream={null} />;
+}
+
+function RemoteGeneralSection({
+  mcpServer,
+  remoteMcpServer,
+}: {
+  mcpServer: McpServer;
+  remoteMcpServer: RemoteMcpServer;
+}): JSX.Element {
+  const upstream = useUpstreamUrlDraft(remoteMcpServer);
+  return <GeneralSectionContent mcpServer={mcpServer} upstream={upstream} />;
+}
+
+function GeneralSectionContent({
+  mcpServer,
+  upstream,
+}: {
+  mcpServer: McpServer;
+  upstream: UpstreamUrlDraft | null;
 }): JSX.Element {
   const [nameDraft, setNameDraft] = useState(mcpServer.name ?? "");
 
@@ -89,12 +128,14 @@ export function GeneralSection({
   const trimmedDraft = nameDraft.trim();
   const nameTooLong = codePointLength(trimmedDraft) > NAME_MAX_LENGTH;
   const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
-  const dirty = nameDirty || metadataForm.brandingDirty;
+  const upstreamDirty = !!upstream?.dirty;
+  const dirty = nameDirty || metadataForm.brandingDirty || upstreamDirty;
   // Same check as the Save gate: an edit nobody can save is no change worth
   // guarding.
   const { hasScope } = useRBAC();
   useReportUnsavedChanges(hasScope("mcp:write") && dirty);
-  const saving = update.isPending || metadataForm.isLoading;
+  const saving =
+    update.isPending || metadataForm.isLoading || !!upstream?.pending;
   const supportsEditing = isKnownEnumValue(
     KnownUpdateMcpServerFormVisibility,
     mcpServer.visibility,
@@ -105,7 +146,8 @@ export function GeneralSection({
     trimmedDraft === "" ||
     nameTooLong ||
     saving ||
-    (metadataUnresolved && metadataForm.brandingDirty);
+    (metadataUnresolved && metadataForm.brandingDirty) ||
+    (!!upstream?.dirty && upstream.invalid);
 
   const handleSave = async () => {
     if (
@@ -118,6 +160,10 @@ export function GeneralSection({
     try {
       if (metadataForm.brandingDirty) {
         await metadataForm.saveAsync();
+      }
+
+      if (upstream?.dirty) {
+        await upstream.save();
       }
 
       // Last: a name change moves the route to the new slug.
@@ -161,7 +207,9 @@ export function GeneralSection({
   return (
     <SettingsSection>
       <SettingsSection.Header>
-        <SettingsSection.Title>Name and icon</SettingsSection.Title>
+        <SettingsSection.Title>
+          {upstream ? "Name, icon, and URL" : "Name and icon"}
+        </SettingsSection.Title>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
@@ -203,6 +251,8 @@ export function GeneralSection({
                 <Pencil aria-hidden="true" className="size-3" />
               </span>
             </button>
+            {/* Both fields share one column so their left edges line up
+                beside the icon rather than one of them wrapping under it. */}
             <div className="flex max-w-xl min-w-0 flex-1 flex-col gap-4">
               <DisplayNameField
                 id="mcp-server-display-name"
@@ -216,6 +266,7 @@ export function GeneralSection({
                     : undefined
                 }
               />
+              {upstream ? <UpstreamUrlField upstream={upstream} /> : null}
             </div>
           </div>
           {!supportsEditing && (
@@ -231,8 +282,20 @@ export function GeneralSection({
           )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
+          <SettingsSection.FooterHint>
+            {upstream?.dirty
+              ? "Verify before saving to confirm the remote URL answers as an MCP server."
+              : null}
+          </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
+              {upstream ? (
+                <VerifyRemoteMcpUrlButton
+                  state={upstream.verify}
+                  url={upstream.draft}
+                  disabled={upstream.pending || upstream.invalid}
+                />
+              ) : null}
               <FooterSaveButton
                 pending={saving}
                 disabled={saveDisabled}

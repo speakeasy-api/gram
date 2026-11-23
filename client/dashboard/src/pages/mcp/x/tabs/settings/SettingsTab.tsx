@@ -56,10 +56,6 @@ import {
 } from "./sections/authentication/IdentityChainingSection";
 import { GeneralSection } from "./sections/GeneralSection";
 import {
-  MCP_UPSTREAM_URL_SECTION_ID,
-  UpstreamUrlSection,
-} from "./sections/UpstreamUrlSection";
-import {
   UPSTREAM_CREDENTIALS_SECTION_ID,
   UpstreamCredentialsSection,
 } from "./sections/authentication/UpstreamCredentialsSection";
@@ -106,7 +102,6 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_AGENT_SETUP_SECTION_ID,
   IDENTITY_CHAINING_SECTION_ID,
   MCP_SESSIONS_SECTION_ID,
-  MCP_UPSTREAM_URL_SECTION_ID,
   UPSTREAM_CREDENTIALS_SECTION_ID,
   MCP_VISIBILITY_SECTION_ID,
   ...SETTINGS_GROUP_IDS,
@@ -254,13 +249,31 @@ export function SettingsTab({
               ? toolsetSections && {
                   ...G.identity,
                   content: (
-                    <div id={MCP_AUTHENTICATION_SECTION_ID}>
-                      <ReadinessIssueFrame
-                        anchorId={MCP_AUTHENTICATION_SECTION_ID}
-                      >
-                        <ToolsetOAuthSection toolset={hostedToolset} />
-                      </ReadinessIssueFrame>
-                    </div>
+                    <>
+                      <div id={MCP_AUTHENTICATION_SECTION_ID}>
+                        <ReadinessIssueFrame
+                          anchorId={MCP_AUTHENTICATION_SECTION_ID}
+                        >
+                          <ToolsetOAuthSection toolset={hostedToolset} />
+                        </ReadinessIssueFrame>
+                      </div>
+                      <div id={MCP_ENVIRONMENT_SECTION_ID}>
+                        {/* A stable anchor for the readiness checklist. */}
+                        <div
+                          id={SETTINGS_ENVIRONMENT_VARIABLES_ID}
+                          className="scroll-mt-8"
+                        >
+                          <ReadinessIssueFrame
+                            anchorId={SETTINGS_ENVIRONMENT_VARIABLES_ID}
+                          >
+                            <MCPAuthenticationTab
+                              toolset={hostedToolset}
+                              showOAuth={false}
+                            />
+                          </ReadinessIssueFrame>
+                        </div>
+                      </div>
+                    </>
                   ),
                 }
               : {
@@ -294,24 +307,6 @@ export function SettingsTab({
                     endpoints={endpoints}
                   />
                 )}
-                {toolsetSections ? (
-                  <div id={MCP_ENVIRONMENT_SECTION_ID}>
-                    {/* A stable anchor for the readiness checklist. */}
-                    <div
-                      id={SETTINGS_ENVIRONMENT_VARIABLES_ID}
-                      className="scroll-mt-8"
-                    >
-                      <ReadinessIssueFrame
-                        anchorId={SETTINGS_ENVIRONMENT_VARIABLES_ID}
-                      >
-                        <MCPAuthenticationTab
-                          toolset={hostedToolset}
-                          showOAuth={false}
-                        />
-                      </ReadinessIssueFrame>
-                    </div>
-                  </div>
-                ) : null}
               </>
             ),
           },
@@ -363,7 +358,9 @@ export function SettingsTab({
     return (
       <SettingsLayout
         groups={[
-          {
+          // Held until the source settles: arriving later would remount the
+          // form around its Remote URL and drop anything already typed.
+          (remoteMcpServer || remoteQuery.isError) && {
             ...G.general,
             content: (
               <>
@@ -372,7 +369,10 @@ export function SettingsTab({
                 <AvailabilityAnchor>
                   <AvailabilitySection mcpServer={mcpServer} />
                 </AvailabilityAnchor>
-                <GeneralSection mcpServer={mcpServer} />
+                <GeneralSection
+                  mcpServer={mcpServer}
+                  remoteMcpServer={remoteMcpServer}
+                />
               </>
             ),
           },
@@ -404,10 +404,6 @@ export function SettingsTab({
                     status={upstreamAuth}
                   />
                 )}
-                <RemoteMcpSessionsSection
-                  mcpServer={mcpServer}
-                  mcpUrl={mcpUrl}
-                />
                 <IdentityChainingSection mcpServer={mcpServer} />
               </>
             ),
@@ -422,17 +418,13 @@ export function SettingsTab({
                   isLoadingEndpoints={isLoadingEndpoints}
                   mcpServer={mcpServer}
                 />
-                {/* Keyed by the source, and held until it loads, so a late
-                    arrival never remounts the field over a typed draft. */}
-                {remoteMcpServer ? (
-                  <UpstreamUrlSection
-                    key={remoteMcpServer.id}
-                    remoteMcpServer={remoteMcpServer}
-                  />
-                ) : null}
                 <NetworkAccessSection
                   mcpServer={mcpServer}
                   endpoints={endpoints}
+                />
+                <RemoteMcpSessionsSection
+                  mcpServer={mcpServer}
+                  mcpUrl={mcpUrl}
                 />
               </>
             ),
@@ -586,11 +578,7 @@ function UpstreamIdentityPendingSection({
   return (
     <SettingsSection id={id}>
       <SettingsSection.Header>
-        <SettingsSection.Title>
-          {id === UPSTREAM_CREDENTIALS_SECTION_ID
-            ? "Upstream credentials"
-            : "Sign-in method"}
-        </SettingsSection.Title>
+        <SettingsSection.Title>Identity</SettingsSection.Title>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>

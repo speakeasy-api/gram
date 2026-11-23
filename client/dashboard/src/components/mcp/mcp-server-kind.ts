@@ -10,8 +10,8 @@ import type { useRoutes } from "@/routes";
 export type McpServerKind = "hosted" | "remote" | "tunneled" | "unproxied";
 
 export const MCP_SERVER_KIND_LABEL: Record<McpServerKind, string> = {
-  hosted: "Hosted by Speakeasy",
-  remote: "Remote (by URL)",
+  hosted: "Hosted",
+  remote: "Remote",
   tunneled: "Tunneled",
   unproxied: "Unproxied",
 };

@@ -89,7 +89,7 @@ export function DeleteHostedServerButton({
       >
         <Dialog.Content className="max-w-2xl!">
           <Dialog.Header>
-            <Dialog.Title>Delete MCP server</Dialog.Title>
+            <Dialog.Title>Delete MCP Server</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
             <Text variant="body">
@@ -117,7 +117,7 @@ export function DeleteHostedServerButton({
                 onClick={() => void handleDeleteMcpServer()}
                 disabled={isDeletingMcpServer || !usage.canConfirm}
               >
-                Delete MCP server
+                Delete MCP Server
               </Button>
             </div>
           </div>

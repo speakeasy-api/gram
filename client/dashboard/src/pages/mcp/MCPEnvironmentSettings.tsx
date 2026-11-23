@@ -706,7 +706,7 @@ export function MCPAuthenticationTab({
         }
         action={
           <Button onClick={() => setIsAddingNew(true)} disabled={isAddingNew}>
-            <Button.Text>Add variable</Button.Text>
+            <Button.Text>Add Variable</Button.Text>
           </Button>
         }
       >
@@ -795,7 +795,7 @@ export function MCPAuthenticationTab({
                 <Button.LeftIcon>
                   <Plus className="h-4 w-4" />
                 </Button.LeftIcon>
-                <Button.Text>Add variable</Button.Text>
+                <Button.Text>Add Variable</Button.Text>
               </Button>
             </div>
           )}
@@ -848,7 +848,7 @@ export function MCPAuthenticationTab({
       >
         <Dialog.Content>
           <Dialog.Header>
-            <Dialog.Title>Delete variable</Dialog.Title>
+            <Dialog.Title>Delete Variable</Dialog.Title>
             <Dialog.Description>
               Are you sure you want to delete{" "}
               <strong>{deletingValueVar?.name}</strong>? This action is
@@ -891,7 +891,7 @@ export function MCPAuthenticationTab({
       >
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
-            <Dialog.Title>Create environment</Dialog.Title>
+            <Dialog.Title>Create New Environment</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
             <div>
@@ -1023,7 +1023,7 @@ function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
               <Badge.LeftIcon>
                 <CheckCircle className="h-3.5 w-3.5" />
               </Badge.LeftIcon>
-              <Badge.Text>Login secured</Badge.Text>
+              <Badge.Text>Login Secured</Badge.Text>
             </Badge>
           )}
           <ConvertToUserSessionsButton toolset={toolset} />
@@ -1114,7 +1114,7 @@ function OAuthStatusDisplay({
       <div className="border-success-softest bg-success-softest border border-dashed p-8 text-center">
         <p className="text-success-foreground mb-1">
           <CheckCircle className="text-success-foreground mx-auto mb-1 h-5 w-5" />
-          Login secured
+          Login Secured
         </p>
         <p className="text-success-foreground text-sm">
           Users will authenticate with interactive auth before accessing this

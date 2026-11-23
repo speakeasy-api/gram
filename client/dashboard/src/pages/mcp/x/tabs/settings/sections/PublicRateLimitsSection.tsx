@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/Button";
 import { Field, FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { RequireScope } from "@/components/require-scope";
-import { TechnicalDetails } from "@/components/technical-details";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
@@ -183,12 +182,12 @@ function PublicRateLimits({
       >
         Anonymous rate limit
       </Text>
-      <Text muted small className="mb-2 max-w-3xl">
-        Caps the total requests that anonymous callers can send to MCP servers
-        fronting this source. All anonymous callers share one limit, so it
-        protects your server from overload but does not split the limit fairly
-        between callers. Requests over the limit are refused until capacity
-        frees up again.
+      <Text muted small className="mb-4 max-w-3xl">
+        Caps how many requests anonymous callers can send to MCP servers
+        fronting this source, across every MCP method. One token bucket is
+        shared by all callers, so it bounds the total load on your server rather
+        than fairness between callers. Requests over the limit get HTTP 429 with
+        a Retry-After header.
         {tunneledMcpServer.allowPublic ? null : (
           <>
             {" "}
@@ -203,12 +202,6 @@ function PublicRateLimits({
           </>
         )}
       </Text>
-      <div className="mb-4">
-        <TechnicalDetails>
-          One token bucket covers every MCP method. Requests over the limit get
-          HTTP 429 with a Retry-After header.
-        </TechnicalDetails>
-      </div>
 
       <dl className="mb-4 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-1">
         <dt>

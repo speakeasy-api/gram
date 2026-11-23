@@ -158,7 +158,7 @@ export function IssuerDuplicateWarning({
         <div className="flex gap-2 items-center">
           <InfoIcon className="size-5" />
           <Text>
-            <strong>Existing issuer available</strong>
+            <strong>Existing Issuer Available</strong>
           </Text>
         </div>
         <Text small>{tierCopy(primary)}</Text>

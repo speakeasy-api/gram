@@ -136,13 +136,13 @@ export function ServiceAccountPanel({
               options={[
                 {
                   value: "client-secret",
-                  title: "Client secret",
+                  title: "Client Secret",
                   description:
                     "Paste a client ID and secret from the authorization server.",
                 },
                 {
                   value: "signing-key",
-                  title: "Signing client",
+                  title: "Signing Client",
                   description:
                     "Speakeasy signs its token requests with a key in your KMS.",
                   unavailable: customerManagedKeys ? undefined : "Requires KMS",

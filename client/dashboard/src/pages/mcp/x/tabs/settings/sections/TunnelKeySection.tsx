@@ -27,7 +27,7 @@ function RotatedKeyDialogBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>Tunnel key rotated</Dialog.Title>
+        <Dialog.Title>Tunnel Key Rotated</Dialog.Title>
         <Dialog.Description>
           Copy the new key now. It will not be shown again.
         </Dialog.Description>
@@ -165,7 +165,7 @@ export function TunnelKeySection({
           ) : (
             <>
               <Dialog.Header>
-                <Dialog.Title>Rotate tunnel key</Dialog.Title>
+                <Dialog.Title>Rotate Tunnel Key</Dialog.Title>
                 <Dialog.Description>
                   The current key will stop working for new tunnel connections.
                 </Dialog.Description>

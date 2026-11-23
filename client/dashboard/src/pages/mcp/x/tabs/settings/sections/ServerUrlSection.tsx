@@ -1,5 +1,5 @@
 import { Spinner } from "@/components/ui/Spinner";
-import { ExternalLink, Plus } from "lucide-react";
+import { ExternalLink, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import {
   Field,
   FieldDescription,
@@ -313,12 +313,13 @@ export function ServerUrlSection({
                         <div>
                           <Button
                             variant="secondary"
+                            aria-label="Add hosted address"
                             onClick={() => setAddingPlatform(true)}
                           >
                             <Button.LeftIcon>
                               <Plus className="size-4" />
                             </Button.LeftIcon>
-                            <Button.Text>Add address</Button.Text>
+                            <Button.Text>Add</Button.Text>
                           </Button>
                         </div>
                       </RequireScope>
@@ -621,7 +622,13 @@ function AddressRow({
             }}
             aria-label={update.isPending ? "Saving address" : "Save address"}
           >
-            <Button.Text>{update.isPending ? "Saving…" : "Save"}</Button.Text>
+            <Button.Icon>
+              {update.isPending ? (
+                <Spinner className="mr-0 size-4" />
+              ) : (
+                <SaveIcon aria-hidden="true" className="size-4" />
+              )}
+            </Button.Icon>
           </Button>
           <Button
             variant="destructive-secondary"
@@ -641,7 +648,9 @@ function AddressRow({
               remove.mutate({ request: { id: endpoint.id } });
             }}
           >
-            <Button.Text>Remove</Button.Text>
+            <Button.LeftIcon>
+              <Trash2 className="size-4" />
+            </Button.LeftIcon>
           </Button>
         </RequireScope>
       </Stack>
@@ -1010,7 +1019,13 @@ function NewPlatformAddressRow({
           onClick={() => void handleCreate()}
           aria-label={submitting ? "Adding address" : "Add address"}
         >
-          <Button.Text>{submitting ? "Adding…" : "Add"}</Button.Text>
+          <Button.Icon>
+            {submitting ? (
+              <Spinner className="mr-0 size-4" />
+            ) : (
+              <SaveIcon aria-hidden="true" className="size-4" />
+            )}
+          </Button.Icon>
         </Button>
         <Button
           size="md"
@@ -1018,7 +1033,9 @@ function NewPlatformAddressRow({
           disabled={submitting}
           onClick={onClose}
         >
-          <Button.Text>Cancel</Button.Text>
+          <Button.LeftIcon>
+            <XIcon className="size-4" />
+          </Button.LeftIcon>
         </Button>
       </Stack>
       {suffix.trim() && slugError && (
@@ -1108,7 +1125,13 @@ function NewCustomAddressRow({
           onClick={() => void handleCreate()}
           aria-label={submitting ? "Adding address" : "Add address"}
         >
-          <Button.Text>{submitting ? "Adding…" : "Add"}</Button.Text>
+          <Button.Icon>
+            {submitting ? (
+              <Spinner className="mr-0 size-4" />
+            ) : (
+              <SaveIcon aria-hidden="true" className="size-4" />
+            )}
+          </Button.Icon>
         </Button>
         <Button
           size="md"
@@ -1116,7 +1139,9 @@ function NewCustomAddressRow({
           disabled={submitting}
           onClick={onClose}
         >
-          <Button.Text>Cancel</Button.Text>
+          <Button.LeftIcon>
+            <XIcon className="size-4" />
+          </Button.LeftIcon>
         </Button>
       </Stack>
       {slug.trim() && slugError && (

@@ -21,11 +21,7 @@ import {
   useNewServerGuardrail,
   type NewServerGuardrailOutcome,
 } from "@/pages/security/server-guardrails/useNewServerGuardrail";
-import { TechnicalDetails } from "@/components/technical-details";
-import {
-  RESOURCE_IDENTIFIER_EXPLAINER,
-  RESOURCE_IDENTIFIER_TECHNICAL,
-} from "./copy";
+import { RESOURCE_IDENTIFIER_EXPLAINER } from "./copy";
 import { useCreateTunneledMcpSource } from "./hooks";
 import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
 import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
@@ -283,9 +279,6 @@ export default function CreateTunneledMcp(): JSX.Element {
               <Text muted small>
                 {`${RESOURCE_IDENTIFIER_EXPLAINER} Leave blank if unknown — it can be recorded later in the source settings.`}
               </Text>
-              <TechnicalDetails>
-                {RESOURCE_IDENTIFIER_TECHNICAL}
-              </TechnicalDetails>
             </Stack>
 
             <Stack gap={1}>

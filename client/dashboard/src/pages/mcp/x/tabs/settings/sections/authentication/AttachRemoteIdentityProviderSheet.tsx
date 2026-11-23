@@ -840,7 +840,7 @@ export function AttachRemoteIdentityProviderSheet({
         >
           <SheetHeader className="px-6 pt-6 pb-0">
             <SheetTitle className="text-lg font-semibold">
-              Attach authorization server
+              Attach Authorization Server
             </SheetTitle>
           </SheetHeader>
 
@@ -1022,7 +1022,7 @@ export function AttachRemoteIdentityProviderSheet({
               onClick={handleSubmit}
             >
               <Button.Text>
-                {submitting ? "Attaching…" : "Attach authorization server"}
+                {submitting ? "Attaching…" : "Attach Authorization Server"}
               </Button.Text>
             </Button>
           </SheetFooter>
@@ -1059,7 +1059,7 @@ export function AttachRemoteIdentityProviderSheet({
                 attachMutation.mutate();
               }}
             >
-              <Button.Text>Attach authorization server</Button.Text>
+              <Button.Text>Attach Authorization Server</Button.Text>
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
