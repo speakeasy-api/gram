@@ -625,6 +625,11 @@ func NewTemporalWorker(
 		temporalWorker.RegisterWorkflow(FleetHealthCacheWorkflow)
 	}
 
+	if opts.DB != nil {
+		temporalWorker.RegisterActivityWithOptions(newHooksRolloutStageAdvancer(logger, opts.DB).Advance, activity.RegisterOptions{Name: hooksRolloutStagesActivity})
+		temporalWorker.RegisterWorkflow(HooksRolloutStagesWorkflow)
+	}
+
 	if opts.HookFleetMetrics != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.HookFleetMetrics.Emit, activity.RegisterOptions{Name: hookFleetMetricsActivity})
 		temporalWorker.RegisterWorkflow(HookFleetMetricsWorkflow)
@@ -1009,6 +1014,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if opts.FleetHealthCache != nil {
 		if err := addFleetHealthCacheSchedule(ctx, env); err != nil {
 			logger.ErrorContext(ctx, "register fleet health cache schedule", attr.SlogError(err))
+		}
+	}
+
+	if opts.DB != nil {
+		if err := addHooksRolloutStagesSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register hooks rollout stages schedule", attr.SlogError(err))
 		}
 	}
 

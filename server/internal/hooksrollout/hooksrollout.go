@@ -46,6 +46,10 @@ const (
 	// SourceDefault means the platform-wide default pin applies.
 	SourceDefault Source = "default"
 
+	// SourceStage means an active staged rollout clears the organization for
+	// a version newer than the default pin.
+	SourceStage Source = "stage"
+
 	// SourceUnset means no pin applies: there is no override and no default
 	// pin has been set yet.
 	SourceUnset Source = "unset"
@@ -70,20 +74,32 @@ type OrganizationPins struct {
 
 	// Default is the platform-wide default pin, nil until one is set.
 	Default *Pin
+
+	// Stage is the current staged rollout, nil when none was ever staged.
+	Stage *Stage
 }
 
 // Effective returns the pin that applies to the organization and where it
-// comes from. It returns a nil pin with SourceUnset when neither applies.
-// Canary status is the caller's to check, since it depends on the slug.
-func (p OrganizationPins) Effective() (*Pin, Source) {
+// comes from. It returns a nil pin with SourceUnset when none applies. Canary
+// status is the caller's to check.
+func (p OrganizationPins) Effective(organizationID string) (*Pin, Source) {
 	switch {
 	case p.Override != nil:
 		return p.Override, SourceOrganization
+	case p.stageClears(organizationID):
+		return &Pin{Version: p.Stage.Version, SetBy: p.Stage.SetBy, SetAt: p.Stage.SetAt}, SourceStage
 	case p.Default != nil:
 		return p.Default, SourceDefault
 	default:
 		return nil, SourceUnset
 	}
+}
+
+func (p OrganizationPins) stageClears(organizationID string) bool {
+	if !p.Stage.Active() || !InStage(organizationID, p.Stage.Percent) {
+		return false
+	}
+	return p.Default == nil || p.Stage.Version > p.Default.Version
 }
 
 // Override is an organization's current override, with the organization's
@@ -149,7 +165,11 @@ func (s *Store) OrganizationPins(ctx context.Context, organizationID string) (Or
 	if err != nil {
 		return OrganizationPins{}, err
 	}
-	return OrganizationPins{Override: override, Default: defaultPin}, nil
+	stage, err := currentStage(ctx, s.queries)
+	if err != nil {
+		return OrganizationPins{}, err
+	}
+	return OrganizationPins{Override: override, Default: defaultPin, Stage: stage}, nil
 }
 
 // DefaultPin reads the default pin, nil when none has been set.
