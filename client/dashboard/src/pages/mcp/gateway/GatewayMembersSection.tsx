@@ -83,7 +83,7 @@ import { memberWrappers } from "./ensureToolsetWrapper";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   hosted: "Hosted by Speakeasy",
-  proxied: "Remote (by URL)",
+  proxied: "Proxied",
   disabled: "Disabled",
   unproxied: "Unproxied",
   slugless: "No slug",
@@ -95,7 +95,7 @@ const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
 // hosted/proxied split.
 const BACKEND_KIND_PRESENTATION = {
   hosted: { label: "Hosted by Speakeasy", Icon: Server },
-  remote: { label: "Remote (by URL)", Icon: Globe },
+  remote: { label: "Remote", Icon: Globe },
   tunneled: { label: "Tunneled", Icon: Cable },
 } as const;
 

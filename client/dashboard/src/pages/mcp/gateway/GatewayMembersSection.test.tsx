@@ -266,7 +266,7 @@ describe("Add servers sheet", () => {
       screen.getByRole("checkbox", { name: "Alpha" }).closest("li")!,
     );
     expect(alpha.getByText("alpha")).toBeTruthy();
-    expect(alpha.getByText("Remote (by URL)")).toBeTruthy();
+    expect(alpha.getByText("Remote")).toBeTruthy();
     expect(alpha.queryByText("Excluded")).toBeNull();
     const beta = within(
       screen.getByRole("checkbox", { name: "Beta" }).closest("li")!,
