@@ -1,18 +1,19 @@
 package keys_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestReapStalePluginAPIKeys(t *testing.T) {
@@ -25,26 +26,34 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 	project := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
 	orphan := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 
+	keysQ := keysrepo.New(ti.conn)
+	fixtures := testrepo.New(ti.conn)
 	insert := func(name string, prefixMatches bool, projectID uuid.NullUUID, age time.Duration, lastUsed *time.Duration) uuid.UUID {
 		t.Helper()
 		token := name[len(name)-6:]
 		if !prefixMatches {
 			token = "zzzzzz"
 		}
-		var id uuid.UUID
-		var lastAccessed *time.Time
-		if lastUsed != nil {
-			at := time.Now().Add(-*lastUsed)
-			lastAccessed = &at
-		}
-		err := ti.conn.QueryRow(ctx, `
-			INSERT INTO api_keys (organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, created_at, last_accessed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, ARRAY['hooks'], $7, $8)
-			RETURNING id`,
-			authCtx.ActiveOrganizationID, projectID, authCtx.UserID, name, "gram_local_"+token[:5], uuid.NewString(), time.Now().Add(-age), lastAccessed,
-		).Scan(&id)
+		key, err := keysQ.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+			OrganizationID:  authCtx.ActiveOrganizationID,
+			ProjectID:       projectID,
+			CreatedByUserID: authCtx.UserID,
+			Name:            name,
+			KeyPrefix:       "gram_local_" + token[:5],
+			KeyHash:         uuid.NewString(),
+			Scopes:          []string{"hooks"},
+		})
 		require.NoError(t, err)
-		return id
+		lastAccessed := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+		if lastUsed != nil {
+			lastAccessed = pgtype.Timestamptz{Time: time.Now().Add(-*lastUsed), InfinityModifier: pgtype.Finite, Valid: true}
+		}
+		require.NoError(t, fixtures.SetAPIKeyActivityFixture(ctx, testrepo.SetAPIKeyActivityFixtureParams{
+			CreatedAt:      pgtype.Timestamptz{Time: time.Now().Add(-age), InfinityModifier: pgtype.Finite, Valid: true},
+			LastAccessedAt: lastAccessed,
+			ID:             key.ID,
+		}))
+		return key.ID
 	}
 	recent := 2 * day
 
@@ -84,7 +93,9 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 		// Created after the latest publish, so the publish anchor doesn't cover it.
 		postPublishDownload: true,
 	} {
-		require.Equal(t, wantDeleted, isKeyDeleted(t, ti.conn, id), fmt.Sprintf("key %s", id))
+		key, err := keysQ.GetAPIKeyByID(ctx, keysrepo.GetAPIKeyByIDParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID})
+		require.NoError(t, err)
+		require.Equal(t, wantDeleted, key.Deleted, "key %s", id)
 	}
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionKeyRevoke)
@@ -99,11 +110,4 @@ func TestReapStalePluginAPIKeys(t *testing.T) {
 	reaped, err = keys.ReapStalePluginAPIKeys(ctx, ti.conn, audit.NewLogger(), 100)
 	require.NoError(t, err)
 	require.Zero(t, reaped)
-}
-
-func isKeyDeleted(t *testing.T, conn *pgxpool.Pool, id uuid.UUID) bool {
-	t.Helper()
-	var deleted bool
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT deleted FROM api_keys WHERE id = $1`, id).Scan(&deleted))
-	return deleted
 }
