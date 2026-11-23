@@ -853,6 +853,40 @@ func TestCredentialRejected(t *testing.T) {
 	}
 }
 
+func TestChallengeError(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		challenge       []string
+		wantCode        string
+		wantDescription string
+	}{
+		{name: "no challenge", challenge: nil},
+		{name: "challenge without an error", challenge: []string{`Bearer realm="api"`}},
+		{name: "error only", challenge: []string{`Bearer error="invalid_token"`}, wantCode: "invalid_token"},
+		{name: "error and description", challenge: []string{`Bearer error="invalid_token", error_description="credential expired"`}, wantCode: "invalid_token", wantDescription: "credential expired"},
+		{name: "description before error", challenge: []string{`Bearer error_description="credential expired", error="invalid_token"`}, wantCode: "invalid_token", wantDescription: "credential expired"},
+		{name: "DPoP challenge after another scheme", challenge: []string{`Basic realm="api", DPoP error="invalid_token", error_description="key mismatch"`}, wantCode: "invalid_token", wantDescription: "key mismatch"},
+		{name: "error on another scheme", challenge: []string{`ApiKey error="invalid_token", error_description="ignored"`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, description := ChallengeError(tc.challenge)
+			require.Equal(t, tc.wantCode, code)
+			require.Equal(t, tc.wantDescription, description)
+		})
+	}
+}
+
+func TestRefusalHappened_UpstreamCredentialRejectionIsAProviderRejection(t *testing.T) {
+	t.Parallel()
+
+	code, ok := refusalHappened(fmt.Errorf("refresh tool catalog: %w", ErrUpstreamCredentialRejected))
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeProviderRejected, code)
+}
+
 // A 403 on a direct server's handshake or tool call is a rejection only when its challenge says the token is invalid.
 func TestRequestConnections_ForbiddenNeedsAnInvalidToken(t *testing.T) {
 	t.Parallel()
