@@ -74,7 +74,7 @@ func TestReconnectRecordsOnlyReviewedTypedChoices(t *testing.T) {
 	client := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
 	previous := &connectionCatalog{IssuerID: issuerID, OrganizationID: f.orgID}
 	next := &connectionCatalog{IssuerID: issuerID, OrganizationID: f.orgID, Members: map[string]connectionCatalogMember{
-		"source": {ServerID: f.serverID, ProjectID: f.projectID, Auth: &connectionCatalogAuth{ClientID: client, RegistrationID: validUUID(f.registration), ExplicitPick: false}},
+		"source": {ServerID: f.serverID, ProjectID: f.projectID, Auth: &connectionCatalogAuth{ClientID: client, RegistrationID: validUUID(f.registration)}},
 	}}
 	replace := func(previous, next *connectionCatalog) {
 		t.Helper()
@@ -98,15 +98,20 @@ func TestReconnectRecordsOnlyReviewedTypedChoices(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, untouched.NoAuth)
 
-	// The same reviewed client is writable only after an explicit EMA pick.
+	// A reconnect can keep an EMA binding from a catalog that predates the
+	// picker flag. It cannot revive the binding after retirement.
 	ema := f.adminClient(authClientTypeEMA, validUUID(f.registration))
+	paramsSet := next.upstreamChoices(credentialID)
+	paramsSet.PickedAuthClientIds = []uuid.UUID{ema}
+	_, err = usersessionsrepo.New(pool).RecordIssuedAuthClientChoices(ctx, paramsSet)
+	require.NoError(t, err)
 	next.Members["source"].Auth.ClientID = ema
-	replace(next, next)
-	_, err = f.q.GetSelectionFixture(ctx, params)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	next.Members["source"].Auth.ExplicitPick = true
 	replace(next, next)
 	choice, err = f.q.GetSelectionFixture(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, validUUID(ema), choice.AuthClientID)
+	require.NoError(t, f.q.SoftDeleteAuthClientFixture(ctx, ema))
+	replace(next, next)
+	_, err = f.q.GetSelectionFixture(ctx, params)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

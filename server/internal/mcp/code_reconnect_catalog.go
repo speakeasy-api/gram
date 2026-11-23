@@ -233,7 +233,10 @@ func reconnectMemberIDs(catalogs ...*connectionCatalog) []uuid.UUID {
 
 // replaceReconnectUpstreamChoices runs inside the approval transaction, after
 // locking the connection. Removed members are retired; only the new catalogue's
-// members can receive choices. Other servers on the issuer are untouched.
+// members can receive choices. An unchanged reviewed binding is written
+// back only if the typed offer and registration still agree; previous
+// catalog entries are never inputs to the writer. Other servers on the
+// issuer are untouched.
 func replaceReconnectUpstreamChoices(ctx context.Context, q *usersessionsrepo.Queries, credentialID uuid.UUID, previous, next *connectionCatalog) error {
 	if err := q.SoftDeleteReconnectUpstreamChoices(ctx, usersessionsrepo.SoftDeleteReconnectUpstreamChoicesParams{
 		CredentialID: credentialID, OrganizationID: next.OrganizationID, McpServerIds: reconnectMemberIDs(previous, next),

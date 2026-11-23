@@ -130,7 +130,6 @@ func (m connectionCatalogMember) approvedHash(typed bool) string {
 type connectionCatalogAuth struct {
 	ClientID       uuid.UUID     `json:"client_id"`
 	RegistrationID uuid.NullUUID `json:"registration_id"`
-	ExplicitPick   bool          `json:"explicit_pick,omitempty"`
 }
 
 // connectionCatalog freezes discovery for one approved OAuth connection.
@@ -248,7 +247,9 @@ func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID) usersessions
 		picks.ScopeMcpServerIds = append(picks.ScopeMcpServerIds, member.ServerID)
 		if member.Auth != nil {
 			picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, member.ServerID)
-			picks.PickedExplicit = append(picks.PickedExplicit, member.Auth.ExplicitPick)
+			// The approved catalog binds the exact client used for the tool
+			// preview, whether preselected or named in the picker.
+			picks.PickedExplicit = append(picks.PickedExplicit, true)
 			picks.PickedClientIds = append(picks.PickedClientIds, member.Auth.RegistrationID.UUID)
 			picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, member.Auth.ClientID)
 		}
