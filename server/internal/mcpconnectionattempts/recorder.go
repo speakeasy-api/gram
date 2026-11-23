@@ -43,7 +43,8 @@ const (
 		remote_session_client_id, subject_urn, user_session_id, remote_session_id,
 		trace_id, provider_host, app_key, client_family, client_version, repeats, device_key)`
 
-	eventsTable = "mcp_connection_events"
+	// EventsTable holds one row per step of an attempt.
+	EventsTable = "mcp_connection_events"
 
 	// defaultQueueSize holds about 2 MiB of rows, enough for a long ClickHouse stall.
 	defaultQueueSize = 4096
@@ -380,7 +381,7 @@ func idString(id uuid.UUID) string {
 // AppendRows inserts rows with the posture the context carries. It never
 // retries: a repeated insert would double count step_events in the rollup.
 func AppendRows(ctx context.Context, conn driver.Conn, rows []Row) error {
-	return appendRowsInto(ctx, conn, eventsTable, rows)
+	return appendRowsInto(ctx, conn, EventsTable, rows)
 }
 
 func appendRowsInto(ctx context.Context, conn driver.Conn, table string, rows []Row) error {
@@ -502,7 +503,7 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 // nothing is written.
 func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), opts ...RecorderOption) *Recorder {
 	return newRecorder(logger, meterProvider, conn, logsEnabled, config{
-		table:            eventsTable,
+		table:            EventsTable,
 		queueSize:        defaultQueueSize,
 		maxBatch:         defaultMaxBatch,
 		flushInterval:    defaultFlushInterval,
