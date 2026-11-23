@@ -2023,7 +2023,7 @@ func newStartCommand() *cli.Command {
 			riskFindings := riskchrepo.New(chDB)
 			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
-			workloadPolicySvc := workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), featureFlags)
+			workloadPolicySvc := workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient))
 			channelsCfg := channelsConfig{
 				Logger: logger, Mux: mux, DB: db, ServerURL: serverURL, DashboardURL: siteURL,
 				Authz: authzEngine, Sessions: sessionManager, AuditLogger: auditLogger,
