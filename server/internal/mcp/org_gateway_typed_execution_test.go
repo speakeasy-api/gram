@@ -100,7 +100,12 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 			}
 		}
 	}
-	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{UserSessionIssuerID: fx.issuerID, ClientID: "typed-consent-" + uuid.NewString(), ClientName: "Typed consent", RedirectUris: []string{"http://localhost:3000/callback"}, TokenEndpointAuthMethod: "none"})
+	clientID, callback := "typed-consent-"+uuid.NewString(), "http://localhost:3000/callback"
+	if inspect {
+		clientID, callback = "speakeasy-dashboard-inspect", "https://dashboard.example.test/inspect/oauth/callback"
+		ti.service.SetPlatformHosts(map[string]string{"dashboard.example.test": "https://dashboard.example.test"})
+	}
+	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{UserSessionIssuerID: fx.issuerID, ClientID: clientID, ClientName: "Typed consent", RedirectUris: []string{callback}, TokenEndpointAuthMethod: "none"})
 	require.NoError(t, err)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)
@@ -141,6 +146,11 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		page := httptest.NewRecorder()
 		require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, path+"/connect?"+query.Encode(), nil).WithContext(ctx), endpoint))
 		require.Equal(t, http.StatusOK, page.Code)
+		if inspect {
+			require.Contains(t, page.Body.String(), `data-gateway="true"`)
+			require.Contains(t, page.Body.String(), "Progressive (dashboard Inspect)")
+			require.NotContains(t, page.Body.String(), `name="discovery_mode"`)
+		}
 		inventory := gatewayInventoryFromPage(t, page.Body.String())
 		names := make([]string, 0, len(inventory.Tools))
 		for _, tool := range inventory.Tools {
@@ -151,6 +161,11 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}, "tool_inventory_id": {inventory.Attempt}, "discovery_mode": {string(metamcp.DiscoveryModeProgressive)}, "tool_catalog_mode": {string(toolfilter.CatalogModeCached)}, "tool_filtering": {"on"}, "tools": {"typed-personal--ping"}}
 		if picker {
 			form.Set("auth_client.typed-personal", selectedClient.String())
+		}
+		if inspect {
+			// Even a posted mode cannot make the reviewed Inspect bearer lose
+			// its status and progressive discovery tools.
+			form.Set("discovery_mode", "code_mode")
 		}
 		request := httptest.NewRequest(http.MethodPost, path+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -170,6 +185,11 @@ func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientTy
 		policy, err := toolfilter.ParseSessionPolicy(rawPolicy)
 		require.NoError(t, err)
 		require.NotNil(t, policy.Catalog)
+		if inspect {
+			require.NotNil(t, policy.Gateway)
+			require.NotNil(t, policy.Gateway.DiscoveryMode)
+			require.Equal(t, metamcp.DiscoveryModeProgressive, *policy.Gateway.DiscoveryMode)
+		}
 		require.NotNil(t, policy.Selection)
 		require.True(t, policy.Selection.AllowsName("typed-personal--ping"))
 		require.False(t, policy.Selection.AllowsName("typed-excluded--other"))
