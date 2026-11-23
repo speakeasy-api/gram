@@ -314,9 +314,8 @@ type RoleAuditActor struct {
 // Keep access service call sites concise while exposing the actor to other packages.
 type accessAuditActor = RoleAuditActor
 
-// validateRoleGrants checks a role write before anything is stored, so a bad
-// grant is a 400 rather than a failed write. For example, an mcp:write rule
-// limited to one tool is refused here: tools only limit mcp:connect.
+// validateRoleGrants runs before any write, so a bad grant is a 400 rather
+// than a failed write.
 func validateRoleGrants(grants []*authz.RoleGrant) error {
 	if err := authz.ValidateGrantSource(authz.GrantSourceRoles, grants); err != nil {
 		return fmt.Errorf("check grant source: %w", err)
