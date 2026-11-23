@@ -1,0 +1,63 @@
+server/internal/intentpolicy/gemini.go
+  s_939a11e59e098b::t_159bb52a55c594 1-252
+server/internal/intentpolicy/testdata/messages.json
+  s_939a11e59e098b::t_9a44d01bd68956 1-16
+  s_939a11e59e098b::t_08bda71fe7bebb 17-45
+server/internal/intentpolicy/contracts_test.go
+  s_939a11e59e098b::t_6c8934a5118a26 1-196
+server/internal/intentpolicy/testdata/pi.jsonl
+  s_939a11e59e098b::t_9a44d01bd68956 1-4
+server/internal/intentpolicy/jev.go
+  s_939a11e59e098b::t_9d7b3389363529 1-189
+server/internal/intentpolicy/guardrail.go
+  s_939a11e59e098b::t_b9d3570530f68d 1-103,105-132
+  s_939a11e59e098b::t_0234131f4f8a22 104
+server/internal/classifier/jev/jev.go
+  s_939a11e59e098b::t_948a6e51bf622f 24,81,112,245
+  s_939a11e59e098b::t_db386d1d92b7d8 35
+  s_939a11e59e098b::t_7079038613d2b4 55-64
+server/internal/intentpolicy/analyze.go
+  s_939a11e59e098b::t_e23c616db956e8 1-124
+server/internal/intentpolicy/transcript.go
+  s_939a11e59e098b::t_585b2202307a96 1-311
+server/internal/intentpolicy/testdata/claude-code.jsonl
+  s_939a11e59e098b::t_9a44d01bd68956 1-6
+server/internal/intentpolicy/contracts.go
+  s_939a11e59e098b::t_3f39e818af4eb9 90-96,98-99
+  s_939a11e59e098b::t_51d55778aedb77 174-179,182-200
+  s_939a11e59e098b::t_fc8f923502c18d 1-12,14-70,72,74,77-89,97,100-173,201-204,207,209-210,212-236
+  s_939a11e59e098b::t_c82333094b2508 13,71,73,75-76,180-181,205-206,208,211
+server/internal/intentpolicy/store.go
+  s_939a11e59e098b::t_4494baa641312f 1-152
+server/internal/intentpolicy/types.go
+  s_939a11e59e098b::t_5af1cce216caba 1-263
+server/internal/intentpolicy/action.go
+  s_939a11e59e098b::t_6b59d2f26931a2 1-112
+server/internal/intentpolicy/transcript_test.go
+  s_939a11e59e098b::t_ecaf5bec08c9c8 63
+  s_939a11e59e098b::t_ce52c8ea15895a 1-62,64-88
+server/internal/intentpolicy/fake_test.go
+  s_939a11e59e098b::t_d19759dabd10b6 1-20
+server/internal/intentpolicy/evaluator_test.go
+  s_939a11e59e098b::t_c3b73d8ce85903 1-197
+server/internal/classifier/jev/jev_test.go
+  s_939a11e59e098b::t_cdf6ead95a1eee 145,425
+  s_939a11e59e098b::t_74c51a7e060af4 24,34,493-509
+  s_939a11e59e098b::t_ccd8b04c2c52e2 510
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fdfe27e1f1c68bbd6147ac77f62c224e9f4c3ea5",
+  "prompts": {},
+  "sessions": {
+    "s_939a11e59e098b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e06bbd70-3627-49d7-9eb0-bf822f5d09b6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
