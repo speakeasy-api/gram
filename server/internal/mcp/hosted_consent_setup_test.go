@@ -61,7 +61,7 @@ func TestHostedConsentSetupPresentation(t *testing.T) {
 			require.NoError(t, q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: toolset.ID, RequiresUpstreamAuth: tc.stored}))
 			bearer := mintUserSessionBearerForSubject(t, ti, hosted, subject)
 			request := func() (*httptest.ResponseRecorder, error) {
-				return servePublicHTTP(t, context.Background(), ti, hosted.McpSlug.String, makeInitializeBody(), bearer, nil) //nolint:wrapcheck // Compare the same runtime error before and after view rendering.
+				return servePublicHTTP(t, context.Background(), ti, hosted.McpSlug.String, makeInitializeBody(), bearer, nil)
 			}
 			before, beforeErr := request()
 			code, page, location := render(t, fx)

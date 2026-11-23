@@ -222,6 +222,22 @@ function StandardAuthenticationSectionBody({
     setDeleteOpen(true);
   };
 
+  const noUpstreamAction = target.hosted &&
+    serverId &&
+    !gatewayId &&
+    associations.data?.associations.length === 0 && (
+      <RequireScope scope="org:admin" level="section">
+        <RequireScope
+          scope="mcp:write"
+          resourceId={serverId}
+          projectId={target.projectId}
+          level="section"
+        >
+          <HostedNoUpstreamAction key={serverId} serverId={serverId} />
+        </RequireScope>
+      </RequireScope>
+    );
+
   let authenticationFields: ReactNode;
   if (!issuerConfigured && gatewayId) {
     authenticationFields = (
@@ -229,10 +245,13 @@ function StandardAuthenticationSectionBody({
     );
   } else if (!issuerConfigured) {
     authenticationFields = (
-      <IdentityProviderSetupField
-        onStartManual={() => setSheetOpen(true)}
-        additionalAction={additionalSetupAction}
-      />
+      <>
+        <IdentityProviderSetupField
+          onStartManual={() => setSheetOpen(true)}
+          additionalAction={additionalSetupAction}
+        />
+        {noUpstreamAction}
+      </>
     );
   } else if (isLoadingUserSessionIssuer) {
     authenticationFields = <AuthenticationLoadingField />;
@@ -264,6 +283,7 @@ function StandardAuthenticationSectionBody({
             }
           />
         )}
+        {noUpstreamAction}
         {/* Last: its footer Save closes the panel. */}
         <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
       </>
@@ -283,21 +303,6 @@ function StandardAuthenticationSectionBody({
             isError={effectiveIssuersQuery.isError}
           />
           {authenticationFields}
-          {target.hosted &&
-            serverId &&
-            !gatewayId &&
-            associations.data?.associations.length === 0 && (
-              <RequireScope scope="org:admin" level="section">
-                <RequireScope
-                  scope="mcp:write"
-                  resourceId={serverId}
-                  projectId={target.projectId}
-                  level="section"
-                >
-                  <HostedNoUpstreamAction key={serverId} serverId={serverId} />
-                </RequireScope>
-              </RequireScope>
-            )}
         </div>
       </SettingsSection.Panel>
 
@@ -387,6 +392,8 @@ function HostedNoUpstreamAction({
 }: {
   serverId: string;
 }): JSX.Element {
+  // The legacy proxied setter is deprecated. This operation still owns the
+  // exact hosted no-upstream decision; typed offer mutations cannot save it.
   const mutation = useSetMcpServerUpstreamAuthRequirementMutation();
   return (
     <Field>

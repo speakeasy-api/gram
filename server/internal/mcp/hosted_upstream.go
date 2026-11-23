@@ -150,3 +150,57 @@ func (s *Service) hostedConsentSetupIncomplete(ctx context.Context, org string, 
 	}
 	return false, nil
 }
+
+// markUnreachableHostedConsentPlacements checks exact project/registration
+// pairs together. This is only for rendering; the serving and callback
+// paths still do their own live authorization and resource checks.
+func (s *Service) markUnreachableHostedConsentPlacements(ctx context.Context, organizationID string, members []metaMember) error {
+	var projects, registrations []uuid.UUID
+	for _, member := range members {
+		if member.backend == metaMemberBackendHosted {
+			for id := range member.associatedClients {
+				projects = append(projects, member.projectID)
+				registrations = append(registrations, id)
+			}
+		}
+	}
+	if len(registrations) == 0 {
+		return nil
+	}
+	rows, err := s.db.Query(ctx, `
+SELECT p.id, c.id
+FROM unnest($2::uuid[], $3::uuid[]) AS placement(project_id, registration_id)
+JOIN projects AS p ON p.id = placement.project_id AND p.organization_id = $1 AND NOT p.deleted
+JOIN remote_session_clients AS c ON c.id = placement.registration_id AND NOT c.deleted
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))`, organizationID, projects, registrations)
+	if err != nil {
+		return fmt.Errorf("list reachable hosted registrations: %w", err)
+	}
+	defer rows.Close()
+	type placement struct{ project, registration uuid.UUID }
+	live := make(map[placement]bool)
+	for rows.Next() {
+		var key placement
+		if err := rows.Scan(&key.project, &key.registration); err != nil {
+			return fmt.Errorf("scan reachable hosted registration: %w", err)
+		}
+		live[key] = true
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read reachable hosted registrations: %w", err)
+	}
+	for i := range members {
+		member := &members[i]
+		if member.backend == metaMemberBackendHosted {
+			for id := range member.associatedClients {
+				if !live[placement{project: member.projectID, registration: id}] {
+					member.associatedClients = nil
+					member.upstreamUnavailable = errHostedConsentSetupIncomplete
+				}
+			}
+		}
+	}
+	return nil
+}
