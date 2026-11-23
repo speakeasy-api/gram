@@ -46,9 +46,11 @@ per-ingress attestor pods.
   lets tsnet pick a random port. With a fixed port, the node's port is
   logged as `gram.tailnet_gateway.tsnet_port`. tsnet's backend log (`Logf`)
   goes to a child logger tagged `gram.component=tsnet`: advertised endpoint
-  changes (`magicsock: endpoints changed`) and a peer moving to a direct
-  path (`magicsock: disco: node … now using`) log at info, the rest at
-  debug. tsnet's user-facing log (`UserLogf`) still goes to the host logger
+  changes (`magicsock: endpoints changed`) and a peer's UDP path changes
+  (`magicsock: disco: node … now using <addr>`) log at info, the rest at
+  debug. A `now using` line is direct only when its address is a plain
+  `ip:port`; an address with a VNI is a Tailscale peer relay. A peer with no
+  `now using` line is still on DERP. tsnet's user-facing log (`UserLogf`) still goes to the host logger
   at info.
 - The node advertises the service with `ListenService` in TCP mode: tsnet
   forwards each connection over loopback with a PROXY protocol header naming

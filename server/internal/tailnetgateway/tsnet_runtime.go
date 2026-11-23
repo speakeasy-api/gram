@@ -600,9 +600,9 @@ func (n *tsnetNode) Close(ctx context.Context) error {
 }
 
 // pathLines are the tsnet backend log lines that show how peers reach a node:
-// the public endpoints it advertises and when a peer moves to a direct path.
-// They are the only way to tell a direct connection from one relayed through
-// DERP, so they log at info. The rest of tsnet's backend log is voluminous,
+// the public endpoints it advertises and each change of a peer's UDP path,
+// direct or through a peer relay. A peer that never logs one is on DERP. They
+// are the only way to tell those apart, so they log at info. The rest of tsnet's backend log is voluminous,
 // including per-peer DERP chatter every few seconds, so it logs at debug.
 var pathLines = []string{
 	"magicsock: endpoints changed:",
