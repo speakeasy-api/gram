@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import McpSessionsProvider from "./McpSessionsProvider";
 
 const state = vi.hoisted(() => ({
-  health: "on" as "on" | "off",
+  health: "on" as "pending" | "on" | "off",
   linkRows: [] as (boolean | undefined)[],
 }));
 
@@ -142,5 +142,25 @@ describe("McpSessionsProvider", () => {
       }),
     ).toBeNull();
     expect(state.linkRows.at(-1)).toBe(false);
+  });
+
+  it("renders the MCP servers tab as before while the flag loads", () => {
+    state.health = "pending";
+    renderProvider("mcp-servers");
+    const eyebrow = screen.getByText("MCP Authentication Provider");
+    expect(eyebrow.children).toHaveLength(0);
+    expect(
+      screen.queryByRole("button", {
+        name: "What is an MCP Authentication Provider?",
+      }),
+    ).toBeNull();
+    expect(state.linkRows.at(-1)).toBe(false);
+  });
+
+  it("renders nothing on Overview while the flag loads", () => {
+    state.health = "pending";
+    renderProvider("overview");
+    expect(screen.queryByText("MCP Authentication Provider")).toBeNull();
+    expect(screen.queryByText("acme-sso")).toBeNull();
   });
 });
