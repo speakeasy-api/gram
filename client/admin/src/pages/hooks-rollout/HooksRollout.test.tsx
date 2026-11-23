@@ -304,9 +304,13 @@ describe("HooksRollout", () => {
         next_advance_at: undefined,
       },
     });
-    mocks.resumeHooksRolloutStage.mockResolvedValue({
+    const resumed: AdminHooksRollout = {
       ...PINNED,
       stage: RUNNING,
+    };
+    mocks.resumeHooksRolloutStage.mockImplementation(async () => {
+      mocks.getHooksRollout.mockResolvedValue(resumed);
+      return resumed;
     });
     await renderWithApp(<HooksRollout />);
 
@@ -319,6 +323,8 @@ describe("HooksRollout", () => {
     await waitFor(() =>
       expect(mocks.resumeHooksRolloutStage).toHaveBeenCalled(),
     );
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeTruthy();
+    expect(screen.queryByText("Paused")).toBeNull();
   });
 
   it("cancels a rollout only with a reason and after confirmation", async () => {

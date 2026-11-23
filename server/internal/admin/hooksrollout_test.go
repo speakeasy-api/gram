@@ -336,6 +336,7 @@ func TestOrganizationHooksRollout_ClearedByStage(t *testing.T) {
 
 	var orgID string
 	for i := 0; orgID == ""; i++ {
+		require.Less(t, i, 200, "no organization fell in the first 25 percent")
 		id := createHooksRolloutOrganization(t, ctx, conn, "hooks-rollout-stage-"+strconv.Itoa(i))
 		if hooksrollout.InStage(id, 25) {
 			orgID = id

@@ -142,4 +142,21 @@ describe("HooksRolloutOverride", () => {
     expect(await screen.findByText(/Canary organization/)).toBeTruthy();
     expect(screen.queryByLabelText("Hooks version override")).toBeNull();
   });
+
+  it("explains when a staged rollout clears the organization", async () => {
+    mocks.getOrganizationHooksRollout.mockResolvedValue({
+      organization_id: ORG.id,
+      current_version: 46,
+      source: "stage",
+      effective_version: 46,
+      eligible: true,
+    } satisfies AdminOrganizationHooksRollout);
+    await renderWithApp(<HooksRolloutOverride org={ORG} />);
+
+    expect(
+      await screen.findByText(
+        /Cleared for hooks version 46 by the staged rollout/,
+      ),
+    ).toBeTruthy();
+  });
 });

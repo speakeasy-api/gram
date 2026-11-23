@@ -104,9 +104,10 @@ one to clear an override left from before.
 
 ## Hold back a release
 
-If a staged rollout is running, pause or cancel it first (see
-[Roll out in stages](#roll-out-in-stages)). Otherwise, leave the default pin
-where it is. Organizations without an override stay at
+A running or paused staged rollout still clears its share of organizations.
+Pause it to stop it adding more, or cancel it to send them back to the default
+pin (see [Roll out in stages](#roll-out-in-stages)). Otherwise, leave the
+default pin where it is. Organizations without an override stay at
 or below it, whatever the current hooks version is. To stop a release that has
 already started rolling out, set the default pin back to the previous version:
 organizations that have not been republished yet stay on their current hooks
