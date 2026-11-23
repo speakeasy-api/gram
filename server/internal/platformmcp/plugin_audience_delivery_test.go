@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -50,7 +51,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil, staff.Organization{}).WithPublicationRequests(true)
+	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, audit.NewLogger(), nil, "test", "https://example.test", nil, nil, staff.Organization{}, marketplacetokenstest.Tokens(t, conn)).WithPublicationRequests(true)
 	service := testPluginTargets(conn).WithAuthorization(engine).WithServerRemoval(delivery).
 		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget()).
 		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: true})

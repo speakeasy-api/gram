@@ -513,10 +513,19 @@ func newWorkerCommand() *cli.Command {
 			authz.SetUpstreamSelectorWriteGate(feature.UpstreamSelectorWrites(featureFlags))
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			gcpIdentity := newGCPIdentity(ctx, logger, c)
+			// Unconfigured or disabled, Service and Provisioner are nil
+			// without an error. A configuration error stops the worker: a silently
+			// disabled sweep would leave organizations whose key was revoked
+			// unsuspended.
+			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			if err != nil {
+				return err
+			}
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, staffOrg).
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, staffOrg, orgEncryption.MarketplaceTokens(logger, encryptionClient)).
 					WithDistributionAdmission(admission.NewGuard())
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
@@ -856,21 +865,12 @@ func newWorkerCommand() *cli.Command {
 
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
-			gcpIdentity := newGCPIdentity(ctx, logger, c)
 			kmsSigningClients, err := newKMSSigningClients(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("build kms signing client factory: %w", err)
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			// Unconfigured or disabled, Service and Provisioner are nil
-			// without an error. A configuration error stops the worker: a silently
-			// disabled sweep would leave organizations whose key was revoked
-			// unsuspended.
-			orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
-			if err != nil {
-				return err
-			}
 			if err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption); err != nil {
 				return err
 			}

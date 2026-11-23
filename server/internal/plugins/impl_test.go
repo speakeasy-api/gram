@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -1181,12 +1182,12 @@ func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELSignals(t *testi
 		InstallationID:           12345,
 		RepoOwner:                "test-owner",
 		RepoName:                 "test-marketplace",
-		MarketplaceToken:         conv.ToPGText("marketplace-token"),
 		PublishedMcpFingerprints: []byte(`{}`),
 		PublishedHooksVersion:    pgtype.Text{},
 		PublishedHooksConfig:     nil,
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, ti.conn, *authCtx.ProjectID, "marketplace-token")
 
 	result, body, err := ti.service.DownloadCodexInstallScript(ctx, &gen.DownloadCodexInstallScriptPayload{})
 	require.NoError(t, err)

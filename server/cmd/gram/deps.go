@@ -88,6 +88,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
@@ -2048,6 +2049,12 @@ func (d orgEncryptionDeps) ClientSecrets(logger *slog.Logger, platform *encrypti
 // process's organization encryption and transition state.
 func (d orgEncryptionDeps) UpstreamTokens(logger *slog.Logger, platform *encryption.Client) *upstreamtokens.Tokens {
 	return upstreamtokens.New(logger, d.Cipher(logger, platform), platform)
+}
+
+// MarketplaceTokens builds the plugin marketplace token seam over the
+// process's organization encryption and transition state.
+func (d orgEncryptionDeps) MarketplaceTokens(logger *slog.Logger, platform *encryption.Client) *marketplacetokens.Tokens {
+	return marketplacetokens.New(logger, d.Cipher(logger, platform), platform)
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.
