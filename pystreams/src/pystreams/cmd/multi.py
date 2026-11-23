@@ -127,11 +127,10 @@ async def multi(
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+    # A next instance equal to the current one means the move is over: the
+    # client is an ordinary one.
     if redis_next_addr and redis_next_addr == redis_addr:
-        raise click.UsageError(
-            "--redis-next-addr is the same instance as --redis-addr: replies "
-            "would be written to the instance being left"
-        )
+        redis_next_addr = None
 
     if role == "enforcement" and (
         not redis_addr or not risk_fingerprint_pepper_keyring

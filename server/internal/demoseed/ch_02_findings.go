@@ -426,6 +426,36 @@ func (s *seeder) chfAuthzChallenges(ctx context.Context, ch driver.Conn) error {
 				return fmt.Errorf("append authz challenge: %w", err)
 			}
 		}
+
+		// The assistant's agent refused another member's personal Linear
+		// connection: the agent's Permissions tab lists these under failed
+		// checks. The recorded selector names the server, never the
+		// connection's owner.
+		agentURN := "agent:" + s.det("assistant-agent").String()
+		client := s.det("auth-client-linear").String()
+		refusedSelector := `{"client_type":"remote_session","mcp_server_id":"` + s.det("mcpserver-linear").String() +
+			`","project_id":"` + proj + `","resource_id":"` + client + `","resource_kind":"mcp_auth_client"}`
+		for n := range 3 {
+			if err := b.Append(
+				now.Add(-time.Duration(1+n*9)*time.Hour),
+				s.orgID(),
+				proj,
+				md5Hex(s.name("chal-auth-"+strconv.Itoa(n))),
+				md5Hex(s.name("chalspan-auth-" + strconv.Itoa(n)))[:16],
+				"req_"+md5Hex(s.name("chalreq-auth-" + strconv.Itoa(n)))[:16],
+				agentURN, "agent", (*string)(nil), (*string)(nil), (*string)(nil),
+				[]string{},
+				"require",
+				"deny", "connection_owner_mismatch", "mcp:auth", "mcp_auth_client", client,
+				refusedSelector,
+				[]string{"mcp:auth"},
+				[]string{"mcp:auth"}, []string{"mcp_auth_client"}, []string{client}, []string{refusedSelector},
+				[]string{}, []string{}, []string{}, []string{},
+				uint32(3),
+			); err != nil {
+				return fmt.Errorf("append refused auth client challenge: %w", err)
+			}
+		}
 		return nil
 	})
 }

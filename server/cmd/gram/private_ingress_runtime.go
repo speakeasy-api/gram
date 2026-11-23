@@ -207,6 +207,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		AdmitWorkloadSession:     runtimepolicy.AdmitWorkloadSession,
 		AdmitWorkloadSessionInTx: runtimepolicy.AdmitWorkloadSessionInTx,
 		DevMode:                  c.String("environment") == "local",
+		LoadUserPolicy:           nil,
 	})
 	_, broker, stop, err := newPubSubClient(ctx, c, logger)
 	if err != nil {
