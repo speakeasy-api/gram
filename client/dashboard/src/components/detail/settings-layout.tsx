@@ -280,7 +280,7 @@ function SettingsGroupSection({
       aria-labelledby={`${group.id}-title`}
       // The last area keeps a viewport of room below it, so the index can
       // bring even a short final area to the top.
-      className="border-border scroll-mt-8 border-t pt-8 pb-14 first:border-t-0 first:pt-0 last:min-h-[calc(100vh-24rem)] last:pb-0"
+      className="border-border scroll-mt-8 border-t pt-8 pb-14 first-of-type:border-t-0 first-of-type:pt-0 last:min-h-[calc(100vh-24rem)] last:pb-0"
     >
       <h2
         id={`${group.id}-title`}

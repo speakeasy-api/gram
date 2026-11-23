@@ -74,6 +74,7 @@ vi.mock("./sections/RemoteMcpSessionsSection", () => ({
   RemoteMcpSessionsSection: () => <h2>Sessions</h2>,
 }));
 vi.mock("./sections/UpstreamUrlSection", () => ({
+  MCP_UPSTREAM_URL_SECTION_ID: "upstream-url",
   UpstreamUrlSection: () => <h2>Remote URL</h2>,
 }));
 vi.mock("./sections/ServerUrlSection", () => ({
