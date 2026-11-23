@@ -10,26 +10,19 @@ import (
 
 // Decision is the engine's answer to one check.
 type Decision struct {
-	// Allowed is true when the caller may do what the check asks.
 	Allowed bool
 	// Enforced is false when RBAC does not apply to this caller, such as a
 	// legacy API key. Allowed is then true for every check except an
 	// auth-client check.
 	Enforced bool
-	// Reason says why the check was refused. It is ReasonNone when allowed.
-	Reason Reason
-	// Check is the check this answers.
-	Check Check
+	Reason   Reason
+	Check    Check
 
-	// match is the grant that allowed the check. It is nil when the check was
-	// refused or RBAC does not apply to the caller.
-	match *grantMatch
-	// alternative is, for an allowed AnyOf check, the alternative that matched.
+	match       *grantMatch
 	alternative int
-	// blocked marks, for an AnyOf check, the alternatives a block refused.
-	blocked []bool
-	// blockedBy is, for an AnyOf check, the alternative a block refused before
-	// any alternative was matched.
+	blocked     []bool
+	// blockedBy is set when a block refused an AnyOf before any alternative
+	// was matched.
 	blockedBy *Check
 }
 
@@ -42,28 +35,14 @@ type Decisions struct {
 	Each       []Decision
 }
 
-// Decide answers each check without refusing anything: a check the caller
-// may not do is a branch for the handler, not a denial. Use Require to gate
-// an action.
-//
-// Example: a list page passes one check per server and shows the servers
-// whose decision is allowed.
-//
-//	d, err := engine.Decide(ctx, checks...)
-//	for i, s := range servers {
-//		if d.Each[i].Allowed {
-//			visible = append(visible, s)
-//		}
-//	}
-//
-// Decide accepts a probe, and an AnyOf check in any position. It records one
-// challenge row for the call.
+// Decide answers each check without refusing anything: a "no" is a branch for
+// the handler, not a denial. Use Require to gate an action. Example: a list
+// page passes one check per server and shows those whose decision is allowed.
 func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error) {
 	return e.decideAll(ctx, checks, true)
 }
 
-// decideAll is Decide, with the challenge row optional for the wrappers that
-// record none today (Evaluate, Can, DenialReasons).
+// decideAll lets the wrappers that record no challenge today keep doing so.
 func (e *Engine) decideAll(ctx context.Context, checks []Check, record bool) (Decisions, error) {
 	q, err := e.prepare(ctx, checks, false)
 	if err != nil {
@@ -98,26 +77,14 @@ func (e *Engine) decideAll(ctx context.Context, checks []Check, record bool) (De
 	return result, nil
 }
 
-// question is one call to Require or Decide after the setup both share.
 type question struct {
-	// enforced is false when RBAC skips this caller.
-	enforced bool
-	// grants are the caller's grants, read from the context. Empty when not
-	// enforced.
-	grants grantAuthorization
-	// aboutOtherOrganization reports an org check about an organization other
-	// than the caller's, which nobody satisfies.
+	enforced               bool
+	grants                 grantAuthorization
 	aboutOtherOrganization func(Check) bool
 }
 
-// prepare runs the setup Require and Decide share, always in this order:
-//  1. refuse shapes the API never accepts: a nested AnyOf, or for Require a
-//     probe or an AnyOf next to other checks
-//  2. ask whether RBAC applies to this caller
-//  3. for a skipped caller, report invalid checks
-//  4. read the grants from the context
-//
-// Each check is validated when it is decided.
+// prepare runs the setup in one fixed order for every entry point, so the
+// same checks can never be refused in one place and allowed in another.
 func (e *Engine) prepare(ctx context.Context, checks []Check, forRequire bool) (question, error) {
 	if err := validateShape(checks, forRequire); err != nil {
 		return question{}, err
@@ -140,9 +107,6 @@ func (e *Engine) prepare(ctx context.Context, checks []Check, forRequire bool) (
 	return q, nil
 }
 
-// decide answers one check. A check about another organization is refused,
-// a skipped caller is allowed anything but auth-client use, and otherwise the
-// caller's grants decide.
 func (q question) decide(check Check) (Decision, error) {
 	refused := Decision{Allowed: false, Enforced: q.enforced, Reason: ReasonNotGranted, Check: check, match: nil, alternative: 0, blocked: nil, blockedBy: nil}
 	allowed := Decision{Allowed: true, Enforced: q.enforced, Reason: ReasonNone, Check: check, match: nil, alternative: 0, blocked: nil, blockedBy: nil}
@@ -177,10 +141,9 @@ func (q question) decide(check Check) (Decision, error) {
 	return refused, err
 }
 
-// decideAnyOf answers an AnyOf check: a block on any alternative refuses it,
-// unless a direct grant on the concrete resource outranks the block, and
-// otherwise one allowed alternative is enough. Alternatives about another
-// organization are left out.
+// decideAnyOf: a block on any alternative refuses the whole AnyOf unless a
+// direct grant on the concrete resource outranks it. Example: a project-wide
+// skill read and a read of skill S, with S blocked, is refused.
 func (q question) decideAnyOf(check Check) (Decision, error) {
 	refused := Decision{Allowed: false, Enforced: q.enforced, Reason: ReasonNotGranted, Check: check, match: nil, alternative: 0, blocked: nil, blockedBy: nil}
 	alternatives := slices.DeleteFunc(slices.Clone(check.anyOf), q.aboutOtherOrganization)
@@ -234,11 +197,9 @@ func (q question) decideAnyOf(check Check) (Decision, error) {
 	return refused, nil
 }
 
-// dispositionReason says why a tool call no grant allows was refused. When
-// the same call under another disposition would be allowed, the disposition
-// is the reason. Example: a role limited to read_only tools is refused a
-// destructive tool with ReasonReadOnly. It costs up to one grant match per
-// disposition, and only for a refused check that carries one.
+// dispositionReason names the disposition as the reason when the same call
+// under another disposition would pass. Example: a role limited to read_only
+// tools is refused a destructive tool with ReasonReadOnly.
 func (a grantAuthorization) dispositionReason(check Check) (Reason, error) {
 	disposition, hasDisposition := check.Dimensions[SelectorKeyDisposition]
 	if !hasDisposition {
@@ -269,8 +230,6 @@ func (a grantAuthorization) allowsWithDisposition(check Check, disposition strin
 	return evaluation.Grant != nil, err
 }
 
-// recordBatch records one challenge row for a Decide call. focus names the
-// check that failed to evaluate, or is nil for a decided batch.
 func (e *Engine) recordBatch(ctx context.Context, q question, decided []Decision, focus *Check) {
 	checks := make([]Check, 0, len(decided))
 	matches := make([]grantMatch, 0, len(decided))
@@ -318,7 +277,6 @@ func (e *Engine) recordBatch(ctx context.Context, q question, decided []Decision
 	row.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 }
 
-// allowedPlainChecks returns the allowed checks that are not AnyOf checks.
 func allowedPlainChecks(decided []Decision) []Check {
 	var allowed []Check
 	for _, d := range decided {

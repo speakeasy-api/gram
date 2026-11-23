@@ -266,15 +266,12 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 		return e.mapError(ctx, InvalidCheck(checks[0].Scope, checks[0].ResourceID))
 	}
 	q := question{enforced: true, grants: loadedGrantAuthorization(grants), aboutOtherOrganization: func(Check) bool { return false }}
-	// Only the caller's own refusal is explained to the client: a probe of
-	// some other principal's grants says nothing about what the caller lacks.
 	return e.requireAll(ctx, q, checks, false)
 }
 
-// requireAll decides the checks in order and stops at the first refusal. It
-// records one challenge row: the refusal, the check that could not be
-// evaluated, or the allow with every matched grant. explain records the
-// refusal for the client (see recordDenial).
+// requireAll stops at the first refusal. explain is false when the grants are
+// not the caller's own, since their refusal says nothing about what the
+// caller lacks.
 func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, explain bool) error {
 	operation := authzrepo.OperationRequire
 	if checks[0].anyOf != nil {
@@ -334,18 +331,13 @@ func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, exp
 	return nil
 }
 
-// refusal is how Require reports one refused decision.
 type refusal struct {
-	// err is returned to the handler.
 	err error
-	// explained is recorded for the client, or nil to record nothing.
+	// explained is what the client is told it lacks; nil tells it nothing.
 	explained error
-	// focus is the check the challenge row names.
-	focus *Check
+	focus     *Check
 }
 
-// refusal works out what Require returns, explains and records for a refused
-// decision.
 func (e *Engine) refusal(ctx context.Context, q question, d Decision) refusal {
 	check := d.Check
 	if check.anyOf == nil {
@@ -360,12 +352,10 @@ func (e *Engine) refusal(ctx context.Context, q question, d Decision) refusal {
 
 	alternatives := check.anyOf
 	first := alternatives[0]
-	// A block refused the whole AnyOf before its alternatives were matched.
 	if d.blockedBy != nil {
 		blocked := d.blockedBy
 		return refusal{err: Denied(blocked.Scope, blocked.selector()), explained: nil, focus: blocked}
 	}
-	// Every alternative was about another organization, so none was matched.
 	if d.blocked == nil {
 		return refusal{err: Denied(first.Scope, first.selector()), explained: nil, focus: &first}
 	}
@@ -385,7 +375,6 @@ func (e *Engine) refusal(ctx context.Context, q question, d Decision) refusal {
 	return refusal{err: Denied(first.Scope, first.selector()), explained: explained, focus: &first}
 }
 
-// challengeReason is the challenge row's reason for a refused decision.
 func challengeReason(q question, d Decision) authzrepo.Reason {
 	switch {
 	case d.Reason == ReasonBlocked:
@@ -572,9 +561,7 @@ func leastPrivilegedAlternative(checks []Check, blocked []bool) (Check, bool) {
 	return best.check, true
 }
 
-// Evaluate reports whether the caller satisfies every check, without
-// recording a challenge: a false result is a branch, not a denial. It is
-// Decide's AllAllowed, kept until its callers move to Decide.
+// Evaluate is Decide's AllAllowed without a challenge row. Replaced by Decide.
 func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	if len(checks) == 0 {
 		return false, e.mapError(ctx, ErrNoChecks)
@@ -586,8 +573,7 @@ func (e *Engine) Evaluate(ctx context.Context, checks ...Check) (bool, error) {
 	return d.AllAllowed, err
 }
 
-// Can is Evaluate that also accepts a single AnyOf check. It is kept until
-// its callers move to Decide.
+// Can is Evaluate that also accepts a single AnyOf. Replaced by Decide.
 func (e *Engine) Can(ctx context.Context, checks ...Check) (bool, error) {
 	if _, ok := singleAnyOf(checks); !ok {
 		return e.Evaluate(ctx, checks...)
@@ -633,9 +619,7 @@ func (a grantAuthorization) decideAnyOf(checks []Check) (anyOfDecision, error) {
 	return decision, nil
 }
 
-// Filter returns the resource IDs of the checks the caller is allowed. It
-// records one challenge row for the batch. It is kept until its callers move
-// to Decide.
+// Filter returns the resource IDs of the allowed checks. Replaced by Decide.
 func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	if i := slices.IndexFunc(checks, isAnyOf); i >= 0 {
 		return nil, e.mapError(ctx, InvalidCheck(checks[i].Scope, checks[i].ResourceID))
@@ -653,9 +637,7 @@ func (e *Engine) Filter(ctx context.Context, checks []Check) ([]string, error) {
 	return allowed, nil
 }
 
-// FindMatched reports, for each check in order, whether the caller is
-// allowed. It records one challenge row for the batch. It is kept until its
-// callers move to Decide.
+// FindMatched reports whether each check is allowed. Replaced by Decide.
 func (e *Engine) FindMatched(ctx context.Context, checks []Check) ([]bool, error) {
 	if i := slices.IndexFunc(checks, isAnyOf); i >= 0 {
 		return nil, e.mapError(ctx, InvalidCheck(checks[i].Scope, checks[i].ResourceID))
@@ -845,8 +827,6 @@ func (e *Engine) withoutOtherOrganization(ctx context.Context, checks []Check) (
 	return kept, refused
 }
 
-// logOtherOrganizations logs each check, or AnyOf alternative, that is
-// refused because it is about another organization than the caller's.
 func (e *Engine) logOtherOrganizations(ctx context.Context, aboutOther func(Check) bool, checks []Check) {
 	for _, c := range checks {
 		if isAnyOf(c) {
@@ -859,8 +839,6 @@ func (e *Engine) logOtherOrganizations(ctx context.Context, aboutOther func(Chec
 	}
 }
 
-// logOtherOrganization logs a check refused because it is about another
-// organization than the caller's.
 func (e *Engine) logOtherOrganization(ctx context.Context, c Check) {
 	e.logger.ErrorContext(
 		ctx,

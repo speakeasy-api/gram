@@ -95,9 +95,7 @@ const (
 	ReasonNotGranted Reason = "not_granted"
 )
 
-// DenialReasons returns why each check is refused, aligned with the input
-// order, without recording a challenge. It is the Reason of each of
-// Decide's decisions, kept until its caller moves to Decide.
+// DenialReasons returns each check's Reason. Replaced by Decide.
 func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]Reason, error) {
 	d, err := e.decideAll(ctx, checks, false)
 	if err != nil {
