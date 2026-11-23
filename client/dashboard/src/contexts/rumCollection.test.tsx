@@ -107,6 +107,7 @@ describe("PostHog initialization", () => {
         api_host: "https://metrics.example.com",
         defaults: "2025-05-24",
         capture_pageview: "history_change",
+        disable_capture_url_hashes: true,
         disableDeviceModel: true,
         disable_session_recording: true,
       }),

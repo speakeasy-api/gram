@@ -105,6 +105,8 @@ export const TelemetryProvider = (props: {
             defaults: "2025-05-24",
             // Capture in-app pathname changes as well as the initial page load.
             capture_pageview: "history_change",
+            // Acknowledgement links carry bearer credentials in their fragments.
+            disable_capture_url_hashes: true,
             // PostHog otherwise collects the hardware model by default on
             // Chromium-based Android browsers.
             disableDeviceModel: true,
