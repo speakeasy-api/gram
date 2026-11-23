@@ -4,7 +4,8 @@
 #MISE dir="{{ config_root }}"
 #MISE hide=true
 #USAGE flag "--url <url>" env="GRAM_CODE_RUNTIME_URL" help="Loopback HTTP address shared with the gateway"
-#USAGE flag "--monty-bin <path>" env="GRAM_CODE_RUNNER_MONTY_BIN" help="Pinned subprocess executable"
+#USAGE flag "--runner-bin <path>" env="GRAM_CODE_RUNNER_BIN" help="Runner executable; defaults to the pinned speakeasy-api/codemode release"
+#USAGE flag "--monty-bin <path>" env="GRAM_CODE_RUNNER_MONTY_BIN" help="Subprocess executable; defaults to the pinned speakeasy-api/codemode release"
 
 set -euo pipefail
 
@@ -29,12 +30,13 @@ listen=$(node --input-type=module -e '
   console.log(`${u.hostname}:${u.port || "80"}`);
 ' "${usage_url:?GRAM_CODE_RUNTIME_URL or --url is required}")
 
-monty_bin="${usage_monty_bin:-$MISE_PROJECT_ROOT/agents/code-runner/target/monty/bin/monty}"
-if [ ! -x "$monty_bin" ]; then
-  echo "Run mise run zero:code-mode to build the pinned subprocess executable." >&2
+# mise puts the pinned release's executables on PATH. The flags point at a
+# local speakeasy-api/codemode build instead.
+runner_bin="${usage_runner_bin:-$(command -v gram-code-runner || true)}"
+monty_bin="${usage_monty_bin:-$(command -v monty || true)}"
+if [ ! -x "$runner_bin" ] || [ ! -x "$monty_bin" ]; then
+  echo "Run mise install to download the pinned Code Mode runtime." >&2
   exit 1
 fi
-mise run build:code-runner
 export GRAM_CODE_RUNNER_TOKEN="$GRAM_CODE_RUNTIME_TOKEN"
-exec "$MISE_PROJECT_ROOT/agents/code-runner/target/debug/gram-code-runner" \
-  --listen "$listen" --monty-bin "$monty_bin"
+exec "$runner_bin" --listen "$listen" --monty-bin "$monty_bin"

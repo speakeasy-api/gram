@@ -608,7 +608,7 @@ jobs:
     name: assistant-runtime-image
     # The image is content-addressed by agents/ (the server embeds the same
     # hash and pulls the runtime image by it), so an unchanged runtime is
-    # re-tagged rather than rebuilt, the same way code-runner-image works.
+    # re-tagged rather than rebuilt.
     # TEMPORARY: on GitHub-hosted runners (and so on upstream checkout/buildx/
     # build-push actions) because Blacksmith runners cannot reach the Ubuntu apt
     # mirrors, which breaks the musl toolchain install below. Move back to
@@ -785,10 +785,10 @@ jobs:
 
   code-runner-image:
     name: code-runner-image
-    # The image is content-addressed by agents/code-runner (the Dockerfile pins
-    # Monty), so an unchanged runner is re-tagged rather than rebuilt. Every
-    # commit therefore gets a runner image under the same preview and sha tags
-    # as the server, which previews and releases resolve without a lookup.
+    # The runner image is built and published by speakeasy-api/codemode. This
+    # job only aliases the release pinned in mise.toml, so every commit has a
+    # runner image under the same preview and sha tags as the server, which
+    # previews and releases resolve without a lookup. Nothing is built here.
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -813,8 +813,11 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # Same value as `mise run hash:code-runner-image`.
-          hash=$(git rev-parse HEAD:agents/code-runner | cut -c1-12)
+          version=$(sed -n 's|^"github:speakeasy-api/codemode" = "\(.*\)"$|\1|p' mise.toml)
+          if [[ -z "$version" ]]; then
+            echo "::error::mise.toml does not pin github:speakeasy-api/codemode"
+            exit 1
+          fi
           tags=("sha-${GITHUB_SHA}" "sha-${GITHUB_SHA::7}")
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             tags+=("pr-${PR_NUMBER}" "pr-${PR_NUMBER}-${HEAD_SHA::8}")
@@ -822,12 +825,8 @@ jobs:
             tags+=("main")
           fi
           {
-            echo "hash=$hash"
+            echo "version=$version"
             echo "aliases=${tags[*]}"
-            echo "push<<EOF"
-            echo "${IMAGE}:${hash}"
-            for tag in "${tags[@]}"; do echo "${IMAGE}:${tag}"; done
-            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
       - id: gcrAuth
@@ -860,46 +859,15 @@ jobs:
       - name: Setup Docker builder
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
-      - name: Find an existing image
-        id: existing
+      - name: Tag the released image
         env:
-          HASH: ${{ steps.tags.outputs.hash }}
-        run: |
-          if docker buildx imagetools inspect "${IMAGE}:${HASH}" >/dev/null 2>&1; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Tag the existing image
-        if: steps.existing.outputs.found == 'true'
-        env:
-          HASH: ${{ steps.tags.outputs.hash }}
+          VERSION: ${{ steps.tags.outputs.version }}
           ALIASES: ${{ steps.tags.outputs.aliases }}
         run: |
           set -euo pipefail
           args=()
           for tag in $ALIASES; do args+=(--tag "${IMAGE}:${tag}"); done
-          docker buildx imagetools create "${args[@]}" "${IMAGE}:${HASH}"
-
-      - name: Log in to Docker Hub
-        if: steps.existing.outputs.found != 'true'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push code runner image
-        if: steps.existing.outputs.found != 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          context: .
-          file: ./agents/code-runner/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.tags.outputs.push }}
-          cache-from: type=gha,scope=code-runner
-          cache-to: type=gha,mode=max,scope=code-runner
+          docker buildx imagetools create "${args[@]}" "${IMAGE}:${VERSION}"
 
   otel-collector:
     name: otel-collector

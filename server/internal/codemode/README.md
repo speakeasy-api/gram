@@ -103,8 +103,11 @@ sends no output.
 
 Run `mise run zero:code-mode`, then `mise exec -- pitchfork start code-runtime`.
 The setup task saves a local provider and random token in ignored
-`mise.local.toml`, preserving existing settings, and builds the native binaries.
-`./zero` includes this setup. Normal `mise run start` / `wake` starts the daemon
+`mise.local.toml`, preserving existing settings. `./zero` includes this setup.
+The runtime binaries (`gram-code-runner`, `gram-code-worker` and `monty`) are a
+release of [speakeasy-api/codemode](https://github.com/speakeasy-api/codemode)
+pinned in `mise.toml`; `mise install` downloads them and nothing is compiled
+here. Change the runtime in that repository, release it, then bump the pin. Normal `mise run start` / `wake` starts the daemon
 when `GRAM_CODE_RUNTIME_PROVIDER=local`; `pause` stops it with the application.
 Pitchfork owns the native runner process; no runner Docker container is needed.
 Its HTTP address defaults to `http://127.0.0.1:18081`, with
@@ -114,15 +117,15 @@ Its HTTP address defaults to `http://127.0.0.1:18081`, with
 `mise exec -- pitchfork restart code-runtime`. Restart `server` after changing
 its runtime settings. A native local process exercises the protocol and Python
 restrictions; managed gVisor/container isolation still needs staging validation.
-Mise installs the pinned Rust toolchain. The interpreter build cache is shared
-across worktrees; Cargo checks the pinned source revision on each setup. A failed
-runtime setup/start leaves the rest of the local stack available and logs how
-to retry.
+A failed runtime setup/start leaves the rest of the local stack available and
+logs how to retry.
 
-Build `mise run build:monty` and `mise run build:code-runner`, then run
-`mise run test:code-mode`. The task exercises the actual pinned Rust/Monty runtime
+Run `mise run test:code-mode`. The task exercises the pinned runtime release
 through the Go protocol and MCP gateway, with real Redis/database infrastructure.
-`--monty-bin /absolute/path/to/monty` reuses an already-built pinned executable.
+To test an unreleased runtime, build it in a speakeasy-api/codemode checkout and
+set `GRAM_CODE_RUNNER_TEST_BIN=/absolute/path/to/gram-code-runner` with
+`--monty-bin /absolute/path/to/monty`; the local daemon takes the same pair as
+`GRAM_CODE_RUNNER_BIN` and `GRAM_CODE_RUNNER_MONTY_BIN`.
 Run with `-race` to include Go's race detector. No commercial registry is needed.
 
 The setup task configures `GRAM_CODE_RUNTIME_PROVIDER=local` and
@@ -196,8 +199,8 @@ limited to reading and executing system libraries and its binary's directory
 caps the worker at two CPU-seconds. Because the cap is CPU time rather than wall
 time, twelve executions sharing a pod's CPU slow down instead of failing. An
 escaped worker therefore cannot read a sibling's memory or environment, or
-signal or trace it; `agents/code-runner/tests/worker_isolation.rs` checks both
-on Linux. Landlock is skipped on a kernel without it, such as gVisor, where the
+signal or trace it; `tests/worker_isolation.rs` in speakeasy-api/codemode
+checks both on Linux. Landlock is skipped on a kernel without it, such as gVisor, where the
 seccomp filter, gVisor and the organization boundary remain.
 
 An execution goes to the organization's least busy pod. When every pod is full
@@ -270,15 +273,14 @@ executions on that pod's transport; dispatched writes retain unknown outcomes.
 
 ### Images and previews
 
-CI publishes `gram-code-runner` on every commit, content-addressed by the
-12-character tree hash of `agents/code-runner`: it builds the image when that
-hash is new and otherwise re-tags the existing one. Each image is tagged with
-the tree hash, its commit and, on pull requests, the preview tag
-`pr-<number>-<head sha>`, so every preview has a runner image with the server's
-tag.
+speakeasy-api/codemode builds and publishes `gram-code-runner`, tagged with its
+release version. On every commit, CI here aliases the release pinned in
+`mise.toml` with the commit tag (`sha-<commit>`) and, on pull requests, the
+preview tag `pr-<number>-<head sha>`, so every preview has a runner image with
+the server's tag. Nothing is built in this repository.
 
 This repository's CI pushes tags. For released environments, gram-infra resolves
-the tree-hash tag to its registry digest and sets the template image and
+the released commit's tag to its registry digest and sets the template image and
 `GRAM_CODE_RUNTIME_IMAGE` to that same `repository:tag@sha256:` reference; mutable
 references are refused there. Templates are named from a hash of the image
 reference, so a rollout adds a new template while the previous one keeps serving

@@ -1,14 +1,12 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
-//MISE description="Configure and build the native local Code Mode runtime"
+//MISE description="Configure the native local Code Mode runtime"
 //MISE dir="{{ config_root }}"
-//USAGE flag "--skip-build" help="Write missing local settings without building the runtime."
 
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { parseTOML } from "confbox";
-import { $ } from "zx";
 
 type LocalConfig = { env?: Record<string, unknown> };
 
@@ -84,20 +82,6 @@ if (
 ) {
   chmodSync(filename, 0o600);
 }
+// The runtime itself is the speakeasy-api/codemode release pinned in mise.toml;
+// mise install downloads it, so there is nothing to build here.
 console.log("Code Mode settings ready in mise.local.toml.");
-
-if (provider === "local" && process.env["usage_skip_build"] !== "true") {
-  const common =
-    await $`git rev-parse --path-format=absolute --git-common-dir`.quiet();
-  // Cargo serializes shared builds and fingerprints source/toolchain changes.
-  // Each worktree still gets its own installed executable. Cargo's install
-  // metadata verifies the pinned revision even when an executable exists.
-  await $({
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      CARGO_TARGET_DIR: join(common.stdout.trim(), "gram-code-build", "monty"),
-    },
-  })`mise run build:monty`;
-  await $({ stdio: "inherit" })`mise run build:code-runner`;
-}

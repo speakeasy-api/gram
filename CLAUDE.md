@@ -121,7 +121,7 @@ Use `pull-request-demo` when a user-visible change needs a shareable PR screensh
 
 ### Testing Code Mode locally
 
-Gateway Code Mode runs as a native Pitchfork daemon. `./zero` includes `mise run zero:code-mode`, which writes missing local provider/token settings and builds the pinned OSS runtime. Start or restart it with `mise exec -- pitchfork start code-runtime` or `mise exec -- pitchfork restart code-runtime`. Normal stack start/wake includes it when `GRAM_CODE_RUNTIME_PROVIDER=local`, and pause stops it. The runner Docker image is only needed for the restricted-Linux smoke test. Runtime logs are available through `pitchfork logs code-runtime`. Use `mise run test:code-mode -race` for the actual interpreter/gateway integration tests.
+Gateway Code Mode runs as a native Pitchfork daemon. `./zero` includes `mise run zero:code-mode`, which writes missing local provider/token settings. The runtime itself (`gram-code-runner`, `gram-code-worker`, `monty`) is a release of [speakeasy-api/codemode](https://github.com/speakeasy-api/codemode) pinned in `mise.toml` and downloaded by `mise install`; nothing is compiled here, and runtime changes are made and released in that repository, then picked up by bumping the pin. Start or restart it with `mise exec -- pitchfork start code-runtime` or `mise exec -- pitchfork restart code-runtime`. Normal stack start/wake includes it when `GRAM_CODE_RUNTIME_PROVIDER=local`, and pause stops it. Runtime logs are available through `pitchfork logs code-runtime`. Use `mise run test:code-mode -race` for the actual interpreter/gateway integration tests.
 
 ### Testing assistants locally
 
