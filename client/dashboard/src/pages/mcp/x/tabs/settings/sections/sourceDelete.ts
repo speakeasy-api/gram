@@ -74,9 +74,9 @@ export function sourceBackedConfirmName(
   switch (target.kind) {
     case "remote":
     case "unproxied":
-      return target.source.url;
+      return target.source.url.trim();
     case "tunneled":
-      return target.source.name;
+      return target.source.name.trim();
   }
 }
 

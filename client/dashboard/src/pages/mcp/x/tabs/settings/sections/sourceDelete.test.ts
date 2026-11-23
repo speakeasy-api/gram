@@ -266,6 +266,12 @@ describe("sourceBackedConfirmName", () => {
         kind: "tunneled",
         source: tunneled,
       }),
-    ).toBe(tunneled.name);
+    ).toBe(tunneled.name.trim());
+    expect(
+      sourceBackedConfirmName(undefined, {
+        kind: "tunneled",
+        source: { ...tunneled, name: "  Padded  " },
+      }),
+    ).toBe("Padded");
   });
 });
