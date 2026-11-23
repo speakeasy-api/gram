@@ -76,8 +76,6 @@ describe("ToolSelectionPanel tool rows", () => {
 
 describe("ToolSelectionPanel annotation rows", () => {
   it("counts each tool once, under the disposition the server matches it by", () => {
-    // list_records declares read-only and idempotent, so the server treats it
-    // as read-only and an idempotent rule would not cover it.
     render(
       <ToolSelectionPanel
         servers={[

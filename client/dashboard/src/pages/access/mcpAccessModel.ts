@@ -55,7 +55,6 @@ export type ToolLimit =
 
 export type ToolLimitKind = ToolLimit["kind"];
 
-/** The MCP hints a tool declares, as the API and tool metadata carry them. */
 interface ToolHints {
   readOnlyHint?: boolean | undefined;
   destructiveHint?: boolean | undefined;

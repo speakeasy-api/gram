@@ -389,8 +389,6 @@ describe("effectiveReach without an explicit connect rule", () => {
 });
 
 describe("coversTool", () => {
-  // The server matches a tool by one disposition, read-only first, so a tool
-  // that declares both read-only and idempotent is a read-only tool.
   const readOnlyAndIdempotent: ToolSelectionTool = {
     name: "list",
     disposition: toolDisposition({

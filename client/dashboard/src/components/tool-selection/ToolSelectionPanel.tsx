@@ -25,11 +25,8 @@ export type ToolSelectionMode = "annotations" | "tools";
 export interface ToolSelectionTool {
   name: string;
   /**
-   * The one disposition the server matches the tool by (toolDisposition). A
-   * tool that is both read-only and idempotent is read-only, so an
-   * idempotent rule does not cover it and it is not counted under idempotent.
-   * Undefined when the kind is not known, such as a tool a rule names on a
-   * server with no catalogue here; no kind rule covers it then.
+   * Undefined for a tool named by a rule on a server with no tool list here.
+   * No kind rule covers such a tool.
    */
   disposition: Disposition | undefined;
 }

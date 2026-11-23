@@ -13,7 +13,6 @@ const TOOL_ANNOTATIONS: readonly ToolAnnotation[] = [
   "open_world",
 ];
 
-/** Whether a value is one of the four annotations; unannotated is not. */
 export function isToolAnnotation(value: unknown): value is ToolAnnotation {
   return (
     typeof value === "string" &&
