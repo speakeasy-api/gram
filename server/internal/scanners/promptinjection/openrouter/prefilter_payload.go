@@ -2,6 +2,7 @@ package openrouter
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"unicode/utf8"
 
@@ -13,6 +14,10 @@ import (
 // questions. This English-text heuristic can undercount code and non-English
 // input; leave headroom below Jev's 32k limit and handle explicit overflow.
 const maxPrefilterInputTokens = 28000
+
+// errPrefilterInputTooLarge reports evidence whose untruncatable metadata
+// alone exceeds the prefilter's input budget.
+var errPrefilterInputTooLarge = errors.New("prefilter metadata exceeds input budget")
 
 // preparePrefilterPayload bounds the complete evidence before calling Jev.
 // Truncation can hide an attack in omitted text; it is marked in the evidence.
@@ -50,7 +55,7 @@ func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.T
 		}
 		const marker = "\n...[truncated]...\n"
 		if largest == nil || len(*largest.value) <= len(marker) {
-			return nil, nil, truncated, fmt.Errorf("prefilter metadata exceeds input budget")
+			return nil, nil, truncated, errPrefilterInputTooLarge
 		}
 		value := *largest.value
 		keep := (len(value) - len(marker)) / 2

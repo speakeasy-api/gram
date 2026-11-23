@@ -944,6 +944,13 @@ const (
 	// remote session's access token.
 	RemoteSessionAccessExpiresAtKey = attribute.Key("gram.remote_session.access_expires_at")
 
+	// RiskAnalysisComponentKey is the risk engine or policy layer one
+	// risk.analysis.evaluations sample describes.
+	RiskAnalysisComponentKey = attribute.Key("gram.risk.analysis.component")
+	// RiskAnalysisDegradationReasonKey is why a risk analysis evaluation
+	// reached no usable verdict; "none" when it completed.
+	RiskAnalysisDegradationReasonKey = attribute.Key("gram.risk.analysis.degradation_reason")
+
 	RiskPolicyCountKey           = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey              = attribute.Key("gram.risk.policy_id")
 	RiskPolicyApprovalIDKey      = attribute.Key("gram.risk.policy_approval.id")
@@ -3787,6 +3794,14 @@ func RiskEnforcementFailMode(v string) attribute.KeyValue {
 
 func SlogRiskEnforcementFailMode(v string) slog.Attr {
 	return slog.String(string(RiskEnforcementFailModeKey), v)
+}
+
+func RiskAnalysisComponent[V ~string](v V) attribute.KeyValue {
+	return RiskAnalysisComponentKey.String(string(v))
+}
+
+func RiskAnalysisDegradationReason[V ~string](v V) attribute.KeyValue {
+	return RiskAnalysisDegradationReasonKey.String(string(v))
 }
 
 func RiskScanRequestID(v string) attribute.KeyValue { return RiskScanRequestIDKey.String(v) }

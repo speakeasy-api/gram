@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/scanners/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -64,12 +66,42 @@ func NewMCPPolicyScanner(scanner *Scanner, resolver destructivetool.Resolver) *M
 	}
 }
 
-// ScanMCPPolicy runs one policy against the request's message view.
+// ScanMCPPolicy runs one policy against the request's message view and records
+// the evaluation on risk.analysis.evaluations.
 func (s *MCPPolicyScanner) ScanMCPPolicy(ctx context.Context, policy policycore.Policy, request MCPScanRequest) ([]scanners.Finding, error) {
 	if s == nil || s.scanner == nil {
 		return nil, errors.New("MCP policy scanner is unavailable")
 	}
 
+	findings, err := s.scanMCPPolicy(ctx, policy, request)
+	s.recordEvaluation(ctx, policy, err)
+	return findings, err
+}
+
+// recordEvaluation classifies one MCP policy evaluation. The evaluator
+// cancels sibling policies once one matches, and engines that fail open turn
+// that cancellation into an incomplete source, so an incomplete source on a
+// canceled ctx is a cancellation rather than an outage.
+func (s *MCPPolicyScanner) recordEvaluation(ctx context.Context, policy policycore.Policy, err error) {
+	health := s.scanner.policyHealth
+	orgID := policy.OrganizationID
+	policyID := attr.RiskPolicyID(policy.ID.String())
+	_, sourceIncomplete := errors.AsType[*sourceIncompleteError](err)
+	switch {
+	case err == nil:
+		health.Completed(ctx, orgID, policyID)
+	case errors.Is(err, context.Canceled), errors.Is(ctx.Err(), context.Canceled):
+		health.Canceled(ctx, orgID, policyID)
+	case errors.Is(err, context.DeadlineExceeded):
+		health.Degraded(ctx, orgID, riskhealth.ReasonTimeout, policyID)
+	case sourceIncomplete:
+		health.Degraded(ctx, orgID, riskhealth.ReasonDependencyUnavailable, policyID)
+	default:
+		health.Degraded(ctx, orgID, riskhealth.ReasonPolicyError, policyID)
+	}
+}
+
+func (s *MCPPolicyScanner) scanMCPPolicy(ctx context.Context, policy policycore.Policy, request MCPScanRequest) ([]scanners.Finding, error) {
 	messageType := request.MessageType
 	if messageType == "" {
 		messageType = message.ToolRequest
@@ -225,11 +257,30 @@ func (s *MCPPolicyScanner) scanPromptPolicy(ctx context.Context, policy policyco
 	return findings, nil
 }
 
-func completionError(source string, err error) error {
-	if err != nil {
-		return fmt.Errorf("%s scan: %w", source, err)
+// sourceIncompleteError reports a policy source whose engine returned no
+// usable verdict, as opposed to a failure of the policy's own setup.
+type sourceIncompleteError struct {
+	// source is the policy source whose engine degraded.
+	source string
+
+	// err is the engine's error, nil when it only reported an incomplete
+	// result.
+	err error
+}
+
+func (e *sourceIncompleteError) Error() string {
+	if e.err != nil {
+		return fmt.Sprintf("%s scan: %v", e.source, e.err)
 	}
-	return fmt.Errorf("%s scan incomplete", source)
+	return fmt.Sprintf("%s scan incomplete", e.source)
+}
+
+func (e *sourceIncompleteError) Unwrap() error {
+	return e.err
+}
+
+func completionError(source string, err error) error {
+	return &sourceIncompleteError{source: source, err: err}
 }
 
 func filterMCPPresidioFindings(findings []scanners.Finding, entities []string, threshold float64) ([]scanners.Finding, bool) {

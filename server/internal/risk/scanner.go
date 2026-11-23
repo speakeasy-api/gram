@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/scanners/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -353,6 +354,7 @@ type Scanner struct {
 	nextRealtimeRecordID  uint64
 	realtimeDraining      bool
 	metrics               *scannerMetrics
+	policyHealth          *riskhealth.Recorder // one evaluation per customer policy per event
 	celEng                *celenv.Engine
 	recommended           ra.RecommendedSet
 }
@@ -454,6 +456,7 @@ func newScanner(
 		nextRealtimeRecordID:  0,
 		realtimeDraining:      false,
 		metrics:               newScannerMetrics(meterProvider, logger),
+		policyHealth:          riskhealth.New(meterProvider, logger, riskhealth.ComponentPolicyEvaluation),
 		celEng:                celEng,
 		recommended:           recommended,
 	}, nil
@@ -691,7 +694,15 @@ func (s *Scanner) scanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, comparison, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, mode, nativeFindings, promptPolicyFindings, llmFindings, laneTruncated, incomplete)
+			// Each policy gets its own completeness flag so its health
+			// evaluation describes only the engines it depends on; it folds
+			// into the scan-wide flag afterwards.
+			var policyIncomplete atomic.Bool
+			result, comparison, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, mode, nativeFindings, promptPolicyFindings, llmFindings, laneTruncated, &policyIncomplete)
+			if policyIncomplete.Load() {
+				incomplete.Store(true)
+			}
+			s.recordPolicyEvaluation(gctx, p, result, scanErr, policyIncomplete.Load())
 			if comparison != nil {
 				comparisonsMu.Lock()
 				comparisons = append(comparisons, pendingComparison{policy: p, input: *comparison})
@@ -2015,6 +2026,41 @@ func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPo
 		return
 	}
 	s.recordLLMPolicyEvaluation(ctx, policy, llmOutcome, duration)
+}
+
+// recordPolicyEvaluation records one customer policy's realtime evaluation on
+// risk.analysis.evaluations. A policy that errored, enforced a dead-letter
+// sentinel, or reached no verdict because an engine it depends on returned
+// none is degraded even though the event was allowed: those are the policies
+// that silently stopped protecting the customer. An enforcing verdict counts
+// as completed even when a sibling source degraded, since the policy acted,
+// except on a prompt-based policy: its judge is its only engine, so an
+// incomplete one that still enforces did so from its fail-closed mode.
+//
+// ctx is the fan-out context. A sibling's match cancels it, and engines turn
+// that cancellation into an incomplete result or a fail-mode verdict, so a
+// policy without a genuine verdict on a canceled ctx is canceled, not
+// degraded. Engine errors mark the policy incomplete before they propagate,
+// which separates them from failures of the policy's own setup.
+func (s *Scanner) recordPolicyEvaluation(ctx context.Context, policy repo.RiskPolicy, result *ScanResult, scanErr error, incomplete bool) {
+	orgID := policy.OrganizationID
+	policyID := attr.RiskPolicyID(policy.ID.String())
+	failModeVerdict := incomplete && policy.PolicyType == ra.PolicyTypePromptBased
+	genuineVerdict := result != nil && result.DeadLetterReason == "" && !failModeVerdict
+	switch {
+	case genuineVerdict:
+		s.policyHealth.Completed(ctx, orgID, policyID)
+	case errors.Is(scanErr, context.Canceled), errors.Is(ctx.Err(), context.Canceled):
+		s.policyHealth.Canceled(ctx, orgID, policyID)
+	case errors.Is(scanErr, context.DeadlineExceeded):
+		s.policyHealth.Degraded(ctx, orgID, riskhealth.ReasonTimeout, policyID)
+	case result != nil, incomplete:
+		s.policyHealth.Degraded(ctx, orgID, riskhealth.ReasonDependencyUnavailable, policyID)
+	case scanErr != nil:
+		s.policyHealth.Degraded(ctx, orgID, riskhealth.ReasonPolicyError, policyID)
+	default:
+		s.policyHealth.Completed(ctx, orgID, policyID)
+	}
 }
 
 // recordLLMPolicyEvaluation counts one policy evaluation on the LLM analyzer

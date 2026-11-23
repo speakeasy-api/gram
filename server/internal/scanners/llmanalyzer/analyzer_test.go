@@ -23,7 +23,7 @@ import (
 
 func newAnalyzer(t *testing.T, completer llmanalyzer.Completer) *llmanalyzer.Analyzer {
 	t.Helper()
-	return llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer)
+	return llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), completer)
 }
 
 func userRequest(body string) llmanalyzer.Request {
@@ -388,7 +388,7 @@ func TestAnalyze_ParseErrorLogsRawCompletion(t *testing.T) {
 		Calls:            nil,
 		ParseFailures:    0,
 	}
-	analysis := llmanalyzer.NewAnalyzer(logger, testenv.NewTracerProvider(t), stub).Analyze(t.Context(), userRequest("hello"))
+	analysis := llmanalyzer.NewAnalyzer(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), stub).Analyze(t.Context(), userRequest("hello"))
 	require.ErrorIs(t, analysis.Err, llmanalyzer.ErrParse)
 
 	var entry map[string]any
@@ -411,7 +411,7 @@ func TestAnalyze_UpstreamErrorDoesNotLogCompletion(t *testing.T) {
 		Calls:            nil,
 		ParseFailures:    0,
 	}
-	llmanalyzer.NewAnalyzer(logger, testenv.NewTracerProvider(t), stub).Analyze(t.Context(), userRequest("hello"))
+	llmanalyzer.NewAnalyzer(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), stub).Analyze(t.Context(), userRequest("hello"))
 	require.NotContains(t, logs.String(), "gram.risk.llm.completion")
 }
 

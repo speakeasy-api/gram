@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/scanners/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -87,6 +88,15 @@ Return a JSON object:
 
 Output ONLY the JSON object, no prose or markdown fences.`
 
+var (
+	// errMalformedVerdict is a completion that could not be read as a
+	// verdict: empty, or not the verdict JSON.
+	errMalformedVerdict = errors.New("malformed llm judge verdict")
+
+	// errTruncatedVerdict is a completion that stopped at maxVerdictTokens.
+	errTruncatedVerdict = errors.New("truncated llm judge verdict")
+)
+
 // Judge is the OpenRouter-backed promptpolicy.Evaluator. The judge call mirrors the
 // custom-rule suggestion path: strict JSON schema, low temperature, hard
 // timeout, OpenRouter object completion.
@@ -94,6 +104,7 @@ type Judge struct {
 	logger      *slog.Logger
 	tracer      trace.Tracer
 	metrics     *judgeMetrics
+	health      *riskhealth.Recorder
 	client      openrouter.CompletionClient
 	limiter     *ratelimit.Limiter
 	stokenCodec *stokens.Codec
@@ -107,6 +118,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		logger:      logger,
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"),
 		metrics:     newJudgeMetrics(meterProvider, logger),
+		health:      riskhealth.New(meterProvider, logger, riskhealth.ComponentPromptPolicyJudge),
 		client:      client,
 		limiter:     limiter,
 		stokenCodec: stokens.NewCodec(),
@@ -116,9 +128,16 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 // Evaluate runs the judge and returns a non-nil verdict when the message
 // violates the policy prompt, or a non-matching verdict when it does not. A nil
 // client or an empty prompt/text yields (nil, nil). On judge error or timeout it
-// returns a non-nil error so callers can apply policy fail-mode.
+// returns a non-nil error so callers can apply policy fail-mode. Every call
+// with something to judge records one evaluation on risk.analysis.evaluations.
 func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
-	if j == nil || j.client == nil {
+	if j == nil {
+		return nil, nil
+	}
+	if j.client == nil {
+		if strings.TrimSpace(in.Prompt) != "" && in.Message.HasContent() {
+			j.health.Degraded(ctx, in.OrgID, riskhealth.ReasonNotConfigured)
+		}
 		return nil, nil
 	}
 	// Skip only when there is nothing to judge. An empty body is NOT enough:
@@ -158,6 +177,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 		)
 	case !res.Allowed:
 		j.metrics.RecordRateLimited(ctx, in.OrgID)
+		j.health.Degraded(ctx, in.OrgID, riskhealth.ReasonThrottled)
 		span.SetAttributes(attribute.Bool("risk.judge.rate_limited", true))
 		span.SetStatus(codes.Error, "llm judge rate limited")
 		j.logger.WarnContext(ctx, "llm judge rate limited",
@@ -171,6 +191,7 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	callResult, err := j.call(ctx, in, judgePrompt)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
+	j.recordHealth(ctx, in.OrgID, err)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "llm judge call failed")
@@ -214,10 +235,25 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 func (j *Judge) contextDone(ctx context.Context, span trace.Span, orgID string, err error) error {
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	j.metrics.RecordEvaluation(ctx, orgID, outcome, 0)
+	j.health.Failed(ctx, orgID, err)
 	if span != nil {
 		span.SetAttributes(attr.Outcome(outcome))
 	}
 	return fmt.Errorf("llm judge call: %w", err)
+}
+
+// recordHealth records one judge call on risk.analysis.evaluations: the
+// judge's own verdict-shape failures first, then the provider failure
+// classification.
+func (j *Judge) recordHealth(ctx context.Context, orgID string, err error) {
+	switch {
+	case errors.Is(err, errTruncatedVerdict):
+		j.health.Degraded(ctx, orgID, riskhealth.ReasonTruncatedResponse)
+	case errors.Is(err, errMalformedVerdict):
+		j.health.Degraded(ctx, orgID, riskhealth.ReasonMalformedResponse)
+	default:
+		j.health.Failed(ctx, orgID, err)
+	}
 }
 
 type judgeCallResult struct {
@@ -269,16 +305,16 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt str
 		return judgeCallResult{}, fmt.Errorf("openrouter object completion: %w", err)
 	}
 	if response == nil || response.Message == nil {
-		return judgeCallResult{}, fmt.Errorf("empty completion response")
+		return judgeCallResult{}, fmt.Errorf("%w: empty completion response", errMalformedVerdict)
 	}
 	// A truncated completion often still parses, so reject it on the finish
 	// reason rather than the body.
 	if response.FinishReason != nil && *response.FinishReason == openrouter.FinishReasonLength {
-		return judgeCallResult{}, fmt.Errorf("completion hit the %d-token cap", maxVerdictTokens)
+		return judgeCallResult{}, fmt.Errorf("%w: completion hit the %d-token cap", errTruncatedVerdict, maxVerdictTokens)
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return judgeCallResult{}, fmt.Errorf("empty completion content")
+		return judgeCallResult{}, fmt.Errorf("%w: empty completion content", errMalformedVerdict)
 	}
 
 	var verdict struct {
@@ -287,7 +323,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt str
 		Rationale  string  `json:"rationale"`
 	}
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return judgeCallResult{}, fmt.Errorf("parse judge response: %w", err)
+		return judgeCallResult{}, fmt.Errorf("%w: parse judge response: %w", errMalformedVerdict, err)
 	}
 	// Clamp confidence and cap rationale length in code - the schema no longer
 	// enforces these (see the schema note above re: Anthropic route 400s).

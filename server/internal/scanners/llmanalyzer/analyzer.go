@@ -9,12 +9,14 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
@@ -54,6 +56,7 @@ type Completer interface {
 type Analyzer struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
+	health    *riskhealth.Recorder
 	completer Completer
 	stokens   *stokens.Codec
 }
@@ -61,10 +64,12 @@ type Analyzer struct {
 // NewAnalyzer builds an analyzer over completer. A nil completer yields a
 // disabled analyzer whose Analyze always returns a dead-letter result, so the
 // lanes need no nil checks of their own.
-func NewAnalyzer(logger *slog.Logger, tracerProvider trace.TracerProvider, completer Completer) *Analyzer {
+func NewAnalyzer(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, completer Completer) *Analyzer {
+	logger = logger.With(attr.SlogComponent("risk-llm-analyzer"))
 	return &Analyzer{
-		logger:    logger.With(attr.SlogComponent("risk-llm-analyzer")),
+		logger:    logger,
 		tracer:    tracerProvider.Tracer(tracerName),
+		health:    riskhealth.New(meterProvider, logger, riskhealth.ComponentLLMAnalyzer),
 		completer: completer,
 		stokens:   stokens.NewCodec(),
 	}
@@ -184,6 +189,7 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 		findings = append(findings, NewFinding(key, verdict.Risks[key].Reasoning))
 	}
 	span.SetAttributes(attribute.Int("gram.risk.llm.flagged_count", len(flagged)))
+	a.health.Completed(ctx, req.OrgID)
 
 	return Analysis{
 		Result: scanners.Result{
@@ -214,6 +220,11 @@ func (a *Analyzer) fail(ctx context.Context, span trace.Span, info CallInfo, com
 		attrs = append(attrs, attr.SlogRiskLLMCompletion(completion.Content))
 	}
 	a.logger.LogAttrs(ctx, slog.LevelWarn, "risk llm analysis failed; returning dead-letter result", attrs...)
+	if errors.Is(err, context.Canceled) {
+		a.health.Canceled(ctx, info.OrgID)
+	} else {
+		a.health.Degraded(ctx, info.OrgID, healthReason(err))
+	}
 	return Analysis{
 		Result:     DeadLetterResult(reason),
 		Verdict:    Verdict{Risks: nil, Raw: ""},
@@ -277,6 +288,25 @@ func DeadLetterReason(err error) string {
 		}
 	}
 	return ReasonRequestError
+}
+
+// healthReason maps an analyzer failure onto the shared risk analysis
+// degradation reasons. It is finer than DeadLetterReason for upstream statuses
+// so an exhausted model host balance or a rejected key is told apart from a
+// malformed request.
+func healthReason(err error) riskhealth.Reason {
+	switch {
+	case errors.Is(err, ErrDisabled):
+		return riskhealth.ReasonNotConfigured
+	case errors.Is(err, ErrTimeout):
+		return riskhealth.ReasonTimeout
+	case errors.Is(err, ErrEmptyCompletion), errors.Is(err, ErrParse):
+		return riskhealth.ReasonMalformedResponse
+	}
+	if upstream, ok := errors.AsType[*UpstreamError](err); ok {
+		return riskhealth.ReasonForHTTPStatus(upstream.Status)
+	}
+	return riskhealth.ReasonFromError(err)
 }
 
 // NewFinding builds the finding for a positive score on key. The reasoning
