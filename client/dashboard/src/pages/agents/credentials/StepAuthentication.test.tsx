@@ -41,8 +41,16 @@ vi.mock("@/components/sessions/useOAuthPopup", async (importOriginal) => {
 // The picker reads the server's credentials itself; here it only has to show
 // where it sits.
 vi.mock("./KeyCredentialChoice", () => ({
-  KeyCredentialChoice: ({ serverName }: { serverName: string }) => (
-    <div>Credential picker for {serverName}</div>
+  KeyCredentialChoice: ({
+    serverName,
+    accounts,
+  }: {
+    serverName: string;
+    accounts: boolean;
+  }) => (
+    <div data-accounts={String(accounts)}>
+      Credential picker for {serverName}
+    </div>
   ),
 }));
 
@@ -439,5 +447,64 @@ describe("the credential the agent's issued keys already use", () => {
     expect(
       screen.getByRole("button", { name: /Example server.*Your connection/ }),
     ).toBeTruthy();
+  });
+});
+
+describe("an agent connection the viewer may not see", () => {
+  const view = (choice?: string) =>
+    render(
+      <StepAuthentication
+        servers={[server]}
+        allServers
+        onRemove={vi.fn<(id: string) => void>()}
+        credentialChoice={
+          choice === undefined
+            ? undefined
+            : {
+                show: () => true,
+                value: () => choice,
+                onChange:
+                  vi.fn<(serverId: string, authClientId: string) => void>(),
+              }
+        }
+        connections={{
+          byServer: new Map([[server.id, { status: "missing" }]]),
+          assignedByServer: new Map([[server.id, { status: "forbidden" }]]),
+          refetch: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+
+  it("says so on the row and explains why, without asking for a sign-in", () => {
+    view();
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Connection not visible to you/,
+      }),
+    );
+    expect(
+      screen.getByText(
+        /You don't have permission to see which connection this agent uses for Example server/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Connect account" }),
+    ).toBeNull();
+  });
+
+  it("keeps a personal connection already picked for the agent's keys", () => {
+    view("account");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Example server.*Connection not visible to you/,
+      }),
+    );
+    expect(
+      screen
+        .getByText("Credential picker for Example server")
+        .getAttribute("data-accounts"),
+    ).toBe("true");
   });
 });

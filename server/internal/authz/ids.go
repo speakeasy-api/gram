@@ -22,10 +22,11 @@ func idFromUUID(id uuid.UUID) Option[string] {
 }
 
 // idFromString is the id an id type holds for a string. Absent: the empty
-// string, the wildcard, which only grants may carry, a reserved marker such
-// as $represented_user, and anything containing whitespace.
+// string, the nil uuid written out, as idFromUUID treats it, the wildcard,
+// which only grants may carry, a reserved marker such as $represented_user,
+// and anything containing whitespace.
 func idFromString(id string) Option[string] {
-	if id == "" || id == WildcardResource || strings.HasPrefix(id, "$") || strings.ContainsFunc(id, unicode.IsSpace) {
+	if id == "" || strings.EqualFold(id, uuid.Nil.String()) || id == WildcardResource || strings.HasPrefix(id, "$") || strings.ContainsFunc(id, unicode.IsSpace) {
 		return None[string]()
 	}
 	return Some(id)

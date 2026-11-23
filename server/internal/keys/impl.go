@@ -144,7 +144,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	// them out of hooks entirely. Every other scope (and any mix) stays
 	// admin-only.
 	if !slices.Equal(finalScopes, []string{auth.APIKeyScopeHooks.String()}) || len(payload.PolicyGrants) > 0 {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 			return nil, err
 		}
 	}
@@ -178,7 +178,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load key project").LogError(ctx, s.logger)
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(project.ID)).Read()); err != nil {
 			return nil, err
 		}
 		projectID = uuid.NullUUID{UUID: project.ID, Valid: true}
@@ -268,7 +268,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 		}
 		return s.listAgentKeys(ctx, *payload.AgentID)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, err
 	}
 
@@ -389,7 +389,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		}
 		return nil
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return err
 	}
 

@@ -453,7 +453,7 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 				// Cached discovery keeps consented annotations; execution checks the live tool disposition.
 				disposition = dispositionFromAnnotations(entry.Annotations)
 			}
-			checks = append(checks, authz.MCPToolCallCheck(resourceID.String(), authz.MCPToolCallDimensions{Tool: name, Disposition: disposition, ProjectID: member.projectID.String()}))
+			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(member.projectID)).ToolCall(name, disposition))
 		}
 	}
 	if len(checks) > 0 {

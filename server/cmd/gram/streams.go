@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/storage"
 	"github.com/speakeasy-api/gram/infra/pkg/storagebindings"
+	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -349,6 +350,7 @@ func newStreamsCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, staffFlags()...)
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
@@ -370,6 +372,10 @@ func newStreamsCommand() *cli.Command {
 			if err := checkPystreamsStub(serviceEnv, c.Bool("pystreams-stub")); err != nil {
 				return err
 			}
+			staffOrg, err := staffOrganizationFromCLI(c)
+			if err != nil {
+				return err
+			}
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "streams"
 			logger := PullLogger(c.Context).With(
@@ -389,6 +395,7 @@ func newStreamsCommand() *cli.Command {
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
 				GitSHA:         GitSHA,
+				Partition:      PullPartition(ctx),
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})
@@ -428,6 +435,9 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to database: %w", err)
 			}
 			defer db.Close()
+			if err := verifyStaffOrganization(ctx, logger, db, staffOrg); err != nil {
+				return err
+			}
 
 			encryptionClient, err := encryption.New(c.String("encryption-key"))
 			if err != nil {
@@ -485,7 +495,7 @@ func newStreamsCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient, staffOrg)
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
@@ -738,6 +748,7 @@ func newStreamsCommand() *cli.Command {
 			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
 			approvalSlackHandler := slackapproval.NewEventHandler(logger, &background.TemporalRiskApprovalSlackScheduler{TemporalEnv: temporalEnv})
+			accessRequestSlackHandler := slackrequests.NewEventHandler(logger, &background.TemporalAccessRequestSlackScheduler{TemporalEnv: temporalEnv})
 
 			var siteURL *url.URL
 			if raw := c.String("site-url"); raw != "" {
@@ -774,6 +785,9 @@ func newStreamsCommand() *cli.Command {
 				}
 				if err := approvalSlackHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("send approval requests to Slack: %w", err))
+				}
+				if err := accessRequestSlackHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("send access requests to Slack: %w", err))
 				}
 				return errors.Join(handlerErrors...)
 			})

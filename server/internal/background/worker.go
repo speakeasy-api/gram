@@ -27,6 +27,7 @@ import (
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
+	"github.com/speakeasy-api/gram/server/internal/access/slackrequests"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -65,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -139,7 +141,11 @@ type WorkerOptions struct {
 	// through the approvals service.
 	ServerURL *url.URL
 	// OrgHosts resolves the host of links sent to an organization by email.
-	OrgHosts          *orghost.Resolver
+	OrgHosts *orghost.Resolver
+	// StaffOrganization is the deployment's Speakeasy staff organization. Its
+	// connection attempts do not count toward the daily outcomes label
+	// threshold.
+	StaffOrganization staff.Organization
 	BillingTracker    billing.Tracker
 	BillingRepository billing.Repository
 	StripeClient      stripeclient.Client
@@ -271,6 +277,7 @@ func ForDeploymentProcessing(
 		SiteURL:                        nil,
 		ServerURL:                      nil,
 		OrgHosts:                       orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		StaffOrganization:              staff.Organization{},
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		StripeClient:                   nil,
@@ -370,6 +377,7 @@ func NewTemporalWorker(
 		SiteURL:                        nil,
 		ServerURL:                      nil,
 		OrgHosts:                       orghost.New(orghost.Config{ServerURL: nil, SiteURL: nil, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
+		StaffOrganization:              staff.Organization{},
 		BillingTracker:                 nil,
 		BillingRepository:              nil,
 		StripeClient:                   nil,
@@ -435,6 +443,7 @@ func NewTemporalWorker(
 			SiteURL:                        conv.Default(o.SiteURL, opts.SiteURL),
 			ServerURL:                      conv.Default(o.ServerURL, opts.ServerURL),
 			OrgHosts:                       conv.Default(o.OrgHosts, opts.OrgHosts),
+			StaffOrganization:              conv.Default(o.StaffOrganization, opts.StaffOrganization),
 			BillingTracker:                 conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:              conv.Default(o.BillingRepository, opts.BillingRepository),
 			StripeClient:                   conv.Default(o.StripeClient, opts.StripeClient),
@@ -589,6 +598,8 @@ func NewTemporalWorker(
 		opts.Connections,
 		opts.StartupSeeds,
 		signInEpochs(opts.RedisClient),
+		opts.ServerURL,
+		opts.StaffOrganization,
 	)
 	activities.memoryEvalRunner = opts.MemoryEvals
 
@@ -800,8 +811,13 @@ func NewTemporalWorker(
 			temporalWorker.RegisterActivity(riskApprovalSlack.NotifyRiskApprovalApprovers)
 			temporalWorker.RegisterActivity(riskApprovalSlack.FinishRiskApprovalCards)
 		}
+		requestNotifier := slackrequests.NewNotifier(logger, slackrequests.NewCards(opts.DB, opts.OrgHosts), slackDirectory.sync, slackapi.NewClient("", opts.GuardianPolicy.PooledClient()))
+		accessRequestSlack := &accessRequestSlackActivities{logger: logger, notifier: requestNotifier}
+		temporalWorker.RegisterActivity(accessRequestSlack.NotifyAccessRequestAdmins)
+		temporalWorker.RegisterActivity(accessRequestSlack.FinishAccessRequestCards)
 	}
 	temporalWorker.RegisterWorkflow(RiskApprovalSlackWorkflow)
+	temporalWorker.RegisterWorkflow(AccessRequestSlackWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)

@@ -707,16 +707,14 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	}
 	for _, role := range roles.Roles {
 		grants, unevaluated := roleAuthzGrants(role)
-		serverCheck := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), projectID.String())
+		serverCheck := authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(projectID)).Connect()
 		canEnter, err := authz.GrantsAuthorize(grants, serverCheck)
 		if err != nil {
 			return GetMCPAccessOutput{}, fmt.Errorf("evaluate server access for role %q: %w", role.Name, err)
 		}
 		allowedTools := make([]string, 0, len(tools))
 		for _, tool := range tools {
-			allowed, err := authz.GrantsAuthorize(grants, authz.MCPToolCallCheck(row.McpServerID.String(), authz.MCPToolCallDimensions{
-				Tool: tool.Name, Disposition: tool.Disposition, ProjectID: projectID.String(),
-			}))
+			allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(projectID)).ToolCall(tool.Name, tool.Disposition))
 			if err != nil {
 				return GetMCPAccessOutput{}, fmt.Errorf("evaluate tool access for role %q: %w", role.Name, err)
 			}
@@ -775,7 +773,7 @@ func (s *AccessReadService) accessTools(ctx context.Context, row platformrepo.Ge
 				if tool == nil || tool.Name == "" {
 					continue
 				}
-				tools = append(tools, MCPAccessTool{Name: tool.Name, Disposition: conv.DispositionFromAnnotations(tool.Annotations)})
+				tools = append(tools, MCPAccessTool{Name: tool.Name, Disposition: annotationDisposition(tool.Annotations)})
 			}
 		}
 	case row.RemoteMcpServerID.Valid || row.TunneledMcpServerID.Valid:
@@ -791,7 +789,7 @@ func (s *AccessReadService) accessTools(ctx context.Context, row platformrepo.Ge
 		for _, tool := range rows {
 			tools = append(tools, MCPAccessTool{
 				Name: tool.ToolName,
-				Disposition: conv.DispositionFromAnnotations(conv.AnnotationsFromColumns(
+				Disposition: annotationDisposition(conv.AnnotationsFromColumns(
 					tool.ReadOnlyHint, tool.DestructiveHint, tool.IdempotentHint, tool.OpenWorldHint,
 				)),
 			})
@@ -1116,4 +1114,15 @@ func authClientRole(role *accessgen.Role) *accessgen.Role {
 
 func anyAuthClientRule(access []MCPRoleAuthClientAccess) bool {
 	return slices.ContainsFunc(access, func(a MCPRoleAuthClientAccess) bool { return a.Access != "not_granted" })
+}
+
+// annotationDisposition is the disposition a call to a tool with these
+// annotations carries.
+func annotationDisposition(a *types.ToolAnnotations) string {
+	if a == nil {
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
+	}
+	disposition, _ := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	return disposition
 }

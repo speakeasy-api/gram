@@ -388,6 +388,7 @@ function inventoryServer(
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: new Date("2026-01-04T10:00:00Z"),
     lastSeen: new Date("2026-01-05T10:00:00Z"),
+    blockedCallCount: 0,
     observedUseCount: 8,
     requestCount: 0,
     serverName: "GitHub MCP",
@@ -842,7 +843,7 @@ describe("ShadowMCPServerDetail", () => {
 
     renderDetailPage();
 
-    expect(screen.queryByRole("button", { name: "Decide access" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Approve server" })).toBeNull();
     expect(screen.queryByTestId("decide-access-sheet")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Review request" }));
@@ -862,7 +863,8 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.queryByRole("button", { name: "Review request" })).toBeNull();
     expect(screen.queryByTestId("decide-access-sheet")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Decide access" }));
+    // Servers are blocked by default here, so the page offers approval.
+    fireEvent.click(screen.getByRole("button", { name: "Approve server" }));
 
     const sheet = screen.getByTestId("decide-access-sheet");
     expect(sheet.getAttribute("data-canonical-server-url")).toBe(

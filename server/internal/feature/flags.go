@@ -5,11 +5,6 @@ type Flag string
 const (
 	// FlagChannels gates the Channels rollout for an organization.
 	FlagChannels Flag = "channels"
-	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
-	// based") risk policy MVP. While set, only opted-in organizations can
-	// create or update nl-type risk policies and have them enforced. The
-	// dashboard gates the matching UI behind the same key.
-	FlagPromptPolicies Flag = "gram-prompt-policies"
 	// FlagToolApprovals gates creating require_approval risk policies (tool
 	// approvals) and the dashboard's approval wizard and Tool approvals tab.
 	// Evaluated server-side on policy create and update and in the dashboard;
@@ -33,6 +28,15 @@ const (
 	// slug). Fails closed to the operator. Existing connections keep the
 	// runtime they were created with. Removed once the gateway is the default.
 	FlagPrivateNetworkGateway Flag = "private-network-gateway"
+	// FlagAccessRequests gates stored access requests: requestAccess records
+	// a request an admin can approve as a temporary grant or deny, from the
+	// dashboard or a Slack DM, and refuses scopes that cannot be given
+	// temporarily. Evaluated server-side in requestAccess and in the
+	// dashboard; targeted by PostHog organization group (org slug). Fails
+	// closed: requestAccess then only emails the admins, as before, and the
+	// request listing answers not found. Requests already stored stay
+	// decidable and withdrawable. Removed once access requests are GA.
+	FlagAccessRequests Flag = "access-requests"
 	// FlagRiskEnforcementPubsub routes applicable realtime scanner lanes over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
 	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
@@ -61,6 +65,14 @@ const (
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
 	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
 	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
+	// FlagShadowMCPAutoLink links a Shadow MCP server automatically to the
+	// project MCP server that proxies its URL, so direct calls are sent there
+	// without an administrator linking the two. Evaluated server-side by the
+	// hook guard and the Shadow MCP inventory; targeted by PostHog
+	// organization group (org slug) or project slug group. Fails closed: off,
+	// only links an administrator made redirect, as before. Removed once
+	// automatic links are GA.
+	FlagShadowMCPAutoLink Flag = "shadow-mcp-auto-link"
 	// FlagStoredGatewayMachineAccess lets admitted agents and workloads use
 	// stored gateways. The server evaluates it per organization and fails closed.
 	FlagStoredGatewayMachineAccess Flag = "stored-gateway-machine-access"

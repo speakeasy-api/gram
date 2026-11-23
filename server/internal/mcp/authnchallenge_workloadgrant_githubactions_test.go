@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -184,7 +185,7 @@ func TestGitHubActionsRule_OneAgentForPluginsMCPAndHooks(t *testing.T) {
 	// is checked against the engine that handler uses.
 	plugins := agent.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
 		f.ti.productFeatures, f.ti.serverURL.String(), orghost.New(orghost.Config{ServerURL: f.ti.serverURL, SiteURL: nil}),
-		assetstest.NewTestBlobStore(t), nil, nil, tokens)
+		assetstest.NewTestBlobStore(t), nil, nil, tokens, marketplacetokenstest.Tokens(t, f.ti.conn))
 	polling, err := plugins.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "getPlugins"), accessToken, &security.JWTScheme{Name: constants.DeviceAgentTokenSecurityScheme, Scopes: []string{}, RequiredScopes: []string{}})
 	require.NoError(t, err)
 	polled, err := plugins.GetPlugins(polling, &agentgen.GetPluginsPayload{})
@@ -193,10 +194,10 @@ func TestGitHubActionsRule_OneAgentForPluginsMCPAndHooks(t *testing.T) {
 	require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()).String(), polled.Principal.Urn, "getPlugins answers for the agent the rule assigns")
 
 	// Hooks for the workflow's project.
-	require.NoError(t, f.ti.authzEngine.Require(admitted, authz.HooksIngestCheck(f.fx.orgID, f.fx.target.ProjectID.String())))
+	require.NoError(t, f.ti.authzEngine.Require(admitted, authz.Org(authz.OrgIDFrom(f.fx.orgID)).HooksIngest(authz.ProjectIDOf(f.fx.target.ProjectID))))
 
 	// Hooks for any other project are refused: the grant names one project.
-	err = f.ti.authzEngine.Require(admitted, authz.HooksIngestCheck(f.fx.orgID, uuid.NewString()))
+	err = f.ti.authzEngine.Require(admitted, authz.Org(authz.OrgIDFrom(f.fx.orgID)).HooksIngest(authz.ProjectIDFrom(uuid.NewString())))
 	shareable, ok := errors.AsType[*oops.ShareableError](err)
 	require.True(t, ok, "error: %v", err)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)

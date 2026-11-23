@@ -21,8 +21,10 @@ import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { CatalogLogo } from "@/pages/catalog/CatalogLogo";
 import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
@@ -47,7 +49,10 @@ import {
   shadowMCPOfficialServerDescription,
   shadowMCPSetUpHref,
 } from "./shadowMCPOfficialServer";
-import { useSaveShadowMCPOfficialServer } from "./useSaveShadowMCPOfficialServer";
+import {
+  type OfficialServerChoice,
+  useSaveShadowMCPOfficialServer,
+} from "./useSaveShadowMCPOfficialServer";
 
 /**
  * The event a request for help records. Speakeasy staff are notified from
@@ -234,31 +239,39 @@ function OpenServerButton({
 
 function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
   const { save, isPending } = useSaveShadowMCPOfficialServer();
+  // Without automatic links, removing the link is the only way out, as it
+  // always was. The server decides which links are automatic; this only
+  // picks the actions.
+  const autoLinks =
+    useFeatureFlag(FEATURE_FLAGS.shadowMCPAutoLink).status === "enabled";
   const official = server.officialServer;
   if (!official) return null;
-  const restoreLink = async () => {
-    try {
-      await save({
+  const automatic = official.automatic === true;
+  // Undo puts back exactly what was there: the automatic link, or the
+  // server the admin chose.
+  const previous: OfficialServerChoice = automatic
+    ? { serverUrl: server.canonicalServerUrl }
+    : {
         serverUrl: server.canonicalServerUrl,
         mcpServerId: official.mcpServerId,
-      });
-      toast.success(`Link to “${official.name}” restored`);
+      };
+  const restoreLink = async () => {
+    try {
+      await save(previous);
+      toast.success(`“${official.name}” is the official server again`);
     } catch {
-      toast.error("Could not restore the link. Try again.");
+      toast.error("Could not restore the official server. Try again.");
     }
   };
 
-  const removeLink = async () => {
+  const change = async (choice: OfficialServerChoice, done: string) => {
     try {
-      await save({
-        serverUrl: server.canonicalServerUrl,
-        mcpServerId: undefined,
-      });
-      toast.success(`Link to “${official.name}” removed`, {
+      await save(choice);
+      toast.success(done, {
         action: { label: "Undo", onClick: () => void restoreLink() },
       });
     } catch {
-      toast.error("Could not remove the link. Try again.");
+      toast.error("Could not change the official server. Try again.");
     }
   };
 
@@ -268,9 +281,18 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         title="Official server"
         description={shadowMCPOfficialServerDescription(server)}
         badge={
-          <Badge variant="success" size="sm">
-            <Badge.Text>{SHADOW_MCP_OFFICIAL_STATE_LABEL.onboarded}</Badge.Text>
-          </Badge>
+          <>
+            <Badge variant="success" size="sm">
+              <Badge.Text>
+                {SHADOW_MCP_OFFICIAL_STATE_LABEL.onboarded}
+              </Badge.Text>
+            </Badge>
+            {automatic ? (
+              <Badge variant="neutral" size="sm">
+                <Badge.Text>Automatic</Badge.Text>
+              </Badge>
+            ) : null}
+          </>
         }
       />
 
@@ -307,20 +329,76 @@ function LinkedPanel({ server }: { server: ShadowMCPInventoryServer }) {
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Text muted small className="max-w-xl">
-          Remove the link to let direct connections follow the usual rules
-          again. You can add it back at any time.
-        </Text>
-        <Button
-          variant="tertiary"
-          size="sm"
-          disabled={isPending}
-          onClick={() => void removeLink()}
-        >
-          <Button.Text>Remove link</Button.Text>
-        </Button>
-      </div>
+      {autoLinks || automatic ? null : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Text muted small className="max-w-xl">
+            Stop using it as the official server to let direct connections
+            follow the usual rules again. You can make it official again at any
+            time.
+          </Text>
+          <Button
+            variant="tertiary"
+            size="sm"
+            disabled={isPending}
+            onClick={() =>
+              void change(
+                { serverUrl: server.canonicalServerUrl },
+                `“${official.name}” is no longer the official server`,
+              )
+            }
+          >
+            <Button.Text>Stop using as official</Button.Text>
+          </Button>
+        </div>
+      )}
+      {autoLinks || automatic ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Text muted small className="max-w-xl">
+            {automatic
+              ? "A server that proxies this URL is made official by default. If it is not ready yet, keep the direct connection; you can make it official again at any time."
+              : "You chose this server. Remove your choice to go back to the default: a server that proxies this URL is made official automatically."}
+          </Text>
+          <div className="flex flex-wrap items-center gap-2">
+            {automatic ? null : (
+              <Button
+                variant="tertiary"
+                size="sm"
+                disabled={isPending}
+                onClick={() =>
+                  void change(
+                    { serverUrl: server.canonicalServerUrl },
+                    `Choice of “${official.name}” removed`,
+                  )
+                }
+              >
+                <Button.Text>Remove choice</Button.Text>
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isPending}
+              onClick={() =>
+                void change(
+                  { serverUrl: server.canonicalServerUrl, keepShadow: true },
+                  "Direct connection kept. Agents are no longer sent elsewhere.",
+                )
+              }
+            >
+              <Button.Text>Keep direct connection</Button.Text>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {autoLinks || automatic ? (
+        <Advanced>
+          <LinkAnotherServer
+            server={server}
+            excludeMcpServerId={official.mcpServerId}
+          />
+        </Advanced>
+      ) : null}
     </section>
   );
 }
@@ -465,6 +543,8 @@ function UnlinkedPanel({
   const url = server.canonicalServerUrl;
   const serverName = server.serverName || server.urlHost || url;
   const suggested = server.suggestedOfficialServer;
+  // The admin kept the direct connection although a server proxies this URL.
+  const declined = server.officialServerDeclined === true;
   const { mutateAsync } = probe;
   const latestUrl = useRef(url);
   latestUrl.current = url;
@@ -537,13 +617,25 @@ function UnlinkedPanel({
   const linkSuggested = async () => {
     if (!suggested) return;
     try {
-      await save({
-        serverUrl: url,
-        mcpServerId: suggested.mcpServerId,
-      });
-      toast.success(`Linked to “${suggested.name}”`);
+      // After keeping the direct connection, linking again removes that
+      // choice, so the server that proxies the URL is linked by default.
+      await save(
+        declined
+          ? { serverUrl: url }
+          : { serverUrl: url, mcpServerId: suggested.mcpServerId },
+      );
+      toast.success(`“${suggested.name}” is now the official server`);
     } catch {
-      toast.error("Could not link the server. Try again.");
+      toast.error("Could not make the server official. Try again.");
+    }
+  };
+
+  const resetToAutomatic = async () => {
+    try {
+      await save({ serverUrl: url });
+      toast.success("Direct connection no longer kept");
+    } catch {
+      toast.error("Could not change the official server. Try again.");
     }
   };
 
@@ -596,9 +688,13 @@ function UnlinkedPanel({
         <OptionRow
           key="link"
           recommended={isRecommended}
-          icon={<Icon name="link" className="size-4" />}
+          icon={<Icon name="badge-check" className="size-4" />}
           title={`Already served as “${suggested.name}”`}
-          description="A server in this project proxies the same URL. Link it to make it the official version: no new server, no setup."
+          description={
+            declined
+              ? "A server in this project proxies the same URL. You kept the direct connection instead; make it official to send agents there."
+              : "A server in this project proxies the same URL. Make it official to block direct connections and send agents to it. No new server, no setup."
+          }
           actions={
             <>
               <OpenServerButton
@@ -610,8 +706,11 @@ function UnlinkedPanel({
                 variant={isRecommended ? "primary" : "secondary"}
                 disabled={linking}
                 onClick={() => void linkSuggested()}
+                aria-label={`Make official: “${suggested.name}”`}
               >
-                <Button.Text>{linking ? "Linking" : "Link it"}</Button.Text>
+                <Button.Text>
+                  {linking ? "Making official" : "Make official"}
+                </Button.Text>
               </Button>
             </>
           }
@@ -624,7 +723,7 @@ function UnlinkedPanel({
           recommended={isRecommended}
           icon={<CatalogLogo server={catalogEntry} className="size-5" />}
           title={`In the Speakeasy catalog as “${catalogEntry.title || serverName}”`}
-          description="Its setup is known, so it is added here in one step and linked as soon as it is on."
+          description="Its setup is known, so it is added here in one step and made official as soon as it is on."
           actions={
             <CreateServerGate allowed={canCreateServer}>
               <Button
@@ -710,8 +809,37 @@ function UnlinkedPanel({
     <section aria-label="Make this server official" className={PANEL_CLASS}>
       <PanelHeading
         title="Make this an official server"
-        description="Serve it through Speakeasy so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
+        description={
+          declined
+            ? "You kept the direct connection, so no server is made official automatically. Direct connections follow the usual Shadow MCP rules."
+            : "Serve it through Speakeasy so you decide who may use it and can see what it does. Direct connections are then blocked, and agents are sent to the official server."
+        }
+        badge={
+          declined ? (
+            <Badge variant="neutral" size="sm">
+              <Badge.Text>Direct connection kept</Badge.Text>
+            </Badge>
+          ) : undefined
+        }
       />
+      {declined && !suggested ? (
+        // No server proxies the URL today. Removing the choice lets one that
+        // appears later be linked automatically.
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Text muted small className="max-w-xl">
+            Go back to the default to make a server that proxies this URL
+            official as soon as one exists.
+          </Text>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={linking}
+            onClick={() => void resetToAutomatic()}
+          >
+            <Button.Text>Choose automatically</Button.Text>
+          </Button>
+        </div>
+      ) : null}
       {primaryKey ? options[primaryKey](true) : <ChecksSkeleton />}
       <Advanced>
         {others.map((key) => options[key](false))}
@@ -742,8 +870,11 @@ function Advanced({ children }: { children: React.ReactNode }) {
  */
 function LinkAnotherServer({
   server,
+  excludeMcpServerId,
 }: {
   server: ShadowMCPInventoryServer;
+  /** The server already linked, which is not offered again. */
+  excludeMcpServerId?: string;
 }): JSX.Element {
   const gramProject = useProjectSlugForRequests();
   const serversQuery = useMcpServers({ gramProject }, undefined, {
@@ -753,7 +884,9 @@ function LinkAnotherServer({
   const [selected, setSelected] = useState("");
 
   const enabled = (serversQuery.data?.mcpServers ?? []).filter(
-    (candidate) => candidate.visibility !== "disabled",
+    (candidate) =>
+      candidate.visibility !== "disabled" &&
+      candidate.id !== excludeMcpServerId,
   );
   const nameCounts = new Map<string, number>();
   for (const candidate of enabled) {
@@ -772,6 +905,9 @@ function LinkAnotherServer({
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const chosenLabel = candidates.find(
+    (candidate) => candidate.id === selected,
+  )?.label;
   const onLink = async () => {
     const chosen = candidates.find((candidate) => candidate.id === selected);
     try {
@@ -779,21 +915,26 @@ function LinkAnotherServer({
         serverUrl: server.canonicalServerUrl,
         mcpServerId: selected,
       });
-      toast.success(`Linked to “${chosen?.label ?? "the server"}”`);
+      toast.success(
+        `“${chosen?.label ?? "The server"}” is now the official server`,
+      );
     } catch {
-      toast.error("Could not link the server. Try again.");
+      toast.error("Could not make the server official. Try again.");
     }
   };
 
   return (
     <OptionRow
       icon={<Icon name="server" className="size-4" />}
-      title="Link another server"
-      description="Link any server in this project as the official version, for example one at a different URL."
+      title="Use another server as official"
+      description="Make any server in this project the official version, for example when several servers proxy this URL or one is at a different URL."
     >
       <div className="flex max-w-xl items-center gap-2">
         <Select value={selected} onValueChange={setSelected}>
-          <SelectTrigger aria-label="Server to link" className="w-full">
+          <SelectTrigger
+            aria-label="Server to make official"
+            className="w-full"
+          >
             <SelectValue placeholder="Choose a server" />
           </SelectTrigger>
           <SelectContent>
@@ -809,8 +950,15 @@ function LinkAnotherServer({
           size="sm"
           disabled={selected === "" || isPending}
           onClick={() => void onLink()}
+          aria-label={
+            chosenLabel
+              ? `Make official: “${chosenLabel}”`
+              : "Make official: chosen server"
+          }
         >
-          <Button.Text>{isPending ? "Linking" : "Link"}</Button.Text>
+          <Button.Text>
+            {isPending ? "Making official" : "Make official"}
+          </Button.Text>
         </Button>
       </div>
     </OptionRow>

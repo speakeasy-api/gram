@@ -1112,7 +1112,7 @@ describe("live provider setup", () => {
           status === "authorization_required"
             ? "Sign in to Slack, then test the connection again."
             : status === "configuration_required"
-              ? "Review this server’s User Identity configuration before continuing."
+              ? "Review this server’s user identity settings before continuing."
               : "Couldn’t test the Slack connection. Review app permissions and try again.",
         ),
       );

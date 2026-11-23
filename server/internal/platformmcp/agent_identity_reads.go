@@ -241,8 +241,13 @@ type AgentCheckGroup struct {
 
 	ResourceID string `json:"resource_id"`
 
-	// ResourceName is the MCP server's name when the resource is one.
+	// ResourceName is the MCP server's name when the resource is one, or
+	// for an auth client (upstream credential) check, the name of the server
+	// it was used for.
 	ResourceName string `json:"resource_name,omitempty"`
+
+	// ServerID is, for an auth client check, the MCP server it was used for.
+	ServerID string `json:"server_id,omitempty"`
 
 	// Count is how many such checks the read found.
 	Count int `json:"count"`
@@ -250,7 +255,8 @@ type AgentCheckGroup struct {
 	// LastAt is the latest one, RFC3339.
 	LastAt string `json:"last_at"`
 
-	// Reason is why the latest one was decided as it was, such as no_grants.
+	// Reason is why the latest one was decided as it was, such as no_grants,
+	// or connection_owner_mismatch for another member's personal connection.
 	Reason string `json:"reason"`
 }
 
@@ -298,7 +304,7 @@ func (s *AgentIdentityReadService) MCPAccess(ctx context.Context, principal Prin
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return zero, err
 	}
-	agent, err := s.requireAgent(ctx, principal, input.AgentID, authz.ScopeAgentWrite)
+	agent, err := s.requireAgent(ctx, principal, input.AgentID, authz.AgentRef.Write)
 	if err != nil {
 		return zero, err
 	}
@@ -386,13 +392,13 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return zero, err
 	}
-	agent, err := s.requireAgent(ctx, principal, input.AgentID, authz.ScopeAgentRead)
+	agent, err := s.requireAgent(ctx, principal, input.AgentID, authz.AgentRef.Read)
 	if err != nil {
 		return zero, err
 	}
 	// Live organization access is settled before the input is judged, so a
 	// caller without org:read learns nothing from a window error.
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}); err != nil {
+	if err := s.engine.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Read()); err != nil {
 		if isAuthorizationRefusal(err) {
 			return zero, ErrAgentChecksForbidden
 		}
@@ -457,7 +463,7 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 // authorizer admits only a dashboard session, so this applies the same owner
 // rule through agents.OwnsUnblocked and the same scope check through the
 // caller's grants.
-func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal Principal, rawID string, scope authz.Scope) (agentsrepo.Agent, error) {
+func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal Principal, rawID string, permission func(authz.AgentRef) authz.Check) (agentsrepo.Agent, error) {
 	var zero agentsrepo.Agent
 	agentID, err := uuid.Parse(strings.TrimSpace(rawID))
 	if err != nil || agentID == uuid.Nil {
@@ -477,20 +483,21 @@ func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal P
 	if agents.OwnsUnblocked(principal.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt) {
 		return agent, nil
 	}
-	err = s.engine.Require(ctx, authz.Check{Scope: scope, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil})
+	check := permission(authz.Agent(authz.AgentIDOf(agent.ID)))
+	err = s.engine.Require(ctx, check)
 	if err == nil {
 		return agent, nil
 	}
 	if !isAuthorizationRefusal(err) {
 		return zero, fmt.Errorf("authorize agent read: %w", err)
 	}
-	if scope != authz.ScopeAgentRead {
+	if check.Scope != authz.ScopeAgentRead {
 		return zero, ErrAgentNotAvailable
 	}
 	// agent:write does not include agent:read. A caller holding it already
 	// reads the agent through get_agent_mcp_access, so hiding the agent
 	// protects nothing; name the permission they lack instead.
-	err = s.engine.Require(ctx, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil})
+	err = s.engine.Require(ctx, authz.Agent(authz.AgentIDOf(agent.ID)).Write())
 	if err == nil {
 		return zero, ErrAgentReadForbidden
 	}
@@ -506,10 +513,7 @@ func (s *AgentIdentityReadService) mcpNames(ctx context.Context, organizationID 
 	var ids []uuid.UUID
 	for _, result := range results {
 		for _, check := range result.Challenges {
-			if conv.PtrValOr(check.ResourceKind, "") != authz.ResourceKindMCP {
-				continue
-			}
-			id, err := uuid.Parse(conv.PtrValOr(check.ResourceID, ""))
+			id, err := uuid.Parse(checkServerID(check))
 			if err != nil {
 				continue
 			}
@@ -748,25 +752,42 @@ func agentChecksWindow(rawFrom, rawTo *string, now time.Time) (time.Time, time.T
 	return start, end, nil
 }
 
-// groupAgentChecks groups one outcome's checks by scope and resource. Rows
-// arrive newest first, so each group's first row is its latest.
+// checkServerID is the MCP server a check concerns: the resource of a server
+// check, or the server an auth client check recorded it was used for.
+func checkServerID(check *accessgen.AuthzChallenge) string {
+	switch conv.PtrValOr(check.ResourceKind, "") {
+	case authz.ResourceKindMCP:
+		return conv.PtrValOr(check.ResourceID, "")
+	case authz.ResourceKindMCPAuthClient:
+		return check.Selector[authz.ChallengeKeyMCPServerID]
+	default:
+		return ""
+	}
+}
+
+// groupAgentChecks groups one outcome's checks by scope and resource, and an
+// auth client's checks also by the server it was used for. Rows arrive newest
+// first, so each group's first row is its latest.
 func groupAgentChecks(result *accessgen.ListChallengesResult, names map[string]string) AgentCheckOutcome {
 	groups := []AgentCheckGroup{}
 	index := make(map[string]int)
 	for _, check := range result.Challenges {
 		kind := conv.PtrValOr(check.ResourceKind, "")
 		resourceID := conv.PtrValOr(check.ResourceID, "")
-		key := check.Scope + "\x00" + kind + "\x00" + resourceID
+		serverID := checkServerID(check)
+		// An auth client serves several servers, so its checks are grouped
+		// by the server it was used for too.
+		key := check.Scope + "\x00" + kind + "\x00" + resourceID + "\x00" + serverID
 		if at, ok := index[key]; ok {
 			groups[at].Count++
 			continue
 		}
-		name := ""
-		if kind == authz.ResourceKindMCP {
-			name = names[resourceID]
+		groupServerID := ""
+		if kind == authz.ResourceKindMCPAuthClient {
+			groupServerID = serverID
 		}
 		index[key] = len(groups)
-		groups = append(groups, AgentCheckGroup{Scope: check.Scope, ResourceKind: kind, ResourceID: resourceID, ResourceName: name, Count: 1, LastAt: check.Timestamp, Reason: check.Reason})
+		groups = append(groups, AgentCheckGroup{Scope: check.Scope, ResourceKind: kind, ResourceID: resourceID, ResourceName: names[serverID], ServerID: groupServerID, Count: 1, LastAt: check.Timestamp, Reason: check.Reason})
 	}
 	return AgentCheckOutcome{Total: result.Total, Groups: groups, Truncated: result.Total > len(result.Challenges)}
 }

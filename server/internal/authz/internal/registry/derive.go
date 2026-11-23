@@ -258,14 +258,18 @@ func (r Registry) DeriveRequiredCheckDimensions() map[string][]string {
 }
 
 // DeriveDimensionValues returns the closed value set of the dimension key on
-// kind, as a lookup.
+// kind, whether the type or one of its permissions declares it, as a lookup.
 func (r Registry) DeriveDimensionValues(kind Kind, key string) map[string]bool {
 	out := make(map[string]bool)
 	for _, t := range r.Types {
 		if t.Kind != kind {
 			continue
 		}
-		for _, d := range t.Dimensions {
+		dimensions := slices.Clone(t.Dimensions)
+		for _, p := range t.Permissions {
+			dimensions = append(dimensions, p.Dimensions...)
+		}
+		for _, d := range dimensions {
 			if d.Key != key {
 				continue
 			}
@@ -302,6 +306,38 @@ func (r Registry) DeriveCatalog() []CatalogEntry {
 		return cmp.Compare(slices.Index(ScopeCategories, a.Category), slices.Index(ScopeCategories, b.Category))
 	})
 	return entries
+}
+
+// ScopeOpenKeys lists, for one scope, the grant keys each kind of check may
+// leave out. The generator writes each as an authz openKeys, field for field.
+type ScopeOpenKeys struct {
+	Probe          []string
+	Connection     []string
+	PolicyAudience []string
+}
+
+// DeriveOpenKeys maps each permission's scope that opens a key to the keys it
+// opens. Blocks open none: matching an exclusion never leaves a key out.
+func (r Registry) DeriveOpenKeys() map[Scope]ScopeOpenKeys {
+	out := make(map[Scope]ScopeOpenKeys)
+	for _, s := range r.Scopes() {
+		if s.Block || len(s.Permission.Open) == 0 {
+			continue
+		}
+		var keys ScopeOpenKeys
+		for _, open := range s.Permission.Open {
+			switch open.On {
+			case OpenOnProbe:
+				keys.Probe = open.Keys
+			case OpenOnConnection:
+				keys.Connection = open.Keys
+			case OpenOnPolicyAudience:
+				keys.PolicyAudience = open.Keys
+			}
+		}
+		out[s.Scope] = keys
+	}
+	return out
 }
 
 // DeriveAgentEligibility maps every scope, root and retired ones included, to

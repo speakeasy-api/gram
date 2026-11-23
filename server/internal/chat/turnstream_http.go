@@ -44,12 +44,7 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Read()); err != nil {
 		return err
 	}
 	if s.turnStream == nil {

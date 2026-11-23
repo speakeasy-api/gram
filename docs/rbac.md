@@ -746,7 +746,7 @@ skill:read
 
 `assistant:read` lets a caller list, open, and talk to assistants (including the Project Assistant and stopping a turn it started). `assistant:write` lets a caller create, update, delete, and provision them, and implies `assistant:read`. `project:*` does not imply either; assistant triggers stay on `project:read`/`project:write`. `assistant:blocked_read` and `assistant:blocked_write` store exceptions.
 
-Assistant checks follow the MCP pattern: the check names the assistant and carries the project as a `project_id` dimension (`authz.AssistantCheck(scope, assistantID, projectID)`). Project-level operations (creating an assistant, provisioning the Project Assistant) name the project itself as the resource. List results are filtered per assistant with `authz.Engine.Filter`. Grant selectors therefore take one of three shapes:
+Assistant checks follow the MCP pattern: the check names the assistant and carries the project as a `project_id` dimension (`authz.Assistant(authz.AssistantIDOf(assistant.ID), authz.ProjectIDOf(projectID)).Read()` or `.Write()`). Project-level operations (creating an assistant, provisioning the Project Assistant) name the project itself as the resource. List results are filtered per assistant with `authz.Engine.Filter`. Grant selectors therefore take one of three shapes:
 
 ```json
 { "resource_kind": "assistant", "resource_id": "*" }
@@ -907,11 +907,8 @@ Dimensions are extra selector fields that narrow a check beyond resource kind an
 Today, dimensions are used for MCP tool calls:
 
 ```go
-if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
-	Tool:        params.Name,
-	Disposition: disposition,
-	ProjectID:   toolset.ProjectID,
-})); err != nil {
+server := authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(toolset.ProjectID))
+if err := authzEngine.Require(ctx, server.ToolCall(params.Name, disposition)); err != nil {
 	return nil, err
 }
 ```
@@ -928,14 +925,17 @@ That check becomes a selector like:
 }
 ```
 
-MCP disposition values come from tool annotations and are normalized to:
+MCP disposition values come from tool annotations (`authz.DispositionFromHints`, used for both calling and listing tools) and are normalized to:
 
 ```text
 read_only
 destructive
 idempotent
 open_world
+unannotated
 ```
+
+A tool with no annotations, or with every hint false, is `unannotated`, a value of its own: a grant with no disposition limit covers it, a grant limited to `read_only` does not, and a rule can allow or block it by name. A tool that says it is both read-only and destructive is `destructive`; calling it logs a warning. A tool whose annotations are unknown, such as one missing from the tool catalog, carries no disposition, so only a grant with no disposition limit covers it.
 
 Only add a dimension when the resource family needs finer-grained grants without creating a new scope for every variation. New dimensions must be explicitly allowed in `authz.ValidateSelector`; otherwise role grants using them will be rejected.
 
@@ -987,9 +987,15 @@ Check:
 
 Result: denied.
 
-One nuance: if a grant has a key that the check does not include, matching skips that key. This allows a more specific grant to satisfy a broader connection-level check that does not yet constrain that dimension. Be aware of this when deciding whether a handler should use a plain resource check or a dimensional check.
+A grant key the check does not include never matches: absence is not permission. Three checks may leave a key out, each set by how the check is built (`Check.mayOmit` in `server/internal/authz/access.go`):
 
-Because of that, some resource kinds require a dimension on every check. `requiredCheckDimensions` in `server/internal/authz/checks.go` lists them, and the engine rejects a check of that kind that omits one, or sets it to `*`, as an invalid check (it fails closed). Today only `mcp` is listed, with `project_id`: an MCP grant can be bounded to one project (`{"resource_kind":"mcp","resource_id":"*","project_id":"<PROJECT_ID>"}`), and a check without the project would otherwise pass it in any project. Build MCP checks with `authz.MCPCheck(scope, resourceID, projectID)` or `authz.MCPToolCallCheck` with `ProjectID` set. Project-level operations name the project as both the resource and the `project_id`.
+- a probe (`Check.Probe()`), which asks whether the caller could act on some resource and never gates an action;
+- a connection to a server (`authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(projectID)).Connect()`), which names no tool, so a grant limited to some tools or dispositions still lets the caller connect;
+- the risk policy audience question (`authz.RiskPolicyEvaluateCheck`), which names no server, so an audience grant limited to a server still places the caller under the policy.
+
+Blocks, auth client checks and `WithStrictSelectorMatch` allow none of them. A `Require` or `RequireAny` refusal caused only by a missing key is logged as an error naming the key, so a call site that should carry it shows up.
+
+Some resource kinds also require a dimension on every check. `requiredCheckDimensions` in `server/internal/authz/checks.go` lists them, and the engine rejects a check of that kind that omits one, or sets it to `*`, as an invalid check (it fails closed). Today only `mcp` is listed, with `project_id`: an MCP grant can be bounded to one project (`{"resource_kind":"mcp","resource_id":"*","project_id":"<PROJECT_ID>"}`), and a check without the project should be refused as invalid rather than match no project-bounded grant. Build MCP checks with `authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(projectID))`, which always carries the project. Project-level operations use `authz.MCPServers(authz.ProjectIDOf(projectID))`, which names the project as both the resource and the `project_id`.
 
 #### Auth client checks
 
@@ -1000,6 +1006,8 @@ Auth client checks always match strictly, for allows and blocks: a grant key the
 `upstream_client` identifies an upstream OAuth client. Combined with `connection_owner` it names one logical connection, one person's connection to that upstream client, across every auth client that shares it. Without an owner it applies to every person's `remote_session` connection through that upstream client. It is optional: a `connection_owner` grant without it applies across every upstream client, and adding it narrows the grant to one.
 
 `connection_owner` accepts a user ID, `*`, or `$represented_user`. The engine binds `$represented_user` once per request from trusted context: the signed-in user, or the user an agent credential acts for, never the agent owner, and never an API key's or assistant token's owner. Embedded chat sessions bind no represented user, so they cannot use a `remote_session` connection. A `remote_session` check is denied unless its owner is that represented user, whatever grants match, so an allow never lets anyone use another user's connection. An agent acting for a user must also pass that user's own policy.
+
+One exception: a connection its owner attached to an agent. Attaching is the owner's consent, so the agent may use that connection whoever issued its key or approved its session. The gateway reads the attachment through the same exact binding lookup token resolution uses, which serves only a live attachment the connection's owner made (`attached_by_subject_id` is the connection's subject), to an active agent, while the owner is still a member. For that one connection the mandatory `mcp:auth` decision binds `$represented_user` to the owner instead of the represented user, and adds the owner's live policy to the policies the check must pass: the credential, the agent, the agent owner and the represented user's own policy still bound which auth clients, projects and upstream clients the agent may use, and any block on the connection still applies. The owner's policy is read on every decision, so detaching, the owner leaving or being deactivated, the owner revoking their `mcp:auth`, an owner block on the agent, and agent suspension all stop use at once. Unattached fallbacks keep the rule above: an agent key with no attachment uses only its issuer's own connection. Workloads represent no user and get no consent (`authz.AttachedConnectionConsent`, `MandatoryAuthorization.WithAttachedConnection`).
 
 Agent managers set which auth clients an agent may use with `mcp:auth` and `mcp:blocked_auth` grants in its policy (`agents.createPolicyGrant`), through the agent's Upstream credentials panel. An allow is contained by the caller's and the owner's authority like any other policy grant; a restriction only withdraws access, so writing one needs no containment check. Splitting a wide allow into narrower ones writes the narrower grants before deleting the wide one, so the agent keeps its access throughout.
 
@@ -1228,10 +1236,7 @@ Grant row:
 Handler check:
 
 ```go
-authz.MCPToolCallCheck("toolset_a", authz.MCPToolCallDimensions{
-	Tool:        "search_docs",
-	Disposition: "read_only",
-})
+authz.MCPServer(authz.MCPServerIDFrom("toolset_a"), authz.ProjectIDFrom("project_a")).ToolCall("search_docs", "read_only")
 ```
 
 Result: allowed.
@@ -1257,19 +1262,13 @@ Grant row:
 Allowed check:
 
 ```go
-authz.MCPToolCallCheck("toolset_a", authz.MCPToolCallDimensions{
-	Tool:        "search_docs",
-	Disposition: "read_only",
-})
+authz.MCPServer(authz.MCPServerIDFrom("toolset_a"), authz.ProjectIDFrom("project_a")).ToolCall("search_docs", "read_only")
 ```
 
 Denied check:
 
 ```go
-authz.MCPToolCallCheck("toolset_a", authz.MCPToolCallDimensions{
-	Tool:        "delete_customer",
-	Disposition: "destructive",
-})
+authz.MCPServer(authz.MCPServerIDFrom("toolset_a"), authz.ProjectIDFrom("project_a")).ToolCall("delete_customer", "destructive")
 ```
 
 The first check matches the constrained tool. The second does not.
@@ -1349,7 +1348,7 @@ When adding a new scope:
 
 When adding a new selector dimension:
 
-1. Prefer a typed helper like `MCPToolCallCheck` instead of raw maps at call sites.
+1. Add it to the typed ref in the registry (as `ToolCall` carries `tool` and `disposition`) instead of raw maps at call sites.
 2. Add the dimension to `allowedSelectorKeys`.
 3. Validate allowed values if the dimension has an enum.
 4. Update API and dashboard types if the dimension is user-facing.

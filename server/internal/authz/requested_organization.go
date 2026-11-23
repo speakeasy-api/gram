@@ -55,7 +55,7 @@ func (e *Engine) RequireUserOrganizationScopeWithDBTX(ctx context.Context, db ac
 		ResourceKind:    "",
 		ResourceID:      organizationID,
 		Dimensions:      nil,
-		selectorMatch:   selectorMatchNormal,
+		exact:           false,
 		representedUser: "",
 		probe:           false,
 		anyOf:           nil,

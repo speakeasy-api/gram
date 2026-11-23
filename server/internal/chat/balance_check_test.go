@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -92,14 +93,15 @@ func TestCheckCreditBalance_AllowsWhenIncludedZero(t *testing.T) {
 	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-1", "free"))
 }
 
-func TestCheckCreditBalance_BypassesSpecialLimitOrgs(t *testing.T) {
+func TestCheckCreditBalance_BypassesStaffOrganization(t *testing.T) {
 	t.Parallel()
 
-	// repo would error if called — special org should never reach it.
+	// repo would error if called — the staff organization should never reach it.
 	repo := &fakeBillingRepo{storedErr: errors.New("must not be called")}
 	svc := newServiceWithBilling(t, repo)
+	svc.staffOrg = staff.NewOrganization("org-staff")
 
-	require.NoError(t, svc.checkCreditBalance(t.Context(), "5a25158b-24dc-4d49-b03d-e85acfbea59c", "free"))
+	require.NoError(t, svc.checkCreditBalance(t.Context(), "org-staff", "free"))
 }
 
 func TestCheckCreditBalance_BypassesPaidAccountTypes(t *testing.T) {
