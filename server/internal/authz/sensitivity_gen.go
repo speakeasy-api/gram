@@ -8,7 +8,6 @@ package authz
 type Sensitivity string
 
 const (
-	// SensitivityNone marks a scope that needs no warning before it is granted.
 	SensitivityNone Sensitivity = ""
 
 	// SensitivityConversations marks a scope that exposes other members'

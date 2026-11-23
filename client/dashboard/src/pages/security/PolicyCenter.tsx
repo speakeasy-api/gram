@@ -89,7 +89,6 @@ import {
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { useDetectionRulesStore } from "./detection-rules-data";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
@@ -632,7 +631,6 @@ function PolicyCenterContent() {
   const mode = useDetectorMode();
   const queryClient = useQueryClient();
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
   const {
     data: quarantinesData,
@@ -640,14 +638,12 @@ function PolicyCenterContent() {
     isError: quarantinesError,
     refetch: refetchQuarantines,
   } = useRiskListSessionQuarantines();
-  const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
 
   const policyRows = useMemo(
     (): PolicyRow[] =>
       (data?.policies ?? [])
-        .filter((policy) => nlEnabled || !isPromptPolicy(policy))
-        // The Shadow MCP page owns the policy behind "blocked by default"; it
-        // is a setting there, not a policy here.
+        // The Shadow MCP page owns the policy behind "blocked by default"; the
+        // page treats it as a setting, not a policy.
         .filter((policy) => !isShadowMCPModePolicy(policy))
         .map((policy) => {
           const kind: PolicyKind = isPromptPolicy(policy) ? "prompt" : "risk";
@@ -656,7 +652,7 @@ function PolicyCenterContent() {
         .sort(
           (a, b) => b.policy.createdAt.getTime() - a.policy.createdAt.getTime(),
         ),
-    [data?.policies, nlEnabled],
+    [data?.policies],
   );
 
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);

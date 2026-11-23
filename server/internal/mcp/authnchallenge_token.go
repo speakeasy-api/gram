@@ -154,6 +154,9 @@ type mintSessionParams struct {
 	// AuthClientPicks is the typed auth client picked per MCP server, recorded
 	// with the registration UpstreamClientPicks names for it.
 	AuthClientPicks map[uuid.UUID]uuid.UUID
+	// DeferredServerIDs are servers a headless issuance left for the person
+	// to connect later: the new credential records no choice for them.
+	DeferredServerIDs []uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
 	// TypedOnly records a new credential's choices from the auth clients each
@@ -677,7 +680,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
 		}
 	} else if err == nil {
-		connect := authz.MCPCheck(authz.ScopeMCPConnect, endpoint.connectResourceID().String(), endpoint.ProjectID.String())
+		connect := authz.MCPServer(authz.MCPServerIDOf(endpoint.connectResourceID()), authz.ProjectIDOf(endpoint.ProjectID)).Connect()
 		authorizationCtx, err = s.authz.PrepareContext(authorizationCtx)
 		if err == nil {
 			err = s.authz.Require(authorizationCtx, connect)
@@ -718,7 +721,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
 	}
-	upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: ""}, requested, enforced)
+	upstreamPicks, authClientPicks, deferred, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: "", connectsLater: true}, requested, enforced)
 	if err != nil {
 		if _, ok := errors.AsType[*oops.OAuthError](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "upstream_credential_choice", exchange.reject(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice, err)...)
@@ -753,6 +756,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		ToolSelection:          nil,
 		UpstreamClientPicks:    upstreamPicks,
 		AuthClientPicks:        authClientPicks,
+		DeferredServerIDs:      deferred,
 		Catalog:                nil,
 		TypedOnly:              enforced,
 	}, logger)
@@ -1130,6 +1134,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		ToolSelection:          toolSelection,
 		UpstreamClientPicks:    grant.UpstreamClientPicks,
 		AuthClientPicks:        grant.AuthClientPicks,
+		DeferredServerIDs:      nil,
 		Catalog:                catalog,
 		TypedOnly:              enforced,
 	}, logger)
@@ -1656,6 +1661,7 @@ func (s *Service) rotateRefreshToken(
 		ToolSelection:          oldSession.ToolSelection,
 		UpstreamClientPicks:    nil,
 		AuthClientPicks:        nil,
+		DeferredServerIDs:      nil,
 		Catalog:                nil,
 		// A rotated session records no choices.
 		TypedOnly: false,
@@ -2266,6 +2272,7 @@ func (s *Service) mintSession(
 		Replayable:             params.Replayable,
 		UpstreamClientPicks:    params.UpstreamClientPicks,
 		AuthClientPicks:        params.AuthClientPicks,
+		DeferredServerIDs:      params.DeferredServerIDs,
 		Catalog:                params.Catalog,
 		TypedOnly:              params.TypedOnly,
 	}, logger)
@@ -2345,6 +2352,9 @@ type sessionIssuance struct {
 	// AuthClientPicks is the typed auth client picked per MCP server, recorded
 	// with the registration UpstreamClientPicks names for it.
 	AuthClientPicks map[uuid.UUID]uuid.UUID
+	// DeferredServerIDs are servers a headless issuance left for the person
+	// to connect later: the new credential records no choice for them.
+	DeferredServerIDs []uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
 	// TypedOnly records a new credential's choices from the auth clients each
@@ -2473,6 +2483,7 @@ func (s *Service) issueSession(
 			CredentialID:        session.ID,
 			Source:              upstreamclients.SelectionSourceIssuance,
 			ScopeMcpServerIds:   nil,
+			ExcludeMcpServerIds: issuance.DeferredServerIDs,
 			PickedMcpServerIds:  nil,
 			PickedClientIds:     nil,
 			PickedAuthClientIds: nil,

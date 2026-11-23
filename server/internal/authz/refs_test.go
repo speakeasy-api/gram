@@ -1,10 +1,9 @@
 package authz
 
 import (
-	"github.com/google/uuid"
-
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,14 +19,14 @@ func TestRefs_MatchTodaysChecks(t *testing.T) {
 		id      = "resource-1"
 	)
 	literal := func(scope Scope, resourceID string, dimensions map[string]string) Check {
-		return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil}
+		return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
 	}
 
 	cases := map[string]struct{ ref, today Check }{
 		"org read":            {Org(OrgIDFrom(org)).Read(), literal(ScopeOrgRead, org, nil)},
 		"org admin":           {Org(OrgIDFrom(org)).Admin(), literal(ScopeOrgAdmin, org, nil)},
 		"org device sync":     {Org(OrgIDFrom(org)).DeviceAgentSync(), literal(ScopeOrgDeviceAgentSync, org, nil)},
-		"org hooks ingest":    {Org(OrgIDFrom(org)).HooksIngest(ProjectIDFrom(project)), HooksIngestCheck(org, project)},
+		"org hooks ingest":    {Org(OrgIDFrom(org)).HooksIngest(ProjectIDFrom(project)), literal(ScopeOrgHooksIngest, org, map[string]string{SelectorKeyProjectID: project})},
 		"project read":        {Project(ProjectIDFrom(project)).Read(), literal(ScopeProjectRead, project, nil)},
 		"project write":       {Project(ProjectIDFrom(project)).Write(), literal(ScopeProjectWrite, project, nil)},
 		"plugin write":        {Project(ProjectIDFrom(project)).PluginWrite(), literal(ScopePluginWrite, project, nil)},
@@ -37,25 +36,25 @@ func TestRefs_MatchTodaysChecks(t *testing.T) {
 		"channels read all":   {Project(ProjectIDFrom(project)).ChannelsReadAll(), literal(ScopeChannelsReadAll, project, nil)},
 		"memory read":         {Project(ProjectIDFrom(project)).MemoryRead(), literal(ScopeMemoryRead, project, nil)},
 		"memory write":        {Project(ProjectIDFrom(project)).MemoryWrite(), literal(ScopeMemoryWrite, project, nil)},
-		"mcp read":            {MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project)).Read(), MCPCheck(ScopeMCPRead, id, project)},
-		"mcp write":           {MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project)).Write(), MCPCheck(ScopeMCPWrite, id, project)},
-		"mcp connect":         {MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project)).Connect(), MCPCheck(ScopeMCPConnect, id, project)},
-		"mcp servers read":    {MCPServers(ProjectIDFrom(project)).Read(), MCPCheck(ScopeMCPRead, project, project)},
-		"mcp servers write":   {MCPServers(ProjectIDFrom(project)).Write(), MCPCheck(ScopeMCPWrite, project, project)},
-		"mcp servers connect": {MCPServers(ProjectIDFrom(project)).Connect(), MCPCheck(ScopeMCPConnect, project, project)},
-		"mcp tool call":       {MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project)).ToolCall("tool", "destructive"), MCPToolCallCheck(id, MCPToolCallDimensions{Tool: "tool", Disposition: "destructive", ProjectID: project})},
-		"environment read":    {Environment(EnvironmentIDFrom(id), ProjectIDFrom(project)).Read(), EnvironmentCheck(ScopeEnvironmentRead, id, project)},
-		"environment write":   {Environment(EnvironmentIDFrom(id), ProjectIDFrom(project)).Write(), EnvironmentCheck(ScopeEnvironmentWrite, id, project)},
-		"environments read":   {Environments(ProjectIDFrom(project)).Read(), EnvironmentCheck(ScopeEnvironmentRead, project, project)},
-		"environments write":  {Environments(ProjectIDFrom(project)).Write(), EnvironmentCheck(ScopeEnvironmentWrite, project, project)},
-		"assistant read":      {Assistant(AssistantIDFrom(id), ProjectIDFrom(project)).Read(), AssistantCheck(ScopeAssistantRead, id, project)},
-		"assistant write":     {Assistant(AssistantIDFrom(id), ProjectIDFrom(project)).Write(), AssistantCheck(ScopeAssistantWrite, id, project)},
-		"assistants read":     {Assistants(ProjectIDFrom(project)).Read(), AssistantCheck(ScopeAssistantRead, project, project)},
-		"assistants write":    {Assistants(ProjectIDFrom(project)).Write(), AssistantCheck(ScopeAssistantWrite, project, project)},
+		"mcp read":            {MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project)).Read(), mcpCheck(ScopeMCPRead, id, project)},
+		"mcp write":           {MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project)).Write(), mcpCheck(ScopeMCPWrite, id, project)},
+		"mcp connect":         {MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project)).Connect(), mcpCheck(ScopeMCPConnect, id, project)},
+		"mcp servers read":    {MCPServers(ProjectIDFrom(project)).Read(), mcpCheck(ScopeMCPRead, project, project)},
+		"mcp servers write":   {MCPServers(ProjectIDFrom(project)).Write(), mcpCheck(ScopeMCPWrite, project, project)},
+		"mcp servers connect": {MCPServers(ProjectIDFrom(project)).Connect(), mcpCheck(ScopeMCPConnect, project, project)},
+		"mcp tool call":       {MCPServer(MCPServerIDFrom(id), ProjectIDFrom(project)).ToolCall("tool", "destructive"), mcpToolCallCheck(id, mcpToolCallDimensions{Tool: "tool", Disposition: "destructive", ProjectID: project})},
+		"environment read":    {Environment(EnvironmentIDFrom(id), ProjectIDFrom(project)).Read(), literal(ScopeEnvironmentRead, id, map[string]string{SelectorKeyProjectID: project})},
+		"environment write":   {Environment(EnvironmentIDFrom(id), ProjectIDFrom(project)).Write(), literal(ScopeEnvironmentWrite, id, map[string]string{SelectorKeyProjectID: project})},
+		"environments read":   {Environments(ProjectIDFrom(project)).Read(), literal(ScopeEnvironmentRead, project, map[string]string{SelectorKeyProjectID: project})},
+		"environments write":  {Environments(ProjectIDFrom(project)).Write(), literal(ScopeEnvironmentWrite, project, map[string]string{SelectorKeyProjectID: project})},
+		"assistant read":      {Assistant(AssistantIDFrom(id), ProjectIDFrom(project)).Read(), literal(ScopeAssistantRead, id, map[string]string{SelectorKeyProjectID: project})},
+		"assistant write":     {Assistant(AssistantIDFrom(id), ProjectIDFrom(project)).Write(), literal(ScopeAssistantWrite, id, map[string]string{SelectorKeyProjectID: project})},
+		"assistants read":     {Assistants(ProjectIDFrom(project)).Read(), literal(ScopeAssistantRead, project, map[string]string{SelectorKeyProjectID: project})},
+		"assistants write":    {Assistants(ProjectIDFrom(project)).Write(), literal(ScopeAssistantWrite, project, map[string]string{SelectorKeyProjectID: project})},
 		"skill read":          {Skill(SkillIDFrom(id)).Read(), literal(ScopeSkillRead, id, nil)},
 		"skill write":         {Skill(SkillIDFrom(id)).Write(), literal(ScopeSkillWrite, id, nil)},
-		"chat read":           {Chat(ChatIDFrom(id)).Read(), ChatReadCheck(id)},
-		"chat write":          {Chat(ChatIDFrom(id)).Write(), ChatWriteCheck(id)},
+		"chat read":           {Chat(ChatIDFrom(id)).Read(), literal(ScopeChatRead, id, nil)},
+		"chat write":          {Chat(ChatIDFrom(id)).Write(), literal(ScopeChatWrite, id, nil)},
 		"agent read":          {Agent(AgentIDFrom(id)).Read(), literal(ScopeAgentRead, id, nil)},
 		"agent write":         {Agent(AgentIDFrom(id)).Write(), literal(ScopeAgentWrite, id, nil)},
 		"agent authorize":     {Agent(AgentIDFrom(id)).Authorize(), literal(ScopeAgentAuthorize, id, nil)},
@@ -133,6 +132,7 @@ func TestRefs_AbsentIDsAreRefused(t *testing.T) {
 		"zero project id":        Project(ProjectID{}).Read(),
 		"nil uuid":               Project(ProjectIDOf(uuid.Nil)).Read(),
 		"empty string":           Project(ProjectIDFrom("")).Read(),
+		"nil uuid string":        Skill(SkillIDFrom(uuid.Nil.String())).Read(),
 		"wildcard":               Project(ProjectIDFrom(WildcardResource)).Read(),
 		"reserved marker":        Project(ProjectIDFrom(SelectorValueRepresentedUser)).Read(),
 		"whitespace":             Project(ProjectIDFrom("project 1")).Read(),
@@ -150,4 +150,68 @@ func TestRefs_AbsentIDsAreRefused(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidCheck, name)
 		require.False(t, allowed, name)
 	}
+}
+
+func TestOption_EqualsFailsOnAnAbsentSide(t *testing.T) {
+	t.Parallel()
+
+	equal, err := Some("a").Equals(Some("a"))
+	require.NoError(t, err)
+	require.True(t, equal)
+
+	equal, err = Some("a").Equals(Some("b"))
+	require.NoError(t, err)
+	require.False(t, equal)
+
+	for name, pair := range map[string][2]Option[string]{
+		"left absent":  {None[string](), Some("a")},
+		"right absent": {Some("a"), None[string]()},
+		"both absent":  {None[string](), None[string]()},
+		"zero value":   {{}, Some("")},
+	} {
+		equal, err := pair[0].Equals(pair[1])
+		require.ErrorIs(t, err, ErrEmptyValue, name)
+		require.False(t, equal, name)
+	}
+}
+
+func TestOption_GetReportsAbsence(t *testing.T) {
+	t.Parallel()
+
+	value, ok := Some(3).Get()
+	require.True(t, ok)
+	require.Equal(t, 3, value)
+
+	_, ok = None[int]().Get()
+	require.False(t, ok)
+}
+
+func TestIDs_EqualsFailsOnAnAbsentID(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.New()
+	equal, err := ProjectIDOf(id).Equals(ProjectIDFrom(id.String()))
+	require.NoError(t, err)
+	require.True(t, equal)
+
+	equal, err = ProjectIDOf(id).Equals(ProjectIDOf(uuid.New()))
+	require.NoError(t, err)
+	require.False(t, equal)
+
+	_, err = ProjectIDOf(id).Equals(ProjectID{})
+	require.ErrorIs(t, err, ErrEmptyValue)
+	_, err = ProjectIDOf(uuid.Nil).Equals(ProjectIDOf(uuid.Nil))
+	require.ErrorIs(t, err, ErrEmptyValue)
+
+	require.Empty(t, ProjectIDOf(uuid.Nil).String())
+	require.Equal(t, id.String(), ProjectIDOf(id).String())
+}
+
+func TestIDs_StringsThatCannotNameAResourceAreAbsent(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"", "*", "$represented_user", "project 1", "project\t1", "project 1", "project 1"} {
+		require.Empty(t, ProjectIDFrom(raw).String(), "%q", raw)
+	}
+	require.Equal(t, "project-1", ProjectIDFrom("project-1").String())
 }

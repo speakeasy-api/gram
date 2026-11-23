@@ -4072,6 +4072,19 @@ func (q *Queries) LapseNetworkIngressCertificateLease(ctx context.Context, netwo
 	return err
 }
 
+const lapsePrincipalGrantFixture = `-- name: LapsePrincipalGrantFixture :exec
+UPDATE principal_grants
+SET expires_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE id = $1
+`
+
+// Test-only fixture: turns a grant into a temporary grant that has already
+// lapsed.
+func (q *Queries) LapsePrincipalGrantFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lapsePrincipalGrantFixture, id)
+	return err
+}
+
 const latchAttachmentOwnerFixture = `-- name: LatchAttachmentOwnerFixture :execrows
 UPDATE agents SET owner_reassignment_required_at = now(), owner_reassignment_reason = 'owner-loss' WHERE id = $1 AND organization_id = $2
 `
@@ -6716,6 +6729,26 @@ func (q *Queries) SetAPIKeyExpiresAtFixture(ctx context.Context, arg SetAPIKeyEx
 	return err
 }
 
+const setAPIKeysCreatedAtFixture = `-- name: SetAPIKeysCreatedAtFixture :exec
+UPDATE api_keys
+SET created_at = $1
+WHERE organization_id = $2
+  AND id = ANY($3::uuid[])
+`
+
+type SetAPIKeysCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+// Pins created_at on an organization's keys so keys.list paging tests can
+// force ties on the first half of its (created_at, id) ordering.
+func (q *Queries) SetAPIKeysCreatedAtFixture(ctx context.Context, arg SetAPIKeysCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeysCreatedAtFixture, arg.CreatedAt, arg.OrganizationID, arg.Ids)
+	return err
+}
+
 const setAgentInvalidLifecycleFixture = `-- name: SetAgentInvalidLifecycleFixture :exec
 UPDATE agents
 SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
@@ -7532,25 +7565,6 @@ type SetOpenRouterAPIKeyHashFixtureParams struct {
 // Test-only fixture: simulates key rotation between an upstream response and CAS.
 func (q *Queries) SetOpenRouterAPIKeyHashFixture(ctx context.Context, arg SetOpenRouterAPIKeyHashFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyHashFixture, arg.KeyHash, arg.OrganizationID, arg.KeyType)
-	return err
-}
-
-const setOpenRouterAPIKeyProviderPayloadFixture = `-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
-UPDATE openrouter_api_keys
-SET key = $1
-WHERE organization_id = $2
-  AND key_type = $3
-`
-
-type SetOpenRouterAPIKeyProviderPayloadFixtureParams struct {
-	ProviderPayload pgtype.Text
-	OrganizationID  string
-	KeyType         string
-}
-
-// Test-only privacy sentinel in the deprecated plaintext provider payload column.
-func (q *Queries) SetOpenRouterAPIKeyProviderPayloadFixture(ctx context.Context, arg SetOpenRouterAPIKeyProviderPayloadFixtureParams) error {
-	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyProviderPayloadFixture, arg.ProviderPayload, arg.OrganizationID, arg.KeyType)
 	return err
 }
 

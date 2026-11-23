@@ -453,6 +453,10 @@ func TestKeysService_AgentKeyValidation(t *testing.T) {
 			p.DelegatedGrantsVersion = new(int(runtimepolicy.IssuedDelegatedPolicyVersion))
 			p.RequestedGrants[0].Scope = string(authz.ScopeProjectBlockedRead)
 		}, code: oops.CodeBadRequest},
+		{name: "tool limit on viewing a server", mutate: func(p *gen.CreateKeyPayload) {
+			p.RequestedGrants[0].Scope = string(authz.ScopeMCPRead)
+			p.RequestedGrants[0].Selector = &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: uuid.NewString(), ProjectID: new(projectID.String()), Tool: new("search")}
+		}, code: oops.CodeBadRequest},
 		{name: "duplicate grant", mutate: func(p *gen.CreateKeyPayload) {
 			p.RequestedGrants = append(p.RequestedGrants, cloneGrant(p.RequestedGrants[0]))
 		}, code: oops.CodeBadRequest},

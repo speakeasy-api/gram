@@ -1385,6 +1385,10 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Roles & Permissions",
         url: "challenges",
       },
+      requests: {
+        title: "Roles & Permissions",
+        url: "requests",
+      },
     },
   },
   // Role authoring is its own page, not a sheet: a role can carry a dozen

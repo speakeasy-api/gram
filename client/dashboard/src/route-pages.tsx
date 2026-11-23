@@ -865,6 +865,9 @@ const ORG_ROUTE_PAGES: PageTree<OrgRouteStructure> = {
       challenges: {
         component: Access,
       },
+      requests: {
+        component: Access,
+      },
     },
   },
   createRole: {

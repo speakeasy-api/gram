@@ -120,7 +120,7 @@ func (s *OrganizationGatewayActivityService) Get(ctx context.Context, principal 
 		}
 		// A project's gateway reads like the dashboard's Project Gateway tab,
 		// which needs access to that project.
-		if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+		if err := s.authorizer.Require(ctx, authz.Project(authz.ProjectIDOf(id)).Read()); err != nil {
 			return GetOrganizationGatewayActivityOutput{}, fmt.Errorf("require project read for project gateway activity: %w", err)
 		}
 		row, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: id, OrganizationID: principal.OrganizationID})
@@ -131,7 +131,7 @@ func (s *OrganizationGatewayActivityService) Get(ctx context.Context, principal 
 			return GetOrganizationGatewayActivityOutput{}, fmt.Errorf("read project gateway project: %w", err)
 		}
 		project = &row
-	} else if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}); err != nil {
+	} else if err := s.authorizer.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Read()); err != nil {
 		return GetOrganizationGatewayActivityOutput{}, fmt.Errorf("require org read for organization gateway activity: %w", err)
 	}
 	now := s.now()
@@ -273,7 +273,7 @@ func (s *OrganizationGatewayActivityService) nameReadableProjects(ctx context.Co
 	}
 	checks := make([]authz.Check, 0, len(top))
 	for _, server := range top {
-		checks = append(checks, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: server.ProjectID, Dimensions: nil})
+		checks = append(checks, authz.Project(authz.ProjectIDFrom(server.ProjectID)).Read())
 	}
 	allowed, err := s.authorizer.FindMatched(ctx, checks)
 	if err != nil {

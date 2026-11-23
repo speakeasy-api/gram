@@ -430,7 +430,7 @@ func (s *Service) routeMetaMember(
 	gate.servedCredentials = map[uuid.UUID]contextvalues.UpstreamCredential{}
 	tokens, skipped, err := s.resolveMemberTokensSkipping(ctx, &gate, member)
 	if err != nil {
-		return memberDial{}, "", err
+		return memberDial{}, "", withMemberConnectLink(err, member, gate.memberCallerURL(member))
 	}
 
 	switch {
@@ -892,7 +892,11 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	}
 
 	// Rebuild entries from the kept set, matching the hosted path's output.
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete}
+	var instructions string
+	if handshake := session.InitializeResult(); handshake != nil {
+		instructions = handshake.Instructions
+	}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, instructions: instructions}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)

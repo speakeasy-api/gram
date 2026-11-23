@@ -19,11 +19,21 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   save: vi.fn(),
   canWriteMcp: true,
+  autoLinks: true,
   catalogServers: [] as Array<{
     registrySpecifier: string;
     title?: string;
     remotes: Array<{ url: string }>;
   }>,
+}));
+
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status:
+      flag === "shadow-mcp-auto-link" && mocks.autoLinks
+        ? "enabled"
+        : "disabled",
+  }),
 }));
 
 vi.mock("@gram/client/react-query/probeRemoteMcpURL.js", () => ({
@@ -118,7 +128,7 @@ vi.mock("@/components/ui/Select", () => ({
     children: React.ReactNode;
   }) => (
     <select
-      aria-label="Server to link"
+      aria-label="Server to make official"
       value={value}
       onChange={(event) => onValueChange(event.target.value)}
     >
@@ -156,6 +166,7 @@ function server(
     canonicalServerUrl: "https://tracker.example.com/mcp",
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastSeen: new Date("2026-01-02T10:00:00Z"),
+    blockedCallCount: 0,
     observedUseCount: 13,
     requestCount: 0,
     serverName: "Tracker",
@@ -187,6 +198,7 @@ describe("OfficialServerPanel", () => {
     mocks.save.mockResolvedValue(undefined);
     mocks.catalogServers = [];
     mocks.canWriteMcp = true;
+    mocks.autoLinks = true;
     window.localStorage.clear();
   });
   afterEach(cleanup);
@@ -436,7 +448,7 @@ describe("OfficialServerPanel", () => {
     expect(screen.getByText("Onboarded")).toBeTruthy();
     expect(
       screen.getByText(
-        "Linked to “Tracker”, served through the gateway “Team Gateway”. Direct connections are blocked and agents are sent there.",
+        "Official server: “Tracker”, served through the gateway “Team Gateway”. Direct connections are blocked and agents are sent there.",
       ),
     ).toBeTruthy();
     expect(
@@ -451,7 +463,7 @@ describe("OfficialServerPanel", () => {
     expect(mocks.probe).not.toHaveBeenCalled();
   });
 
-  it("removes the link and adds it back on undo", async () => {
+  it("removes a chosen server and chooses it again on undo", async () => {
     const official = {
       mcpServerId: "11111111-1111-4111-8111-111111111111",
       name: "Tracker",
@@ -459,44 +471,13 @@ describe("OfficialServerPanel", () => {
     };
     renderPanel(server({ officialServer: official }));
 
-    expect(screen.queryByText("Link off")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
+    expect(screen.queryByText("Automatic")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove choice" }));
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenLastCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
-        mcpServerId: undefined,
       }),
     );
-
-    await vi.waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
-    const options = mocks.toastSuccess.mock.calls.at(-1)?.[1] as {
-      action: { label: string; onClick: () => void };
-    };
-    expect(options.action.label).toBe("Undo");
-    options.action.onClick();
-    await vi.waitFor(() =>
-      expect(mocks.save).toHaveBeenLastCalledWith({
-        serverUrl: "https://tracker.example.com/mcp",
-        mcpServerId: official.mcpServerId,
-      }),
-    );
-    await vi.waitFor(() =>
-      expect(mocks.toastSuccess).toHaveBeenLastCalledWith(
-        "Link to “Tracker” restored",
-      ),
-    );
-  });
-
-  it("says so when undoing a removed link fails", async () => {
-    const official = {
-      mcpServerId: "11111111-1111-4111-8111-111111111111",
-      name: "Tracker",
-      url: "https://app.example.com/mcp/tracker",
-    };
-    renderPanel(server({ officialServer: official }));
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
-    await vi.waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalled());
     const options = mocks.toastSuccess.mock.calls[0]?.[1] as {
       action: { label: string; onClick: () => void };
     };
@@ -506,13 +487,121 @@ describe("OfficialServerPanel", () => {
     options.action.onClick();
     await vi.waitFor(() =>
       expect(mocks.toastError).toHaveBeenCalledWith(
-        "Could not restore the link. Try again.",
+        "Could not restore the official server. Try again.",
       ),
     );
     expect(mocks.save).toHaveBeenLastCalledWith({
       serverUrl: "https://tracker.example.com/mcp",
       mcpServerId: official.mcpServerId,
     });
+  });
+
+  it("only removes the link when automatic links are off", async () => {
+    mocks.autoLinks = false;
+    const official = {
+      mcpServerId: "11111111-1111-4111-8111-111111111111",
+      name: "Tracker",
+      url: "https://app.example.com/mcp/tracker",
+    };
+    renderPanel(server({ officialServer: official }));
+
+    expect(
+      screen.queryByRole("button", { name: "Keep direct connection" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove choice" })).toBeNull();
+    expect(screen.queryByText("Advanced")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Stop using as official" }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenLastCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+      }),
+    );
+    expect(mocks.toastSuccess.mock.calls[0]?.[0]).toBe(
+      "“Tracker” is no longer the official server",
+    );
+  });
+
+  it("keeps the direct connection instead of the automatic link", async () => {
+    renderPanel(
+      server({
+        officialServer: {
+          mcpServerId: "11111111-1111-4111-8111-111111111111",
+          name: "Tracker",
+          url: "https://app.example.com/mcp/tracker",
+          automatic: true,
+        },
+      }),
+    );
+
+    expect(screen.getByText("Automatic")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Official server: “Tracker”, chosen automatically because it proxies this URL. Direct connections are blocked and agents are sent there.",
+      ),
+    ).toBeTruthy();
+    // There is no choice of the admin's to remove.
+    expect(screen.queryByRole("button", { name: "Remove choice" })).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Keep direct connection" }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenLastCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+        keepShadow: true,
+      }),
+    );
+
+    // Undo goes back to the automatic link, not to a choice.
+    const options = mocks.toastSuccess.mock.calls[0]?.[1] as {
+      action: { label: string; onClick: () => void };
+    };
+    options.action.onClick();
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenLastCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+      }),
+    );
+  });
+
+  it("goes back to the automatic link when no server proxies the URL", async () => {
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
+    renderPanel(server({ officialServerDeclined: true }));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose automatically" }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+      }),
+    );
+  });
+
+  it("links the proxying server again after the direct connection was kept", async () => {
+    mocks.probe.mockResolvedValue({ outcome: "mcp_available" });
+    renderPanel(
+      server({
+        officialServerDeclined: true,
+        suggestedOfficialServer: {
+          mcpServerId: "22222222-2222-4222-8222-222222222222",
+          name: "Tracker Cloud",
+          slug: "tracker-cloud",
+        },
+      }),
+    );
+
+    expect(screen.getByText("Direct connection kept")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Make official: “Tracker Cloud”" }),
+    );
+    await vi.waitFor(() =>
+      expect(mocks.save).toHaveBeenCalledWith({
+        serverUrl: "https://tracker.example.com/mcp",
+      }),
+    );
   });
 
   it("recommends the server that already serves the URL, others under Advanced", async () => {
@@ -545,9 +634,11 @@ describe("OfficialServerPanel", () => {
       await screen.findByRole("button", { name: "Add from catalog" }),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Make official" })).toBeTruthy();
-    expect(screen.getByText("Link another server")).toBeTruthy();
+    expect(screen.getByText("Use another server as official")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Link it" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Make official: “Tracker Cloud”" }),
+    );
     await vi.waitFor(() =>
       expect(mocks.save).toHaveBeenCalledWith({
         serverUrl: "https://tracker.example.com/mcp",
@@ -561,12 +652,15 @@ describe("OfficialServerPanel", () => {
     renderPanel(server());
     await screen.findByRole("button", { name: "Make official" });
 
-    expect(screen.queryByText("Link another server")).toBeNull();
+    expect(screen.queryByText("Use another server as official")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    expect(screen.getByText("Link another server")).toBeTruthy();
+    expect(screen.getByText("Use another server as official")).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Link" }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("button", {
+          name: "Make official: chosen server",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
   });
 
@@ -576,7 +670,9 @@ describe("OfficialServerPanel", () => {
     await screen.findByRole("button", { name: "Make official" });
 
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-    const select = screen.getByRole("combobox", { name: "Server to link" });
+    const select = screen.getByRole("combobox", {
+      name: "Server to make official",
+    });
     expect(
       within(select)
         .getAllByRole("option")
@@ -584,7 +680,9 @@ describe("OfficialServerPanel", () => {
     ).toEqual(["Choose a server", "Company Tools"]);
 
     fireEvent.change(select, { target: { value: "server-tools" } });
-    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Make official: “Company Tools”" }),
+    );
 
     await waitFor(() => {
       expect(mocks.save).toHaveBeenCalledWith({

@@ -174,7 +174,7 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	require.Equal(t, mcpversions.Version20250326, result.ProtocolVersion)
 	require.Equal(t, "Speakeasy Gateway", result.ServerInfo.Name)
 	// The caller's servers lead, so agents see the gateway's reach first.
-	require.True(t, strings.HasPrefix(result.Instructions, `Tools from these servers: "member alpha".`+"\n\n"), "instructions=%s", result.Instructions)
+	require.True(t, strings.HasPrefix(result.Instructions, `Tools from these servers: "member alpha".`+metamcp.ProgressiveMemberInstructionsHint+"\n\n"), "instructions=%s", result.Instructions)
 	require.True(t, strings.HasSuffix(result.Instructions, metamcp.Instructions))
 	require.Contains(t, result.Instructions, "list_servers")
 	require.Contains(t, result.Instructions, "describe_tools")
@@ -233,7 +233,7 @@ func TestServePublic_MetaEndpoint_Initialize_CustomInstructions(t *testing.T) {
 		want   string
 	}{
 		{name: "custom replaces default and server line", stored: conv.ToPGText(custom), want: custom},
-		{name: "reset restores default", stored: pgtype.Text{}, want: `Tools from these servers: "member alpha".` + "\n\n" + metamcp.Instructions},
+		{name: "reset restores default", stored: pgtype.Text{}, want: `Tools from these servers: "member alpha".` + metamcp.ProgressiveMemberInstructionsHint + "\n\n" + metamcp.Instructions},
 	} {
 		// Exercise setting and resetting the same endpoint sequentially.
 		setInstructions(tc.stored)

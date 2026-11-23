@@ -14,6 +14,89 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// Requests from members for access they were denied, decided by an organization admin. An approval creates a temporary grant.
+type AccessRequest struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// The Speakeasy user who asked for access.
+	// @access: confidential
+	RequesterUserID string
+	// The scope asked for, e.g. "project:read".
+	// @access: confidential
+	Scope string
+	// Where the scope applies, in the shape of principal_grants.selectors.
+	// @access: opaque-restricted
+	Selector []byte
+	// Name of the resource the request is for, as it was when requested.
+	// @access: opaque-confidential
+	ResourceName pgtype.Text
+	// Free-form note from the requester to the admins.
+	// @access: opaque-restricted
+	Message pgtype.Text
+	// pending, approved, denied, expired or withdrawn.
+	// @access: confidential
+	Status string
+	// The admin who approved or denied the request.
+	// @access: confidential
+	DecidedByUserID pgtype.Text
+	// Where the decision came from: dashboard or slack.
+	// @access: confidential
+	DecidedVia pgtype.Text
+	// @access: confidential
+	DecidedAt pgtype.Timestamptz
+	// The principal_grants row an approval created. Soft reference: the grant may be revoked later.
+	// @access: confidential
+	TemporaryGrantID uuid.NullUUID
+	// IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
+	// @access: opaque-confidential
+	ChallengeIds []string
+	// When a pending request lapses.
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+// Notifications sent for an access request, such as one Slack DM per admin.
+type AccessRequestMessage struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	AccessRequestID uuid.UUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	RecipientUserID string
+	// @access: confidential
+	SlackTeamID pgtype.Text
+	// @access: confidential-pii
+	SlackUserID pgtype.Text
+	// @access: confidential
+	SlackChannelID pgtype.Text
+	// @access: confidential
+	SlackMessageTs pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type AdminMcpAuthorizationGrant struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -333,7 +416,9 @@ type AiIntegrationConfig struct {
 	// @access: restricted
 	ExternalOrganizationID pgtype.Text
 	// @access: secret-restricted
-	ApiKeyEncrypted string
+	ApiKeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
@@ -1745,6 +1830,28 @@ type ChatMessageParticipant struct {
 	UserID pgtype.Text
 	// @access: confidential-pii
 	DisplayName pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type ChatMessageTranscript struct {
+	// Source message identity.
+	// @access: confidential
+	MessageID uuid.UUID
+	// Owning project identity.
+	// @access: confidential
+	ProjectID uuid.UUID
+	// Owning organization identity.
+	// @access: confidential
+	OrganizationID string
+	// Organization-key encrypted transcript payload.
+	// @access: opaque-restricted
+	Ciphertext string
+	// Unkeyed freshness digest of sensitive transcript fields.
+	// @access: opaque-restricted
+	SourceHash []byte
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -4206,7 +4313,9 @@ type ModelProviderKey struct {
 	// @access: confidential
 	Provider string
 	// @access: secret-restricted
-	ApiKeyEncrypted string
+	ApiKeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
@@ -4632,9 +4741,9 @@ type OpenrouterApiKey struct {
 	// @access: confidential
 	KeyType string
 	// @access: secret-restricted
-	Key pgtype.Text
-	// @access: secret-restricted
 	KeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	KeyOrgEncrypted pgtype.Text
 	// @access: secret-restricted
 	KeyHash string
 	// @access: restricted
@@ -5676,6 +5785,14 @@ type PluginGithubConnection struct {
 	RepoName string
 	// @access: secret-restricted
 	MarketplaceToken pgtype.Text
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenHash pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	PublishedFingerprint pgtype.Text
 	// @access: confidential

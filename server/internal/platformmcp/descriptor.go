@@ -348,9 +348,52 @@ func grantsAuthorizeAnyResource(grants []authz.Grant, organizationID string, sco
 				dimensions[key] = "platform-mcp-catalogue-probe"
 			}
 		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-			Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions,
-		})
+		// A wildcard tool or disposition is no limit, and a check may not
+		// carry a wildcard, so the grant is probed without it.
+		for _, key := range []string{authz.SelectorKeyTool, authz.SelectorKeyDisposition} {
+			if dimensions[key] == authz.WildcardResource {
+				delete(dimensions, key)
+			}
+		}
+		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions} //nolint:glint // norawauthzchecks: probes a stored grant's own selector, whatever its kind
+		_, hasTool := dimensions[authz.SelectorKeyTool]
+		_, hasDisposition := dimensions[authz.SelectorKeyDisposition]
+		if hasTool || hasDisposition {
+			// A grant limited to some tools or dispositions reaches tool
+			// calls, so probe with one. Only a tool call may name either.
+			if scope != authz.ScopeMCPConnect {
+				continue
+			}
+			server := authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID]))
+			// Every block limited to a tool or a disposition covers a call
+			// that leaves that value out, so the probe names both. A grant that
+			// names no tool reaches tools no block names, so it is probed
+			// with a placeholder tool. A grant that names no disposition
+			// reaches its tools whatever their annotations, so each
+			// disposition is tried: the grant counts when any of them passes.
+			tool := dimensions[authz.SelectorKeyTool]
+			if !hasTool {
+				tool = "platform-mcp-catalogue-probe"
+			}
+			dispositions := []string{dimensions[authz.SelectorKeyDisposition]}
+			if !hasDisposition {
+				dispositions = authz.Dispositions()
+			}
+			for _, disposition := range dispositions {
+				allowed, err := authz.GrantsAuthorize(grants, server.ToolCall(tool, disposition))
+				if err == nil && allowed {
+					return true
+				}
+			}
+			continue
+		}
+		if scope == authz.ScopeMCPConnect {
+			// Probe connect as a connection, which may leave the tool and
+			// disposition out, so a grant whose tool or disposition is a
+			// wildcard still matches.
+			check = authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(dimensions[authz.SelectorKeyProjectID])).Connect()
+		}
+		allowed, err := authz.GrantsAuthorize(grants, check)
 		if err == nil && allowed {
 			return true
 		}

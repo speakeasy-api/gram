@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 )
 
 const (
@@ -87,9 +88,13 @@ type Builder struct {
 
 	// clock is the wall clock, which decides whether raw events are still whole.
 	clock func() time.Time
+
+	// staffOrg is the deployment's Speakeasy staff organization. Its attempts
+	// are kept but do not count toward minOrgsPerLabel.
+	staffOrg staff.Organization
 }
 
-func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch driver.Conn) *Builder {
+func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch driver.Conn, staffOrg staff.Organization) *Builder {
 	logger = logger.With(attr.SlogComponent("mcp_connection_outcomes_daily"))
 	meter := meterProvider.Meter(meterScope)
 	skipped, err := meter.Int64Counter(meterSkippedDays,
@@ -104,7 +109,7 @@ func NewBuilder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgx
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterUnknownLabels), attr.SlogError(err))
 	}
-	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, unknownLabels: unknown, backfillStart: BackfillStart, clock: time.Now}
+	return &Builder{logger: logger, db: db, ch: ch, skippedDays: skipped, unknownLabels: unknown, backfillStart: BackfillStart, clock: time.Now, staffOrg: staffOrg}
 }
 
 const (
@@ -263,7 +268,7 @@ func (b *Builder) checkRawWhole(day time.Time) error {
 
 // outcomes works out the day's rows: how each attempt ended and what fixed it.
 func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, error) {
-	counts := newTally()
+	counts := newTally(b.staffOrg)
 	var failures []mcpconnectionattempts.AttemptSummary
 	dayFilter := mcpconnectionattempts.AttemptFilter{
 		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: mcpconnectionattempts.ExcludedOrganizations(),

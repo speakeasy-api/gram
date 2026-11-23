@@ -26,6 +26,11 @@ import {
   POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
+  applicableDecision,
+  decisionActionLabel,
+  standingDecisionOf,
+} from "@/components/shadow-mcp/shadowMCPPolicyChange";
+import {
   MoreToggle,
   useCollapsedPreview,
 } from "@/components/ui/collapsible-preview";
@@ -192,7 +197,7 @@ function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
         className={SUMMARY_TILE_CLASS}
         description={
           officialState
-            ? "Linked to an official server"
+            ? "Agents are sent to the official server"
             : shadowMCPInventoryStatusDescription(server)
         }
       />
@@ -348,11 +353,17 @@ function TopUsersTable({
 }
 
 function DecideAccessButton({
+  actionLabel,
+  actionReady,
   disabled,
   onOpenDecide,
   policiesUnavailable,
   server,
 }: {
+  /** The action the policy makes applicable to this server. */
+  actionLabel: string;
+  /** The applicable action depends on the policy, so it waits for it. */
+  actionReady: boolean;
   disabled: boolean;
   onOpenDecide: () => void;
   /**
@@ -367,14 +378,14 @@ function DecideAccessButton({
 
   return (
     <Button
-      disabled={disabled || policiesUnavailable}
+      disabled={disabled || policiesUnavailable || !actionReady}
       onClick={onOpenDecide}
       variant={pendingReview ? "primary" : "secondary"}
       size="sm"
       title={policiesUnavailable ? POLICIES_UNAVAILABLE_REASON : undefined}
     >
       <Button.Text>
-        {pendingReview ? "Review request" : "Decide access"}
+        {pendingReview ? "Review request" : actionLabel}
       </Button.Text>
     </Button>
   );
@@ -720,6 +731,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       // A pending legacy bypass request rides along so the sheet promotes it
       // into the review and the decision drains it too.
       pendingBypassRequestId: server.latestRequest?.id,
+      currentDecision: standingDecisionOf(server),
     });
   };
 
@@ -755,6 +767,17 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             <Page.Section.CTA>
               {server && (
                 <DecideAccessButton
+                  actionLabel={
+                    policiesQuery.data
+                      ? decisionActionLabel(
+                          applicableDecision(
+                            disposition,
+                            standingDecisionOf(server),
+                          ),
+                        )
+                      : "Decide access"
+                  }
+                  actionReady={!!policiesQuery.data}
                   disabled={decideTarget !== null}
                   onOpenDecide={openDecide}
                   policiesUnavailable={policiesQuery.isError}

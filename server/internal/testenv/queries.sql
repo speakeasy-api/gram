@@ -713,13 +713,6 @@ SET key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
--- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
--- Test-only privacy sentinel in the deprecated plaintext provider payload column.
-UPDATE openrouter_api_keys
-SET key = @provider_payload
-WHERE organization_id = @organization_id
-  AND key_type = @key_type;
-
 -- name: GetOpenRouterAPIKeyStateFixture :one
 -- Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
 SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
@@ -1202,6 +1195,14 @@ SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
 UPDATE api_keys
 SET expires_at = @expires_at
 WHERE key_hash = @key_hash;
+
+-- name: SetAPIKeysCreatedAtFixture :exec
+-- Pins created_at on an organization's keys so keys.list paging tests can
+-- force ties on the first half of its (created_at, id) ordering.
+UPDATE api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[]);
 
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
@@ -2584,6 +2585,13 @@ UPDATE principal_grants
 SET expires_at = clock_timestamp()
 WHERE id = @id
   AND expires_at IS NOT NULL;
+
+-- name: LapsePrincipalGrantFixture :exec
+-- Test-only fixture: turns a grant into a temporary grant that has already
+-- lapsed.
+UPDATE principal_grants
+SET expires_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE id = @id;
 
 -- name: GetPrincipalGrantExpiresAtFixture :one
 -- Test-only fixture: reads a grant row's deadline (NULL when permanent).

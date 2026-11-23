@@ -1,3 +1,4 @@
+import { oktaIssuerUrl } from "@/pages/org/identity-provider/oktaEma";
 import { discoveredFromDraft } from "@/pages/mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { buildCreateIssuerForm } from "@/pages/remote-identity-providers/issuerSettingsForm";
 import type { GramCore } from "@gram/client/core.js";
@@ -91,6 +92,10 @@ export function normalizeIssuer(address: string): string | undefined {
       /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`,
     );
     if (url.protocol !== "https:") return undefined;
+    // A pasted Okta admin console URL names the org, not its issuer.
+    if (/-admin\.(okta|oktapreview)\.com$/i.test(url.hostname)) {
+      return oktaIssuerUrl(trimmed);
+    }
     return url.toString().replace(/\/+$/, "");
   } catch {
     return undefined;

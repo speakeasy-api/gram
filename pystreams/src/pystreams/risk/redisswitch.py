@@ -36,9 +36,10 @@ _MOVED_PREFIX: Final = b"moved:"
 
 # How long a blocked write waits between attempts.
 RETRY_INTERVAL_SECONDS: Final = 0.25
-# Longest a write waits for a hold to end before failing. Holds are bounded by
-# the operator's copy job, well under this.
-HOLD_TIMEOUT_SECONDS: Final = 60.0
+# Longest a write waits for a hold to end before failing. Longer than the
+# longest hold the operator's copy job sets (120 s in prod), so a held write
+# waits for the hold to end rather than failing.
+HOLD_TIMEOUT_SECONDS: Final = 150.0
 
 Write = Callable[[redis_asyncio.client.Pipeline], None]
 
@@ -119,9 +120,9 @@ class RedisSwitch:
 
         - Nothing was sent to write: the keys said to wait, a key changed
           between the read and the write so the instance refused the
-          transaction, or the connection failed first. The operator's job
-          closes connections during a hold, and the client reports a watched
-          connection that dropped as WatchError.
+          transaction, or the connection failed first. Where the instance
+          allows it, the operator's job closes connections during a hold, and
+          the client reports a watched connection that dropped as WatchError.
         - The connection dropped during the write and its outcome is unknown.
           Trying again can then deliver a reply twice. That is allowed: the
           reply inbox is built for at-least-once delivery and discards a repeat.

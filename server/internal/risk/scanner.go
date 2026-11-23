@@ -344,8 +344,8 @@ type Scanner struct {
 	piiScanner            ra.PIIScanner               // nil if Presidio is unavailable
 	piScanner             *promptinjection.Scanner    // never nil
 	promptPolicy          *promptpolicy.Scanner       // nil-safe; owns prompt policy finding decisions
-	flags                 feature.Provider            // nil disables prompt_based enforcement
-	dispatcher            EnforcementDispatcher       // nil leaves Pub/Sub enforcement inert
+	flags                 feature.Provider
+	dispatcher            EnforcementDispatcher // nil leaves Pub/Sub enforcement inert
 	riskRecorder          *metering.RiskRecorder
 	realtimeRecordsMu     sync.Mutex
 	realtimeRecords       sync.WaitGroup
@@ -565,43 +565,23 @@ func (s *Scanner) scanForEnforcement(
 		return nil, nil
 	}
 
-	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
-	if err != nil {
-		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-		return nil, err
+	applies, _, audienceErr := s.riskPolicyApplicability(ctx, organizationID, userID)
+	if audienceErr != nil {
+		// The scan still runs, against every policy, and its own outcome is
+		// recorded as usual. The trace keeps the reason every policy applied.
+		span.RecordError(audienceErr)
 	}
-
 	applicablePolicies := make([]repo.RiskPolicy, 0, len(policies))
 	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
-		if err != nil {
-			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		if applies(p.ID.String()) {
+			applicablePolicies = append(applicablePolicies, p)
 		}
-		if !policyApplication.Satisfied {
-			continue
-		}
-		applicablePolicies = append(applicablePolicies, p)
-	}
-
-	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
-	// fan-out) so prompt_based policies don't each repeat the slug lookup and
-	// so the lookup is never cancelled by a sibling match. Gated on the exact
-	// condition under which the fan-out would run the judge.
-
-	promptPoliciesOn := false
-	if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == ra.PolicyTypePromptBased
-	}) {
-		// All enforcing policies for a project belong to the same org.
-		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
 	}
 
 	// The risk engine mode selects the engine behind gitleaks, presidio and
 	// prompt_injection sources for the whole org. Resolved once, only when a
-	// policy actually has a covered source, on the parent ctx like the
-	// prompt-policy flag above. The slug rides along for the LLM lane's
-	// telemetry.
+	// policy actually has a covered source, on the parent ctx. The slug rides
+	// along for the LLM lane's telemetry.
 	mode, orgSlug := feature.VariantRiskLLMOff, ""
 	if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
 		return llmanalyzer.CoversAnySource(p.Sources)
@@ -641,7 +621,7 @@ func (s *Scanner) scanForEnforcement(
 			nativeFindings, promptPolicyFindings, llmFindings, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           false,
 				native:           pubsubLanesOn,
-				promptPolicies:   pubsubLanesOn && promptPoliciesOn,
+				promptPolicies:   pubsubLanesOn,
 				llm:              true,
 				llmExecutionPath: realtimeStreamsExecutionPath,
 				llmFailMode:      failModeClosed,
@@ -660,7 +640,7 @@ func (s *Scanner) scanForEnforcement(
 			nativeFindings, promptPolicyFindings, _, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           true,
 				native:           true,
-				promptPolicies:   promptPoliciesOn,
+				promptPolicies:   true,
 				llm:              false,
 				llmExecutionPath: "",
 				llmFailMode:      "",
@@ -672,7 +652,7 @@ func (s *Scanner) scanForEnforcement(
 			nativeFindings, promptPolicyFindings, _, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 				legacy:           true,
 				native:           true,
-				promptPolicies:   promptPoliciesOn,
+				promptPolicies:   true,
 				llm:              false,
 				llmExecutionPath: "",
 				llmFailMode:      "",
@@ -684,7 +664,7 @@ func (s *Scanner) scanForEnforcement(
 		nativeFindings, promptPolicyFindings, _, laneTruncated = s.dispatchEnforcementLanes(ctx, request, orgSlug, applicablePolicies, incomplete, laneDispatch{
 			legacy:           false,
 			native:           true,
-			promptPolicies:   promptPoliciesOn,
+			promptPolicies:   true,
 			llm:              false,
 			llmExecutionPath: "",
 			llmFailMode:      "",
@@ -711,7 +691,7 @@ func (s *Scanner) scanForEnforcement(
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
-			result, comparison, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, mode, nativeFindings, promptPolicyFindings, llmFindings, laneTruncated, incomplete)
+			result, comparison, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, mode, nativeFindings, promptPolicyFindings, llmFindings, laneTruncated, incomplete)
 			if comparison != nil {
 				comparisonsMu.Lock()
 				comparisons = append(comparisons, pendingComparison{policy: p, input: *comparison})
@@ -806,21 +786,16 @@ func (s *Scanner) scanForEnforcement(
 // for the project whose action is "block". Flag-action policies surface as
 // findings via the batch scanner instead of denying at the hook layer.
 func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) (*ShadowMCPPolicy, error) {
-	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
-	if err != nil {
-		return nil, err
-	}
-
 	policies, err := s.repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
+	if len(policies) == 0 {
+		return nil, nil
+	}
+	applies, grants, _ := s.riskPolicyApplicability(ctx, organizationID, userID)
 	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
-		if err != nil {
-			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
-		}
-		if !policyApplication.Satisfied {
+		if !applies(p.ID.String()) {
 			continue
 		}
 		if p.Action == "block" {
@@ -842,6 +817,28 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 		}
 	}
 	return nil, nil
+}
+
+// riskPolicyApplicability answers, for one caller, whether a policy governs
+// their requests. A policy is left out only when the caller is known to be
+// outside its audience or to hold an exemption. When the caller's grants cannot
+// be read, or a policy cannot be evaluated, the policy applies and the failure
+// is logged. The error is returned as well when the grants could not be read,
+// for callers that record it. The caller's grants are returned too, nil when
+// they could not be read, for callers that read more from them.
+func (s *Scanner) riskPolicyApplicability(ctx context.Context, organizationID string, userID string) (func(policyID string) bool, []authz.Grant, error) {
+	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "risk policy audience could not be read, so every policy applies", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
+		return func(string) bool { return true }, nil, err
+	}
+	return func(policyID string) bool {
+		application, err := authz.EvaluateRiskPolicy(grants, policyID, authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
+		if err != nil {
+			s.logger.ErrorContext(ctx, "risk policy could not be evaluated, so it applies", attr.SlogOrganizationID(organizationID), attr.SlogRiskPolicyID(policyID), attr.SlogError(err))
+		}
+		return application.Applies()
+	}, grants, nil
 }
 
 func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {
@@ -900,14 +897,14 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // policy's result (every covered source under shadow, compared sources under
 // llm). Its llmFindings and truncated are filled from the arguments when the
 // lane was awaited; recordComparisons fills them otherwise.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, mode feature.Variant, nativeFindings map[string][]scanners.Finding, promptPolicyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool) (result *ScanResult, comparison *shadowComparisonInput, retErr error) {
-	result, retErr = s.scanPolicyEnforce(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn, mode, nativeFindings, promptPolicyFindings, llmFindings, truncated, incomplete, &comparison)
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, mode feature.Variant, nativeFindings map[string][]scanners.Finding, promptPolicyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool) (result *ScanResult, comparison *shadowComparisonInput, retErr error) {
+	result, retErr = s.scanPolicyEnforce(ctx, policy, baseProvenance, text, messageType, toolName, mode, nativeFindings, promptPolicyFindings, llmFindings, truncated, incomplete, &comparison)
 	return result, comparison, retErr
 }
 
 // scanPolicyEnforce is scanPolicy's body; the deferred capture writes the
 // comparison input to comparisonOut so early returns need no plumbing.
-func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, mode feature.Variant, nativeFindings map[string][]scanners.Finding, promptPolicyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool, comparisonOut **shadowComparisonInput) (result *ScanResult, retErr error) {
+func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, mode feature.Variant, nativeFindings map[string][]scanners.Finding, promptPolicyFindings map[string][]scanners.Finding, llmFindings []scanners.Finding, truncated bool, incomplete *atomic.Bool, comparisonOut **shadowComparisonInput) (result *ScanResult, retErr error) {
 	// Per-policy child span so an individual gitleaks/presidio/judge span
 	// attributes to the policy that spawned it (the g.Go fan-out threads gctx
 	// here, so this span parents under risk.scanForEnforcement).
@@ -995,7 +992,7 @@ func (s *Scanner) scanPolicyEnforce(ctx context.Context, policy repo.RiskPolicy,
 			return nil, nil
 		}
 		if promptPolicyFindings == nil {
-			return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, promptPoliciesOn, incomplete)
+			return s.scanPromptPolicy(ctx, policy, baseProvenance, text, messageType, toolName, incomplete)
 		}
 		findings, ok := promptPolicyFindings[policy.ID.String()]
 		if !ok {
@@ -1376,14 +1373,8 @@ func realtimeMessageView(text string, messageType message.Type, toolName string)
 // filtered policies to those whose message_types apply to this message, so the
 // judge runs for whatever message types the policy declares. Returns nil when
 // the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, promptPoliciesOn bool, incomplete *atomic.Bool) (*ScanResult, error) {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, baseProvenance metering.RiskProvenance, text string, messageType message.Type, toolName string, incomplete *atomic.Bool) (*ScanResult, error) {
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
-	if !promptPoliciesOn {
-		// Preserve the intentional allow, but do not cache it as evaluated:
-		// feature-flag state is not part of the durable checkpoint fingerprint.
-		incomplete.Store(true)
-		return nil, nil
-	}
 	prompt := ""
 	if policy.Prompt.Valid {
 		prompt = policy.Prompt.String

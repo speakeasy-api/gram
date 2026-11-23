@@ -58,7 +58,7 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 	Attribute("connection_owner", String, "Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only): a user ID, '*', or '$represented_user'.")
 	Attribute("upstream_client", String, "Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on remote_session clients only). Together with connection_owner it names one person's connection across every auth client sharing that upstream client.")
 	Attribute("disposition", String, "Tool disposition filter (MCP scopes only).", func() {
-		Enum("read_only", "destructive", "idempotent", "open_world")
+		Enum("read_only", "destructive", "idempotent", "open_world", "unannotated")
 	})
 	Attribute("tool", String, "Specific tool name filter (MCP scopes only).")
 	Attribute("project_id", String, "Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).")
@@ -216,6 +216,7 @@ var _ = Service("agents", func() {
 				Minimum(1)
 				Maximum(200)
 			})
+			Attribute("project_id", String, "Keep only agents assigned to this project in the active organization.", func() { Format(FormatUUID) })
 			Attribute("search", String, "Case-insensitive substring match on the agent name.")
 			Attribute("lifecycle", ArrayOf(String), "Keep only agents in these lifecycle states.", func() {
 				Elem(func() { Enum("active", "suspended", "revoked") })
@@ -238,6 +239,7 @@ var _ = Service("agents", func() {
 			security.SessionHeader()
 			Param("cursor")
 			Param("limit")
+			Param("project_id")
 			Param("search")
 			Param("name_order")
 			Param("lifecycle")

@@ -157,9 +157,10 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
 		// Example OAuth's and Example Shared Credential's issuers, three
-		// independent gateway issuers, one Connections issuer, Linear's and
-		// Notion's.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 9, "demo seed postflight: expected 9 project user session issuers, found %d"},
+		// independent gateway issuers, one Connections issuer, Linear's,
+		// Notion's, Support Tools' (the Shadow MCP official server) and the
+		// connection health provider's.
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 10, "demo seed postflight: expected 10 project user session issuers, found %d"},
 		{byProj(s.q.PostflightIDGatewayIssuers), 4, "demo seed postflight: expected 4 distinct gateway issuers, found %d"},
 		// The workforce issuer. The local fixtures add the Enterprise Sign-In
 		// (ID-JAG) Server's own federated sign-in after this check.
@@ -230,12 +231,12 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byProj(s.q.PostflightIDServerClientAssociations), 4, "demo seed postflight: expected 4 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Example OAuth server
 		// and Example Shared Credential server sign-ins on their own server, the gateway
-		// sign-ins on both members, and the organization sign-ins on the
-		// connection health servers with no upstream sign-in.
+		// sign-ins on both members, and the organization sign-ins' no-auth
+		// choice on Support Tools and on the connection health servers.
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: s.healthServerIDs(),
+				OrgNoAuthServerIds: append(s.healthServerIDs(), s.det("mcpserver-shadow-official")),
 				ProjectID:          proj,
 				HealthIssuerID:     s.healthIssuer(),
 				LinearSessionIds:   []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
@@ -244,14 +245,14 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				SlackServerID:      s.det("mcpserver-slack"),
 				LinearClientID:     s.det("remote-identity-client-linear"),
 			})
-		}, 38, "demo seed postflight: expected exactly 38 matching upstream client choices, found %d"},
+		}, 41, "demo seed postflight: expected exactly 41 matching upstream client choices, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDHealthUpstreamClientChoices(ctx, repo.PostflightIDHealthUpstreamClientChoicesParams{ProjectID: proj, HealthIssuerID: s.healthIssuer()})
 		}, healthHeld * int64(len(healthServers)), "demo seed postflight: expected no upstream sign-in on every connection health server for each held sign-in, found %d"},
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: s.healthServerIDs(),
+				OrgNoAuthServerIds: append(s.healthServerIDs(), s.det("mcpserver-shadow-official")),
 				ProjectID:          proj,
 				HealthIssuerID:     s.healthIssuer(),
 				LinearServerID:     s.det("mcpserver-linear"),

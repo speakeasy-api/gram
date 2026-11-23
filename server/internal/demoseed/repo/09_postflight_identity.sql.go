@@ -810,9 +810,17 @@ SELECT count(*)
 FROM upstream_client_selections u
 WHERE u.project_id = $1::uuid AND u.deleted IS FALSE
   AND u.credential_kind = 'user_session'
-  AND u.credential_id NOT IN (SELECT id FROM user_sessions WHERE user_session_issuer_id = $2::uuid)
   AND NOT (
-    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
+    EXISTS (SELECT 1 FROM user_sessions hs
+            JOIN mcp_servers hm ON hm.id = u.mcp_server_id AND hm.project_id = u.project_id
+            WHERE hs.id = u.credential_id AND hs.deleted IS FALSE
+              AND hs.user_session_issuer_id = $2::uuid
+              AND hm.user_session_issuer_id = $2::uuid)
+    AND u.no_auth AND u.remote_session_client_id IS NULL
+  )
+  AND NOT (
+    EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE
+            AND s.user_session_issuer_id IS DISTINCT FROM $2::uuid)
     AND (
       (u.mcp_server_id = $3::uuid AND u.remote_session_client_id = $4::uuid)
       OR (u.mcp_server_id = $5::uuid AND u.no_auth)
@@ -840,7 +848,8 @@ type PostflightIDMisassignedUpstreamClientChoicesParams struct {
 // Count live choices outside the intended set: the Example OAuth server
 // through its main client, the Example Shared Credential server with no
 // upstream authentication, and the organization gateway's choices of each
-// server's associated client, each on a seeded session.
+// server's associated client, each on a seeded session. Connection health
+// sign-ins may only choose no upstream sign-in on the provider's own servers.
 func (q *Queries) PostflightIDMisassignedUpstreamClientChoices(ctx context.Context, arg PostflightIDMisassignedUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDMisassignedUpstreamClientChoices,
 		arg.ProjectID,
@@ -1452,7 +1461,7 @@ WITH live AS (
     AND credential_id NOT IN (SELECT id FROM user_sessions WHERE user_session_issuer_id = $9::uuid)
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 38
+WHERE (SELECT count(*) FROM live) = 41
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])
@@ -1499,7 +1508,7 @@ type PostflightIDUpstreamClientChoicesParams struct {
 }
 
 // Check both the total and the expected credential/server/client tuples so
-// thirty-eight misassigned choices cannot satisfy postflight.
+// forty-one misassigned choices cannot satisfy postflight.
 func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg PostflightIDUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices,
 		arg.LinearSessionIds,
