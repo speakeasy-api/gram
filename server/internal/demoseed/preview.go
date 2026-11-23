@@ -89,7 +89,10 @@ func RunPreviewFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Po
 			}
 			return nil
 		}},
-		{"system role grants", func() error { return authz.SeedSystemRoleGrantsTx(ctx, tx, spec.OrgID) }},
+		// Ensure, not seed: the seed's tool block on the global Admin role
+		// would otherwise count as Admin being provisioned, and the runner
+		// (an Admin) would hold no project or organization grant at all.
+		{"system role grants", func() error { return authz.EnsureSystemRoleGrantsTx(ctx, tx, spec.OrgID) }},
 		{"personal auth client default", func() error { return authz.SeedPersonalAuthClientDefaultTx(ctx, tx, spec.OrgID) }},
 		{"grant session visibility", func() error {
 			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: runner.ID})

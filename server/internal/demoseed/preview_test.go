@@ -5,10 +5,12 @@ package demoseed
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -70,6 +72,37 @@ func TestPreviewFixturesAdoptOnlyTheRunner(t *testing.T) {
 	neighbourAfter, err := demoseedtest.ReadDeveloperState(ctx, db, neighbour.OrgID, testDeveloperEmail)
 	require.NoError(t, err)
 	require.Equal(t, neighbourBefore, neighbourAfter)
+}
+
+// The seed writes a tool block on the global Admin role before the fixtures
+// run, so the fixtures must still give Admin its default grants: otherwise
+// the runner, an Admin, cannot even read the organization's project.
+func TestPreviewFixturesLetTheRunnerReadTheProject(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	spec, err := PreviewSpec(127)
+	require.NoError(t, err)
+	runner := spec.PreviewRunner()
+
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	// The built-in roles exist before the first reset, as in a preview's
+	// database cloned from its environment.
+	seedLocalPostgres(ctx, t, db, LocalSpec())
+	require.NoError(t, RunLocalFixtures(ctx, logger, db, assetstest.NewTestBlobStore(t), nil, LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}))
+
+	require.NoError(t, Run(ctx, logger, db, nil, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), testAssistantIssuerURL, testServerURL, spec))
+	require.NoError(t, RunPreviewFixtures(ctx, logger, db, nil, spec))
+
+	principals, err := authz.ResolveUserPrincipals(ctx, db, spec.OrgID, runner.ID)
+	require.NoError(t, err)
+	grants, err := authz.LoadGrants(ctx, db, spec.OrgID, principals)
+	require.NoError(t, err)
+	projectID := uuid.MustParse(spec.ProjectID())
+	require.True(t, authz.GrantsSatisfy(grants, authz.Project(authz.ProjectIDOf(projectID)).Read()), "the runner can read the project")
+	require.True(t, authz.GrantsSatisfy(grants, authz.Project(authz.ProjectIDOf(projectID)).Write()), "the runner, an Admin, can change the project")
 }
 
 // Creating a built-in role would reach every organization in the database, so
