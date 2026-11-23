@@ -58,6 +58,7 @@ func TestServeConsentMCP_ConfiguredChainPreservesTokenFailure(t *testing.T) {
 				req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
 				w := httptest.NewRecorder()
 				err := fx.ti.service.ServeConsentMCP(w, req, fx.endpoint)
+				require.Empty(t, w.Header().Get("X-Gram-Consent-Recovery"))
 				var failure *oops.ShareableError
 				require.ErrorAs(t, err, &failure)
 				if unavailable {
@@ -78,5 +79,29 @@ func TestServeConsentMCP_ConfiguredChainPreservesTokenFailure(t *testing.T) {
 				require.Empty(t, g.signInIDs, "AcquireConsent must not run")
 			})
 		}
+	}
+}
+
+func TestServeConsentMCP_RecoveryHints(t *testing.T) {
+	t.Parallel()
+	ctx, fx, _ := seedChainedConsentEndpoint(t, "consent-inventory-recovery")
+	for _, tc := range []struct {
+		state string
+		csrf  string
+		want  string
+	}{
+		{state: fx.stateID, csrf: "csrf-token", want: "reconnect"},
+		{state: uuid.NewString(), csrf: "csrf-token", want: "restart"},
+		{state: fx.stateID, csrf: "incorrect"},
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)).WithContext(ctx)
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Gram-Consent-State", tc.state)
+		req.Header.Set("Gram-Consent-Csrf", tc.csrf)
+		req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
+		w := httptest.NewRecorder()
+		require.Error(t, fx.ti.service.ServeConsentMCP(w, req, fx.endpoint))
+		require.Equal(t, tc.want, w.Header().Get("X-Gram-Consent-Recovery"))
 	}
 }

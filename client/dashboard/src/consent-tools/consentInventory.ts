@@ -1,5 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
 
 import type { ToolAnnotation } from "@/components/tool-selection/annotations";
@@ -68,6 +71,152 @@ export function parseGatewayInventoryBootstrap(
   };
 }
 
+type DiscoveryStage = "initialize" | "tools/list";
+
+export class ConsentInventoryFailure extends Error {
+  readonly stage: DiscoveryStage | "bootstrap";
+  readonly reason:
+    | "missing_inventory"
+    | "timeout"
+    | "network"
+    | "invalid_inventory"
+    | "http";
+  readonly status?: number;
+  readonly recovery?: "reconnect" | "restart";
+  readonly retryAfter?: string | null;
+
+  constructor(
+    stage: ConsentInventoryFailure["stage"],
+    reason: ConsentInventoryFailure["reason"],
+    status?: number,
+    recovery?: ConsentInventoryFailure["recovery"],
+    retryAfter?: string | null,
+  ) {
+    super("Consent inventory could not load");
+    this.stage = stage;
+    this.reason = reason;
+    this.status = status;
+    this.recovery = recovery;
+    this.retryAfter = retryAfter;
+  }
+}
+
+export function reportConsentInventoryFailure(
+  failure: ConsentInventoryFailure,
+  flowID?: string,
+): void {
+  // Never log an SDK error, a URL, server response text, or consent credentials.
+  console.warn("Consent inventory could not load", {
+    ...(/^[a-zA-Z0-9_-]{1,64}$/.test(flowID ?? "") ? { flowID } : {}),
+    stage: failure.stage,
+    reason:
+      failure.status === undefined ? failure.reason : `http_${failure.status}`,
+  });
+}
+
+export const RESTART_CONSENT_MESSAGE =
+  "This authorization request is no longer valid. Return to the client app and start the connection again.";
+
+export const CONSENT_INVENTORY_DEADLINE_MS = 10000;
+const MAX_RETRY_DELAY_MS = 2000;
+const TRANSIENT_HTTP_STATUSES = new Set([408, 429, 502, 503, 504]);
+
+function transientRetryDelay(failure: ConsentInventoryFailure): number | null {
+  if (
+    failure.recovery ||
+    failure.status === undefined ||
+    !TRANSIENT_HTTP_STATUSES.has(failure.status)
+  )
+    return null;
+  const value = failure.retryAfter?.trim();
+  if (!value) return 250;
+  const delay = /^\d+$/.test(value)
+    ? Number(value) * 1000
+    : value.endsWith(" GMT")
+      ? Math.max(0, Date.parse(value) - Date.now())
+      : NaN;
+  // Do not retry sooner than the server requested if it exceeds our budget.
+  return delay <= MAX_RETRY_DELAY_MS ? delay : null;
+}
+
+export async function loadConsentInventory({
+  toolsUrl,
+  state,
+  csrfToken,
+  signal,
+  authClient,
+  flowID,
+}: {
+  toolsUrl: string;
+  state: string;
+  csrfToken: string;
+  signal?: AbortSignal;
+  authClient?: string;
+  flowID?: string;
+}): Promise<ConsentInventory & { attempt: string }> {
+  const controller = new AbortController();
+  const combined = signal
+    ? AbortSignal.any([controller.signal, signal])
+    : controller.signal;
+  let stage: DiscoveryStage = "initialize";
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  const deadline = setTimeout(() => {
+    controller.abort(new ConsentInventoryFailure(stage, "timeout"));
+  }, CONSENT_INVENTORY_DEADLINE_MS);
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(combined.reason);
+    if (combined.aborted) onAbort();
+    else combined.addEventListener("abort", onAbort, { once: true });
+  });
+  const load = async (
+    mayRetry: boolean,
+  ): Promise<ConsentInventory & { attempt: string }> => {
+    combined.throwIfAborted();
+    stage = "initialize";
+    try {
+      const attempt = crypto.randomUUID();
+      const inventory = await fetchConsentInventory(
+        toolsUrl,
+        state,
+        csrfToken,
+        attempt,
+        combined,
+        authClient,
+        () => {
+          stage = "tools/list";
+        },
+      );
+      return { ...inventory, attempt };
+    } catch (err) {
+      combined.throwIfAborted();
+      const failure =
+        err instanceof ConsentInventoryFailure
+          ? err
+          : new ConsentInventoryFailure(stage, "invalid_inventory");
+      const delay = mayRetry ? transientRetryDelay(failure) : null;
+      if (delay === null) throw failure;
+      reportConsentInventoryFailure(failure, flowID);
+      await new Promise<void>((resolve) => {
+        retryTimer = setTimeout(resolve, delay);
+      });
+      return load(false);
+    }
+  };
+  try {
+    // Bound the entire operation, including a stalled SDK request or cleanup.
+    return await Promise.race([interrupted, load(true)]);
+  } catch (err) {
+    if (err instanceof ConsentInventoryFailure)
+      reportConsentInventoryFailure(err, flowID);
+    throw err;
+  } finally {
+    clearTimeout(deadline);
+    clearTimeout(retryTimer);
+    if (onAbort) combined.removeEventListener("abort", onAbort);
+  }
+}
+
 /**
  * The island is an ordinary MCP client of the consent-scoped transport: the
  * official SDK performs initialize, paginated tools/list, and session
@@ -84,26 +233,55 @@ export async function fetchConsentInventory(
   attempt: string,
   signal?: AbortSignal,
   authClient?: string,
+  onList?: () => void,
 ): Promise<ConsentInventory> {
+  let stage: DiscoveryStage = "initialize";
   const transport = new StreamableHTTPClientTransport(
     new URL(toolsUrl, window.location.origin),
     {
+      // Only the bounded discovery retry above may start a new request after failure.
+      reconnectionOptions: {
+        initialReconnectionDelay: 0,
+        maxReconnectionDelay: 0,
+        reconnectionDelayGrowFactor: 1,
+        maxRetries: 0,
+      },
       // The SDK replaces requestInit.signal with its own controller. Combine
       // the discovery deadline at the fetch boundary. Session termination must
       // survive discovery cancellation, but gets its own bounded deadline.
-      fetch: (input, init) =>
-        fetch(input, {
+      fetch: async (input, init) => {
+        const requestSignal =
+          init?.method === "DELETE"
+            ? AbortSignal.timeout(2000)
+            : signal && init?.signal
+              ? AbortSignal.any([signal, init.signal])
+              : (signal ?? init?.signal);
+        const isRequest = init?.method === "POST";
+        const response = await fetch(input, {
           ...init,
-          signal:
-            init?.method === "DELETE"
-              ? AbortSignal.timeout(2000)
-              : signal
-                ? AbortSignal.any([
-                    signal,
-                    ...(init?.signal ? [init.signal] : []),
-                  ])
-                : init?.signal,
-        }),
+          signal: requestSignal,
+        }).catch((err: unknown) => {
+          signal?.throwIfAborted();
+          if (isRequest) throw new ConsentInventoryFailure(stage, "network");
+          throw err;
+        });
+        // The SDK error discards response headers and may include response
+        // text. Preserve only the allowlisted recovery hint on MCP POSTs.
+        if (isRequest && !response.ok) {
+          void response.body?.cancel().catch(() => undefined);
+          const recovery = response.headers.get("X-Gram-Consent-Recovery");
+          throw new ConsentInventoryFailure(
+            stage,
+            "http",
+            response.status,
+            recovery === "reconnect" || recovery === "restart"
+              ? recovery
+              : undefined,
+            response.headers.get("Retry-After"),
+          );
+        }
+        return response;
+      },
       requestInit: {
         credentials: "omit",
         headers: {
@@ -125,12 +303,16 @@ export async function fetchConsentInventory(
   );
   try {
     await client.connect(transport);
+    signal?.throwIfAborted();
+    stage = "tools/list";
+    onList?.();
     const tools: ConsentTool[] = [];
     const seen = new Set<string>();
     const roleHiddenTools: RoleHiddenTools = { count: 0, names: [] };
     let cursor: string | undefined = undefined;
     do {
       const page = await client.listTools(cursor ? { cursor } : undefined);
+      signal?.throwIfAborted();
       for (const tool of page.tools) {
         if (seen.has(tool.name)) throw new Error("duplicate tool name");
         seen.add(tool.name);
@@ -156,6 +338,18 @@ export async function fetchConsentInventory(
       cursor = page.nextCursor;
     } while (cursor);
     return { tools, roleHiddenTools };
+  } catch (err) {
+    signal?.throwIfAborted();
+    if (err instanceof ConsentInventoryFailure) throw err;
+    if (
+      err instanceof StreamableHTTPError &&
+      err.code !== undefined &&
+      err.code >= 100 &&
+      err.code <= 599
+    ) {
+      throw new ConsentInventoryFailure(stage, "http", err.code);
+    }
+    throw new ConsentInventoryFailure(stage, "invalid_inventory");
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);

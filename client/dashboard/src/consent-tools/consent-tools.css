@@ -76,3 +76,25 @@
     }
   }
 }
+
+@layer island-utilities {
+  #consent-tools-root .consent-recovery-button {
+    min-height: 2rem;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--foreground);
+    padding: 0.25rem 0.75rem;
+    cursor: pointer;
+  }
+
+  #consent-tools-root .consent-recovery-button:hover,
+  #consent-tools-root .consent-recovery-button:focus-visible {
+    background: var(--accent);
+  }
+
+  #consent-tools-root .consent-recovery-button:focus-visible,
+  #consent-tools-root .consent-recovery-focus:focus {
+    outline: 2px solid var(--ring, var(--foreground));
+    outline-offset: 2px;
+  }
+}
