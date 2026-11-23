@@ -228,15 +228,20 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
 	}
+	// A check about another organization is refused before anything else,
+	// whether or not RBAC applies to the caller. An AnyOf check leaves out
+	// such alternatives when it is decided, so another alternative can pass.
+	if err := validateShape(checks, true); err != nil {
+		return e.mapError(ctx, err)
+	}
+	aboutOther := e.aboutOtherOrganization(ctx)
+	e.logOtherOrganizations(ctx, aboutOther, checks)
+	if other := slices.IndexFunc(checks, func(c Check) bool { return !isAnyOf(c) && aboutOther(c) }); other >= 0 {
+		return e.mapError(ctx, Denied(checks[other].Scope, checks[other].selector()))
+	}
 	q, err := e.prepare(ctx, checks, true)
 	if err != nil {
 		return e.mapError(ctx, err)
-	}
-	// An AnyOf check leaves out its alternatives about another organization
-	// when it is decided, so another alternative can still pass.
-	if other := slices.IndexFunc(checks, func(c Check) bool { return !isAnyOf(c) && q.aboutOtherOrganization(c) }); other >= 0 {
-		e.logOtherOrganization(ctx, checks[other])
-		return e.mapError(ctx, Denied(checks[other].Scope, checks[other].selector()))
 	}
 	return e.requireAll(ctx, q, checks, true)
 }
@@ -760,6 +765,10 @@ func validateInput(c Check) error {
 // refused for every caller.
 func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
 	for _, check := range checks {
+		if isAnyOf(check) {
+			e.logInvalidUnenforced(ctx, check.anyOf)
+			continue
+		}
 		err := validateInput(check)
 		if err == nil {
 			continue
@@ -834,6 +843,20 @@ func (e *Engine) withoutOtherOrganization(ctx context.Context, checks []Check) (
 		e.logOtherOrganization(ctx, c)
 	}
 	return kept, refused
+}
+
+// logOtherOrganizations logs each check, or AnyOf alternative, that is
+// refused because it is about another organization than the caller's.
+func (e *Engine) logOtherOrganizations(ctx context.Context, aboutOther func(Check) bool, checks []Check) {
+	for _, c := range checks {
+		if isAnyOf(c) {
+			e.logOtherOrganizations(ctx, aboutOther, c.anyOf)
+			continue
+		}
+		if aboutOther(c) {
+			e.logOtherOrganization(ctx, c)
+		}
+	}
 }
 
 // logOtherOrganization logs a check refused because it is about another

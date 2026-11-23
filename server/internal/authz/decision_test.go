@@ -1,6 +1,8 @@
 package authz
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -70,6 +72,25 @@ func TestDecide_unenforcedCallerIsAllowedAndSaysSo(t *testing.T) {
 	for _, decision := range d.Each {
 		require.False(t, decision.Enforced)
 	}
+}
+
+// For a caller RBAC skips, a valid AnyOf check is not reported as invalid:
+// its alternatives are what gets validated.
+func TestDecide_unenforcedAnyOfIsNotReportedInvalid(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	engine := NewEngine(slog.New(slog.NewTextHandler(&logs, nil)), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID: "org-one",
+		UserID:               "user-one",
+		SessionID:            nil,
+	})
+
+	d, err := engine.Decide(ctx, AnyOf(projectRead("proj_a"), projectRead("proj_b")))
+	require.NoError(t, err)
+	require.True(t, d.AllAllowed)
+	require.NotContains(t, logs.String(), "invalid authz check")
 }
 
 // A refusal from Decide is a branch, not an error, and an AnyOf check can sit

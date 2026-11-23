@@ -70,10 +70,8 @@ func (e *Engine) decideAll(ctx context.Context, checks []Check, record bool) (De
 		return Decisions{AllAllowed: false, Each: nil}, e.mapError(ctx, err)
 	}
 	result := Decisions{AllAllowed: len(checks) > 0, Each: make([]Decision, 0, len(checks))}
+	e.logOtherOrganizations(ctx, q.aboutOtherOrganization, checks)
 	for _, check := range checks {
-		if !isAnyOf(check) && q.aboutOtherOrganization(check) {
-			e.logOtherOrganization(ctx, check)
-		}
 		d, err := q.decide(check)
 		if err != nil {
 			if record && q.enforced {
@@ -308,6 +306,7 @@ func (e *Engine) recordBatch(ctx context.Context, q question, decided []Decision
 		row.Reason = authzrepo.ReasonInvalidCheck
 		row.Matches = nil
 		row.FilterAllowedCount = 0
+		row.FilterCandidateCount = uint32(len(row.Checks)) //nolint:gosec // candidate count is small
 	case allowedCount > 0:
 		row.Outcome = authzrepo.OutcomeAllow
 		row.Reason = authzrepo.ReasonGrantMatched
