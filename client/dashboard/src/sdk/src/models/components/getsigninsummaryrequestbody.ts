@@ -19,6 +19,18 @@ export const Bucket = {
  */
 export type Bucket = ClosedEnum<typeof Bucket>;
 
+export const Steps = {
+  Connect: "connect",
+  SignIn: "sign_in",
+  ServiceSignIn: "service_sign_in",
+  SignInRenewal: "sign_in_renewal",
+  ServiceRenewal: "service_renewal",
+  ListingTools: "listing_tools",
+  Request: "request",
+  Other: "other",
+} as const;
+export type Steps = ClosedEnum<typeof Steps>;
+
 export type GetSignInSummaryRequestBody = {
   /**
    * Bucket size. Defaults to hour for ranges up to 48 hours, otherwise day.
@@ -32,6 +44,10 @@ export type GetSignInSummaryRequestBody = {
    * Limit to one server, gateway or toolset.
    */
   serverId?: string | undefined;
+  /**
+   * Count only attempts that ended at these steps, as the Connection Logs step filter does. Absent: sign_in, service_sign_in, sign_in_renewal and service_renewal. Steps outside these four count nothing. In-progress attempts are never counted.
+   */
+  steps?: Array<Steps> | undefined;
   /**
    * Exclusive end of attempt start times.
    */
@@ -48,10 +64,14 @@ export const Bucket$outboundSchema: z.ZodMiniEnum<typeof Bucket> = z.enum(
 );
 
 /** @internal */
+export const Steps$outboundSchema: z.ZodMiniEnum<typeof Steps> = z.enum(Steps);
+
+/** @internal */
 export type GetSignInSummaryRequestBody$Outbound = {
   bucket?: string | undefined;
   from: string;
   server_id?: string | undefined;
+  steps?: Array<string> | undefined;
   to: string;
   user_session_issuer_id: string;
 };
@@ -65,6 +85,7 @@ export const GetSignInSummaryRequestBody$outboundSchema: z.ZodMiniType<
     bucket: z.optional(Bucket$outboundSchema),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     serverId: z.optional(z.string()),
+    steps: z.optional(z.array(Steps$outboundSchema)),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     userSessionIssuerId: z.string(),
   }),

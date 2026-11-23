@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { useConnectionHealthFlag } from "@/pages/mcp-sessions/connection-health/flag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { AppRoute } from "@/routes";
 import { useRoutes } from "@/routes";
@@ -55,6 +56,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isAssistantsAvailable = useAssistantsAvailable();
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
+  // Connection health is in beta, so MCP Sessions carries the beta stage with it.
+  const connectionHealthOn = useConnectionHealthFlag() === "on";
 
   // Explore is opt-in while it is dogfooded: the flag is released to the
   // organizations trying it, and everyone else never sees the page.
@@ -86,7 +89,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.identities.people, scope: observe },
       { route: routes.identities.agents, scope: observe },
       {
-        route: routes.mcpSessions,
+        route: connectionHealthOn
+          ? { ...routes.mcpSessions, stage: "beta" as const }
+          : routes.mcpSessions,
         scope: read,
         resourceId: projectId,
       },
@@ -146,6 +151,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     routes,
     projectId,
     isAssistantsAvailable,
+    connectionHealthOn,
     isExploreEnabled,
     isOrgMemoryEnabled,
     isSignalsIntelligenceEnabled,
