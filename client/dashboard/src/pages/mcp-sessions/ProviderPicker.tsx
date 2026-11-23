@@ -164,7 +164,6 @@ export function ProviderSwitcher({
           const next = providers.find((p) => p.id === item.value);
           if (next && next.id !== current.id) onSelect(next);
         }}
-        searchable={providers.length > SEARCH_THRESHOLD}
         searchPlaceholder="Find a provider"
         emptyMessage="No provider matches."
         className="h-8 max-w-[240px]"
