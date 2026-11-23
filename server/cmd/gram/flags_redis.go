@@ -45,7 +45,7 @@ func redisRoleFlags() []cli.Flag {
 		&cli.StringFlag{
 			Name:    "redis-role-guard",
 			Usage:   "What to do with a redis key sent to the wrong role: report (log and count) or enforce (refuse the command)",
-			Value:   string(redisrole.GuardReport),
+			Value:   redisrole.GuardReport.String(),
 			EnvVars: []string{"GRAM_REDIS_ROLE_GUARD"},
 		},
 	}

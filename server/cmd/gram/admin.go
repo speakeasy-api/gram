@@ -440,6 +440,7 @@ func newAdminCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
+			defer o11y.LogDefer(context.WithoutCancel(ctx), logger, "failed to close redis clients", stores.Close)
 			redisClient := stores.Sessions
 
 			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)

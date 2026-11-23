@@ -506,6 +506,16 @@ type redisStores struct {
 	EvictableCache *cache.EvictableRedisAdapter
 }
 
+// Close closes the sessions client and, when it is a separate client, the
+// evictable one.
+func (s *redisStores) Close() error {
+	var evictableErr error
+	if s.Evictable.Client != s.Sessions {
+		evictableErr = s.Evictable.Close()
+	}
+	return errors.Join(s.Sessions.Close(), evictableErr)
+}
+
 // splitsEvictableRole reports whether evictableAddr names an instance other
 // than sessionsAddr. Unset, blank, or the sessions address (ignoring
 // surrounding spaces) keeps both roles on one client, so pointing the
@@ -538,6 +548,11 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 		if err != nil {
 			return nil, errors.Join(err, sessions.Close())
 		}
+		// The evictable adapter keeps its own key check, so in this mode a
+		// sessions key sent through the adapter is counted twice on
+		// gram.redis.role.wrong_role_commands: once by the adapter and once
+		// by this hook. The counter's job is to stay at zero, which double
+		// counting does not change.
 		sessions.AddHook(guard.Hook(redisrole.RoleSessions))
 		evictableClient.AddHook(guard.Hook(redisrole.RoleEvictable))
 	}

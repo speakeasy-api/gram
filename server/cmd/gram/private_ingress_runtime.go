@@ -127,7 +127,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	redisClient := stores.Sessions
 	r.Redis = redisClient
-	r.cleanup = append(r.cleanup, func(context.Context) error { return redisClient.Close() })
+	r.cleanup = append(r.cleanup, func(context.Context) error { return stores.Close() })
 	guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
 	if err != nil {
 		return nil, err

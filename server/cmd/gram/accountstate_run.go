@@ -147,6 +147,12 @@ func runAccountState(ctx context.Context, r accountStateRequest) (any, error) {
 	if evictableAddress := os.Getenv("GRAM_REDIS_EVICTABLE_ADDR"); splitsEvictableRole(config.RedisAddress, evictableAddress) {
 		evictableClient = redis.NewClient(&redis.Options{Addr: strings.TrimSpace(evictableAddress), Password: os.Getenv("GRAM_REDIS_EVICTABLE_PASSWORD"), DialTimeout: 3 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, MaxRetries: -1})
 		defer o11y.NoLogDefer(evictableClient.Close)
+		// The cache server is checked by Validate; check the separate
+		// instance before anything is applied, so a wrong address fails the
+		// command instead of leaving stale feature flags behind.
+		if err := evictableClient.Ping(preflight).Err(); err != nil {
+			return nil, fmt.Errorf("reach the evictable redis instance: %w", err)
+		}
 	}
 	featureCache := cache.NewEvictableRedisAdapter(redisrole.EvictableClient{Client: evictableClient}, redisrole.NewGuard(slog.Default(), metricnoop.NewMeterProvider(), redisrole.GuardReport))
 	features := productfeatures.NewClient(slog.Default(), noop.NewTracerProvider(), db, featureCache)

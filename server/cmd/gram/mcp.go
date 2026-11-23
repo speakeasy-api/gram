@@ -185,7 +185,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("connect to redis: %w", err)
 	}
 	redisClient := stores.Sessions
-	shutdown.redisClose = redisClient.Close
+	shutdown.redisClose = stores.Close
 
 	assetStorage, stop, err := newAssetStorage(ctx, logger, assetStorageOptions{assetsBackend: c.String("assets-backend"), assetsURI: c.String("assets-uri")})
 	if err != nil {

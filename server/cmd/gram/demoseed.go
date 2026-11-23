@@ -216,7 +216,7 @@ func newDemoSeedCommand() *cli.Command {
 			if err != nil {
 				logger.WarnContext(ctx, "local seed could not reach redis; restart the server if features look stale", attr.SlogError(err))
 			} else {
-				defer o11y.NoLogDefer(stores.Sessions.Close)
+				defer o11y.NoLogDefer(stores.Close)
 				evictable = stores.Evictable
 			}
 

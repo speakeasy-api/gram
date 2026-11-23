@@ -1,10 +1,12 @@
 package gram
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/redisrole"
@@ -24,12 +26,36 @@ func newTestRedisStores(t *testing.T, opts redisClientOptions) (*redisStores, er
 		return nil, err
 	}
 	t.Cleanup(func() {
-		require.NoError(t, stores.Sessions.Close())
-		if stores.Evictable.Client != stores.Sessions {
-			require.NoError(t, stores.Evictable.Close())
+		// Tests that close the stores themselves leave nothing to close.
+		if stores.Sessions.Ping(context.Background()).Err() == nil {
+			require.NoError(t, stores.Close())
 		}
 	})
 	return stores, nil
+}
+
+func TestRedisStoresCloseClosesBothClientsWhenSplit(t *testing.T) {
+	t.Parallel()
+
+	sessionsRedis := miniredis.RunT(t)
+	evictableRedis := miniredis.RunT(t)
+	stores, err := newTestRedisStores(t, redisClientOptions{redisAddr: sessionsRedis.Addr(), redisPassword: "", enableTracing: false, evictableAddr: evictableRedis.Addr(), evictablePassword: "", guardMode: ""})
+	require.NoError(t, err)
+
+	require.NoError(t, stores.Close())
+	require.ErrorIs(t, stores.Sessions.Ping(t.Context()).Err(), redis.ErrClosed)
+	require.ErrorIs(t, stores.Evictable.Ping(t.Context()).Err(), redis.ErrClosed)
+}
+
+func TestRedisStoresCloseClosesTheSharedClientOnce(t *testing.T) {
+	t.Parallel()
+
+	sessionsRedis := miniredis.RunT(t)
+	stores, err := newTestRedisStores(t, redisClientOptions{redisAddr: sessionsRedis.Addr(), redisPassword: "", enableTracing: false, evictableAddr: "", evictablePassword: "", guardMode: ""})
+	require.NoError(t, err)
+
+	require.NoError(t, stores.Close())
+	require.ErrorIs(t, stores.Sessions.Ping(t.Context()).Err(), redis.ErrClosed)
 }
 
 func TestSplitsEvictableRole(t *testing.T) {
@@ -73,7 +99,7 @@ func TestNewRedisStoresWithoutSeparateAddressUsesOneClient(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stores, err := newTestRedisStores(t, redisClientOptions{redisAddr: mr.Addr(), redisPassword: "", enableTracing: false, evictableAddr: evictableAddr, evictablePassword: "", guardMode: string(redisrole.GuardEnforce)})
+			stores, err := newTestRedisStores(t, redisClientOptions{redisAddr: mr.Addr(), redisPassword: "", enableTracing: false, evictableAddr: evictableAddr, evictablePassword: "", guardMode: redisrole.GuardEnforce.String()})
 			require.NoError(t, err)
 			require.Same(t, stores.Sessions, stores.Evictable.Client)
 
@@ -96,7 +122,7 @@ func TestNewRedisStoresWithSeparateAddressSplitsRoles(t *testing.T) {
 
 	sessionsRedis := miniredis.RunT(t)
 	evictableRedis := miniredis.RunT(t)
-	stores, err := newTestRedisStores(t, redisClientOptions{redisAddr: sessionsRedis.Addr(), redisPassword: "", enableTracing: false, evictableAddr: evictableRedis.Addr(), evictablePassword: "", guardMode: string(redisrole.GuardEnforce)})
+	stores, err := newTestRedisStores(t, redisClientOptions{redisAddr: sessionsRedis.Addr(), redisPassword: "", enableTracing: false, evictableAddr: evictableRedis.Addr(), evictablePassword: "", guardMode: redisrole.GuardEnforce.String()})
 	require.NoError(t, err)
 	require.NotSame(t, stores.Sessions, stores.Evictable.Client)
 
