@@ -14,14 +14,15 @@ import {
   isToolError,
   resultText,
 } from "./terminal-format";
-import { MAX_RESULT_LINES } from "./terminal-skin-theme";
+
+// A one-line result up to this long shows in place of its summary.
+const SUMMARY_CHARS = 120;
 
 /**
  * One tool call as a terminal line:
  *
  *   ⏺ list_servers(project: "default")
- *     ⎿  first lines of the result
- *        … +12 lines (click to expand)
+ *     ⎿  12 lines (click to expand)
  */
 export const TerminalToolCall: ToolCallMessagePartComponent = (props) => {
   const { pendingApprovals } = useToolApproval();
@@ -38,8 +39,20 @@ export const TerminalToolCall: ToolCallMessagePartComponent = (props) => {
   const state =
     status.type === "running" ? "running" : isError ? "error" : "done";
 
-  const lineCount = text.split("\n").length;
-  const long = lineCount > MAX_RESULT_LINES || text.length > 240;
+  const lines = text ? text.split("\n") : [];
+  // Collapsed by default, like Claude Code: one summary line under the call.
+  // A short one-line result is its own summary; an error leads with its first
+  // line so the failure is readable without expanding.
+  const short = lines.length === 1 && text.length <= SUMMARY_CHARS;
+  const summary = short
+    ? text
+    : isError && lines[0]
+      ? lines[0]
+      : lines.length > 0
+        ? `${lines.length} ${lines.length === 1 ? "line" : "lines"}`
+        : isError
+          ? "Failed"
+          : "Done";
   const tool = displayToolName(toolName);
 
   return (
@@ -60,21 +73,19 @@ export const TerminalToolCall: ToolCallMessagePartComponent = (props) => {
       ) : (
         <div className="gram-term-tool-result">
           <span aria-hidden="true">⎿</span>
-          <div className="min-w-0">
-            <pre data-expanded={expanded || undefined}>
-              {text || (isError ? "Failed" : "Done")}
-            </pre>
-            {long && (
+          <div className={expanded ? "min-w-0" : "flex min-w-0"}>
+            {expanded ? (
+              <pre data-expanded>{text}</pre>
+            ) : (
+              <span className="min-w-0 truncate">{summary}</span>
+            )}
+            {!short && text && (
               <button
                 type="button"
-                className="gram-term-expand"
+                className="gram-term-expand shrink-0 whitespace-pre"
                 onClick={() => setExpanded((v) => !v)}
               >
-                {expanded
-                  ? "Show less"
-                  : lineCount > MAX_RESULT_LINES
-                    ? `… +${lineCount - MAX_RESULT_LINES} lines (click to expand)`
-                    : "… (click to expand)"}
+                {expanded ? "Show less" : " (click to expand)"}
               </button>
             )}
           </div>

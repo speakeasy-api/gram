@@ -27,7 +27,7 @@ import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronRight, User } from "lucide-react";
+import { ChevronRight, User } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -440,16 +440,18 @@ function MostActiveWidget({ className }: { className?: string }): JSX.Element {
             const name = isAgent
               ? `the agent ${agent?.name ?? row.userKey}`
               : row.userLabel;
-            const Icon = isAgent ? Bot : User;
             return (
               <li
                 key={`${row.userKind}:${row.userKey}`}
                 className="group hover:bg-muted/50 flex items-center gap-3 px-6 py-3"
               >
-                <Icon
-                  aria-label={isAgent ? "Agent" : "Person"}
-                  className="text-muted-foreground size-4 shrink-0"
-                />
+                {/* An agent's name already carries its own bot badge. */}
+                {!isAgent && (
+                  <User
+                    aria-label="Person"
+                    className="text-muted-foreground size-4 shrink-0"
+                  />
+                )}
                 <span className="min-w-0 flex-1 truncate text-sm">
                   <ToolUsageIdentity
                     kind={row.userKind}

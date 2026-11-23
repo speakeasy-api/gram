@@ -13,9 +13,6 @@ export const TerminalSkinContext = createContext(false);
 /** Class on the element that wraps the terminal's <Chat />; scopes the CSS. */
 export const TERMINAL_HOST_CLASS = "gram-home-terminal";
 
-/** Collapsed tool results show this many lines, like Claude Code. */
-export const MAX_RESULT_LINES = 3;
-
 const host = `:host-context(.${TERMINAL_HOST_CLASS})`;
 
 /**
@@ -107,9 +104,14 @@ export const TERMINAL_SKIN_CSS = `
     width: auto;
     border: 0;
     background: var(--muted);
-    color: var(--muted-foreground);
+    color: var(--foreground);
     padding: 0.25rem 0.75rem 0.25rem 2rem;
     position: relative;
+  }
+  /* Muted only until the assistant picks the prompt up: no reply follows it
+     yet. Once a reply starts, the prompt reads as the conversation's text. */
+  ${host} .aui-user-message-root:last-child .aui-user-message-content {
+    color: var(--muted-foreground);
   }
   ${host} .aui-user-message-content::before {
     content: ">";
@@ -179,12 +181,6 @@ export const TERMINAL_SKIN_CSS = `
     word-break: break-word;
     font: inherit;
     line-height: 1.5;
-  }
-  ${host} .gram-term-tool-result pre:not([data-expanded]) {
-    display: -webkit-box;
-    -webkit-line-clamp: ${MAX_RESULT_LINES};
-    -webkit-box-orient: vertical;
-    overflow: hidden;
   }
   ${host} .gram-term-expand {
     color: var(--muted-foreground);
