@@ -1,4 +1,4 @@
-import { calendarDateRangeValue } from "./filter-schema";
+import { calendarDateRangeValue, withinMaxSelected } from "./filter-schema";
 import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -62,7 +62,14 @@ export function FilterControl({
                 }))
           }
           defaultValue={value as string[]}
-          onValueChange={(values) => onChange(values)}
+          // With a cap the selection is controlled, so a refused pick never shows.
+          value={
+            dim.maxSelected === undefined ? undefined : (value as string[])
+          }
+          onValueChange={(values) => {
+            if (withinMaxSelected(dim.maxSelected, value as string[], values))
+              onChange(values);
+          }}
           placeholder={
             dim.placeholder ?? `Filter by ${dim.label.toLowerCase()}`
           }

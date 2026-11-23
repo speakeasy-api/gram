@@ -220,6 +220,10 @@ export function ConnectionLogsView({
     [filters.values.date, now],
   );
   const beforeRetention = startsBeforeRetention(window, now);
+  // The API takes at most 50 servers and 50 people; a longer link is not sent.
+  const tooMany =
+    filters.values.server.length > MAX_FILTER_VALUES ||
+    filters.values.person.length > MAX_FILTER_VALUES;
   // A preset these logs don't offer would label a range that is not queried.
   const unsupportedPreset =
     !customRange &&
@@ -241,11 +245,11 @@ export function ConnectionLogsView({
   const isReference = REFERENCE_PATTERN.test(search.trim());
 
   const counts = useAttemptCounts(scope, window, baseFilters, {
-    enabled: !beforeRetention,
+    enabled: !beforeRetention && !tooMany,
   });
   // Labels come from unfiltered counts so a chip keeps its name.
   const optionCounts = useAttemptCounts(scope, window, EMPTY_FILTERS, {
-    enabled: !beforeRetention,
+    enabled: !beforeRetention && !tooMany,
   });
   const optionFacets = optionCounts.data?.facets;
   const filteredFacets = counts.data?.facets;
@@ -272,11 +276,11 @@ export function ConnectionLogsView({
     [baseFilters, textFilters],
   );
   const searchedCounts = useAttemptCounts(scope, window, listFilters, {
-    enabled: !beforeRetention && searching,
+    enabled: !beforeRetention && !tooMany && searching,
   });
 
   const list = useConnectionAttempts(scope, window, listFilters, {
-    enabled: !beforeRetention && !isReference && !searchBlocked,
+    enabled: !beforeRetention && !tooMany && !isReference && !searchBlocked,
   });
   const {
     query: reference,
@@ -454,6 +458,20 @@ export function ConnectionLogsView({
         heading="Connection Logs needs logging"
         description={`Logging is off for ${organization.name || "this organization"}, so connection attempt logs are not kept. Turning it on starts logging from that moment.`}
         action={<EnableLoggingAction />}
+      />
+    );
+  } else if (tooMany && !isReference) {
+    body = (
+      <InlineEmptyState
+        icon="filter"
+        orientation="horizontal"
+        heading="Too many servers or people in this link"
+        description="Connection Logs can filter by up to 50 servers and 50 people. Remove some to see attempts."
+        action={
+          <Button variant="secondary" onClick={resetAll}>
+            Reset filters
+          </Button>
+        }
       />
     );
   } else if (beforeRetention && !isReference) {

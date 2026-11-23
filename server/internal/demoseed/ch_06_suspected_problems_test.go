@@ -18,24 +18,40 @@ import (
 )
 
 // The seeded connection health lists the Cursor, Internal Wiki and Dana problems, and not
-// the people who recovered from this morning's Linear errors, whatever the hour it runs.
+// the people who recovered from this morning's Linear errors: at the hours around the
+// story's switch to today, any other hour, and 23 hours after seeding, the read just
+// before the next daily reseed.
 func TestSeededConnectionHealthListsTheIntendedProblems(t *testing.T) {
 	t.Parallel()
-	for hours := 0; hours < 24; hours += 3 {
-		ago := time.Duration(hours) * time.Hour
-		t.Run(ago.String(), func(t *testing.T) {
+	local := time.Now().AddDate(0, 0, -2)
+	at := func(hour, minute int) time.Time {
+		return time.Date(local.Year(), local.Month(), local.Day(), hour, minute, 0, 0, time.Local).UTC()
+	}
+	for _, c := range []struct {
+		name      string
+		seeded    time.Time
+		readAfter time.Duration
+	}{
+		{"just before the switch", at(11, 44), time.Minute},
+		{"just after the switch", at(11, 46), time.Minute},
+		{"just after midnight", at(0, 5), time.Minute},
+		{"evening", at(18, 0), time.Minute},
+		{"23 hours later", at(11, 46), 23 * time.Hour},
+		{"23 hours after an evening seed", at(18, 0), 23 * time.Hour},
+	} {
+		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			seededProblems(t, time.Now().UTC().Add(-ago))
+			seededProblems(t, c.seeded, c.seeded.Add(c.readAfter))
 		})
 	}
 }
 
-func seededProblems(t *testing.T, now time.Time) {
+func seededProblems(t *testing.T, seeded, now time.Time) {
 	t.Helper()
 	spec := DefaultSpec()
 	spec.OrgID = "org-problems-" + uuid.NewString()
 	spec.UUIDPrefix = strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
-	s := &seeder{spec: spec, now: now.Add(-time.Minute)}
+	s := &seeder{spec: spec, now: seeded}
 
 	rows, served, err := s.connectionHealthRows()
 	require.NoError(t, err)
@@ -43,10 +59,13 @@ func seededProblems(t *testing.T, now time.Time) {
 	require.NoError(t, err)
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
+	// Other tenants' rows must not land while the safety test fingerprints them.
+	otherTenantWrites.RLock()
 	require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), ch, rows))
 	require.NoError(t, mcpconnectionattempts.AppendServed(t.Context(), ch, served))
+	otherTenantWrites.RUnlock()
 
-	got, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, Keep: nil}, time.Time{}, now)
+	got, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false}, time.Time{}, now)
 	require.NoError(t, err)
 
 	subject := func(key string) string {

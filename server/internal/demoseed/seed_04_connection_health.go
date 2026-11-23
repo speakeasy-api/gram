@@ -119,8 +119,8 @@ func (s *seeder) healthClientID(family string) uuid.UUID {
 	return s.det("health-client-" + family)
 }
 
-// healthClock places the story: its day is today when it is past 11:05 local time and
-// yesterday before.
+// healthClock places the story: its day is today once this morning's Linear errors have
+// recovered, past 11:45 local time, and yesterday before.
 type healthClock struct {
 	now time.Time
 	day time.Time
@@ -129,7 +129,7 @@ type healthClock struct {
 func newHealthClock(now time.Time) healthClock {
 	local := now.In(time.Local)
 	day := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.Local)
-	if day.Add(11*time.Hour + 5*time.Minute).After(local) {
+	if day.Add(11*time.Hour + 45*time.Minute).After(local) {
 		day = day.AddDate(0, 0, -1)
 	}
 	return healthClock{now: now, day: day}

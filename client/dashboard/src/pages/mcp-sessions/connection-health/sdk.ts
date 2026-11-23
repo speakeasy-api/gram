@@ -350,14 +350,18 @@ function problemDetail(d: SdkSuspectedProblemDetail): SuspectedProblemDetail {
     people: d.people.map((p) => ({
       person: personOf(p.person),
       apps: p.apps,
+      appsTotal: p.appsTotal,
       servers: p.servers.map((s) => ({
         server: serverOf(s.server),
         member: server(s.member),
       })),
+      serversTotal: p.serversTotal,
       attempts: p.attempts,
       firstFailedAt: iso(p.firstFailedAt),
     })),
     peopleTotal: d.peopleTotal,
+    serversTotal: d.serversTotal,
+    asOf: iso(d.asOf),
     countsWidened: d.countsWidened,
     servers: d.servers.map((s) => ({
       server: serverOf(s.server),

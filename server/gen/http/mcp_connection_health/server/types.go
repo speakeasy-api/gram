@@ -1970,11 +1970,16 @@ type SuspectedProblemDetailResponseBody struct {
 	// At most 50 people, earliest failure first.
 	People []*SuspectedProblemPersonResponseBody `form:"people" json:"people" xml:"people"`
 	// Distinct people in the problem.
-	PeopleTotal int64                                 `form:"people_total" json:"people_total" xml:"people_total"`
-	Servers     []*SuspectedProblemServerResponseBody `form:"servers" json:"servers" xml:"servers"`
-	// True when a filter list was too long to send, so the chart, messages and
-	// filters cover every failed attempt with these messages on these servers, not
-	// only this problem's people.
+	PeopleTotal int64 `form:"people_total" json:"people_total" xml:"people_total"`
+	// At most 50, most attempts first.
+	Servers []*SuspectedProblemServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// Servers before the cap.
+	ServersTotal int64 `form:"servers_total" json:"servers_total" xml:"servers_total"`
+	// When the problem was read: the end of the chart, the message counts and the
+	// Connection Logs links.
+	AsOf string `form:"as_of" json:"as_of" xml:"as_of"`
+	// True when a filter list was too long to send and was left out, so the chart,
+	// messages and filters may include unrelated failures.
 	CountsWidened bool `form:"counts_widened" json:"counts_widened" xml:"counts_widened"`
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
@@ -2016,11 +2021,17 @@ type SuspectedProblemMessageResponseBody struct {
 // SuspectedProblemPersonResponseBody is used to define fields on response body
 // types.
 type SuspectedProblemPersonResponseBody struct {
-	Person        *ConnectionPersonResponseBody        `form:"person" json:"person" xml:"person"`
-	Apps          []*ConnectionAppResponseBody         `form:"apps" json:"apps" xml:"apps"`
-	Servers       []*SuspectedProblemPlaceResponseBody `form:"servers" json:"servers" xml:"servers"`
-	Attempts      int64                                `form:"attempts" json:"attempts" xml:"attempts"`
-	FirstFailedAt string                               `form:"first_failed_at" json:"first_failed_at" xml:"first_failed_at"`
+	Person *ConnectionPersonResponseBody `form:"person" json:"person" xml:"person"`
+	// At most 5.
+	Apps []*ConnectionAppResponseBody `form:"apps" json:"apps" xml:"apps"`
+	// Apps before the cap.
+	AppsTotal int64 `form:"apps_total" json:"apps_total" xml:"apps_total"`
+	// At most 5.
+	Servers []*SuspectedProblemPlaceResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// Servers before the cap.
+	ServersTotal  int64  `form:"servers_total" json:"servers_total" xml:"servers_total"`
+	Attempts      int64  `form:"attempts" json:"attempts" xml:"attempts"`
+	FirstFailedAt string `form:"first_failed_at" json:"first_failed_at" xml:"first_failed_at"`
 }
 
 // SuspectedProblemPlaceResponseBody is used to define fields on response body

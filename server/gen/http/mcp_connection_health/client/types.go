@@ -1993,11 +1993,16 @@ type SuspectedProblemDetailResponseBody struct {
 	// At most 50 people, earliest failure first.
 	People []*SuspectedProblemPersonResponseBody `form:"people,omitempty" json:"people,omitempty" xml:"people,omitempty"`
 	// Distinct people in the problem.
-	PeopleTotal *int64                                `form:"people_total,omitempty" json:"people_total,omitempty" xml:"people_total,omitempty"`
-	Servers     []*SuspectedProblemServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
-	// True when a filter list was too long to send, so the chart, messages and
-	// filters cover every failed attempt with these messages on these servers, not
-	// only this problem's people.
+	PeopleTotal *int64 `form:"people_total,omitempty" json:"people_total,omitempty" xml:"people_total,omitempty"`
+	// At most 50, most attempts first.
+	Servers []*SuspectedProblemServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Servers before the cap.
+	ServersTotal *int64 `form:"servers_total,omitempty" json:"servers_total,omitempty" xml:"servers_total,omitempty"`
+	// When the problem was read: the end of the chart, the message counts and the
+	// Connection Logs links.
+	AsOf *string `form:"as_of,omitempty" json:"as_of,omitempty" xml:"as_of,omitempty"`
+	// True when a filter list was too long to send and was left out, so the chart,
+	// messages and filters may include unrelated failures.
 	CountsWidened *bool `form:"counts_widened,omitempty" json:"counts_widened,omitempty" xml:"counts_widened,omitempty"`
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
@@ -2039,11 +2044,17 @@ type SuspectedProblemMessageResponseBody struct {
 // SuspectedProblemPersonResponseBody is used to define fields on response body
 // types.
 type SuspectedProblemPersonResponseBody struct {
-	Person        *ConnectionPersonResponseBody        `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
-	Apps          []*ConnectionAppResponseBody         `form:"apps,omitempty" json:"apps,omitempty" xml:"apps,omitempty"`
-	Servers       []*SuspectedProblemPlaceResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
-	Attempts      *int64                               `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
-	FirstFailedAt *string                              `form:"first_failed_at,omitempty" json:"first_failed_at,omitempty" xml:"first_failed_at,omitempty"`
+	Person *ConnectionPersonResponseBody `form:"person,omitempty" json:"person,omitempty" xml:"person,omitempty"`
+	// At most 5.
+	Apps []*ConnectionAppResponseBody `form:"apps,omitempty" json:"apps,omitempty" xml:"apps,omitempty"`
+	// Apps before the cap.
+	AppsTotal *int64 `form:"apps_total,omitempty" json:"apps_total,omitempty" xml:"apps_total,omitempty"`
+	// At most 5.
+	Servers []*SuspectedProblemPlaceResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Servers before the cap.
+	ServersTotal  *int64  `form:"servers_total,omitempty" json:"servers_total,omitempty" xml:"servers_total,omitempty"`
+	Attempts      *int64  `form:"attempts,omitempty" json:"attempts,omitempty" xml:"attempts,omitempty"`
+	FirstFailedAt *string `form:"first_failed_at,omitempty" json:"first_failed_at,omitempty" xml:"first_failed_at,omitempty"`
 }
 
 // SuspectedProblemPlaceResponseBody is used to define fields on response body
@@ -6338,6 +6349,12 @@ func ValidateSuspectedProblemDetailResponseBody(body *SuspectedProblemDetailResp
 	if body.Servers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
 	}
+	if body.ServersTotal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers_total", "body"))
+	}
+	if body.AsOf == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("as_of", "body"))
+	}
 	if body.CountsWidened == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("counts_widened", "body"))
 	}
@@ -6407,6 +6424,9 @@ func ValidateSuspectedProblemDetailResponseBody(body *SuspectedProblemDetailResp
 			}
 		}
 	}
+	if body.AsOf != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.as_of", *body.AsOf, goa.FormatDateTime))
+	}
 	if body.Rule != nil {
 		if !(*body.Rule == "same_server" || *body.Rule == "same_service" || *body.Rule == "same_app_version" || *body.Rule == "one_person") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.rule", *body.Rule, []any{"same_server", "same_service", "same_app_version", "one_person"}))
@@ -6475,8 +6495,14 @@ func ValidateSuspectedProblemPersonResponseBody(body *SuspectedProblemPersonResp
 	if body.Apps == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("apps", "body"))
 	}
+	if body.AppsTotal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("apps_total", "body"))
+	}
 	if body.Servers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.ServersTotal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers_total", "body"))
 	}
 	if body.Attempts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attempts", "body"))

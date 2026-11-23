@@ -438,7 +438,12 @@ func (g *healthGen) emit(kind string, p healthPerson, server string, when, recov
 	oauth := g.service(server, "") != ""
 	member := healthGatewayMembers[g.r.intn(len(healthGatewayMembers))]
 	if healthBlips[kind] {
-		defer g.recovered(p, server, member, recoverAt)
+		// A direct server has no gateway member.
+		recoveredMember := ""
+		if server == healthGatewayKey {
+			recoveredMember = member
+		}
+		defer g.recovered(p, server, recoveredMember, recoverAt)
 	}
 	switch {
 	case kind == "renewal", kind == "listing" && server != healthGatewayKey, kind == "partial" && server != healthGatewayKey,
@@ -561,9 +566,14 @@ func (g *healthGen) storyLinear() {
 			g.servedRequest(g.personByKey(r.who), "linear", "", t.Add(time.Minute))
 		}
 	}
-	if t := at(0, 11, 33, 0); t.Before(g.clk.now) {
-		g.serviceRenewal(g.personByKey("mei"), healthGatewayKey, "linear", t, mcpconnectionattempts.ResultRefreshed)
-		g.servedRequest(g.personByKey("mei"), healthGatewayKey, "linear", t.Add(time.Minute))
+	for _, r := range []struct {
+		who    string
+		minute int
+	}{{"mei", 33}, {"jonas", 36}} {
+		if t := at(0, 11, r.minute, 0); t.Before(g.clk.now) {
+			g.serviceRenewal(g.personByKey(r.who), healthGatewayKey, "linear", t, mcpconnectionattempts.ResultRefreshed)
+			g.servedRequest(g.personByKey(r.who), healthGatewayKey, "linear", t.Add(time.Minute))
+		}
 	}
 }
 
@@ -577,9 +587,9 @@ func (g *healthGen) storyCursor() {
 	}{{"lena", 38}, {"felix", 22}, {"lars", 27}} {
 		p := g.personByKey(who.key)
 		start := at(-2, 10, 20+i, 15)
-		end := g.stillTrying(at(0, 10, 5+g.r.intn(34), 0), time.Duration(30+10*i)*time.Minute)
+		end := g.stillTrying(at(0, 10, 5+g.r.intn(34), 0), time.Duration(3+2*i)*time.Minute)
 		if who.key == "lena" {
-			end = g.stillTrying(at(0, 10, 41, 26), 25*time.Minute)
+			end = g.stillTrying(at(0, 10, 41, 26), 2*time.Minute)
 		}
 		// The app retries a few times minutes apart during working hours, then gives up for a while.
 		times := []time.Time{start, end}
@@ -615,10 +625,10 @@ func (g *healthGen) storyWiki() {
 		count       int
 		first, last time.Time
 	}{
-		{"ken", 4, at(0, 10, 41, 30), g.stillTrying(at(0, 10, 50, 10), 22*time.Minute)},
-		{"ivy", 3, at(-1, 16, 5, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 47*time.Minute)},
-		{"theo", 4, at(-1, 16, 6, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 38*time.Minute)},
-		{"amara", 5, at(-1, 16, 7, 40), g.stillTrying(at(0, 10, 52, 8), 16*time.Minute)},
+		{"ken", 4, at(0, 10, 41, 30), g.stillTrying(at(0, 10, 50, 10), 4*time.Minute)},
+		{"ivy", 3, at(-1, 16, 5, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 8*time.Minute)},
+		{"theo", 4, at(-1, 16, 6, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 6*time.Minute)},
+		{"amara", 5, at(-1, 16, 7, 40), g.stillTrying(at(0, 10, 52, 8), 3*time.Minute)},
 	} {
 		for _, t := range g.spread(who.first, who.last, who.count) {
 			g.request(g.personByKey(who.key), "wiki", "", t, mcpconnectionattempts.CodeStaticKeyRejected, 0)
@@ -629,7 +639,7 @@ func (g *healthGen) storyWiki() {
 // storyDana: Dana's MCP sign-in reached its time limit two days ago; her app still retries.
 func (g *healthGen) storyDana() {
 	p := g.personByKey("dana")
-	for _, t := range g.spread(g.clk.danaFrom().Add(44*time.Second), g.clk.now.Add(-35*time.Minute), 41) {
+	for _, t := range g.spread(g.clk.danaFrom().Add(44*time.Second), g.clk.now.Add(-5*time.Minute), 41) {
 		g.renewal(p, "linear", t, mcpconnectionattempts.CodeRefreshTokenExpired)
 	}
 	g.renewal(p, "linear", g.clk.at(-3, 17, 20, 0), mcpconnectionattempts.ResultRefreshed)

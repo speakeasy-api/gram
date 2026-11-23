@@ -2,6 +2,8 @@ package mcpconnectionhealth_test
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -16,6 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -369,8 +373,8 @@ func TestGetSuspectedProblem_NeverFindsAnotherProjectsOrOrganizationsProblem(t *
 		ti.failOn(t, otherOrg, ti.project, ti.server, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
 	}
 	for _, scope := range []problems.ReadScope{
-		{OrganizationID: ti.org, ProjectID: otherProject, WholeOrganization: false, Keep: nil},
-		{OrganizationID: otherOrg, ProjectID: ti.project, WholeOrganization: false, Keep: nil},
+		{OrganizationID: ti.org, ProjectID: otherProject, WholeOrganization: false},
+		{OrganizationID: otherOrg, ProjectID: ti.project, WholeOrganization: false},
 	} {
 		there, err := problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, scope, time.Time{}, time.Now())
 		require.NoError(t, err)
@@ -451,4 +455,186 @@ func TestGetSuspectedProblem_OneRowPerPerson(t *testing.T) {
 			require.Len(t, row.Apps, 2, "two apps fold into one row")
 		}
 	}
+}
+
+// failWith writes a failed request by person on a gateway through a named app, started
+// took before it failed ago before now.
+func (ti *testInstance) failWith(t *testing.T, gateway uuid.UUID, person urn.SessionSubject, ago, took time.Duration, code mcpconnectionattempts.Code, family, version string, opts ...mcpconnectionattempts.Option) uuid.UUID {
+	t.Helper()
+	at := ti.now.Add(-ago)
+	a := mcpconnectionattempts.AttemptAt(uuid.New(), at.Add(-took), mcpconnectionattempts.GatewayScope(ti.org, ti.project, gateway, mcpconnectionattempts.AppDCR))
+	row, err := mcpconnectionattempts.RowAt(a, mcpconnectionattempts.StepMCPRequest, code, true, at, append(opts, mcpconnectionattempts.Subject(&person))...)
+	require.NoError(t, err)
+	row.ClientFamily, row.ClientVersion = family, version
+	require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), ti.ch, []mcpconnectionattempts.Row{row}))
+	return a.ID()
+}
+
+// answeredFor writes a request of another app that the gateway answered ago before now.
+func (ti *testInstance) answeredFor(t *testing.T, gateway uuid.UUID, family string, ago time.Duration) {
+	t.Helper()
+	require.NoError(t, mcpconnectionattempts.AppendServed(t.Context(), ti.ch, []mcpconnectionattempts.Served{{
+		OrganizationID: ti.org, ProjectID: ti.project, ServerKind: "meta", ServerID: gateway.String(), MemberID: "",
+		SubjectURN: urn.NewUserSubject("user-" + uuid.NewString()).String(), AppKey: mcpconnectionattempts.AppDCR.String(), ClientFamily: family,
+		RemoteSessionClientID: "", ServedAt: ti.now.Add(-ago), AnsweredAt: ti.now.Add(-ago),
+	}}))
+}
+
+func (ti *testInstance) listFor(t *testing.T, ctx context.Context, issuer uuid.UUID) []*gen.SuspectedProblem {
+	t.Helper()
+	res, err := ti.service.ListSuspectedProblems(ctx, &gen.ListSuspectedProblemsPayload{UserSessionIssuerID: issuer.String(), ServerID: nil, Part: nil})
+	require.NoError(t, err)
+	return res.Problems
+}
+
+func (ti *testInstance) reassign(t *testing.T, gateway, issuer uuid.UUID) {
+	t.Helper()
+	n, err := repo.New(ti.conn).SetGatewayIssuerFixture(t.Context(), repo.SetGatewayIssuerFixtureParams{IssuerID: uuid.NullUUID{UUID: issuer, Valid: true}, ID: gateway, ProjectID: ti.project})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+}
+
+// Failures recorded under a provider stay with it after their server moves to another.
+func TestSuspectedProblems_RecordedProviderWinsAfterAReassignment(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	otherIssuer, _ := ti.provider(t, "Notion")
+	for range 2 {
+		ti.failOn(t, ti.org, ti.project, ti.server, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.UserSessionIssuer(ti.issuer))
+	}
+	ti.reassign(t, ti.server, otherIssuer)
+
+	listed := ti.listFor(t, ctx, ti.issuer)
+	require.Len(t, listed, 1, "the attempts name this provider")
+	got := ti.getProblem(t, ctx, listed[0].ID)
+	require.True(t, got.Found)
+	require.Len(t, got.Problem.Messages, 1)
+	require.Equal(t, int64(2), got.Problem.Messages[0].Attempts)
+	require.Empty(t, ti.listFor(t, ctx, otherIssuer), "the new provider has none of these attempts")
+}
+
+// Failures that name no provider belong to the server's provider now.
+func TestSuspectedProblems_UnrecordedProviderFollowsTheServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	otherIssuer, _ := ti.provider(t, "Notion")
+	ti.failPeople(t, ti.server, 2, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	ti.reassign(t, ti.server, otherIssuer)
+
+	require.Empty(t, ti.listFor(t, ctx, ti.issuer))
+	require.Len(t, ti.listFor(t, ctx, otherIssuer), 1)
+}
+
+// An attempt that ran a while before it failed is still inside its problem's filters.
+func TestGetSuspectedProblem_FiltersReachTheStartOfASlowAttempt(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	var want []string
+	for range 2 {
+		want = append(want, ti.failWith(t, ti.server, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, 30*time.Minute, mcpconnectionattempts.CodeStaticKeyRejected, "", "").String())
+	}
+	listed := ti.listProblems(t, ctx, nil, nil).Problems
+	require.Len(t, listed, 1)
+	got := ti.getProblem(t, ctx, listed[0].ID)
+	require.True(t, got.Found)
+	f := got.Problem.Filters
+	asOf, err := time.Parse(time.RFC3339Nano, got.Problem.AsOf)
+	require.NoError(t, err)
+	rows, err := ti.service.ListAttempts(ctx, &gen.ListAttemptsPayload{
+		UserSessionIssuerID: ti.issuer.String(), From: f.From, To: asOf.Add(time.Second).Format(time.RFC3339),
+		Filters: &gen.ConnectionAttemptFilters{Outcomes: f.Outcomes, ServerIds: f.ServerIds, People: f.People, Reasons: f.Reasons},
+	})
+	require.NoError(t, err)
+	var ids []string
+	for _, r := range rows.Attempts {
+		ids = append(ids, r.ID)
+	}
+	require.ElementsMatch(t, want, ids)
+	var failed int64
+	for _, m := range got.Problem.Messages {
+		failed += m.Attempts
+	}
+	require.Equal(t, int64(2), failed)
+}
+
+// A read that runs out of time answers temporarily unavailable, whichever read stalled.
+func TestSuspectedProblems_AStalledReadIsUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	ti.failPeople(t, ti.server, 2, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	mcpconnectionhealth.SetProblemsDeadline(ti.service, time.Nanosecond)
+
+	_, err := ti.service.ListSuspectedProblems(ctx, &gen.ListSuspectedProblemsPayload{UserSessionIssuerID: ti.issuer.String(), ServerID: nil, Part: nil})
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnavailable, shareable.Code)
+	require.Equal(t, http.StatusServiceUnavailable, shareable.HTTPStatus(ctx))
+	_, err = ti.service.GetSuspectedProblem(ctx, &gen.GetSuspectedProblemPayload{UserSessionIssuerID: ti.issuer.String(), ID: "x", ServerID: nil})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+}
+
+// Servers are capped at 50, and a person's folded servers at 5, each with a total.
+func TestGetSuspectedProblem_CapsServers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	gateways := []uuid.UUID{ti.server}
+	for i := range 50 {
+		gateways = append(gateways, ti.gateway(t, fmt.Sprintf("Server %d", i)))
+	}
+	for _, gateway := range gateways {
+		ti.failOn(t, ti.org, ti.project, gateway, p, 30*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+		ti.failOn(t, ti.org, ti.project, gateway, p, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	}
+	listed := ti.listProblems(t, ctx, nil, nil).Problems
+	require.Len(t, listed, 1)
+	got := ti.getProblem(t, ctx, listed[0].ID)
+	require.True(t, got.Found)
+	require.Len(t, got.Problem.Servers, 50)
+	require.Equal(t, int64(51), got.Problem.ServersTotal)
+	require.Len(t, got.Problem.People, 1)
+	require.Len(t, got.Problem.People[0].Servers, 5)
+	require.Equal(t, int64(51), got.Problem.People[0].ServersTotal)
+	require.True(t, got.Problem.CountsWidened, "51 servers are over the filter's cap")
+}
+
+// One person on each provider's server with the same app version is a project-wide pattern no provider lists.
+func TestSuspectedProblems_AnAppVersionSplitAcrossProvidersIsNotListed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	otherIssuer, otherGateway := ti.provider(t, "Notion")
+	for _, gateway := range []uuid.UUID{ti.server, otherGateway} {
+		ti.failWith(t, gateway, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, time.Second, mcpconnectionattempts.CodeInvalidBearerToken, mcpconnectionattempts.FamilyClaudeCode, "2.0.1")
+		ti.answeredFor(t, gateway, mcpconnectionattempts.FamilyCodexCLI, 30*time.Minute)
+	}
+	projectWide, err := problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: ti.org, ProjectID: ti.project}, time.Time{}, time.Now())
+	require.NoError(t, err)
+	require.Len(t, projectWide, 1, "across the project the two people are one app version problem")
+	require.Equal(t, problems.RuleSameAppVersion, projectWide[0].Rule)
+	require.Empty(t, ti.listFor(t, ctx, ti.issuer))
+	require.Empty(t, ti.listFor(t, ctx, otherIssuer))
+}
+
+// An app version qualified only by another app working on the other provider's server is not listed.
+func TestSuspectedProblems_AnAppVersionQualifiedElsewhereIsNotListed(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	_, otherGateway := ti.provider(t, "Notion")
+	second := ti.gateway(t, "GitHub")
+	for _, gateway := range []uuid.UUID{ti.server, second, otherGateway} {
+		ti.failWith(t, gateway, urn.NewUserSubject("user-"+uuid.NewString()), time.Hour, time.Second, mcpconnectionattempts.CodeInvalidBearerToken, mcpconnectionattempts.FamilyClaudeCode, "2.0.1")
+	}
+	ti.answeredFor(t, otherGateway, mcpconnectionattempts.FamilyCodexCLI, 30*time.Minute)
+	projectWide, err := problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: ti.org, ProjectID: ti.project}, time.Time{}, time.Now())
+	require.NoError(t, err)
+	require.Len(t, projectWide, 1)
+	require.Equal(t, problems.RuleSameAppVersion, projectWide[0].Rule)
+	require.Empty(t, ti.listFor(t, ctx, ti.issuer), "this provider's two people have no other app working on their servers")
 }

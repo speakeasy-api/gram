@@ -21,16 +21,15 @@ var headlines = map[problems.Rule][2]string{
 
 // The fact sentences. Each states only what the episodes establish.
 const (
-	factOn             = "On {servers}."
-	factAppSignIn      = "The app's sign-in to Speakeasy fails."
-	factServiceSignIn  = "Signing in to {service} fails."
-	factSavedSignIn    = "The saved sign-in for {service} is not accepted."
-	factNotAnswering   = "{server} is not answering."
-	factNotAnsweringUs = "{server} does not answer these people."
-	factRequestsFail   = "Requests to {server} are failing."
-	factAllUse         = "All use {app}."
-	factUses           = "Uses {app}."
-	factOtherApps      = "Other apps worked there in this time."
+	factOn            = "On {servers}."
+	factAppSignIn     = "The app's sign-in to Speakeasy fails."
+	factServiceSignIn = "Signing in to {service} fails."
+	factSavedSignIn   = "The saved sign-in for {service} is not accepted."
+	factRequestsFail  = "Requests to {server} are failing."
+	factAllUse        = "All use {app}."
+	factUses          = "Uses {app}."
+	factOtherApp      = "Another app worked on this server in this time."
+	factOtherAppSome  = "Another app worked on at least one of these servers in this time."
 )
 
 // savedCredentialReasons fail a saved key or shared credential: nobody signs in.
@@ -61,10 +60,10 @@ func fact(n names, p problems.Problem) string {
 			out = append(out, fill(factOn, "{servers}", where))
 		}
 	}
-	service, server := "the service", "The server"
+	service, server := "the service", "the server"
 	if p.Rule == problems.RuleSameService {
 		service = hostOf(p.Scope.Key)
-		server = "The service at " + service
+		server = "servers using " + service
 	}
 	reason := sharedReason(p)
 	meaning, _ := mcpconnectionattempts.MeaningOf(reason)
@@ -88,12 +87,14 @@ func fact(n names, p problems.Problem) string {
 		}
 	case p.Part == mcpconnectionattempts.PartServiceSignIn:
 		out = append(out, fill(factServiceSignIn, "{service}", service))
-	case p.WhoFixes != mcpconnectionattempts.WhoProvider:
-		out = append(out, fill(factRequestsFail, "{server}", strings.ToLower(server[:1])+server[1:]))
-	case p.OtherAppsServed:
-		out = append(out, fill(factNotAnsweringUs, "{server}", server))
+	// What a server returned is not proof it is down: say what was recorded.
+	case adminSentence != "":
+		out = append(out, adminSentence)
+		adminSentence = ""
+	case reason != "" && meaning.WhatHappened != "":
+		out = append(out, meaning.WhatHappened)
 	default:
-		out = append(out, fill(factNotAnswering, "{server}", server))
+		out = append(out, fill(factRequestsFail, "{server}", server))
 	}
 	if adminSentence != "" {
 		out = append(out, adminSentence)
@@ -107,7 +108,11 @@ func fact(n names, p problems.Problem) string {
 		}
 	}
 	if p.OtherAppsServed {
-		out = append(out, factOtherApps)
+		if servers == 1 {
+			out = append(out, factOtherApp)
+		} else {
+			out = append(out, factOtherAppSome)
+		}
 	}
 	return strings.Join(out, " ")
 }
@@ -147,33 +152,48 @@ func problemServers(p problems.Problem) int {
 	return len(seen)
 }
 
+// namedPlaces are the first two distinct servers or gateway members the problem's people fail on, the ones its fact names.
+func namedPlaces(p problems.Problem) []mcpconnectionattempts.FailingPerson {
+	var out []mcpconnectionattempts.FailingPerson
+	for _, e := range p.Episodes {
+		if !e.ReachedServer() || slices.ContainsFunc(out, func(o mcpconnectionattempts.FailingPerson) bool {
+			return o.ServerID == e.ServerID && o.MemberID == e.MemberID
+		}) {
+			continue
+		}
+		if out = append(out, e); len(out) == 2 {
+			break
+		}
+	}
+	return out
+}
+
 // serversPhrase names the servers the problem's people fail on: "Linear", "Linear and GitHub", "Linear and 2 other servers".
 func serversPhrase(n names, p problems.Problem) string {
-	var named []string
-	seen := map[string]bool{}
-	for _, e := range p.Episodes {
-		if !e.ReachedServer() {
-			continue
-		}
-		key := e.ServerID + "/" + e.MemberID
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
+	named := make([]string, 0, 2)
+	for _, e := range namedPlaces(p) {
 		name := episodeServerName(n, e)
 		if name == "" {
 			name = "an MCP server"
 		}
 		named = append(named, name)
 	}
-	switch len(named) {
-	case 0:
+	reached := 0
+	seen := map[string]bool{}
+	for _, e := range p.Episodes {
+		if key := e.ServerID + "/" + e.MemberID; e.ReachedServer() && !seen[key] {
+			seen[key] = true
+			reached++
+		}
+	}
+	switch {
+	case len(named) == 0:
 		return ""
-	case 1:
+	case reached == 1:
 		return named[0]
-	case 2:
+	case reached == 2:
 		return named[0] + " and " + named[1]
 	default:
-		return fmt.Sprintf("%s and %d other servers", named[0], len(named)-1)
+		return fmt.Sprintf("%s and %d other servers", named[0], reached-1)
 	}
 }

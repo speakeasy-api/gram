@@ -208,6 +208,7 @@ type grouper struct {
 	ways           []way
 	servers        []string
 	scopes         [][]Scope
+	onScope        map[Scope]map[string]struct{}
 	worked         map[servedKey]map[string]workedAt
 }
 
@@ -220,6 +221,7 @@ func newGrouper(organizationID string, episodes []mcpconnectionattempts.FailingP
 		servers:        make([]string, len(episodes)),
 		scopes:         make([][]Scope, len(episodes)),
 		worked:         map[servedKey]map[string]workedAt{},
+		onScope:        map[Scope]map[string]struct{}{},
 	}
 	for i, e := range episodes {
 		g.people[i] = isPerson(e.SubjectURN)
@@ -227,6 +229,12 @@ func newGrouper(organizationID string, episodes []mcpconnectionattempts.FailingP
 		g.servers[i] = serverOf(e)
 		if g.people[i] {
 			g.scopes[i] = scopesOf(e, g.ways[i], g.servers[i], upstreams)
+			for _, sc := range g.scopes[i] {
+				if g.onScope[sc] == nil {
+					g.onScope[sc] = map[string]struct{}{}
+				}
+				g.onScope[sc][e.SubjectURN] = struct{}{}
+			}
 		}
 	}
 	for _, s := range served {
@@ -459,13 +467,13 @@ func (g grouper) othersOn(scope Scope, eps []mcpconnectionattempts.FailingPerson
 	for _, e := range eps {
 		in[e.SubjectURN] = true
 	}
-	others := map[string]bool{}
-	for i, e := range g.episodes {
-		if !in[e.SubjectURN] && slices.Contains(g.scopes[i], scope) {
-			others[e.SubjectURN] = true
+	others := 0
+	for subject := range g.onScope[scope] {
+		if !in[subject] {
+			others++
 		}
 	}
-	return len(others)
+	return others
 }
 
 // otherAppsWorked is whether a named family none of the episodes failed with worked on one

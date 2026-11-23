@@ -24,6 +24,14 @@ func TestConnectionHealthRowsTellTheSampleStories(t *testing.T) {
 		require.Equal(t, r.ServedAt, r.AnsweredAt, "every seeded served row is an answered request")
 		require.False(t, r.ServedAt.After(s.now))
 	}
+	direct := 0
+	for _, r := range served {
+		if r.ServerKind == "mcp" {
+			direct++
+			require.Empty(t, r.MemberID, "a direct server has no gateway member")
+		}
+	}
+	require.Positive(t, direct)
 
 	finals := map[string]int{}
 	attempts := map[string]bool{}

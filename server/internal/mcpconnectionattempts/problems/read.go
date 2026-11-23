@@ -27,8 +27,11 @@ type ReadScope struct {
 	// WholeOrganization reads every project and organization gateway instead of one project.
 	WholeOrganization bool
 
-	// Keep, when set, keeps only the episodes it accepts, before grouping.
-	Keep func(mcpconnectionattempts.FailingPerson) bool
+	// IssuerID, when set, keeps one MCP authentication provider's failures, attributed as Connection Logs does.
+	IssuerID uuid.UUID
+
+	// IssuerServerIDs are the servers and gateways attached to IssuerID now.
+	IssuerServerIDs []string
 }
 
 // Read returns the suspected problems of the scope at now, or mcpconnectionattempts.ErrLogsOff.
@@ -48,17 +51,16 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 		triedSince = recordedSince
 	}
 	episodes, err := mcpconnectionattempts.ReadFailingNow(ctx, ch, logsEnabled, mcpconnectionattempts.FailingNowFilter{
-		OrganizationID: organizationID,
-		ProjectID:      scope.ProjectID,
-		ProviderHost:   "",
-		ServerID:       "",
-		TriedSince:     triedSince,
+		OrganizationID:  organizationID,
+		ProjectID:       scope.ProjectID,
+		IssuerID:        scope.IssuerID,
+		IssuerServerIDs: scope.IssuerServerIDs,
+		ProviderHost:    "",
+		ServerID:        "",
+		TriedSince:      triedSince,
 	}, now)
 	if err != nil {
 		return nil, fmt.Errorf("read failing now: %w", err)
-	}
-	if scope.Keep != nil {
-		episodes = slices.DeleteFunc(episodes, func(e mcpconnectionattempts.FailingPerson) bool { return !scope.Keep(e) })
 	}
 	episodes = sinceRecording(episodes, triedSince, recordedSince, now)
 	if len(episodes) == 0 {
@@ -70,12 +72,12 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 	eg, egctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var err error
-		upstreams, err = readUpstreams(egctx, db, organizationID, episodes)
+		upstreams, err = readUpstreams(egctx, db, organizationID, scope.ProjectID, episodes)
 		return err
 	})
 	eg.Go(func() error {
 		var err error
-		served, err = mcpconnectionattempts.ReadServedByFamily(egctx, ch, organizationID, episodes)
+		served, err = mcpconnectionattempts.ReadServedByFamily(egctx, ch, organizationID, scope.ProjectID, episodes)
 		if err != nil {
 			return fmt.Errorf("read served by family: %w", err)
 		}
@@ -107,7 +109,7 @@ func sinceRecording(episodes []mcpconnectionattempts.FailingPerson, triedSince, 
 }
 
 // readUpstreams reads the configured upstream of each episode's mcp_servers row.
-func readUpstreams(ctx context.Context, db repo.DBTX, organizationID string, episodes []mcpconnectionattempts.FailingPerson) (map[string]Upstream, error) {
+func readUpstreams(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, episodes []mcpconnectionattempts.FailingPerson) (map[string]Upstream, error) {
 	set := map[uuid.UUID]bool{}
 	for _, e := range episodes {
 		if id, err := uuid.Parse(e.BackingServerID()); err == nil {
@@ -118,7 +120,7 @@ func readUpstreams(ctx context.Context, db repo.DBTX, organizationID string, epi
 		return map[string]Upstream{}, nil
 	}
 
-	rows, err := repo.New(db).ListServerUpstreams(ctx, repo.ListServerUpstreamsParams{OrganizationID: organizationID, ServerIds: slices.Collect(maps.Keys(set))})
+	rows, err := repo.New(db).ListServerUpstreams(ctx, repo.ListServerUpstreamsParams{OrganizationID: organizationID, ProjectID: uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil}, ServerIds: slices.Collect(maps.Keys(set))})
 	if err != nil {
 		return nil, fmt.Errorf("list server upstreams: %w", err)
 	}

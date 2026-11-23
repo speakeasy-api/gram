@@ -321,3 +321,25 @@ func (q *Queries) ListServerNames(ctx context.Context, arg ListServerNamesParams
 	}
 	return items, nil
 }
+
+const setGatewayIssuerFixture = `-- name: SetGatewayIssuerFixture :execrows
+UPDATE meta_mcp_servers
+SET user_session_issuer_id = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type SetGatewayIssuerFixtureParams struct {
+	IssuerID  uuid.NullUUID
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: moves a gateway in a project to another MCP authentication provider.
+func (q *Queries) SetGatewayIssuerFixture(ctx context.Context, arg SetGatewayIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setGatewayIssuerFixture, arg.IssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

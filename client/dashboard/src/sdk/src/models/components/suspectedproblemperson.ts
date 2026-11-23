@@ -21,11 +21,25 @@ import {
  * One person in the problem, with every app and server they fail on.
  */
 export type SuspectedProblemPerson = {
+  /**
+   * At most 5.
+   */
   apps: Array<ConnectionApp>;
+  /**
+   * Apps before the cap.
+   */
+  appsTotal: number;
   attempts: number;
   firstFailedAt: Date;
   person: ConnectionPerson;
+  /**
+   * At most 5.
+   */
   servers: Array<SuspectedProblemPlace>;
+  /**
+   * Servers before the cap.
+   */
+  serversTotal: number;
 };
 
 /** @internal */
@@ -35,6 +49,7 @@ export const SuspectedProblemPerson$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     apps: z.array(ConnectionApp$inboundSchema),
+    apps_total: z.int(),
     attempts: z.int(),
     first_failed_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -42,10 +57,13 @@ export const SuspectedProblemPerson$inboundSchema: z.ZodMiniType<
     ),
     person: ConnectionPerson$inboundSchema,
     servers: z.array(SuspectedProblemPlace$inboundSchema),
+    servers_total: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "apps_total": "appsTotal",
       "first_failed_at": "firstFailedAt",
+      "servers_total": "serversTotal",
     });
   }),
 );

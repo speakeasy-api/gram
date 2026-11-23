@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -91,6 +92,14 @@ type AttemptFilter struct {
 	// PeopleFailingBefore is the exclusive end of PeopleFailingFrom's range.
 	PeopleFailingBefore time.Time
 
+	// IssuerID, when set, keeps the provider's attempts as Connection Logs does: on one of
+	// IssuerServerIDs or the provider itself, or with a row stamped with it, and never with
+	// rows stamped only with another provider.
+	IssuerID uuid.UUID
+
+	// IssuerServerIDs are the servers and gateways attached to IssuerID now.
+	IssuerServerIDs []string
+
 	// FixCandidatesOnly keeps only attempts that ended connected or carry a reason: the
 	// successes that can fix a failure and the failures that show it was not fixed yet.
 	// It applies after the attempt is reduced, so it keeps every attempt End can call
@@ -118,6 +127,16 @@ func (f AttemptFilter) where() (string, []any, error) {
 	}
 	if f.ServerID != "" {
 		conds, args = append(conds, "server_id = ?"), append(args, f.ServerID)
+	}
+	if f.IssuerID != uuid.Nil {
+		window := strings.Join(conds, " AND ")
+		windowArgs := slices.Clone(args)
+		issuer := f.IssuerID.String()
+		conds = append(conds,
+			`(has(?, server_id) OR server_id = ? OR attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+window+` AND user_session_issuer_id = ?))`,
+			`attempt_id NOT IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+window+` AND user_session_issuer_id != '' GROUP BY attempt_id HAVING countIf(user_session_issuer_id = ?) = 0)`)
+		args = append(append(append(args, nonNilStrings(f.IssuerServerIDs), issuer), windowArgs...), issuer)
+		args = append(append(args, windowArgs...), issuer)
 	}
 	if !f.PeopleFailingFrom.IsZero() {
 		from, before := f.PeopleFailingFrom.UnixNano(), f.PeopleFailingBefore.UnixNano()
@@ -167,4 +186,11 @@ func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, eac
 		return fmt.Errorf("read attempt rows: %w", err)
 	}
 	return nil
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }

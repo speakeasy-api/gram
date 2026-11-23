@@ -49,6 +49,9 @@ var otherTenantSpec = Spec{
 //  3. is idempotent — per-table row counts are identical after every run.
 func TestDemoSeedSafety(t *testing.T) {
 	t.Parallel()
+	// No other test writes another tenant's rows while this one compares them.
+	otherTenantWrites.Lock()
+	defer otherTenantWrites.Unlock()
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)

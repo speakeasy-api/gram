@@ -80,7 +80,11 @@ export type SuspectedProblemDetailConnectionFailureSource = OpenEnum<
 
 export type SuspectedProblemDetail = {
   /**
-   * True when a filter list was too long to send, so the chart, messages and filters cover every failed attempt with these messages on these servers, not only this problem's people.
+   * When the problem was read: the end of the chart, the message counts and the Connection Logs links.
+   */
+  asOf: Date;
+  /**
+   * True when a filter list was too long to send and was left out, so the chart, messages and filters may include unrelated failures.
    */
   countsWidened: boolean;
   /**
@@ -135,7 +139,14 @@ export type SuspectedProblemDetail = {
    */
   suspectedProblemRule: SuspectedProblemRule;
   scope: SuspectedProblemScope;
+  /**
+   * At most 50, most attempts first.
+   */
   servers: Array<SuspectedProblemServer>;
+  /**
+   * Servers before the cap.
+   */
+  serversTotal: number;
   /**
    * When its earliest failure ended.
    */
@@ -171,6 +182,10 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    as_of: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
     counts_widened: z.boolean(),
     fact: z.string(),
     failed_per_10_minutes: z.array(SuspectedProblemBucket$inboundSchema),
@@ -194,6 +209,7 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
     rule: SuspectedProblemRule$inboundSchema,
     scope: SuspectedProblemScope$inboundSchema,
     servers: z.array(SuspectedProblemServer$inboundSchema),
+    servers_total: z.int(),
     since: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -204,6 +220,7 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "as_of": "asOf",
       "counts_widened": "countsWidened",
       "failed_per_10_minutes": "failedPer10Minutes",
       "last_connected_at": "lastConnectedAt",
@@ -214,6 +231,7 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
       "people_on_server_count": "peopleOnServerCount",
       "people_total": "peopleTotal",
       "rule": "suspectedProblemRule",
+      "servers_total": "serversTotal",
       "source": "connectionFailureSource",
     });
   }),

@@ -300,14 +300,22 @@ export interface SuspectedProblemDetail extends SuspectedProblem {
   /** One row per person, at most 50; `peopleTotal` counts them all. */
   people: {
     person: Person;
+    /** At most 5; `appsTotal` counts them all. */
     apps: App[];
+    appsTotal: number;
+    /** At most 5; `serversTotal` counts them all. */
     servers: { server: ServerRef; member?: ServerRef }[];
+    serversTotal: number;
     attempts: number;
     firstFailedAt: string;
   }[];
   peopleTotal: number;
+  /** At most 50, most attempts first. */
   servers: { server: ServerRef; member?: ServerRef; attempts: number }[];
-  /** The chart, messages and filters cover everyone failing with these messages on these servers. */
+  serversTotal: number;
+  /** When the problem was read: the end of the chart, the messages and the links. */
+  asOf: string;
+  /** A filter list was too long to send, so unrelated failures may be counted. */
   countsWidened: boolean;
 }
 

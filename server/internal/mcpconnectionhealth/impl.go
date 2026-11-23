@@ -52,6 +52,9 @@ type Service struct {
 	features    feature.Provider
 	logsEnabled LogsEnabled
 	now         func() time.Time
+
+	// problemsDeadline bounds one suspected problems request.
+	problemsDeadline time.Duration
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -78,6 +81,8 @@ func NewService(
 		features:    features,
 		logsEnabled: logsEnabled,
 		now:         time.Now,
+
+		problemsDeadline: defaultProblemsDeadline,
 	}
 }
 

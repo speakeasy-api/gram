@@ -516,10 +516,15 @@ type SuspectedProblemDetail struct {
 	People []*SuspectedProblemPerson
 	// Distinct people in the problem.
 	PeopleTotal int64
-	Servers     []*SuspectedProblemServer
-	// True when a filter list was too long to send, so the chart, messages and
-	// filters cover every failed attempt with these messages on these servers, not
-	// only this problem's people.
+	// At most 50, most attempts first.
+	Servers []*SuspectedProblemServer
+	// Servers before the cap.
+	ServersTotal int64
+	// When the problem was read: the end of the chart, the message counts and the
+	// Connection Logs links.
+	AsOf string
+	// True when a filter list was too long to send and was left out, so the chart,
+	// messages and filters may include unrelated failures.
 	CountsWidened bool
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
@@ -579,9 +584,15 @@ type SuspectedProblemPart string
 
 // One person in the problem, with every app and server they fail on.
 type SuspectedProblemPerson struct {
-	Person        *ConnectionPerson
-	Apps          []*ConnectionApp
-	Servers       []*SuspectedProblemPlace
+	Person *ConnectionPerson
+	// At most 5.
+	Apps []*ConnectionApp
+	// Apps before the cap.
+	AppsTotal int64
+	// At most 5.
+	Servers []*SuspectedProblemPlace
+	// Servers before the cap.
+	ServersTotal  int64
 	Attempts      int64
 	FirstFailedAt string
 }

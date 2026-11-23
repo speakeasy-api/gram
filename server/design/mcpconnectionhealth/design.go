@@ -515,11 +515,13 @@ var ProblemPlace = Type("SuspectedProblemPlace", func() {
 var ProblemPerson = Type("SuspectedProblemPerson", func() {
 	Description("One person in the problem, with every app and server they fail on.")
 	Attribute("person", Person)
-	Attribute("apps", ArrayOf(App))
-	Attribute("servers", ArrayOf(ProblemPlace))
+	Attribute("apps", ArrayOf(App), "At most 5.")
+	Attribute("apps_total", Int64, "Apps before the cap.")
+	Attribute("servers", ArrayOf(ProblemPlace), "At most 5.")
+	Attribute("servers_total", Int64, "Servers before the cap.")
 	Attribute("attempts", Int64)
 	Attribute("first_failed_at", String, func() { Format(FormatDateTime) })
-	Required("person", "apps", "servers", "attempts", "first_failed_at")
+	Required("person", "apps", "apps_total", "servers", "servers_total", "attempts", "first_failed_at")
 })
 
 var ProblemServer = Type("SuspectedProblemServer", func() {
@@ -538,9 +540,11 @@ var ProblemDetail = Type("SuspectedProblemDetail", func() {
 	Attribute("messages", ArrayOf(ProblemMessage))
 	Attribute("people", ArrayOf(ProblemPerson), "At most 50 people, earliest failure first.")
 	Attribute("people_total", Int64, "Distinct people in the problem.")
-	Attribute("servers", ArrayOf(ProblemServer))
-	Attribute("counts_widened", Boolean, "True when a filter list was too long to send, so the chart, messages and filters cover every failed attempt with these messages on these servers, not only this problem's people.")
-	Required("failed_per_10_minutes", "other_failures_on_service", "messages", "people", "people_total", "servers", "counts_widened")
+	Attribute("servers", ArrayOf(ProblemServer), "At most 50, most attempts first.")
+	Attribute("servers_total", Int64, "Servers before the cap.")
+	Attribute("as_of", String, "When the problem was read: the end of the chart, the message counts and the Connection Logs links.", func() { Format(FormatDateTime) })
+	Attribute("counts_widened", Boolean, "True when a filter list was too long to send and was left out, so the chart, messages and filters may include unrelated failures.")
+	Required("failed_per_10_minutes", "other_failures_on_service", "messages", "people", "people_total", "servers", "servers_total", "as_of", "counts_widened")
 })
 
 var ListSuspectedProblemsResult = Type("ListSuspectedProblemsResult", func() {

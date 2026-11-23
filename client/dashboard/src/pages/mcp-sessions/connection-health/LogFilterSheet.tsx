@@ -96,14 +96,22 @@ export function LogFilterSheet({
         />
       );
     }
+    const max = dim.kind === "multiselect" ? dim.maxSelected : undefined;
     return (
-      <FilterControl
-        dim={dim}
-        value={value}
-        onChange={(next) => onChange(dim.id, next)}
-        options={optionsById[dim.id]}
-        className="w-full"
-      />
+      <>
+        <FilterControl
+          dim={dim}
+          value={value}
+          onChange={(next) => onChange(dim.id, next)}
+          options={optionsById[dim.id]}
+          className="w-full"
+        />
+        {max !== undefined && (value as string[]).length >= max ? (
+          <span className="text-muted-foreground text-xs">
+            You can pick up to {max}.
+          </span>
+        ) : null}
+      </>
     );
   };
   const field = (dim: FilterDimension) => (

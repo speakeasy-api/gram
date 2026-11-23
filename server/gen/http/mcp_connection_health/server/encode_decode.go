@@ -2519,6 +2519,8 @@ func marshalMcpconnectionhealthSuspectedProblemDetailToSuspectedProblemDetailRes
 		LastConnectedAt:        v.LastConnectedAt,
 		OtherFailuresOnService: v.OtherFailuresOnService,
 		PeopleTotal:            v.PeopleTotal,
+		ServersTotal:           v.ServersTotal,
+		AsOf:                   v.AsOf,
 		CountsWidened:          v.CountsWidened,
 		ID:                     v.ID,
 		Rule:                   string(v.Rule),
@@ -2623,6 +2625,8 @@ func marshalMcpconnectionhealthSuspectedProblemMessageToSuspectedProblemMessageR
 // type *mcpconnectionhealth.SuspectedProblemPerson.
 func marshalMcpconnectionhealthSuspectedProblemPersonToSuspectedProblemPersonResponseBody(v *mcpconnectionhealth.SuspectedProblemPerson) *SuspectedProblemPersonResponseBody {
 	res := &SuspectedProblemPersonResponseBody{
+		AppsTotal:     v.AppsTotal,
+		ServersTotal:  v.ServersTotal,
 		Attempts:      v.Attempts,
 		FirstFailedAt: v.FirstFailedAt,
 	}

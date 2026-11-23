@@ -138237,9 +138237,13 @@ components:
         SuspectedProblemDetail:
             type: object
             properties:
+                as_of:
+                    type: string
+                    description: 'When the problem was read: the end of the chart, the message counts and the Connection Logs links.'
+                    format: date-time
                 counts_widened:
                     type: boolean
-                    description: True when a filter list was too long to send, so the chart, messages and filters cover every failed attempt with these messages on these servers, not only this problem's people.
+                    description: True when a filter list was too long to send and was left out, so the chart, messages and filters may include unrelated failures.
                 fact:
                     type: string
                     description: What the data establishes about it, in plain words.
@@ -138309,6 +138313,11 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SuspectedProblemServer'
+                    description: At most 50, most attempts first.
+                servers_total:
+                    type: integer
+                    description: Servers before the cap.
+                    format: int64
                 since:
                     type: string
                     description: When its earliest failure ended.
@@ -138331,6 +138340,8 @@ components:
                 - people
                 - people_total
                 - servers
+                - servers_total
+                - as_of
                 - counts_widened
                 - id
                 - rule
@@ -138455,6 +138466,11 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ConnectionApp'
+                    description: At most 5.
+                apps_total:
+                    type: integer
+                    description: Apps before the cap.
+                    format: int64
                 attempts:
                     type: integer
                     format: int64
@@ -138467,11 +138483,18 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SuspectedProblemPlace'
+                    description: At most 5.
+                servers_total:
+                    type: integer
+                    description: Servers before the cap.
+                    format: int64
             description: One person in the problem, with every app and server they fail on.
             required:
                 - person
                 - apps
+                - apps_total
                 - servers
+                - servers_total
                 - attempts
                 - first_failed_at
         SuspectedProblemPlace:

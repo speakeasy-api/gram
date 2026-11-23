@@ -56,7 +56,7 @@ func (f *readFixture) failAs(p urn.SessionSubject, scope mcpconnectionattempts.S
 
 func (f *readFixture) read(org string, project uuid.UUID, recordedSince time.Time) []Problem {
 	f.t.Helper()
-	scope := ReadScope{OrganizationID: org, ProjectID: project, WholeOrganization: project == uuid.Nil, Keep: nil}
+	scope := ReadScope{OrganizationID: org, ProjectID: project, WholeOrganization: project == uuid.Nil}
 	got, err := Read(f.t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, scope, recordedSince, f.now)
 	require.NoError(f.t, err)
 	return got
@@ -118,8 +118,8 @@ func TestRead_GroupsOneProjectsFailures(t *testing.T) {
 	}
 }
 
-// Keep narrows the episodes before they are grouped.
-func TestRead_KeepsOnlyTheEpisodesAskedFor(t *testing.T) {
+// A provider's read keeps only the failures on its servers before they are grouped.
+func TestRead_KeepsOneProvidersFailures(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
 	org, project, a, b := "org-"+uuid.NewString(), uuid.New(), uuid.New(), uuid.New()
@@ -127,8 +127,8 @@ func TestRead_KeepsOnlyTheEpisodesAskedFor(t *testing.T) {
 		f.fail(mcpconnectionattempts.ServerScope(org, project, a, mcpconnectionattempts.AppDCR), time.Hour)
 		f.fail(mcpconnectionattempts.ServerScope(org, project, b, mcpconnectionattempts.AppDCR), time.Hour)
 	}
-	keepA := func(e mcpconnectionattempts.FailingPerson) bool { return e.ServerID == a.String() }
-	got, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, ReadScope{OrganizationID: org, ProjectID: project, WholeOrganization: false, Keep: keepA}, time.Time{}, f.now)
+	scope := ReadScope{OrganizationID: org, ProjectID: project, WholeOrganization: false, IssuerID: uuid.New(), IssuerServerIDs: []string{a.String()}}
+	got, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, scope, time.Time{}, f.now)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.Equal(t, a.String(), got[0].Scope.Key)
@@ -276,6 +276,7 @@ func TestListServerUpstreams(t *testing.T) {
 
 	rows, err := repo.New(db).ListServerUpstreams(t.Context(), repo.ListServerUpstreamsParams{
 		OrganizationID: mine.organizationID,
+		ProjectID:      uuid.NullUUID{},
 		ServerIds:      []uuid.UUID{withIssuer, noIssuer, foreignIssuer, deleted, other, tunnel, bareTunnel},
 	})
 	require.NoError(t, err)
@@ -289,4 +290,25 @@ func TestListServerUpstreams(t *testing.T) {
 		foreignIssuer: {URL: "https://foreign.example.com/mcp", Issuer: ""},
 		tunnel:        {URL: "", Issuer: "https://tunnel-auth.example.com"},
 	}, got, "no deleted server, no other organization's server or issuer, no tunnel without an issuer")
+}
+
+// A project's lookup never names another project's server, even in the same organization.
+func TestListServerUpstreams_KeepsOneProject(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	mine := seedOrg(t, db)
+	project, err := testrepo.New(db).CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{ID: uuid.New(), Name: "q", Slug: "q-" + uuid.NewString()[:8], OrganizationID: mine.organizationID})
+	require.NoError(t, err)
+	here := seedServer(t, db, mine, "https://here.example.com/mcp")
+	there := seedServer(t, db, orgFixture{organizationID: mine.organizationID, project: project}, "https://there.example.com/mcp")
+
+	rows, err := repo.New(db).ListServerUpstreams(t.Context(), repo.ListServerUpstreamsParams{
+		OrganizationID: mine.organizationID,
+		ProjectID:      uuid.NullUUID{UUID: mine.project, Valid: true},
+		ServerIds:      []uuid.UUID{here, there},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, here, rows[0].ID)
 }

@@ -146,11 +146,13 @@ const episodeHaving = ` AND ((` + fixCandidates + `) OR length(sign_ins) > 0)`
 // readEpisodeAttempts reads the attempts episodes are derived from, as recorded by now:
 // every attempt started from from by a person with an attempt that can read as failed
 // since since. An unfinished one does once its live window has passed.
-func readEpisodeAttempts(ctx context.Context, ch driver.Conn, organizationID string, projectID uuid.UUID, from, since, now time.Time) ([]attemptFacts, error) {
+func readEpisodeAttempts(ctx context.Context, ch driver.Conn, filter FailingNowFilter, from, since, now time.Time) ([]attemptFacts, error) {
+	organizationID := filter.OrganizationID
 	until := now.Add(time.Nanosecond)
 	where, args, err := AttemptFilter{
-		StartedFrom: from, StartedBefore: until, OrganizationID: organizationID, ExcludeOrganizationIDs: nil, ProjectID: projectID, ServerID: "",
-		PeopleFailingFrom: later(from, since.Add(-AttemptLiveWindow)), PeopleFailingBefore: until, FixCandidatesOnly: false,
+		StartedFrom: from, StartedBefore: until, OrganizationID: organizationID, ExcludeOrganizationIDs: nil, ProjectID: filter.ProjectID, ServerID: "",
+		PeopleFailingFrom: later(from, since.Add(-AttemptLiveWindow)), PeopleFailingBefore: until,
+		IssuerID: filter.IssuerID, IssuerServerIDs: filter.IssuerServerIDs, FixCandidatesOnly: false,
 	}.where()
 	if err != nil {
 		return nil, err

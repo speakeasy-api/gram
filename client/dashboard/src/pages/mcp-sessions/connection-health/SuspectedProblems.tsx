@@ -18,7 +18,7 @@ const MIXED_PROBLEMS_RULE =
 
 /** The rule as the provider Overview states it, which lists only problems signing in to Speakeasy. */
 export const SIGN_IN_PROBLEMS_RULE =
-  "Failed to sign in the same way and not signed in since: 2 or more people on one MCP server or one app version, or one person for 24 hours.";
+  "Failed to sign in the same way on this provider's servers and not signed in since: 2 or more people on one MCP server or one app version, or one person for 24 hours.";
 
 /** The one panel that says we suspect something, with its own loading, error and empty states. */
 export function SuspectedProblems({

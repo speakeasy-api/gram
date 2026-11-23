@@ -144,20 +144,17 @@ function sourceName(problem: SuspectedProblemDetail): string | undefined {
   return apps.size === 1 ? [...apps][0] : undefined;
 }
 
+/** A fixed question; every name and label goes in the escaped context, never in the question. */
 function investigationFor(problem: SuspectedProblemDetail): Investigation {
   const target = problemTarget(problem);
   return {
-    question: `Why can't ${
-      problem.peopleCount === 1 && problem.people[0]
-        ? personLabel(problem.people[0])
-        : `these ${problem.peopleCount} people`
-    } ${
-      problem.part === "speakeasy"
-        ? `sign in to MCP${target ? ` on ${target}` : ""}`
-        : `connect${target ? ` to ${target}` : ""}`
-    }, and is there anything I should change?`,
+    question:
+      "Why are the people in this suspected problem failing to connect, and is there anything I should change?",
     context: [
       `Suspected problem · ${problem.headline}`,
+      `People: ${problem.people.map((p) => personLabel(p)).join("; ")}`,
+      target ? `Where: ${target}` : null,
+      `Part: ${problem.part === "speakeasy" ? "signing in to Speakeasy" : "connecting to the service"}`,
       `Since ${problem.since}`,
       problem.fact,
       `Rule: ${problemRule(problem)}`,
@@ -191,7 +188,10 @@ function ProblemBody({
     (sum, b) => sum + b.attempts,
     0,
   );
-  const logsHref = `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(problem.filters, now)}`;
+  // One snapshot: the chart, the messages and both links end when the problem was read.
+  const asOf = new Date(problem.asOf);
+  const sinceFrom = formatSince(problem.filters.from, now);
+  const logsHref = `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(problem.filters, asOf)}`;
   const peopleCount = problem.peopleCount;
   const sinceLabel = formatSince(problem.since, now);
   const succeeded = problem.part === "speakeasy" ? "signed in" : "connected";
@@ -239,19 +239,19 @@ function ProblemBody({
         </div>
 
         <Block
-          title={`${problem.countsWidened ? "Failed attempts with these messages on these servers" : "Failed attempts"} · ${formatCount(failed)}`}
+          title={`Failed attempts by these people · ${formatCount(failed)}`}
           aside="10-minute intervals, last 24 hours"
         >
           <div className="border p-3">
-            <FailureBars buckets={problem.failedPer10Minutes} now={now} />
+            <FailureBars buckets={problem.failedPer10Minutes} now={asOf} />
           </div>
-          {problem.countsWidened ? (
-            <p className="text-muted-foreground text-sm">
-              This problem has too many people or servers to filter by. These
-              counts include everyone who failed with these messages on these
-              servers.
-            </p>
-          ) : null}
+          <p className="text-muted-foreground text-sm">
+            Every failed attempt by these people on these servers with these
+            messages since {sinceFrom}, including any they got past in between.
+            {problem.countsWidened
+              ? " Some filters could not be applied, so unrelated failures may be included."
+              : ""}
+          </p>
         </Block>
 
         <Block title={`People · ${peopleCount}`} aside="Attempts">
@@ -261,7 +261,7 @@ function ProblemBody({
                 key={p.person.subjectUrn}
                 to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(
                   { ...problem.filters, people: [p.person.subjectUrn] },
-                  now,
+                  asOf,
                 )}`}
               >
                 <div className="flex min-w-0 items-center gap-2">
@@ -269,9 +269,9 @@ function ProblemBody({
                   <div className="min-w-0">
                     <div className="truncate text-sm">{personLabel(p)}</div>
                     <div className="text-muted-foreground truncate text-xs">
-                      {p.apps.map(appLabel).join(", ")}
+                      {foldedLabel(p.apps.map(appLabel), p.appsTotal)}
                       {p.servers.length > 0
-                        ? ` · ${p.servers.map(serverLabel).join(", ")}`
+                        ? ` · ${foldedLabel(p.servers.map(serverLabel), p.serversTotal)}`
                         : ""}
                     </div>
                   </div>
@@ -293,7 +293,7 @@ function ProblemBody({
           ) : null}
         </Block>
 
-        <Block title={`Servers · ${problem.servers.length}`} aside="Attempts">
+        <Block title={`Servers · ${problem.serversTotal}`} aside="Attempts">
           <div className="divide-y border">
             {problem.servers.map((s) => (
               <div
@@ -307,9 +307,17 @@ function ProblemBody({
               </div>
             ))}
           </div>
+          {problem.serversTotal > problem.servers.length ? (
+            <p className="text-muted-foreground text-sm">
+              Showing the {problem.servers.length} with the most attempts.
+            </p>
+          ) : null}
         </Block>
 
-        <Block title={`Messages · ${problem.messages.length}`} aside="Attempts">
+        <Block
+          title={`Messages · ${problem.messages.length}`}
+          aside={`Attempts since ${sinceFrom}`}
+        >
           <div className="divide-y border">
             {problem.messages.map((m) => (
               <div
@@ -345,15 +353,17 @@ function ProblemBody({
           onLaunched={onClose}
         />
         <Button asChild>
-          <Link to={logsHref}>
-            {problem.countsWidened
-              ? "Open matching attempts in Connection Logs"
-              : "Open in Connection Logs"}
-          </Link>
+          <Link to={logsHref}>Open in Connection Logs</Link>
         </Button>
       </SheetFooter>
     </div>
   );
+}
+
+/** "Linear, GitHub +3" when more were folded than shown. */
+function foldedLabel(labels: string[], total: number): string {
+  const more = total - labels.length;
+  return more > 0 ? `${labels.join(", ")} +${more}` : labels.join(", ");
 }
 
 const PERSON_ROW =

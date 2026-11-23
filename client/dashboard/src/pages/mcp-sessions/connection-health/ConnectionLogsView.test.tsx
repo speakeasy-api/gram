@@ -83,4 +83,12 @@ describe("ConnectionLogsView on a server's tab", () => {
     expect(screen.getAllByText(/srv_other/).length).toBeGreaterThan(0);
     expect(screen.getByText("No attempts match these filters")).toBeTruthy();
   });
+
+  it("does not send a link with more than 50 people", () => {
+    const people = Array.from({ length: 51 }, (_, i) => `user:u${i}`).join(",");
+    renderLogs(`/?person=${encodeURIComponent(people)}`);
+    expect(
+      screen.getByText("Too many servers or people in this link"),
+    ).toBeTruthy();
+  });
 });

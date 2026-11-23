@@ -141,3 +141,10 @@ LEFT JOIN scoped
   AND scoped.ended_at > days.day_start
 GROUP BY days.day_start
 ORDER BY days.day_start;
+
+-- name: SetGatewayIssuerFixture :execrows
+-- Test fixture: moves a gateway in a project to another MCP authentication provider.
+UPDATE meta_mcp_servers
+SET user_session_issuer_id = @issuer_id
+WHERE id = @id
+  AND project_id = @project_id;

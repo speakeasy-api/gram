@@ -972,7 +972,7 @@ func TestReadServedByFamily_ReadsInBatches(t *testing.T) {
 	f.answered(last, 2*time.Minute)
 	f.served(f.conn(person(), serverKindMCP, uuid.New(), AppDCR), time.Minute)
 
-	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, failing)
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, uuid.Nil, failing)
 	require.NoError(t, err)
 	byServer := map[string]ServedByFamily{}
 	for _, s := range got {
@@ -995,7 +995,7 @@ func TestReadServedByFamily_NeverReturnsAnotherOrganizationsRows(t *testing.T) {
 	f.served(mine, time.Minute)
 	other.served(theirs, time.Minute)
 
-	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, []FailingPerson{{Episode: Episode{ServerKind: serverKindMCP, ServerID: f.server.String()}}})
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, uuid.Nil, []FailingPerson{{Episode: Episode{ServerKind: serverKindMCP, ServerID: f.server.String()}}})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.Equal(t, FamilyCursor, got[0].ClientFamily)
@@ -1031,14 +1031,18 @@ func TestFailingNow_ReadsServedConnectionsInBatches(t *testing.T) {
 		failures = append(failures, failure{a: attemptFacts{AttemptSummary: AttemptSummary{ServerKind: serverKindMCP, ServerID: server.String(), SubjectURN: p.String()}}})
 		f.answered(f.conn(p, serverKindMCP, server, AppDCR), time.Minute)
 	}
-	oneServed, oneAnswers, err := readServed(t.Context(), f.ch, f.org, failures, servedBatch)
+	oneServed, oneAnswers, err := readServed(t.Context(), f.ch, f.org, uuid.Nil, failures, servedBatch)
 	require.NoError(t, err)
 	require.Len(t, oneServed, 3)
 	require.Len(t, oneAnswers, 3)
-	served, answers, err := readServed(t.Context(), f.ch, f.org, failures, 1)
+	served, answers, err := readServed(t.Context(), f.ch, f.org, uuid.Nil, failures, 1)
 	require.NoError(t, err)
 	require.ElementsMatch(t, oneServed, served)
 	require.ElementsMatch(t, oneAnswers, answers)
+	none, noAnswers, err := readServed(t.Context(), f.ch, f.org, uuid.Nil, nil, 1)
+	require.NoError(t, err)
+	require.Empty(t, none, "nothing failing reads nothing")
+	require.Empty(t, noAnswers)
 }
 
 // A project's read leaves out other projects and organization gateways.
@@ -1053,4 +1057,35 @@ func TestFailingNow_KeepsOneProject(t *testing.T) {
 	got := f.read(FailingNowFilter{ProjectID: f.project})
 	require.Len(t, got, 1)
 	require.Equal(t, f.project, got[0].ProjectID)
+}
+
+// Served and answered rows in another project never end this project's failures.
+func TestFailingNow_ServedRowsOfAnotherProjectEndNothing(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	f.attempt(f.direct(AppDCR), time.Hour, StepMCPRequest, CodeProviderServerError, Subject(&p))
+	foreign := f.onServer(p, AppDCR)
+	foreign.ProjectID = uuid.New()
+	f.answered(foreign, 10*time.Minute)
+
+	require.Len(t, f.read(FailingNowFilter{ProjectID: f.project}), 1, "another project's answer does not end it")
+	require.Empty(t, f.read(FailingNowFilter{}), "read across projects, the answer ends it")
+}
+
+// Served-by-family rows of another project do not count for this one.
+func TestReadServedByFamily_KeepsOneProject(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	foreign := f.onServer(p, AppDCR)
+	foreign.ProjectID = uuid.New()
+	f.answered(foreign, time.Minute)
+	failing := []FailingPerson{{Episode: Episode{ServerKind: serverKindMCP, ServerID: f.server.String()}}}
+	got, err := ReadServedByFamily(t.Context(), f.ch, f.org, f.project, failing)
+	require.NoError(t, err)
+	require.Empty(t, got)
+	got, err = ReadServedByFamily(t.Context(), f.ch, f.org, uuid.Nil, failing)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
 }

@@ -52,21 +52,28 @@ func TestProblemText_EachRule(t *testing.T) {
 				Episodes:  []mcpconnectionattempts.FailingPerson{ep("user:a", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken), ep("user:b", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken)},
 				SharedApp: app, OtherAppsServed: true},
 			headline: "3 people can't sign in to Linear",
-			fact:     "The app's sign-in to Speakeasy fails. " + admin(mcpconnectionattempts.CodeInvalidBearerToken) + " All use Claude Code 2.1.4. Other apps worked there in this time.",
+			fact:     "The app's sign-in to Speakeasy fails. " + admin(mcpconnectionattempts.CodeInvalidBearerToken) + " All use Claude Code 2.1.4. Another app worked on this server in this time.",
 		},
 		{
 			name: "same service the provider fixes",
 			problem: problems.Problem{Rule: problems.RuleSameService, Scope: problems.Scope{Kind: problems.ScopeService, Key: "mcp.linear.app"}, Part: server, WhoFixes: mcpconnectionattempts.WhoProvider, People: 2,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:a", linear, server, mcpconnectionattempts.CodeProviderServerError), ep("user:b", github, server, mcpconnectionattempts.CodeProviderUnavailable)}},
 			headline: "2 people can't connect to mcp.linear.app",
-			fact:     "The service at mcp.linear.app is not answering.",
+			fact:     "Requests to servers using mcp.linear.app are failing.",
 		},
 		{
 			name: "a server that answers other apps",
 			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: server, WhoFixes: mcpconnectionattempts.WhoProvider, People: 2, OtherAppsServed: true,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:a", linear, server, mcpconnectionattempts.CodeProviderServerError), ep("user:b", linear, server, mcpconnectionattempts.CodeProviderServerError)}},
 			headline: "2 people can't connect to Linear",
-			fact:     "The server does not answer these people. " + admin(mcpconnectionattempts.CodeProviderServerError) + " Other apps worked there in this time.",
+			fact:     admin(mcpconnectionattempts.CodeProviderServerError) + " Another app worked on this server in this time.",
+		},
+		{
+			name: "one recorded error on two servers",
+			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: server, WhoFixes: mcpconnectionattempts.WhoProvider, People: 1,
+				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, server, mcpconnectionattempts.CodeProviderServerError), ep("user:dana", github, server, mcpconnectionattempts.CodeProviderServerError)}},
+			headline: "Dana Reyes can't connect",
+			fact:     "On Linear and GitHub. The service had an error.",
 		},
 		{
 			name: "requests Speakeasy has to fix",
@@ -88,7 +95,7 @@ func TestProblemText_EachRule(t *testing.T) {
 				Episodes:  []mcpconnectionattempts.FailingPerson{ep("user:a", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken), ep("user:b", github, signIn, mcpconnectionattempts.CodeInvalidBearerToken)},
 				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}, OtherAppsServed: true},
 			headline: "2 people on Claude Code 2.0.1 can't sign in",
-			fact:     "On Linear and GitHub. The app's sign-in to Speakeasy fails. Other apps worked there in this time.",
+			fact:     "On Linear and GitHub. The app's sign-in to Speakeasy fails. Another app worked on at least one of these servers in this time.",
 		},
 		{
 			name: "one person with a rejected saved key on one server",
@@ -115,9 +122,7 @@ func TestProblemText_EachRule(t *testing.T) {
 			for _, code := range mcpconnectionattempts.Codes() {
 				require.NotContains(t, strings.Fields(view.Headline), code, "no reason codes in headlines")
 			}
-			if tc.problem.OtherAppsServed {
-				require.NotContains(t, view.Fact, "is not answering", "never with other apps working there")
-			}
+			require.NotContains(t, view.Fact, "not answering", "a recorded failure is not proof the server is down")
 			if allSavedCredential(tc.problem) {
 				require.NotContains(t, view.Fact, "Signing in", "nobody signs in with a saved key")
 			}
@@ -137,12 +142,18 @@ func TestCapProblems_KeepsTheFirstHundred(t *testing.T) {
 	require.Equal(t, "0", shown[0].ID, "the most people first stay")
 }
 
-func TestProblemsError_ADeadlineIsTemporarilyUnavailable(t *testing.T) {
+func TestPastDeadline_IsTemporarilyUnavailableButKeepsRefusals(t *testing.T) {
 	t.Parallel()
 	s := &Service{logger: testenv.NewLogger(t)}
+	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
 	var shareable *oops.ShareableError
-	require.ErrorAs(t, s.problemsError(t.Context(), fmt.Errorf("read: %w", context.DeadlineExceeded), "read"), &shareable)
+	require.ErrorAs(t, s.pastDeadline(expired, fmt.Errorf("read: %w", context.DeadlineExceeded)), &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code)
-	require.ErrorAs(t, s.problemsError(t.Context(), errors.New("boom"), "read"), &shareable)
-	require.Equal(t, oops.CodeUnexpected, shareable.Code)
+	require.ErrorAs(t, s.pastDeadline(expired, oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
+	require.Equal(t, oops.CodeUnavailable, shareable.Code, "any read past the budget")
+	require.ErrorAs(t, s.pastDeadline(expired, oops.C(oops.CodeForbidden)), &shareable)
+	require.Equal(t, oops.CodeForbidden, shareable.Code)
+	require.ErrorAs(t, s.pastDeadline(t.Context(), oops.E(oops.CodeUnexpected, errors.New("boom"), "load names")), &shareable)
+	require.Equal(t, oops.CodeUnexpected, shareable.Code, "inside the budget nothing changes")
 }
