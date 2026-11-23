@@ -234,6 +234,10 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 			return s.staleMemberStatus(ctx, logger, gate, member)
 		}
 		if gate.caller.kind == gatewayCallerPerson && gate.connectURL != "" && member.authClient != nil && member.authClient.outcome == authClientGap {
+			// Routing adds a link to this error, so inspect the original gap.
+			if _, missingChoice := errors.AsType[memberChoiceGapError](member.upstreamUnavailable); missingChoice {
+				return signInRow(metamcp.SignInNeedsConsent, "Choose a connection for this server when you sign in to the gateway.", nil)
+			}
 			switch member.authClient.reason {
 			case authClientReasonAmbiguous, authClientReasonUnmapped, authClientReasonClientGone, authClientReasonClientDeleted, authClientReasonClientDisabled, authClientReasonUnassociated, authClientReasonRegistration, authClientReasonDetached:
 				if offered, readErr := requiresAuth(ctx, member); readErr == nil && offered {
@@ -306,9 +310,6 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 // agent gateway, a missing or unusable connection is a row the agent's
 // sign-in step fixes.
 func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
-	if _, missingChoice := errors.AsType[memberChoiceGapError](err); missingChoice && gate.caller.kind == gatewayCallerPerson && gate.connectURL != "" {
-		return signInRow(metamcp.SignInNeedsConsent, "Choose a connection for this server when you sign in to the gateway.", nil)
-	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable {
 		if gate.agentFix != nil {
 			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)

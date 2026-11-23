@@ -247,7 +247,7 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 // a connection outage.
 func withMemberConnectLink(err error, member metaMember, connectURL string) error {
 	if _, ok := errors.AsType[memberChoiceGapError](err); ok && connectURL != "" {
-		return memberChoiceGapError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q has no connection chosen for this session. Ask the user to open %s to connect it. If it is already connected, the app needs to sign in to this gateway again to use it", member.slug, connectURL)}}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q has no connection chosen for this session. Ask the user to open %s to connect it. If it is already connected, the app needs to sign in to this gateway again to use it", member.slug, connectURL)}}
 	}
 	if unreadable, ok := errors.AsType[memberSignInUnreadableError](err); ok && connectURL != "" {
 		return newMemberSignInUnreadableError(member, reconnectAskUser(connectURL), unreadable.cause)
