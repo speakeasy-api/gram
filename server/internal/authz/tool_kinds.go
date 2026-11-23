@@ -1,14 +1,6 @@
 package authz
 
-import (
-	"maps"
-	"slices"
-)
-
-// Dispositions returns every disposition a tool call can carry, sorted.
-func Dispositions() []string {
-	return slices.Sorted(maps.Keys(validDispositions))
-}
+import "slices"
 
 // ToolKindAccess lists the dispositions a set of grants allows on one MCP
 // server, and the ones its blocks take away.
