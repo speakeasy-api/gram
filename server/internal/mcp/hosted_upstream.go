@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -130,4 +131,20 @@ func (s *Service) hostedConsentRegistrations(ctx context.Context, endpoint *Reso
 		}
 	}
 	return registrations, nil
+}
+
+const hostedSetupNotice = "An administrator must finish upstream authentication setup for this server."
+
+// hostedConsentSetupIncomplete reads the exact placement for display. A single
+// reachable registration needs sign-in even when stored intent is NULL. This
+// does not infer or persist intent for the runtime.
+func (s *Service) hostedConsentSetupIncomplete(ctx context.Context, org string, projectID, serverID uuid.UUID) (bool, error) {
+	_, err := s.hostedSignInClients(ctx, org, projectID, serverID)
+	if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read hosted consent setup: %w", err)
+	}
+	return false, nil
 }

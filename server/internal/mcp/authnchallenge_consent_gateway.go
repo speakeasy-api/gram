@@ -236,6 +236,14 @@ func (g gatewayServer) NotSetUp() bool {
 	return g.Status == gatewayServerNotSetUp
 }
 
+// HostedSetupNotice distinguishes a missing hosted placement from a proxied setup issue.
+func (g gatewayServer) HostedSetupNotice() string {
+	if g.NotSetUp() && g.cause == mcpconnectionattempts.CodeUpstreamSignInNotSetUp {
+		return hostedSetupNotice
+	}
+	return ""
+}
+
 // gatewayConsentView is what a gateway's consent page renders in place of
 // the flat list of services.
 type gatewayConsentView struct {
@@ -359,11 +367,16 @@ func (s *Service) gatewayConsent(
 	cards []remoteSessionCard,
 	focus string,
 ) (*gatewayConsentView, []remoteSessionCard, error) {
-	members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+	members, err := s.consentSubjectMembers(context.WithValue(ctx, hostedConsentPresentationKey{}, true), endpoint, challengeState)
 	if err != nil {
 		return nil, nil, err
 	}
 	view := gatewayServersView(members, cards)
+	// Rendering may name an admitted server with incomplete setup. It must
+	// not become a candidate for the tool inventory or an approval.
+	view.members = slices.DeleteFunc(slices.Clone(members), func(member metaMember) bool {
+		return member.backend == metaMemberBackendHosted && member.associatedClients == nil
+	})
 	if challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindUser {
 		view.CanHide = true
 		hidden, herr := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, challengeState.Subject.ID)
@@ -396,6 +409,12 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
 		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, address: guardian.AddressFine, signInAddress: false, cause: mcpconnectionattempts.Code{}, upstreamHost: "", Auth: nil}
+		if member.backend == metaMemberBackendHosted && member.associatedClients == nil {
+			server.Status = gatewayServerNotSetUp
+			server.cause = mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+			view.Servers = append(view.Servers, server)
+			continue
+		}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)

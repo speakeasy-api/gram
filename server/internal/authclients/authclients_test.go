@@ -14,8 +14,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -275,6 +278,40 @@ func TestSetMcpServerUpstreamAuthRequirementRequiresOrgAdmin(t *testing.T) {
 	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead)
 	_, err := ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.id.String(), RequiresUpstreamAuth: true})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestSetHostedNoUpstreamRequiresExactServerWriteAndPreservesSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	q := authclientbackfill.New(ti.conn)
+	issuer := uuid.New()
+	require.NoError(t, q.SeedUserSessionIssuerFixture(ctx, authclientbackfill.SeedUserSessionIssuerFixtureParams{
+		ID: issuer, ProjectID: conv.ToNullUUID(ti.projectID), Slug: "hosted-sign-in",
+	}))
+	seed := func(slug string) uuid.UUID {
+		toolset, server := uuid.New(), uuid.New()
+		require.NoError(t, q.SeedToolsetFixture(ctx, authclientbackfill.SeedToolsetFixtureParams{ID: toolset, OrganizationID: ti.organizationID, ProjectID: ti.projectID, Name: slug, Slug: slug}))
+		require.NoError(t, q.SeedHostedMCPServerFixture(ctx, authclientbackfill.SeedHostedMCPServerFixtureParams{ID: server, ProjectID: ti.projectID, Slug: conv.ToPGText(slug), ToolsetID: conv.ToNullUUID(toolset)}))
+		require.NoError(t, q.SetServerUserSessionIssuerFixture(ctx, authclientbackfill.SetServerUserSessionIssuerFixtureParams{ID: server, UserSessionIssuerID: conv.ToNullUUID(issuer)}))
+		return server
+	}
+	server, sibling := seed("hosted-target"), seed("hosted-sibling")
+	payload := &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: server.String(), RequiresUpstreamAuth: false}
+	_, err := ti.service.SetMcpServerUpstreamAuthRequirement(withOrgGrants(t, ctx, authz.ScopeOrgAdmin), payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	admin := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.organizationID), authz.NewGrant(authz.ScopeMCPWrite, server.String()))
+	got, err := ti.service.SetMcpServerUpstreamAuthRequirement(admin, payload)
+	require.NoError(t, err)
+	require.Equal(t, authclients.StatusNoAuthRequired, got.Status)
+	rows := mcpserversrepo.New(ti.conn)
+	for _, id := range []uuid.UUID{server, sibling} {
+		row, err := rows.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: id, ProjectID: ti.projectID})
+		require.NoError(t, err)
+		require.Equal(t, conv.ToNullUUID(issuer), row.UserSessionIssuerID)
+		require.Equal(t, id == server, row.RequiresUpstreamAuth.Valid)
+		require.False(t, row.RequiresUpstreamAuth.Bool)
+	}
+	require.EqualValues(t, 1, auditCount(t, ti, audit.ActionMcpServerUpstreamAuthRequirementUpdate))
 }
 
 func auditCount(t *testing.T, ti *testInstance, action audit.Action) int64 {

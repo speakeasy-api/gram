@@ -1,3 +1,6 @@
+import { useSetMcpServerUpstreamAuthRequirementMutation } from "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js";
+import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
 import type { ServerClientAssociation } from "@gram/client/models/components/serverclientassociation.js";
 import { useServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { Badge } from "@/components/ui/Badge";
@@ -252,9 +255,27 @@ function StandardAuthenticationSectionBody({
             onAdd={() => setSheetOpen(true)}
             onEdit={handleEdit}
             onDelete={handleDelete}
-            readOnly={userSessionIssuer.projectId === ""}
+            readOnly={
+              userSessionIssuer.projectId === "" &&
+              (!target.hosted || associations.data?.associations.length !== 0)
+            }
           />
         )}
+        {target.hosted &&
+          serverId &&
+          !gatewayId &&
+          associations.data?.associations.length === 0 && (
+            <RequireScope scope="org:admin" level="section">
+              <RequireScope
+                scope="mcp:write"
+                resourceId={serverId}
+                projectId={target.projectId}
+                level="section"
+              >
+                <HostedNoUpstreamAction key={serverId} serverId={serverId} />
+              </RequireScope>
+            </RequireScope>
+          )}
         {/* Last: its footer Save closes the panel. */}
         <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
       </>
@@ -355,5 +376,48 @@ function AuthenticationLoadErrorField() {
         again.
       </FieldError>
     </AuthRow>
+  );
+}
+
+function HostedNoUpstreamAction({
+  serverId,
+}: {
+  serverId: string;
+}): JSX.Element {
+  const mutation = useSetMcpServerUpstreamAuthRequirementMutation();
+  return (
+    <Field>
+      <FieldLabel>Upstream authentication</FieldLabel>
+      <FieldDescription>
+        {mutation.isSuccess
+          ? "No upstream authentication required. Users still sign in to this server."
+          : "Assign an authorization server above, or confirm that this server does not need upstream authentication. This does not turn off user sign-in."}
+      </FieldDescription>
+      {!mutation.isSuccess && (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={mutation.isPending}
+          onClick={() =>
+            mutation.mutate({
+              request: {
+                setMcpServerUpstreamAuthRequirementRequestBody: {
+                  mcpServerId: serverId,
+                  requiresUpstreamAuth: false,
+                },
+              },
+            })
+          }
+        >
+          <Button.Text>No upstream authentication</Button.Text>
+        </Button>
+      )}
+      {mutation.isError && (
+        <FieldError>
+          Could not save upstream authentication. Check that no registration is
+          assigned to this server.
+        </FieldError>
+      )}
+    </Field>
   );
 }

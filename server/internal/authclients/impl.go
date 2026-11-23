@@ -337,7 +337,10 @@ func (s *Service) SetMcpServerUpstreamAuthRequirement(ctx context.Context, paylo
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 	if server.ToolsetID.Valid {
-		return nil, oops.E(oops.CodeBadRequest, nil, "hosted toolsets keep their own authentication; their upstream requirement cannot be set").LogError(ctx, logger)
+		if payload.RequiresUpstreamAuth {
+			return nil, oops.E(oops.CodeBadRequest, nil, "Assign an upstream registration to require authentication for this hosted server.").LogWarn(ctx, logger)
+		}
+		return s.setHostedNoUpstream(ctx, logger, authCtx, server.ProjectID, server.ID)
 	}
 
 	// The requested requirement is ignored: whether the upstream needs

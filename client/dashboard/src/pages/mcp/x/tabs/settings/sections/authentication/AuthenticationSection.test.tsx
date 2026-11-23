@@ -6,17 +6,28 @@ import type { AuthTarget } from "./authTarget";
 
 const {
   attachSheet,
+  saveNoUpstream,
   useServerClientAssociations,
   useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
+  saveNoUpstream: vi.fn(),
   useServerClientAssociations: vi.fn(),
   useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
 }));
+
+vi.mock(
+  "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js",
+  () => ({
+    useSetMcpServerUpstreamAuthRequirementMutation: () => ({
+      mutate: saveNoUpstream,
+    }),
+  }),
+);
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
   useUserSessionIssuer: (...args: unknown[]) => useUserSessionIssuer(...args),
@@ -191,6 +202,31 @@ afterEach(() => {
 });
 
 describe("AuthenticationSectionBody", () => {
+  it("records no upstream authentication on the hosted server only", () => {
+    useServerClientAssociations.mockReturnValue({
+      data: { associations: [] },
+      isLoading: false,
+    });
+    render(
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "No upstream authentication" }),
+    );
+
+    expect(saveNoUpstream).toHaveBeenCalledWith({
+      request: {
+        setMcpServerUpstreamAuthRequirementRequestBody: {
+          mcpServerId:
+            standardTargetWithSessionIssuer.mcpServerId ??
+            standardTargetWithSessionIssuer.attachImpactTarget.toolsetId,
+          requiresUpstreamAuth: false,
+        },
+      },
+    });
+  });
+
   it("includes a target-specific setup action before a session issuer is configured", () => {
     useUserSessionIssuer.mockReturnValue({
       data: null,
@@ -359,6 +395,7 @@ describe("AuthenticationSectionBody", () => {
 
 const standardTargetWithSessionIssuer: AuthTarget = {
   kind: "standard",
+  hosted: true,
   slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",

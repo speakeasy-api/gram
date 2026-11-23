@@ -115,6 +115,8 @@ type metaMember struct {
 // in-process, so they are always available. A tunneled member's liveness is
 // one route-store read; a remote member's would be a credentialed network
 // probe per listing, so it stays unknown until cached health exists.
+type hostedConsentPresentationKey struct{}
+
 func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 	switch {
 	case member.backend == metaMemberBackendHosted:
@@ -640,6 +642,9 @@ func (s *Service) admitMetaMembers(
 			registration, err := assignments[member.serverID].registration(member.projectID)
 			if err != nil {
 				logger.WarnContext(ctx, "hosted member upstream assignment unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+				if ctx.Value(hostedConsentPresentationKey{}) == true {
+					ready = append(ready, member)
+				}
 				continue
 			}
 			member.associatedClients = make(map[uuid.UUID]bool, 1)
