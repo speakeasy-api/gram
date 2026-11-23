@@ -768,6 +768,28 @@ type ClearOrganizationHooksRolloutRequestBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
+// StartHooksRolloutStageRequestBody is the type of the "admin" service
+// "startHooksRolloutStage" endpoint HTTP request body.
+type StartHooksRolloutStageRequestBody struct {
+	// Hooks generator version to roll out. Must be above the default pin and not
+	// exceed the version this build publishes.
+	Version *int `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
+// PauseHooksRolloutStageRequestBody is the type of the "admin" service
+// "pauseHooksRolloutStage" endpoint HTTP request body.
+type PauseHooksRolloutStageRequestBody struct {
+	// Why, recorded with the change.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// CancelHooksRolloutStageRequestBody is the type of the "admin" service
+// "cancelHooksRolloutStage" endpoint HTTP request body.
+type CancelHooksRolloutStageRequestBody struct {
+	// Why, recorded with the change.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -3403,6 +3425,8 @@ type GetHooksRolloutResponseBody struct {
 	// The pin for every organization without an override. Absent until one is set;
 	// until then those organizations follow the legacy hooks-rollout PostHog flag.
 	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
 	// Organizations that always receive current_version and ignore pins.
 	CanaryOrganizationSlugs []string `form:"canary_organization_slugs" json:"canary_organization_slugs" xml:"canary_organization_slugs"`
 	// Organizations with an override, by slug.
@@ -3420,6 +3444,8 @@ type SetHooksRolloutDefaultResponseBody struct {
 	// The pin for every organization without an override. Absent until one is set;
 	// until then those organizations follow the legacy hooks-rollout PostHog flag.
 	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
 	// Organizations that always receive current_version and ignore pins.
 	CanaryOrganizationSlugs []string `form:"canary_organization_slugs" json:"canary_organization_slugs" xml:"canary_organization_slugs"`
 	// Organizations with an override, by slug.
@@ -3483,6 +3509,82 @@ type ClearOrganizationHooksRolloutResponseBody struct {
 	// Whether the organization's next publish moves its hooks plugin to
 	// current_version. Absent for legacy_flag, which the admin server cannot read.
 	Eligible *bool `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+}
+
+// StartHooksRolloutStageResponseBody is the type of the "admin" service
+// "startHooksRolloutStage" endpoint HTTP response body.
+type StartHooksRolloutStageResponseBody struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion int `form:"current_version" json:"current_version" xml:"current_version"`
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string `form:"canary_organization_slugs" json:"canary_organization_slugs" xml:"canary_organization_slugs"`
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides" json:"overrides" xml:"overrides"`
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes" json:"recent_changes" xml:"recent_changes"`
+}
+
+// PauseHooksRolloutStageResponseBody is the type of the "admin" service
+// "pauseHooksRolloutStage" endpoint HTTP response body.
+type PauseHooksRolloutStageResponseBody struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion int `form:"current_version" json:"current_version" xml:"current_version"`
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string `form:"canary_organization_slugs" json:"canary_organization_slugs" xml:"canary_organization_slugs"`
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides" json:"overrides" xml:"overrides"`
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes" json:"recent_changes" xml:"recent_changes"`
+}
+
+// ResumeHooksRolloutStageResponseBody is the type of the "admin" service
+// "resumeHooksRolloutStage" endpoint HTTP response body.
+type ResumeHooksRolloutStageResponseBody struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion int `form:"current_version" json:"current_version" xml:"current_version"`
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string `form:"canary_organization_slugs" json:"canary_organization_slugs" xml:"canary_organization_slugs"`
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides" json:"overrides" xml:"overrides"`
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes" json:"recent_changes" xml:"recent_changes"`
+}
+
+// CancelHooksRolloutStageResponseBody is the type of the "admin" service
+// "cancelHooksRolloutStage" endpoint HTTP response body.
+type CancelHooksRolloutStageResponseBody struct {
+	// The hooks generator version this server build publishes to an organization
+	// once its pin reaches it.
+	CurrentVersion int `form:"current_version" json:"current_version" xml:"current_version"`
+	// The pin for every organization without an override. Absent until one is set;
+	// until then those organizations follow the legacy hooks-rollout PostHog flag.
+	DefaultPin *AdminHooksRolloutPinResponseBody `form:"default_pin,omitempty" json:"default_pin,omitempty" xml:"default_pin,omitempty"`
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStageResponseBody `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
+	// Organizations that always receive current_version and ignore pins.
+	CanaryOrganizationSlugs []string `form:"canary_organization_slugs" json:"canary_organization_slugs" xml:"canary_organization_slugs"`
+	// Organizations with an override, by slug.
+	Overrides []*AdminHooksRolloutOverrideResponseBody `form:"overrides" json:"overrides" xml:"overrides"`
+	// The most recent pin changes, newest first.
+	RecentChanges []*AdminHooksRolloutChangeResponseBody `form:"recent_changes" json:"recent_changes" xml:"recent_changes"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -28016,6 +28118,764 @@ type ClearOrganizationHooksRolloutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// StartHooksRolloutStageUnauthorizedResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "unauthorized" error.
+type StartHooksRolloutStageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageForbiddenResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "forbidden" error.
+type StartHooksRolloutStageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageBadRequestResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "bad_request" error.
+type StartHooksRolloutStageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageNotFoundResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "not_found" error.
+type StartHooksRolloutStageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageConflictResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "conflict" error.
+type StartHooksRolloutStageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageUnsupportedMediaResponseBody is the type of the
+// "admin" service "startHooksRolloutStage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type StartHooksRolloutStageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageInvalidResponseBody is the type of the "admin" service
+// "startHooksRolloutStage" endpoint HTTP response body for the "invalid" error.
+type StartHooksRolloutStageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageInvariantViolationResponseBody is the type of the
+// "admin" service "startHooksRolloutStage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type StartHooksRolloutStageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageUnexpectedResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "unexpected" error.
+type StartHooksRolloutStageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartHooksRolloutStageGatewayErrorResponseBody is the type of the "admin"
+// service "startHooksRolloutStage" endpoint HTTP response body for the
+// "gateway_error" error.
+type StartHooksRolloutStageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageUnauthorizedResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "unauthorized" error.
+type PauseHooksRolloutStageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageForbiddenResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "forbidden" error.
+type PauseHooksRolloutStageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageBadRequestResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "bad_request" error.
+type PauseHooksRolloutStageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageNotFoundResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "not_found" error.
+type PauseHooksRolloutStageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageConflictResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "conflict" error.
+type PauseHooksRolloutStageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageUnsupportedMediaResponseBody is the type of the
+// "admin" service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type PauseHooksRolloutStageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageInvalidResponseBody is the type of the "admin" service
+// "pauseHooksRolloutStage" endpoint HTTP response body for the "invalid" error.
+type PauseHooksRolloutStageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageInvariantViolationResponseBody is the type of the
+// "admin" service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type PauseHooksRolloutStageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageUnexpectedResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "unexpected" error.
+type PauseHooksRolloutStageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PauseHooksRolloutStageGatewayErrorResponseBody is the type of the "admin"
+// service "pauseHooksRolloutStage" endpoint HTTP response body for the
+// "gateway_error" error.
+type PauseHooksRolloutStageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageUnauthorizedResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "unauthorized" error.
+type ResumeHooksRolloutStageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageForbiddenResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "forbidden" error.
+type ResumeHooksRolloutStageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageBadRequestResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "bad_request" error.
+type ResumeHooksRolloutStageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageNotFoundResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "not_found" error.
+type ResumeHooksRolloutStageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageConflictResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "conflict" error.
+type ResumeHooksRolloutStageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageUnsupportedMediaResponseBody is the type of the
+// "admin" service "resumeHooksRolloutStage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ResumeHooksRolloutStageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageInvalidResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "invalid" error.
+type ResumeHooksRolloutStageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageInvariantViolationResponseBody is the type of the
+// "admin" service "resumeHooksRolloutStage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ResumeHooksRolloutStageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageUnexpectedResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "unexpected" error.
+type ResumeHooksRolloutStageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeHooksRolloutStageGatewayErrorResponseBody is the type of the "admin"
+// service "resumeHooksRolloutStage" endpoint HTTP response body for the
+// "gateway_error" error.
+type ResumeHooksRolloutStageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageUnauthorizedResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "unauthorized" error.
+type CancelHooksRolloutStageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageForbiddenResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "forbidden" error.
+type CancelHooksRolloutStageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageBadRequestResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "bad_request" error.
+type CancelHooksRolloutStageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageNotFoundResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "not_found" error.
+type CancelHooksRolloutStageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageConflictResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "conflict" error.
+type CancelHooksRolloutStageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageUnsupportedMediaResponseBody is the type of the
+// "admin" service "cancelHooksRolloutStage" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CancelHooksRolloutStageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageInvalidResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "invalid" error.
+type CancelHooksRolloutStageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageInvariantViolationResponseBody is the type of the
+// "admin" service "cancelHooksRolloutStage" endpoint HTTP response body for
+// the "invariant_violation" error.
+type CancelHooksRolloutStageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageUnexpectedResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "unexpected" error.
+type CancelHooksRolloutStageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CancelHooksRolloutStageGatewayErrorResponseBody is the type of the "admin"
+// service "cancelHooksRolloutStage" endpoint HTTP response body for the
+// "gateway_error" error.
+type CancelHooksRolloutStageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -29784,6 +30644,28 @@ type AdminHooksRolloutPinResponseBody struct {
 	SetBy string `form:"set_by" json:"set_by" xml:"set_by"`
 	// When the pin was set.
 	SetAt string `form:"set_at" json:"set_at" xml:"set_at"`
+}
+
+// AdminHooksRolloutStageResponseBody is used to define fields on response body
+// types.
+type AdminHooksRolloutStageResponseBody struct {
+	// Hooks generator version the rollout clears.
+	Version int `form:"version" json:"version" xml:"version"`
+	// Share of organizations on the default pin that the rollout clears, beyond
+	// canary organizations.
+	Percent int `form:"percent" json:"percent" xml:"percent"`
+	// One of running, paused, completed or cancelled. Running and paused rollouts
+	// clear organizations; completed and cancelled ones do not.
+	State string `form:"state" json:"state" xml:"state"`
+	// Why the rollout was paused or cancelled.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Email of the staff operator who made the last change, or
+	// hooks-rollout-schedule when the schedule advanced it.
+	SetBy string `form:"set_by" json:"set_by" xml:"set_by"`
+	// When the last change was made.
+	SetAt string `form:"set_at" json:"set_at" xml:"set_at"`
+	// When a running rollout moves to its next share. Absent unless running.
+	NextAdvanceAt *string `form:"next_advance_at,omitempty" json:"next_advance_at,omitempty" xml:"next_advance_at,omitempty"`
 }
 
 // AdminHooksRolloutOverrideResponseBody is used to define fields on response
@@ -32953,6 +33835,9 @@ func NewGetHooksRolloutResponseBody(res *admin.AdminHooksRollout) *GetHooksRollo
 	if res.DefaultPin != nil {
 		body.DefaultPin = marshalAdminAdminHooksRolloutPinToAdminHooksRolloutPinResponseBody(res.DefaultPin)
 	}
+	if res.Stage != nil {
+		body.Stage = marshalAdminAdminHooksRolloutStageToAdminHooksRolloutStageResponseBody(res.Stage)
+	}
 	if res.CanaryOrganizationSlugs != nil {
 		body.CanaryOrganizationSlugs = make([]string, len(res.CanaryOrganizationSlugs))
 		for i, val := range res.CanaryOrganizationSlugs {
@@ -32996,6 +33881,9 @@ func NewSetHooksRolloutDefaultResponseBody(res *admin.AdminHooksRollout) *SetHoo
 	}
 	if res.DefaultPin != nil {
 		body.DefaultPin = marshalAdminAdminHooksRolloutPinToAdminHooksRolloutPinResponseBody(res.DefaultPin)
+	}
+	if res.Stage != nil {
+		body.Stage = marshalAdminAdminHooksRolloutStageToAdminHooksRolloutStageResponseBody(res.Stage)
 	}
 	if res.CanaryOrganizationSlugs != nil {
 		body.CanaryOrganizationSlugs = make([]string, len(res.CanaryOrganizationSlugs))
@@ -33088,6 +33976,194 @@ func NewClearOrganizationHooksRolloutResponseBody(res *admin.AdminOrganizationHo
 	}
 	if res.DefaultPin != nil {
 		body.DefaultPin = marshalAdminAdminHooksRolloutPinToAdminHooksRolloutPinResponseBody(res.DefaultPin)
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageResponseBody builds the HTTP response body from the
+// result of the "startHooksRolloutStage" endpoint of the "admin" service.
+func NewStartHooksRolloutStageResponseBody(res *admin.AdminHooksRollout) *StartHooksRolloutStageResponseBody {
+	body := &StartHooksRolloutStageResponseBody{
+		CurrentVersion: res.CurrentVersion,
+	}
+	if res.DefaultPin != nil {
+		body.DefaultPin = marshalAdminAdminHooksRolloutPinToAdminHooksRolloutPinResponseBody(res.DefaultPin)
+	}
+	if res.Stage != nil {
+		body.Stage = marshalAdminAdminHooksRolloutStageToAdminHooksRolloutStageResponseBody(res.Stage)
+	}
+	if res.CanaryOrganizationSlugs != nil {
+		body.CanaryOrganizationSlugs = make([]string, len(res.CanaryOrganizationSlugs))
+		for i, val := range res.CanaryOrganizationSlugs {
+			body.CanaryOrganizationSlugs[i] = val
+		}
+	} else {
+		body.CanaryOrganizationSlugs = []string{}
+	}
+	if res.Overrides != nil {
+		body.Overrides = make([]*AdminHooksRolloutOverrideResponseBody, len(res.Overrides))
+		for i, val := range res.Overrides {
+			if val == nil {
+				body.Overrides[i] = nil
+				continue
+			}
+			body.Overrides[i] = marshalAdminAdminHooksRolloutOverrideToAdminHooksRolloutOverrideResponseBody(val)
+		}
+	} else {
+		body.Overrides = []*AdminHooksRolloutOverrideResponseBody{}
+	}
+	if res.RecentChanges != nil {
+		body.RecentChanges = make([]*AdminHooksRolloutChangeResponseBody, len(res.RecentChanges))
+		for i, val := range res.RecentChanges {
+			if val == nil {
+				body.RecentChanges[i] = nil
+				continue
+			}
+			body.RecentChanges[i] = marshalAdminAdminHooksRolloutChangeToAdminHooksRolloutChangeResponseBody(val)
+		}
+	} else {
+		body.RecentChanges = []*AdminHooksRolloutChangeResponseBody{}
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageResponseBody builds the HTTP response body from the
+// result of the "pauseHooksRolloutStage" endpoint of the "admin" service.
+func NewPauseHooksRolloutStageResponseBody(res *admin.AdminHooksRollout) *PauseHooksRolloutStageResponseBody {
+	body := &PauseHooksRolloutStageResponseBody{
+		CurrentVersion: res.CurrentVersion,
+	}
+	if res.DefaultPin != nil {
+		body.DefaultPin = marshalAdminAdminHooksRolloutPinToAdminHooksRolloutPinResponseBody(res.DefaultPin)
+	}
+	if res.Stage != nil {
+		body.Stage = marshalAdminAdminHooksRolloutStageToAdminHooksRolloutStageResponseBody(res.Stage)
+	}
+	if res.CanaryOrganizationSlugs != nil {
+		body.CanaryOrganizationSlugs = make([]string, len(res.CanaryOrganizationSlugs))
+		for i, val := range res.CanaryOrganizationSlugs {
+			body.CanaryOrganizationSlugs[i] = val
+		}
+	} else {
+		body.CanaryOrganizationSlugs = []string{}
+	}
+	if res.Overrides != nil {
+		body.Overrides = make([]*AdminHooksRolloutOverrideResponseBody, len(res.Overrides))
+		for i, val := range res.Overrides {
+			if val == nil {
+				body.Overrides[i] = nil
+				continue
+			}
+			body.Overrides[i] = marshalAdminAdminHooksRolloutOverrideToAdminHooksRolloutOverrideResponseBody(val)
+		}
+	} else {
+		body.Overrides = []*AdminHooksRolloutOverrideResponseBody{}
+	}
+	if res.RecentChanges != nil {
+		body.RecentChanges = make([]*AdminHooksRolloutChangeResponseBody, len(res.RecentChanges))
+		for i, val := range res.RecentChanges {
+			if val == nil {
+				body.RecentChanges[i] = nil
+				continue
+			}
+			body.RecentChanges[i] = marshalAdminAdminHooksRolloutChangeToAdminHooksRolloutChangeResponseBody(val)
+		}
+	} else {
+		body.RecentChanges = []*AdminHooksRolloutChangeResponseBody{}
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageResponseBody builds the HTTP response body from
+// the result of the "resumeHooksRolloutStage" endpoint of the "admin" service.
+func NewResumeHooksRolloutStageResponseBody(res *admin.AdminHooksRollout) *ResumeHooksRolloutStageResponseBody {
+	body := &ResumeHooksRolloutStageResponseBody{
+		CurrentVersion: res.CurrentVersion,
+	}
+	if res.DefaultPin != nil {
+		body.DefaultPin = marshalAdminAdminHooksRolloutPinToAdminHooksRolloutPinResponseBody(res.DefaultPin)
+	}
+	if res.Stage != nil {
+		body.Stage = marshalAdminAdminHooksRolloutStageToAdminHooksRolloutStageResponseBody(res.Stage)
+	}
+	if res.CanaryOrganizationSlugs != nil {
+		body.CanaryOrganizationSlugs = make([]string, len(res.CanaryOrganizationSlugs))
+		for i, val := range res.CanaryOrganizationSlugs {
+			body.CanaryOrganizationSlugs[i] = val
+		}
+	} else {
+		body.CanaryOrganizationSlugs = []string{}
+	}
+	if res.Overrides != nil {
+		body.Overrides = make([]*AdminHooksRolloutOverrideResponseBody, len(res.Overrides))
+		for i, val := range res.Overrides {
+			if val == nil {
+				body.Overrides[i] = nil
+				continue
+			}
+			body.Overrides[i] = marshalAdminAdminHooksRolloutOverrideToAdminHooksRolloutOverrideResponseBody(val)
+		}
+	} else {
+		body.Overrides = []*AdminHooksRolloutOverrideResponseBody{}
+	}
+	if res.RecentChanges != nil {
+		body.RecentChanges = make([]*AdminHooksRolloutChangeResponseBody, len(res.RecentChanges))
+		for i, val := range res.RecentChanges {
+			if val == nil {
+				body.RecentChanges[i] = nil
+				continue
+			}
+			body.RecentChanges[i] = marshalAdminAdminHooksRolloutChangeToAdminHooksRolloutChangeResponseBody(val)
+		}
+	} else {
+		body.RecentChanges = []*AdminHooksRolloutChangeResponseBody{}
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageResponseBody builds the HTTP response body from
+// the result of the "cancelHooksRolloutStage" endpoint of the "admin" service.
+func NewCancelHooksRolloutStageResponseBody(res *admin.AdminHooksRollout) *CancelHooksRolloutStageResponseBody {
+	body := &CancelHooksRolloutStageResponseBody{
+		CurrentVersion: res.CurrentVersion,
+	}
+	if res.DefaultPin != nil {
+		body.DefaultPin = marshalAdminAdminHooksRolloutPinToAdminHooksRolloutPinResponseBody(res.DefaultPin)
+	}
+	if res.Stage != nil {
+		body.Stage = marshalAdminAdminHooksRolloutStageToAdminHooksRolloutStageResponseBody(res.Stage)
+	}
+	if res.CanaryOrganizationSlugs != nil {
+		body.CanaryOrganizationSlugs = make([]string, len(res.CanaryOrganizationSlugs))
+		for i, val := range res.CanaryOrganizationSlugs {
+			body.CanaryOrganizationSlugs[i] = val
+		}
+	} else {
+		body.CanaryOrganizationSlugs = []string{}
+	}
+	if res.Overrides != nil {
+		body.Overrides = make([]*AdminHooksRolloutOverrideResponseBody, len(res.Overrides))
+		for i, val := range res.Overrides {
+			if val == nil {
+				body.Overrides[i] = nil
+				continue
+			}
+			body.Overrides[i] = marshalAdminAdminHooksRolloutOverrideToAdminHooksRolloutOverrideResponseBody(val)
+		}
+	} else {
+		body.Overrides = []*AdminHooksRolloutOverrideResponseBody{}
+	}
+	if res.RecentChanges != nil {
+		body.RecentChanges = make([]*AdminHooksRolloutChangeResponseBody, len(res.RecentChanges))
+		for i, val := range res.RecentChanges {
+			if val == nil {
+				body.RecentChanges[i] = nil
+				continue
+			}
+			body.RecentChanges[i] = marshalAdminAdminHooksRolloutChangeToAdminHooksRolloutChangeResponseBody(val)
+		}
+	} else {
+		body.RecentChanges = []*AdminHooksRolloutChangeResponseBody{}
 	}
 	return body
 }
@@ -52348,6 +53424,606 @@ func NewClearOrganizationHooksRolloutGatewayErrorResponseBody(res *goa.ServiceEr
 	return body
 }
 
+// NewStartHooksRolloutStageUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "startHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewStartHooksRolloutStageUnauthorizedResponseBody(res *goa.ServiceError) *StartHooksRolloutStageUnauthorizedResponseBody {
+	body := &StartHooksRolloutStageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageForbiddenResponseBody builds the HTTP response body
+// from the result of the "startHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewStartHooksRolloutStageForbiddenResponseBody(res *goa.ServiceError) *StartHooksRolloutStageForbiddenResponseBody {
+	body := &StartHooksRolloutStageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageBadRequestResponseBody builds the HTTP response
+// body from the result of the "startHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewStartHooksRolloutStageBadRequestResponseBody(res *goa.ServiceError) *StartHooksRolloutStageBadRequestResponseBody {
+	body := &StartHooksRolloutStageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageNotFoundResponseBody builds the HTTP response body
+// from the result of the "startHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewStartHooksRolloutStageNotFoundResponseBody(res *goa.ServiceError) *StartHooksRolloutStageNotFoundResponseBody {
+	body := &StartHooksRolloutStageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageConflictResponseBody builds the HTTP response body
+// from the result of the "startHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewStartHooksRolloutStageConflictResponseBody(res *goa.ServiceError) *StartHooksRolloutStageConflictResponseBody {
+	body := &StartHooksRolloutStageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "startHooksRolloutStage" endpoint of
+// the "admin" service.
+func NewStartHooksRolloutStageUnsupportedMediaResponseBody(res *goa.ServiceError) *StartHooksRolloutStageUnsupportedMediaResponseBody {
+	body := &StartHooksRolloutStageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageInvalidResponseBody builds the HTTP response body
+// from the result of the "startHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewStartHooksRolloutStageInvalidResponseBody(res *goa.ServiceError) *StartHooksRolloutStageInvalidResponseBody {
+	body := &StartHooksRolloutStageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "startHooksRolloutStage" endpoint of
+// the "admin" service.
+func NewStartHooksRolloutStageInvariantViolationResponseBody(res *goa.ServiceError) *StartHooksRolloutStageInvariantViolationResponseBody {
+	body := &StartHooksRolloutStageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageUnexpectedResponseBody builds the HTTP response
+// body from the result of the "startHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewStartHooksRolloutStageUnexpectedResponseBody(res *goa.ServiceError) *StartHooksRolloutStageUnexpectedResponseBody {
+	body := &StartHooksRolloutStageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartHooksRolloutStageGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "startHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewStartHooksRolloutStageGatewayErrorResponseBody(res *goa.ServiceError) *StartHooksRolloutStageGatewayErrorResponseBody {
+	body := &StartHooksRolloutStageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "pauseHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewPauseHooksRolloutStageUnauthorizedResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageUnauthorizedResponseBody {
+	body := &PauseHooksRolloutStageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageForbiddenResponseBody builds the HTTP response body
+// from the result of the "pauseHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewPauseHooksRolloutStageForbiddenResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageForbiddenResponseBody {
+	body := &PauseHooksRolloutStageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageBadRequestResponseBody builds the HTTP response
+// body from the result of the "pauseHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewPauseHooksRolloutStageBadRequestResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageBadRequestResponseBody {
+	body := &PauseHooksRolloutStageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageNotFoundResponseBody builds the HTTP response body
+// from the result of the "pauseHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewPauseHooksRolloutStageNotFoundResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageNotFoundResponseBody {
+	body := &PauseHooksRolloutStageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageConflictResponseBody builds the HTTP response body
+// from the result of the "pauseHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewPauseHooksRolloutStageConflictResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageConflictResponseBody {
+	body := &PauseHooksRolloutStageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "pauseHooksRolloutStage" endpoint of
+// the "admin" service.
+func NewPauseHooksRolloutStageUnsupportedMediaResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageUnsupportedMediaResponseBody {
+	body := &PauseHooksRolloutStageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageInvalidResponseBody builds the HTTP response body
+// from the result of the "pauseHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewPauseHooksRolloutStageInvalidResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageInvalidResponseBody {
+	body := &PauseHooksRolloutStageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "pauseHooksRolloutStage" endpoint of
+// the "admin" service.
+func NewPauseHooksRolloutStageInvariantViolationResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageInvariantViolationResponseBody {
+	body := &PauseHooksRolloutStageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageUnexpectedResponseBody builds the HTTP response
+// body from the result of the "pauseHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewPauseHooksRolloutStageUnexpectedResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageUnexpectedResponseBody {
+	body := &PauseHooksRolloutStageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPauseHooksRolloutStageGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "pauseHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewPauseHooksRolloutStageGatewayErrorResponseBody(res *goa.ServiceError) *PauseHooksRolloutStageGatewayErrorResponseBody {
+	body := &PauseHooksRolloutStageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "resumeHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewResumeHooksRolloutStageUnauthorizedResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageUnauthorizedResponseBody {
+	body := &ResumeHooksRolloutStageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageForbiddenResponseBody builds the HTTP response
+// body from the result of the "resumeHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewResumeHooksRolloutStageForbiddenResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageForbiddenResponseBody {
+	body := &ResumeHooksRolloutStageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageBadRequestResponseBody builds the HTTP response
+// body from the result of the "resumeHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewResumeHooksRolloutStageBadRequestResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageBadRequestResponseBody {
+	body := &ResumeHooksRolloutStageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageNotFoundResponseBody builds the HTTP response body
+// from the result of the "resumeHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewResumeHooksRolloutStageNotFoundResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageNotFoundResponseBody {
+	body := &ResumeHooksRolloutStageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageConflictResponseBody builds the HTTP response body
+// from the result of the "resumeHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewResumeHooksRolloutStageConflictResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageConflictResponseBody {
+	body := &ResumeHooksRolloutStageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "resumeHooksRolloutStage" endpoint of
+// the "admin" service.
+func NewResumeHooksRolloutStageUnsupportedMediaResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageUnsupportedMediaResponseBody {
+	body := &ResumeHooksRolloutStageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageInvalidResponseBody builds the HTTP response body
+// from the result of the "resumeHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewResumeHooksRolloutStageInvalidResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageInvalidResponseBody {
+	body := &ResumeHooksRolloutStageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "resumeHooksRolloutStage" endpoint of
+// the "admin" service.
+func NewResumeHooksRolloutStageInvariantViolationResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageInvariantViolationResponseBody {
+	body := &ResumeHooksRolloutStageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageUnexpectedResponseBody builds the HTTP response
+// body from the result of the "resumeHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewResumeHooksRolloutStageUnexpectedResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageUnexpectedResponseBody {
+	body := &ResumeHooksRolloutStageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeHooksRolloutStageGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "resumeHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewResumeHooksRolloutStageGatewayErrorResponseBody(res *goa.ServiceError) *ResumeHooksRolloutStageGatewayErrorResponseBody {
+	body := &ResumeHooksRolloutStageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "cancelHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewCancelHooksRolloutStageUnauthorizedResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageUnauthorizedResponseBody {
+	body := &CancelHooksRolloutStageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageForbiddenResponseBody builds the HTTP response
+// body from the result of the "cancelHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewCancelHooksRolloutStageForbiddenResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageForbiddenResponseBody {
+	body := &CancelHooksRolloutStageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageBadRequestResponseBody builds the HTTP response
+// body from the result of the "cancelHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewCancelHooksRolloutStageBadRequestResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageBadRequestResponseBody {
+	body := &CancelHooksRolloutStageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageNotFoundResponseBody builds the HTTP response body
+// from the result of the "cancelHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewCancelHooksRolloutStageNotFoundResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageNotFoundResponseBody {
+	body := &CancelHooksRolloutStageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageConflictResponseBody builds the HTTP response body
+// from the result of the "cancelHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewCancelHooksRolloutStageConflictResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageConflictResponseBody {
+	body := &CancelHooksRolloutStageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "cancelHooksRolloutStage" endpoint of
+// the "admin" service.
+func NewCancelHooksRolloutStageUnsupportedMediaResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageUnsupportedMediaResponseBody {
+	body := &CancelHooksRolloutStageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageInvalidResponseBody builds the HTTP response body
+// from the result of the "cancelHooksRolloutStage" endpoint of the "admin"
+// service.
+func NewCancelHooksRolloutStageInvalidResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageInvalidResponseBody {
+	body := &CancelHooksRolloutStageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "cancelHooksRolloutStage" endpoint of
+// the "admin" service.
+func NewCancelHooksRolloutStageInvariantViolationResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageInvariantViolationResponseBody {
+	body := &CancelHooksRolloutStageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageUnexpectedResponseBody builds the HTTP response
+// body from the result of the "cancelHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewCancelHooksRolloutStageUnexpectedResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageUnexpectedResponseBody {
+	body := &CancelHooksRolloutStageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCancelHooksRolloutStageGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "cancelHooksRolloutStage" endpoint of the
+// "admin" service.
+func NewCancelHooksRolloutStageGatewayErrorResponseBody(res *goa.ServiceError) *CancelHooksRolloutStageGatewayErrorResponseBody {
+	body := &CancelHooksRolloutStageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -54008,6 +55684,48 @@ func NewClearOrganizationHooksRolloutPayload(body *ClearOrganizationHooksRollout
 	return v
 }
 
+// NewStartHooksRolloutStagePayload builds a admin service
+// startHooksRolloutStage endpoint payload.
+func NewStartHooksRolloutStagePayload(body *StartHooksRolloutStageRequestBody, adminSessionToken *string) *admin.StartHooksRolloutStagePayload {
+	v := &admin.StartHooksRolloutStagePayload{
+		Version: *body.Version,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewPauseHooksRolloutStagePayload builds a admin service
+// pauseHooksRolloutStage endpoint payload.
+func NewPauseHooksRolloutStagePayload(body *PauseHooksRolloutStageRequestBody, adminSessionToken *string) *admin.PauseHooksRolloutStagePayload {
+	v := &admin.PauseHooksRolloutStagePayload{
+		Reason: *body.Reason,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewResumeHooksRolloutStagePayload builds a admin service
+// resumeHooksRolloutStage endpoint payload.
+func NewResumeHooksRolloutStagePayload(adminSessionToken *string) *admin.ResumeHooksRolloutStagePayload {
+	v := &admin.ResumeHooksRolloutStagePayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewCancelHooksRolloutStagePayload builds a admin service
+// cancelHooksRolloutStage endpoint payload.
+func NewCancelHooksRolloutStagePayload(body *CancelHooksRolloutStageRequestBody, adminSessionToken *string) *admin.CancelHooksRolloutStagePayload {
+	v := &admin.CancelHooksRolloutStagePayload{
+		Reason: *body.Reason,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -55145,6 +56863,63 @@ func ValidateSetOrganizationHooksRolloutRequestBody(body *SetOrganizationHooksRo
 func ValidateClearOrganizationHooksRolloutRequestBody(body *ClearOrganizationHooksRolloutRequestBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateStartHooksRolloutStageRequestBody runs the validations defined on
+// StartHooksRolloutStageRequestBody
+func ValidateStartHooksRolloutStageRequestBody(body *StartHooksRolloutStageRequestBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Version != nil {
+		if *body.Version < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.version", *body.Version, 1, true))
+		}
+	}
+	if body.Version != nil {
+		if *body.Version > 100000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.version", *body.Version, 100000, false))
+		}
+	}
+	return
+}
+
+// ValidatePauseHooksRolloutStageRequestBody runs the validations defined on
+// PauseHooksRolloutStageRequestBody
+func ValidatePauseHooksRolloutStageRequestBody(body *PauseHooksRolloutStageRequestBody) (err error) {
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1, true))
+		}
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 500, false))
+		}
+	}
+	return
+}
+
+// ValidateCancelHooksRolloutStageRequestBody runs the validations defined on
+// CancelHooksRolloutStageRequestBody
+func ValidateCancelHooksRolloutStageRequestBody(body *CancelHooksRolloutStageRequestBody) (err error) {
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1, true))
+		}
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 500, false))
+		}
 	}
 	return
 }

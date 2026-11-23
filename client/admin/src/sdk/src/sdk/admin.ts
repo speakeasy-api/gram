@@ -106,6 +106,10 @@ import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
 import { adminSetHooksRolloutDefault } from "../funcs/adminSetHooksRolloutDefault.js";
+import { adminStartHooksRolloutStage } from "../funcs/adminStartHooksRolloutStage.js";
+import { adminPauseHooksRolloutStage } from "../funcs/adminPauseHooksRolloutStage.js";
+import { adminResumeHooksRolloutStage } from "../funcs/adminResumeHooksRolloutStage.js";
+import { adminCancelHooksRolloutStage } from "../funcs/adminCancelHooksRolloutStage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetMcpServerScopePin } from "../funcs/adminSetMcpServerScopePin.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
@@ -242,6 +246,9 @@ import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runup
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
 import { SetHooksRolloutDefaultRequestBody } from "../models/components/sethooksrolloutdefaultrequestbody.js";
+import { StartHooksRolloutStageRequestBody } from "../models/components/starthooksrolloutstagerequestbody.js";
+import { PauseHooksRolloutStageRequestBody } from "../models/components/pausehooksrolloutstagerequestbody.js";
+import { CancelHooksRolloutStageRequestBody } from "../models/components/cancelhooksrolloutstagerequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetMcpServerScopePinRequestBody } from "../models/components/setmcpserverscopepinrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
@@ -558,6 +565,72 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminHooksRollout> {
     return unwrapAsync(adminSetHooksRolloutDefault(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * startHooksRolloutStage admin
+   *
+   * @remarks
+   * Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of another version.
+   */
+  async startHooksRolloutStage(
+    request: StartHooksRolloutStageRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminStartHooksRolloutStage(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * pauseHooksRolloutStage admin
+   *
+   * @remarks
+   * Holds a running staged rollout at its current share. Organizations it already cleared keep the new version.
+   */
+  async pauseHooksRolloutStage(
+    request: PauseHooksRolloutStageRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminPauseHooksRolloutStage(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * resumeHooksRolloutStage admin
+   *
+   * @remarks
+   * Restarts a paused staged rollout. The day at the current share starts over.
+   */
+  async resumeHooksRolloutStage(
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminResumeHooksRolloutStage(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * cancelHooksRolloutStage admin
+   *
+   * @remarks
+   * Ends a staged rollout. Organizations it cleared go back to the default pin; hooks plugins already published are not downgraded.
+   */
+  async cancelHooksRolloutStage(
+    request: CancelHooksRolloutStageRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminHooksRollout> {
+    return unwrapAsync(adminCancelHooksRolloutStage(
       this,
       request,
       options,

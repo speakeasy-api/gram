@@ -12,8 +12,8 @@ import (
 const maxHooksRolloutVersion = 100000
 
 var AdminHooksRolloutSource = Type("AdminHooksRolloutSource", String, func() {
-	Description("What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.")
-	Enum("canary", "organization", "default", "legacy_flag")
+	Description("What decides an organization's hooks version: canary organizations always get the current version, organization and default name the pin that applies, stage means a staged rollout has cleared the organization, and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag decides.")
+	Enum("canary", "organization", "stage", "default", "legacy_flag")
 })
 
 var AdminHooksRolloutPin = Type("AdminHooksRolloutPin", func() {
@@ -46,12 +46,26 @@ var AdminHooksRolloutChange = Type("AdminHooksRolloutChange", func() {
 	Attribute("set_at", String, "When the change was made.", func() { Format(FormatDateTime) })
 })
 
+var AdminHooksRolloutStage = Type("AdminHooksRolloutStage", func() {
+	Description("The latest staged hooks rollout. A running rollout clears a growing share of the organizations that follow the default pin, moving to the next share each day, and moves the default pin when it reaches 100 percent.")
+	Required("version", "percent", "state", "set_by", "set_at")
+
+	Attribute("version", Int, "Hooks generator version the rollout clears.")
+	Attribute("percent", Int, "Share of organizations on the default pin that the rollout clears, beyond canary organizations.")
+	Attribute("state", String, "One of running, paused, completed or cancelled. Running and paused rollouts clear organizations; completed and cancelled ones do not.")
+	Attribute("reason", String, "Why the rollout was paused or cancelled.")
+	Attribute("set_by", String, "Email of the staff operator who made the last change, or hooks-rollout-schedule when the schedule advanced it.")
+	Attribute("set_at", String, "When the last change was made.", func() { Format(FormatDateTime) })
+	Attribute("next_advance_at", String, "When a running rollout moves to its next share. Absent unless running.", func() { Format(FormatDateTime) })
+})
+
 var AdminHooksRollout = Type("AdminHooksRollout", func() {
 	Description("Platform-wide hooks version rollout state.")
 	Required("current_version", "canary_organization_slugs", "overrides", "recent_changes")
 
 	Attribute("current_version", Int, "The hooks generator version this server build publishes to an organization once its pin reaches it.")
 	Attribute("default_pin", AdminHooksRolloutPin, "The pin for every organization without an override. Absent until one is set; until then those organizations follow the legacy hooks-rollout PostHog flag.")
+	Attribute("stage", AdminHooksRolloutStage, "The latest staged rollout. Absent when none was ever started.")
 	Attribute("canary_organization_slugs", ArrayOf(String), "Organizations that always receive current_version and ignore pins.")
 	Attribute("overrides", ArrayOf(AdminHooksRolloutOverride), "Organizations with an override, by slug.")
 	Attribute("recent_changes", ArrayOf(AdminHooksRolloutChange), "The most recent pin changes, newest first.")
@@ -71,10 +85,11 @@ var AdminOrganizationHooksRollout = Type("AdminOrganizationHooksRollout", func()
 })
 
 // MCP parity: get_hooks_rollout and get_organization_hooks_rollout expose the
-// reads to Staff Admin MCP. The writes are deliberately dashboard-only: moving
-// the default pin changes the hooks plugin of every customer organization at
-// once, which does not fit the Admin MCP proposal flow's single-organization
-// targeting, and a release step this consequential stays a human action.
+// reads to Staff Admin MCP, including the staged rollout. The writes are
+// deliberately dashboard-only: moving the default pin or a staged rollout
+// changes the hooks plugin of many customer organizations at once, which does
+// not fit the Admin MCP proposal flow's single-organization targeting, and a
+// release step this consequential stays a human action.
 func hooksRolloutMethods() {
 	Method("getHooksRollout", func() {
 		Description("Returns the platform-wide hooks version rollout state: the version this build publishes, the default pin, canary organizations, organization overrides and recent changes.")
@@ -158,5 +173,74 @@ func hooksRolloutMethods() {
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "adminClearOrganizationHooksRollout")
+	})
+	Method("startHooksRolloutStage", func() {
+		Description("Starts a staged rollout of a hooks version newer than the default pin. It clears canary organizations first, then 25 percent of organizations on the default pin a day later, then moves the default pin a day after that. Replaces an active rollout of another version.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Meta("openapi:typename", "StartHooksRolloutStageRequestBody")
+			Required("version")
+			Attribute("version", Int, "Hooks generator version to roll out. Must be above the default pin and not exceed the version this build publishes.", func() {
+				Minimum(1)
+				Maximum(maxHooksRolloutVersion)
+			})
+		})
+		Result(AdminHooksRollout)
+		HTTP(func() {
+			POST("/admin/hooksRollout.startStage")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminStartHooksRolloutStage")
+	})
+
+	Method("pauseHooksRolloutStage", func() {
+		Description("Holds a running staged rollout at its current share. Organizations it already cleared keep the new version.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Meta("openapi:typename", "PauseHooksRolloutStageRequestBody")
+			Required("reason")
+			Attribute("reason", String, "Why, recorded with the change.", func() {
+				MinLength(1)
+				MaxLength(500)
+			})
+		})
+		Result(AdminHooksRollout)
+		HTTP(func() {
+			POST("/admin/hooksRollout.pauseStage")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminPauseHooksRolloutStage")
+	})
+
+	Method("resumeHooksRolloutStage", func() {
+		Description("Restarts a paused staged rollout. The day at the current share starts over.")
+		Payload(func() {
+			security.AdminAuthPayload()
+		})
+		Result(AdminHooksRollout)
+		HTTP(func() {
+			POST("/admin/hooksRollout.resumeStage")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminResumeHooksRolloutStage")
+	})
+
+	Method("cancelHooksRolloutStage", func() {
+		Description("Ends a staged rollout. Organizations it cleared go back to the default pin; hooks plugins already published are not downgraded.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Meta("openapi:typename", "CancelHooksRolloutStageRequestBody")
+			Required("reason")
+			Attribute("reason", String, "Why, recorded with the change.", func() {
+				MinLength(1)
+				MaxLength(500)
+			})
+		})
+		Result(AdminHooksRollout)
+		HTTP(func() {
+			POST("/admin/hooksRollout.cancelStage")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminCancelHooksRolloutStage")
 	})
 }

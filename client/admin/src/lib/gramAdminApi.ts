@@ -946,9 +946,26 @@ export type AdminHooksRolloutChange = {
   set_at: string;
 };
 
+export type AdminHooksRolloutStageState =
+  | "running"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+export type AdminHooksRolloutStage = {
+  version: number;
+  percent: number;
+  state: AdminHooksRolloutStageState;
+  reason?: string;
+  set_by: string;
+  set_at: string;
+  next_advance_at?: string;
+};
+
 export type AdminHooksRollout = {
   current_version: number;
   default_pin?: AdminHooksRolloutPin;
+  stage?: AdminHooksRolloutStage;
   canary_organization_slugs: string[];
   overrides: AdminHooksRolloutOverride[];
   recent_changes: AdminHooksRolloutChange[];
@@ -957,6 +974,7 @@ export type AdminHooksRollout = {
 export type AdminHooksRolloutSource =
   | "canary"
   | "organization"
+  | "stage"
   | "default"
   | "legacy_flag";
 
@@ -985,6 +1003,48 @@ export function setHooksRolloutDefault(
       body: JSON.stringify({ version }),
     },
   );
+}
+
+function hooksRolloutStageMutation(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<AdminHooksRollout> {
+  return gramAdminMutation<AdminHooksRollout>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function startHooksRolloutStage(
+  version: number,
+): Promise<AdminHooksRollout> {
+  return hooksRolloutStageMutation("/admin/hooksRollout.startStage", {
+    version,
+  });
+}
+
+export function pauseHooksRolloutStage(
+  reason: string,
+): Promise<AdminHooksRollout> {
+  return hooksRolloutStageMutation("/admin/hooksRollout.pauseStage", {
+    reason,
+  });
+}
+
+export function resumeHooksRolloutStage(): Promise<AdminHooksRollout> {
+  return gramAdminMutation<AdminHooksRollout>(
+    "/admin/hooksRollout.resumeStage",
+    { method: "POST" },
+  );
+}
+
+export function cancelHooksRolloutStage(
+  reason: string,
+): Promise<AdminHooksRollout> {
+  return hooksRolloutStageMutation("/admin/hooksRollout.cancelStage", {
+    reason,
+  });
 }
 
 export function getOrganizationHooksRollout(

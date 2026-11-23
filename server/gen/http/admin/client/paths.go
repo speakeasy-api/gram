@@ -646,3 +646,23 @@ func SetOrganizationHooksRolloutAdminPath() string {
 func ClearOrganizationHooksRolloutAdminPath() string {
 	return "/admin/organization.clearHooksRollout"
 }
+
+// StartHooksRolloutStageAdminPath returns the URL path to the admin service startHooksRolloutStage HTTP endpoint.
+func StartHooksRolloutStageAdminPath() string {
+	return "/admin/hooksRollout.startStage"
+}
+
+// PauseHooksRolloutStageAdminPath returns the URL path to the admin service pauseHooksRolloutStage HTTP endpoint.
+func PauseHooksRolloutStageAdminPath() string {
+	return "/admin/hooksRollout.pauseStage"
+}
+
+// ResumeHooksRolloutStageAdminPath returns the URL path to the admin service resumeHooksRolloutStage HTTP endpoint.
+func ResumeHooksRolloutStageAdminPath() string {
+	return "/admin/hooksRollout.resumeStage"
+}
+
+// CancelHooksRolloutStageAdminPath returns the URL path to the admin service cancelHooksRolloutStage HTTP endpoint.
+func CancelHooksRolloutStageAdminPath() string {
+	return "/admin/hooksRollout.cancelStage"
+}

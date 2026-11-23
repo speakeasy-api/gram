@@ -14,6 +14,10 @@ import { renderWithApp } from "@/test/harness";
 const mocks = vi.hoisted(() => ({
   getHooksRollout: vi.fn(),
   setHooksRolloutDefault: vi.fn(),
+  startHooksRolloutStage: vi.fn(),
+  pauseHooksRolloutStage: vi.fn(),
+  resumeHooksRolloutStage: vi.fn(),
+  cancelHooksRolloutStage: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -22,6 +26,10 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     ...actual,
     getHooksRollout: mocks.getHooksRollout,
     setHooksRolloutDefault: mocks.setHooksRolloutDefault,
+    startHooksRolloutStage: mocks.startHooksRolloutStage,
+    pauseHooksRolloutStage: mocks.pauseHooksRolloutStage,
+    resumeHooksRolloutStage: mocks.resumeHooksRolloutStage,
+    cancelHooksRolloutStage: mocks.cancelHooksRolloutStage,
   };
 });
 
@@ -65,6 +73,15 @@ const PINNED: AdminHooksRollout = {
       set_at: "2026-01-01T00:00:00Z",
     },
   ],
+};
+
+const RUNNING: NonNullable<AdminHooksRollout["stage"]> = {
+  version: 46,
+  percent: 25,
+  state: "running",
+  set_by: "hooks-rollout-schedule",
+  set_at: "2026-01-03T00:00:00Z",
+  next_advance_at: "2026-01-04T00:00:00Z",
 };
 
 beforeEach(() => {
@@ -181,5 +198,121 @@ describe("HooksRollout", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+  });
+
+  it("starts a staged rollout only after confirmation", async () => {
+    mocks.getHooksRollout.mockResolvedValue(PINNED);
+    const updated: AdminHooksRollout = { ...PINNED, stage: RUNNING };
+    mocks.startHooksRolloutStage.mockImplementation(async () => {
+      mocks.getHooksRollout.mockResolvedValue(updated);
+      return updated;
+    });
+    await renderWithApp(<HooksRollout />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Start staged rollout" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(mocks.startHooksRolloutStage).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Start rollout" }),
+    );
+    await waitFor(() =>
+      expect(mocks.startHooksRolloutStage).toHaveBeenCalledWith(46),
+    );
+    expect(await screen.findByText("Running")).toBeTruthy();
+  });
+
+  it("refuses to stage a version at or below the default pin", async () => {
+    mocks.getHooksRollout.mockResolvedValue(PINNED);
+    await renderWithApp(<HooksRollout />);
+
+    fireEvent.change(
+      await screen.findByLabelText("Hooks version to roll out"),
+      { target: { value: "44" } },
+    );
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Start staged rollout",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("has nothing to stage when the default pin is current", async () => {
+    mocks.getHooksRollout.mockResolvedValue({
+      ...PINNED,
+      default_pin: { ...PINNED.default_pin!, version: 46 },
+    });
+    await renderWithApp(<HooksRollout />);
+
+    expect(await screen.findByText(/Nothing to roll out/)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Start staged rollout" }),
+    ).toBeNull();
+  });
+
+  it("pauses a running rollout with a reason", async () => {
+    mocks.getHooksRollout.mockResolvedValue({ ...PINNED, stage: RUNNING });
+    const paused: AdminHooksRollout = {
+      ...PINNED,
+      stage: {
+        ...RUNNING,
+        state: "paused",
+        reason: "hooks error alert",
+        next_advance_at: undefined,
+      },
+    };
+    mocks.pauseHooksRolloutStage.mockImplementation(async () => {
+      mocks.getHooksRollout.mockResolvedValue(paused);
+      return paused;
+    });
+    await renderWithApp(<HooksRollout />);
+
+    const pause = (await screen.findByRole("button", {
+      name: "Pause",
+    })) as HTMLButtonElement;
+    expect(pause.disabled).toBe(true);
+    expect(screen.getByText("25%").getAttribute("aria-current")).toBe("step");
+
+    fireEvent.change(
+      screen.getByLabelText("Reason for pausing or cancelling"),
+      { target: { value: "hooks error alert" } },
+    );
+    fireEvent.click(pause);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Pause rollout" }),
+    );
+    await waitFor(() =>
+      expect(mocks.pauseHooksRolloutStage).toHaveBeenCalledWith(
+        "hooks error alert",
+      ),
+    );
+    expect(await screen.findByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(screen.getByText("hooks error alert")).toBeTruthy();
+  });
+
+  it("resumes a paused rollout", async () => {
+    mocks.getHooksRollout.mockResolvedValue({
+      ...PINNED,
+      stage: {
+        ...RUNNING,
+        state: "paused",
+        reason: "alert",
+        next_advance_at: undefined,
+      },
+    });
+    mocks.resumeHooksRolloutStage.mockResolvedValue({
+      ...PINNED,
+      stage: RUNNING,
+    });
+    await renderWithApp(<HooksRollout />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+    await waitFor(() =>
+      expect(mocks.resumeHooksRolloutStage).toHaveBeenCalled(),
+    );
   });
 });

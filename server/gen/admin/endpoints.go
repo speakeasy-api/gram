@@ -145,6 +145,10 @@ type Endpoints struct {
 	GetOrganizationHooksRollout             goa.Endpoint
 	SetOrganizationHooksRollout             goa.Endpoint
 	ClearOrganizationHooksRollout           goa.Endpoint
+	StartHooksRolloutStage                  goa.Endpoint
+	PauseHooksRolloutStage                  goa.Endpoint
+	ResumeHooksRolloutStage                 goa.Endpoint
+	CancelHooksRolloutStage                 goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -298,6 +302,10 @@ func NewEndpoints(s Service) *Endpoints {
 		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
 		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
 		ClearOrganizationHooksRollout:           NewClearOrganizationHooksRolloutEndpoint(s, a.APIKeyAuth),
+		StartHooksRolloutStage:                  NewStartHooksRolloutStageEndpoint(s, a.APIKeyAuth),
+		PauseHooksRolloutStage:                  NewPauseHooksRolloutStageEndpoint(s, a.APIKeyAuth),
+		ResumeHooksRolloutStage:                 NewResumeHooksRolloutStageEndpoint(s, a.APIKeyAuth),
+		CancelHooksRolloutStage:                 NewCancelHooksRolloutStageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -431,6 +439,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetOrganizationHooksRollout = m(e.GetOrganizationHooksRollout)
 	e.SetOrganizationHooksRollout = m(e.SetOrganizationHooksRollout)
 	e.ClearOrganizationHooksRollout = m(e.ClearOrganizationHooksRollout)
+	e.StartHooksRolloutStage = m(e.StartHooksRolloutStage)
+	e.PauseHooksRolloutStage = m(e.PauseHooksRolloutStage)
+	e.ResumeHooksRolloutStage = m(e.ResumeHooksRolloutStage)
+	e.CancelHooksRolloutStage = m(e.CancelHooksRolloutStage)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -3340,5 +3352,97 @@ func NewClearOrganizationHooksRolloutEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.ClearOrganizationHooksRollout(ctx, p)
+	}
+}
+
+// NewStartHooksRolloutStageEndpoint returns an endpoint function that calls
+// the method "startHooksRolloutStage" of service "admin".
+func NewStartHooksRolloutStageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StartHooksRolloutStagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.StartHooksRolloutStage(ctx, p)
+	}
+}
+
+// NewPauseHooksRolloutStageEndpoint returns an endpoint function that calls
+// the method "pauseHooksRolloutStage" of service "admin".
+func NewPauseHooksRolloutStageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PauseHooksRolloutStagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.PauseHooksRolloutStage(ctx, p)
+	}
+}
+
+// NewResumeHooksRolloutStageEndpoint returns an endpoint function that calls
+// the method "resumeHooksRolloutStage" of service "admin".
+func NewResumeHooksRolloutStageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ResumeHooksRolloutStagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ResumeHooksRolloutStage(ctx, p)
+	}
+}
+
+// NewCancelHooksRolloutStageEndpoint returns an endpoint function that calls
+// the method "cancelHooksRolloutStage" of service "admin".
+func NewCancelHooksRolloutStageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CancelHooksRolloutStagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CancelHooksRolloutStage(ctx, p)
 	}
 }

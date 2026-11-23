@@ -464,6 +464,19 @@ type Service interface {
 	// Removes an organization's hooks version override so it follows the default
 	// pin again.
 	ClearOrganizationHooksRollout(context.Context, *ClearOrganizationHooksRolloutPayload) (res *AdminOrganizationHooksRollout, err error)
+	// Starts a staged rollout of a hooks version newer than the default pin. It
+	// clears canary organizations first, then 25 percent of organizations on the
+	// default pin a day later, then moves the default pin a day after that.
+	// Replaces an active rollout of another version.
+	StartHooksRolloutStage(context.Context, *StartHooksRolloutStagePayload) (res *AdminHooksRollout, err error)
+	// Holds a running staged rollout at its current share. Organizations it
+	// already cleared keep the new version.
+	PauseHooksRolloutStage(context.Context, *PauseHooksRolloutStagePayload) (res *AdminHooksRollout, err error)
+	// Restarts a paused staged rollout. The day at the current share starts over.
+	ResumeHooksRolloutStage(context.Context, *ResumeHooksRolloutStagePayload) (res *AdminHooksRollout, err error)
+	// Ends a staged rollout. Organizations it cleared go back to the default pin;
+	// hooks plugins already published are not downgraded.
+	CancelHooksRolloutStage(context.Context, *CancelHooksRolloutStagePayload) (res *AdminHooksRollout, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -486,7 +499,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [128]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout"}
+var MethodNames = [132]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "startHooksRolloutStage", "pauseHooksRolloutStage", "resumeHooksRolloutStage", "cancelHooksRolloutStage"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -934,6 +947,8 @@ type AdminHooksRollout struct {
 	// The pin for every organization without an override. Absent until one is set;
 	// until then those organizations follow the legacy hooks-rollout PostHog flag.
 	DefaultPin *AdminHooksRolloutPin
+	// The latest staged rollout. Absent when none was ever started.
+	Stage *AdminHooksRolloutStage
 	// Organizations that always receive current_version and ignore pins.
 	CanaryOrganizationSlugs []string
 	// Organizations with an override, by slug.
@@ -978,9 +993,32 @@ type AdminHooksRolloutPin struct {
 
 // What decides an organization's hooks version: canary organizations always
 // get the current version, organization and default name the pin that applies,
-// and legacy_flag means no pin applies yet and the hooks-rollout PostHog flag
-// decides.
+// stage means a staged rollout has cleared the organization, and legacy_flag
+// means no pin applies yet and the hooks-rollout PostHog flag decides.
 type AdminHooksRolloutSource string
+
+// The latest staged hooks rollout. A running rollout clears a growing share of
+// the organizations that follow the default pin, moving to the next share each
+// day, and moves the default pin when it reaches 100 percent.
+type AdminHooksRolloutStage struct {
+	// Hooks generator version the rollout clears.
+	Version int
+	// Share of organizations on the default pin that the rollout clears, beyond
+	// canary organizations.
+	Percent int
+	// One of running, paused, completed or cancelled. Running and paused rollouts
+	// clear organizations; completed and cancelled ones do not.
+	State string
+	// Why the rollout was paused or cancelled.
+	Reason *string
+	// Email of the staff operator who made the last change, or
+	// hooks-rollout-schedule when the schedule advanced it.
+	SetBy string
+	// When the last change was made.
+	SetAt string
+	// When a running rollout moves to its next share. Absent unless running.
+	NextAdvanceAt *string
+}
 
 // One (organization, day, surface) cell of the inference hook grid.
 type AdminInferenceHookCell struct {
@@ -2577,6 +2615,14 @@ type CallbackResult struct {
 	SessionID string
 }
 
+// CancelHooksRolloutStagePayload is the payload type of the admin service
+// cancelHooksRolloutStage method.
+type CancelHooksRolloutStagePayload struct {
+	AdminSessionToken *string
+	// Why, recorded with the change.
+	Reason string
+}
+
 // CancelStripeSubscriptionPayload is the payload type of the admin service
 // cancelStripeSubscription method.
 type CancelStripeSubscriptionPayload struct {
@@ -3731,6 +3777,14 @@ type OpenOrganizationInDashboardPayload struct {
 	OrganizationID    string
 }
 
+// PauseHooksRolloutStagePayload is the payload type of the admin service
+// pauseHooksRolloutStage method.
+type PauseHooksRolloutStagePayload struct {
+	AdminSessionToken *string
+	// Why, recorded with the change.
+	Reason string
+}
+
 type ProductFeatureName string
 
 // ProductFeatures is the result type of the admin service
@@ -3880,6 +3934,12 @@ type RepairInferenceKeyPayload struct {
 type RepairOrganizationAssistantAgentNamesPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// ResumeHooksRolloutStagePayload is the payload type of the admin service
+// resumeHooksRolloutStage method.
+type ResumeHooksRolloutStagePayload struct {
+	AdminSessionToken *string
 }
 
 // ResumeStripeSubscriptionPayload is the payload type of the admin service
@@ -4069,6 +4129,15 @@ type SpendProduct struct {
 	CostUsd string
 	// Dense UTC daily product buckets, including in-progress and future days
 	Buckets []*SpendBucket
+}
+
+// StartHooksRolloutStagePayload is the payload type of the admin service
+// startHooksRolloutStage method.
+type StartHooksRolloutStagePayload struct {
+	AdminSessionToken *string
+	// Hooks generator version to roll out. Must be above the default pin and not
+	// exceed the version this build publishes.
+	Version int
 }
 
 // StartMemoryEvalRunPayload is the payload type of the admin service

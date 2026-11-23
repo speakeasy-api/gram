@@ -96,7 +96,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			workflows = append(workflows, "compare Organizational Memory eval runs: answer model scores by arm on the synthetic demo corpus, with summary and digest model cost")
 		}
 		if hooksRolloutAvailable {
-			workflows = append(workflows, "inspect the hooks version rollout pins and which hooks version an organization is cleared for")
+			workflows = append(workflows, "inspect the hooks version rollout pins, the staged rollout and which hooks version an organization is cleared for")
 		}
 		operations := []WriteOperation{}
 		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil && runtime.writes.writes.Enabled {

@@ -24,15 +24,45 @@ The version an organization can receive is decided, in this order, by:
 2. **Override**: an organization's own pin, when it has one. It wins over the
    default in both directions, so it can hold an organization back or roll a
    release out to it early.
-3. **Default pin**: the platform-wide pin for every other organization.
-4. **Legacy flag**: until a default pin is set, organizations without an
+3. **Staged rollout**: while a staged rollout is running or paused, it clears a
+   share of the organizations on the default pin for its version. See
+   [Roll out in stages](#roll-out-in-stages).
+4. **Default pin**: the platform-wide pin for every other organization.
+5. **Legacy flag**: until a default pin is set, organizations without an
    override still follow the payload of the `hooks-rollout` PostHog flag. See
    [Cutover from PostHog](#cutover-from-posthog).
 
 Pins are managed in the admin dashboard. Every change records who made it and
 when, and the last 25 changes are listed on the **Hooks rollout** page.
 
-## Roll out a new hooks version to every customer
+## Roll out in stages
+
+This is the default way to ship a hooks release.
+
+1. Check that the hooks release is deployed: **Current hooks version** on the
+   **Hooks rollout** page (`/hooks-rollout`) shows the new version.
+2. Under **Staged rollout**, enter the current hooks version and click **Start
+   staged rollout**. Confirm the dialog. The version must be above the default
+   pin.
+3. The rollout then moves on its own, checked hourly:
+   - **Canary**: only canary organizations, for 24 hours.
+   - **25%**: a fixed quarter of the organizations on the default pin, picked
+     by a hash of the organization ID, for 24 hours.
+   - **100%**: the default pin moves to the new version and the rollout is
+     marked completed.
+4. Watch the hooks monitors while it runs. If one fires, enter a reason and
+   click **Pause**. The rollout stays at its current share: organizations it
+   already cleared keep the new version, and no more are added.
+5. Once the cause is fixed, click **Resume**. The 24 hours at the current share
+   start over.
+6. To abandon the release, enter a reason and click **Cancel rollout**.
+   Organizations it cleared go back to the default pin. Hooks plugins already
+   published are not downgraded; ship a fix as the next version.
+
+Organization overrides are not affected by a staged rollout. The stage changes
+made by the schedule are recorded with `hooks-rollout-schedule` as the actor.
+
+## Roll out a new hooks version to every customer at once
 
 1. Check that the hooks release is deployed. Open the admin dashboard and go to
    **Platform Management** → **Hooks rollout** (`/hooks-rollout`). **Current
@@ -69,7 +99,9 @@ one to clear an override left from before.
 
 ## Hold back a release
 
-Leave the default pin where it is. Organizations without an override stay at
+If a staged rollout is running, pause or cancel it first (see
+[Roll out in stages](#roll-out-in-stages)). Otherwise, leave the default pin
+where it is. Organizations without an override stay at
 or below it, whatever the current hooks version is. To stop a release that has
 already started rolling out, set the default pin back to the previous version:
 organizations that have not been republished yet stay on their current hooks

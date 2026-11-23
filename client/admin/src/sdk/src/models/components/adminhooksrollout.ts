@@ -19,6 +19,10 @@ import {
   AdminHooksRolloutPin,
   AdminHooksRolloutPin$inboundSchema,
 } from "./adminhooksrolloutpin.js";
+import {
+  AdminHooksRolloutStage,
+  AdminHooksRolloutStage$inboundSchema,
+} from "./adminhooksrolloutstage.js";
 
 /**
  * Platform-wide hooks version rollout state.
@@ -44,6 +48,10 @@ export type AdminHooksRollout = {
    * The most recent pin changes, newest first.
    */
   recentChanges: Array<AdminHooksRolloutChange>;
+  /**
+   * The latest staged hooks rollout. A running rollout clears a growing share of the organizations that follow the default pin, moving to the next share each day, and moves the default pin when it reaches 100 percent.
+   */
+  stage?: AdminHooksRolloutStage | undefined;
 };
 
 /** @internal */
@@ -57,6 +65,7 @@ export const AdminHooksRollout$inboundSchema: z.ZodMiniType<
     default_pin: z.optional(AdminHooksRolloutPin$inboundSchema),
     overrides: z.array(AdminHooksRolloutOverride$inboundSchema),
     recent_changes: z.array(AdminHooksRolloutChange$inboundSchema),
+    stage: z.optional(AdminHooksRolloutStage$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
