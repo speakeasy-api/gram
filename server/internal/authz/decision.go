@@ -49,7 +49,7 @@ func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error)
 		d, err := q.decide(check)
 		if err != nil {
 			if q.enforced {
-				focus := check
+				focus := invalidPart(check)
 				e.recordBatch(ctx, q, result.Each, &focus)
 			}
 			return Decisions{AllAllowed: false, Each: nil}, e.mapError(ctx, err)
@@ -280,4 +280,15 @@ func allowedPlainChecks(decided []Decision) []Check {
 		}
 	}
 	return allowed
+}
+
+// invalidPart names the alternative that failed validation when an AnyOf
+// check is invalid, so the challenge row points at the check to fix.
+func invalidPart(check Check) Check {
+	for _, alternative := range check.anyOf {
+		if validateInput(alternative) != nil {
+			return alternative
+		}
+	}
+	return check
 }

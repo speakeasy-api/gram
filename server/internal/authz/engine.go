@@ -296,7 +296,8 @@ func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, exp
 		d, err := q.decide(check)
 		if err != nil {
 			if q.enforced {
-				row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, &check, nil
+				focus := invalidPart(check)
+				row.Outcome, row.Reason, row.Focus, row.Matches = authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, &focus, nil
 				row.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 			}
 			return e.mapError(ctx, err)
