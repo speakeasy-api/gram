@@ -671,6 +671,7 @@ const ROUTE_STRUCTURE = {
     title: "Costs",
     url: "costs",
     icon: "credit-card",
+    stage: "preview",
     subPages: {
       // Catch-all so the drill path (`/costs/Division~R&D/Department~Eng/…`)
       // renders the same explorer at any depth. CostsExplorer reads the drill
