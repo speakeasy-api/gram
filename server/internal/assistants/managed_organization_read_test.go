@@ -4,8 +4,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -146,8 +153,20 @@ func TestRepairManagedCeilingsAtTurnStart(t *testing.T) {
 	require.Equal(t, map[string]int{string(authz.ScopeOrgRead): 1}, ceilings(managedAgent))
 
 	want := map[string]int{string(authz.ScopeOrgRead): 1, string(authz.ScopeProjectRead): 1}
-	core.repairManagedCeilings(ctx, managed)
+	// Turn start runs the repair before anything else. The empty thread, event
+	// and identity fail credential minting afterwards; only the repair matters.
+	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
+	core.assistantTokens = assistanttokens.New("test-jwt-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
+	_, _ = core.mintTurnCredential(ctx, managed, assistantThreadRecord{}, assistantThreadEventRecord{}, turnIdentity{})
 	require.Equal(t, want, ceilings(managedAgent), "the first turn repairs the missing project ceiling")
+	repaired, err := agents.ListAgentPolicyGrants(ctx, agentrepo.ListAgentPolicyGrantsParams{OrganizationID: "org-test", AgentID: managedAgent})
+	require.NoError(t, err)
+	require.True(t, hasManagedCeiling(repaired, authz.NewGrant(authz.ScopeProjectRead, project.String())), "the repaired grant is permanent and covers this project")
+	entry, err := audittest.LatestAuditLogByAction(ctx, db, audit.ActionAgentPolicyGrantCreate)
+	require.NoError(t, err)
+	require.Equal(t, managedCeilingRepairActor.String(), entry.ActorType+":"+entry.ActorID, "the repair is audited as the system repair actor")
 
 	// A second process has not repaired this assistant yet, so it runs the
 	// repair again and adds nothing.
