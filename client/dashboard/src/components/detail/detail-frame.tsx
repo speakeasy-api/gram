@@ -41,6 +41,7 @@ export function DetailFrame({
   tabs,
   activeTab,
   tabsLabel,
+  tabsAside,
   strip,
   fill = false,
   contentRef,
@@ -49,13 +50,16 @@ export function DetailFrame({
   breadcrumbs: {
     substitutions: Record<string, string | undefined>;
     skipSegments?: string[];
+    insertAfter?: { segment: string; display: string; url: string };
   };
-  /** The header band's contents, usually a `DetailHeaderLayout`. */
-  header: ReactNode;
+  /** The header band's contents, usually a `DetailHeaderLayout`; none drops the band. */
+  header?: ReactNode;
   tabs: DetailFrameTab[];
   activeTab: string | undefined;
   /** Names the tab strip for assistive tech, e.g. "Server sections". */
   tabsLabel: string;
+  /** Right-aligned beside the tabs, on the same strip. */
+  tabsAside?: ReactNode;
   /**
    * Replaces the tabs with other contents at the same height, for a page
    * that belongs to the resource but is not one of its tabs (e.g. Setup).
@@ -70,9 +74,25 @@ export function DetailFrame({
   contentRef?: React.Ref<HTMLDivElement>;
   children: ReactNode;
 }): JSX.Element {
-  const headerBand = (
-    <DetailHeaderBand compact={fill}>{header}</DetailHeaderBand>
-  );
+  const headerBand =
+    header == null ? null : (
+      <DetailHeaderBand compact={fill}>{header}</DetailHeaderBand>
+    );
+  const tabLinks = tabs.map((tab) => (
+    <Link
+      key={tab.key}
+      to={tab.href}
+      aria-current={tab.key === activeTab ? "page" : undefined}
+      className={cn(
+        "relative flex h-12 shrink-0 items-center gap-1.5 text-sm transition-colors hover:no-underline",
+        tab.key === activeTab
+          ? "text-foreground font-medium after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-current"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {tab.titleNode ?? tab.title}
+    </Link>
+  ));
   const tabStrip = (
     <nav
       aria-label={tabsLabel}
@@ -85,23 +105,16 @@ export function DetailFrame({
         <div className="mx-auto flex h-12 w-full max-w-[1334px] items-center gap-4 px-4 sm:px-8">
           {strip}
         </div>
+      ) : tabsAside != null ? (
+        <div className="mx-auto flex w-full max-w-[1334px] items-center gap-4 px-4 sm:px-8">
+          <div className="flex min-w-0 flex-1 gap-7 overflow-x-auto">
+            {tabLinks}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">{tabsAside}</div>
+        </div>
       ) : (
         <div className="mx-auto flex w-full max-w-[1334px] gap-7 overflow-x-auto px-4 sm:px-8">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.key}
-              to={tab.href}
-              aria-current={tab.key === activeTab ? "page" : undefined}
-              className={cn(
-                "relative flex h-12 shrink-0 items-center gap-1.5 text-sm transition-colors hover:no-underline",
-                tab.key === activeTab
-                  ? "text-foreground font-medium after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-current"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {tab.titleNode ?? tab.title}
-            </Link>
-          ))}
+          {tabLinks}
         </div>
       )}
     </nav>
@@ -113,6 +126,7 @@ export function DetailFrame({
         <Page.Header.Breadcrumbs
           substitutions={breadcrumbs.substitutions}
           skipSegments={breadcrumbs.skipSegments}
+          insertAfter={breadcrumbs.insertAfter}
         />
       </Page.Header>
 
@@ -239,7 +253,7 @@ export function DetailHeaderTitle({
   below,
   compact = false,
 }: {
-  eyebrow: string;
+  eyebrow: ReactNode;
   name: ReactNode;
   icon?: ReactNode;
   below?: ReactNode;
@@ -308,10 +322,13 @@ export type DetailHeaderControlRow = {
 export function DetailHeaderControls({
   rows,
   compact = false,
+  fitContent = false,
 }: {
   rows: DetailHeaderControlRow[];
   /** Tighter rows on a short screen. */
   compact?: boolean;
+  /** Grows past the fixed width (up to 480px) so a long readout is not cut. */
+  fitContent?: boolean;
 }): JSX.Element | null {
   if (rows.length === 0) return null;
   return (
@@ -322,7 +339,10 @@ export function DetailHeaderControls({
         <div
           key={row.key}
           className={cn(
-            "flex w-full min-w-0 flex-col sm:w-[200px]",
+            "flex w-full min-w-0 flex-col",
+            fitContent
+              ? "sm:w-auto sm:max-w-[480px] sm:min-w-[200px]"
+              : "sm:w-[200px]",
             "gap-1.5",
             compact && "short:gap-1",
           )}
