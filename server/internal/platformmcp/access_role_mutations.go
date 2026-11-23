@@ -337,7 +337,7 @@ func (s *AccessRoleMutationService) admit(ctx context.Context, principal Princip
 	if !organization.WorkosID.Valid || organization.WorkosID.String == "" || organization.Slug == "" {
 		return ResolvedProject{}, "", accessRoleMutationUnavailable(errors.New("organization role provider metadata is unavailable"))
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, feature.OrgProjectGroups(organization.Slug, project.Slug), nil)
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, feature.OrgProjectGroups(organization.Slug, project.Slug))
 	if err != nil || evaluation != feature.EvaluationEnabled {
 		return ResolvedProject{}, "", accessRoleMutationUnavailable(err)
 	}

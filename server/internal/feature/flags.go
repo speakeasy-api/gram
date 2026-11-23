@@ -100,13 +100,16 @@ const (
 	// both surfaces; targeted by organization group (org slug), like
 	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
-	// FlagMCPConnectionHealth gates the MCP connection health pages and API.
-	// Target by organization group (org slug) or by person "email" (see
-	// FlagTarget); API keys never match a person. Fails closed.
-	// Switch to a person condition only after this server is fully deployed,
-	// back to organization before rolling it back; list emails lowercase.
-	// Servers pick up a switch within about a minute: check a listed person and
-	// an unlisted member of a previously enabled organization before calling it done.
+	// FlagMCPConnectionHealth gates the MCP connection health reads (Connection
+	// Logs, sign-in summary, session activity, denied clients). Evaluated
+	// server-side, where every mcpConnectionHealth method answers not found
+	// without it, and by the dashboard under the same key. Target by
+	// organization group (org slug) or by person "email" (lowercase); API keys
+	// never match a person. Switch to people only after this server is fully
+	// deployed, and back before rolling it back; servers follow within about a
+	// minute, so check a listed person and an unlisted member of a previously
+	// enabled organization. Fails closed. A rollout gate, not authorization.
+	// Removed once the pages are GA.
 	FlagMCPConnectionHealth Flag = "mcp-connection-health"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the

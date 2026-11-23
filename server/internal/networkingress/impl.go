@@ -118,7 +118,7 @@ func (s *Service) newIngressRuntime(ctx context.Context, authCtx *contextvalues.
 	if s.features == nil {
 		return pgtype.Text{String: "", Valid: false}
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagPrivateNetworkGateway, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""), nil)
+	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagPrivateNetworkGateway, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 	if err != nil {
 		s.logger.WarnContext(ctx, "evaluate private network gateway flag; using the operator", attr.SlogError(err))
 	}

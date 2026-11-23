@@ -577,7 +577,7 @@ func exploreEnabled(ctx context.Context, flags feature.Provider, organizationID,
 	if organizationSlug == "" {
 		return false, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, flags, feature.FlagExplore, organizationID, feature.OrgProjectGroups(organizationSlug, projectSlug), nil)
+	evaluation, err := feature.EvaluateFlag(ctx, flags, feature.FlagExplore, organizationID, feature.OrgProjectGroups(organizationSlug, projectSlug))
 	if err != nil {
 		return false, fmt.Errorf("%w: evaluate explore flag: %w", ErrUnavailable, err)
 	}

@@ -110,23 +110,19 @@ if (features?.myNewFeatureEnabled) { ... }
 
 In production the SDK caches flag definitions (polled every minute) and evaluates locally, calling PostHog only for conditions it cannot decide from the distinct ID and group keys the server passes; `IsFlagEnabledLocal` never calls out and adds person properties. Expect up to a minute for a flip to land, stale definitions during an outage, and an `Unable to compute flag locally (<key>)` debug line whenever a condition needs data the server does not send.
 
-### Targeting a flag at people
-
-Pass `feature.FlagTarget(ctx, organizationID)`'s distinct ID and person properties to `EvaluateFlag`. It handles sessions and API keys, so a person condition is always decided locally; `mcpconnectionhealth.begin` is the example.
-
 ### Targeting rule for org and project flags
 
-In the PostHog condition set, match by the `organization` group type and target "organization key is one of ..." (stored as `$group_key`); use the `slug` group key for project scope. Never target a group property such as `organization_slug`, a cohort, or person properties, except person properties a caller supplies through `IsFlagEnabledLocal` or `EvaluateFlag`: the server otherwise passes group keys only, so those conditions call PostHog on every evaluation and miss most orgs, in the dashboard too.
+In the PostHog condition set, match by the `organization` group type and target "organization key is one of ..." (stored as `$group_key`); use the `slug` group key for project scope. Never target a group property such as `organization_slug`, a cohort, or person properties, except person properties a caller supplies through `IsFlagEnabledLocal`: the server otherwise passes group keys only, so those conditions call PostHog on every evaluation and miss most orgs, in the dashboard too.
 
 ### Provider surface
 
-| Call                                                                              | Returns             | Use when                                                                           |
-| --------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------- |
-| `IsFlagEnabled(ctx, flag, distinctID, groups)`                                    | `bool, error`       | Plain rollout gate; cannot tell unavailable from off, so handle `err`              |
-| `feature.EvaluateFlag(ctx, provider, flag, distinctID, groups, personProperties)` | `Evaluation, error` | Gates that fail closed; missing key, disabled provider, or error is Indeterminate  |
-| `feature.FlagVariant(ctx, provider, flag, distinctID, groups)`                    | `Variant, error`    | Multivariate flags; map `""` or an error to the pre-rollout behaviour              |
-| `FlagPayload(ctx, flag, distinctID, groups)`                                      | `[]byte, error`     | The flag carries config (e.g. a version pin); `nil` or an error means no clearance |
-| `IsFlagEnabledLocal(ctx, flag, distinctID, groups, personProperties)`             | `bool, error`       | Hot paths that must never call PostHog; inconclusive reads as `false`              |
+| Call                                                                  | Returns             | Use when                                                                           |
+| --------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------- |
+| `IsFlagEnabled(ctx, flag, distinctID, groups)`                        | `bool, error`       | Plain rollout gate; cannot tell unavailable from off, so handle `err`              |
+| `feature.EvaluateFlag(ctx, provider, flag, distinctID, groups)`       | `Evaluation, error` | Gates that fail closed; missing key, disabled provider, or error is Indeterminate  |
+| `feature.FlagVariant(ctx, provider, flag, distinctID, groups)`        | `Variant, error`    | Multivariate flags; map `""` or an error to the pre-rollout behaviour              |
+| `FlagPayload(ctx, flag, distinctID, groups)`                          | `[]byte, error`     | The flag carries config (e.g. a version pin); `nil` or an error means no clearance |
+| `IsFlagEnabledLocal(ctx, flag, distinctID, groups, personProperties)` | `bool, error`       | Hot paths that must never call PostHog; inconclusive reads as `false`              |
 
 Fail closed: treat Indeterminate and errors as "unavailable", never as an explicit off, and never let a flag stand in for RBAC or an entitlement.
 
@@ -150,7 +146,7 @@ const (
 
 ```go
 groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, "")
-evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagMyNewFeature, authCtx.ActiveOrganizationID, groups, nil)
+evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagMyNewFeature, authCtx.ActiveOrganizationID, groups)
 if err != nil {
     s.logger.WarnContext(ctx, "evaluate my-new-feature flag", attr.SlogError(err))
 }

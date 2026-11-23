@@ -87,11 +87,11 @@ func (f failingFlags) IsFlagEnabled(ctx context.Context, flag feature.Flag, dist
 	return f.InMemory.IsFlagEnabled(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
 }
 
-func (f failingFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (feature.Evaluation, error) {
+func (f failingFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
 	if f.fail.Load() {
 		return feature.EvaluationIndeterminate, errProviderDown
 	}
-	return f.InMemory.EvaluateFlag(ctx, flag, distinctID, groups, personProperties) //nolint:wrapcheck // Test double.
+	return f.InMemory.EvaluateFlag(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
 }
 
 // newTestService builds the service for a fresh organization with the

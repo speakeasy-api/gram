@@ -2,7 +2,6 @@ package feature_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,15 +18,15 @@ func TestEvaluateFlagInMemory(t *testing.T) {
 	provider.SetFlag(testFeatureFlag, "enabled", true)
 	provider.SetFlag(testFeatureFlag, "disabled", false)
 
-	enabled, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "enabled", nil, nil)
+	enabled, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "enabled", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationEnabled, enabled)
 
-	disabled, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "disabled", nil, nil)
+	disabled, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "disabled", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationDisabled, disabled)
 
-	missing, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "missing", nil, nil)
+	missing, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "missing", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationIndeterminate, missing)
 }
@@ -43,11 +42,11 @@ func TestInMemoryAnyDistinctIDFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, enabled)
 
-	evaluation, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "anyone", nil, nil)
+	evaluation, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "anyone", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationEnabled, evaluation)
 
-	evaluation, err = feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "opted-out", nil, nil)
+	evaluation, err = feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "opted-out", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationDisabled, evaluation)
 }
@@ -55,53 +54,9 @@ func TestInMemoryAnyDistinctIDFallback(t *testing.T) {
 func TestEvaluateFlagLegacyProviderIsIndeterminate(t *testing.T) {
 	t.Parallel()
 
-	result, err := feature.EvaluateFlag(t.Context(), legacyProvider{}, testFeatureFlag, "organization", nil, nil)
+	result, err := feature.EvaluateFlag(t.Context(), legacyProvider{}, testFeatureFlag, "organization", nil)
 	require.NoError(t, err)
 	require.Equal(t, feature.EvaluationIndeterminate, result)
-}
-
-func TestEvaluateFlagForwardsGroupsAndPersonProperties(t *testing.T) {
-	t.Parallel()
-
-	provider := &recordingEvaluator{}
-	groups := feature.OrgProjectGroups("org", "project")
-	person := map[string]string{"email": "person@example.com"}
-
-	result, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "person@example.com", groups, person)
-	require.NoError(t, err)
-	require.Equal(t, feature.EvaluationEnabled, result)
-	require.Equal(t, "person@example.com", provider.distinctID)
-	require.Equal(t, groups, provider.groups)
-	require.Equal(t, person, provider.personProperties)
-
-	_, err = feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "organization", groups, nil)
-	require.NoError(t, err)
-	require.Nil(t, provider.personProperties)
-
-	provider.err = errors.New("unavailable")
-	result, err = feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "organization", groups, nil)
-	require.Error(t, err)
-	require.Equal(t, feature.EvaluationIndeterminate, result)
-
-	result, err = feature.EvaluateFlag(t.Context(), nil, testFeatureFlag, "organization", groups, person)
-	require.NoError(t, err)
-	require.Equal(t, feature.EvaluationIndeterminate, result)
-}
-
-type recordingEvaluator struct {
-	legacyProvider
-	err              error
-	distinctID       string
-	groups           map[string]string
-	personProperties map[string]string
-}
-
-func (r *recordingEvaluator) EvaluateFlag(_ context.Context, _ feature.Flag, distinctID string, groups, personProperties map[string]string) (feature.Evaluation, error) {
-	r.distinctID, r.groups, r.personProperties = distinctID, groups, personProperties
-	if r.err != nil {
-		return feature.EvaluationIndeterminate, r.err
-	}
-	return feature.EvaluationEnabled, nil
 }
 
 type legacyProvider struct{}

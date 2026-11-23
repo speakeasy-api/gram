@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
@@ -116,13 +115,7 @@ func (s *Service) begin(ctx context.Context) (caller, error) {
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return caller{}, oops.C(oops.CodeUnauthorized)
 	}
-	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	distinctID, person, _ := feature.FlagTarget(ctx, authCtx.ActiveOrganizationID)
-	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagMCPConnectionHealth, distinctID, groups, person)
-	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate mcp connection health flag", attr.SlogError(err))
-	}
-	if evaluation != feature.EvaluationEnabled {
+	if !s.flagOn(ctx, authCtx) {
 		return caller{}, oops.C(oops.CodeNotFound)
 	}
 	return caller{organizationID: authCtx.ActiveOrganizationID, projectID: *authCtx.ProjectID, ownSubjects: nil}, nil

@@ -185,9 +185,8 @@ const (
 
 // EvaluationProvider is implemented by providers that can distinguish an
 // unavailable or inconclusive lookup from an explicit flag result.
-// personProperties is nil unless the distinct ID is a person.
 type EvaluationProvider interface {
-	EvaluateFlag(ctx context.Context, flag Flag, distinctID string, groups, personProperties map[string]string) (Evaluation, error)
+	EvaluateFlag(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (Evaluation, error)
 }
 
 // DefinitionsFreshness is implemented by providers that evaluate flags from
@@ -201,12 +200,12 @@ type DefinitionsFreshness interface {
 // EvaluateFlag returns an indeterminate result for providers that only expose
 // the legacy bool contract. Callers that need a fail-safe carry-forward decision
 // must not treat that legacy false as an explicit disable.
-func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID string, groups, personProperties map[string]string) (Evaluation, error) {
+func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID string, groups map[string]string) (Evaluation, error) {
 	if provider == nil {
 		return EvaluationIndeterminate, nil
 	}
 	if evaluator, ok := provider.(EvaluationProvider); ok {
-		evaluation, err := evaluator.EvaluateFlag(ctx, flag, distinctID, groups, personProperties)
+		evaluation, err := evaluator.EvaluateFlag(ctx, flag, distinctID, groups)
 		if err != nil {
 			return EvaluationIndeterminate, fmt.Errorf("evaluate feature flag %q: %w", flag, err)
 		}
@@ -220,8 +219,7 @@ func (imp *InMemory) FlagDefinitionsConfirmedAt() (time.Time, bool) {
 	return time.Now(), true
 }
 
-// EvaluateFlag matches on distinct ID only.
-func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _, _ map[string]string) (Evaluation, error) {
+func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _ map[string]string) (Evaluation, error) {
 	enabled, ok := imp.loadFlag(flag, distinctID)
 	if !ok {
 		return EvaluationIndeterminate, nil

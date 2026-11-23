@@ -3981,7 +3981,7 @@ func (s *Service) toolApprovalsEnabled(ctx context.Context, authCtx *contextvalu
 		return false
 	}
 	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagToolApprovals, authCtx.ActiveOrganizationID, groups, nil)
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagToolApprovals, authCtx.ActiveOrganizationID, groups)
 	if err != nil {
 		s.logger.WarnContext(ctx, "tool approvals flag check failed; treating as disabled",
 			attr.SlogError(err),

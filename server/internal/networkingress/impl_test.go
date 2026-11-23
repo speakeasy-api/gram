@@ -265,7 +265,7 @@ var _ context.Context
 // outage.
 type failingFlags struct{ feature.InMemory }
 
-func (*failingFlags) EvaluateFlag(context.Context, feature.Flag, string, map[string]string, map[string]string) (feature.Evaluation, error) {
+func (*failingFlags) EvaluateFlag(context.Context, feature.Flag, string, map[string]string) (feature.Evaluation, error) {
 	return feature.EvaluationIndeterminate, errors.New("posthog unavailable")
 }
 

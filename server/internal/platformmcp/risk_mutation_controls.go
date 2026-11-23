@@ -123,7 +123,7 @@ func (c *RiskMutationControls) Admit(ctx context.Context, principal Principal, p
 	if organizationSlug == "" {
 		return ResolvedProject{}, riskMutationUnavailableWithCause(errors.New("organization slug is unavailable"))
 	}
-	evaluation, err := feature.EvaluateFlag(ctx, c.flags, feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug), nil)
+	evaluation, err := feature.EvaluateFlag(ctx, c.flags, feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug))
 	if err != nil {
 		return ResolvedProject{}, riskMutationUnavailableWithCause(err)
 	}

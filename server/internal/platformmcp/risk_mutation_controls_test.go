@@ -35,7 +35,7 @@ func (p *riskMutationFlagProvider) IsFlagEnabledLocal(context.Context, feature.F
 func (p *riskMutationFlagProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
 	return nil, nil
 }
-func (p *riskMutationFlagProvider) EvaluateFlag(_ context.Context, flag feature.Flag, _ string, groups, personProperties map[string]string) (feature.Evaluation, error) {
+func (p *riskMutationFlagProvider) EvaluateFlag(_ context.Context, flag feature.Flag, _ string, groups map[string]string) (feature.Evaluation, error) {
 	p.flag = flag
 	p.groups = groups
 	return p.evaluation, p.err
