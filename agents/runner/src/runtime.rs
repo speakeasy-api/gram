@@ -24,6 +24,7 @@ use serde_json::Value;
 use tokio::sync::OnceCell;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::Instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
@@ -34,7 +35,7 @@ use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{TokenRegistry, build_bootstrap_client, build_http};
 use crate::mcp_actor::{McpCmd, spawn_mcp_actor};
-use crate::telemetry::SpanIdentity;
+use crate::telemetry::{FirstTokenObserver, SpanIdentity};
 use crate::tools;
 use crate::wire::{McpServer, RunnerContent, RunnerContentPart, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
@@ -84,6 +85,11 @@ pub struct QueuedTurn {
     pub input: RunnerContent,
     pub token: String,
     pub mcp_servers: Option<Vec<McpServer>>,
+    /// The span the turn was admitted under (`thread_turn`). The loop parents
+    /// the turn's `assistant.turn` span under it, so one trace covers
+    /// admission through the final answer even though the loop runs on its
+    /// own task.
+    pub span: tracing::Span,
 }
 
 /// Live per-thread state, shared by successive queued turns.
@@ -131,6 +137,7 @@ impl ConfiguredThread {
                 input,
                 token,
                 mcp_servers,
+                span: tracing::Span::current(),
             })
             .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
         *idle = None;
@@ -371,7 +378,9 @@ pub async fn ensure_thread(
             // OnceCell, so worst case is a no-op.
             reap_oldest_idle(host);
             let tokens = TokenRegistry::new(bearer.clone());
-            spawn_thread(host, thread_id.to_string(), bootstrap, tokens).await
+            spawn_thread(host, thread_id.to_string(), bootstrap, tokens)
+                .instrument(tracing::info_span!("runner.spawn_thread"))
+                .await
         })
         .await;
     match result {
@@ -538,6 +547,7 @@ async fn spawn_thread(
         .resources(fs_resources)
         .cancellation(cancellation.handle())
         .observer(TracingReporter::new())
+        .observer(FirstTokenObserver::default())
         .transcript(transcript);
 
     // Register the loop mutator(s): the policy's own compactor (Threshold's
@@ -673,12 +683,22 @@ async fn run_loop<S>(
 where
     S: ModelSession,
 {
+    // Open while a turn is in flight: `assistant.turn`, ended when the driver
+    // reports the turn finished.
+    let mut turn_span: Option<tracing::Span> = None;
     loop {
-        // A fresh root span per driver step (one model call plus its tool
-        // executions) bounds traces and carries the thread id. Speakeasy identity
-        // rides the span processor registered on the tracer provider, which
-        // stamps every exported span.
-        let step_span = tracing::info_span!("agent.step", thread_id = %thread_id);
+        // A span per driver step (one model call plus its tool executions)
+        // carries the thread id. Steps of an admitted turn nest under its
+        // `assistant.turn` span, so one trace covers the whole turn; a step
+        // outside any turn is its own root. Speakeasy identity rides the span
+        // processor registered on the tracer provider, which stamps every
+        // exported span.
+        let step_span = match &turn_span {
+            Some(parent) => {
+                tracing::info_span!(parent: parent, "agent.step", thread_id = %thread_id)
+            }
+            None => tracing::info_span!(parent: None, "agent.step", thread_id = %thread_id),
+        };
         match driver.next().instrument(step_span).await? {
             LoopStep::Finished(turn) => {
                 // A cancelled turn skips turn-end compaction. Compaction is a
@@ -693,7 +713,18 @@ where
                 if turn.finish_reason == FinishReason::Cancelled {
                     tracing::info!(thread_id = %thread_id, "turn cancelled by user");
                 } else if let Some(compactor) = &turn_end_compactor {
-                    compact_at_turn_end(compactor, &driver).await;
+                    let span = match &turn_span {
+                        Some(parent) => {
+                            tracing::info_span!(parent: parent, "runner.turn_end_compaction")
+                        }
+                        None => tracing::info_span!("runner.turn_end_compaction"),
+                    };
+                    compact_at_turn_end(compactor, &driver)
+                        .instrument(span)
+                        .await;
+                }
+                if let Some(span) = turn_span.take() {
+                    span.record("finish_reason", tracing::field::debug(&turn.finish_reason));
                 }
                 let mut idle = idle_since
                     .lock()
@@ -708,12 +739,23 @@ where
                 let Some(turn) = inbox.recv().await else {
                     return Ok("inbox closed");
                 };
+                // Parented under `thread_turn` in OpenTelemetry only. A tracing
+                // parent would keep `thread_turn` open, and its exported end
+                // time late, until this turn finished.
+                let span = tracing::info_span!(
+                    parent: None,
+                    "assistant.turn",
+                    thread_id = %thread_id,
+                    finish_reason = tracing::field::Empty,
+                );
+                let _ = span.set_parent(turn.span.context());
                 if let Some(cmd) = &mcp_cmd {
                     let (reply, ack) = tokio::sync::oneshot::channel();
                     cmd.send(McpCmd::TurnBoundary {
                         token: turn.token,
                         desired: turn.mcp_servers,
                         reply,
+                        parent: span.clone(),
                     })
                     .await
                     .map_err(|_| RunnerError::Loop("MCP actor closed".into()))?;
@@ -726,6 +768,7 @@ where
                 items.extend(drained_into_items(drain(&mut notices)));
                 mark_busy(&idle_since);
                 req.submit(&mut driver, items)?;
+                turn_span = Some(span);
             }
             LoopStep::Interrupt(LoopInterrupt::AfterToolResult(info)) => {
                 let drained = drain(&mut notices);
@@ -1123,6 +1166,7 @@ mod tests {
                 token,
                 desired,
                 reply,
+                ..
             }) = cmd_rx.recv().await
             {
                 boundary_tx.send((token.clone(), desired)).unwrap();
@@ -1141,6 +1185,7 @@ mod tests {
             input: RunnerContent::Text("Alice".into()),
             token: "token-a".into(),
             mcp_servers: None,
+            span: tracing::Span::none(),
         })
         .unwrap();
         let first_boundary = boundaries.recv().await.unwrap();
@@ -1159,6 +1204,7 @@ mod tests {
                 url: "https://example.com/mcp".into(),
                 headers: Default::default(),
             }]),
+            span: tracing::Span::none(),
         })
         .unwrap();
         assert_eq!(tokens.current().unwrap(), "token-a");
@@ -1227,6 +1273,7 @@ mod tests {
             input: RunnerContent::Text("must not run".into()),
             token: "next".into(),
             mcp_servers: None,
+            span: tracing::Span::none(),
         })
         .unwrap();
         let McpCmd::TurnBoundary { reply, .. } = commands.recv().await.unwrap() else {

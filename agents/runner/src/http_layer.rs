@@ -84,9 +84,29 @@ impl Middleware for TokenRegistry {
     }
 }
 
+/// Stamps the current span's W3C trace context on every outbound request.
+/// Runs inside each request's future, so the context is the span the caller
+/// awaited the request under (for example agentkit's `chat` span).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TraceContextMiddleware;
+
+#[async_trait]
+impl Middleware for TraceContextMiddleware {
+    async fn handle(
+        &self,
+        mut req: reqwest::Request,
+        extensions: &mut http::Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<reqwest::Response> {
+        crate::telemetry::inject_current_trace_context(req.headers_mut());
+        next.run(req, extensions).await
+    }
+}
+
 pub fn build_http(client: reqwest::Client, registry: TokenRegistry) -> Http {
     let client = ClientBuilder::new(client)
         .with(retry_middleware())
+        .with(TraceContextMiddleware)
         .with(registry)
         .build();
     Http::new(client)
@@ -103,7 +123,10 @@ fn retry_middleware() -> RetryTransientMiddleware<ExponentialBackoff> {
 /// the management-API bootstrap call so a transient 5xx or network blip does
 /// not strand the VM's first turn for an assistant.
 pub fn build_bootstrap_client(client: reqwest::Client) -> ClientWithMiddleware {
-    ClientBuilder::new(client).with(retry_middleware()).build()
+    ClientBuilder::new(client)
+        .with(retry_middleware())
+        .with(TraceContextMiddleware)
+        .build()
 }
 
 /// `McpHttpClient` impl that sends one fixed bearer for the lifetime of a

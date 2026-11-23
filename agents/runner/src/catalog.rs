@@ -92,6 +92,7 @@ impl ReconnectingTool {
             .send(McpCmd::ReconnectTool {
                 tool_name: self.inner.spec().name.0.clone(),
                 reply: reply_tx,
+                parent: tracing::Span::current(),
             })
             .await
             .map_err(|_| "mcp actor unavailable".to_string())?;
@@ -177,6 +178,7 @@ impl DeferredMcpTool {
             .send(McpCmd::ConnectForTool {
                 tool_name: self.spec.name.0.clone(),
                 reply: reply_tx,
+                parent: tracing::Span::current(),
             })
             .await
             .map_err(|_| "mcp actor unavailable".to_string())?;
