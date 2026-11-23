@@ -429,7 +429,7 @@ func TestOpenKeys_NoneOnAuthClientsBlocksOrRoot(t *testing.T) {
 func TestOpenKeys_ExactCheckOpensNothing(t *testing.T) {
 	t.Parallel()
 
-	probe := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "server-1", Dimensions: nil, exact: false, representedUser: "", probe: true, anyOf: nil, operation: operationDefault}
+	probe := Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: "server-1", Dimensions: nil, exact: false, representedUser: "", probe: true, group: nil, operation: operationDefault}
 	require.True(t, probe.mayOmit(SelectorKeyTool))
 	require.False(t, probe.mayOmit(SelectorKeyProjectID))
 	probe.exact = true

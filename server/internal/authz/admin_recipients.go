@@ -22,15 +22,16 @@ func ResolveOrganizationAdminEmails(ctx context.Context, db repo.DBTX, organizat
 	}
 
 	check := Check{
-		Scope:           ScopeOrgAdmin,
-		ResourceKind:    "",
-		ResourceID:      organizationID,
-		Dimensions:      nil,
-		exact:           false,
-		representedUser: "",
-		probe:           false,
-		anyOf:           nil,
-		operation:       operationDefault,
+		Scope:             ScopeOrgAdmin,
+		ResourceKind:      "",
+		ResourceID:        organizationID,
+		Dimensions:        nil,
+		exact:             false,
+		representedUser:   "",
+		probe:             false,
+		group:             nil,
+		blockRefusesGroup: false,
+		operation:         operationDefault,
 	}
 	type recipient struct {
 		email  string

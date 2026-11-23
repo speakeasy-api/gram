@@ -66,7 +66,7 @@ func MCPAuthClientCheck(clientID string, dims MCPAuthClientDimensions) Check {
 	if dims.UpstreamClient != "" {
 		dimensions[SelectorKeyUpstreamClient] = dims.UpstreamClient
 	}
-	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: clientID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationDefault}
 }
 
 // RequiredCheckDimensions returns the dimensions a check of resourceKind must
@@ -173,7 +173,7 @@ func expressionForCheck(check Check) GrantExpression {
 	return GrantDifference{
 		Base: base,
 		Exclusion: GrantCheck{
-			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, exact: true, representedUser: check.representedUser, probe: false, anyOf: nil, operation: check.operation},
+			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, exact: true, representedUser: check.representedUser, probe: false, group: nil, blockRefusesGroup: false, operation: check.operation},
 			Instance: instance,
 		},
 	}
@@ -189,7 +189,7 @@ type RiskPolicyDimensions struct {
 // servers still matches it: a match places the caller under the policy, so
 // leaving the server out can only apply the policy more widely.
 func RiskPolicyEvaluateCheck(policyID string) Check {
-	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationPolicyAudience}
+	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationPolicyAudience}
 }
 
 // RiskPolicyApplies builds the runtime authorization rule for applying a risk
@@ -225,13 +225,13 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 		}
 		dimensions[SelectorKeyServerIdentity] = dims.ServerIdentity
 	}
-	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, exact: true, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationDefault}
 }
 
 // InferenceExecuteCheck authorizes inference in one project, not chat mutation.
 // It always carries project_id, so a project-bounded grant covers only its project.
 func InferenceExecuteCheck(projectID string) Check {
-	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault}
+	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, exact: false, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationDefault}
 }
 
 // RequirePluginWrite authorizes project-scoped plugin content mutations and
@@ -241,7 +241,7 @@ func InferenceExecuteCheck(projectID string) Check {
 // still win over either allow alternative.
 func (e *Engine) RequirePluginWrite(ctx context.Context, organizationID, projectID string) error {
 	return e.RequireAnyUnblocked(ctx,
-		Check{Scope: ScopePluginWrite, ResourceKind: ResourceKindProject, ResourceID: projectID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
-		Check{Scope: ScopeOrgAdmin, ResourceKind: ResourceKindOrg, ResourceID: organizationID, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
+		Check{Scope: ScopePluginWrite, ResourceKind: ResourceKindProject, ResourceID: projectID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationDefault},
+		Check{Scope: ScopeOrgAdmin, ResourceKind: ResourceKindOrg, ResourceID: organizationID, Dimensions: nil, exact: false, representedUser: "", probe: false, group: nil, blockRefusesGroup: false, operation: operationDefault},
 	)
 }

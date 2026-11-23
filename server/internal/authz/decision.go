@@ -27,7 +27,8 @@ type verdict struct {
 	match       *grantMatch
 	alternative int
 	blocked     []bool
-	// blockedBy is set when a block refused an AnyOf before any alternative
+	// blockedBy is set when a block refused an AnyUnblocked group before any
+	// alternative
 	// was matched.
 	blockedBy *Check
 }
@@ -70,8 +71,8 @@ func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error)
 	}
 	e.reportAuthorizerRefusals(ctx, q.grants, allowedPlainChecks(verdicts), false)
 	for _, v := range verdicts {
-		if v.Allowed && v.check.anyOf != nil {
-			e.reportAuthorizerRefusals(ctx, q.grants, q.grants.allowedAlternatives(v.check.anyOf), true)
+		if v.Allowed && v.check.group != nil {
+			e.reportAuthorizerRefusals(ctx, q.grants, q.grants.allowedAlternatives(v.check.group), true)
 		}
 	}
 	if len(checks) > 0 {
@@ -81,22 +82,22 @@ func (e *Engine) Decide(ctx context.Context, checks ...Check) (Decisions, error)
 }
 
 // Require refuses the request unless the caller satisfies every check. A
-// single AnyOf check is enough when one of its alternatives is allowed and no
-// block refuses any of them. A probe is refused: gating an action needs the
-// concrete resource.
+// single group check is enough when one of its alternatives is allowed and,
+// for AnyUnblocked, no block refuses any of them. A probe is refused: gating
+// an action needs the concrete resource.
 func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
 	}
 	// A check about another organization is refused before anything else,
-	// whether or not RBAC applies to the caller. An AnyOf check leaves out
+	// whether or not RBAC applies to the caller. A group check leaves out
 	// such alternatives when it is decided, so another alternative can pass.
 	if err := validateShape(checks, true); err != nil {
 		return e.mapError(ctx, err)
 	}
 	aboutOther := e.aboutOtherOrganization(ctx)
 	e.logOtherOrganizations(ctx, aboutOther, checks)
-	if other := slices.IndexFunc(checks, func(c Check) bool { return !isAnyOf(c) && aboutOther(c) }); other >= 0 {
+	if other := slices.IndexFunc(checks, func(c Check) bool { return !isGroup(c) && aboutOther(c) }); other >= 0 {
 		return e.mapError(ctx, Denied(checks[other].Scope, checks[other].selector()))
 	}
 	q, err := e.prepare(ctx, checks, true)
@@ -111,7 +112,7 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 // caller lacks.
 func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, explain bool) error {
 	operation := authzrepo.OperationRequire
-	if checks[0].anyOf != nil {
+	if checks[0].group != nil {
 		operation = authzrepo.OperationRequireAny
 	}
 	row := challengeLogger{
@@ -126,7 +127,7 @@ func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, exp
 		FilterAllowedCount:   0,
 	}
 	if operation == authzrepo.OperationRequireAny {
-		row.Checks = checks[0].anyOf
+		row.Checks = checks[0].group
 	}
 	var allowed []verdict
 	for _, check := range checks {
@@ -160,8 +161,8 @@ func (e *Engine) requireAll(ctx context.Context, q question, checks []Check, exp
 		return nil
 	}
 	if operation == authzrepo.OperationRequireAny {
-		e.reportAuthorizerRefusals(ctx, q.grants, q.grants.allowedAlternatives(allowed[0].check.anyOf), true)
-		row.Focus = &allowed[0].check.anyOf[allowed[0].alternative]
+		e.reportAuthorizerRefusals(ctx, q.grants, q.grants.allowedAlternatives(allowed[0].check.group), true)
+		row.Focus = &allowed[0].check.group[allowed[0].alternative]
 	} else {
 		e.reportAuthorizerRefusals(ctx, q.grants, checks, false)
 	}
@@ -178,7 +179,7 @@ type refusal struct {
 
 func (e *Engine) refusal(ctx context.Context, q question, d verdict) refusal {
 	check := d.check
-	if check.anyOf == nil {
+	if check.group == nil {
 		if d.Reason == ReasonBlocked {
 			err := deniedByBlock(check.Scope, check.selector())
 			return refusal{err: err, explained: err, focus: &check}
@@ -188,7 +189,7 @@ func (e *Engine) refusal(ctx context.Context, q question, d verdict) refusal {
 		return refusal{err: err, explained: err, focus: &check}
 	}
 
-	alternatives := check.anyOf
+	alternatives := check.group
 	first := alternatives[0]
 	if d.blockedBy != nil {
 		blocked := d.blockedBy
@@ -241,7 +242,7 @@ func resourceKindBreadth(check Check) int {
 	}
 }
 
-// leastPrivilegedAlternative picks, among the checks a RequireAny offered, the
+// leastPrivilegedAlternative picks, among the alternatives of a group, the
 // one a client should ask to be granted. Alternatives a block refused are left
 // out, since granting them again changes nothing. Of the rest, a scope that
 // satisfies fewer of the other alternatives is narrower, then a scope checked
@@ -290,9 +291,7 @@ func leastPrivilegedAlternative(checks []Check, blocked []bool) (Check, bool) {
 	return best.check, true
 }
 
-// anyOfDecision is the outcome of evaluating alternatives in order, shared by
-// RequireAny and Can(AnyOf(...)) so the two cannot drift apart. Callers add
-// their own challenge logging and result mapping.
+// anyOfDecision is the outcome of evaluating a group's alternatives in order.
 type anyOfDecision struct {
 	// match is the evaluation of the first alternative a grant allows, nil when
 	// none does.
@@ -396,8 +395,8 @@ func (e *Engine) prepare(ctx context.Context, checks []Check, forRequire bool) (
 func (q question) decide(check Check) (verdict, error) {
 	refused := q.verdict(check, false)
 	allowed := q.verdict(check, true)
-	if check.anyOf != nil {
-		return q.decideAnyOf(check)
+	if check.group != nil {
+		return q.decideGroup(check)
 	}
 	if q.aboutOtherOrganization(check) {
 		return refused, nil
@@ -441,19 +440,20 @@ func (q question) verdict(check Check, allowed bool) verdict {
 	}
 }
 
-// decideAnyOf: a block on any alternative refuses the whole AnyOf unless a
-// direct grant on the concrete resource outranks it. Example: a project-wide
-// skill read and a read of skill S, with S blocked, is refused.
-func (q question) decideAnyOf(check Check) (verdict, error) {
+// decideGroup: in an AnyUnblocked group a block on any alternative refuses
+// the whole group unless a direct grant on the concrete resource outranks it.
+// Example: a project-wide skill read and a read of skill S, with S blocked, is
+// refused. In an Either group the same checks are allowed.
+func (q question) decideGroup(check Check) (verdict, error) {
 	refused := q.verdict(check, false)
-	alternatives := slices.DeleteFunc(slices.Clone(check.anyOf), q.aboutOtherOrganization)
+	alternatives := slices.DeleteFunc(slices.Clone(check.group), q.aboutOtherOrganization)
 	if len(alternatives) == 0 {
-		if len(check.anyOf) == 0 {
+		if len(check.group) == 0 {
 			return refused, ErrNoChecks
 		}
 		return refused, nil
 	}
-	refused.check.anyOf = alternatives
+	refused.check.group = alternatives
 	if !q.enforced {
 		if slices.ContainsFunc(alternatives, unenforcedAllows) {
 			return q.verdict(refused.check, true), nil
@@ -465,14 +465,16 @@ func (q question) decideAnyOf(check Check) (verdict, error) {
 			return refused, err
 		}
 	}
-	blocked, err := firstUnoverriddenExclusion(q.grants, alternatives)
-	if err != nil {
-		return refused, err
-	}
-	if blocked != nil {
-		refused.Reason = ReasonBlocked
-		refused.blockedBy = blocked
-		return refused, nil
+	if check.blockRefusesGroup {
+		blocked, err := firstUnoverriddenExclusion(q.grants, alternatives)
+		if err != nil {
+			return refused, err
+		}
+		if blocked != nil {
+			refused.Reason = ReasonBlocked
+			refused.blockedBy = blocked
+			return refused, nil
+		}
 	}
 	result, err := q.grants.decideAnyOf(alternatives)
 	if err != nil {
@@ -575,17 +577,17 @@ func (e *Engine) recordBatch(ctx context.Context, q question, decided []verdict,
 func allowedPlainChecks(decided []verdict) []Check {
 	var allowed []Check
 	for _, d := range decided {
-		if d.Allowed && d.check.anyOf == nil {
+		if d.Allowed && d.check.group == nil {
 			allowed = append(allowed, d.check)
 		}
 	}
 	return allowed
 }
 
-// invalidPart names the alternative that failed validation when an AnyOf
+// invalidPart names the alternative that failed validation when a group
 // check is invalid, so the challenge row points at the check to fix.
 func invalidPart(check Check) Check {
-	for _, alternative := range check.anyOf {
+	for _, alternative := range check.group {
 		if validateInput(alternative) != nil {
 			return alternative
 		}
@@ -593,16 +595,16 @@ func invalidPart(check Check) Check {
 	return check
 }
 
-// recordedChecks is what a challenge row lists for one decision: for an AnyOf,
+// recordedChecks is what a challenge row lists for one decision: for a group,
 // the alternative that allowed it, or every alternative when none did, never
 // the group itself, whose scope and id are only the first alternative's.
 func recordedChecks(d verdict) []Check {
 	switch {
-	case d.check.anyOf == nil:
+	case d.check.group == nil:
 		return []Check{d.check}
 	case d.Allowed:
-		return []Check{d.check.anyOf[d.alternative]}
+		return []Check{d.check.group[d.alternative]}
 	default:
-		return d.check.anyOf
+		return d.check.group
 	}
 }

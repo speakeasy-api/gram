@@ -28,8 +28,9 @@ const (
 
 // Require and Decide answer the same checks the same way, except where a case
 // names the difference. The caller holds project read on proj_b and a block
-// on proj_a. Example: AnyOf(proj_a, proj_b) is refused by both, because the
-// block on proj_a vetoes the whole group.
+// on proj_a. Example: AnyUnblocked(proj_a, proj_b) is refused by both,
+// because the block on proj_a vetoes the whole group; Either(proj_a, proj_b)
+// is allowed by both.
 func TestRequireAndDecideAgree(t *testing.T) {
 	t.Parallel()
 
@@ -57,37 +58,58 @@ func TestRequireAndDecideAgree(t *testing.T) {
 			decide:   refused,
 		},
 		{
-			name:     "AnyOf, second alternative allowed",
+			name:     "AnyUnblocked, second alternative allowed",
 			enforced: true,
-			checks:   []Check{AnyOf(projectRead("proj_c"), projectRead("proj_b"))},
+			checks:   []Check{AnyUnblocked(projectRead("proj_c"), projectRead("proj_b"))},
 			require:  allowed,
 			decide:   allowed,
 		},
 		{
-			name:     "AnyOf, block on one alternative",
+			name:     "AnyUnblocked, block on one alternative",
 			enforced: true,
-			checks:   []Check{AnyOf(projectRead("proj_a"), projectRead("proj_b"))},
+			checks:   []Check{AnyUnblocked(projectRead("proj_a"), projectRead("proj_b"))},
 			require:  refused,
 			decide:   refused,
 		},
 		{
-			name:     "empty AnyOf",
+			name:     "Either, block on one alternative",
 			enforced: true,
-			checks:   []Check{AnyOf()},
+			checks:   []Check{Either(projectRead("proj_a"), projectRead("proj_b"))},
+			require:  allowed,
+			decide:   allowed,
+		},
+		{
+			name:     "Either, no alternative granted",
+			enforced: true,
+			checks:   []Check{Either(projectRead("proj_a"), projectRead("proj_c"))},
+			require:  refused,
+			decide:   refused,
+		},
+		{
+			name:     "empty Either",
+			enforced: true,
+			checks:   []Check{Either()},
 			require:  invalid,
 			decide:   invalid,
 		},
 		{
-			name:     "empty AnyOf, skipped caller",
-			enforced: false,
-			checks:   []Check{AnyOf()},
+			name:     "empty AnyUnblocked",
+			enforced: true,
+			checks:   []Check{AnyUnblocked()},
 			require:  invalid,
 			decide:   invalid,
 		},
 		{
-			name:     "AnyOf, skipped caller",
+			name:     "empty AnyUnblocked, skipped caller",
 			enforced: false,
-			checks:   []Check{AnyOf(projectRead("proj_a"), projectRead("proj_b"))},
+			checks:   []Check{AnyUnblocked()},
+			require:  invalid,
+			decide:   invalid,
+		},
+		{
+			name:     "AnyUnblocked, skipped caller",
+			enforced: false,
+			checks:   []Check{AnyUnblocked(projectRead("proj_a"), projectRead("proj_b"))},
 			require:  allowed,
 			decide:   allowed,
 		},
@@ -115,9 +137,9 @@ func TestRequireAndDecideAgree(t *testing.T) {
 			differs:  "gating an action needs the concrete resource",
 		},
 		{
-			name:     "AnyOf next to a plain check",
+			name:     "AnyUnblocked next to a plain check",
 			enforced: true,
-			checks:   []Check{AnyOf(projectRead("proj_c"), projectRead("proj_b")), projectRead("proj_b")},
+			checks:   []Check{AnyUnblocked(projectRead("proj_c"), projectRead("proj_b")), projectRead("proj_b")},
 			require:  invalid,
 			decide:   allowed,
 			differs:  "Decide answers each check on its own",
@@ -139,8 +161,9 @@ func TestRequireAndDecideAgree(t *testing.T) {
 	}
 }
 
-// A challenge row from Decide names the alternative that allowed an AnyOf.
-// Example: AnyOf(proj_c, proj_b) is recorded as proj_b; refused, it lists
+// A challenge row from Decide names the alternative that allowed a group.
+// Example: AnyUnblocked(proj_c, proj_b) is recorded as proj_b; refused, it
+// lists
 // both.
 func TestDecide_recordsWinningAlternative(t *testing.T) {
 	t.Parallel()
@@ -150,8 +173,8 @@ func TestDecide_recordsWinningAlternative(t *testing.T) {
 		check    Check
 		recorded []string
 	}{
-		{name: "allowed", check: AnyOf(projectRead("proj_c"), projectRead("proj_b")), recorded: []string{"proj_b"}},
-		{name: "refused", check: AnyOf(projectRead("proj_c"), projectRead("proj_d")), recorded: []string{"proj_c", "proj_d"}},
+		{name: "allowed", check: AnyUnblocked(projectRead("proj_c"), projectRead("proj_b")), recorded: []string{"proj_b"}},
+		{name: "refused", check: AnyUnblocked(projectRead("proj_c"), projectRead("proj_d")), recorded: []string{"proj_c", "proj_d"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -173,9 +196,9 @@ func TestDecide_recordsWinningAlternative(t *testing.T) {
 	}
 }
 
-// RequireAny takes its alternatives as separate checks, so an AnyOf passed
-// to it is a mistake, whether or not RBAC applies to the caller.
-func TestRequireAny_refusesAnyOf(t *testing.T) {
+// RequireAny takes its alternatives as separate checks, so a group passed to
+// it is a mistake, whether or not RBAC applies to the caller.
+func TestRequireAny_refusesGroup(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -183,9 +206,9 @@ func TestRequireAny_refusesAnyOf(t *testing.T) {
 		enforced bool
 		check    Check
 	}{
-		{name: "enforced", enforced: true, check: AnyOf(projectRead("proj_b"))},
-		{name: "skipped caller", enforced: false, check: AnyOf(projectRead("proj_b"))},
-		{name: "empty, skipped caller", enforced: false, check: AnyOf()},
+		{name: "enforced", enforced: true, check: AnyUnblocked(projectRead("proj_b"))},
+		{name: "skipped caller", enforced: false, check: AnyUnblocked(projectRead("proj_b"))},
+		{name: "empty, skipped caller", enforced: false, check: AnyUnblocked()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

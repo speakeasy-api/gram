@@ -39,7 +39,7 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 		logs.Reset()
 		require.NoError(t, engine.Require(ctx, one, two), name)
 		require.NoError(t, engine.RequireAny(ctx, one, two), name)
-		allowed, err := engine.Can(ctx, AnyOf(one, two))
+		allowed, err := engine.Can(ctx, AnyUnblocked(one, two))
 		require.NoError(t, err, name)
 		require.True(t, allowed, name)
 		ids, err := engine.Filter(ctx, []Check{one, two})
@@ -75,7 +75,7 @@ func TestAuthorizerLivePolicy_ReportsWhatItWouldRefuse(t *testing.T) {
 	require.Equal(t, 1, count())
 
 	logs.Reset()
-	allowed, err = engine.Can(narrowed, AnyOf(two, one))
+	allowed, err = engine.Can(narrowed, AnyUnblocked(two, one))
 	require.NoError(t, err)
 	require.True(t, allowed)
 	require.Zero(t, count())

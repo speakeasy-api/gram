@@ -381,15 +381,15 @@ func TestGrantInvariants_AnyOf(t *testing.T) {
 				if unblocked != engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
 					failures.add("[%s] RequireAnyUnblocked(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
-				if engineAllows(t, engine.Require(ctx, AnyOf(a.check, b.check))) != unblocked {
-					failures.add("[%s] Require(AnyOf(%s on %s, %s on %s)) differs from RequireAnyUnblocked", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
+				if engineAllows(t, engine.Require(ctx, AnyUnblocked(a.check, b.check))) != unblocked {
+					failures.add("[%s] Require(AnyUnblocked(%s on %s, %s on %s)) differs from RequireAnyUnblocked", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
-				can, err := engine.Can(ctx, AnyOf(a.check, b.check))
+				can, err := engine.Can(ctx, AnyUnblocked(a.check, b.check))
 				if err != nil {
-					t.Fatalf("Can(AnyOf) errored: %v", err)
+					t.Fatalf("Can(AnyUnblocked) errored: %v", err)
 				}
 				if can != unblocked {
-					failures.add("[%s] Can(AnyOf(%s on %s, %s on %s)) = %v, RequireAnyUnblocked = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, unblocked)
+					failures.add("[%s] Can(AnyUnblocked(%s on %s, %s on %s)) = %v, RequireAnyUnblocked = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, unblocked)
 				}
 			}
 		}

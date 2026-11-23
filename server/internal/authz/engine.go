@@ -234,7 +234,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 	if err := validateShape(checks, true); err != nil {
 		return e.mapError(ctx, err)
 	}
-	if slices.ContainsFunc(checks, isAnyOf) {
+	if slices.ContainsFunc(checks, isGroup) {
 		return e.mapError(ctx, InvalidCheck(checks[0].Scope, checks[0].ResourceID))
 	}
 	q := question{enforced: true, grants: loadedGrantAuthorization(grants), aboutOtherOrganization: func(Check) bool { return false }}
@@ -304,7 +304,7 @@ func unenforcedAllows(check Check) bool {
 }
 
 func validateInput(c Check) error {
-	if c.anyOf != nil {
+	if c.group != nil {
 		return InvalidCheck(c.Scope, c.ResourceID)
 	}
 	switch c.ResourceID {
@@ -335,8 +335,8 @@ func validateInput(c Check) error {
 // refused for every caller.
 func (e *Engine) logInvalidUnenforced(ctx context.Context, checks []Check) {
 	for _, check := range checks {
-		if isAnyOf(check) {
-			e.logInvalidUnenforced(ctx, check.anyOf)
+		if isGroup(check) {
+			e.logInvalidUnenforced(ctx, check.group)
 			continue
 		}
 		err := validateInput(check)
@@ -394,31 +394,10 @@ func (e *Engine) aboutOtherOrganization(ctx context.Context) func(Check) bool {
 	}
 }
 
-// withoutOtherOrganization splits checks into the ones the engine goes on to
-// decide and the org checks about another organization, which no caller
-// satisfies, whether or not enforcement is skipped for them. Each refused
-// check is logged.
-func (e *Engine) withoutOtherOrganization(ctx context.Context, checks []Check) (kept []Check, refused []Check) {
-	other := e.aboutOtherOrganization(ctx)
-	if !slices.ContainsFunc(checks, other) {
-		return checks, nil
-	}
-	kept = make([]Check, 0, len(checks))
-	for _, c := range checks {
-		if !other(c) {
-			kept = append(kept, c)
-			continue
-		}
-		refused = append(refused, c)
-		e.logOtherOrganization(ctx, c)
-	}
-	return kept, refused
-}
-
 func (e *Engine) logOtherOrganizations(ctx context.Context, aboutOther func(Check) bool, checks []Check) {
 	for _, c := range checks {
-		if isAnyOf(c) {
-			e.logOtherOrganizations(ctx, aboutOther, c.anyOf)
+		if isGroup(c) {
+			e.logOtherOrganizations(ctx, aboutOther, c.group)
 			continue
 		}
 		if aboutOther(c) {
@@ -461,16 +440,16 @@ func validateCheckIdentity(c Check) error {
 
 // validateShape refuses request shapes the API never accepts, before the
 // unenforced short-circuit, so a misuse fails whether or not RBAC is
-// enforced. Nobody may nest an AnyOf inside another. Require also refuses a
-// probe, because gating an action needs the concrete resource, and an AnyOf
+// enforced. Nobody may nest a group inside another. Require also refuses a
+// probe, because gating an action needs the concrete resource, and a group
 // next to other checks.
 func validateShape(checks []Check, forRequire bool) error {
 	for _, c := range checks {
-		if (c.anyOf != nil && len(c.anyOf) == 0) || (forRequire && (c.probe || (c.anyOf != nil && len(checks) > 1))) {
+		if (c.group != nil && len(c.group) == 0) || (forRequire && (c.probe || (c.group != nil && len(checks) > 1))) {
 			return InvalidCheck(c.Scope, c.ResourceID)
 		}
-		for _, alternative := range c.anyOf {
-			if alternative.anyOf != nil || (forRequire && alternative.probe) {
+		for _, alternative := range c.group {
+			if alternative.group != nil || (forRequire && alternative.probe) {
 				return InvalidCheck(alternative.Scope, alternative.ResourceID)
 			}
 		}
@@ -478,8 +457,8 @@ func validateShape(checks []Check, forRequire bool) error {
 	return nil
 }
 
-func isAnyOf(c Check) bool {
-	return c.anyOf != nil
+func isGroup(c Check) bool {
+	return c.group != nil
 }
 
 func (e *Engine) mapError(ctx context.Context, err error) error {

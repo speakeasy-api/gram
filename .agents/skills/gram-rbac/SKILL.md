@@ -46,7 +46,7 @@ if err := s.authz.Require(ctx, authz.Environments(p).Read()); err != nil {
 }
 // either of two permissions on the resource, and a block on either refuses
 // (a wildcard grant already covers one resource, so never pair those)
-if err := s.authz.Require(ctx, authz.AnyOf(authz.MCPServer(id, p).Write(), authz.MCPServer(id, p).Connect())); err != nil {
+if err := s.authz.Require(ctx, authz.AnyUnblocked(authz.MCPServer(id, p).Write(), authz.MCPServer(id, p).Connect())); err != nil {
 	return err
 }
 // a branch, not a denial (no challenge logged)
@@ -58,8 +58,8 @@ ok, err := s.authz.Can(ctx, authz.MCPServer(id, p).Connect().Probe())
 | Need                                             | Use                                                                                                                                                                    |
 | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Refuse unless allowed                            | `Require(ctx, checks...)` (all must pass)                                                                                                                              |
-| Several equivalent grants, blocks must still win | `Require(ctx, authz.AnyOf(...))` (same as `RequireAnyUnblocked`)                                                                                                       |
-| Branch on the answer                             | `Can(ctx, ...)`. Accepts a single `AnyOf` and probes. Returns an error, not false, for an invalid check.                                                               |
+| Several equivalent grants, blocks must still win | `Require(ctx, authz.AnyUnblocked(...))` (same as `RequireAnyUnblocked`)                                                                                                       |
+| Branch on the answer                             | `Can(ctx, ...)`. Accepts a single `AnyUnblocked` and probes. Returns an error, not false, for an invalid check.                                                               |
 | Narrow a list                                    | `Filter(ctx, checks)` returns the allowed `ResourceID`s. `FindMatched` returns a bool per check, for many checks that share one resource id (tools in a `tools/list`). |
 | MCP tool call                                    | `authz.MCPServer(id, p).ToolCall(tool, disposition)`, with `authz.DispositionFromHints`. A tool with no annotations is `unannotated`.                                  |
 
@@ -101,7 +101,7 @@ go test ./internal/agents/runtimepolicy -run TestStoredPolicyFixtures -args -wri
 
 The flag refuses to overwrite a fixture. Never regenerate an existing one, because those fixtures are what old stored policies are decoded against.
 
-A credential that acts for a user also carries that user's live policy. Today it decides auth-client checks only. For every other check, the engine logs one warning per engine call (`authz check passes the credential's policies but not the live policy of the user it acts for`) when the call is allowed a check that policy would refuse. `RequireAny` and `Can(AnyOf(...))` log only when it refuses every allowed alternative. After the logging window those checks will be refused. A workload session acts for nobody and is bounded by its owner only.
+A credential that acts for a user also carries that user's live policy. Today it decides auth-client checks only. For every other check, the engine logs one warning per engine call (`authz check passes the credential's policies but not the live policy of the user it acts for`) when the call is allowed a check that policy would refuse. `RequireAny` and `Can(AnyUnblocked(...))` log only when it refuses every allowed alternative. After the logging window those checks will be refused. A workload session acts for nobody and is bounded by its owner only.
 
 ## Never
 
@@ -109,7 +109,7 @@ A credential that acts for a user also carries that user's live policy. Today it
 - **A tool or disposition limit goes on a connect rule or a connect block and nowhere else.** The registry declares `tool` and `disposition` on `mcp:connect` only, so `ValidateSelector` refuses them on `mcp:read`, `mcp:write` and their blocks.
 - **A check with a scope the registry does not know, a resource kind that is not its scope's, or a dimension its scope does not declare is an invalid check.** `resource_kind` and `resource_id` are never dimensions.
 - **Never build a raw `authz.Check{...}` outside `internal/authz`.** The `norawauthzchecks` glint rule reports it in every package but `internal/authz` itself, outside `_test.go` files. Only a check rebuilt from data may carry `//nolint:glint // norawauthzchecks: <reason>`: stored data whatever its kind (a recorded challenge, a stored grant's own selector), or a scope a tool declares (a platform tool's `RequiredScope`). The zero `authz.Check{}` returned beside a non-nil error is allowed.
-- **Never pass a probe to `Require`, or `AnyOf` anywhere but as the single check of `Require` or `Can`.** Both are invalid checks, which map to an unexpected error rather than a 403.
+- **Never pass a probe to `Require`, or `AnyUnblocked` anywhere but as the single check of `Require` or `Can`.** Both are invalid checks, which map to an unexpected error rather than a 403.
 - **Never build a ref with an empty project.** An empty dimension is an invalid check. Take the project from the row you loaded, not from the request, when they can differ.
 - **Never decide whether a risk policy applies from `RiskPolicyApplies(...).Evaluate(...).Satisfied`.** Call `authz.EvaluateRiskPolicy(grants, policyID, dims)` and use `.Applies()`. It names the two reasons a policy leaves a caller alone (`RiskPolicyExempt`, `RiskPolicyNotInAudience`); anything else, including grants that could not be read or a policy that could not be evaluated, means the policy applies. The caller decides how to report the error and never uses it to skip the policy: the realtime scanner logs it and scans, `policycore` returns it.
 - **Never hand-edit a `*_gen.go` file in `authz`.** Change `registry.Definitions` (or the registry file that declares the name, such as `registry/scopes.go` or `registry/selectors.go`) and regenerate.
