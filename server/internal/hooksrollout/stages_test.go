@@ -30,8 +30,8 @@ func TestEffective_StageClearsBucketedOrganizations(t *testing.T) {
 	t.Parallel()
 
 	inside, outside := bucketedOrganizations(t, 25)
-	defaultPin := &hooksrollout.Pin{Version: 40}
-	stage := &hooksrollout.Stage{Version: 42, Percent: 25, State: hooksrollout.StageRunning}
+	defaultPin := &hooksrollout.Pin{Version: 40, SetBy: operator, SetAt: time.Time{}}
+	stage := &hooksrollout.Stage{Version: 42, Percent: 25, State: hooksrollout.StageRunning, Reason: "", SetBy: operator, SetAt: time.Time{}}
 	pins := hooksrollout.OrganizationPins{Default: defaultPin, Stage: stage}
 
 	pin, source := pins.Effective(inside)
@@ -53,11 +53,11 @@ func TestEffective_StageClearsBucketedOrganizations(t *testing.T) {
 	}
 
 	stage.State = hooksrollout.StageRunning
-	pins.Default = &hooksrollout.Pin{Version: 42}
+	pins.Default = &hooksrollout.Pin{Version: 42, SetBy: operator, SetAt: time.Time{}}
 	_, source = pins.Effective(inside)
 	require.Equal(t, hooksrollout.SourceDefault, source, "a stage no newer than the default pin has no effect")
 
-	pins.Override = &hooksrollout.Pin{Version: 39}
+	pins.Override = &hooksrollout.Pin{Version: 39, SetBy: operator, SetAt: time.Time{}}
 	pin, source = pins.Effective(inside)
 	require.Equal(t, hooksrollout.SourceOrganization, source)
 	require.Equal(t, 39, pin.Version)

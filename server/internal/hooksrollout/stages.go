@@ -142,7 +142,7 @@ func (s *StageStore) Start(ctx context.Context, version int, setBy string) error
 		if current.Active() && current.Version == version {
 			return nil
 		}
-		return insertStage(ctx, q, Stage{Version: version, Percent: stagePercents[0], State: StageRunning, SetBy: setBy})
+		return insertStage(ctx, q, Stage{Version: version, Percent: stagePercents[0], State: StageRunning, Reason: "", SetBy: setBy, SetAt: time.Time{}})
 	})
 }
 
@@ -155,7 +155,7 @@ func (s *StageStore) Pause(ctx context.Context, reason, setBy string) error {
 		if current.State != StageRunning {
 			return ErrStageNotRunning
 		}
-		return insertStage(ctx, q, Stage{Version: current.Version, Percent: current.Percent, State: StagePaused, Reason: reason, SetBy: setBy})
+		return insertStage(ctx, q, Stage{Version: current.Version, Percent: current.Percent, State: StagePaused, Reason: reason, SetBy: setBy, SetAt: time.Time{}})
 	})
 }
 
@@ -168,7 +168,7 @@ func (s *StageStore) Resume(ctx context.Context, setBy string) error {
 		if current.State != StagePaused {
 			return ErrStageNotPaused
 		}
-		return insertStage(ctx, q, Stage{Version: current.Version, Percent: current.Percent, State: StageRunning, SetBy: setBy})
+		return insertStage(ctx, q, Stage{Version: current.Version, Percent: current.Percent, State: StageRunning, Reason: "", SetBy: setBy, SetAt: time.Time{}})
 	})
 }
 
@@ -178,7 +178,7 @@ func (s *StageStore) Cancel(ctx context.Context, reason, setBy string) error {
 		if !current.Active() {
 			return ErrNoActiveStage
 		}
-		return insertStage(ctx, q, Stage{Version: current.Version, Percent: current.Percent, State: StageCancelled, Reason: reason, SetBy: setBy})
+		return insertStage(ctx, q, Stage{Version: current.Version, Percent: current.Percent, State: StageCancelled, Reason: reason, SetBy: setBy, SetAt: time.Time{}})
 	})
 }
 
@@ -191,7 +191,7 @@ func (s *StageStore) Advance(ctx context.Context, now time.Time) (*Stage, error)
 		if current == nil || current.State != StageRunning || now.Before(current.NextAdvance()) {
 			return nil
 		}
-		next := Stage{Version: current.Version, Percent: nextPercent(current.Percent), State: StageRunning, SetBy: StageWorkflowActor}
+		next := Stage{Version: current.Version, Percent: nextPercent(current.Percent), State: StageRunning, Reason: "", SetBy: StageWorkflowActor, SetAt: time.Time{}}
 		if next.Percent >= 100 {
 			next.State = StageCompleted
 			if err := setDefaultPin(ctx, q, next.Version, StageWorkflowActor); err != nil {
