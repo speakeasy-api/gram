@@ -641,33 +641,61 @@ func TestLocalConcurrentEnsureCreatesOneContainer(t *testing.T) {
 func TestLocalRuntimeOTelEnv(t *testing.T) {
 	t.Parallel()
 
-	env := func(values map[string]string) func(string) string {
-		return func(key string) string { return values[key] }
+	tests := []struct {
+		name    string
+		enabled bool
+		env     map[string]string
+		want    map[string]string
+	}{
+		{
+			name:    "tracing disabled",
+			enabled: false,
+			env:     map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"},
+			want:    nil,
+		},
+		{
+			name:    "no endpoint",
+			enabled: true,
+			env:     map[string]string{},
+			want:    nil,
+		},
+		{
+			name:    "loopback endpoint is rewritten to the host gateway",
+			enabled: true,
+			env: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+				"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+				"OTEL_RESOURCE_ATTRIBUTES":    "worktree=example",
+			},
+			want: map[string]string{
+				"GRAM_ENABLE_OTEL_TRACES":     "true",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://host.docker.internal:4317",
+				"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+				"OTEL_RESOURCE_ATTRIBUTES":    "worktree=example",
+			},
+		},
+		{
+			// The runner cannot parse "http", so it is dropped and the runner
+			// falls back to its default protocol.
+			name:    "remote endpoint kept and unknown protocol dropped",
+			enabled: true,
+			env: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.internal:4318",
+				"OTEL_EXPORTER_OTLP_PROTOCOL": "http",
+			},
+			want: map[string]string{
+				"GRAM_ENABLE_OTEL_TRACES":     "true",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.internal:4318",
+			},
+		},
 	}
-
-	require.Nil(t, LocalRuntimeOTelEnv(false, env(map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317"})))
-	require.Nil(t, LocalRuntimeOTelEnv(true, env(map[string]string{})))
-
-	require.Equal(t, map[string]string{
-		"GRAM_ENABLE_OTEL_TRACES":     "true",
-		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://host.docker.internal:4317",
-		"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
-		"OTEL_RESOURCE_ATTRIBUTES":    "worktree=example",
-	}, LocalRuntimeOTelEnv(true, env(map[string]string{
-		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
-		"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
-		"OTEL_RESOURCE_ATTRIBUTES":    "worktree=example",
-	})))
-
-	// A non-loopback collector is kept as is, and a protocol the runner
-	// cannot parse is dropped so the runner falls back to its default.
-	require.Equal(t, map[string]string{
-		"GRAM_ENABLE_OTEL_TRACES":     "true",
-		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.internal:4318",
-	}, LocalRuntimeOTelEnv(true, env(map[string]string{
-		"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.internal:4318",
-		"OTEL_EXPORTER_OTLP_PROTOCOL": "http",
-	})))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := LocalRuntimeOTelEnv(tt.enabled, func(key string) string { return tt.env[key] })
+			require.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestLocalContainerSpecCarriesOTelEnv(t *testing.T) {
