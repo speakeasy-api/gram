@@ -131,6 +131,15 @@ Treat `server/internal/platformmcp/` as a first-party product surface. For chang
 
 Follow `.agents/skills/maintaining-platform-mcp/SKILL.md` for the implementation and review checklist. Use `.agents/skills/authoring-platform-mcp-skills/SKILL.md` when shipped Platform MCP workflows change.
 
+### Demo Seed Coverage
+
+The demo seed (`server/internal/demoseed/`) populates the shared demo org (`app.getgram.ai/explore-demo`) and every developer's local org. A feature that ships without seed data shows an empty page in both. Follow `.agents/skills/gram-demo-seed/SKILL.md`:
+
+- When a change introduces or reshapes data a dashboard page renders, expect a seed change in the same PR. Signals: a new table or entity kind, a column or field a page reads, a new telemetry dimension or ClickHouse attribute, or a new page or tab backed by new data.
+- If the seed is unchanged, flag it on the feature code and name the page that will render empty. Accept an explicit, justified exclusion in the PR description.
+- Do not flag internal-only or admin-only data, backend plumbing no page renders, cosmetic UI changes, renames, or data the existing seed already covers.
+- When the seed changes, check that ids, users and emails come from `demoseed.Spec`, that nothing hardcodes a demo identifier, and that `seed/demo/PAGES.md` is updated.
+
 ---
 
 ## PostgreSQL / Database
