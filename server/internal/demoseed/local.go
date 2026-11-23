@@ -355,8 +355,9 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache redisrole.E
 
 	// Built through the owning packages' key functions rather than assembled
 	// by hand: redis.Del matches exactly, so a key that is even one character
-	// off deletes nothing and reports success.
-	keys := []string{sessions.UserInfoCacheKey(userID)}
+	// off deletes nothing and reports success. Typed caches store an entry
+	// under its key plus ":" and the (empty) suffix.
+	keys := []string{typedCacheKey(sessions.UserInfoCacheKey(userID))}
 	for _, feature := range []productfeatures.Feature{
 		productfeatures.FeatureLogs,
 		productfeatures.FeatureToolIOLogs,
@@ -367,11 +368,17 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache redisrole.E
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 	} {
-		keys = append(keys, productfeatures.FeatureCacheKey(orgID, feature))
+		keys = append(keys, typedCacheKey(productfeatures.FeatureCacheKey(orgID, feature)))
 	}
 	if err := cache.Del(ctx, keys...).Err(); err != nil {
 		logger.WarnContext(ctx, "could not clear the local feature cache; restart the server if entitlements look stale", attr.SlogError(err))
 	}
+}
+
+// typedCacheKey returns the Redis key under which a typed cache with no
+// suffix (cache.SuffixNone, as the server wires these caches) stores key.
+func typedCacheKey(key string) string {
+	return key + ":"
 }
 
 // Existing system-role grant sets are intentionally not backfilled. Give the

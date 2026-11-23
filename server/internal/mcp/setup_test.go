@@ -691,7 +691,7 @@ func buildTestMCPService(
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, evictableCache), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewEvictableMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, protectedResources)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, evictableCache), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, protectedResources)
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	efficacySignaler := background.NewThrottledSignaler(
 		&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
