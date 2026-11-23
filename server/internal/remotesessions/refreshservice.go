@@ -333,26 +333,14 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 // FallbackResourceForClient derives the RFC 8707 resource for a client from
 // its attached MCP servers. RefreshNow applies it to rows that carry no
-// persisted resource. organizationID is the client's organization; it selects
-// where the attachments come from and, for associations, scopes them.
+// persisted resource. organizationID is the client's organization; it scopes
+// the client's associated servers.
 func (s *RefreshService) FallbackResourceForClient(ctx context.Context, organizationID string, clientID uuid.UUID) (string, error) {
-	if s.attachmentsFromAssociations(ctx, organizationID) {
-		attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
-		if err != nil {
-			return "", err
-		}
-		return clientUpstreamResource(attachments[clientID]), nil
-	}
-
-	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClient(ctx, clientID)
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, []uuid.UUID{clientID}, true)
 	if err != nil {
-		return "", fmt.Errorf("list mcp servers for client: %w", err)
+		return "", err
 	}
-	resources := make([]string, 0, len(rows))
-	for _, row := range rows {
-		resources = append(resources, row.Url)
-	}
-	return clientUpstreamResource(resources), nil
+	return clientUpstreamResource(attachments[clientID]), nil
 }
 
 // fallbackResourceForGrant derives the resource for a grant stored with none.
@@ -387,7 +375,7 @@ func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remo
 // same endpoint; see claimableUpstream. Siblings are only consulted when the
 // client's own attachments leave the claim open.
 func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
-	attachments, err := attachmentsForClients(ctx, s.db, organizationID, append([]uuid.UUID{clientID}, siblingIDs...), s.attachmentsFromAssociations(ctx, organizationID))
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, append([]uuid.UUID{clientID}, siblingIDs...), true)
 	if err != nil {
 		return "", err
 	}
@@ -398,7 +386,7 @@ func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organi
 // client bound to one endpoint, each weighed against the others, from a
 // single load of their attachments.
 func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, organizationID string, clientIDs []uuid.UUID, upstream string) (map[uuid.UUID]string, error) {
-	attachments, err := attachmentsForClients(ctx, s.db, organizationID, clientIDs, s.attachmentsFromAssociations(ctx, organizationID))
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, clientIDs, true)
 	if err != nil {
 		return nil, err
 	}
@@ -407,13 +395,6 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, orga
 		resources[id] = resourceAmongSiblings(attachments, id, upstream)
 	}
 	return resources, nil
-}
-
-// attachmentsFromAssociations reports whether the organization's clients are
-// attached to the servers they are associated with rather than to every server
-// on the user session issuers they are bound to.
-func (s *RefreshService) attachmentsFromAssociations(ctx context.Context, organizationID string) bool {
-	return feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 }
 
 // attachmentsForClients loads the resources of the MCP servers attached to

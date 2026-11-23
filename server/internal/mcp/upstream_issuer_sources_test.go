@@ -14,7 +14,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -25,10 +24,9 @@ import (
 
 // A tunneled gateway member whose column is cleared while it stays associated
 // with its provider's client: the configuration hash consent stores differs
-// by source, and the member keeps receiving its own token under either
-// setting of the organization's flag, because the session's recorded client
-// choice routes it.
-func TestUpstreamIssuerFlag_TunneledGatewayMemberUnderEitherSource(t *testing.T) {
+// by source, and the member keeps receiving its own token, because the
+// session's recorded client choice routes it.
+func TestUpstreamIssuer_TunneledGatewayMemberKeepsItsOwnToken(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -88,14 +86,6 @@ func TestUpstreamIssuerFlag_TunneledGatewayMemberUnderEitherSource(t *testing.T)
 	text, isError := metaToolResultText(t, rpc)
 	require.False(t, isError, "the member call must succeed: %s", text)
 	require.Equal(t, "Bearer token-member", gateway.forwardFor(`"tools/call"`).Get("Authorization"),
-		"off, the session's client choice routes the member's own token")
-
-	ti.features.SetFlag(feature.FlagUpstreamIssuerFromAssociations, orgID, true)
-
-	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
-	text, isError = metaToolResultText(t, rpc)
-	require.False(t, isError, "the member call must succeed: %s", text)
-	require.Equal(t, "Bearer token-member", gateway.forwardFor(`"tools/call"`).Get("Authorization"),
 		"on, the member still receives its own token")
 }
 
@@ -123,12 +113,11 @@ func upstreamIssuerParityPoints(t *testing.T, reader *sdkmetric.ManualReader) ma
 }
 
 // A hosted gateway member receives only the unqualified token keyed by its
-// upstream issuer, with no client choice to replace it, so the flag decides
-// which token it gets: its column names one provider and its association
-// another. Off, the column-keyed token connects it; on, the association-keyed
-// one does, and only once that provider holds a token. Each tool dispatch
-// counts the two sources as different under either setting.
-func TestUpstreamIssuerFlag_HostedGatewayMemberTakesTheFlaggedSourcesToken(t *testing.T) {
+// upstream issuer, with no client choice to replace it: its column names one
+// provider and its association another. The association-keyed token connects
+// it, and only once that provider holds a token. Each tool dispatch counts the
+// two sources as different with the associations deciding.
+func TestUpstreamIssuer_HostedGatewayMemberTakesTheAssociationToken(t *testing.T) {
 	t.Parallel()
 
 	reader := sdkmetric.NewManualReader()
@@ -183,14 +172,6 @@ func TestUpstreamIssuerFlag_HostedGatewayMemberTakesTheFlaggedSourcesToken(t *te
 		// after the member's credential is picked, which is all this needs.
 		executeMetaTool(t, ti, metaSlug, bearer, hosted.slug+"--alpha_tool")
 	}
-
-	require.Equal(t, metamcp.SignInConnected, callConnectionStatus(t, ti, context.Background(), metaSlug, bearer).statuses[hosted.slug],
-		"off, the column-keyed token connects the member")
-	dispatch()
-	require.Equal(t, int64(1), upstreamIssuerParityPoints(t, reader)[hostedDiffer("column")],
-		"off, the dispatch counts the sources as different with the column deciding")
-
-	ti.features.SetFlag(feature.FlagUpstreamIssuerFromAssociations, orgID, true)
 
 	require.Equal(t, metamcp.SignInNotConnected, callConnectionStatus(t, ti, context.Background(), metaSlug, bearer).statuses[hosted.slug],
 		"on, the column-keyed token no longer serves the member")

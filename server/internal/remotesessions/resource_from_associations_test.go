@@ -9,7 +9,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -61,11 +60,9 @@ func seedSharedIssuerFixture(t *testing.T, slug string) (context.Context, shared
 	return ctx, fx
 }
 
-func newFlaggedResolveManager(t *testing.T, fx sharedIssuerFixture, enabled bool) *remotesessions.ChallengeManager {
+func newSharedIssuerResolveManager(t *testing.T, fx sharedIssuerFixture) *remotesessions.ChallengeManager {
 	t.Helper()
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagUpstreamIssuerFromAssociations, fx.organizationID, enabled)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	return remotesessions.NewChallengeManager(
@@ -78,26 +75,14 @@ func newFlaggedResolveManager(t *testing.T, fx sharedIssuerFixture, enabled bool
 		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
-		remotesessions.WithFeatureFlags(flags),
 	)
-}
-
-func TestFallbackResourceForClient_SharedIssuerAmbiguousFromBindings(t *testing.T) {
-	t.Parallel()
-
-	ctx, fx := seedSharedIssuerFixture(t, "fallback-bindings")
-	mgr := newFlaggedResolveManager(t, fx, false)
-
-	resource, err := mgr.FallbackResourceForClient(ctx, fx.organizationID, fx.clientID)
-	require.NoError(t, err)
-	require.Empty(t, resource, "every server on the shared issuer counts, so the client names two upstreams")
 }
 
 func TestFallbackResourceForClient_SharedIssuerFromAssociations(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx := seedSharedIssuerFixture(t, "fallback-associations")
-	mgr := newFlaggedResolveManager(t, fx, true)
+	mgr := newSharedIssuerResolveManager(t, fx)
 
 	resource, err := mgr.FallbackResourceForClient(ctx, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
@@ -108,7 +93,7 @@ func TestResourceForClientAtUpstream_SharedIssuerFromAssociations(t *testing.T) 
 	t.Parallel()
 
 	ctx, fx := seedSharedIssuerFixture(t, "upstream-associations")
-	mgr := newFlaggedResolveManager(t, fx, true)
+	mgr := newSharedIssuerResolveManager(t, fx)
 
 	resource, err := mgr.ResourceForClientAtUpstream(ctx, fx.organizationID, fx.clientID, []uuid.UUID{fx.siblingID}, fx.ownURL)
 	require.NoError(t, err)
@@ -118,17 +103,6 @@ func TestResourceForClientAtUpstream_SharedIssuerFromAssociations(t *testing.T) 
 	require.NoError(t, err)
 	require.True(t, applies[fx.clientID])
 	require.False(t, applies[fx.siblingID], "the sibling is associated with the other server")
-}
-
-func TestResourceForClientAtUpstream_SharedIssuerUnqualifiedFromBindings(t *testing.T) {
-	t.Parallel()
-
-	ctx, fx := seedSharedIssuerFixture(t, "upstream-bindings")
-	mgr := newFlaggedResolveManager(t, fx, false)
-
-	resource, err := mgr.ResourceForClientAtUpstream(ctx, fx.organizationID, fx.clientID, []uuid.UUID{fx.siblingID}, fx.ownURL)
-	require.NoError(t, err)
-	require.Empty(t, resource, "the sibling also serves the upstream through the shared issuer, so no client may claim it")
 }
 
 func TestResourceOwnersAmong_SharedIssuerFromAssociations(t *testing.T) {
@@ -151,7 +125,7 @@ func TestFallbackResourceForClient_IgnoresDeletedAssociatedServer(t *testing.T) 
 	ctx, fx := seedSharedIssuerFixture(t, "deleted-server")
 	_, err := mcpserversrepo.New(fx.ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: fx.ownServerID, ProjectID: fx.projectID})
 	require.NoError(t, err)
-	mgr := newFlaggedResolveManager(t, fx, true)
+	mgr := newSharedIssuerResolveManager(t, fx)
 
 	resource, err := mgr.FallbackResourceForClient(ctx, fx.organizationID, fx.clientID)
 	require.NoError(t, err)
@@ -184,7 +158,7 @@ func TestGetRemoteSessionClientTenantOrganizationID(t *testing.T) {
 	require.Equal(t, fx.organizationID, deletedProjectClient, "a deleted project still names its organization")
 }
 
-// Typed offers remain authoritative during the association-derived rollout.
+// Typed offers stay authoritative over client associations.
 func TestResourceForClientAtUpstream_AssociationsPreserveOfferPrecedence(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -203,7 +177,7 @@ func TestResourceForClientAtUpstream_AssociationsPreserveOfferPrecedence(t *test
 			if tc.enforced {
 				enforceUpstreamAuth(t, ctx, fx.ti.conn, fx.organizationID)
 			}
-			mgr := newFlaggedResolveManager(t, fx, true)
+			mgr := newSharedIssuerResolveManager(t, fx)
 			want := fx.ownURL
 			if tc.enforced {
 				want = offeredURL

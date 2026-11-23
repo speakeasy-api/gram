@@ -566,7 +566,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 	for _, diagnosticResource := range resources {
 		// Every deployment serving Platform MCP wires a protected resource
 		// prober into logins, so their scope requests consult resource rows.
-		results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, diagnosticResource, true, feature.UpstreamIssuerFromAssociations(ctx, i.flags, organizationID))
+		results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, diagnosticResource, true, true)
 		if err != nil {
 			return out, nil, fmt.Errorf("inspect XAA readiness identity chaining: %w", err)
 		}

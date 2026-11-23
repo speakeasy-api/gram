@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -56,7 +55,7 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 	if err != nil {
 		return nil, err
 	}
-	return readServerScopes(ctx, s.db, logger, authCtx.ActiveOrganizationID, *authCtx.ProjectID, target, sharing, s.canPin(ctx, logger, authCtx, target, sharing), feature.UpstreamIssuerFromAssociations(ctx, s.features, authCtx.ActiveOrganizationID))
+	return readServerScopes(ctx, s.db, logger, authCtx.ActiveOrganizationID, *authCtx.ProjectID, target, sharing, s.canPin(ctx, logger, authCtx, target, sharing), true)
 }
 
 func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerScopePinPayload) (*gen.RemoteMcpServerScopes, error) {
@@ -85,7 +84,7 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		target:           target,
 		authorized:       sharing,
 		scopes:           scopes,
-		fromAssociations: feature.UpstreamIssuerFromAssociations(ctx, s.features, authCtx.ActiveOrganizationID),
+		fromAssociations: true,
 	})
 }
 

@@ -17,11 +17,9 @@ import (
 // An MCP server's upstream issuer (the remote session issuer its credentials
 // are routed and consented by) comes from one of two sources: the
 // denormalized mcp_servers.remote_session_issuer_id column, or the one
-// provider among the server's live client associations.
-// feature.FlagUpstreamIssuerFromAssociations picks the authoritative one per
-// organization. Every site computes both and records how they compare, so
-// the cutover is measured before it changes anything and stays measured as
-// a rollback. Everything here goes away with the column.
+// provider among the server's live client associations. The associations are
+// authoritative wherever they were read. Every site computes both and records
+// how they compare. Everything here goes away with the column.
 
 // Surfaces an upstream issuer comparison runs on.
 const (
@@ -162,17 +160,18 @@ type upstreamIssuerKeys struct {
 	known bool
 }
 
-// authoritative is the source that decides, given the organization's flag.
-func (k upstreamIssuerKeys) authoritative(fromAssociations bool) uuid.NullUUID {
-	if fromAssociations && k.known {
+// authoritative is the source that decides: the associations when they were
+// read, and the column otherwise.
+func (k upstreamIssuerKeys) authoritative() uuid.NullUUID {
+	if k.known {
 		return k.association.Provider
 	}
 	return k.column
 }
 
 // other is the source that does not decide.
-func (k upstreamIssuerKeys) other(fromAssociations bool) uuid.NullUUID {
-	if fromAssociations && k.known {
+func (k upstreamIssuerKeys) other() uuid.NullUUID {
+	if k.known {
 		return k.column
 	}
 	return k.association.Provider
@@ -195,8 +194,8 @@ func (k upstreamIssuerKeys) outcome(agreed bool) upstreamIssuerOutcome {
 }
 
 // upstreamIssuerSource names the authoritative source for the record.
-func upstreamIssuerSource(fromAssociations bool, keys upstreamIssuerKeys) string {
-	if fromAssociations && keys.known {
+func upstreamIssuerSource(keys upstreamIssuerKeys) string {
+	if keys.known {
 		return upstreamIssuerSourceAssociations
 	}
 	return upstreamIssuerSourceColumn
@@ -258,9 +257,6 @@ type upstreamIssuerParity struct {
 
 	// outcome is how the two compared.
 	outcome upstreamIssuerOutcome
-
-	// fromAssociations is the organization's flag.
-	fromAssociations bool
 }
 
 // recordUpstreamIssuerParity counts one comparison and, for a disagreement,
@@ -271,7 +267,7 @@ func (s *Service) recordUpstreamIssuerParity(ctx context.Context, logger *slog.L
 		Surface:      p.surface,
 		Site:         p.site,
 		Outcome:      string(p.outcome),
-		Source:       upstreamIssuerSource(p.fromAssociations, p.keys),
+		Source:       upstreamIssuerSource(p.keys),
 		ResolverMode: s.resolverModeLabelFor(ctx, p.organizationID),
 	})
 	if p.outcome == upstreamIssuerMatch || p.outcome == upstreamIssuerChoice {
@@ -386,19 +382,17 @@ type directUpstreamIssuerInput struct {
 
 // directUpstreamIssuer routes a direct request's resolved tokens with each of
 // the server's two upstream issuer sources, records how the results compared,
-// and returns the source the organization's flag makes authoritative. It never
+// and returns the authoritative source. It never
 // resolves a token itself. A governing choice, and a request that did not read
 // the associations, return backendIssuerID unchanged.
 func (s *Service) directUpstreamIssuer(ctx context.Context, logger *slog.Logger, in directUpstreamIssuerInput) uuid.NullUUID {
-	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, in.organizationID)
 	parity := upstreamIssuerParity{
-		organizationID:   in.organizationID,
-		serverID:         in.serverID,
-		surface:          upstreamIssuerSurfaceDirect,
-		site:             in.site,
-		keys:             upstreamIssuerKeys{column: in.backendIssuerID, association: associationUpstreamIssuer{Provider: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Providers: 0}, known: false},
-		outcome:          upstreamIssuerMatch,
-		fromAssociations: fromAssociations,
+		organizationID: in.organizationID,
+		serverID:       in.serverID,
+		surface:        upstreamIssuerSurfaceDirect,
+		site:           in.site,
+		keys:           upstreamIssuerKeys{column: in.backendIssuerID, association: associationUpstreamIssuer{Provider: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Providers: 0}, known: false},
+		outcome:        upstreamIssuerMatch,
 	}
 	switch {
 	case in.choiceGoverns:
@@ -425,19 +419,19 @@ func (s *Service) directUpstreamIssuer(ctx context.Context, logger *slog.Logger,
 	associationToken, associationErr := routeUpstreamToken(ctx, discardLogger, in.tokens, in.upstreamResource, in.tunneled, keys.association.Provider)
 	parity.outcome = keys.outcome(sameRoutedUpstream(columnToken, columnErr, associationToken, associationErr))
 	s.recordUpstreamIssuerParity(ctx, logger, parity)
-	return keys.authoritative(fromAssociations)
+	return keys.authoritative()
 }
 
 // memberChoiceGoverns reports that a credential's choice replaced the
 // member's starting upstream issuer, so neither source decides it.
 func memberChoiceGoverns(member metaMember) bool {
-	return member.chosenClientID.Valid || member.remoteSessionIssuerID != member.upstreamIssuer.authoritative(member.upstreamIssuerFromAssociations)
+	return member.chosenClientID.Valid || member.remoteSessionIssuerID != member.upstreamIssuer.authoritative()
 }
 
 // memberWithOtherIssuer is member as the other upstream issuer source would
 // have built it.
 func memberWithOtherIssuer(member metaMember) metaMember {
-	member.remoteSessionIssuerID = member.upstreamIssuer.other(member.upstreamIssuerFromAssociations)
+	member.remoteSessionIssuerID = member.upstreamIssuer.other()
 	return member
 }
 
@@ -447,13 +441,12 @@ func memberWithOtherIssuer(member metaMember) metaMember {
 func (s *Service) recordMemberIssuerParity(ctx context.Context, logger *slog.Logger, organizationID string, member metaMember) {
 	keys := member.upstreamIssuer
 	s.recordUpstreamIssuerParity(ctx, logger, upstreamIssuerParity{
-		organizationID:   organizationID,
-		serverID:         member.serverID,
-		surface:          upstreamIssuerSurfaceGatewayState,
-		site:             upstreamIssuerSiteMemberIssuer,
-		keys:             keys,
-		outcome:          keys.outcome(keys.column == keys.association.Provider),
-		fromAssociations: member.upstreamIssuerFromAssociations,
+		organizationID: organizationID,
+		serverID:       member.serverID,
+		surface:        upstreamIssuerSurfaceGatewayState,
+		site:           upstreamIssuerSiteMemberIssuer,
+		keys:           keys,
+		outcome:        keys.outcome(keys.column == keys.association.Provider),
 	})
 }
 
@@ -462,13 +455,12 @@ func (s *Service) recordMemberIssuerParity(ctx context.Context, logger *slog.Log
 // routing that happened. It never resolves a token.
 func (s *Service) compareMemberRouting(ctx context.Context, logger *slog.Logger, organizationID string, tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string, routed remotesessions.UpstreamToken, routeErr error) {
 	parity := upstreamIssuerParity{
-		organizationID:   organizationID,
-		serverID:         member.serverID,
-		surface:          upstreamIssuerSurfaceGatewayProxied,
-		site:             upstreamIssuerSiteRoute,
-		keys:             member.upstreamIssuer,
-		outcome:          upstreamIssuerChoice,
-		fromAssociations: member.upstreamIssuerFromAssociations,
+		organizationID: organizationID,
+		serverID:       member.serverID,
+		surface:        upstreamIssuerSurfaceGatewayProxied,
+		site:           upstreamIssuerSiteRoute,
+		keys:           member.upstreamIssuer,
+		outcome:        upstreamIssuerChoice,
 	}
 	if !memberChoiceGoverns(member) {
 		other, otherErr := routeMetaMemberToken(tokens, memberWithOtherIssuer(member), upstreamResource)
@@ -482,13 +474,12 @@ func (s *Service) compareMemberRouting(ctx context.Context, logger *slog.Logger,
 // narrowing that happened.
 func (s *Service) compareHostedMemberTokens(ctx context.Context, logger *slog.Logger, organizationID string, tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, hosted map[uuid.UUID]remotesessions.UpstreamToken, hostedErr error) {
 	parity := upstreamIssuerParity{
-		organizationID:   organizationID,
-		serverID:         member.serverID,
-		surface:          upstreamIssuerSurfaceGatewayHosted,
-		site:             upstreamIssuerSiteRoute,
-		keys:             member.upstreamIssuer,
-		outcome:          upstreamIssuerChoice,
-		fromAssociations: member.upstreamIssuerFromAssociations,
+		organizationID: organizationID,
+		serverID:       member.serverID,
+		surface:        upstreamIssuerSurfaceGatewayHosted,
+		site:           upstreamIssuerSiteRoute,
+		keys:           member.upstreamIssuer,
+		outcome:        upstreamIssuerChoice,
 	}
 	if !memberChoiceGoverns(member) {
 		other, otherErr := hostedMemberTokens(tokens, memberWithOtherIssuer(member))
@@ -513,8 +504,8 @@ type reuseInventoryFingerprints struct {
 	// an approval saved before the mode changed still holds.
 	otherMode string
 
-	// otherSource takes it from the upstream issuer source the organization's
-	// flag does not make authoritative, for the re-consent forecast.
+	// otherSource takes it from the upstream issuer source that is not
+	// authoritative, for the re-consent forecast.
 	otherSource string
 
 	// otherSourceErr is why otherSource could not be computed.
