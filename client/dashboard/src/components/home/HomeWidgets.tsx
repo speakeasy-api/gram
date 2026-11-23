@@ -218,6 +218,11 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
         </p>
       ) : (
         <ul className="divide-y">
+          {error && (
+            <li className="text-muted-foreground px-6 py-3 text-xs">
+              Some sources failed to load, so this list may be incomplete.
+            </li>
+          )}
           {items.map((item) => (
             <li key={item.key}>
               <ActionRow

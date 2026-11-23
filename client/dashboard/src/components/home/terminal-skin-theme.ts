@@ -110,7 +110,9 @@ export const TERMINAL_SKIN_CSS = `
   }
   /* Muted only until the assistant picks the prompt up: no reply follows it
      yet. Once a reply starts, the prompt reads as the conversation's text. */
-  ${host} .aui-user-message-root:last-child .aui-user-message-content {
+  ${host}
+    .aui-user-message-root:not(:has(~ .aui-assistant-message-root))
+    .aui-user-message-content {
     color: var(--muted-foreground);
   }
   ${host} .aui-user-message-content::before {

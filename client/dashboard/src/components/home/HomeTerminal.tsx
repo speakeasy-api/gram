@@ -57,8 +57,9 @@ export function HomeTerminal({
           <p className="text-muted-foreground p-6 font-mono text-sm">
             Ask an admin to enable the Project Assistant for this project.
           </p>
-        ) : assistantError ? (
-          // The dock that would show this is hidden on Home.
+        ) : assistantError && !assistantReady ? (
+          // The dock that would show this is hidden on Home. A failed refetch
+          // after the chat is up must not unmount it.
           <p className="text-muted-foreground p-6 font-mono text-sm">
             {assistantError}{" "}
             <button

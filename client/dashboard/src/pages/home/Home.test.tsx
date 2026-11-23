@@ -32,7 +32,10 @@ vi.mock("@/components/insights-context", () => ({
   useHideInsightsDock: () => undefined,
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+  RequireScope: ({ children, scope }: { children: ReactNode; scope: string }) =>
+    scope === "assistant:read" && !state.canReadAssistants ? null : (
+      <>{children}</>
+    ),
 }));
 vi.mock("@/components/page-layout", () => {
   const Page = Object.assign(
@@ -115,6 +118,7 @@ describe("Home", () => {
     state.canReadAssistants = false;
     renderHome();
     expect(screen.queryByTestId("home-terminal")).toBeNull();
+    expect(screen.queryByTestId("chat-landing")).toBeNull();
     expect(screen.getByTestId("project-dashboard")).toBeTruthy();
   });
 
