@@ -18,8 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
@@ -61,7 +59,6 @@ type EvaluateOrg struct {
 	chQueries *chrepo.Queries
 	cacheImpl cache.Cache
 	celEng    *celenv.Engine
-	flags     feature.Provider
 }
 
 func NewEvaluateOrg(
@@ -70,7 +67,6 @@ func NewEvaluateOrg(
 	db *pgxpool.Pool,
 	chQueries *chrepo.Queries,
 	cacheImpl cache.Cache,
-	flags feature.Provider,
 ) *EvaluateOrg {
 	logger = logger.With(attr.SlogComponent("spend_rules_evaluate_org"))
 
@@ -89,7 +85,6 @@ func NewEvaluateOrg(
 		chQueries: chQueries,
 		cacheImpl: cacheImpl,
 		celEng:    celEng,
-		flags:     flags,
 	}
 }
 
@@ -114,18 +109,6 @@ func (a *EvaluateOrg) Do(ctx context.Context, args EvaluateOrgArgs) (err error) 
 
 	logger := a.logger.With(attr.SlogOrganizationID(args.OrganizationID))
 	queries := spendrepo.New(a.db)
-
-	// The Budgets rollout flag (feature.FlagBudgets) gates enforcement org by
-	// org — the same key hides the dashboard surface. When the flag is off the
-	// org's rules stay dormant: no warning/breach events are recorded and the
-	// gate rules payload is cleared, so an already-open circuit lifts on this
-	// cycle instead of blocking users on a feature they cannot see.
-	if !a.budgetsEnabled(ctx, logger, args.OrganizationID) {
-		if err := spendrules.WriteGateRules(ctx, a.cacheImpl, args.OrganizationID, spendrules.GateRules{SourceUpdatedAt: time.Now().UTC(), Rules: nil}); err != nil {
-			return fmt.Errorf("clear spend gate rules: %w", err)
-		}
-		return nil
-	}
 
 	rules, err := queries.ListEnabledSpendRules(ctx, args.OrganizationID)
 	if err != nil {
@@ -203,11 +186,7 @@ func (a *EvaluateOrg) RefreshActor(ctx context.Context, args EvaluateActorArgs) 
 		span.End()
 	}()
 
-	logger := a.logger.With(attr.SlogOrganizationID(args.OrganizationID))
 	if args.OrganizationID == "" || (args.UserID == "" && args.Email == "") {
-		return nil
-	}
-	if !a.budgetsEnabled(ctx, logger, args.OrganizationID) {
 		return nil
 	}
 
@@ -273,39 +252,6 @@ func findActor(actors []spendrules.Actor, userID, email string) (spendrules.Acto
 			WarnAtPct:      0,
 		},
 	}, false
-}
-
-// budgetsEnabled reports whether the Budgets rollout flag is on for the
-// organization. The flag is targeted by PostHog organization group (org
-// slug), the same way the dashboard evaluates it, so the org slug is
-// forwarded as the group key. Every unresolved state degrades to disabled —
-// a nil provider, a failed lookup, or PostHog being disabled outright (the
-// provider returns false in that mode). This is deliberate for a blocking
-// feature: enforcement stays off until its rollout flag is affirmatively on,
-// rather than starting to block users on an unconfirmed flag. Local dev opts
-// in by enabling the flag (e.g. via the seed task), not implicitly.
-func (a *EvaluateOrg) budgetsEnabled(ctx context.Context, logger *slog.Logger, organizationID string) bool {
-	if a.flags == nil {
-		return false
-	}
-
-	var groups map[string]string
-	org, err := orgRepo.New(a.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		// Group targeting degrades to distinct-id-only evaluation; a flag
-		// released purely by org group will read as off for this org until
-		// the metadata lookup recovers.
-		logger.WarnContext(ctx, "resolve organization slug for budgets flag", attr.SlogError(err))
-	} else {
-		groups = feature.OrgProjectGroups(org.Slug, "")
-	}
-
-	on, err := a.flags.IsFlagEnabled(ctx, feature.FlagBudgets, organizationID, groups)
-	if err != nil {
-		logger.WarnContext(ctx, "budgets flag check failed; treating as disabled", attr.SlogError(err))
-		return false
-	}
-	return on
 }
 
 func (a *EvaluateOrg) evaluateRule(

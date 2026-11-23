@@ -505,7 +505,7 @@ func NewActivities(
 			productFeatures,
 			trialFixtureHandler,
 		),
-		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
+		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
 		// cannot outspend the org's key behind their backs.

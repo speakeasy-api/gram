@@ -17,14 +17,6 @@ const (
 	// approval policies keep enforcing and their requests stay decidable when
 	// the flag is off. Removed once tool approvals are GA.
 	FlagToolApprovals Flag = "risk-tool-approvals"
-	// FlagBudgets gates the Budgets (spend control) rollout end to end with
-	// one key: the dashboard hides the Budgets tab on the Costs page behind
-	// it, and the background spend-rule evaluator skips organizations
-	// without it — no warning/breach events are recorded and the hooks spend
-	// gate snapshot is cleared, so enforcement never blocks an org that
-	// cannot see the feature. Targeted by PostHog organization group (org
-	// slug), the same way the dashboard evaluates it.
-	FlagBudgets Flag = "gram-budgets"
 	// FlagPrivateNetworkGateway chooses which runtime hosts an organization's
 	// new private network connection: the tsnet tailnet gateway when enabled,
 	// the Tailscale Kubernetes operator otherwise. Evaluated server-side when a
@@ -56,8 +48,8 @@ const (
 	// when no serial match exists. Gated because the flip is visible: an org
 	// whose agents predate hardware reporting sees the same numbers, but one
 	// mid-upgrade sees devices move between buckets as serials arrive.
-	// Targeted by PostHog organization group (org slug), like FlagBudgets.
-	// Removed once device-level matching is GA.
+	// Targeted by PostHog organization group (org slug). Removed once
+	// device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
@@ -96,14 +88,13 @@ const (
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
 	// toolset re-serving the Platform MCP read tools over the assistant
-	// runtime channel. Targeted by PostHog organization group (org slug),
-	// like FlagBudgets. Evaluated server-side only; removed once the toolset
-	// is GA.
+	// runtime channel. Targeted by PostHog organization group (org slug).
+	// Evaluated server-side only; removed once the toolset is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
 	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
 	// matches the dashboard's page-level flag so one PostHog flag controls
-	// both surfaces; targeted by organization group (org slug), like
-	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
+	// both surfaces; targeted by organization group (org slug). A rollout
+	// gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
@@ -150,8 +141,8 @@ const (
 	// MCP serving hints behind the same key. Off, the extension is absent
 	// from capabilities, its methods answer method-not-found, and
 	// `skill://` reads are not found. Targeted by PostHog
-	// organization group (org slug), like FlagBudgets. A rollout gate while
-	// client support matures; removed once the extension is GA.
+	// organization group (org slug). A rollout gate while client support
+	// matures; removed once the extension is GA.
 	FlagSkillsOverMCP Flag = "skills-over-mcp"
 
 	// FlagHooksRollout is the legacy control for the phased rollout of new
