@@ -49,8 +49,6 @@ func TestToolKindsOnServerListsTheKindsARoleBlocks(t *testing.T) {
 func TestToolKindsOnServerListsABlockOnARoleThatAllowsNothing(t *testing.T) {
 	t.Parallel()
 
-	// The role gives nothing itself, but its block still takes destructive
-	// tools away from members who are given the server by another role.
 	grants := []Grant{roleGrant(ScopeMCPBlockedConnect, toolKindsServer, DispositionDestructive)}
 
 	kinds, err := ToolKindsOnServer(grants, toolKindsServerRef())
@@ -76,7 +74,6 @@ func TestToolKindsOnServerIgnoresRulesForAnotherServerOrProject(t *testing.T) {
 func TestToolKindsOnServerIgnoresRulesThatNameATool(t *testing.T) {
 	t.Parallel()
 
-	// A rule for one named tool says nothing about tools of a kind.
 	named := roleGrant(ScopeMCPConnect, toolKindsServer, DispositionReadOnly)
 	named.Selector[SelectorKeyTool] = "list_tasks"
 	grants := []Grant{named}

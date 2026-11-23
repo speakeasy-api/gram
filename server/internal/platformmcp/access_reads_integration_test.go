@@ -214,9 +214,6 @@ func TestGetMCPAccessReportsTheToolKindsTheEvaluatorAllowsAndBlocks(t *testing.T
 	require.NotEmpty(t, rows)
 	target := rows[0]
 
-	// Read-only tools are allowed, and destructive ones are blocked even for
-	// members given the server by another role. A kind rule on another server
-	// does not count here.
 	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "readers", "Readers")
 	readOnly := authz.NewSelector(authz.ScopeMCPConnect, target.McpServerID.String())
 	readOnly[authz.SelectorKeyDisposition] = authz.DispositionReadOnly

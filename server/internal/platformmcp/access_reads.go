@@ -726,8 +726,7 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 		if err != nil {
 			return GetMCPAccessOutput{}, fmt.Errorf("evaluate tool kind access for role %q: %w", role.Name, err)
 		}
-		// Kinds are listed only when they limit the role: a role that allows
-		// every kind, such as one with unlimited connect, has no kind rules.
+		// A role that allows every kind has no kind rules to report.
 		dispositions := kinds.Allowed
 		if len(dispositions) == len(authz.Dispositions()) {
 			dispositions = []string{}
