@@ -272,7 +272,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 }
 
 // memberReviewableAuthChoices loads the consent options lazily for all retryable
-// gaps together, avoiding repeated offer and remembered-choice queries.
+// gaps together. Status does not need the picker’s remembered selection.
 func (s *Service) memberReviewableAuthChoices(gate *metaGateContext, members []metaMember) func(context.Context, uuid.UUID) bool {
 	var reviewable map[uuid.UUID]bool
 	return func(ctx context.Context, id uuid.UUID) bool {
@@ -283,20 +283,29 @@ func (s *Service) memberReviewableAuthChoices(gate *metaGateContext, members []m
 		if gate.authentication == nil || gate.caller.kind != gatewayCallerPerson {
 			return false
 		}
-		var servers []consentAuthServer
+		var candidates []metaMember
+		var ids []uuid.UUID
 		for _, member := range members {
-			if member.backend == metaMemberBackendProxied && member.authClient != nil && member.authClient.outcome == authClientGap {
-				servers = append(servers, consentAuthServer{id: member.serverID, projectID: member.projectID})
+			if member.backend != metaMemberBackendProxied || member.authClient == nil || member.authClient.outcome != authClientGap {
+				continue
+			}
+			switch member.authClient.reason {
+			case authClientReasonAmbiguous, authClientReasonUnmapped, authClientReasonClientGone, authClientReasonClientDeleted, authClientReasonClientDisabled, authClientReasonUnassociated, authClientReasonRegistration, authClientReasonDetached:
+				candidates = append(candidates, member)
+				ids = append(ids, member.serverID)
 			}
 		}
-		choices, err := s.consentAuthChoices(ctx, gate.organizationID, gate.authentication.subject, servers, nil, nil, true)
+		offers, err := s.configuredAuthOffers(ctx, gate.organizationID, ids)
 		if err != nil {
 			return false
 		}
-		for serverID, choice := range choices {
-			for _, option := range choice.Options {
-				if option.Usable() || option.State == consentClientConnect {
-					reviewable[serverID] = true
+		for _, member := range candidates {
+			for _, offer := range offers[member.serverID].clients {
+				// A failed check leaves this option unavailable without
+				// suppressing a valid option on this or another server.
+				res, err := s.resolveAuthClientChoiceForConsent(ctx, gate.organizationID, member.serverID, member.projectID, offer.AuthClientID.UUID, gate.authentication.subject)
+				if err == nil && (res.outcome == authClientResolved || res.outcome == authClientLegacy) {
+					reviewable[member.serverID] = true
 					break
 				}
 			}
