@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -140,7 +141,14 @@ func runAccountState(ctx context.Context, r accountStateRequest) (any, error) {
 	}
 	cacheClient := redis.NewClient(&redis.Options{Addr: cacheAddress, Password: os.Getenv("GRAM_REDIS_CACHE_PASSWORD"), DialTimeout: 3 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, MaxRetries: -1})
 	defer o11y.NoLogDefer(cacheClient.Close)
-	featureCache := cache.NewEvictableRedisAdapter(redisrole.EvictableClient{Client: cacheClient}, redisrole.NewGuard(slog.Default(), metricnoop.NewMeterProvider(), redisrole.GuardReport))
+	// Feature flags are cached on the evictable instance when this worktree
+	// runs one, and on the cache server otherwise.
+	evictableClient := cacheClient
+	if evictableAddress := os.Getenv("GRAM_REDIS_EVICTABLE_ADDR"); splitsEvictableRole(config.RedisAddress, evictableAddress) {
+		evictableClient = redis.NewClient(&redis.Options{Addr: strings.TrimSpace(evictableAddress), Password: os.Getenv("GRAM_REDIS_EVICTABLE_PASSWORD"), DialTimeout: 3 * time.Second, ReadTimeout: 3 * time.Second, WriteTimeout: 3 * time.Second, MaxRetries: -1})
+		defer o11y.NoLogDefer(evictableClient.Close)
+	}
+	featureCache := cache.NewEvictableRedisAdapter(redisrole.EvictableClient{Client: evictableClient}, redisrole.NewGuard(slog.Default(), metricnoop.NewMeterProvider(), redisrole.GuardReport))
 	features := productfeatures.NewClient(slog.Default(), noop.NewTracerProvider(), db, featureCache)
 	action := func(ctx context.Context) (localaccounts.Result, error) {
 		ctx, cancel := context.WithTimeout(ctx, 45*time.Second)

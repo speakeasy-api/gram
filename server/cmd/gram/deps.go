@@ -473,6 +473,18 @@ type redisClientOptions struct {
 	redisAddr     string
 	redisPassword string
 	enableTracing bool
+
+	// evictableAddr is the address of the instance for the evictable role.
+	// Unset, empty or equal to redisAddr keeps that role on the sessions
+	// client.
+	evictableAddr string
+
+	// evictablePassword authenticates to evictableAddr.
+	evictablePassword string
+
+	// guardMode is the redis role guard mode name: "report", "enforce", or
+	// empty for report.
+	guardMode string
 }
 
 // redisStores holds one Redis client and one cache adapter per role. Every
@@ -485,8 +497,8 @@ type redisStores struct {
 	// SessionsCache is the cache adapter over Sessions.
 	SessionsCache *cache.RedisCacheAdapter
 
-	// Evictable is the client for key families that rebuild on a miss. It
-	// wraps the Sessions client itself.
+	// Evictable is the client for key families that rebuild on a miss. Without
+	// a separate evictable address it wraps the Sessions client itself.
 	Evictable redisrole.EvictableClient
 
 	// EvictableCache is the cache adapter over Evictable. It checks every key
@@ -494,17 +506,42 @@ type redisStores struct {
 	EvictableCache *cache.EvictableRedisAdapter
 }
 
+// splitsEvictableRole reports whether evictableAddr names an instance other
+// than sessionsAddr. Unset, blank, or the sessions address (ignoring
+// surrounding spaces) keeps both roles on one client, so pointing the
+// evictable address back at the sessions address undoes a split.
+func splitsEvictableRole(sessionsAddr, evictableAddr string) bool {
+	evictable := strings.TrimSpace(evictableAddr)
+	return evictable != "" && evictable != strings.TrimSpace(sessionsAddr)
+}
+
 // newRedisStores connects to Redis and builds the clients and adapters of
-// both roles. Both roles use the one sessions client, so every command goes
-// to the instance it goes to without the split.
+// both roles. Without a separate evictable address both roles use the one
+// sessions client with no guard hook, so every command goes where it goes
+// without the split. With one, the evictable role gets its own client and
+// both clients check every key against its role.
 func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, opts redisClientOptions) (*redisStores, error) {
+	mode, err := redisrole.ParseGuardMode(opts.guardMode)
+	if err != nil {
+		return nil, fmt.Errorf("redis role guard: %w", err)
+	}
+	guard := redisrole.NewGuard(logger, meterProvider, mode)
+
 	sessions, err := newRedisClient(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	guard := redisrole.NewGuard(logger, meterProvider, redisrole.GuardReport)
-	evictable := redisrole.EvictableClient{Client: sessions}
+	evictableClient := sessions
+	if splitsEvictableRole(opts.redisAddr, opts.evictableAddr) {
+		evictableClient, err = newEvictableRedisClient(ctx, opts)
+		if err != nil {
+			return nil, errors.Join(err, sessions.Close())
+		}
+		sessions.AddHook(guard.Hook(redisrole.RoleSessions))
+		evictableClient.AddHook(guard.Hook(redisrole.RoleEvictable))
+	}
+	evictable := redisrole.EvictableClient{Client: evictableClient}
 
 	return &redisStores{
 		Sessions:       sessions,
@@ -514,36 +551,62 @@ func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metr
 	}, nil
 }
 
-func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
-	db := 0
-	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
-		Addr:            opts.redisAddr,
-		Password:        opts.redisPassword,
-		DB:              db,
+// redisDB is the logical database every Speakeasy Redis client uses.
+const redisDB = 0
+
+// redisClientTimeouts returns options for addr with the timeouts every
+// Speakeasy Redis client uses.
+func redisClientTimeouts(addr, password string) *redis.Options {
+	return &redis.Options{
+		Addr:            addr,
+		Password:        password,
+		DB:              redisDB,
 		DialTimeout:     1 * time.Second,
 		ReadTimeout:     300 * time.Millisecond,
 		WriteTimeout:    1 * time.Second,
 		DisableIdentity: true,
-	}, redisswitch.DefaultRole, redisswitch.NextFromEnv())
+	}
+}
+
+func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
+	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), redisClientTimeouts(opts.redisAddr, opts.redisPassword), redisswitch.DefaultRole, redisswitch.NextFromEnv())
 	if err != nil {
 		return nil, fmt.Errorf("create redis client: %w", err)
 	}
 
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("redis connection failed: %w", err)
+	if err := readyRedisClient(ctx, redisClient, opts.enableTracing); err != nil {
+		return nil, err
+	}
+	return redisClient, nil
+}
+
+// newEvictableRedisClient builds the client for a separate evictable
+// instance. It is never built through the redis switch.
+func newEvictableRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
+	client := redis.NewClient(redisClientTimeouts(strings.TrimSpace(opts.evictableAddr), opts.evictablePassword))
+	if err := readyRedisClient(ctx, client, opts.enableTracing); err != nil {
+		return nil, errors.Join(fmt.Errorf("evictable %w", err), client.Close())
+	}
+	return client, nil
+}
+
+// readyRedisClient pings client, so a wrong address fails startup, and
+// instruments it for tracing when asked.
+func readyRedisClient(ctx context.Context, client *redis.Client, enableTracing bool) error {
+	if err := client.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("redis connection failed: %w", err)
 	}
 
-	if opts.enableTracing {
+	if enableTracing {
 		attrs := redisotel.WithAttributes(
 			semconv.DBSystemNameRedis,
-			semconv.DBNamespace(fmt.Sprintf("%d", db)),
+			semconv.DBNamespace(fmt.Sprintf("%d", redisDB)),
 		)
-		if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
-			return nil, fmt.Errorf("failed to instrument redis client: %w", err)
+		if err := redisotel.InstrumentTracing(client, redisotel.WithDBStatement(false), attrs); err != nil {
+			return fmt.Errorf("failed to instrument redis client: %w", err)
 		}
 	}
-
-	return redisClient, nil
+	return nil
 }
 
 type temporalClientOptions struct {

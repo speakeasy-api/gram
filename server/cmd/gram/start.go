@@ -838,9 +838,12 @@ func newStartCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{
-				redisAddr:     c.String("redis-cache-addr"),
-				redisPassword: c.String("redis-cache-password"),
-				enableTracing: c.Bool("redis-enable-tracing"),
+				redisAddr:         c.String("redis-cache-addr"),
+				redisPassword:     c.String("redis-cache-password"),
+				enableTracing:     c.Bool("redis-enable-tracing"),
+				evictableAddr:     c.String("redis-evictable-addr"),
+				evictablePassword: c.String("redis-evictable-password"),
+				guardMode:         c.String("redis-role-guard"),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)

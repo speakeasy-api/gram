@@ -206,9 +206,12 @@ func newDemoSeedCommand() *cli.Command {
 			// serve stale entitlements until it is restarted.
 			var evictable redisrole.EvictableClient
 			stores, err := newRedisStores(ctx, logger, otel.GetMeterProvider(), redisClientOptions{
-				redisAddr:     c.String("redis-cache-addr"),
-				redisPassword: c.String("redis-cache-password"),
-				enableTracing: false,
+				redisAddr:         c.String("redis-cache-addr"),
+				redisPassword:     c.String("redis-cache-password"),
+				enableTracing:     false,
+				evictableAddr:     c.String("redis-evictable-addr"),
+				evictablePassword: c.String("redis-evictable-password"),
+				guardMode:         c.String("redis-role-guard"),
 			})
 			if err != nil {
 				logger.WarnContext(ctx, "local seed could not reach redis; restart the server if features look stale", attr.SlogError(err))
