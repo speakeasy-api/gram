@@ -127,6 +127,9 @@ vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   useGetMcpMetadata: () => ({ data: undefined, isPending: false }),
 }));
+vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
+  PluginStatusBanner: () => null,
+}));
 vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
   useServerClientAssociations: () => ({
     data: { requiredClientIds: [] },
