@@ -1,4 +1,4 @@
-h1:/VWEyxsViGzXU3NO2MJ4ZTkIOXHSmdROm5VfNTCx3ag=
+h1:ztog9Ul67U668EvYBTipEgzuv5IYqSh4hXCWu5lunGw=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -557,3 +557,4 @@ h1:/VWEyxsViGzXU3NO2MJ4ZTkIOXHSmdROm5VfNTCx3ag=
 20261120210548_chat_message_transcripts.sql h1:7A7K0e8VPfsebzS/VXpxaXrx4JWL33KFkBggLfkkMeY=
 20261120232024_plugin-github-connections-marketplace-token-hash.sql h1:LW8pTLoqphJSKCvDxctvF8Gtl3RuJXsyfp0wyAZ9vI0=
 20261123124931_ai-provider-keys-org-encrypted.sql h1:IFttysCYATsSX3mdNEIXj+LFmQ1FLl/0W4Fo3FPTTv0=
+20261123192755_hooks-rollout-stages.sql h1:DX1xPSHPIDKBhiF5S5mIaz5lUTge/VL+nXC8Jl8d1rY=
