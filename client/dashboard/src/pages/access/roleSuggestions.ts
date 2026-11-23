@@ -93,13 +93,8 @@ function grantCoversResource(
 }
 
 /**
- * True when the role itself blocks the scope on the requested resource: it
- * holds one of the scope's exclusion scopes on a selector that matches the
- * request. The exclusion scopes come from the generated tables and include
- * broader blocks, so a block on mcp:read also counts against mcp:write, as on
- * the server. The permission the role grants elsewhere would not apply there,
- * so the role is no answer to the request. Without a resource only an
- * unrestricted block counts.
+ * Exclusion scopes include broader blocks, so a block on mcp:read also counts
+ * against mcp:write, as on the server.
  */
 function roleBlocksScope(
   role: Role,

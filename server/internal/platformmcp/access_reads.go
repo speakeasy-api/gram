@@ -941,17 +941,12 @@ func roleAuthzGrants(role *accessgen.Role) ([]authz.Grant, bool) {
 	return grants, unevaluated
 }
 
-// dispositionProbeTool names the tool in the calls dispositionRulesOnServer
-// asks about. It is never a real tool, so a rule limited to one named tool
-// does not reach it unless the rule itself names the tool.
+// dispositionProbeTool is never a real tool, so a rule limited to named tools
+// does not reach the probe calls.
 const dispositionProbeTool = "platform-mcp-disposition-probe"
 
-// dispositionRulesOnServer lists the dispositions named by the role's connect
-// rules that reach server, as the evaluator decides them. An allow rule counts
-// when it reaches the server and the role, with all its grants and blocks, can
-// make that call. A block rule counts when it takes that call away from a
-// role that could otherwise make it. Matching, precedence and resource kinds
-// are the engine's, so the report cannot drift from enforcement.
+// dispositionRulesOnServer asks the evaluator rather than matching selectors
+// itself, so the report cannot drift from enforcement.
 func dispositionRulesOnServer(grants []authz.Grant, server authz.MCPServerRef) (allowed []string, blocked []string, err error) {
 	allowedSet := map[string]struct{}{}
 	blockedSet := map[string]struct{}{}

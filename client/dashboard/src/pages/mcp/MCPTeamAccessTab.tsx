@@ -24,10 +24,6 @@ import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
 import { toolSourceUnavailableMessage } from "./access/toolSourceMessage";
 
-/**
- * The tool's one disposition, in the vocabulary selectors store. The server
- * matches a tool by that disposition alone, so coverage does too.
- */
 function toolAnnotations(tool: Tool | ServerTool): ToolAnnotation[] {
   if (!("annotations" in tool)) return [];
   return toolDispositionAnnotations(tool);

@@ -60,7 +60,6 @@ export type ToolLimit =
 
 export type ToolLimitKind = ToolLimit["kind"];
 
-/** The MCP behaviour hints a tool declares. */
 interface ToolHints {
   readOnlyHint?: boolean | null;
   destructiveHint?: boolean | null;
@@ -100,10 +99,8 @@ export function toolDisposition(tool: {
 }
 
 /**
- * The tool's one disposition in the annotation vocabulary tool pickers and
- * coverage use, so a tool counts under exactly the disposition the server
- * matches it by. A tool with several hints is not also counted under the
- * others. An unannotated tool has none of the four annotations.
+ * The server matches a tool by one disposition only, so a tool with several
+ * hints must not count under the others.
  */
 export function toolDispositionAnnotations(tool: {
   annotations?: ToolHints | null;
