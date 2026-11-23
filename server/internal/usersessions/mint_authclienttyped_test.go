@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	sessionsgen "github.com/speakeasy-api/gram/server/gen/user_sessions"
@@ -78,8 +79,8 @@ func TestMintUserSessionRecordsTypedChoicesWithoutIssuerLinks(t *testing.T) {
 	require.NotNil(t, auth.ProjectID)
 	orgID := auth.ActiveOrganizationID
 	issuerID := seedIssuer(t, ctx, ti, "mint-enforced-issuer")
-	servers := make([]mcpserversrepo.McpServer, 0, 2)
-	for _, slug := range []string{"mint-offered", "mint-detached"} {
+	servers := make([]mcpserversrepo.McpServer, 0, 3)
+	for _, slug := range []string{"mint-offered", "mint-detached", "mint-ema"} {
 		source, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
 			ID:            uuid.New(),
 			ProjectID:     *auth.ProjectID,
@@ -115,6 +116,11 @@ func TestMintUserSessionRecordsTypedChoicesWithoutIssuerLinks(t *testing.T) {
 	_, err = fixtures.SeedAssociationFixture(ctx, authclientbackfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: detached.ID, RemoteSessionClientID: associated})
 	require.NoError(t, err)
 
+	// An EMA offer is never chosen implicitly by dashboard minting.
+	ema, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "ema", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: orgID, McpServerID: servers[2].ID, AuthClientID: ema, Source: "admin"}))
+
 	serverID := offered.ID.String()
 	minted, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{McpServerID: &serverID})
 	require.NoError(t, err)
@@ -133,6 +139,10 @@ func TestMintUserSessionRecordsTypedChoicesWithoutIssuerLinks(t *testing.T) {
 	require.True(t, choice.NoAuth)
 	require.False(t, choice.RemoteSessionClientID.Valid)
 	require.False(t, choice.AuthClientID.Valid)
+
+	_, err = fixtures.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: session.ID, McpServerID: servers[2].ID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
 }
 
 func seedMintUpstreamRegistration(t *testing.T, ctx context.Context, ti *testInstance, orgID string, projectID uuid.UUID, host string) uuid.UUID {

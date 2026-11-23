@@ -405,6 +405,10 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			FocusServer:              "",
 		}
 		hosted, probeErr := s.recheckHostedRemoteSession(ctx, logger, endpoint, state, sess, row.OrganizationIds)
+		if probeErr != nil && !errors.Is(probeErr, pgx.ErrNoRows) && !errors.Is(probeErr, errRemoteSessionUnroutable) && !errors.Is(probeErr, remotesessions.ErrRemoteSessionMisconfigured) && !errors.Is(probeErr, errRemoteSessionRecheckRateLimited) && !errors.Is(probeErr, errRemoteSessionVerdictNotRecorded) && !errors.Is(probeErr, errHostedValidationPlacementChanged) {
+			logger.ErrorContext(ctx, "check exact hosted placement for remote session re-check", attr.SlogError(probeErr))
+			continue
+		}
 		if !hosted && probeErr == nil {
 			clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, placement.ReachProjectID, placement.OrganizationID, []uuid.UUID{sess.RemoteSessionClientID})
 			if err != nil || len(clients) != 1 || clients[0].CredentialOwner != remotesessions.CredentialOwnerSubject {
