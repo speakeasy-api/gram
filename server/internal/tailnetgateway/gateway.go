@@ -165,8 +165,9 @@ func (c Config) Validate() error {
 	if c.ApprovalGrace < 0 {
 		return errors.New("tailnet gateway approval grace must not be negative")
 	}
-	if c.TsnetPortBase != 0 && int(c.TsnetPortBase)+c.MaxHosts-1 > math.MaxUint16 {
-		return fmt.Errorf("tailnet gateway tsnet port range %d-%d exceeds %d", c.TsnetPortBase, int(c.TsnetPortBase)+c.MaxHosts-1, math.MaxUint16)
+	// Compared by subtraction so a huge MaxHosts cannot overflow past the check.
+	if c.TsnetPortBase != 0 && c.MaxHosts > math.MaxUint16-int(c.TsnetPortBase)+1 {
+		return fmt.Errorf("tailnet gateway tsnet port range starting at %d with %d hosts exceeds %d", c.TsnetPortBase, c.MaxHosts, math.MaxUint16)
 	}
 	return nil
 }

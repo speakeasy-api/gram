@@ -606,7 +606,8 @@ func (n *tsnetNode) Close(ctx context.Context) error {
 // including per-peer DERP chatter every few seconds, so it logs at debug.
 var pathLines = []string{
 	"magicsock: endpoints changed:",
-	"magicsock: disco: node ",
+	// magicsock: disco: node [...] now using <addr>
+	" now using ",
 }
 
 // backendLogf sends tsnet's backend log to a child of log tagged as tsnet.

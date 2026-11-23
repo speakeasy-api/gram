@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -1002,6 +1003,10 @@ func TestConfigValidate(t *testing.T) {
 		"port range past 65535": func(c *tailnetgateway.Config) {
 			c.TsnetPortBase = 65500
 			c.MaxHosts = 100
+		},
+		"host count that overflows the range check": func(c *tailnetgateway.Config) {
+			c.TsnetPortBase = 29000
+			c.MaxHosts = math.MaxInt
 		},
 	}
 	for name, mutate := range cases {

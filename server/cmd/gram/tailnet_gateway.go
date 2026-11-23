@@ -319,6 +319,12 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 		return tailnetgateway.Config{}, fmt.Errorf("configure private listener transport: %w", err)
 	}
 
+	portBase := c.Uint("tsnet-port-base")
+	if portBase > math.MaxUint16 {
+		return tailnetgateway.Config{}, fmt.Errorf("tsnet port base %d exceeds %d", portBase, math.MaxUint16)
+	}
+	tsnetPortBase := uint16(portBase)
+
 	stateDir := c.String("state-dir")
 	if stateDir == "" {
 		stateDir, err = os.MkdirTemp("", "gram-tailnet-gateway-")
@@ -331,12 +337,6 @@ func tailnetGatewayConfigFromCLI(c *cli.Context) (tailnetgateway.Config, error) 
 	if err != nil {
 		return tailnetgateway.Config{}, err
 	}
-
-	portBase := c.Uint("tsnet-port-base")
-	if portBase > math.MaxUint16 {
-		return tailnetgateway.Config{}, fmt.Errorf("tsnet port base %d exceeds %d", portBase, math.MaxUint16)
-	}
-	tsnetPortBase := uint16(portBase)
 
 	config := tailnetgateway.Config{
 		Ordinal:            ordinal,
