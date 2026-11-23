@@ -63,6 +63,15 @@ func (a grantAuthorization) authorizerRefusesAny(alternatives []Check) (*Check, 
 	if err != nil || decision.allowed() {
 		return nil, err
 	}
+	for _, alternative := range alternatives {
+		evaluation, err := a.evaluate(alternative)
+		if err != nil {
+			return nil, err
+		}
+		if evaluation.Grant != nil {
+			return &alternative, nil
+		}
+	}
 	return &alternatives[0], nil
 }
 

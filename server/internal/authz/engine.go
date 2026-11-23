@@ -368,6 +368,13 @@ func (e *Engine) evaluateRequired(ctx context.Context, authorization grantAuthor
 }
 
 func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
+	return e.requireAny(ctx, false, checks...)
+}
+
+// requireAny is RequireAny. When blocksVeto is set, the caller has already
+// refused a block on any alternative, so the delegator warning applies the
+// same veto.
+func (e *Engine) requireAny(ctx context.Context, blocksVeto bool, checks ...Check) error {
 	checks, refused := e.withoutOtherOrganization(ctx, checks)
 	if len(checks) == 0 && len(refused) > 0 {
 		return e.mapError(ctx, Denied(refused[0].Scope, refused[0].selector()))
@@ -428,7 +435,11 @@ func (e *Engine) RequireAny(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, err)
 	}
 	if decision.allowed() {
-		refused, err := authorization.authorizerRefusesAny(checks)
+		refusesAny := authorization.authorizerRefusesAny
+		if blocksVeto {
+			refusesAny = authorization.authorizerRefusesGroup
+		}
+		refused, err := refusesAny(checks)
 		reportAuthorizerRefusal(ctx, e.logger, authorization, refused, err)
 		challengeLogger{
 			Operation:            authzrepo.OperationRequireAny,

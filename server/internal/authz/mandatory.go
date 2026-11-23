@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -194,7 +195,16 @@ func (e *Engine) PrepareMandatory(ctx context.Context) (MandatoryAuthorization, 
 	if m.caller == MandatoryCallerWorkload {
 		m.workloadOwner, _ = AdmittedWorkloadOwner(ctx)
 	}
+	// One request prepares one authorization and may decide many checks with
+	// it, so it reports at most one refusal.
+	var reported atomic.Bool
 	m.reportAuthorizerRefusal = func(refused *Check, err error) {
+		if refused == nil && err == nil {
+			return
+		}
+		if reported.Swap(true) {
+			return
+		}
 		reportAuthorizerRefusal(ctx, e.logger, authorization, refused, err)
 	}
 	return m, nil

@@ -117,6 +117,10 @@ func TestAuthorizerLivePolicy_ReportsGroupVetoesAndAdmissionDecisions(t *testing
 	require.Contains(t, logs.String(), "server-two")
 
 	logs.Reset()
+	require.NoError(t, engine.Require(blocksTwo, AnyOf(two, one)))
+	require.Equal(t, 1, count(), "Require refuses a blocked alternative, so the warning does too")
+
+	logs.Reset()
 	require.NoError(t, engine.RequireAny(blocksTwo, two, one))
 	require.Zero(t, count(), "server one passes on its own")
 
@@ -134,4 +138,33 @@ func TestAuthorizerLivePolicy_ReportsGroupVetoesAndAdmissionDecisions(t *testing
 	require.True(t, decision.Allowed, "the decision is unchanged")
 	require.Equal(t, 1, count(), "admission decisions are reported too")
 	require.Contains(t, logs.String(), "server-two")
+
+	logs.Reset()
+	prepared, err := engine.PrepareMandatory(narrowed)
+	require.NoError(t, err)
+	for range 3 {
+		decision, err = prepared.Decide(prepared.OrganizationID(), two)
+		require.NoError(t, err)
+		require.True(t, decision.Allowed)
+	}
+	require.Equal(t, 1, count(), "one prepared authorization reports once")
+}
+
+func TestAuthorizerLivePolicy_ReportsTheAlternativeTheCredentialAllowed(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	engine := NewEngine(slog.New(slog.NewTextHandler(&logs, nil)), nil, staticChallengeLogging(false), workos.NewStubClient())
+
+	const project = "project-one"
+	credential := []Grant{NewGrant(ScopeMCPConnect, "server-two"), NewGrant(ScopeProjectRead, WildcardResource)}
+	authorizer := RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{NewGrant(ScopeMCPConnect, "server-one")}}
+	ctx := admittedPoliciesToContext(principalPolicyTestContext(t, nil, nil, nil), authorizer, false, credential, credential, credential)
+	one := MCPServer(MCPServerIDFrom("server-one"), ProjectIDFrom(project)).Connect()
+	two := MCPServer(MCPServerIDFrom("server-two"), ProjectIDFrom(project)).Connect()
+
+	require.NoError(t, engine.RequireAny(ctx, one, two))
+	require.Equal(t, 1, strings.Count(logs.String(), authorizerWouldRefuseLog))
+	require.Contains(t, logs.String(), "server-two")
+	require.NotContains(t, logs.String(), "server-one")
 }

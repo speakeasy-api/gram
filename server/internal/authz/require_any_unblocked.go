@@ -27,7 +27,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		return err
 	}
 	if !enforce {
-		return e.RequireAny(ctx, checks...)
+		return e.requireAny(ctx, true, checks...)
 	}
 	if len(checks) == 0 {
 		return e.mapError(ctx, ErrNoChecks)
@@ -59,7 +59,7 @@ func (e *Engine) RequireAnyUnblocked(ctx context.Context, checks ...Check) error
 		}.Log(ctx, e.db, e.logger, e.challengeLoggingEnabled)
 		return e.mapError(ctx, Denied(blocked.Scope, blocked.selector()))
 	}
-	return e.RequireAny(ctx, checks...)
+	return e.requireAny(ctx, true, checks...)
 }
 
 // firstUnoverriddenExclusion returns the first check an exclusion rejects,
