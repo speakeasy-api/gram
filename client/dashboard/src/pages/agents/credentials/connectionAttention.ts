@@ -3,27 +3,33 @@ import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
 /**
- * The connection each server shows on the MCP sign-in tab: the agent's
- * assigned one, unless it no longer works and the editor has a usable one,
- * which a save assigns in its place. Until the editor's own connection is
- * known, its checking or error state stands rather than a premature verdict.
- * An assignment the viewer may not see stands too: they could not save their
- * own in its place, so offering it would mislead.
+ * The connection each server shows. For an agent that exists, only the one
+ * assigned to it: the editor's own connection reaches the agent only when
+ * they assign it (`assignableOwnConnection`), so showing it as the agent's
+ * would claim a grant nobody made. While an agent is being created there is
+ * nothing assigned yet, and the creator's connections are what creation
+ * assigns.
  */
 export function displayedConnections(
   connections: OwnerConnections,
 ): Map<string, ServerConnection> {
   const displayed = new Map(connections.byServer);
-  for (const [serverId, assigned] of connections.assignedByServer ?? []) {
-    const own = connections.byServer.get(serverId)?.status;
-    const keepOwn =
-      assigned.status !== "ready" &&
-      assigned.status !== "forbidden" &&
-      assigned.status !== "not-required" &&
-      (own === "ready" || own === "checking" || own === "error");
-    if (!keepOwn) displayed.set(serverId, assigned);
-  }
+  for (const [serverId, assigned] of connections.assignedByServer ?? [])
+    displayed.set(serverId, assigned);
   return displayed;
+}
+
+/**
+ * Whether the editor could give an existing agent their own working
+ * connection to a server, because the agent has none that works there.
+ */
+export function assignableOwnConnection(
+  connections: OwnerConnections,
+  serverId: string,
+): boolean {
+  const assigned = connections.assignedByServer?.get(serverId)?.status;
+  if (assigned !== "missing" && assigned !== "ended") return false;
+  return connections.byServer.get(serverId)?.status === "ready";
 }
 
 /**
