@@ -59,14 +59,14 @@ func (f *failingFixture) onServer(p urn.SessionSubject, app App) Served {
 func (f *failingFixture) served(s Served, ago time.Duration) {
 	f.t.Helper()
 	s.ServedAt = f.at(ago)
-	require.NoError(f.t, appendServedInto(f.t.Context(), f.ch, lastServedTable, []Served{s}))
+	require.NoError(f.t, AppendServedInto(f.t.Context(), f.ch, LastServedTable, []Served{s}))
 }
 
 // answered writes a request on s served ago before now that the server answered.
 func (f *failingFixture) answered(s Served, ago time.Duration) {
 	f.t.Helper()
 	s.ServedAt, s.AnsweredAt = f.at(ago), f.at(ago)
-	require.NoError(f.t, appendServedInto(f.t.Context(), f.ch, lastServedTable, []Served{s}))
+	require.NoError(f.t, AppendServedInto(f.t.Context(), f.ch, LastServedTable, []Served{s}))
 }
 
 func (f *failingFixture) read(filter FailingNowFilter) []FailingPerson {

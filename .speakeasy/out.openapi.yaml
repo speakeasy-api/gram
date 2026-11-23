@@ -36805,6 +36805,111 @@ paths:
       x-speakeasy-name-override: getSignInSummary
       x-speakeasy-react-hook:
         name: McpSignInSummary
+  /rpc/mcpConnectionHealth.getSuspectedProblem:
+    post:
+      description: Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.
+      operationId: getMcpSuspectedProblem
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetSuspectedProblemRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSuspectedProblemResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getSuspectedProblem mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: getSuspectedProblem
+      x-speakeasy-react-hook:
+        name: McpSuspectedProblem
   /rpc/mcpConnectionHealth.listAttempts:
     post:
       description: List connection attempts for a provider, newest first. Repeats of the same failure fold into one row.
@@ -37015,6 +37120,111 @@ paths:
       x-speakeasy-name-override: listDeniedClients
       x-speakeasy-react-hook:
         name: McpDeniedClients
+  /rpc/mcpConnectionHealth.listSuspectedProblems:
+    post:
+      description: 'List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Empty without log:read.'
+      operationId: listMcpSuspectedProblems
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListSuspectedProblemsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSuspectedProblemsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listSuspectedProblems mcpConnectionHealth
+      tags:
+        - mcpConnectionHealth
+      x-speakeasy-name-override: listSuspectedProblems
+      x-speakeasy-react-hook:
+        name: McpSuspectedProblems
   /rpc/mcpEndpoints.checkSlugAvailability:
     get:
       description: 'Check whether an MCP endpoint slug is available. The uniqueness scope depends on whether a custom_domain_id is provided: platform-domain slugs are checked across all platform-domain endpoints (custom_domain_id IS NULL); custom-domain slugs are checked within the (custom_domain_id, slug) pair. Returns true when the slug is free.'
@@ -102885,6 +103095,36 @@ components:
         - status
         - payment_status
         - billing_ready
+    GetSuspectedProblemRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The problem id from listSuspectedProblems.
+        server_id:
+          type: string
+          description: Read the problem as listed for this server, gateway or toolset.
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+        - id
+    GetSuspectedProblemResult:
+      type: object
+      properties:
+        found:
+          type: boolean
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        problem:
+          $ref: '#/components/schemas/SuspectedProblemDetail'
+      required:
+        - logging_enabled
+        - found
     GetToolUsageClientToolBreakdownResult:
       type: object
       properties:
@@ -107717,6 +107957,38 @@ components:
           description: The list of budget rules.
       required:
         - rules
+    ListSuspectedProblemsRequestBody:
+      type: object
+      properties:
+        part:
+          type: string
+          description: Keep problems with this part of the connection.
+          enum:
+            - speakeasy
+            - service
+        server_id:
+          type: string
+          description: Keep problems with people on this server, gateway or toolset.
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The MCP authentication provider.
+          format: uuid
+      required:
+        - user_session_issuer_id
+    ListSuspectedProblemsResult:
+      type: object
+      properties:
+        logging_enabled:
+          type: boolean
+          description: False when the organization has logging off. Nothing else is returned then.
+        problems:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblem'
+      required:
+        - logging_enabled
+        - problems
     ListSyncedUsersResult:
       type: object
       properties:
@@ -122236,6 +122508,340 @@ components:
         - summary
         - impact
         - cached
+    SuspectedProblem:
+      type: object
+      properties:
+        fact:
+          type: string
+          description: What the data establishes about it, in plain words.
+        filters:
+          $ref: '#/components/schemas/SuspectedProblemFilters'
+        headline:
+          type: string
+          description: Who cannot do what, in plain words.
+        id:
+          type: string
+          description: Stable while the same people fail the same way on the same scope.
+        last_failed_at:
+          type: string
+          format: date-time
+        part:
+          description: speakeasy when the app's sign-in to Speakeasy fails; service when signing in to the service or the server answering fails.
+          enum:
+            - speakeasy
+            - service
+          type: string
+          x-speakeasy-name-override: SuspectedProblemPart
+        people_count:
+          type: integer
+          format: int64
+        people_on_server_count:
+          type: integer
+          description: People failing on the server asked for. Only with server_id.
+          format: int64
+        rule:
+          description: The rule a problem was listed by.
+          enum:
+            - same_server
+            - same_service
+            - same_app_version
+            - one_person
+          type: string
+          x-speakeasy-name-override: SuspectedProblemRule
+        scope:
+          $ref: '#/components/schemas/SuspectedProblemScope'
+        since:
+          type: string
+          description: When its earliest failure ended.
+          format: date-time
+      required:
+        - id
+        - rule
+        - part
+        - scope
+        - since
+        - last_failed_at
+        - people_count
+        - headline
+        - fact
+        - filters
+    SuspectedProblemBucket:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          format: int64
+        start:
+          type: string
+          format: date-time
+      required:
+        - start
+        - attempts
+    SuspectedProblemDetail:
+      type: object
+      properties:
+        fact:
+          type: string
+          description: What the data establishes about it, in plain words.
+        failed_per_10_minutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemBucket'
+          description: Failed attempts per 10 minutes over at most the last 24 hours.
+        filters:
+          $ref: '#/components/schemas/SuspectedProblemFilters'
+        headline:
+          type: string
+          description: Who cannot do what, in plain words.
+        id:
+          type: string
+          description: Stable while the same people fail the same way on the same scope.
+        last_connected_at:
+          type: string
+          description: The latest time any of its people last had the broken part working, when known.
+          format: date-time
+        last_failed_at:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemMessage'
+        other_failures_on_service:
+          type: integer
+          description: People failing on the same scope who are not in this problem.
+          format: int64
+        part:
+          description: speakeasy when the app's sign-in to Speakeasy fails; service when signing in to the service or the server answering fails.
+          enum:
+            - speakeasy
+            - service
+          type: string
+          x-speakeasy-name-override: SuspectedProblemPart
+        people:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemPerson'
+          description: At most 50, earliest failure first.
+        people_count:
+          type: integer
+          format: int64
+        people_on_server_count:
+          type: integer
+          description: People failing on the server asked for. Only with server_id.
+          format: int64
+        people_total:
+          type: integer
+          description: Rows in people before the cap.
+          format: int64
+        rule:
+          description: The rule a problem was listed by.
+          enum:
+            - same_server
+            - same_service
+            - same_app_version
+            - one_person
+          type: string
+          x-speakeasy-name-override: SuspectedProblemRule
+        scope:
+          $ref: '#/components/schemas/SuspectedProblemScope'
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuspectedProblemServer'
+        since:
+          type: string
+          description: When its earliest failure ended.
+          format: date-time
+        source:
+          description: The party that returned a failure.
+          enum:
+            - service
+            - server
+            - app
+            - identity_provider
+            - speakeasy_setting
+            - speakeasy
+          type: string
+          x-speakeasy-name-override: ConnectionFailureSource
+      required:
+        - failed_per_10_minutes
+        - other_failures_on_service
+        - messages
+        - people
+        - people_total
+        - servers
+        - id
+        - rule
+        - part
+        - scope
+        - since
+        - last_failed_at
+        - people_count
+        - headline
+        - fact
+        - filters
+    SuspectedProblemFilters:
+      type: object
+      properties:
+        app_versions:
+          type: array
+          items:
+            type: string
+          description: App family and version as family@version.
+          maxItems: 50
+        apps:
+          type: array
+          items:
+            type: string
+          description: App families. An empty string selects apps that are not on the list.
+          maxItems: 50
+        from:
+          type: string
+          description: Inclusive start of attempt start times.
+          format: date-time
+        member_ids:
+          type: array
+          items:
+            type: string
+          description: Gateway member ids on the step that ended the attempt.
+          maxItems: 50
+        networks:
+          type: array
+          items:
+            type: string
+          description: Network keys.
+          maxItems: 50
+        outcomes:
+          type: array
+          items:
+            description: How an attempt ended. didnt_finish has no final step past the live window; in_progress is still inside it.
+            enum:
+              - connected
+              - failed
+              - blocked
+              - declined
+              - didnt_finish
+              - in_progress
+            type: string
+            x-speakeasy-name-override: ConnectionOutcome
+          maxItems: 50
+        people:
+          type: array
+          items:
+            type: string
+          description: Subject URNs.
+          maxItems: 50
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Reason codes.
+          maxItems: 50
+        server_ids:
+          type: array
+          items:
+            type: string
+          description: Server, gateway or toolset ids.
+          maxItems: 50
+        services:
+          type: array
+          items:
+            type: string
+          description: Service hosts.
+          maxItems: 50
+        steps:
+          type: array
+          items:
+            description: The plain step an attempt ended or stopped at.
+            enum:
+              - connect
+              - sign_in
+              - service_sign_in
+              - sign_in_renewal
+              - service_renewal
+              - listing_tools
+              - request
+              - other
+            type: string
+            x-speakeasy-name-override: ConnectionStepGroup
+          maxItems: 50
+      description: Connection Logs filters that show the problem's failed attempts.
+      required:
+        - from
+    SuspectedProblemMessage:
+      type: object
+      properties:
+        admin_message:
+          type: string
+          description: What happened, in one sentence for an administrator.
+        attempts:
+          type: integer
+          format: int64
+        message:
+          type: string
+          description: What happened, in one sentence for the person.
+        reason:
+          type: string
+      required:
+        - reason
+        - message
+        - attempts
+    SuspectedProblemPerson:
+      type: object
+      properties:
+        app:
+          $ref: '#/components/schemas/ConnectionApp'
+        attempts:
+          type: integer
+          format: int64
+        first_failed_at:
+          type: string
+          format: date-time
+        member:
+          $ref: '#/components/schemas/ConnectionServer'
+        person:
+          $ref: '#/components/schemas/ConnectionPerson'
+        server:
+          $ref: '#/components/schemas/ConnectionServer'
+      required:
+        - person
+        - app
+        - attempts
+        - first_failed_at
+    SuspectedProblemScope:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The server id, service host, family@version or subject URN.
+        kind:
+          type: string
+          enum:
+            - server
+            - service
+            - app_version
+            - person
+        name:
+          type: string
+          description: The server's name, the service's host, the app's name and version, or the person's name.
+      required:
+        - kind
+        - id
+        - name
+    SuspectedProblemServer:
+      type: object
+      properties:
+        attempts:
+          type: integer
+          format: int64
+        member:
+          $ref: '#/components/schemas/ConnectionServer'
+        server:
+          $ref: '#/components/schemas/ConnectionServer'
+      required:
+        - server
+        - attempts
     SwitchOrgEncryptionKeyRequestBody:
       type: object
       properties:

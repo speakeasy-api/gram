@@ -6,15 +6,19 @@ import { mcpConnectionHealthGetAttempt } from "../funcs/mcpConnectionHealthGetAt
 import { mcpConnectionHealthGetAttemptCounts } from "../funcs/mcpConnectionHealthGetAttemptCounts.js";
 import { mcpConnectionHealthGetSessionActivity } from "../funcs/mcpConnectionHealthGetSessionActivity.js";
 import { mcpConnectionHealthGetSignInSummary } from "../funcs/mcpConnectionHealthGetSignInSummary.js";
+import { mcpConnectionHealthGetSuspectedProblem } from "../funcs/mcpConnectionHealthGetSuspectedProblem.js";
 import { mcpConnectionHealthListAttempts } from "../funcs/mcpConnectionHealthListAttempts.js";
 import { mcpConnectionHealthListDeniedClients } from "../funcs/mcpConnectionHealthListDeniedClients.js";
+import { mcpConnectionHealthListSuspectedProblems } from "../funcs/mcpConnectionHealthListSuspectedProblems.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ConnectionAttemptCountsResult } from "../models/components/connectionattemptcountsresult.js";
 import { ConnectionDeniedClientsResult } from "../models/components/connectiondeniedclientsresult.js";
 import { ConnectionSessionActivityResult } from "../models/components/connectionsessionactivityresult.js";
 import { ConnectionSignInSummaryResult } from "../models/components/connectionsigninsummaryresult.js";
 import { GetConnectionAttemptResult } from "../models/components/getconnectionattemptresult.js";
+import { GetSuspectedProblemResult } from "../models/components/getsuspectedproblemresult.js";
 import { ListConnectionAttemptsResult } from "../models/components/listconnectionattemptsresult.js";
+import { ListSuspectedProblemsResult } from "../models/components/listsuspectedproblemsresult.js";
 import {
   GetMcpConnectionAttemptRequest,
   GetMcpConnectionAttemptSecurity,
@@ -32,6 +36,10 @@ import {
   GetMcpSignInSummarySecurity,
 } from "../models/operations/getmcpsigninsummary.js";
 import {
+  GetMcpSuspectedProblemRequest,
+  GetMcpSuspectedProblemSecurity,
+} from "../models/operations/getmcpsuspectedproblem.js";
+import {
   ListMcpConnectionAttemptsRequest,
   ListMcpConnectionAttemptsSecurity,
 } from "../models/operations/listmcpconnectionattempts.js";
@@ -39,6 +47,10 @@ import {
   ListMcpDeniedClientsRequest,
   ListMcpDeniedClientsSecurity,
 } from "../models/operations/listmcpdeniedclients.js";
+import {
+  ListMcpSuspectedProblemsRequest,
+  ListMcpSuspectedProblemsSecurity,
+} from "../models/operations/listmcpsuspectedproblems.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class McpConnectionHealth extends ClientSDK {
@@ -119,6 +131,25 @@ export class McpConnectionHealth extends ClientSDK {
   }
 
   /**
+   * getSuspectedProblem mcpConnectionHealth
+   *
+   * @remarks
+   * Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.
+   */
+  async getSuspectedProblem(
+    request: GetMcpSuspectedProblemRequest,
+    security?: GetMcpSuspectedProblemSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetSuspectedProblemResult> {
+    return unwrapAsync(mcpConnectionHealthGetSuspectedProblem(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listAttempts mcpConnectionHealth
    *
    * @remarks
@@ -149,6 +180,25 @@ export class McpConnectionHealth extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ConnectionDeniedClientsResult> {
     return unwrapAsync(mcpConnectionHealthListDeniedClients(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSuspectedProblems mcpConnectionHealth
+   *
+   * @remarks
+   * List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Empty without log:read.
+   */
+  async listSuspectedProblems(
+    request: ListMcpSuspectedProblemsRequest,
+    security?: ListMcpSuspectedProblemsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSuspectedProblemsResult> {
+    return unwrapAsync(mcpConnectionHealthListSuspectedProblems(
       this,
       request,
       security,

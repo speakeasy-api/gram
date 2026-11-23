@@ -6,14 +6,19 @@ import { ServerConnectionHealth } from "./ServerConnectionHealth";
 
 const state = vi.hoisted(() => ({
   problems: [] as { id: string; part: string }[],
+  problemsError: false,
+  loggingEnabled: true,
   logsProps: [] as Record<string, unknown>[],
 }));
 
 vi.mock("./api", async (original) => ({
   ...(await original<object>()),
-  useSuspectedProblems: () => ({ data: { problems: state.problems } }),
+  useSuspectedProblems: () => ({
+    data: { problems: state.problems },
+    isError: state.problemsError,
+  }),
   useSignInSummary: () => ({
-    data: { loggingEnabled: true, viewerScope: "all" },
+    data: { loggingEnabled: state.loggingEnabled, viewerScope: "all" },
   }),
 }));
 
@@ -47,6 +52,8 @@ describe("ServerConnectionHealth", () => {
   afterEach(() => {
     cleanup();
     state.problems = [];
+    state.problemsError = false;
+    state.loggingEnabled = true;
     state.logsProps = [];
   });
 
@@ -75,5 +82,18 @@ describe("ServerConnectionHealth", () => {
     state.problems = [{ id: "p2", part: "service" }];
     renderTab();
     expect(screen.getByText(SERVICE_DEFINITION)).toBeTruthy();
+  });
+
+  it("shows no problems while logging is off", () => {
+    state.problems = [{ id: "p1", part: "service" }];
+    state.loggingEnabled = false;
+    renderTab();
+    expect(screen.queryByTestId("problems")).toBeNull();
+  });
+
+  it("says when problems could not load", () => {
+    state.problemsError = true;
+    renderTab();
+    expect(screen.getByText(/Couldn't load suspected problems/)).toBeTruthy();
   });
 });

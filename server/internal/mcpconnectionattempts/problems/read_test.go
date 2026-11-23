@@ -54,9 +54,9 @@ func (f *readFixture) failAs(p urn.SessionSubject, scope mcpconnectionattempts.S
 	require.NoError(f.t, mcpconnectionattempts.AppendRows(f.t.Context(), f.ch, []mcpconnectionattempts.Row{row}))
 }
 
-func (f *readFixture) read(org string, recordedSince time.Time) []Problem {
+func (f *readFixture) read(org string, project uuid.UUID, recordedSince time.Time) []Problem {
 	f.t.Helper()
-	got, err := Read(f.t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, org, recordedSince, f.now)
+	got, err := Read(f.t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, org, project, recordedSince, f.now)
 	require.NoError(f.t, err)
 	return got
 }
@@ -64,14 +64,14 @@ func (f *readFixture) read(org string, recordedSince time.Time) []Problem {
 func TestRead_LogsOffReturnsTheError(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
-	_, err := Read(t.Context(), f.ch, f.db, logsOff, "org-"+uuid.NewString(), time.Time{}, f.now)
+	_, err := Read(t.Context(), f.ch, f.db, logsOff, "org-"+uuid.NewString(), uuid.Nil, time.Time{}, f.now)
 	require.ErrorIs(t, err, mcpconnectionattempts.ErrLogsOff)
 }
 
 func TestRead_RejectsAnEmptyOrganization(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
-	_, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, "", time.Time{}, f.now)
+	_, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, "", uuid.Nil, time.Time{}, f.now)
 	require.Error(t, err)
 }
 
@@ -82,14 +82,33 @@ func TestRead_GroupsOneOrganizationsFailures(t *testing.T) {
 	orgA, orgB, project, server := "org-"+uuid.NewString(), "org-"+uuid.NewString(), uuid.New(), uuid.New()
 	f.fail(mcpconnectionattempts.ServerScope(orgA, project, server, mcpconnectionattempts.AppDCR), time.Hour)
 	f.fail(mcpconnectionattempts.ServerScope(orgB, project, server, mcpconnectionattempts.AppDCR), time.Hour)
-	require.Empty(t, f.read(orgA, time.Time{}), "one person in each organization makes no problem")
+	require.Empty(t, f.read(orgA, uuid.Nil, time.Time{}), "one person in each organization makes no problem")
 
 	f.fail(mcpconnectionattempts.ServerScope(orgA, project, server, mcpconnectionattempts.AppDCR), time.Hour)
-	got := f.read(orgA, time.Time{})
+	got := f.read(orgA, uuid.Nil, time.Time{})
 	require.Len(t, got, 1)
 	require.Equal(t, RuleSameServer, got[0].Rule)
 	require.Equal(t, 2, got[0].People)
 	require.Equal(t, orgA, got[0].OrganizationID)
+}
+
+// A project's read groups only its own episodes; an organization gateway's belong to none.
+func TestRead_GroupsOneProjectsFailures(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	org, projectA, projectB, server := "org-"+uuid.NewString(), uuid.New(), uuid.New(), uuid.New()
+	f.fail(mcpconnectionattempts.ServerScope(org, projectA, server, mcpconnectionattempts.AppDCR), time.Hour)
+	f.fail(mcpconnectionattempts.ServerScope(org, projectB, server, mcpconnectionattempts.AppDCR), time.Hour)
+	require.Len(t, f.read(org, uuid.Nil, time.Time{}), 1, "the organization sees two people")
+	require.Empty(t, f.read(org, projectA, time.Time{}), "one person in each project makes no problem")
+
+	f.fail(mcpconnectionattempts.ServerScope(org, projectA, server, mcpconnectionattempts.AppDCR), time.Hour)
+	got := f.read(org, projectA, time.Time{})
+	require.Len(t, got, 1)
+	require.Equal(t, 2, got[0].People)
+	for _, e := range got[0].Episodes {
+		require.Equal(t, projectA, e.ProjectID)
+	}
 }
 
 func TestRead_StartsWhereRecordingStarted(t *testing.T) {
@@ -99,8 +118,8 @@ func TestRead_StartsWhereRecordingStarted(t *testing.T) {
 	for range MinPeople {
 		f.fail(mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR), 3*time.Hour)
 	}
-	require.Len(t, f.read(org, time.Time{}), 1)
-	require.Empty(t, f.read(org, f.now.Add(-time.Hour)), "failures from before recording started are not read")
+	require.Len(t, f.read(org, uuid.Nil, time.Time{}), 1)
+	require.Empty(t, f.read(org, uuid.Nil, f.now.Add(-time.Hour)), "failures from before recording started are not read")
 }
 
 func TestRead_CountsAnEarlierRunFromWhenRecordingStarted(t *testing.T) {
@@ -111,12 +130,12 @@ func TestRead_CountsAnEarlierRunFromWhenRecordingStarted(t *testing.T) {
 	p := f.fail(scope, 30*time.Hour)
 	f.failAs(p, scope, 30*time.Minute, mcpconnectionattempts.CodeStaticKeyRejected)
 
-	got := f.read(org, time.Time{})
+	got := f.read(org, uuid.Nil, time.Time{})
 	require.Len(t, got, 1)
 	require.Equal(t, RuleOnePerson, got[0].Rule)
 
 	recorded := f.now.Add(-2 * time.Hour)
-	require.Empty(t, f.read(org, recorded), "the run counts from when recording started, two hours ago")
+	require.Empty(t, f.read(org, uuid.Nil, recorded), "the run counts from when recording started, two hours ago")
 }
 
 // A failure last seen before recording started is not counted, even when it became known as failed later.
@@ -132,8 +151,8 @@ func TestRead_DropsAFailureLastSeenBeforeRecordingStarted(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), f.ch, []mcpconnectionattempts.Row{row}))
 	}
-	require.Len(t, f.read(org, time.Time{}), 1)
-	require.Empty(t, f.read(org, f.now.Add(-time.Hour)), "known as failed 40 minutes ago, last seen failing 99 minutes ago")
+	require.Len(t, f.read(org, uuid.Nil, time.Time{}), 1)
+	require.Empty(t, f.read(org, uuid.Nil, f.now.Add(-time.Hour)), "known as failed 40 minutes ago, last seen failing 99 minutes ago")
 }
 
 // Old outages retried just after recording started count from then, so their grace has not passed.
@@ -147,8 +166,8 @@ func TestRead_AppliesGraceFromWhenRecordingStarted(t *testing.T) {
 		f.failAs(p, scope, 3*time.Hour, mcpconnectionattempts.CodeProviderServerError)
 		f.failAs(p, scope, 9*time.Minute, mcpconnectionattempts.CodeProviderServerError)
 	}
-	require.Len(t, f.read(org, time.Time{}), 1)
-	require.Empty(t, f.read(org, f.now.Add(-10*time.Minute)), "recording started 10 minutes ago, inside the 30 minute grace")
+	require.Len(t, f.read(org, uuid.Nil, time.Time{}), 1)
+	require.Empty(t, f.read(org, uuid.Nil, f.now.Add(-10*time.Minute)), "recording started 10 minutes ago, inside the 30 minute grace")
 }
 
 type orgFixture struct {
@@ -203,7 +222,7 @@ func TestRead_GroupsAServiceAcrossADirectServerAndAGatewayMember(t *testing.T) {
 	f.failAs(urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.ServerScope(o.organizationID, o.project, direct, mcpconnectionattempts.AppDCR), time.Hour, down)
 	f.failAs(urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.GatewayScope(o.organizationID, o.project, uuid.New(), mcpconnectionattempts.AppDCR), time.Hour, down, mcpconnectionattempts.Member(memberServer))
 
-	got := f.read(o.organizationID, time.Time{})
+	got := f.read(o.organizationID, uuid.Nil, time.Time{})
 	require.Len(t, got, 1)
 	require.Equal(t, RuleSameService, got[0].Rule)
 	require.Equal(t, Scope{Kind: ScopeService, Key: "mcp.example.com"}, got[0].Scope)

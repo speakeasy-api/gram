@@ -531,7 +531,7 @@ export function ConnectionLogsView({
         orientation="horizontal"
         heading="No attempts match these filters"
         description={noMatchSentence(
-          serverId ? { ...filters.values, server: null } : filters.values,
+          serverId ? { ...filters.values, server: [] } : filters.values,
           optionsById,
           search,
         )}
@@ -693,20 +693,18 @@ function noMatchSentence(
   const range = rangePhrase(values, options);
   if (search) return `Nothing matches “${search}” in ${range}.`;
   const others =
-    [
-      values.person,
-      values.service,
-      values.app,
-      values.appVersion,
-      values.network,
-    ].some(Boolean) ||
+    [values.service, values.app, values.appVersion, values.network].some(
+      Boolean,
+    ) ||
+    values.person.length > 0 ||
     values.step.length > 0 ||
     values.message.length > 0;
   if (others) return `No attempts match these filters in ${range}.`;
   const verb =
     values.outcome.length === 1 ? OUTCOME_SENTENCE[values.outcome[0]!] : null;
-  const server = values.server
-    ? options.server?.find((o) => "value" in o && o.value === values.server)
+  const only = values.server.length === 1 ? values.server[0] : undefined;
+  const server = only
+    ? options.server?.find((o) => "value" in o && o.value === only)
     : undefined;
   const on = server && "label" in server ? ` on ${server.label as string}` : "";
   return verb

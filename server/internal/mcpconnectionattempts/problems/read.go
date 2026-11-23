@@ -17,8 +17,9 @@ import (
 )
 
 // Read returns the suspected problems at now, or mcpconnectionattempts.ErrLogsOff.
+// A non-nil projectID groups only that project's episodes; organization gateways have none.
 // Failures before recordedSince (zero for none) cannot be seen to end; app versions need served rows.
-func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(context.Context, string) (bool, error), organizationID string, recordedSince, now time.Time) ([]Problem, error) {
+func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(context.Context, string) (bool, error), organizationID string, projectID uuid.UUID, recordedSince, now time.Time) ([]Problem, error) {
 	if organizationID == "" {
 		return nil, errors.New("suspected problems need an organization")
 	}
@@ -34,6 +35,9 @@ func Read(ctx context.Context, ch driver.Conn, db repo.DBTX, logsEnabled func(co
 	}, now)
 	if err != nil {
 		return nil, fmt.Errorf("read failing now: %w", err)
+	}
+	if projectID != uuid.Nil {
+		episodes = slices.DeleteFunc(episodes, func(e mcpconnectionattempts.FailingPerson) bool { return e.ProjectID != projectID })
 	}
 	episodes = sinceRecording(episodes, triedSince, recordedSince, now)
 	if len(episodes) == 0 {

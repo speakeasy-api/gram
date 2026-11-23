@@ -123,7 +123,7 @@ func triedSince(failures []failure, since time.Time) []failure {
 	return slices.DeleteFunc(failures, func(f failure) bool { return known[f.connectionKey()].Before(since) })
 }
 
-// lastServed is one connection's latest served times in lastServedTable, with max()
+// lastServed is one connection's latest served times in LastServedTable, with max()
 // taken over its unmerged rows. AnsweredAt is zero when the server never answered.
 type lastServed struct {
 	ServerKind            string    `ch:"server_kind"`
@@ -143,7 +143,7 @@ const servedQuery = `
 SELECT
 	server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + lastServedTable + `
+FROM ` + LastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ? AND subject_urn IN ?
 GROUP BY server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id`
 
@@ -154,7 +154,7 @@ const answersQuery = `
 SELECT
 	server_kind, server_id, member_id, '' AS subject_urn, '' AS app_key, '' AS client_family, '' AS remote_session_client_id,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + lastServedTable + `
+FROM ` + LastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id`
 
@@ -242,7 +242,7 @@ type ServedByFamily struct {
 const servedByFamilyQuery = `
 SELECT server_kind, server_id, member_id, client_family,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
-FROM ` + lastServedTable + `
+FROM ` + LastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id, client_family`
 

@@ -46,7 +46,7 @@ export const LOG_FILTERS = defineFilters([
   {
     id: "server",
     label: "Server",
-    kind: "select",
+    kind: "multiselect",
     pinned: true,
     chipPrefix: true,
   },
@@ -54,7 +54,7 @@ export const LOG_FILTERS = defineFilters([
   {
     id: "person",
     label: "Person",
-    kind: "select",
+    kind: "multiselect",
     pinned: true,
     allLabel: "All people",
     description: "Attempts with no known person are listed by network.",
@@ -170,9 +170,9 @@ export function toAttemptFilters(values: LogFilterValues): AttemptFilters {
         (ATTEMPT_OUTCOMES as readonly string[]).includes(o),
       ),
     ),
-    serverIds: one(values.server),
+    serverIds: nonEmpty(values.server),
     services: one(values.service),
-    people: one(values.person),
+    people: nonEmpty(values.person),
     apps: one(values.app === UNLISTED_APP ? "" : values.app),
     appVersions: one(values.appVersion),
     steps: nonEmpty(
@@ -214,9 +214,9 @@ export function logsSearch(filters: LinkFilters, now: Date): string {
     }
   };
   set("outcome", filters.outcomes);
-  set("server", filters.serverIds, true);
+  set("server", filters.serverIds);
   set("service", filters.services, true);
-  set("person", filters.people, true);
+  set("person", filters.people);
   set(
     "app",
     filters.apps?.map((a) => (a === "" ? UNLISTED_APP : a)),

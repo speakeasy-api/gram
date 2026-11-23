@@ -233,25 +233,25 @@ export const SERVICE_DEFINITION =
   "An MCP server is what the AI app connects to in Speakeasy. A service is the outside system that server works with for the person, like Linear. Each has its own sign-in.";
 
 const PROBLEM_RULES: Record<ProblemRule, string> = {
-  three_people_same_service:
-    "3 or more people got the same kind of failure from one service and have not connected since.",
-  three_people_same_server:
-    "3 or more people got the same kind of failure on one server and have not connected since.",
-  three_people_same_app_version:
-    "3 or more people on one app version got the same kind of failure and have not connected since.",
-  one_person_24_hours:
+  same_service:
+    "2 or more people got the same kind of failure from one service and have not connected since.",
+  same_server:
+    "2 or more people got the same kind of failure on one server and have not connected since.",
+  same_app_version:
+    "2 or more people on one app version got the same kind of failure and have not connected since.",
+  one_person:
     "One person got the same kind of failure for 24 hours and has not connected since.",
 };
 
 /** Rules for problems signing in to Speakeasy, where success is signing in. */
 const SIGN_IN_PROBLEM_RULES: Record<ProblemRule, string> = {
-  three_people_same_service:
-    "3 or more people got the same kind of failure from one service and have not signed in since.",
-  three_people_same_server:
-    "3 or more people got the same kind of failure on one server and have not signed in since.",
-  three_people_same_app_version:
-    "3 or more people on one app version got the same kind of failure and have not signed in since.",
-  one_person_24_hours:
+  same_service:
+    "2 or more people got the same kind of failure from one service and have not signed in since.",
+  same_server:
+    "2 or more people got the same kind of failure on one server and have not signed in since.",
+  same_app_version:
+    "2 or more people on one app version got the same kind of failure and have not signed in since.",
+  one_person:
     "One person got the same kind of failure for 24 hours and has not signed in since.",
 };
 
@@ -265,7 +265,7 @@ export function problemRule(problem: SuspectedProblem): string {
 /** The headline with when it started, as the panel lists it. */
 export function problemHeadline(problem: SuspectedProblem, now: Date): string {
   const since =
-    problem.rule === "one_person_24_hours"
+    problem.rule === "one_person"
       ? formatDayMonth(problem.since)
       : formatSince(problem.since, now);
   return `${problem.headline} since ${since}`;

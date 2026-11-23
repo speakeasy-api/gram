@@ -2,6 +2,7 @@ package attemptlog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -157,4 +158,44 @@ func groupStrings(groups []StepGroup) []string {
 		out[i] = string(g)
 	}
 	return out
+}
+
+// TimeCount is the weighted attempts that started in one interval.
+type TimeCount struct {
+	// Start is the interval's start.
+	Start time.Time `ch:"t_start"`
+
+	// Attempts is weighted attempts.
+	Attempts uint64 `ch:"t_attempts"`
+}
+
+// CountOver counts the attempts matching the filters per interval of width, every interval in the range included.
+func CountOver(ctx context.Context, ch driver.Conn, s Scope, f Filters, width time.Duration, now time.Time) ([]TimeCount, error) {
+	if width < time.Second {
+		return nil, errors.New("interval must be at least a second")
+	}
+	attempts, args, err := attemptsSQL(s, now)
+	if err != nil {
+		return nil, err
+	}
+	where, filterArgs := filterSQL(f)
+	args = append(args, filterArgs...)
+	query := fmt.Sprintf(`
+	SELECT toDateTime(toStartOfInterval(a_started, INTERVAL %d SECOND), 'UTC') AS t_start, toUInt64(sum(a_weight)) AS t_attempts
+	FROM (`+attempts+`)
+	WHERE `+where+`
+	GROUP BY t_start`+readSettings, int64(width/time.Second))
+	rows, err := queryAll[TimeCount](ctx, ch, "attempts over time", query, args...)
+	if err != nil {
+		return nil, err
+	}
+	found := make(map[int64]uint64, len(rows))
+	for _, r := range rows {
+		found[r.Start.Unix()] = r.Attempts
+	}
+	var out []TimeCount
+	for start := s.From.UTC().Truncate(width); start.Before(s.To); start = start.Add(width) {
+		out = append(out, TimeCount{Start: start, Attempts: found[start.Unix()]})
+	}
+	return out, nil
 }

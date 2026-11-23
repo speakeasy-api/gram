@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	lastServedTable = "mcp_connection_last_served"
+	// LastServedTable holds each connection's latest served times.
+	LastServedTable = "mcp_connection_last_served"
 
 	lastServedInsert = `INSERT INTO %s (
 		organization_id, project_id, server_kind, server_id, member_id, subject_urn,
@@ -443,7 +444,7 @@ func (r *Recorder) flushServed(now time.Time, final bool) {
 	defer cancel()
 	// Waits for the commit, so a failure is counted here.
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 1, "wait_for_async_insert": 1}))
-	if err := appendServedInto(ctx, r.conn, r.cfg.servedTable, rows); err != nil {
+	if err := AppendServedInto(ctx, r.conn, r.cfg.servedTable, rows); err != nil {
 		reason := dropInsertFailed
 		if exception, ok := errors.AsType[*clickhouse.Exception](err); ok && exception.Code == unknownTableCode {
 			reason = dropTableMissing
@@ -496,8 +497,8 @@ func (r *Recorder) servedDrop(ctx context.Context, reason dropReason, n int, cau
 	r.logger.WarnContext(ctx, "dropped served connections", attrs...)
 }
 
-// appendServedInto inserts served connections into table. The table keeps the latest times per connection.
-func appendServedInto(ctx context.Context, conn driver.Conn, table string, rows []Served) error {
+// AppendServedInto inserts served connections into table. The table keeps the latest times per connection.
+func AppendServedInto(ctx context.Context, conn driver.Conn, table string, rows []Served) error {
 	batch, err := conn.PrepareBatch(ctx, fmt.Sprintf(lastServedInsert, table))
 	if err != nil {
 		return fmt.Errorf("prepare served connections: %w", err)

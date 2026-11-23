@@ -99,13 +99,6 @@ export function OverviewTab({
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
   const problems = useSuspectedProblems(scope, "speakeasy");
-  // A problem link opens here only for a problem this page lists.
-  const problemParam = searchParams.get(PROBLEM_PARAM);
-  const listedProblemId = problems.data?.problems?.some(
-    (p) => p.id === problemParam,
-  )
-    ? problemParam
-    : null;
   const killswitches = useActiveKillswitches();
   const denied = useDeniedClients(scope, window);
   const activity = useConnectionAttempts(
@@ -130,12 +123,17 @@ export function OverviewTab({
       <div className="space-y-3">
         {!showProblems ? null : problems.isPending ? (
           <Skeleton className="h-40 w-full" />
+        ) : problems.isError ? (
+          <p className="text-muted-foreground text-sm">
+            Couldn't load suspected problems. Refresh the page to try again.
+          </p>
         ) : (
           <SuspectedProblems
             problems={problems.data?.problems ?? []}
             now={now}
             onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
             rule={SIGN_IN_PROBLEMS_RULE}
+            empty="No suspected problems signing in right now."
           />
         )}
 
@@ -276,7 +274,7 @@ export function OverviewTab({
         onClose={() => setParam(ATTEMPT_PARAM, null)}
       />
       <ProblemDetailSheet
-        id={showProblems ? listedProblemId : null}
+        id={showProblems ? searchParams.get(PROBLEM_PARAM) : null}
         providerId={providerId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}

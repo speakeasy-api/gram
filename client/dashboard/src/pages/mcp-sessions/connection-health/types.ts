@@ -246,16 +246,16 @@ export interface DeniedClientsResponse {
 }
 
 export type ProblemRule =
-  | "three_people_same_server"
-  | "three_people_same_service"
-  | "three_people_same_app_version"
-  | "one_person_24_hours";
+  | "same_server"
+  | "same_service"
+  | "same_app_version"
+  | "one_person";
 
 export interface SuspectedProblem {
   id: string;
-  /** "5 people can't connect to the Linear service". */
+  /** "2 people can't connect to Linear". */
   headline: string;
-  /** "Linear is returning errors." */
+  /** "Signing in to the service fails. Other apps worked there in this time." */
   fact: string;
   since: string;
   lastFailedAt: string;
@@ -264,6 +264,7 @@ export interface SuspectedProblem {
   peopleOnServerCount?: number;
   scope: {
     kind: "server" | "service" | "app_version" | "person";
+    /** Server id, service host, family@version or subject URN. */
     id: string;
     name: string;
   };
@@ -276,29 +277,32 @@ export interface SuspectedProblem {
 
 export interface ListSuspectedProblemsResponse {
   loggingEnabled: boolean;
-  problems?: SuspectedProblem[];
+  problems: SuspectedProblem[];
 }
 
 export interface SuspectedProblemDetail extends SuspectedProblem {
   source?: Source;
+  /** At most the last 24 hours. */
   failedPer10Minutes: { start: string; attempts: number }[];
   lastConnectedAt?: string;
+  /** People failing on the same scope who are not in this problem. */
   otherFailuresOnService: number;
   messages: {
     reason: string;
     message: string;
-    technicalMessage?: string;
+    adminMessage?: string;
     attempts: number;
   }[];
+  /** At most 50; `peopleTotal` counts them all. */
   people: {
-    person?: Person;
-    network?: Network;
+    person: Person;
     app: App;
     server?: ServerRef;
     member?: ServerRef;
     attempts: number;
     firstFailedAt: string;
   }[];
+  peopleTotal: number;
   servers: { server: ServerRef; member?: ServerRef; attempts: number }[];
 }
 

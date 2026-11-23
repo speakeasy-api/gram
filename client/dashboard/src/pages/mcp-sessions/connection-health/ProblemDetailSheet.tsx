@@ -2,7 +2,6 @@ import { OUTCOME } from "@/components/chart/palette";
 import { HealthBarChart } from "./HealthBarChart";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
   Sheet,
@@ -17,7 +16,7 @@ import { useRoutes } from "@/routes";
 import { ArrowRight } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
-import { SUSPECTED_PROBLEMS_ARE_SAMPLE, useSuspectedProblem } from "./api";
+import { useSuspectedProblem } from "./api";
 import { AskAiButton, type Investigation } from "./AskAiButton";
 import { logsSearch } from "./filters";
 import {
@@ -33,19 +32,22 @@ import {
 } from "./format";
 import type { SuspectedProblemDetail } from "./types";
 
-/** One suspected problem, opened from the Overview's panel. */
+/** One suspected problem, opened from the Overview's panel or a server's tab. */
 export function ProblemDetailSheet({
   id,
   providerId,
+  serverId,
   now,
   onClose,
 }: {
   id: string | null;
   providerId: string;
+  /** The server tab it was opened from. */
+  serverId?: string;
   now: Date;
   onClose: () => void;
 }): JSX.Element {
-  const query = useSuspectedProblem(id);
+  const query = useSuspectedProblem({ providerId, serverId }, id);
   const problem = query.data?.problem;
   return (
     <Sheet
@@ -85,8 +87,8 @@ export function ProblemDetailSheet({
               ) : (
                 <InlineEmptyState
                   icon="circle-check"
-                  heading="No longer suspected"
-                  description="People affected by it have connected since, or it was never listed for this project."
+                  heading="This problem has cleared"
+                  description="The people in it have connected since, or stopped trying."
                 />
               )}
             </div>
@@ -97,20 +99,18 @@ export function ProblemDetailSheet({
   );
 }
 
-/** What the people could not reach: "Linear" for the Linear service. */
+/** What the people could not reach. */
 function problemTarget(problem: SuspectedProblemDetail): string | undefined {
-  if (problem.scope.kind === "service")
-    return problem.scope.name.replace(/ service$/, "");
-  if (problem.scope.kind === "server") return problem.scope.name;
+  if (problem.scope.kind === "service" || problem.scope.kind === "server")
+    return problem.scope.name;
   const server = problem.servers[0];
   return server ? serverLabel(server) : undefined;
 }
 
-/** "on the Linear service", "on Internal Wiki"; nothing for one person. */
+/** "on mcp.linear.app", "on Internal Wiki"; nothing for one person. */
 function problemPlace(problem: SuspectedProblemDetail): string {
   switch (problem.scope.kind) {
     case "service":
-      return ` on the ${problem.scope.name}`;
     case "server":
     case "app_version":
       return ` on ${problem.scope.name}`;
@@ -121,7 +121,8 @@ function problemPlace(problem: SuspectedProblemDetail): string {
 
 /** The service or app the failures came from, when the problem names one. */
 function sourceName(problem: SuspectedProblemDetail): string | undefined {
-  if (problem.source === "service") return problem.filters.services?.[0];
+  if (problem.source === "service")
+    return problem.scope.kind === "service" ? problem.scope.name : undefined;
   if (problem.source !== "app") return undefined;
   const apps = new Set(problem.people.map((p) => appLabel(p.app)));
   return apps.size === 1 ? [...apps][0] : undefined;
@@ -141,16 +142,13 @@ function investigationFor(problem: SuspectedProblemDetail): Investigation {
     }, and is there anything I should change?`,
     context: [
       `Suspected problem · ${problem.headline}`,
-      SUSPECTED_PROBLEMS_ARE_SAMPLE
-        ? "This suspected problem is sample data: its people, servers and times are made up."
-        : null,
       `Since ${problem.since}`,
       problem.fact,
       `Rule: ${problemRule(problem)}`,
       problem.source
         ? `Failures came from: ${SOURCE_LABELS[problem.source]}${sourceName(problem) ? ` (${sourceName(problem)})` : ""}`
         : null,
-      `Messages: ${problem.messages.map((m) => `${m.message} (${m.reason}, ${m.attempts})`).join("; ")}`,
+      `Messages: ${problem.messages.map((m) => `${m.adminMessage ?? m.message} (${m.reason}, ${m.attempts})`).join("; ")}`,
       `Servers: ${problem.servers.map((s) => `${serverLabel(s)} (${s.attempts})`).join("; ")}`,
       problem.lastConnectedAt
         ? `${problem.part === "speakeasy" ? "Last successful sign-in" : "Last successful connection"}: ${problem.lastConnectedAt}`
@@ -187,9 +185,6 @@ function ProblemBody({
         <div className="text-eyebrow flex items-center gap-2">
           <span className="bg-destructive size-2 rounded-full" aria-hidden />
           Suspected problem
-          {SUSPECTED_PROBLEMS_ARE_SAMPLE ? (
-            <Badge variant="warning">Sample data</Badge>
-          ) : null}
         </div>
         <SheetTitle className="font-mono text-lg font-normal">
           {problem.headline}
@@ -214,7 +209,7 @@ function ProblemBody({
             {problem.lastConnectedAt
               ? problem.scope.kind === "person"
                 ? ` ${problem.scope.name} has not ${succeeded} since ${formatSince(problem.lastConnectedAt, now)}.`
-                : ` No one has ${succeeded}${problem.part === "speakeasy" ? "" : " to it"} since ${formatSince(problem.lastConnectedAt, now)}.`
+                : ` None of them has ${succeeded} since ${formatSince(problem.lastConnectedAt, now)}.`
               : ""}
           </p>
           <p className="text-muted-foreground">Rule: {problemRule(problem)}</p>
@@ -229,7 +224,7 @@ function ProblemBody({
 
         <Block
           title={`Failed attempts · ${formatCount(failed)}`}
-          aside="10-minute intervals"
+          aside="10-minute intervals, last 24 hours"
         >
           <div className="border p-3">
             <FailureBars buckets={problem.failedPer10Minutes} now={now} />
@@ -240,14 +235,9 @@ function ProblemBody({
           <div className="divide-y border">
             {problem.people.map((p) => (
               <PersonRow
-                key={`${p.person?.subjectUrn ?? p.network?.key}-${p.server?.id}`}
+                key={`${p.person.subjectUrn}-${p.server?.id}-${p.member?.id}`}
                 to={`${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(
-                  {
-                    ...problem.filters,
-                    people: p.person ? [p.person.subjectUrn] : undefined,
-                    networks:
-                      !p.person && p.network ? [p.network.key] : undefined,
-                  },
+                  { ...problem.filters, people: [p.person.subjectUrn] },
                   now,
                 )}`}
               >
@@ -269,6 +259,13 @@ function ProblemBody({
               </PersonRow>
             ))}
           </div>
+          {problem.peopleTotal > problem.people.length ? (
+            <p className="text-muted-foreground text-sm">
+              Showing the first {problem.people.length} of{" "}
+              {formatCount(problem.peopleTotal)}. Open Connection Logs to see
+              the rest.
+            </p>
+          ) : null}
         </Block>
 
         <Block title={`Servers · ${problem.servers.length}`} aside="Attempts">
@@ -295,12 +292,7 @@ function ProblemBody({
                 className="flex justify-between gap-4 px-4 py-3"
               >
                 <div className="min-w-0">
-                  <div className="text-sm">{m.message}</div>
-                  {m.technicalMessage ? (
-                    <div className="text-muted-foreground text-sm">
-                      {m.technicalMessage}
-                    </div>
-                  ) : null}
+                  <div className="text-sm">{m.adminMessage ?? m.message}</div>
                   <div className="text-muted-foreground font-mono text-xs">
                     {m.reason}
                   </div>
@@ -313,11 +305,11 @@ function ProblemBody({
         {problem.otherFailuresOnService > 0 ? (
           <p className="text-muted-foreground text-sm">
             {problem.otherFailuresOnService === 1
-              ? "1 other failure"
-              : `${formatCount(problem.otherFailuresOnService)} other failures`}{" "}
-            on {problem.filters.services?.[0] ?? "the same service"} in this
-            time range {problem.otherFailuresOnService === 1 ? "is" : "are"} not
-            part of this.
+              ? "1 other person"
+              : `${formatCount(problem.otherFailuresOnService)} other people`}{" "}
+            failing on {problem.scope.name}{" "}
+            {problem.otherFailuresOnService === 1 ? "is" : "are"} not part of
+            this.
           </p>
         ) : null}
       </div>
@@ -327,15 +319,9 @@ function ProblemBody({
           investigation={investigationFor(problem)}
           onLaunched={onClose}
         />
-        {SUSPECTED_PROBLEMS_ARE_SAMPLE ? (
-          <span className="text-muted-foreground self-center text-sm">
-            Sample data has no rows in Connection Logs.
-          </span>
-        ) : (
-          <Button asChild>
-            <Link to={logsHref}>Open in Connection Logs</Link>
-          </Button>
-        )}
+        <Button asChild>
+          <Link to={logsHref}>Open in Connection Logs</Link>
+        </Button>
       </SheetFooter>
     </div>
   );
@@ -344,7 +330,7 @@ function ProblemBody({
 const PERSON_ROW =
   "grid grid-cols-[1fr_auto_40px_16px] items-center gap-3 px-4 py-2.5";
 
-/** Links to the person's rows; sample people have none, so they do not link. */
+/** Links to the person's rows. */
 function PersonRow({
   to,
   children,
@@ -352,14 +338,6 @@ function PersonRow({
   to: string;
   children: ReactNode;
 }): JSX.Element {
-  if (SUSPECTED_PROBLEMS_ARE_SAMPLE) {
-    return (
-      <div className={PERSON_ROW}>
-        {children}
-        <span />
-      </div>
-    );
-  }
   return (
     <Link to={to} className={`hover:bg-muted/40 ${PERSON_ROW}`}>
       {children}

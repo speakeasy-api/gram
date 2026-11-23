@@ -147,6 +147,9 @@ type Problem struct {
 
 	// OtherAppsServed is whether another named family worked on one of its servers after its first failure there.
 	OtherAppsServed bool
+
+	// OthersOnScope counts the people failing on its scope who are not in it, zero for a person.
+	OthersOnScope int
 }
 
 // way is how an episode failed: two episodes failed the same way when both are equal.
@@ -437,6 +440,7 @@ func (g grouper) problem(scope Scope, w way, idx []int, people int, otherApps bo
 		Episodes:        eps,
 		SharedApp:       sharedApp(eps),
 		OtherAppsServed: otherApps,
+		OthersOnScope:   g.othersOn(scope, eps),
 	}
 	for _, e := range eps[1:] {
 		if e.LastFailureAt.After(p.LastFailedAt) {
@@ -444,6 +448,24 @@ func (g grouper) problem(scope Scope, w way, idx []int, people int, otherApps bo
 		}
 	}
 	return p
+}
+
+// othersOn counts the people who could join scope in any way and are not among eps.
+func (g grouper) othersOn(scope Scope, eps []mcpconnectionattempts.FailingPerson) int {
+	if scope.Kind == ScopePerson {
+		return 0
+	}
+	in := map[string]bool{}
+	for _, e := range eps {
+		in[e.SubjectURN] = true
+	}
+	others := map[string]bool{}
+	for i, e := range g.episodes {
+		if !in[e.SubjectURN] && slices.Contains(g.scopes[i], scope) {
+			others[e.SubjectURN] = true
+		}
+	}
+	return len(others)
 }
 
 // otherAppsWorked is whether a named family none of the episodes failed with worked on one

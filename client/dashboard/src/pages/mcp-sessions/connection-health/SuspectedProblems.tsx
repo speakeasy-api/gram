@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/Badge";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { problemHeadline } from "./format";
@@ -7,31 +6,37 @@ import type { SuspectedProblem } from "./types";
 const VISIBLE = 3;
 
 const SUSPECTED_PROBLEMS_RULE =
-  "Failed the same way and not connected since: 3 or more people on one MCP server, one service or one app version, or one person for 24 hours.";
+  "Failed the same way and not connected since: 2 or more people on one MCP server, one service or one app version, or one person for 24 hours.";
 
 /** The rule where problems signing in to Speakeasy sit beside problems connecting to a service. */
 const MIXED_PROBLEMS_RULE =
-  "Failed the same way with no success since: 3 or more people on one MCP server, one service or one app version, or one person for 24 hours.";
+  "Failed the same way with no success since: 2 or more people on one MCP server, one service or one app version, or one person for 24 hours.";
 
 /** The rule as the provider Overview states it, which lists only problems signing in to Speakeasy. */
 export const SIGN_IN_PROBLEMS_RULE =
-  "Failed to sign in the same way and not signed in since: 3 or more people on one MCP server or one app version, or one person for 24 hours.";
+  "Failed to sign in the same way and not signed in since: 2 or more people on one MCP server or one app version, or one person for 24 hours.";
 
-/** The one panel that says we suspect something; nothing when there is none. */
+/** The one panel that says we suspect something; `empty`, or nothing, when there is none. */
 export function SuspectedProblems({
   problems,
   now,
   onOpen,
   rule,
+  empty,
 }: {
   problems: SuspectedProblem[];
   now: Date;
   onOpen: (problem: SuspectedProblem) => void;
   /** The hint under the heading; chosen from the problems listed when absent. */
   rule?: string;
+  /** Said when there are no problems. */
+  empty?: string;
 }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
-  if (problems.length === 0) return null;
+  if (problems.length === 0)
+    return empty ? (
+      <p className="text-muted-foreground text-sm">{empty}</p>
+    ) : null;
   const hint =
     rule ??
     (problems.some((p) => p.part === "speakeasy")
@@ -44,10 +49,6 @@ export function SuspectedProblems({
       <div>
         <h2 id="suspected-problems" className="text-eyebrow">
           Suspected problems · {problems.length}
-          {/* Fixture data until the detector ships. */}
-          <Badge variant="warning" className="ml-2 align-middle">
-            Sample data
-          </Badge>
         </h2>
         <p className="text-muted-foreground mt-1 text-sm">{hint}</p>
       </div>
@@ -70,7 +71,7 @@ export function SuspectedProblems({
                 <span className="text-muted-foreground block text-xs">
                   {problem.peopleOnServerCount !== undefined &&
                   problem.peopleOnServerCount < problem.peopleCount
-                    ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} ${problem.scope.kind === "service" ? `on all servers that use the ${problem.scope.name}` : "in all"}. `
+                    ? `${problem.peopleOnServerCount} on this server · ${problem.peopleCount} ${problem.scope.kind === "service" ? `on all servers that use ${problem.scope.name}` : "in all"}. `
                     : ""}
                   {problem.fact}
                 </span>

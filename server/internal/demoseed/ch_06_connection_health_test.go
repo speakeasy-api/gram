@@ -37,7 +37,7 @@ func TestConnectionHealthRowsTellTheSampleStories(t *testing.T) {
 	for _, outcome := range []string{"connected", "failed", "blocked", "declined"} {
 		require.Positive(t, finals[outcome], outcome)
 	}
-	// The sample problems' counts.
+	// The suspected problems' counts.
 	require.Equal(t, 87, byReason[mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed.String()])
 	require.Equal(t, 16, byReason[mcpconnectionattempts.CodeStaticKeyRejected.String()])
 	require.Equal(t, 1, byReason[mcpconnectionattempts.CodeRemoteSessionUnavailable.String()])

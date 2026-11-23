@@ -14,10 +14,6 @@ import {
 } from "@tanstack/react-query";
 import { useState } from "react";
 import { presetWindow } from "./filters";
-import {
-  fixtureGetSuspectedProblem,
-  fixtureListSuspectedProblems,
-} from "./problem-fixtures";
 import * as sdk from "./sdk";
 import type {
   ActiveKillswitch,
@@ -295,36 +291,39 @@ export function useAttemptHere(
   };
 }
 
-/** Suspected problems are made-up sample data until their API ships. */
-export const SUSPECTED_PROBLEMS_ARE_SAMPLE = true;
-
-/** FIXTURES: suspected problems have no detector or API yet. */
 export function useSuspectedProblems(
   scope: Scope,
   part?: ProblemPart,
 ): UseQueryResult<ListSuspectedProblemsResponse> {
-  const { projectId } = useClient();
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
     queryKey: [ROOT, projectId, "listSuspectedProblems", scope, part],
     queryFn: () =>
-      fixtureListSuspectedProblems({
+      sdk.listSuspectedProblems(client, gramProject, {
         userSessionIssuerId: scope.providerId,
         serverId: scope.serverId,
         part,
       }),
+    retry,
     throwOnError: false,
   });
 }
 
-/** FIXTURES: see useSuspectedProblems. */
 export function useSuspectedProblem(
+  scope: Scope,
   id: string | null,
 ): UseQueryResult<GetSuspectedProblemResponse> {
-  const { projectId } = useClient();
+  const { client, gramProject, projectId } = useClient();
   return useQuery({
-    queryKey: [ROOT, projectId, "getSuspectedProblem", id],
-    queryFn: () => fixtureGetSuspectedProblem({ id: id ?? "" }),
+    queryKey: [ROOT, projectId, "getSuspectedProblem", scope, id],
+    queryFn: () =>
+      sdk.getSuspectedProblem(client, gramProject, {
+        userSessionIssuerId: scope.providerId,
+        serverId: scope.serverId,
+        id: id ?? "",
+      }),
     enabled: !!id,
+    retry,
     throwOnError: false,
   });
 }

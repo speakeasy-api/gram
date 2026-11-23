@@ -40,7 +40,7 @@ func testConfig() config {
 		servedInterval:      5 * time.Minute,
 		servedFlushInterval: 10 * time.Millisecond,
 		servedFlushBudget:   10 * time.Second,
-		servedTable:         lastServedTable,
+		servedTable:         LastServedTable,
 	}
 }
 

@@ -38,8 +38,8 @@ export function ServerConnectionHealth({
     [providerId, serverId],
   );
   const problems = useSuspectedProblems(scope);
-  // Sample problems show only once logging is known to be on, and only to
-  // viewers who read everyone's attempts.
+  // Problems name other people, so they show only once logging is known to be
+  // on, and only to viewers who read everyone's attempts.
   const window = useMemo(() => presetWindow("1h", now), [now]);
   const summary = useSignInSummary(scope, window, "hour").data;
   const showProblems =
@@ -51,6 +51,11 @@ export function ServerConnectionHealth({
   return (
     <div className="space-y-8">
       <div className="space-y-3 empty:hidden">
+        {showProblems && problems.isError ? (
+          <p className="text-muted-foreground text-sm">
+            Couldn't load suspected problems. Refresh the page to try again.
+          </p>
+        ) : null}
         <SuspectedProblems
           problems={shownProblems}
           now={now}
@@ -84,6 +89,7 @@ export function ServerConnectionHealth({
       <ProblemDetailSheet
         id={showProblems ? searchParams.get(PROBLEM_PARAM) : null}
         providerId={providerId}
+        serverId={serverId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}
       />

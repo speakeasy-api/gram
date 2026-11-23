@@ -209,6 +209,9 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 	if err := mcpconnectionattempts.AppendRows(ctx, ch, rows); err != nil {
 		return fmt.Errorf("seed connection events: %w", err)
 	}
+	if err := mcpconnectionattempts.AppendServedInto(ctx, ch, mcpconnectionattempts.LastServedTable, s.healthServed(healthRows)); err != nil {
+		return fmt.Errorf("seed served connections: %w", err)
+	}
 	return s.chRunChecks(ctx, ch, []chCheck{
 		{
 			cond:     `(SELECT count() FROM mcp_connection_events WHERE organization_id = @org AND is_final) < 50`,
@@ -234,6 +237,11 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			cond:     `(SELECT countIf(client_family = 'browser') FROM mcp_connection_events WHERE organization_id = @org) = 0 OR (SELECT countIf(client_family != 'browser' AND step NOT IN ('inbound_token', 'mcp_request', 'provider_refresh', 'sign_in_renewal', 'discovery_listing', 'discovery_member')) FROM mcp_connection_events WHERE organization_id = @org) > 0 OR (SELECT countIf(repeats > 0 AND NOT (is_final AND step = 'mcp_request')) FROM mcp_connection_events WHERE organization_id = @org) > 0`,
 			settings: "",
 			msg:      "demo seed postflight: sign-in rows come from a browser, and only one-row requests carry repeats",
+		},
+		{
+			cond:     `(SELECT count() FROM mcp_connection_last_served WHERE organization_id = @org) < 20`,
+			settings: "",
+			msg:      "demo seed postflight: the connection health provider's people need served connections, or no failure can end",
 		},
 		{
 			cond:     `(SELECT uniqExact(attempt_id) FROM mcp_connection_events WHERE organization_id = @org AND user_session_issuer_id = @health_issuer) < 2000 OR (SELECT uniqExact(subject_urn) FROM mcp_connection_events WHERE organization_id = @org AND user_session_issuer_id = @health_issuer AND subject_urn != '') < 20`,
