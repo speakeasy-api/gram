@@ -62,7 +62,7 @@ describe("RegisterClientSheet", () => {
   it("waits for a name and a redirect URI before registering", () => {
     renderSheet();
 
-    const submit = screen.getByRole("button", { name: "Register agent" });
+    const submit = screen.getByRole("button", { name: "Register client" });
     expect(submit).toHaveProperty("disabled", true);
 
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -106,7 +106,7 @@ describe("RegisterClientSheet", () => {
     // A blank extra field is dropped rather than sent.
     fireEvent.click(screen.getByRole("button", { name: "Add redirect URI" }));
     fireEvent.click(screen.getByRole("radio", { name: /client_secret_post/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Register agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Register client" }));
 
     expect(createMutate).toHaveBeenCalledWith({
       request: {

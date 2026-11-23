@@ -58,7 +58,7 @@ func TestStaleChoiceErrorChain(t *testing.T) {
 	t.Parallel()
 	s := &Service{}
 	member := metaMember{slug: "db"}
-	s.applyMemberAuthClient(t.Context(), &member, gapWithChoice(authClientReasonNoAuthForbidden), nil)
+	s.applyMemberAuthClient(t.Context(), "org", &member, gapWithChoice(authClientReasonNoAuthForbidden), nil)
 	stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable)
 	require.True(t, ok)
 	require.Equal(t, authClientReasonNoAuthForbidden, stale.reason)
@@ -69,13 +69,13 @@ func TestStaleChoiceErrorChain(t *testing.T) {
 	require.True(t, needsNewConsent(member.upstreamUnavailable))
 
 	other := metaMember{slug: "db"}
-	s.applyMemberAuthClient(t.Context(), &other, gapResolution(authClientReasonClientDisabled), nil)
+	s.applyMemberAuthClient(t.Context(), "org", &other, gapResolution(authClientReasonClientDisabled), nil)
 	_, ok = errors.AsType[memberStaleChoiceError](other.upstreamUnavailable)
 	require.False(t, ok)
 	require.False(t, needsNewConsent(other.upstreamUnavailable))
 
 	legacy := metaMember{slug: "db"}
-	s.applyMemberAuthClient(t.Context(), &legacy, gapResolution(authClientReasonMissingChoice), errUpstreamSelectionStaleNoAuth)
+	s.applyMemberAuthClient(t.Context(), "org", &legacy, gapResolution(authClientReasonMissingChoice), errUpstreamSelectionStaleNoAuth)
 	_, ok = errors.AsType[memberStaleChoiceError](legacy.upstreamUnavailable)
 	require.True(t, ok, "the upstream client choice path reaches the same error")
 	require.ErrorIs(t, errUpstreamSelectionStaleNoAuth, errUpstreamSelectionUnusable, "direct servers keep their reconnect challenge")
@@ -289,7 +289,7 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 func TestUnreadableChoiceSaysItCouldNotBeChecked(t *testing.T) {
 	t.Parallel()
 	member := metaMember{slug: "db"}
-	(&Service{}).applyMemberAuthClient(t.Context(), &member, gapResolution(authClientReasonMissingChoice), errors.New("read failed"))
+	(&Service{}).applyMemberAuthClient(t.Context(), "org", &member, gapResolution(authClientReasonMissingChoice), errors.New("read failed"))
 	require.Equal(t, `This server's connection could not be checked. Try again in a few minutes.`, memberErrorMessage(member.upstreamUnavailable))
 }
 
@@ -456,7 +456,7 @@ func TestRecordConsentPage_ProposedNoAuthIsAFirstConnect(t *testing.T) {
 	s.connections = rec.Recorder
 	member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "linear"}
 	res, err := s.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, uuid.NullUUID{}, urn.NewUserSubject("user_1"))
-	s.applyMemberAuthClient(t.Context(), &member, res, err)
+	s.applyMemberAuthClient(t.Context(), "org", &member, res, err)
 	stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable)
 	require.True(t, ok, "an OAuth member with nothing picked resolves as a proposed no-auth choice")
 	require.False(t, stale.saved)
@@ -475,7 +475,7 @@ func TestStaleChoiceSavedOnlyFromTheCredential(t *testing.T) {
 	saved := gapWithChoice(authClientReasonNoAuthForbidden)
 	saved.saved = true
 	member := metaMember{serverID: uuid.New(), slug: "linear"}
-	(&Service{}).applyMemberAuthClient(t.Context(), &member, saved, nil)
+	(&Service{}).applyMemberAuthClient(t.Context(), "org", &member, saved, nil)
 	stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable)
 	require.True(t, ok)
 	require.True(t, stale.saved)

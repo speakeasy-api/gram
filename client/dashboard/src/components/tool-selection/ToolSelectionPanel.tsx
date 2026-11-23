@@ -329,8 +329,12 @@ export function ToolSelectionPanel({
                 // Counts come from a deploy-time catalogue. A server that
                 // resolves its tools per caller has none, and hiding every
                 // row would leave the pane empty even though annotations are
-                // exactly what such a server can be narrowed by.
-                if (count === 0 && hasAnnotationCounts) return null;
+                // exactly what such a server can be narrowed by. A selected
+                // row stays, or a choice seeded before the counts arrived
+                // would be submitted with no way to clear it.
+                if (count === 0 && hasAnnotationCounts && !isActive) {
+                  return null;
+                }
                 return (
                   <button
                     key={opt.key}

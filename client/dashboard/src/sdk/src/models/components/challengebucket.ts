@@ -51,6 +51,7 @@ export const ChallengeBucketReason = {
   InvalidCheck: "invalid_check",
   RbacSkippedApikey: "rbac_skipped_apikey",
   DevOverride: "dev_override",
+  ConnectionOwnerMismatch: "connection_owner_mismatch",
 } as const;
 export type ChallengeBucketReason = OpenEnum<typeof ChallengeBucketReason>;
 

@@ -92,7 +92,7 @@ func (s *Service) authorizePerson(ctx context.Context, userID string) (*contextv
 		return nil, oops.C(oops.CodeForbidden)
 	}
 	if userID == "" || userID != ac.UserID {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 			return nil, err
 		}
 	}

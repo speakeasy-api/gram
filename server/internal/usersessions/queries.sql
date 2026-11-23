@@ -760,12 +760,11 @@ WHERE issuer.id = @user_session_issuer_id
   )
   AND session.deleted IS FALSE;
 
--- name: ListUserSessionIssuerClientIDConflicts :many
--- A client_id on both issuers blocks migration unless both rows were resolved
--- from the same Client ID Metadata Document: those describe one client and
--- merge onto the target's row. A source CIMD row that an issuance selection
--- profile pins to the source issuer cannot be merged and still blocks.
-SELECT source.client_id
+-- name: ListUserSessionIssuerDuplicateClients :many
+-- Lists each live source client whose client_id the target issuer also holds.
+-- A duplicate blocks consolidation unless ListMergeableClientPairs pairs it
+-- with the target's row, so that query alone decides which duplicates merge.
+SELECT source.id AS source_client_id, source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
   ON target.user_session_issuer_id = @target_issuer_id
@@ -773,17 +772,6 @@ JOIN user_session_clients AS target
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = @source_issuer_id
   AND source.deleted IS FALSE
-  AND NOT (
-    source.client_id_metadata_uri IS NOT NULL
-    AND target.client_id_metadata_uri IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM issuance_selection_profiles AS profile
-      WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-        AND profile.user_session_client_id = source.id
-        AND profile.deleted IS FALSE
-    )
-  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -797,26 +785,57 @@ WHERE source.user_session_issuer_id = @source_issuer_id
   )
 ORDER BY source.client_id;
 
--- Merging a source CIMD client into the target issuer's client for the same
--- metadata document URL. ListMergeableCimdClientPairs decides which clients
--- merge; the steps after it each take one pair and run in order, each seeing
--- the previous step's writes.
+-- Merging a source client into the target issuer's client for the same
+-- client_id. ListMergeableClientPairs decides which clients merge; the steps
+-- after it each take one pair and run in order, each seeing the previous
+-- step's writes.
 
--- name: ListMergeableCimdClientPairs :many
--- Pairs each live source client resolved from a Client ID Metadata Document
--- with the target issuer's live client for the same document URL. A source
--- client an issuance selection profile pins to the source issuer is left out:
--- the profile's foreign key keeps it on that issuer.
-SELECT source.id AS source_client_id, target.id AS target_client_id
+-- name: ListMergeableClientPairs :many
+-- Pairs each live source client with the target issuer's live client for the
+-- same client_id when both rows describe one client:
+--
+--   - Both were resolved from the same Client ID Metadata Document. Their
+--     sessions and consents move onto the target's row.
+--   - Both were registered through dynamic client registration, which mints
+--     a random client_id, so a shared one means a single registration was
+--     copied onto both issuers. The source copy merges only while nothing
+--     uses it: no live session, no live consent, and no assistant binding.
+--     Its secret hash differs from the target's only by its bcrypt salt, but
+--     that cannot be verified, so a copy something signs in through blocks.
+--
+-- A source client an issuance selection profile pins to the source issuer is
+-- left out: the profile's foreign key keeps it on that issuer.
+SELECT source.id AS source_client_id, target.id AS target_client_id, source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
   ON target.user_session_issuer_id = @target_issuer_id
  AND target.client_id = source.client_id
- AND target.client_id_metadata_uri IS NOT NULL
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = @source_issuer_id
-  AND source.client_id_metadata_uri IS NOT NULL
   AND source.deleted IS FALSE
+  AND (
+    (source.client_id_metadata_uri IS NOT NULL AND target.client_id_metadata_uri IS NOT NULL)
+    OR (
+      source.client_id_metadata_uri IS NULL
+      AND target.client_id_metadata_uri IS NULL
+      AND source.assistant_runtime_id IS NULL
+      AND source.assistant_trigger_workload_binding_id IS NULL
+      AND target.assistant_runtime_id IS NULL
+      AND target.assistant_trigger_workload_binding_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_sessions AS session
+        WHERE session.user_session_client_id = source.id
+          AND session.deleted IS FALSE
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM user_session_consents AS consent
+        WHERE consent.user_session_client_id = source.id
+          AND consent.deleted IS FALSE
+      )
+    )
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM issuance_selection_profiles AS profile
@@ -835,7 +854,7 @@ WHERE source.user_session_issuer_id = @source_issuer_id
         OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
       )
   )
-ORDER BY source.id;
+ORDER BY source.client_id;
 
 -- name: MoveDuplicateConsentResourcesToClient :execrows
 -- Where the same subject approved the same upstream set through both clients,
@@ -2980,7 +2999,10 @@ ORDER BY tb.original_trigger_id;
 -- Records, for one inbound credential, the upstream OAuth client it uses for
 -- every MCP server it can reach, or an explicit no-auth choice. A NULL
 -- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
--- recording to those servers, and an empty array records nothing. An existing
+-- recording to those servers, and an empty array records nothing.
+-- exclude_mcp_server_ids leaves those servers without a row whatever else
+-- would decide them, for servers issuance deferred until the person connects
+-- them. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
 -- only once the server has an associated client and one is decided for the
 -- credential: the no-auth choice is unusable by then, and recording the
@@ -3052,6 +3074,8 @@ reachable AS (
     WHERE s.deleted IS FALSE
       AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
            OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
+      AND (sqlc.narg('exclude_mcp_server_ids')::uuid[] IS NULL
+           OR NOT s.id = ANY(sqlc.narg('exclude_mcp_server_ids')::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id

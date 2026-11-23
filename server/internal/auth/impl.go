@@ -1277,7 +1277,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if len(projectIDs) > 0 && org.ID == authCtx.ActiveOrganizationID {
 			checks := make([]authz.Check, len(projectIDs))
 			for i, id := range projectIDs {
-				checks[i] = authz.Check{Scope: authz.ScopeProjectRead, ResourceID: id, ResourceKind: "", Dimensions: nil}
+				checks[i] = authz.Project(authz.ProjectIDFrom(id)).Read()
 			}
 			allowedIDs, err = s.authz.Filter(ctx, checks)
 			if err != nil {

@@ -28,7 +28,9 @@ type Service interface {
 	// result lists only the keys this call changed: keys that already held the
 	// grants, expired keys and other people's keys are not in it.
 	ExtendAgentKeys(context.Context, *ExtendAgentKeysPayload) (res *ListKeysResult, err error)
-	// List all api keys for an organization
+	// List an organization's api keys, newest first. Send limit to get one page at
+	// a time and follow next_cursor for the rest. Without limit, every matching
+	// key is returned in one response.
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Revoke a api key
 	RevokeKey(context.Context, *RevokeKeyPayload) (err error)
@@ -230,14 +232,26 @@ type Key struct {
 
 // ListKeysPayload is the payload type of the keys service listKeys method.
 type ListKeysPayload struct {
-	// When set, list keys for this first-class agent
-	AgentID      *string
+	// When set, list keys for this first-class agent. Cannot be combined with
+	// cursor, limit or search.
+	AgentID *string
+	// Opaque cursor from a previous response's next_cursor. Returns the keys after
+	// that page.
+	Cursor *string
+	// Page size. When omitted, every matching key is returned and next_cursor is
+	// never set.
+	Limit *int
+	// Only return keys whose name contains this text, ignoring case.
+	Search       *string
 	SessionToken *string
 }
 
 // ListKeysResult is the result type of the keys service extendAgentKeys method.
 type ListKeysResult struct {
 	Keys []*Key
+	// Cursor for the next page of keys.list. Absent on the last page and when no
+	// limit was sent.
+	NextCursor *string
 }
 
 // RevokeKeyPayload is the payload type of the keys service revokeKey method.

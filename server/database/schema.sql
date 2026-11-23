@@ -1556,6 +1556,12 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_project_id_id_key
 ON api_keys (organization_id, project_id, id);
 
+-- Serves keys.list: an organization's live ordinary keys, newest first, read
+-- one keyset page at a time.
+CREATE INDEX IF NOT EXISTS api_keys_organization_id_created_at_id_idx
+ON api_keys (organization_id, created_at DESC, id DESC)
+WHERE deleted IS FALSE AND subject_urn IS NULL;
+
 CREATE TABLE IF NOT EXISTS litellm_instances (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -6651,6 +6657,11 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   -- never returned by the API. Nullable while pre-encryption rows are
   -- migrated; reads prefer this column and fall back to key.
   key_encrypted TEXT,
+  -- The same upstream OpenRouter key sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  key_org_encrypted TEXT,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -6670,6 +6681,7 @@ COMMENT ON COLUMN openrouter_api_keys.organization_id IS '@access: confidential'
 COMMENT ON COLUMN openrouter_api_keys.key_type IS '@access: confidential';
 COMMENT ON COLUMN openrouter_api_keys.key IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN openrouter_api_keys.key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.key_hash IS '@access: secret-restricted';
 COMMENT ON COLUMN openrouter_api_keys.monthly_credits IS '@access: restricted';
 COMMENT ON COLUMN openrouter_api_keys.disabled IS '@access: confidential';
@@ -7210,6 +7222,43 @@ COMMENT ON COLUMN chat_messages.original_message_id IS 'Original source-message 
 COMMENT ON COLUMN chat_messages.replayed IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.created_at IS '@access: confidential';
 COMMENT ON COLUMN chat_messages.risk_analyzed_at IS '@access: confidential';
+
+-- A non-partial unique index supplies the composite message ownership target.
+CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_project_id_id_key
+ON chat_messages (project_id, id);
+
+-- Encrypted transcript shadows retain the lifecycle of their source message.
+CREATE TABLE IF NOT EXISTS chat_message_transcripts (
+  message_id UUID NOT NULL,
+  project_id UUID NOT NULL,
+  organization_id TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  source_hash BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT chat_message_transcripts_pkey PRIMARY KEY (message_id),
+  CONSTRAINT chat_message_transcripts_project_id_message_id_fkey FOREIGN KEY (project_id, message_id) REFERENCES chat_messages(project_id, id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT chat_message_transcripts_source_hash_check CHECK (octet_length(source_hash) = 32)
+);
+
+COMMENT ON COLUMN chat_message_transcripts.message_id IS 'Source message identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.project_id IS 'Owning project identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.organization_id IS 'Owning organization identity.
+@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.ciphertext IS 'Organization-key encrypted transcript payload.
+@access: opaque-restricted';
+COMMENT ON COLUMN chat_message_transcripts.source_hash IS 'Unkeyed freshness digest of sensitive transcript fields.
+@access: opaque-restricted';
+COMMENT ON COLUMN chat_message_transcripts.created_at IS '@access: confidential';
+COMMENT ON COLUMN chat_message_transcripts.updated_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS chat_message_transcripts_project_id_idx ON chat_message_transcripts (project_id);
+CREATE INDEX IF NOT EXISTS chat_message_transcripts_organization_id_idx ON chat_message_transcripts (organization_id);
 
 CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_messages (chat_id, generation, seq);
 
@@ -9738,7 +9787,13 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   provider TEXT NOT NULL,
   project_id uuid NOT NULL,
   external_organization_id TEXT,
-  api_key_encrypted TEXT NOT NULL,
+  api_key_encrypted TEXT,
+  -- The same credential as api_key_encrypted (an API key, or the Anthropic
+  -- webhook signing-secret JSON) sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. api_key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  api_key_org_encrypted TEXT,
   enabled boolean NOT NULL DEFAULT true,
   -- Billing mode for the provider org this integration covers. Dashboard cost
   -- figures are derived from token usage (tokens x published API price), which
@@ -9771,6 +9826,7 @@ COMMENT ON COLUMN ai_integration_configs.provider IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.project_id IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.external_organization_id IS '@access: restricted';
 COMMENT ON COLUMN ai_integration_configs.api_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN ai_integration_configs.api_key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN ai_integration_configs.enabled IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.billing_mode IS '@access: confidential';
 COMMENT ON COLUMN ai_integration_configs.id IS '@access: confidential';
@@ -11789,12 +11845,31 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   installation_id BIGINT NOT NULL,
   repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
   repo_name TEXT NOT NULL CHECK (repo_name <> ''),
-  -- Opaque URL token issued at marketplace setup. The marketplace proxy uses
-  -- it to resolve a Claude Code install URL back to this connection, whose
-  -- installation_id + owner/repo locate the upstream content. Nullable so
-  -- existing connections (and any future connection without the marketplace
-  -- surface enabled) are unconstrained.
+  -- The marketplace token in plaintext, being replaced by
+  -- marketplace_token_hash and its two sealed copies below. Once the publish
+  -- path stores those instead, nothing writes this column: it is read only as a
+  -- fallback for connections the marketplace token backfill has not moved yet,
+  -- which clears it, and is dropped in a later contract migration.
   marketplace_token TEXT,
+  -- The organization that owns the connection's project, stored on the row so
+  -- the organization encryption fence of the marketplace token copies compares
+  -- against the row's own organization. Nullable so connections stored before
+  -- this column stay valid until the publish path or the marketplace token
+  -- backfill fills it in.
+  organization_id TEXT,
+  -- Hex-encoded SHA-256 of the marketplace token, the URL-as-secret credential
+  -- of the marketplace proxy. The proxy hashes the token from the install URL
+  -- and resolves the connection by this value, whose installation_id and
+  -- owner/repo locate the upstream content. Nullable so connections without a
+  -- marketplace token are unconstrained.
+  marketplace_token_hash TEXT CHECK (marketplace_token_hash <> ''),
+  -- The marketplace token sealed under the platform key, which the server opens
+  -- to show the marketplace install URL again. Written while the organization's
+  -- marketplace-tokens use case is in platform_key or dual_write.
+  marketplace_token_encrypted TEXT,
+  -- The marketplace token sealed under the organization's key. Written while
+  -- the organization's marketplace-tokens use case is in dual_write or org_kms.
+  marketplace_token_org_encrypted TEXT,
   -- DEPRECATED: superseded by published_mcp_fingerprint + published_hooks_version
   -- when hooks and MCP plugin generation were decoupled. No longer written or
   -- read; retained per expand-contract and dropped in a later contract migration.
@@ -11831,7 +11906,11 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT plugin_github_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT plugin_github_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- organization_id must be the project's own organization: the encryption
+  -- fence reads it, and token copies are sealed for it.
+  CONSTRAINT plugin_github_connections_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN plugin_github_connections.id IS '@access: confidential';
@@ -11840,6 +11919,10 @@ COMMENT ON COLUMN plugin_github_connections.installation_id IS '@access: confide
 COMMENT ON COLUMN plugin_github_connections.repo_owner IS '@access: confidential-pii';
 COMMENT ON COLUMN plugin_github_connections.repo_name IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.marketplace_token IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN plugin_github_connections.published_fingerprint IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.published_mcp_fingerprints IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.published_hooks_version IS '@access: confidential';
@@ -11858,12 +11941,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
   ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
 
--- Lookup index for the marketplace proxy. Partial so existing rows without a
--- token (and any future rows where the marketplace surface isn't enabled)
--- aren't constrained against each other.
+-- DEPRECATED: lookup index for the plaintext marketplace_token fallback,
+-- dropped with that column in a later contract migration.
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_key
   ON plugin_github_connections (marketplace_token)
   WHERE marketplace_token IS NOT NULL;
+
+-- Lookup index for the marketplace proxy, which resolves an install URL token
+-- by its hash. Partial so connections without a token aren't constrained
+-- against each other.
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_hash_key
+  ON plugin_github_connections (marketplace_token_hash)
+  WHERE marketplace_token_hash IS NOT NULL;
+
+-- The marketplace token backfill, verification and finalize of organization
+-- encryption read one organization's connections.
+CREATE INDEX IF NOT EXISTS plugin_github_connections_organization_id_idx
+  ON plugin_github_connections (organization_id)
+  WHERE organization_id IS NOT NULL;
 
 -- Hooks version rollout pins, set by Speakeasy staff from the admin dashboard.
 -- A pin names the highest hooksGeneratorVersion an organization is cleared to
@@ -12543,6 +12638,166 @@ ON authz_challenge_resolutions (organization_id, challenge_id);
 
 CREATE INDEX IF NOT EXISTS authz_challenge_resolutions_org_principal_idx
 ON authz_challenge_resolutions (organization_id, principal_urn);
+
+-- A member's request for access they were denied, decided by an organization
+-- admin from the dashboard or a Slack DM. Approving creates a temporary grant
+-- in principal_grants.
+CREATE TABLE IF NOT EXISTS access_requests (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- The member asking. Only people request access; API keys and agents cannot.
+  requester_user_id TEXT NOT NULL,
+  -- The scope asked for, e.g. "project:read". Validated in application code
+  -- against the temporarily grantable scopes.
+  scope TEXT NOT NULL,
+  -- Where the scope applies, in the same shape as principal_grants.selectors.
+  selector JSONB NOT NULL,
+  -- The resource's name when the request was made, for display after it is
+  -- renamed or removed.
+  resource_name TEXT,
+  -- The requester's note to the admins.
+  message TEXT,
+
+  -- 'pending', 'approved', 'denied', 'expired' or 'withdrawn'. Valid values
+  -- enforced in the application layer.
+  status TEXT NOT NULL DEFAULT 'pending',
+  decided_by_user_id TEXT,
+  -- Where the decision came from: 'dashboard' or 'slack'.
+  decided_via TEXT,
+  decided_at timestamptz,
+  -- The grant an approval created. Soft reference: the grant may be revoked
+  -- (deleted) or lapse later.
+  temporary_grant_id uuid,
+  -- Denied challenges this request covers, from the ClickHouse
+  -- authz_challenges table (soft cross-DB reference).
+  challenge_ids TEXT[] NOT NULL DEFAULT '{}',
+  -- When a pending request lapses.
+  expires_at timestamptz NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT access_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT access_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT access_requests_selector_check CHECK (jsonb_typeof(selector) = 'object' AND selector != '{}')
+);
+
+COMMENT ON TABLE access_requests IS 'Requests from members for access they were denied, decided by an organization admin. An approval creates a temporary grant.';
+COMMENT ON COLUMN access_requests.id IS '@access: confidential';
+COMMENT ON COLUMN access_requests.organization_id IS '@access: confidential';
+COMMENT ON COLUMN access_requests.requester_user_id IS 'The Speakeasy user who asked for access.
+@access: confidential';
+COMMENT ON COLUMN access_requests.scope IS 'The scope asked for, e.g. "project:read".
+@access: confidential';
+COMMENT ON COLUMN access_requests.selector IS 'Where the scope applies, in the shape of principal_grants.selectors.
+@access: opaque-restricted';
+COMMENT ON COLUMN access_requests.resource_name IS 'Name of the resource the request is for, as it was when requested.
+@access: opaque-confidential';
+COMMENT ON COLUMN access_requests.message IS 'Free-form note from the requester to the admins.
+@access: opaque-restricted';
+COMMENT ON COLUMN access_requests.status IS 'pending, approved, denied, expired or withdrawn.
+@access: confidential';
+COMMENT ON COLUMN access_requests.decided_by_user_id IS 'The admin who approved or denied the request.
+@access: confidential';
+COMMENT ON COLUMN access_requests.decided_via IS 'Where the decision came from: dashboard or slack.
+@access: confidential';
+COMMENT ON COLUMN access_requests.decided_at IS '@access: confidential';
+COMMENT ON COLUMN access_requests.temporary_grant_id IS 'The principal_grants row an approval created. Soft reference: the grant may be revoked later.
+@access: confidential';
+COMMENT ON COLUMN access_requests.challenge_ids IS 'IDs of the denied challenges in the ClickHouse authz_challenges table that this request covers.
+@access: opaque-confidential';
+COMMENT ON COLUMN access_requests.expires_at IS 'When a pending request lapses.
+@access: confidential';
+COMMENT ON COLUMN access_requests.created_at IS '@access: confidential';
+COMMENT ON COLUMN access_requests.updated_at IS '@access: confidential';
+COMMENT ON COLUMN access_requests.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN access_requests.deleted IS '@access: confidential';
+
+-- Target of the tenant-pinned foreign key from access_request_messages, so a
+-- message cannot point at another organization's request. Also backs the
+-- organization foreign key.
+CREATE UNIQUE INDEX IF NOT EXISTS access_requests_organization_id_id_key
+ON access_requests (organization_id, id);
+
+-- One open request per person and access, so asking again returns the open
+-- request instead of sending another round of DMs.
+CREATE UNIQUE INDEX IF NOT EXISTS access_requests_open_request_key
+ON access_requests (organization_id, requester_user_id, scope, selector)
+WHERE deleted IS FALSE AND status = 'pending';
+
+-- The admins' list of requests.
+CREATE INDEX IF NOT EXISTS access_requests_org_status_created_at_idx
+ON access_requests (organization_id, status, created_at DESC)
+WHERE deleted IS FALSE;
+
+-- A requester's own requests, for the state shown on the page they were
+-- blocked on.
+CREATE INDEX IF NOT EXISTS access_requests_org_requester_created_at_idx
+ON access_requests (organization_id, requester_user_id, created_at DESC)
+WHERE deleted IS FALSE;
+
+-- One notification sent for an access request, such as the Slack DM to one
+-- admin. Kept so a decision can update every message and so a click can be
+-- matched to the DM it came from.
+CREATE TABLE IF NOT EXISTS access_request_messages (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  access_request_id uuid NOT NULL,
+
+  -- Notification channel, 'slack' for now. Valid values enforced in the
+  -- application layer.
+  provider TEXT NOT NULL,
+  -- 'dm' for now.
+  kind TEXT NOT NULL,
+  -- The Speakeasy user the message was sent to.
+  recipient_user_id TEXT NOT NULL,
+  slack_team_id TEXT,
+  slack_user_id TEXT,
+  slack_channel_id TEXT,
+  slack_message_ts TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT access_request_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT access_request_messages_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- Pinned to the organization, so a message cannot carry a different tenant
+  -- than its request.
+  CONSTRAINT access_request_messages_organization_id_access_request_id_fkey FOREIGN KEY (organization_id, access_request_id) REFERENCES access_requests (organization_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE access_request_messages IS 'Notifications sent for an access request, such as one Slack DM per admin.';
+COMMENT ON COLUMN access_request_messages.id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.organization_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.access_request_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.provider IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.kind IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.recipient_user_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.slack_team_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.slack_user_id IS '@access: confidential-pii';
+COMMENT ON COLUMN access_request_messages.slack_channel_id IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.slack_message_ts IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.created_at IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.updated_at IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN access_request_messages.deleted IS '@access: confidential';
+
+CREATE UNIQUE INDEX IF NOT EXISTS access_request_messages_request_recipient_key
+ON access_request_messages (access_request_id, provider, recipient_user_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS access_request_messages_slack_message_idx
+ON access_request_messages (slack_team_id, slack_channel_id, slack_message_ts)
+WHERE deleted IS FALSE;
+
+-- Backs the tenant-pinned foreign key and the organization foreign key.
+CREATE INDEX IF NOT EXISTS access_request_messages_organization_id_access_request_id_idx
+ON access_request_messages (organization_id, access_request_id);
 
 CREATE TABLE IF NOT EXISTS risk_policy_bypass_requests (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -13598,7 +13853,12 @@ CREATE TABLE IF NOT EXISTS model_provider_keys (
   project_id uuid NOT NULL,
   slot TEXT NOT NULL,
   provider TEXT NOT NULL,
-  api_key_encrypted TEXT NOT NULL,
+  api_key_encrypted TEXT,
+  -- The same key as api_key_encrypted sealed under the organization's own key
+  -- (orgencryption use case 'ai-provider-keys'). NULL until the organization
+  -- is enrolled. api_key_encrypted is cleared once the organization finishes
+  -- moving, so a row can hold either copy or both.
+  api_key_org_encrypted TEXT,
   enabled boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -13615,6 +13875,7 @@ COMMENT ON COLUMN model_provider_keys.project_id IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.slot IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.provider IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.api_key_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN model_provider_keys.api_key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN model_provider_keys.enabled IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.created_at IS '@access: confidential';
 COMMENT ON COLUMN model_provider_keys.updated_at IS '@access: confidential';

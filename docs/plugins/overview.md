@@ -89,15 +89,15 @@ All endpoints live under `/rpc/plugins.<method>` and require session auth + `Gra
 
 ## Implementation
 
-| Path                                           | Contents                                                   |
-| ---------------------------------------------- | ---------------------------------------------------------- |
-| `server/design/plugins/design.go`              | Goa service definition (types, endpoints, security)        |
-| `server/internal/plugins/impl.go`              | Service logic — all 13 endpoint implementations            |
-| `server/internal/plugins/generate.go`          | Package generation — platform-specific file/ZIP generation |
-| `server/internal/plugins/marketplace_token.go` | 256-bit base64url token for marketplace proxy              |
-| `server/internal/plugins/repo/`                | SQLc-generated database access                             |
-| `server/internal/audit/plugins.go`             | 8 audit event definitions                                  |
-| `client/dashboard/src/pages/plugins/`          | React UI (list, detail, publish, install instructions)     |
+| Path                                         | Contents                                                   |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| `server/design/plugins/design.go`            | Goa service definition (types, endpoints, security)        |
+| `server/internal/plugins/impl.go`            | Service logic — all 13 endpoint implementations            |
+| `server/internal/plugins/generate.go`        | Package generation — platform-specific file/ZIP generation |
+| `server/internal/plugins/marketplacetokens/` | Marketplace proxy tokens: minted, hashed, sealed, opened   |
+| `server/internal/plugins/repo/`              | SQLc-generated database access                             |
+| `server/internal/audit/plugins.go`           | 8 audit event definitions                                  |
+| `client/dashboard/src/pages/plugins/`        | React UI (list, detail, publish, install instructions)     |
 
 ## Audit events
 

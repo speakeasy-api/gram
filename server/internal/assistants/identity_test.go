@@ -81,23 +81,24 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	}
 	anyServer := uuid.NewString()
 	for _, check := range []authz.Check{
-		authz.MCPCheck(authz.ScopeMCPConnect, anyServer, project.String()),
-		authz.MCPCheck(authz.ScopeMCPRead, anyServer, project.String()),
+		authz.MCPServer(authz.MCPServerIDFrom(anyServer), authz.ProjectIDOf(project)).Connect(),
+		authz.MCPServer(authz.MCPServerIDFrom(anyServer), authz.ProjectIDOf(project)).Read(),
 		{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: project.String(), Dimensions: nil},
 	} {
 		allowed, err := authz.GrantsAuthorize(policy, check)
 		require.NoError(t, err)
 		require.True(t, allowed, check.Scope)
 	}
-	allowed, err := authz.GrantsAuthorize(policy, authz.MCPCheck(authz.ScopeMCPConnect, anyServer, uuid.NewString()))
+	allowed, err := authz.GrantsAuthorize(policy, authz.MCPServer(authz.MCPServerIDFrom(anyServer), authz.ProjectIDFrom(uuid.NewString())).Connect())
 	require.NoError(t, err)
 	require.False(t, allowed, "the ceiling is limited to the assistant's project")
-	for _, scope := range []authz.Scope{authz.ScopeAssistantRead, authz.ScopeAssistantWrite} {
-		allowed, err = authz.GrantsAuthorize(policy, authz.AssistantCheck(scope, record.ID.String(), project.String()))
+	ref := authz.Assistant(authz.AssistantIDOf(record.ID), authz.ProjectIDOf(project))
+	for _, check := range []authz.Check{ref.Read(), ref.Write()} {
+		allowed, err = authz.GrantsAuthorize(policy, check)
 		require.NoError(t, err)
-		require.True(t, allowed, scope)
+		require.True(t, allowed, check.Scope)
 	}
-	allowed, err = authz.GrantsAuthorize(policy, authz.AssistantCheck(authz.ScopeAssistantWrite, uuid.NewString(), project.String()))
+	allowed, err = authz.GrantsAuthorize(policy, authz.Assistant(authz.AssistantIDFrom(uuid.NewString()), authz.ProjectIDOf(project)).Write())
 	require.NoError(t, err)
 	require.False(t, allowed, "the agent administers only its own assistant")
 
@@ -297,10 +298,10 @@ func TestDerivedWorkloadCeilingCarriesAssistantSelfAdministration(t *testing.T) 
 	require.NoError(t, err)
 	grants, err := runtimepolicy.DelegatedRuntimeGrants(agentPolicy, agentPolicy, agentPolicy)
 	require.NoError(t, err)
-	allowed, err := authz.GrantsAuthorize(grants, authz.AssistantCheck(authz.ScopeAssistantWrite, record.ID.String(), project.String()))
+	allowed, err := authz.GrantsAuthorize(grants, authz.Assistant(authz.AssistantIDOf(record.ID), authz.ProjectIDOf(project)).Write())
 	require.NoError(t, err)
 	require.True(t, allowed, "the ceiling keeps the agent's own-assistant administration")
-	allowed, err = authz.GrantsAuthorize(grants, authz.AssistantCheck(authz.ScopeAssistantWrite, uuid.NewString(), project.String()))
+	allowed, err = authz.GrantsAuthorize(grants, authz.Assistant(authz.AssistantIDFrom(uuid.NewString()), authz.ProjectIDOf(project)).Write())
 	require.NoError(t, err)
 	require.False(t, allowed)
 }

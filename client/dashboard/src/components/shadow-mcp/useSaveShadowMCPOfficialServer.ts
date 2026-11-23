@@ -7,13 +7,17 @@ import { useQueryClient } from "@tanstack/react-query";
 export type OfficialServerChoice = {
   /** The Shadow MCP server's URL. */
   serverUrl: string;
-  /** The server to link as official; undefined removes the link. */
+  /** The server to link as official. */
   mcpServerId?: string;
+  /** Keep the direct connection: nothing is linked, not even automatically. */
+  keepShadow?: boolean;
 };
 
 /**
- * Adds or removes the link from a Shadow MCP server to its official version
- * and refreshes the list and the server page, which both show the result.
+ * Saves the admin's choice for a Shadow MCP server's official version and
+ * refreshes the list and the server page, which both show the result. With
+ * neither a server nor keepShadow, the choice is removed and the server that
+ * proxies to the URL, if any, is linked automatically again.
  */
 export function useSaveShadowMCPOfficialServer(): {
   save: (choice: OfficialServerChoice) => Promise<void>;
@@ -29,6 +33,7 @@ export function useSaveShadowMCPOfficialServer(): {
           projectId: project.id,
           serverUrl: choice.serverUrl,
           mcpServerId: choice.mcpServerId,
+          keepShadow: choice.keepShadow,
         },
       },
     });

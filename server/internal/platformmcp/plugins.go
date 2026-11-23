@@ -748,9 +748,7 @@ func (s *PluginsService) IsOrganizationAdmin(ctx context.Context, principal Prin
 	if !ok {
 		return false, ErrUnavailable
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	})
+	allowed, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	if err != nil {
 		return false, fmt.Errorf("authorize plugin inventory access: %w", err)
 	}
@@ -761,7 +759,7 @@ func (s *PluginsService) ListAssignedPlugins(ctx context.Context, principal Prin
 	if !s.valid() || s.authorization == nil {
 		return ListPluginsOutput{}, ErrUnavailable
 	}
-	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
+	if err := s.authorization.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Read()); err != nil {
 		return ListPluginsOutput{}, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
@@ -815,7 +813,7 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 	if strings.TrimSpace(input.Plugin) == "" {
 		return GetPluginOutput{}, ErrPluginNotFound
 	}
-	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
+	if err := s.authorization.Require(ctx, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Read()); err != nil {
 		return GetPluginOutput{}, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {

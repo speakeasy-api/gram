@@ -683,7 +683,7 @@ func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contex
 			continue
 		}
 		scopes = append(scopes, tool.RequiredScope)
-		checks = append(checks, authz.Check{Scope: authz.Scope(tool.RequiredScope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		checks = append(checks, authz.Check{Scope: authz.Scope(tool.RequiredScope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}) //nolint:glint // norawauthzchecks: a platform tool declares its project scope as data
 	}
 	if len(checks) == 0 {
 		return granted

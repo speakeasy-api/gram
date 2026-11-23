@@ -567,6 +567,95 @@ paths:
       x-speakeasy-react-hook:
         name: CreateTemporaryGrant
         type: mutation
+  /rpc/access.decideAccessRequest:
+    post:
+      description: 'Approve or deny a pending access request. Approving gives the requester the scope as a temporary grant until expires_at, with the same limits as createTemporaryGrant, and resolves the denials the request covers. Requires org:admin; the requester cannot decide their own request. Session only: the decision is attributed to the person who made it.'
+      operationId: decideAccessRequest
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideAccessRequestForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: decideAccessRequest access
+      tags:
+        - access
+      x-speakeasy-name-override: decideAccessRequest
+      x-speakeasy-react-hook:
+        name: DecideAccessRequest
+        type: mutation
   /rpc/access.deleteDirectoryRoleMapping:
     delete:
       description: Remove a directory role mapping.
@@ -1444,6 +1533,103 @@ paths:
       x-speakeasy-name-override: listAIDetections
       x-speakeasy-react-hook:
         name: AIDetections
+  /rpc/access.listAccessRequests:
+    get:
+      description: List access requests in the organization, newest first. Organization administrators see every request; anyone else sees only their own. Requires the access requests rollout for the organization.
+      operationId: listAccessRequests
+      parameters:
+        - allowEmptyValue: true
+          description: 'Only requests with this status: pending, approved, denied, expired or withdrawn.'
+          in: query
+          name: status
+          schema:
+            description: 'Only requests with this status: pending, approved, denied, expired or withdrawn.'
+            type: string
+        - allowEmptyValue: true
+          description: Only requests made by the signed-in member, even for an administrator.
+          in: query
+          name: mine
+          schema:
+            default: false
+            description: Only requests made by the signed-in member, even for an administrator.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAccessRequestsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listAccessRequests access
+      tags:
+        - access
+      x-speakeasy-name-override: listAccessRequests
+      x-speakeasy-react-hook:
+        name: AccessRequests
   /rpc/access.listAgentPolicyScopes:
     get:
       description: 'List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.'
@@ -3519,7 +3705,7 @@ paths:
         type: mutation
   /rpc/access.requestAccess:
     post:
-      description: Request access to a scope by sending an email notification to organization administrators.
+      description: Request access to a scope. Organization administrators are emailed. With the access requests rollout on, a signed-in member's request is also stored, so an administrator can approve it as temporary access or deny it from the dashboard or Slack.
       operationId: requestAccess
       parameters:
         - allowEmptyValue: true
@@ -4272,7 +4458,7 @@ paths:
         type: mutation
   /rpc/access.setShadowMCPOfficialServer:
     post:
-      description: Link one project-scoped Shadow MCP server to its official version, or remove the link. While a link exists, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the linked server. With mcp_server_id the link is added (or restored, when it was removed before) or pointed at that server; omitting mcp_server_id removes the link. Each add, change and removal is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
+      description: Choose the official version of one project-scoped Shadow MCP server. By default a project MCP server that proxies to the Shadow MCP server's URL is made official automatically (the oldest, when several do). While an official server exists and has an address, direct connections are blocked wherever a Shadow MCP policy applies and agents are pointed at the official server; an official server with no address yet leaves direct connections on the ordinary rules. With mcp_server_id that server is made official instead; with keep_shadow no server is official, so direct use follows the ordinary Shadow MCP rules; with neither, the automatic choice applies again. Each change is recorded in the audit log. Requires an authenticated session authorized for org:admin on the active organization.
       operationId: setShadowMCPOfficialServer
       parameters:
         - allowEmptyValue: true
@@ -4819,6 +5005,95 @@ paths:
       x-speakeasy-name-override: updateShadowMCPInventoryServerName
       x-speakeasy-react-hook:
         name: UpdateShadowMCPInventoryServerName
+        type: mutation
+  /rpc/access.withdrawAccessRequest:
+    post:
+      description: Withdraw a pending access request you made. Only the requester can withdraw it.
+      operationId: withdrawAccessRequest
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: withdrawAccessRequest access
+      tags:
+        - access
+      x-speakeasy-name-override: withdrawAccessRequest
+      x-speakeasy-react-hook:
+        name: WithdrawAccessRequest
         type: mutation
   /rpc/adminAssets.uploadImage:
     post:
@@ -9374,6 +9649,14 @@ paths:
             maximum: 200
             minimum: 1
             type: integer
+        - allowEmptyValue: true
+          description: Keep only agents assigned to this project in the active organization.
+          in: query
+          name: project_id
+          schema:
+            description: Keep only agents assigned to this project in the active organization.
+            format: uuid
+            type: string
         - allowEmptyValue: true
           description: Case-insensitive substring match on the agent name.
           in: query
@@ -33519,16 +33802,42 @@ paths:
         name: ExtendAgentAPIKeys
   /rpc/keys.list:
     get:
-      description: List all api keys for an organization
+      description: List an organization's api keys, newest first. Send limit to get one page at a time and follow next_cursor for the rest. Without limit, every matching key is returned in one response.
       operationId: listAPIKeys
       parameters:
         - allowEmptyValue: true
-          description: When set, list keys for this first-class agent
+          description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
           in: query
           name: agent_id
           schema:
-            description: When set, list keys for this first-class agent
+            description: When set, list keys for this first-class agent. Cannot be combined with cursor, limit or search.
             format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+          in: query
+          name: cursor
+          schema:
+            description: Opaque cursor from a previous response's next_cursor. Returns the keys after that page.
+            maxLength: 512
+            type: string
+        - allowEmptyValue: true
+          description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+          in: query
+          name: limit
+          schema:
+            description: Page size. When omitted, every matching key is returned and next_cursor is never set.
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Only return keys whose name contains this text, ignoring case.
+          in: query
+          name: search
+          schema:
+            description: Only return keys whose name contains this text, ignoring case.
+            maxLength: 255
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -90064,6 +90373,74 @@ components:
         - role_id
         - mapping_id
         - source_kind
+    AccessRequest:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        decided_at:
+          type: string
+          format: date-time
+        decided_by_name:
+          type: string
+          description: The deciding administrator's display name, or their email.
+        decided_by_user_id:
+          type: string
+          description: The administrator who approved or denied the request.
+        decided_via:
+          type: string
+          description: 'Where the decision was made: dashboard or slack.'
+        expires_at:
+          type: string
+          description: When a pending request lapses.
+          format: date-time
+        grant_expires_at:
+          type: string
+          description: When the temporary grant an approval gave stops, or stopped, authorizing requests.
+          format: date-time
+        id:
+          type: string
+          description: Access request ID.
+          format: uuid
+        message:
+          type: string
+          description: The requester's note to the administrators.
+        requester_name:
+          type: string
+          description: The requester's display name, or their email when they have none.
+        requester_user_id:
+          type: string
+          description: The member who asked.
+        resource_name:
+          type: string
+          description: Name of the resource, as it was when the request was made.
+        scope:
+          type: string
+          description: The scope asked for.
+        selector:
+          $ref: '#/components/schemas/Selector'
+        status:
+          type: string
+          description: 'pending: waiting for a decision. approved: a temporary grant was given. denied, expired or withdrawn: no access was given.'
+        temporary_grant_id:
+          type: string
+          description: The temporary grant an approval gave.
+          format: uuid
+        updated_at:
+          type: string
+          format: date-time
+      description: A member's request for access they were denied, decided by an organization administrator.
+      required:
+        - id
+        - requester_user_id
+        - requester_name
+        - scope
+        - selector
+        - status
+        - expires_at
+        - created_at
+        - updated_at
     AccessibleMCPServer:
       type: object
       properties:
@@ -90913,6 +91290,7 @@ components:
             - destructive
             - idempotent
             - open_world
+            - unannotated
         project_id:
           type: string
           description: Project filter (MCP, environment, assistant, inference, mcp:auth and mcp:blocked_auth scopes).
@@ -93145,6 +93523,7 @@ components:
             - invalid_check
             - rbac_skipped_apikey
             - dev_override
+            - connection_owner_mismatch
         resolution_role_slug:
           type: string
           description: Role slug assigned (when resolution_type=role_assigned).
@@ -93699,6 +94078,7 @@ components:
             - invalid_check
             - rbac_skipped_apikey
             - dev_override
+            - connection_owner_mismatch
         resolution_role_slug:
           type: string
           description: Role slug assigned (when resolution_type=role_assigned).
@@ -98274,6 +98654,23 @@ components:
         - operation_id
         - prescription_id
         - expected_version
+    DecideAccessRequestForm:
+      type: object
+      properties:
+        approve:
+          type: boolean
+          description: True gives the access as a temporary grant; false denies the request.
+        expires_at:
+          type: string
+          description: 'When the temporary grant stops authorizing new requests. Required to approve: at least five minutes and at most 24 hours from now.'
+          format: date-time
+        id:
+          type: string
+          description: The access request to decide.
+          format: uuid
+      required:
+        - id
+        - approve
     DeclineRiskPolicyChallengeResponseBody:
       type: object
       properties:
@@ -100290,6 +100687,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Tool annotations the rule is narrowed to, when it is not the whole resource.
         effect:
           type: string
@@ -105327,6 +105725,16 @@ components:
         - organization_id
         - provider
         - schedules
+    ListAccessRequestsResult:
+      type: object
+      properties:
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequest'
+          description: Access requests, newest first. At most 200 are returned.
+      required:
+        - requests
     ListActorAttributesResult:
       type: object
       properties:
@@ -106280,6 +106688,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Key'
+        next_cursor:
+          type: string
+          description: Cursor for the next page of keys.list. Absent on the last page and when no limit was sent.
       required:
         - keys
     ListMCPPlatformToolsetsResult:
@@ -110989,7 +111400,7 @@ components:
           type: array
           items:
             type: string
-          description: 'Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. A client resolved from the same Client ID Metadata Document on both issuers is not listed: it merges onto the target''s client, keeping its sessions and consents, unless an issuance selection profile pins the source client to the source issuer.'
+          description: Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. Client ids listed in merged_client_ids are not listed here.
         consent_count:
           type: integer
           description: User-session consents that would move.
@@ -111006,6 +111417,11 @@ components:
         impact_previewed:
           type: boolean
           description: True when the consolidation was run and rolled back to compute server_impacts and dropped_client_links. False when a hard blocker stopped it, in which case both are empty.
+        merged_client_ids:
+          type: array
+          items:
+            type: string
+          description: Active OAuth client ids present on both issuers whose source client would merge onto the target's client for the same id. A client resolved from the same Client ID Metadata Document on both issuers merges, keeping its sessions and consents. A client registered through dynamic client registration on both issuers merges only when nothing uses the source copy (it has no session that has not been revoked, even an expired one, and no consent) and neither copy has an assistant binding. The target copy survives, so its own sessions and consents do not block. Neither merges when an issuance selection profile pins the source client to the source issuer; it is listed in conflicting_client_ids instead.
         newly_reachable_server_count:
           type: integer
           description: Live MCP servers already on the target that the source's unscoped sign-ins would reach for the first time. Informational; not part of the fingerprint.
@@ -111050,6 +111466,7 @@ components:
         - cimd_client_count
         - remote_session_count
         - conflicting_client_ids
+        - merged_client_ids
         - principal_binding_conflict_count
         - ema_binding_conflict_count
         - platform_owned
@@ -114478,9 +114895,11 @@ components:
     RequestAccessResult:
       type: object
       properties:
+        request:
+          $ref: '#/components/schemas/AccessRequest'
         sent_to_count:
           type: integer
-          description: Number of administrators who were notified.
+          description: Number of administrators who were emailed.
           format: int64
       required:
         - sent_to_count
@@ -114788,6 +115207,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Tool annotations the rule is narrowed to, when it is not the whole resource.
         kind:
           type: string
@@ -117743,6 +118163,7 @@ components:
             - destructive
             - idempotent
             - open_world
+            - unannotated
         project_id:
           type: string
           description: Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
@@ -118778,6 +119199,7 @@ components:
               - destructive
               - idempotent
               - open_world
+              - unannotated
           description: Narrow the access to tools carrying these annotations. Omit for the whole resource.
         level:
           type: string
@@ -118890,9 +119312,12 @@ components:
     SetShadowMCPOfficialServerForm:
       type: object
       properties:
+        keep_shadow:
+          type: boolean
+          description: 'Keep using the Shadow MCP server directly: no server is made official, not even automatically. Cannot be combined with mcp_server_id.'
         mcp_server_id:
           type: string
-          description: The MCP server to link as the official version. Omit it to remove the link.
+          description: The MCP server to make the official version. Omit it, with keep_shadow unset, to go back to the automatic choice.
           format: uuid
         project_id:
           type: string
@@ -119261,6 +119686,11 @@ components:
             type: string
         approval_request:
           $ref: '#/components/schemas/ShadowMCPInventoryApprovalRequest'
+        blocked_call_count:
+          type: integer
+          description: Calls to this server that a Speakeasy hook blocked, within the telemetry retention window. Included in observed_use_count. Optional for one release so a dashboard deployed ahead of the server still loads the inventory; the server always sends it.
+          default: 0
+          format: int64
         blocked_policy_ids:
           type: array
           items:
@@ -119284,6 +119714,9 @@ components:
           format: int64
         official_server:
           $ref: '#/components/schemas/ShadowMCPOfficialServer'
+        official_server_declined:
+          type: boolean
+          description: True when an administrator chose to keep using the Shadow MCP server directly, so no official server is chosen automatically.
         request_count:
           type: integer
           format: int64
@@ -119406,9 +119839,12 @@ components:
     ShadowMCPOfficialServer:
       type: object
       properties:
+        automatic:
+          type: boolean
+          description: True when the server was made official automatically because the server proxies to the Shadow MCP server's URL; false when an administrator chose it.
         direct_access_allowed:
           type: boolean
-          description: 'Deprecated: links no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
+          description: 'Deprecated: official servers no longer have an on/off switch, so this is always false. Kept one release so older dashboards, which require it, keep rendering, then removed.'
         gateway_name:
           type: string
           description: The gateway that serves the official server, when url is a gateway's address.
@@ -119424,7 +119860,7 @@ components:
         url:
           type: string
           description: Where agents connect. A gateway's address when the server is a gateway member. Absent while the server has no endpoint.
-      description: The official, Speakeasy-served version of a Shadow MCP server, linked by an administrator.
+      description: 'The official, Speakeasy-served version of a Shadow MCP server: a project MCP server that proxies to its URL, or one an administrator chose.'
       required:
         - mcp_server_id
         - name
@@ -119440,7 +119876,7 @@ components:
         slug:
           type: string
           description: The server's slug, when it has one.
-      description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+      description: A project MCP server that already serves a Shadow MCP server's upstream URL and can be made its official version.
       required:
         - mcp_server_id
         - name

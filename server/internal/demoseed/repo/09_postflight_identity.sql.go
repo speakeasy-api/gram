@@ -1461,7 +1461,7 @@ WITH live AS (
     AND credential_id NOT IN (SELECT id FROM user_sessions WHERE user_session_issuer_id = $9::uuid)
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 38
+WHERE (SELECT count(*) FROM live) = 41
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])
@@ -1508,7 +1508,7 @@ type PostflightIDUpstreamClientChoicesParams struct {
 }
 
 // Check both the total and the expected credential/server/client tuples so
-// thirty-eight misassigned choices cannot satisfy postflight.
+// forty-one misassigned choices cannot satisfy postflight.
 func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg PostflightIDUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices,
 		arg.LinearSessionIds,

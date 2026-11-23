@@ -254,6 +254,13 @@ describe("serverOnBehalfOf", () => {
       loading: false,
       kind: "error",
     },
+    {
+      case: "an assignment the viewer may not read",
+      server: { issuerId: "i" },
+      connection: { status: "forbidden" as const },
+      loading: false,
+      kind: "forbidden",
+    },
   ])("says $kind for $case", ({ server, connection, loading, kind }) => {
     expect(serverOnBehalfOf(server, connection, loading).kind).toBe(kind);
   });
@@ -299,6 +306,17 @@ describe("ServerOnBehalfOfLine", () => {
     );
     expect(container.textContent).toBe(
       "Needs a person's connection, none assigned",
+    );
+  });
+
+  it("says when whose connection it uses is not visible to the viewer", () => {
+    mocks.issuerId = "issuer-1";
+    mocks.connection = { status: "forbidden" };
+    const { container } = render(
+      <ServerOnBehalfOfLine agentId="agent-1" resourceId="toolset-1" />,
+    );
+    expect(container.textContent).toBe(
+      "Whose credential it uses is not visible to you",
     );
   });
 

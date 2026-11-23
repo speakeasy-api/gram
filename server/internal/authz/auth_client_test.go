@@ -9,43 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-const (
-	authClientA   = "client_a"
-	authProjectP  = "proj_p"
-	authProjectQ  = "proj_q"
-	authUpstreamU = "upstream_u"
-	sessionUserID = "user_123"
-)
-
-func (c Check) withRepresentedUser(userID string) Check {
-	c.representedUser = userID
-	return c
-}
-
-func authClientGrant(principal string, scope Scope, selector Selector) Grant {
-	grant := NewGrantWithSelector(scope, selector)
-	grant.PrincipalUrn = principal
-	return grant
-}
-
-func authSelector(resourceID string, extra map[string]string) Selector {
-	selector := Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: resourceID}
-	maps.Copy(selector, extra)
-	return selector
-}
-
-func sharedClientCheck(projectID string) Check {
-	return MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: projectID, ConnectionOwner: "", UpstreamClient: ""})
-}
-
-func personalClientCheck(owner string) Check {
-	return MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: owner, UpstreamClient: authUpstreamU})
-}
 
 func TestMCPAuthScopesUseAuthClientResourceKind(t *testing.T) {
 	t.Parallel()
@@ -120,10 +87,10 @@ func TestMCPAuthClientCheckRejectsMissingDimensions(t *testing.T) {
 		"personal wildcard upstream":  MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: "*"}),
 		"shared client with upstream": MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: authProjectP, ConnectionOwner: "", UpstreamClient: authUpstreamU}),
 		"shared client with owner":    MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeEMA, ProjectID: authProjectP, ConnectionOwner: sessionUserID, UpstreamClient: ""}),
-		"extra dimension":             {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP, SelectorKeyTool: "x"}, selectorMatch: selectorMatchStrict, representedUser: "", probe: false, anyOf: nil},
-		"wrong resource kind":         {Scope: ScopeMCPAuth, ResourceKind: ResourceKindMCP, ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP}, selectorMatch: selectorMatchStrict, representedUser: "", probe: false, anyOf: nil},
-		"dimensionless auth scope":    {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil},
-		"dimensionless block scope":   {Scope: ScopeMCPBlockedAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, selectorMatch: selectorMatchNormal, representedUser: "", probe: false, anyOf: nil},
+		"extra dimension":             {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP, SelectorKeyTool: "x"}, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
+		"wrong resource kind":         {Scope: ScopeMCPAuth, ResourceKind: ResourceKindMCP, ResourceID: authClientA, Dimensions: map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: authProjectP}, exact: true, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
+		"dimensionless auth scope":    {Scope: ScopeMCPAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
+		"dimensionless block scope":   {Scope: ScopeMCPBlockedAuth, ResourceKind: "", ResourceID: authClientA, Dimensions: nil, exact: false, representedUser: "", probe: false, anyOf: nil, operation: operationDefault},
 	}
 	for name, check := range invalid {
 		_, err := GrantsAuthorize(grants, check)
@@ -240,7 +207,7 @@ func TestServerScopesKeepLenientMatching(t *testing.T) {
 	t.Parallel()
 
 	grant := NewGrantWithSelector(ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: "toolset_1", SelectorKeyDisposition: DispositionReadOnly})
-	allowed, err := GrantsAuthorize([]Grant{grant}, MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP))
+	allowed, err := GrantsAuthorize([]Grant{grant}, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect())
 	require.NoError(t, err)
 	require.True(t, allowed)
 }
@@ -277,7 +244,7 @@ func TestEngineRequiresRepresentedUserPolicyForAgents(t *testing.T) {
 
 	unpermitted := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{connect}})
 	requireForbidden(t, engine.Require(unpermitted, personalClientCheck("user_u"))) // U must hold mcp:auth too
-	require.NoError(t, engine.Require(unpermitted, MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP)), "other scopes ignore U's policy")
+	require.NoError(t, engine.Require(unpermitted, MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect()), "other scopes ignore U's policy")
 
 	ineligible := ctxFor(RepresentedUserPolicy{UserID: "user_u", Policy: []Grant{}})
 	requireForbidden(t, engine.Require(ineligible, sharedClientCheck(authProjectP)))
@@ -342,7 +309,7 @@ func TestUnenforcedPathsDenyAuthClientChecks(t *testing.T) {
 
 	own := personalClientCheck(sessionUserID)
 	shared := sharedClientCheck(authProjectP)
-	other := MCPCheck(ScopeMCPConnect, "toolset_1", authProjectP)
+	other := MCPServer(MCPServerIDFrom("toolset_1"), ProjectIDFrom(authProjectP)).Connect()
 
 	requireForbidden(t, engine.Require(ctx, own))
 	requireForbidden(t, engine.Require(ctx, other, shared))
@@ -446,4 +413,92 @@ func TestUpstreamClientSelectorNeedsPersonalClientType(t *testing.T) {
 	require.Error(t, ValidateSelector(ScopeMCPAuth, authSelector(WildcardResource, map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyUpstreamClient: authUpstreamU})))
 	require.Error(t, ValidateSelector(ScopeMCPAuth, authSelector(WildcardResource, map[string]string{SelectorKeyUpstreamClient: SelectorValueRepresentedUser})))
 	require.Error(t, ValidateSelector(ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: WildcardResource, SelectorKeyUpstreamClient: authUpstreamU}))
+}
+
+func TestSeedPersonalAuthClientDefaultIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_personal_default"
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, SeedSystemRoleGrants(ctx, conn, organizationID))
+	none, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Empty(t, none, "reconciling roles never adds it; only organization creation does")
+	require.NoError(t, SeedPersonalAuthClientDefaultTx(ctx, conn, organizationID))
+
+	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, ScopeMCPAuth, grants[0].Scope)
+	require.Equal(t, PersonalAuthClientSelector(), grants[0].Selector)
+
+	user := GrantsToContext(enterpriseSessionCtxWithOrg(t, organizationID), grants)
+	own := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: "p", ConnectionOwner: sessionUserID, UpstreamClient: "upstream_1"})
+	foreign := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: "p", ConnectionOwner: "someone_else", UpstreamClient: "upstream_1"})
+	shared := MCPAuthClientCheck("client_1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: "p", ConnectionOwner: "", UpstreamClient: ""})
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	requireMandatory(t, engine, user, MandatoryDecision{Allowed: true, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNone}, own)
+	requireMandatory(t, engine, user, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}, foreign)
+	requireMandatory(t, engine, user, MandatoryDecision{Allowed: false, Source: MandatoryPolicySourceRequest, Reason: MandatoryDenyReasonNotGranted}, shared)
+
+	require.NoError(t, SeedPersonalAuthClientDefaultTx(ctx, conn, organizationID))
+	grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Len(t, grants, 1, "seeding twice keeps one grant")
+}
+
+func TestSeededPersonalDefaultIsRecordedAsProvisioned(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_personal_default_ledger"
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, SeedPersonalAuthClientDefaultTx(ctx, conn, organizationID))
+
+	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	// An admin removing it, then a reseed, does not bring it back: the ledger
+	// row survives the removal.
+	require.NoError(t, PatchPrincipalGrants(ctx, conn, organizationID, AllUsersPrincipal(), nil, []*RoleGrant{{Scope: string(ScopeMCPAuth), Selectors: []Selector{PersonalAuthClientSelector()}}}))
+	require.NoError(t, SeedPersonalAuthClientDefaultTx(ctx, conn, organizationID))
+	grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{AllUsersPrincipal()})
+	require.NoError(t, err)
+	require.Len(t, grants, 1, "seeding again is creation-time only; the backfill is what must not restore it")
+}
+
+const (
+	authClientA   = "client_a"
+	authProjectP  = "proj_p"
+	authProjectQ  = "proj_q"
+	authUpstreamU = "upstream_u"
+	sessionUserID = "user_123"
+)
+
+func (c Check) withRepresentedUser(userID string) Check {
+	c.representedUser = userID
+	return c
+}
+
+func authClientGrant(principal string, scope Scope, selector Selector) Grant {
+	grant := NewGrantWithSelector(scope, selector)
+	grant.PrincipalUrn = principal
+	return grant
+}
+
+func authSelector(resourceID string, extra map[string]string) Selector {
+	selector := Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: resourceID}
+	maps.Copy(selector, extra)
+	return selector
+}
+
+func sharedClientCheck(projectID string) Check {
+	return MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: projectID, ConnectionOwner: "", UpstreamClient: ""})
+}
+
+func personalClientCheck(owner string) Check {
+	return MCPAuthClientCheck(authClientA, MCPAuthClientDimensions{ClientType: AuthClientTypeRemoteSession, ProjectID: authProjectP, ConnectionOwner: owner, UpstreamClient: authUpstreamU})
 }

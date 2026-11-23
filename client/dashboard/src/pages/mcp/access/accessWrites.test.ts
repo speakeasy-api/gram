@@ -774,6 +774,41 @@ describe("an annotation choice is stored as a block", () => {
       },
     ]);
   });
+
+  // Connect does not come with manage, so blocks alone would leave this row
+  // with no connect at all. The choice is written as the grant, and the
+  // block still keeps out tools that also carry a left-out annotation.
+  it("grants the chosen annotations when nothing else grants connect", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "manage" }),
+    ]);
+
+    const written = narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: [], dispositions: ["read_only"] },
+      undefined,
+    ).entries;
+
+    expect(written).toHaveLength(3);
+    expect(written).toEqual(
+      expect.arrayContaining([
+        { principalUrn: "user:1", level: "manage" },
+        {
+          principalUrn: "user:1",
+          level: "use",
+          tools: [],
+          dispositions: ["read_only"],
+        },
+        {
+          principalUrn: "user:1",
+          level: "blocked",
+          tools: [],
+          dispositions: ["destructive", "idempotent", "open_world"],
+        },
+      ]),
+    );
+  });
 });
 
 describe("subtracting by name without a catalogue", () => {
@@ -1150,4 +1185,81 @@ it("refuses narrowing that would discard an unknown stored block", () => {
       catalog,
     ),
   ).toThrow("not supported");
+});
+
+describe("narrowing to read-only tools on an OpenAPI server", () => {
+  // An OpenAPI GET is annotated read-only, idempotent and open-world at once,
+  // and a POST open-world. The runtime checks a call under one disposition,
+  // the first in priority order, so a block on open-world and idempotent
+  // leaves the GETs reachable — and the page has to read it the same way, or
+  // a saved "read-only tools" reads back as no access at all.
+  const openapi: ToolSelectionTool[] = [
+    {
+      name: "list_pets",
+      annotations: ["read_only", "idempotent", "open_world"],
+    },
+    {
+      name: "get_pet",
+      annotations: ["read_only", "idempotent", "open_world"],
+    },
+    { name: "create_pet", annotations: ["open_world"] },
+    { name: "update_pet", annotations: ["idempotent", "open_world"] },
+    {
+      name: "delete_pet",
+      annotations: ["destructive", "idempotent", "open_world"],
+    },
+  ];
+
+  it("reads the saved choice back as the read-only tools", () => {
+    const { direct, rows } = state([
+      entry({ principalUrn: "user:1", level: "use" }),
+    ]);
+    const written = narrowWrite(
+      direct,
+      rows[0]!,
+      { tools: [], dispositions: ["read_only"] },
+      openapi,
+    ).entries;
+    expect(written).toContainEqual({
+      principalUrn: "user:1",
+      level: "blocked",
+      tools: [],
+      dispositions: ["destructive", "idempotent", "open_world"],
+    });
+
+    // What the list holds once the save lands.
+    const saved = buildAccessRows(written.map((rule) => entry({ ...rule })));
+    expect(reachableTools(saved[0]!.cells.use, openapi)).toEqual([
+      "list_pets",
+      "get_pet",
+    ]);
+    expect(narrowingSeed(saved[0]!, openapi)).toEqual({
+      tools: ["list_pets", "get_pet"],
+      dispositions: [],
+    });
+  });
+
+  it("keeps an annotation block a name choice matches exactly", () => {
+    // Saving the dialog untouched sends back the names the block leaves. The
+    // block they amount to is the annotation block already standing, so it
+    // stays written as annotations.
+    const { direct, rows } = state([
+      role({ level: "use", memberIds: ["1"] }),
+      entry({
+        principalUrn: "user:1",
+        level: "blocked",
+        dispositions: ["destructive", "idempotent", "open_world"],
+      }),
+    ]);
+    const person = rows.find((r) => r.principalUrn === "user:1")!;
+
+    expect(
+      narrowWrite(
+        direct,
+        person,
+        { tools: ["list_pets", "get_pet"], dispositions: [] },
+        openapi,
+      ).message,
+    ).toBe("Access to this server is unchanged.");
+  });
 });
