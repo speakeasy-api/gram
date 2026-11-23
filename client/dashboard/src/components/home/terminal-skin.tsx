@@ -5,7 +5,11 @@ import {
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
 import { THINKING_VERBS } from "@/elements/lib/thinkingVerbs";
+import { isPartialToolCallAnnotation } from "@/elements/lib/toolCallAnnotation";
+import { DocsCitations } from "@/elements/components/assistant-ui/docs-citations";
+import { usePrefersReducedMotion } from "@/elements/hooks/usePrefersReducedMotion";
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
+import { useRunCitations } from "@/elements/hooks/useRunCitations";
 import { useElements } from "@/elements/hooks/useElements";
 import { useToolApproval } from "@/elements/hooks/useToolApproval";
 import {
@@ -106,14 +110,25 @@ export const TerminalToolGroup: FC<
   const working = useAuiState(({ message }) => {
     if (message.status?.type !== "running") return false;
     const last = indices[indices.length - 1] ?? -1;
+    // An empty text part or the next batch's heading, mid-flight, does not
+    // end the run.
     return message.parts
       .slice(last + 1)
-      .every((part) => part.type === "text" && part.text.trim() === "");
+      .every(
+        (part) =>
+          part.type === "text" &&
+          (part.text.trim() === "" || isPartialToolCallAnnotation(part.text)),
+      );
   });
+  // Sources behind an answer stay visible, as in the stock group.
+  const excerpts = useRunCitations(indices);
   return (
     <div className="gram-term-tools">
       {children}
       {working && <TerminalWorking />}
+      {excerpts.length > 0 && (
+        <DocsCitations excerpts={excerpts} className="mt-2 border" />
+      )}
     </div>
   );
 };
@@ -121,19 +136,26 @@ export const TerminalToolGroup: FC<
 const VERB_MS = 3000;
 
 function TerminalWorking(): JSX.Element {
+  const reducedMotion = usePrefersReducedMotion();
   const [index, setIndex] = useState(() =>
     Math.floor(Math.random() * THINKING_VERBS.length),
   );
   useEffect(() => {
+    // Reduced motion keeps one verb on screen.
+    if (reducedMotion) return;
     const id = setInterval(
       () => setIndex((i) => (i + 1) % THINKING_VERBS.length),
       VERB_MS,
     );
     return () => clearInterval(id);
-  }, []);
+  }, [reducedMotion]);
   return (
     <div className="aui-thinking gram-term-working" role="status">
-      <span className="aui-thinking-label">{THINKING_VERBS[index]}…</span>
+      {/* A stable label for screen readers; the rotating verb is decoration. */}
+      <span className="sr-only">Assistant is working…</span>
+      <span className="aui-thinking-label" aria-hidden="true">
+        {THINKING_VERBS[index]}…
+      </span>
     </div>
   );
 }

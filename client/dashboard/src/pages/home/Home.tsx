@@ -17,6 +17,7 @@ import { HomeWidgets } from "@/components/home/HomeWidgets";
 import { HomeTerminal } from "@/components/home/HomeTerminal";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function Home(): JSX.Element {
   const { hasAnyScope, hasAnyScopeInProject, isLoading } = useRBAC();
@@ -50,6 +51,12 @@ export default function Home(): JSX.Element {
         <Page.Header>
           <Page.Header.Breadcrumbs />
         </Page.Header>
+        <Page.Body>
+          <Skeleton
+            label="Loading the project home"
+            className="h-[32rem] w-full"
+          />
+        </Page.Body>
       </Page>
     );
   }

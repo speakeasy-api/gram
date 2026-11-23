@@ -1302,8 +1302,8 @@ export function InsightsProvider({
           CHAT_LINK_CSS +
           TERMINAL_SKIN_CSS,
       },
-      // Inert unless a surface wraps <Chat /> in TerminalSkinProvider (the
-      // project homepage terminal); everywhere else renders stock.
+      // Inert unless a surface wraps <Chat /> in TerminalSkinContext.Provider
+      // (the project homepage terminal); everywhere else renders stock.
       components: { ...mcpConfig.components, ...TERMINAL_SKIN_COMPONENTS },
     }),
     [
@@ -1462,6 +1462,8 @@ export function InsightsProvider({
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
+      assistantError,
+      retryAssistant,
       newConversation: handleStartFresh,
       registerDockHide,
     }),
@@ -1472,6 +1474,8 @@ export function InsightsProvider({
       handleSendPrompt,
       runtimeMounted,
       assistantNeedsAdmin,
+      assistantError,
+      retryAssistant,
       handleStartFresh,
       registerDockHide,
     ],

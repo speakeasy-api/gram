@@ -87,6 +87,15 @@ describe("isToolError", () => {
     ).toBe(true);
   });
 
+  it("is false for a successful result that quotes the failure text", () => {
+    expect(
+      isToolError("complete", {
+        role: "tool",
+        content: "Last week's chat said: tool execution failed twice.",
+      }),
+    ).toBe(false);
+  });
+
   it("is false for a normal result", () => {
     expect(
       isToolError("complete", { role: "tool", content: "12 servers" }),

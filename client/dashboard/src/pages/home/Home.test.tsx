@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   assistantsAvailable: true,
   terminalHome: "disabled" as "enabled" | "disabled" | "loading",
+  canReadAssistants: true,
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: state.terminalHome }),
@@ -48,7 +49,8 @@ vi.mock("@/components/page-layout", () => {
 });
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasAnyScope: () => true,
+    hasAnyScope: (scopes: string[]) =>
+      !scopes.includes("assistant:read") || state.canReadAssistants,
     hasAnyScopeInProject: () => true,
     isLoading: false,
   }),
@@ -59,6 +61,7 @@ afterEach(() => {
   cleanup();
   state.assistantsAvailable = true;
   state.terminalHome = "disabled";
+  state.canReadAssistants = true;
 });
 
 function renderHome(): void {
@@ -107,10 +110,21 @@ describe("Home", () => {
     expect(screen.getByTestId("project-dashboard")).toBeTruthy();
   });
 
-  it("renders neither layout while the flag is loading", () => {
+  it("keeps the normal overview when terminal-home is on but the viewer lacks assistant:read", () => {
+    state.terminalHome = "enabled";
+    state.canReadAssistants = false;
+    renderHome();
+    expect(screen.queryByTestId("home-terminal")).toBeNull();
+    expect(screen.getByTestId("project-dashboard")).toBeTruthy();
+  });
+
+  it("shows a loading state, not either layout, while the flag is loading", () => {
     state.terminalHome = "loading";
     renderHome();
     expect(screen.queryByTestId("home-terminal")).toBeNull();
     expect(screen.queryByTestId("project-dashboard")).toBeNull();
+    expect(
+      screen.getByRole("status", { name: "Loading the project home" }),
+    ).toBeTruthy();
   });
 });

@@ -58,12 +58,24 @@ function useWeekWindow(): { from: Date; to: Date; prevFrom: Date } {
   );
 }
 
-function useLogsEnabled(): { enabled: boolean; pending: boolean } {
+function useLogsEnabled(): {
+  enabled: boolean;
+  pending: boolean;
+  error: boolean;
+  /** Confirmed off, not just unknown after a failed request. */
+  off: boolean;
+} {
   const organization = useOrganization();
-  const { data, isPending } = useProductFeatures({
+  const { data, isPending, isError } = useProductFeatures({
     organizationId: organization.id,
   });
-  return { enabled: data?.logsEnabled === true, pending: isPending };
+  const enabled = data?.logsEnabled === true;
+  return {
+    enabled,
+    pending: isPending,
+    error: isError,
+    off: !isPending && !isError && !enabled,
+  };
 }
 
 function useWeekOverview() {
@@ -89,7 +101,8 @@ function useWeekOverview() {
   return {
     data: query.data,
     pending: logs.pending || (logs.enabled && query.isPending),
-    logsOff: !logs.pending && !logs.enabled,
+    error: logs.error || (logs.enabled && query.isError),
+    logsOff: logs.off,
   };
 }
 
@@ -133,8 +146,9 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
     throwOnError: false,
   });
   const accessFlag = useFeatureFlag(FEATURE_FLAGS.accessRequests);
+  const requestsEnabled = accessFlag.status === "enabled" && isAdmin;
   const requests = useAccessRequests({ status: "pending" }, undefined, {
-    enabled: accessFlag.status === "enabled" && isAdmin,
+    enabled: requestsEnabled,
     throwOnError: false,
   });
 
@@ -178,7 +192,14 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
   ].slice(0, 5);
 
   const pending =
-    week.pending || (isAdmin && signals.isPending && !signals.isError);
+    week.pending ||
+    (isAdmin && signals.isPending && !signals.isError) ||
+    (requestsEnabled && requests.isPending && !requests.isError);
+  // With a source down, an empty list does not mean all is well.
+  const error =
+    week.error ||
+    (isAdmin && signals.isError) ||
+    (requestsEnabled && requests.isError);
 
   return (
     <Card.Dashboard
@@ -189,6 +210,8 @@ function NeedsAttention({ className }: { className?: string }): JSX.Element {
     >
       {pending ? (
         <ListSkeleton />
+      ) : items.length === 0 && error ? (
+        <LoadError />
       ) : items.length === 0 ? (
         <p className="text-muted-foreground px-6 py-5 text-sm">
           Nothing needs attention this week.
@@ -249,6 +272,8 @@ function SpendWidget({ className }: { className?: string }): JSX.Element {
     >
       {week.logsOff ? (
         <LogsOff />
+      ) : week.error ? (
+        <LoadError />
       ) : (
         <div className="flex flex-col">
           <StatTile
@@ -314,6 +339,8 @@ function MoversWidget({ className }: { className?: string }): JSX.Element {
 
   const pending =
     logs.pending || (enabled && (thisWeek.isPending || lastWeek.isPending));
+  const error =
+    logs.error || (enabled && (thisWeek.isError || lastWeek.isError));
 
   return (
     <Card.Dashboard
@@ -322,10 +349,12 @@ function MoversWidget({ className }: { className?: string }): JSX.Element {
       className={cn(WIDGET_CLASS, className)}
       bodyClassName={cn(WIDGET_BODY_CLASS, "p-0")}
     >
-      {!logs.pending && !logs.enabled ? (
+      {logs.off ? (
         <LogsOff />
       ) : pending ? (
         <ListSkeleton />
+      ) : error ? (
+        <LoadError />
       ) : movers.length === 0 ? (
         <p className="text-muted-foreground px-6 py-5 text-sm">
           No change in server usage this week.
@@ -414,6 +443,7 @@ function MostActiveWidget({ className }: { className?: string }): JSX.Element {
   );
 
   const pending = logs.pending || (logs.enabled && users.isPending);
+  const error = logs.error || (logs.enabled && users.isError);
 
   return (
     <Card.Dashboard
@@ -423,10 +453,12 @@ function MostActiveWidget({ className }: { className?: string }): JSX.Element {
       bodyClassName={cn(WIDGET_BODY_CLASS, "p-0")}
       action={<ViewAllLink to={routes.identities.people.href()} />}
     >
-      {!logs.pending && !logs.enabled ? (
+      {logs.off ? (
         <LogsOff />
       ) : pending ? (
         <ListSkeleton />
+      ) : error ? (
+        <LoadError />
       ) : top.length === 0 ? (
         <p className="text-muted-foreground px-6 py-5 text-sm">
           No one has used this project's tools this week.
@@ -503,7 +535,9 @@ function HeatmapWidget({ className }: { className?: string }): JSX.Element {
         </p>
       ) : week.pending ? (
         <Skeleton className="h-40 w-full" />
-      ) : grid.days.length === 0 ? (
+      ) : week.error ? (
+        <p className="text-muted-foreground text-sm">{LOAD_ERROR}</p>
+      ) : grid.total === 0 ? (
         <p className="text-muted-foreground text-sm">
           No tool calls in the last 7 days.
         </p>
@@ -646,6 +680,14 @@ function ListSkeleton(): JSX.Element {
         <Skeleton key={i} className="h-8 w-full" />
       ))}
     </div>
+  );
+}
+
+const LOAD_ERROR = "Couldn't load this data. Try reloading the page.";
+
+function LoadError(): JSX.Element {
+  return (
+    <p className="text-muted-foreground px-6 py-5 text-sm">{LOAD_ERROR}</p>
   );
 }
 

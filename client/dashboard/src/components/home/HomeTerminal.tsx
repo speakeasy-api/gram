@@ -19,8 +19,13 @@ export function HomeTerminal({
 }: {
   className?: string;
 }): ReactElement {
-  const { assistantReady, assistantNeedsAdmin, newConversation } =
-    useInsightsState();
+  const {
+    assistantReady,
+    assistantNeedsAdmin,
+    assistantError,
+    retryAssistant,
+    newConversation,
+  } = useInsightsState();
   const { slug } = useProject();
 
   return (
@@ -51,6 +56,18 @@ export function HomeTerminal({
         {assistantNeedsAdmin ? (
           <p className="text-muted-foreground p-6 font-mono text-sm">
             Ask an admin to enable the Project Assistant for this project.
+          </p>
+        ) : assistantError ? (
+          // The dock that would show this is hidden on Home.
+          <p className="text-muted-foreground p-6 font-mono text-sm">
+            {assistantError}{" "}
+            <button
+              type="button"
+              onClick={retryAssistant}
+              className="text-foreground underline underline-offset-2"
+            >
+              Try again
+            </button>
           </p>
         ) : assistantReady ? (
           <TerminalSkinContext.Provider value>

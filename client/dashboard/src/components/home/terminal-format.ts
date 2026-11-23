@@ -70,6 +70,30 @@ export function isToolError(statusType: string, result: unknown): boolean {
       result !== null &&
       "isError" in result &&
       result.isError === true) ||
-    /tool execution failed/i.test(resultText(result))
+    isFailureEnvelope(resultText(result))
   );
+}
+
+const FAILURE = /^tool execution failed/i;
+
+/**
+ * Only the failure envelope counts, `{"err": "tool execution failed: …"}` or
+ * the bare message, so a successful result that quotes the phrase does not.
+ */
+function isFailureEnvelope(text: string): boolean {
+  const trimmed = text.trim();
+  if (FAILURE.test(trimmed)) return true;
+  if (!trimmed.startsWith("{")) return false;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "err" in parsed &&
+      typeof parsed.err === "string" &&
+      FAILURE.test(parsed.err)
+    );
+  } catch {
+    return false;
+  }
 }

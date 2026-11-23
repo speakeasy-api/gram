@@ -12,7 +12,8 @@ beforeEach(() => {
   process.env.TZ = "UTC";
 });
 afterEach(() => {
-  process.env.TZ = ORIGINAL_TZ;
+  if (ORIGINAL_TZ === undefined) delete process.env.TZ;
+  else process.env.TZ = ORIGINAL_TZ;
 });
 
 function bucket(iso: string, totalCost: number, totalToolCalls = 0) {
@@ -58,6 +59,24 @@ describe("computeMovers", () => {
     ]);
   });
 
+  it("leaves out a server missing from a full top-N list", () => {
+    const full = Array.from({ length: 10 }, (_, i) => server(`s${i}`, 100));
+    // "ghost" may rank 11th this week, so its change is unknown.
+    const names = computeMovers(
+      [server("s0", 50), server("ghost", 30)],
+      full,
+      20,
+    ).map((m) => m.name);
+    expect(names).toContain("s0");
+    expect(names).not.toContain("ghost");
+    // Same the other way round.
+    expect(
+      computeMovers(full, [server("s0", 50), server("fresh", 5)], 20).map(
+        (m) => m.name,
+      ),
+    ).not.toContain("fresh");
+  });
+
   it("caps the list", () => {
     const current = Array.from({ length: 8 }, (_, i) => server(`s${i}`, i + 1));
     expect(computeMovers([], current, 3).map((m) => m.name)).toEqual([
@@ -86,5 +105,14 @@ describe("buildHeatmap", () => {
 
   it("keeps max at least 1 when there are no calls", () => {
     expect(buildHeatmap([]).max).toBe(1);
+  });
+
+  it("totals zero for a zero-filled week", () => {
+    const map = buildHeatmap([
+      bucket("2026-11-18T09:00:00Z", 0, 0),
+      bucket("2026-11-19T09:00:00Z", 0, 0),
+    ]);
+    expect(map.days).toHaveLength(2);
+    expect(map.total).toBe(0);
   });
 });

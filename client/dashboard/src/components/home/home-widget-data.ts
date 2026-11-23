@@ -27,22 +27,32 @@ export function dailyCost(buckets: readonly Bucket[]): number[] {
 
 export type Mover = { name: string; prev: number; curr: number; delta: number };
 
+// The project overview returns at most this many top servers.
+export const TOP_SERVERS_CAP = 10;
+
 /**
  * Servers ranked by the size of their week-over-week change. The inputs are
- * top-N lists, so a server missing from one week counts as zero there.
+ * top-N lists: a server missing from a short list had no calls that week, but
+ * one missing from a full list may just rank lower, so it is left out.
  */
 export function computeMovers(
   previous: readonly { serverName: string; toolCallCount: number }[],
   current: readonly { serverName: string; toolCallCount: number }[],
   limit = 5,
 ): Mover[] {
-  const before = new Map(previous.map((s) => [s.serverName, s.toolCallCount]));
-  const after = new Map(current.map((s) => [s.serverName, s.toolCallCount]));
-  return [...new Set([...before.keys(), ...after.keys()])]
-    .map((name) => {
-      const prev = before.get(name) ?? 0;
-      const curr = after.get(name) ?? 0;
-      return { name, prev, curr, delta: curr - prev };
+  const count = (
+    week: readonly { serverName: string; toolCallCount: number }[],
+    name: string,
+  ): number | undefined =>
+    week.find((s) => s.serverName === name)?.toolCallCount ??
+    (week.length < TOP_SERVERS_CAP ? 0 : undefined);
+  const names = new Set([...previous, ...current].map((s) => s.serverName));
+  return [...names]
+    .flatMap((name) => {
+      const prev = count(previous, name);
+      const curr = count(current, name);
+      if (prev === undefined || curr === undefined) return [];
+      return [{ name, prev, curr, delta: curr - prev }];
     })
     .filter((m) => m.delta !== 0)
     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
@@ -56,6 +66,8 @@ export type Heatmap = {
   days: Date[];
   /** Busiest hour; at least 1 so it can divide. */
   max: number;
+  /** All tool calls in the data. The API zero-fills empty hours. */
+  total: number;
 };
 
 export function heatmapKey(day: Date, hour: number): string {
@@ -76,5 +88,6 @@ export function buildHeatmap(buckets: readonly Bucket[]): Heatmap {
     cells,
     days: [...days.values()].sort((a, b) => a.getTime() - b.getTime()),
     max: Math.max(1, ...cells.values()),
+    total: [...cells.values()].reduce((sum, n) => sum + n, 0),
   };
 }

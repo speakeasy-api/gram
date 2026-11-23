@@ -6,6 +6,7 @@ import { type FC, useEffect, useMemo, useState } from "react";
 import { isThinkingIndicatorActive } from "@/elements/lib/thinkingIndicator";
 import { THINKING_VERBS } from "@/elements/lib/thinkingVerbs";
 import { RainbowSpinner } from "@/components/ui/Spinner";
+import { usePrefersReducedMotion } from "@/elements/hooks/usePrefersReducedMotion";
 import { cn } from "@/lib/utils";
 
 // Cadence: hold each verb, then crossfade to the next.
@@ -19,31 +20,6 @@ function shuffled<T>(items: readonly T[]): T[] {
     [copy[i], copy[j]] = [copy[j]!, copy[i]!];
   }
   return copy;
-}
-
-/** Tracks the user's `prefers-reduced-motion` setting, updating if it changes. */
-function usePrefersReducedMotion(): boolean {
-  const query = "(prefers-reduced-motion: reduce)";
-  const [reduced, setReduced] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia(query).matches,
-  );
-
-  useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      typeof window.matchMedia !== "function"
-    )
-      return;
-    const mql = window.matchMedia(query);
-    const onChange = () => setReduced(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
-
-  return reduced;
 }
 
 /**
