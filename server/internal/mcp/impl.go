@@ -189,6 +189,10 @@ type Service struct {
 	// upstreamIssuerParityLog dedupes upstream issuer disagreement and
 	// re-consent forecast logs.
 	upstreamIssuerParityLog *onceLog
+
+	// authClientRefusals dedupes the refused mcp:auth checks recorded as
+	// authorization challenges.
+	authClientRefusals *onceLog
 	// prepareMandatory replaces authz PrepareMandatory for the shadow when
 	// set; tests use it to observe admissions.
 	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
@@ -656,6 +660,7 @@ func NewService(
 		features:                  features,
 		mandatoryShadowLog:        newOnceLog(),
 		upstreamIssuerParityLog:   newOnceLog(),
+		authClientRefusals:        newOnceLog(),
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
