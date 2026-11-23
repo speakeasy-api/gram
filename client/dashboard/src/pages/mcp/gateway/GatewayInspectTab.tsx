@@ -487,7 +487,6 @@ function GatewayInspectConnection({
   const needsChoice = unconnected.some(
     (member) => signIn.statusFor(member.slug)?.status === "needs_consent",
   );
-  const connectMembers = needsChoice ? approval.connect : signIn.connect;
   const memberSignIn =
     unconnected.length > 0 && skippedConnect ? (
       <p className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
@@ -702,12 +701,16 @@ function GatewayInspectConnection({
   ) {
     state = (
       <GatewayConnectStep
-        members={unconnected.map((m) => ({
-          slug: m.slug,
-          name: m.name,
-          mcpServerId: memberServer(m.slug)?.id,
-        }))}
-        onConnect={connectMembers}
+        members={unconnected.map((m) => {
+          const choose = signIn.statusFor(m.slug)?.status === "needs_consent";
+          return {
+            slug: m.slug,
+            name: m.name,
+            mcpServerId: memberServer(m.slug)?.id,
+            choose,
+            connect: choose ? approval.connect : signIn.connect,
+          };
+        })}
         choosingConnection={needsChoice}
         connecting={needsChoice && approval.isConnecting}
         connectionError={needsChoice && approval.error}

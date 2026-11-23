@@ -97,7 +97,9 @@ vi.mock("./useGatewayMemberStates", async (importOriginal) => ({
         !!slug && state.unconnected.includes(slug),
       connect: state.connect,
       statusFor: (slug: string) =>
-        state.choiceRequired && state.unconnected.includes(slug)
+        state.choiceRequired &&
+        slug === "oauth" &&
+        state.unconnected.includes(slug)
           ? { status: "needs_consent" }
           : undefined,
     },
@@ -532,7 +534,10 @@ it("reviews a missing choice and inspects with the approved session", () => {
     protocolVersion: undefined,
     serverName: undefined,
     tools: [],
-    servers: [{ slug: "oauth", name: "OAuth server" }],
+    servers: [
+      { slug: "oauth", name: "OAuth server" },
+      { slug: "other", name: "Other server" },
+    ],
   };
   state.members = [
     {
@@ -543,8 +548,16 @@ it("reviews a missing choice and inspects with the approved session", () => {
       isLoading: false,
       refetch: vi.fn<() => void>(),
     },
+    {
+      slug: "other",
+      name: "Other server",
+      tools: [],
+      error: "not connected",
+      isLoading: false,
+      refetch: vi.fn<() => void>(),
+    },
   ];
-  state.unconnected = ["oauth"];
+  state.unconnected = ["oauth", "other"];
   state.choiceRequired = true;
   const tab = (
     <TooltipProvider>
@@ -570,6 +583,12 @@ it("reviews a missing choice and inspects with the approved session", () => {
     }),
   );
   expect(state.approve).toHaveBeenCalledOnce();
+  state.connect.mockClear();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Connect your Other server account" }),
+  );
+  expect(state.connect).toHaveBeenCalledOnce();
+  expect(state.approve).toHaveBeenCalledOnce();
   expect(screen.queryByText(/Couldn't read OAuth server's tools/)).toBeNull();
 
   // The callback has returned with the reviewed bearer, not a second mint.
@@ -580,6 +599,7 @@ it("reviews a missing choice and inspects with the approved session", () => {
   expect(state.inspect).toHaveBeenCalledWith(
     expect.objectContaining({
       headers: { Authorization: "Bearer approved-inspect-bearer" },
+      configurationKey: expect.not.stringContaining(":catalog"),
       enabled: true,
     }),
   );

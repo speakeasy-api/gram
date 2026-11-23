@@ -240,7 +240,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 			}
 			switch member.authClient.reason {
 			case authClientReasonAmbiguous, authClientReasonUnmapped, authClientReasonClientGone, authClientReasonClientDeleted, authClientReasonClientDisabled, authClientReasonUnassociated, authClientReasonRegistration, authClientReasonDetached:
-				if offered, readErr := requiresAuth(ctx, member); readErr == nil && offered {
+				if s.memberHasReviewableAuthChoice(ctx, gate, member) {
 					return signInRow(metamcp.SignInNeedsConsent, "Choose a current connection for this server when you sign in to the gateway.", nil)
 				}
 			}
@@ -268,6 +268,28 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		return notConnectedRow(gate, dial.oauthSignIn)
 	}
 	return signInRow(metamcp.SignInNotRequired, "", nil)
+}
+
+// memberHasReviewableAuthChoice checks offers without acquiring any credential.
+// A live personal option may need to be connected in the picker first.
+func (s *Service) memberHasReviewableAuthChoice(ctx context.Context, gate *metaGateContext, member metaMember) bool {
+	if gate.authentication == nil {
+		return false
+	}
+	choices, err := s.consentAuthChoices(ctx, gate.organizationID, gate.authentication.subject, []consentAuthServer{{id: member.serverID, projectID: member.projectID}}, nil, nil, true)
+	if err != nil {
+		return false
+	}
+	choice := choices[member.serverID]
+	if choice == nil {
+		return false
+	}
+	for _, option := range choice.Options {
+		if option.Usable() || option.State == consentClientConnect {
+			return true
+		}
+	}
+	return false
 }
 
 // memberAuthRequirements reports whether a proxied member offers an enabled

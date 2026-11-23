@@ -1071,7 +1071,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
 	}
 	inventoryDeferred := gateway == nil && consentInventoryDeferred(cards, prefillAttr != "")
-	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	showDiscoveryMode := !challengeState.FirstParty && challengeState.ClientID != dashboardInspectClientID && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
 	var prefillDiscoveryMode metamcp.DiscoveryMode
 	if showDiscoveryMode {
 		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)

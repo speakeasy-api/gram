@@ -7,6 +7,8 @@ export interface ConnectStepMember {
   slug: string;
   name: string;
   mcpServerId?: string;
+  choose?: boolean;
+  connect?: () => void;
 }
 
 /**
@@ -17,7 +19,6 @@ export interface ConnectStepMember {
  */
 export function GatewayConnectStep({
   members,
-  onConnect,
   onSkip,
   availableCount,
   choosingConnection = false,
@@ -25,8 +26,6 @@ export function GatewayConnectStep({
   connectionError = false,
 }: {
   members: ConnectStepMember[];
-  /** Starts account connection or a review of this gateway session. */
-  onConnect: (() => void) | undefined;
   onSkip: () => void;
   /** Tools the viewer can use without connecting, for the skip link. */
   availableCount: number;
@@ -68,16 +67,16 @@ export function GatewayConnectStep({
             <Button
               variant="primary"
               size="sm"
-              onClick={onConnect}
-              disabled={connecting || !onConnect}
+              onClick={member.connect}
+              disabled={(member.choose && connecting) || !member.connect}
               aria-label={
-                choosingConnection
+                member.choose
                   ? `Choose a connection for ${member.name}`
                   : `Connect your ${member.name} account`
               }
             >
               <Button.Text>
-                {choosingConnection ? "Choose connection" : "Connect"}
+                {member.choose ? "Choose connection" : "Connect"}
               </Button.Text>
             </Button>
           </li>
