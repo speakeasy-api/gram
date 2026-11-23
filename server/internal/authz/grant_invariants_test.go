@@ -24,13 +24,10 @@ import (
 // ValidateSelector would refuse is left out, so the world is exactly the set
 // of grants that can be stored.
 //
-// P numbers follow the typed checks page (step 5). A to D are the gaps added
-// after it: agents and several policies (A), any-of requests (B), precedence
-// (C) and every API giving the same answer (D). The engine tests (B, D) run on
-// grants with no tool or disposition limit to keep them fast. Not covered
-// here: how agent policies are stored and delegated (runtimepolicy) and
-// organization isolation, which the grant loader enforces before the
-// evaluator runs.
+// The engine tests run on grants with no tool or disposition limit to keep
+// them fast. Not covered here: how agent policies are stored and delegated
+// (runtimepolicy) and organization isolation, which the grant loader enforces
+// before the evaluator runs.
 
 func TestGrantInvariants_WorldSize(t *testing.T) {
 	t.Parallel()
@@ -43,7 +40,7 @@ func TestGrantInvariants_WorldSize(t *testing.T) {
 	}
 }
 
-// P1: no grants means no access.
+// No grants means no access.
 func TestGrantInvariants_NoGrantsNoAccess(t *testing.T) {
 	t.Parallel()
 	for _, c := range everyCheck() {
@@ -53,8 +50,8 @@ func TestGrantInvariants_NoGrantsNoAccess(t *testing.T) {
 	}
 }
 
-// P2: adding an allow grant never removes access.
-// P3: adding a block never gives access.
+// Adding an allow grant never removes access.
+// Adding a block never gives access.
 func TestGrantInvariants_AddingGrantsIsMonotonic(t *testing.T) {
 	t.Parallel()
 	storable := storableGrants()
@@ -72,9 +69,9 @@ func TestGrantInvariants_AddingGrantsIsMonotonic(t *testing.T) {
 				now := isAllowed(t, grants, c.check)
 				switch {
 				case IsBlocklistScope(added.Scope) && !was && now:
-					blockGranted.add("P3: adding block %s to [%s] allowed %s on %s", describeGrant(added), describeGrants(before), c.name, c.server.id)
+					blockGranted.add("adding block %s to [%s] allowed %s on %s", describeGrant(added), describeGrants(before), c.name, c.server.id)
 				case !IsBlocklistScope(added.Scope) && was && !now:
-					allowRemoved.add("P2: adding %s to [%s] removed %s on %s", describeGrant(added), describeGrants(before), c.name, c.server.id)
+					allowRemoved.add("adding %s to [%s] removed %s on %s", describeGrant(added), describeGrants(before), c.name, c.server.id)
 				}
 			}
 		}
@@ -83,7 +80,7 @@ func TestGrantInvariants_AddingGrantsIsMonotonic(t *testing.T) {
 	blockGranted.done()
 }
 
-// P4: a grant limited to project A never satisfies a check in project B.
+// A grant limited to project A never satisfies a check in project B.
 func TestGrantInvariants_ProjectIsolation(t *testing.T) {
 	t.Parallel()
 	failures := &failureReport{t: t}
@@ -96,14 +93,14 @@ func TestGrantInvariants_ProjectIsolation(t *testing.T) {
 		}
 		for _, c := range inB {
 			if isAllowed(t, grants, c.check) {
-				failures.add("P4: [%s] allowed %s on %s in project B", describeGrants(grants), c.name, c.server.id)
+				failures.add("[%s] allowed %s on %s in project B", describeGrants(grants), c.name, c.server.id)
 			}
 		}
 	})
 	failures.done()
 }
 
-// P5: with no blocks, a grant set that allows a scope on a server also allows
+// With no blocks, a grant set that allows a scope on a server also allows
 // every scope that scope implies on it.
 func TestGrantInvariants_ImplicationHolds(t *testing.T) {
 	t.Parallel()
@@ -132,7 +129,7 @@ func TestGrantInvariants_ImplicationHolds(t *testing.T) {
 						continue
 					}
 					if isAllowed(t, grants, higherCheck.check) && !isAllowed(t, grants, lowerCheck.check) {
-						failures.add("P5: [%s] allows %s on %s but not %s", describeGrants(grants), higherCheck.name, server.id, lowerCheck.name)
+						failures.add("[%s] allows %s on %s but not %s", describeGrants(grants), higherCheck.name, server.id, lowerCheck.name)
 					}
 				}
 			}
@@ -141,8 +138,8 @@ func TestGrantInvariants_ImplicationHolds(t *testing.T) {
 	failures.done()
 }
 
-// P6: widening an allow grant never removes access. The one expected
-// exception is P7's: a grant made to the user by name for one server outranks
+// Widening an allow grant never removes access. The one expected
+// exception: a grant made to the user by name for one server outranks
 // an inherited block, and widening it to every server gives that up.
 func TestGrantInvariants_WideningNeverRemovesAccess(t *testing.T) {
 	t.Parallel()
@@ -163,7 +160,7 @@ func TestGrantInvariants_WideningNeverRemovesAccess(t *testing.T) {
 				widened[i] = wide
 				for _, c := range checks {
 					if isAllowed(t, grants, c.check) && !isAllowed(t, widened, c.check) {
-						failures.add("P6: widening %s to %s in [%s] removed %s on %s", describeGrant(g), describeGrant(wide), describeGrants(grants), c.name, c.server.id)
+						failures.add("widening %s to %s in [%s] removed %s on %s", describeGrant(g), describeGrant(wide), describeGrants(grants), c.name, c.server.id)
 					}
 				}
 			}
@@ -172,7 +169,7 @@ func TestGrantInvariants_WideningNeverRemovesAccess(t *testing.T) {
 	failures.done()
 }
 
-// P7: a block wins over every allow, with one exception: a grant made to the
+// A block wins over every allow, with one exception: a grant made to the
 // user by name for that one server outranks a block that reaches them through
 // a role or everyone. The user's own block always wins.
 func TestGrantInvariants_BlockWins(t *testing.T) {
@@ -196,7 +193,7 @@ func TestGrantInvariants_BlockWins(t *testing.T) {
 					continue
 				}
 				if holder == principalUser || !namesServer {
-					failures.add("P7: [%s] plus %s still allows %s on %s", describeGrants(grants), describeGrant(block), c.name, c.server.id)
+					failures.add("[%s] plus %s still allows %s on %s", describeGrants(grants), describeGrant(block), c.name, c.server.id)
 				}
 			}
 		}
@@ -204,7 +201,7 @@ func TestGrantInvariants_BlockWins(t *testing.T) {
 	failures.done()
 }
 
-// P8: absence never grants. Leaving the tool or disposition out of a tool call
+// Absence never grants. Leaving the tool or disposition out of a tool call
 // never turns a refusal into an allow.
 func TestGrantInvariants_AbsentValueNeverGrants(t *testing.T) {
 	t.Parallel()
@@ -219,10 +216,10 @@ func TestGrantInvariants_AbsentValueNeverGrants(t *testing.T) {
 						continue
 					}
 					if isAllowed(t, grants, ref.ToolCall(tool, "")) {
-						failures.add("P8: [%s] refuses %s (%s) on %s but allows it with no disposition", describeGrants(grants), tool, disposition, server.id)
+						failures.add("[%s] refuses %s (%s) on %s but allows it with no disposition", describeGrants(grants), tool, disposition, server.id)
 					}
 					if isAllowed(t, grants, ref.ToolCall("", disposition)) {
-						failures.add("P8: [%s] refuses %s (%s) on %s but allows it with no tool", describeGrants(grants), tool, disposition, server.id)
+						failures.add("[%s] refuses %s (%s) on %s but allows it with no tool", describeGrants(grants), tool, disposition, server.id)
 					}
 				}
 			}
@@ -231,7 +228,7 @@ func TestGrantInvariants_AbsentValueNeverGrants(t *testing.T) {
 	failures.done()
 }
 
-// P9: a grant limited to a tool or a disposition never allows a call to
+// A grant limited to a tool or a disposition never allows a call to
 // another tool or a call with another disposition.
 func TestGrantInvariants_LimitsAreRespected(t *testing.T) {
 	t.Parallel()
@@ -251,7 +248,7 @@ func TestGrantInvariants_LimitsAreRespected(t *testing.T) {
 				for _, disposition := range append([]string{""}, allDispositions...) {
 					outside := (hasTool && tool != limitTool) || (hasDisposition && disposition != limitDisposition)
 					if outside && isAllowed(t, []Grant{g}, ref.ToolCall(tool, disposition)) {
-						failures.add("P9: %s allows calling %s (%s) on %s", describeGrant(g), tool, disposition, server.id)
+						failures.add("%s allows calling %s (%s) on %s", describeGrant(g), tool, disposition, server.id)
 					}
 				}
 			}
@@ -260,7 +257,7 @@ func TestGrantInvariants_LimitsAreRespected(t *testing.T) {
 	failures.done()
 }
 
-// P10 and P15: a check without a server id or without a project id is refused
+// A check without a server id or without a project id is refused
 // with ErrInvalidCheck, whatever the grants.
 func TestGrantInvariants_InvalidChecksAreRefused(t *testing.T) {
 	t.Parallel()
@@ -277,14 +274,14 @@ func TestGrantInvariants_InvalidChecksAreRefused(t *testing.T) {
 		for name, check := range invalid {
 			answer := authorize(grants, check)
 			if answer.allowed || !errors.Is(answer.err, ErrInvalidCheck) {
-				failures.add("P10: [%s] answered %s with allowed=%v err=%v", describeGrants(grants), name, answer.allowed, answer.err)
+				failures.add("[%s] answered %s with allowed=%v err=%v", describeGrants(grants), name, answer.allowed, answer.err)
 			}
 		}
 	})
 	failures.done()
 }
 
-// P11: the order of the grants never changes the answer.
+// The order of the grants never changes the answer.
 func TestGrantInvariants_OrderDoesNotMatter(t *testing.T) {
 	t.Parallel()
 	failures := &failureReport{t: t}
@@ -298,14 +295,14 @@ func TestGrantInvariants_OrderDoesNotMatter(t *testing.T) {
 		for _, c := range checks {
 			a, b := authorize(grants, c.check), authorize(reversed, c.check)
 			if a.allowed != b.allowed || (a.err == nil) != (b.err == nil) {
-				failures.add("P11: [%s] answers %s on %s differently when reversed", describeGrants(grants), c.name, c.server.id)
+				failures.add("[%s] answers %s on %s differently when reversed", describeGrants(grants), c.name, c.server.id)
 			}
 		}
 	})
 	failures.done()
 }
 
-// A1: a request that carries several policies, such as an agent's credential,
+// A request that carries several policies, such as an agent's credential,
 // the agent and its owner, is allowed only what every policy allows on its
 // own. A block in any one of them takes the check away.
 func TestGrantInvariants_EveryPolicyMustAllow(t *testing.T) {
@@ -319,7 +316,7 @@ func TestGrantInvariants_EveryPolicyMustAllow(t *testing.T) {
 			for _, c := range checks {
 				want := isAllowed(t, first, c.check) && isAllowed(t, second, c.check)
 				if got := policiesAllow(t, both, c.check); got != want {
-					failures.add("A1: policies [%s] and [%s] answer %s on %s with %v, each alone says %v", describeGrants(first), describeGrants(second), c.name, c.server.id, got, want)
+					failures.add("policies [%s] and [%s] answer %s on %s with %v, each alone says %v", describeGrants(first), describeGrants(second), c.name, c.server.id, got, want)
 				}
 			}
 		}
@@ -327,7 +324,7 @@ func TestGrantInvariants_EveryPolicyMustAllow(t *testing.T) {
 	failures.done()
 }
 
-// A2: an agent never gets more than the user would with the same grants, and
+// An agent never gets more than the user would with the same grants, and
 // an agent's grant never outranks a block from a role or everyone, even when it
 // names the server. An agent's owner can write its policy without being an
 // administrator, so letting it outrank a block would let owners lift one.
@@ -344,7 +341,7 @@ func TestGrantInvariants_AgentGrantsNeverOutrankBlocks(t *testing.T) {
 		}
 		for _, c := range checks {
 			if isAllowed(t, asAgent, c.check) && !isAllowed(t, grants, c.check) {
-				failures.add("A2: [%s] allows %s on %s for the agent but not for the user", describeGrants(asAgent), c.name, c.server.id)
+				failures.add("[%s] allows %s on %s for the agent but not for the user", describeGrants(asAgent), c.name, c.server.id)
 			}
 			blockScope, ok := ExclusionScopeFor(c.check.Scope)
 			if !ok {
@@ -354,7 +351,7 @@ func TestGrantInvariants_AgentGrantsNeverOutrankBlocks(t *testing.T) {
 				block := NewGrant(blockScope, c.server.id)
 				block.PrincipalUrn = holder
 				if isAllowed(t, append(slices.Clone(asAgent), block), c.check) {
-					failures.add("A2: agent grants [%s] outrank %s for %s on %s", describeGrants(asAgent), describeGrant(block), c.name, c.server.id)
+					failures.add("agent grants [%s] outrank %s for %s on %s", describeGrants(asAgent), describeGrant(block), c.name, c.server.id)
 				}
 			}
 		}
@@ -362,7 +359,7 @@ func TestGrantInvariants_AgentGrantsNeverOutrankBlocks(t *testing.T) {
 	failures.done()
 }
 
-// A3: a grant on personal auth clients for "$represented_user" covers only the
+// A grant on personal auth clients for "$represented_user" covers only the
 // connection of the user the request acts for. A request that acts for nobody
 // covers no personal connection, and a binding the caller sets is replaced.
 // An agent acting for a user needs that user's own policy to allow it too.
@@ -386,7 +383,7 @@ func TestGrantInvariants_PersonalConnectionsBindToRepresentedUser(t *testing.T) 
 					}
 					want := represented != "" && owner == represented && userAllows
 					if got := policiesAllow(t, authorization, check); got != want {
-						t.Errorf("A3: acting for %q (user policy allows: %v), caller binding %q, connection of %q: got %v, want %v", represented, userAllows, callerBinding, owner, got, want)
+						t.Errorf("acting for %q (user policy allows: %v), caller binding %q, connection of %q: got %v, want %v", represented, userAllows, callerBinding, owner, got, want)
 					}
 				}
 			}
@@ -394,10 +391,10 @@ func TestGrantInvariants_PersonalConnectionsBindToRepresentedUser(t *testing.T) 
 	}
 }
 
-// B1: RequireAny allows when one alternative is allowed on its own, and
+// RequireAny allows when one alternative is allowed on its own, and
 // refuses when none is. A block on one alternative only takes that one away.
-// B2: the order of the alternatives never changes the answer.
-// B3: Require(AnyOf(...)) and Can(AnyOf(...)) answer as RequireAnyUnblocked.
+// The order of the alternatives never changes the answer.
+// Require(AnyOf(...)) and Can(AnyOf(...)) answer as RequireAnyUnblocked.
 func TestGrantInvariants_AnyOf(t *testing.T) {
 	t.Parallel()
 	engine := newInvariantEngine(t)
@@ -416,21 +413,21 @@ func TestGrantInvariants_AnyOf(t *testing.T) {
 				}
 				anyAllowed := engineAllows(t, engine.RequireAny(ctx, a.check, b.check))
 				if anyAllowed != (alone[i] || alone[j]) {
-					failures.add("B1: [%s] RequireAny(%s on %s, %s on %s) = %v, alone %v and %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, anyAllowed, alone[i], alone[j])
+					failures.add("[%s] RequireAny(%s on %s, %s on %s) = %v, alone %v and %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, anyAllowed, alone[i], alone[j])
 				}
 				unblocked := engineAllows(t, engine.RequireAnyUnblocked(ctx, a.check, b.check))
 				if unblocked != engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
-					failures.add("B2: [%s] RequireAnyUnblocked(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
+					failures.add("[%s] RequireAnyUnblocked(%s on %s, %s on %s) depends on order", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
 				if engineAllows(t, engine.Require(ctx, AnyOf(a.check, b.check))) != unblocked {
-					failures.add("B3: [%s] Require(AnyOf(%s on %s, %s on %s)) differs from RequireAnyUnblocked", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
+					failures.add("[%s] Require(AnyOf(%s on %s, %s on %s)) differs from RequireAnyUnblocked", describeGrants(grants), a.name, a.server.id, b.name, b.server.id)
 				}
 				can, err := engine.Can(ctx, AnyOf(a.check, b.check))
 				if err != nil {
 					t.Fatalf("Can(AnyOf) errored: %v", err)
 				}
 				if can != unblocked {
-					failures.add("B3: [%s] Can(AnyOf(%s on %s, %s on %s)) = %v, RequireAnyUnblocked = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, unblocked)
+					failures.add("[%s] Can(AnyOf(%s on %s, %s on %s)) = %v, RequireAnyUnblocked = %v", describeGrants(grants), a.name, a.server.id, b.name, b.server.id, can, unblocked)
 				}
 			}
 		}
@@ -438,10 +435,9 @@ func TestGrantInvariants_AnyOf(t *testing.T) {
 	failures.done()
 }
 
-// B4: RequireAnyUnblocked refuses when a block covers any one alternative,
-// even if the other alternative is allowed. The P7 exception still holds: a
-// grant made to the user by name for that server outranks a block from a role
-// or everyone.
+// RequireAnyUnblocked refuses when a block covers any one alternative,
+// even if the other alternative is allowed. A grant made to the user by name
+// for that server still outranks a block from a role or everyone.
 func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
 	t.Parallel()
 	engine := newInvariantEngine(t)
@@ -468,7 +464,7 @@ func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
 						continue
 					}
 					if engineAllows(t, engine.RequireAnyUnblocked(ctx, b.check, a.check)) {
-						failures.add("B4: [%s] plus %s still allows RequireAnyUnblocked(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
+						failures.add("[%s] plus %s still allows RequireAnyUnblocked(%s on %s, %s on %s)", describeGrants(grants), describeGrant(block), b.name, b.server.id, a.name, a.server.id)
 					}
 				}
 			}
@@ -477,9 +473,9 @@ func TestGrantInvariants_AnyOfUnblockedRefusesEveryBlock(t *testing.T) {
 	failures.done()
 }
 
-// C1: a grant made to the user by name for every server ("*") never outranks
-// a block from a role or everyone. Only a grant naming the one server does
-// (P7). Grants the default access backfill created (Inferred) never outrank a
+// A grant made to the user by name for every server ("*") never outranks
+// a block from a role or everyone. Only a grant naming the one server does.
+// Grants the default access backfill created (Inferred) never outrank a
 // block either, even when they name the server.
 func TestGrantInvariants_OnlyNamedServerGrantsOutrankBlocks(t *testing.T) {
 	t.Parallel()
@@ -502,10 +498,10 @@ func TestGrantInvariants_OnlyNamedServerGrantsOutrankBlocks(t *testing.T) {
 				block := NewGrant(blockScope, c.server.id)
 				block.PrincipalUrn = holder
 				if !namesServer && isAllowed(t, append(slices.Clone(grants), block), c.check) {
-					failures.add("C1: [%s] outranks %s for %s on %s without naming the server", describeGrants(grants), describeGrant(block), c.name, c.server.id)
+					failures.add("[%s] outranks %s for %s on %s without naming the server", describeGrants(grants), describeGrant(block), c.name, c.server.id)
 				}
 				if isAllowed(t, append(slices.Clone(inferred), block), c.check) {
-					failures.add("C1: backfilled [%s] outranks %s for %s on %s", describeGrants(inferred), describeGrant(block), c.name, c.server.id)
+					failures.add("backfilled [%s] outranks %s for %s on %s", describeGrants(inferred), describeGrant(block), c.name, c.server.id)
 				}
 			}
 		}
@@ -513,7 +509,7 @@ func TestGrantInvariants_OnlyNamedServerGrantsOutrankBlocks(t *testing.T) {
 	failures.done()
 }
 
-// C2: wider covers narrower and never the other way round. A root grant
+// Wider covers narrower and never the other way round. A root grant
 // covers every server in every project, a grant on every server covers each
 // one, and a grant naming one server covers no other.
 func TestGrantInvariants_WiderCoversNarrower(t *testing.T) {
@@ -523,7 +519,7 @@ func TestGrantInvariants_WiderCoversNarrower(t *testing.T) {
 	root.PrincipalUrn = principalUser
 	for _, c := range everyCheck() {
 		if !isAllowed(t, []Grant{root}, c.check) {
-			failures.add("C2: root does not allow %s on %s", c.name, c.server.id)
+			failures.add("root does not allow %s on %s", c.name, c.server.id)
 		}
 	}
 	for _, g := range storableGrants() {
@@ -535,20 +531,20 @@ func TestGrantInvariants_WiderCoversNarrower(t *testing.T) {
 				continue
 			}
 			if g.Selector.ResourceID() != WildcardResource && g.Selector.ResourceID() != c.server.id {
-				failures.add("C2: %s allows %s on %s", describeGrant(g), c.name, c.server.id)
+				failures.add("%s allows %s on %s", describeGrant(g), c.name, c.server.id)
 			}
 			everyServer := g
 			everyServer.Selector = maps.Clone(g.Selector)
 			everyServer.Selector[SelectorKeyResourceID] = WildcardResource
 			if !isAllowed(t, []Grant{everyServer}, c.check) {
-				failures.add("C2: %s allows %s on %s but %s does not", describeGrant(g), c.name, c.server.id, describeGrant(everyServer))
+				failures.add("%s allows %s on %s but %s does not", describeGrant(g), c.name, c.server.id, describeGrant(everyServer))
 			}
 		}
 	}
 	failures.done()
 }
 
-// D1: every way of asking gives the same answer. Require, Evaluate, Can,
+// Every way of asking gives the same answer. Require, Evaluate, Can,
 // Filter and FindMatched agree with GrantsAuthorize on every check.
 func TestGrantInvariants_SameAnswerEverywhere(t *testing.T) {
 	t.Parallel()
@@ -588,7 +584,7 @@ func TestGrantInvariants_SameAnswerEverywhere(t *testing.T) {
 			}
 			for name, got := range answers {
 				if got != want {
-					failures.add("D1: [%s] %s says %v for %s on %s, GrantsAuthorize says %v", describeGrants(grants), name, got, c.name, c.server.id, want)
+					failures.add("[%s] %s says %v for %s on %s, GrantsAuthorize says %v", describeGrants(grants), name, got, c.name, c.server.id, want)
 				}
 			}
 		}
@@ -596,7 +592,7 @@ func TestGrantInvariants_SameAnswerEverywhere(t *testing.T) {
 	failures.done()
 }
 
-// D2: a probe never claims access no concrete call has. A tool call probe that
+// A probe never claims access no concrete call has. A tool call probe that
 // leaves out the tool or the disposition is allowed only when some call with
 // those values filled in is allowed. The reverse need not hold: a block on one
 // tool also covers a probe that names no tool.
@@ -615,7 +611,7 @@ func TestGrantInvariants_ProbesClaimNoMoreThanCalls(t *testing.T) {
 						continue
 					}
 					if !someCallAllowed(t, grants, ref, tool, disposition) {
-						failures.add("D2: [%s] allows a probe of %q (%q) on %s but no call", describeGrants(grants), tool, disposition, server.id)
+						failures.add("[%s] allows a probe of %q (%q) on %s but no call", describeGrants(grants), tool, disposition, server.id)
 					}
 				}
 			}
@@ -828,8 +824,7 @@ func widenings(g Grant) []Grant {
 // but never outrank a block.
 const principalAgent = "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001"
 
-// userGrants keeps the grants made to the user by name, which is all a
-// policy needs to hold for A1.
+// userGrants keeps the grants made to the user by name.
 func userGrants(grants []Grant) []Grant {
 	return slices.DeleteFunc(slices.Clone(grants), func(g Grant) bool { return g.PrincipalUrn != principalUser })
 }
