@@ -53,7 +53,8 @@ func (a grantAuthorization) authorizerRefusesEach(allowed []Check) (*Check, erro
 
 // authorizerRefusesAny reports whether the bounded authorization refuses an
 // allowed RequireAny call, where one alternative that passes on its own is
-// enough. It returns the first alternative when it does.
+// enough. When it does, it returns the first alternative the credential
+// allows.
 func (a grantAuthorization) authorizerRefusesAny(alternatives []Check) (*Check, error) {
 	bounded, ok := a.boundedByAuthorizer()
 	if !ok || len(alternatives) == 0 {
