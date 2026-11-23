@@ -528,9 +528,12 @@ it("reviews a missing choice and inspects with the approved session", () => {
   state.accessToken = "dashboard-mint";
   state.data = {
     discoveryMode: "progressive",
+    instructions: undefined,
+    protocolVersion: undefined,
+    serverName: undefined,
     tools: [],
     servers: [{ slug: "oauth", name: "OAuth server" }],
-  } as GatewayInspection;
+  };
   state.members = [
     {
       slug: "oauth",

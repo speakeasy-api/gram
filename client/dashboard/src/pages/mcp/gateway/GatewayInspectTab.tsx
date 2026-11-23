@@ -719,10 +719,9 @@ function GatewayInspectConnection({
 
   if (!state && reviewed && approval.error) {
     state = (
-      <Alert
-        variant="error"
-        title="Couldn't start connection review. Try again."
-      />
+      <Alert variant="error" title="Couldn't start connection review">
+        Use Review connection to try again.
+      </Alert>
     );
   }
 
