@@ -113,9 +113,8 @@ func legacyResourceKindForScope(scope Scope) string {
 	return ResourceKindWildcard
 }
 
-// scopeAllowsSelectorKey reports whether a single permission declares key
-// beyond its type's dimensions. Today that is project_id on org:hooks_ingest:
-// the one org scope checked per project (R6, parked).
+// scopeAllowsSelectorKey covers keys one permission declares beyond its type's
+// dimensions, such as project_id on org:hooks_ingest.
 func scopeAllowsSelectorKey(scope Scope, key string) bool {
 	return scopeSelectorKeys[scope][key]
 }

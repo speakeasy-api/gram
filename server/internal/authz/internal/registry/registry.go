@@ -193,10 +193,8 @@ type OpenKeys struct {
 }
 
 // legacyScopes are the only stored strings a permission may keep through
-// LegacyScope. They predate the registry and are stored in grants, API key
-// and agent policies, and the public scope enum. They go, with the field,
-// when R1 renames the scopes. The memory and channels scopes were added
-// alongside the registry and are checked against a project in the same way.
+// LegacyScope: grants, API key and agent policies, and the public scope enum
+// store them. They go, with the field, when the scopes are renamed.
 var legacyScopes = []Scope{
 	"plugin:write", "log:read", "mcp:auth",
 	"memory:read", "memory:write",

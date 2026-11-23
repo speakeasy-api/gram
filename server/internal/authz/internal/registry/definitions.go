@@ -10,10 +10,8 @@ package registry
 // generated from this literal (scopes_gen.go), so the definitions must compile
 // without them. Validate rejects any string that names no declared scope.
 //
-// Scope strings are today's. R1 and R6 of the RBAC foundations plan (renaming
-// plugin:write and log:read, moving org:hooks_ingest's project dimension) are
-// parked until scopes are redefined, so those permissions keep the historical
-// Scope and Dimensions they are stored and checked with.
+// Some permissions keep the scope string and dimensions they were first stored
+// with until scopes are renamed.
 var Definitions = Registry{
 	Root: RootPermission{Scope: "root", Agent: AgentUnsafe()},
 	Types: []ResourceType{
@@ -73,7 +71,7 @@ var Definitions = Registry{
 					LegacyScope: "",
 					Implies:     nil,
 					Exclusions:  nil,
-					// R6 (parked): the one org permission checked per project.
+					// The one org permission checked per project.
 					Dimensions:    []Dimension{{Key: SelectorKeyProjectID, Values: nil, Required: false}},
 					Source:        GrantSourceRoles,
 					Open:          []OpenKeys{{On: OpenOnProbe, Keys: []string{SelectorKeyProjectID}}},
@@ -137,7 +135,7 @@ var Definitions = Registry{
 			Dimensions: nil,
 			Permissions: []Permission{
 				{
-					// R1 (parked): stored as channels:connect, checked on a project.
+					// Stored as channels:connect, checked on a project.
 					// The three Channels permissions are independent of each other and
 					// of every MCP permission.
 					Action:        ActionChannelsConnect,
@@ -155,7 +153,7 @@ var Definitions = Registry{
 					Agent:         AgentUnsafe(),
 				},
 				{
-					// R1 (parked): stored as channels:admin, checked on a project.
+					// Stored as channels:admin, checked on a project.
 					Action:        ActionChannelsAdmin,
 					LegacyScope:   "channels:admin",
 					Implies:       nil,
@@ -171,7 +169,7 @@ var Definitions = Registry{
 					Agent:         AgentUnsafe(),
 				},
 				{
-					// R1 (parked): stored as channels:read_all, checked on a project.
+					// Stored as channels:read_all, checked on a project.
 					// Not an Admin default: it discloses other members' private
 					// conversations and is granted explicitly.
 					Action:        ActionChannelsReadAll,
@@ -219,7 +217,7 @@ var Definitions = Registry{
 					Agent:         SafeSince(1),
 				},
 				{
-					// R1 (parked): stored as plugin:write, checked on a project.
+					// Stored as plugin:write, checked on a project.
 					Action:        ActionPluginWrite,
 					LegacyScope:   "plugin:write",
 					Implies:       nil,
@@ -235,7 +233,7 @@ var Definitions = Registry{
 					Agent:         AgentUnsafe(),
 				},
 				{
-					// R1 (parked): stored as log:read, checked on a project.
+					// Stored as log:read, checked on a project.
 					// Neither project:* nor org:admin implies it.
 					Action:        ActionLogRead,
 					LegacyScope:   "log:read",
@@ -252,7 +250,7 @@ var Definitions = Registry{
 					Agent:         AgentUnsafe(),
 				},
 				{
-					// R1 (parked): stored as memory:read, checked on a project.
+					// Stored as memory:read, checked on a project.
 					Action:        ActionMemoryRead,
 					LegacyScope:   "memory:read",
 					Implies:       nil,
@@ -268,7 +266,7 @@ var Definitions = Registry{
 					Agent:         AgentUnsafe(),
 				},
 				{
-					// R1 (parked): stored as memory:write, checked on a project.
+					// Stored as memory:write, checked on a project.
 					Action:        ActionMemoryWrite,
 					LegacyScope:   "memory:write",
 					Implies:       []Action{ActionMemoryRead},
