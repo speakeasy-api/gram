@@ -180,6 +180,7 @@ func e2eTenant(spec demoseed.Spec) e2econtrol.Tenant {
 		OrganizationSlug: spec.OrgSlug,
 		ProjectSlug:      "default",
 		SeededUserPrefix: spec.UserPrefix,
+		CustomDomain:     spec.CustomDomain,
 	}
 }
 
