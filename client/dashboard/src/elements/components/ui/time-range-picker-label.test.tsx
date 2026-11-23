@@ -28,6 +28,15 @@ describe("formatTimeRangeLabel", () => {
       ),
     ).toBe("Nov 16 – Nov 17");
   });
+
+  it("names only the days of a typed range that ends on the final day's last second", () => {
+    expect(
+      formatTimeRangeLabel(
+        new Date(2026, 10, 16),
+        new Date(2026, 10, 17, 23, 59, 59),
+      ),
+    ).toBe("Nov 16 – Nov 17");
+  });
 });
 
 it("sizes the field to a range that names its times", () => {

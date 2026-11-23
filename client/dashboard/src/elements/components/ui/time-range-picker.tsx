@@ -62,16 +62,24 @@ function isLocalMidnight(date: Date): boolean {
   );
 }
 
+/** 23:59:59, at any sub-second: the AI parser ends whole days on the second. */
+function isLocalEndOfDay(date: Date): boolean {
+  return (
+    date.getHours() === 23 &&
+    date.getMinutes() === 59 &&
+    date.getSeconds() === 59
+  );
+}
+
 /**
  * A range that starts and ends on day boundaries reads as days. Anything else
  * (a range dragged across a chart, say) names its times, or "Nov 16 – Nov 17"
  * hides that the window opens at 11:34 AM and closes at 11:34 PM. The end may
- * be the final day's midnight or the last instant before the next one.
+ * be the final day's midnight or its last second.
  */
 export function formatTimeRangeLabel(from: Date, to: Date): string {
   const wholeDays =
-    isLocalMidnight(from) &&
-    (isLocalMidnight(to) || isLocalMidnight(new Date(to.getTime() + 1)));
+    isLocalMidnight(from) && (isLocalMidnight(to) || isLocalEndOfDay(to));
   if (wholeDays) return `${formatDate(from)} – ${formatDate(to)}`;
   const withTime = (date: Date) =>
     date.toLocaleString("en-US", {
