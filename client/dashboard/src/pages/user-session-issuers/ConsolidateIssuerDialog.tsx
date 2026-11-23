@@ -316,7 +316,7 @@ function ConsolidateImpact({
     preflight.platformOwned &&
       "One of these is managed by the Speakeasy Platform MCP, so it can't be consolidated. Choose another target.",
     preflight.conflictingClientIds.length > 0 &&
-      `${plural(preflight.conflictingClientIds.length, "client is", "clients are")} registered with both (${preflight.conflictingClientIds.join(", ")}). Revoke the copy on one of them in its MCP server's Clients and Sessions, then try again.`,
+      `${plural(preflight.conflictingClientIds.length, "client is", "clients are")} registered with both and can't be merged (${preflight.conflictingClientIds.join(", ")}). Revoke the copy on one of them in its MCP server's Clients and Sessions, then try again.`,
     preflight.principalBindingConflictCount > 0 &&
       `${plural(preflight.principalBindingConflictCount, "person is", "people are")} linked to an identity provider account through both. Contact Speakeasy support to consolidate these.`,
     preflight.emaBindingConflictCount > 0 &&
@@ -340,7 +340,11 @@ function ConsolidateImpact({
   return (
     <Stack gap={3}>
       <Text small muted>
-        {moves(preflight)} move to the target.
+        {`${moves(preflight)} move to the target${
+          preflight.mergedClientIds.length > 0
+            ? `, including ${plural(preflight.mergedClientIds.length, "client registered with both that merges", "clients registered with both that merge")} into the target's copy`
+            : ""
+        }.`}
         {preflight.unscopedSessionCount > 0 &&
           preflight.newlyReachableServerCount > 0 &&
           ` ${plural(preflight.unscopedSessionCount, "sign-in", "sign-ins")} will also work on the target's ${plural(preflight.newlyReachableServerCount, "MCP server", "MCP servers")}.`}

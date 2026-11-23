@@ -204,6 +204,10 @@ type authClientPermitRequest struct {
 	// exact attached connection for an attached agent, and empty when there is
 	// none, which no personal grant matches.
 	ConnectionOwner string
+	// AttachedConsent is the owner's consent to an attached connection, read
+	// with ConnectionOwner when the owner is not the user an agent acts for.
+	// The mandatory decision applies it; it is zero otherwise.
+	AttachedConsent authz.AttachedConnectionConsent
 }
 
 // connectionOwner is the owner the mcp:auth check names: the resolved
@@ -239,11 +243,20 @@ func (connectPermitter) Permitted(context.Context, authClientPermitRequest) (boo
 // It admits the caller on its own path, including callers the generic check
 // skips, and a check it cannot evaluate is a refusal, never an allow. It
 // makes the same decision the shadow records, through decideAuthClientUse.
+//
+// A refusal is recorded as a denied authorization challenge, so it is listed
+// with the caller's failed checks. Serving paths decide every request, and a
+// gateway decides every member on each one, so a refusal repeated by the same
+// caller for the same client and server is recorded once per onceLog window.
 type mandatoryPermitter struct {
 	engine *authz.Engine
 	// visibility reads a server's visibility for an anonymous caller. Without
 	// it every server is decided as private.
 	visibility serverVisibilityLookup
+
+	// refusals remembers the refusals already recorded as authorization
+	// challenges.
+	refusals *onceLog
 }
 
 func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitRequest) (bool, error) {
@@ -255,7 +268,19 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 	if err != nil {
 		return false, fmt.Errorf("evaluate auth client check: %w", err)
 	}
-	return decision.Allowed, nil
+	if decision.Allowed {
+		return true, nil
+	}
+	// Only a refusal that was recorded is remembered, so one skipped (a
+	// preview, logging off, a failed write) is recorded the next time.
+	key := authClientRefusalKey(req, authorization, decision)
+	if p.refusals.first(key) {
+		check := mandatoryAuthClientCheck(req.ProjectID, req.ClientID, req.RegistrationID, req.ClientType, req.connectionOwner())
+		if !p.engine.LogMandatoryDenial(ctx, authorization, decision, check, req.ServerID.String()) {
+			p.refusals.forget(key)
+		}
+	}
+	return false, nil
 }
 
 // serverVisibilityLookup reads the visibility a server in an organization is
@@ -298,11 +323,22 @@ func decideAuthClientUse(ctx context.Context, authorization authz.MandatoryAutho
 		}
 		return authz.MandatoryDecision{Allowed: false, Source: authz.MandatoryPolicySourceNone, Reason: reason}, nil
 	}
-	decision, err := authorization.DecideAuthClientAdmission(req.OrganizationID, admittedUnder, use)
+	// An attachment is its owner's consent to the agent using their
+	// connection, whoever issued the agent's key.
+	decision, err := authorization.WithAttachedConnection(req.AttachedConsent).DecideAuthClientAdmission(req.OrganizationID, admittedUnder, use)
 	if err != nil {
 		return authz.MandatoryDecision{}, fmt.Errorf("decide auth client admission: %w", err)
 	}
 	return decision, nil
+}
+
+// authClientRefusalKey identifies one refusal for deduplication: who was
+// refused which client, on which server, for whose connection, and why.
+func authClientRefusalKey(req authClientPermitRequest, authorization authz.MandatoryAuthorization, decision authz.MandatoryDecision) string {
+	return strings.Join([]string{
+		req.OrganizationID, string(authorization.Caller()), authorization.PrincipalID(), authorization.RepresentedUserID(),
+		req.ServerID.String(), req.ClientID.String(), req.connectionOwner(), string(decision.Reason),
+	}, "|")
 }
 
 // gapResolution is a choice that cannot be used, for reason.
@@ -478,7 +514,7 @@ func (s *Service) resolveAuthClientForServing(ctx context.Context, selector *ups
 	req := authClientPermitRequest{
 		OrganizationID: selector.organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 		CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject,
-		UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "",
+		UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{},
 	}
 	return s.prepareAuthClient(ctx, req, res, func(permit authClientPermitRequest, _ bool) {
 		if resolved {
@@ -506,7 +542,14 @@ func (s *Service) resolveAuthClientChoiceForConsent(ctx context.Context, organiz
 	return s.resolveProposedAuthClient(ctx, organizationID, serverID, projectID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: authClientID, Valid: true}, subject)
 }
 
+// resolveProposedAuthClient resolves a proposed choice for serverID.
+//
+// A proposal is a preview, not a use of the client: a consent, catalog,
+// recovery or sign-in page asks what a member could be served. Its refusals
+// are not recorded as authorization checks, so viewing such a page adds no
+// failed checks the person did not trigger.
 func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID string, serverID, projectID uuid.UUID, registrationID, authClientID uuid.NullUUID, subject urn.SessionSubject) (authClientResolution, error) {
+	ctx = authz.WithoutChallenges(ctx)
 	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
 	if err != nil {
 		return gapResolution(authClientReasonMissingChoice), fmt.Errorf("read upstream auth enforcement: %w", err)
@@ -530,7 +573,7 @@ func (s *Service) resolveProposedAuthClient(ctx context.Context, organizationID 
 		res.choice = upstreamChoice{clientID: row.RegistrationID, remoteSessionIssuerID: row.RegistrationIssuerID}
 	}
 
-	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: ""}, res, nil)
+	return s.prepareAuthClient(ctx, authClientPermitRequest{OrganizationID: organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: uuid.Nil, Subject: subject, UserSessionIssuerID: uuid.Nil, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{}}, res, nil)
 }
 
 // resolveNoAuthChoice decides a no-auth choice for a server as a recorded one
@@ -590,6 +633,7 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 			return res, fmt.Errorf("check auth client permission: %w", err)
 		}
 		permit.ConnectionOwner = connection.owner
+		permit.AttachedConsent = connection.consent
 		res.attachedSession = connection.attachedSession
 		res.connectionOwner = connection.owner
 		if connection.authorizer {
@@ -746,7 +790,7 @@ func (s *Service) authClientPermitFor(ctx context.Context, organizationID string
 	if s.authz == nil {
 		return nil, errors.New("upstream auth enforcement needs the authorization engine")
 	}
-	return mandatoryPermitter{engine: s.authz, visibility: s.mandatoryServerVisibility}, nil
+	return mandatoryPermitter{engine: s.authz, visibility: s.mandatoryServerVisibility, refusals: s.authClientRefusals}, nil
 }
 
 // withoutDeniedSources drops client headers that read a denied inbound header,
@@ -1000,12 +1044,14 @@ func (s *Service) shadowAuthClient(ctx context.Context, selector *upstreamSelect
 		permit := authClientPermitRequest{
 			OrganizationID: selector.organizationID, ProjectID: projectID, ServerID: serverID, ClientID: res.clientID, ClientType: res.clientType, RegistrationID: res.choice.clientID,
 			CredentialKind: selector.credentialKindOrDefault(), CredentialID: selector.credentialID, Subject: subject, UserSessionIssuerID: selector.userSessionIssuerID, ConnectionOwner: "",
+			AttachedConsent: authz.AttachedConnectionConsent{},
 		}
 		connection, err := s.authClientConnection(ctx, permit)
 		if err != nil {
 			s.logger.WarnContext(ctx, "auth client shadow could not resolve the connection owner", attr.SlogMcpServerID(serverID.String()), attr.SlogError(err))
 		} else {
 			permit.ConnectionOwner = connection.owner
+			permit.AttachedConsent = connection.consent
 			s.shadowAuthClientUse(ctx, choiceErr == nil, permit)
 		}
 	}

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -17,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution"
@@ -303,9 +303,10 @@ func TestProcessRoleDistributionSetup_PublicationFailureRollsBack(t *testing.T) 
 	require.True(t, ok)
 	_, err := pluginsrepo.New(ti.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: *ac.ProjectID, InstallationID: 12345, RepoOwner: "test-org", RepoName: "test-plugins",
-		MarketplaceToken: pgtype.Text{String: "test-token", Valid: true}, PublishedMcpFingerprints: []byte(`{}`),
+		PublishedMcpFingerprints: []byte(`{}`),
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, ti.conn, *ac.ProjectID, "test-token")
 	// Fail the final publication write, after creation and assignment.
 	err = pluginsrepo.New(ti.conn).CreateRoleSetupPublicationFailureFunctionFixture(ctx)
 	require.NoError(t, err)

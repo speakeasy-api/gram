@@ -416,7 +416,9 @@ type AiIntegrationConfig struct {
 	// @access: restricted
 	ExternalOrganizationID pgtype.Text
 	// @access: secret-restricted
-	ApiKeyEncrypted string
+	ApiKeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
@@ -4311,7 +4313,9 @@ type ModelProviderKey struct {
 	// @access: confidential
 	Provider string
 	// @access: secret-restricted
-	ApiKeyEncrypted string
+	ApiKeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
@@ -4737,9 +4741,9 @@ type OpenrouterApiKey struct {
 	// @access: confidential
 	KeyType string
 	// @access: secret-restricted
-	Key pgtype.Text
-	// @access: secret-restricted
 	KeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	KeyOrgEncrypted pgtype.Text
 	// @access: secret-restricted
 	KeyHash string
 	// @access: restricted
@@ -5781,6 +5785,14 @@ type PluginGithubConnection struct {
 	RepoName string
 	// @access: secret-restricted
 	MarketplaceToken pgtype.Text
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenHash pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenOrgEncrypted pgtype.Text
 	// @access: confidential
 	PublishedFingerprint pgtype.Text
 	// @access: confidential

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+  assignableOwnConnection,
   displayedConnections,
   missingSignInsSentence,
   serversNeedingConnection,
@@ -141,5 +142,72 @@ describe("a connection the viewer may not see", () => {
       connections({ status: "ready", sessions: [] }),
     );
     expect(displayed.get("grain")).toEqual({ status: "forbidden" });
+  });
+});
+
+describe("an existing agent with no working connection", () => {
+  const servers = [
+    { id: "linear", name: "Linear", issuerId: "issuer_linear" },
+  ] as InventoryServer[];
+  const connections = (
+    own: ServerConnection,
+    assigned: ServerConnection,
+  ): OwnerConnections => ({
+    byServer: new Map([["linear", own]]),
+    assignedByServer: new Map([["linear", assigned]]),
+    refetch: async () => {},
+  });
+  const ready: ServerConnection = { status: "ready", sessions: [] };
+
+  it.each([
+    { status: "missing" } as ServerConnection,
+    { status: "ended", sessions: [] } as ServerConnection,
+  ])(
+    "shows the $status assignment, not the editor's connection",
+    (assigned) => {
+      const view = connections(ready, assigned);
+      const displayed = displayedConnections(view);
+      expect(displayed.get("linear")).toEqual(assigned);
+      expect(
+        serversNeedingConnection(servers, displayed).map((server) => server.id),
+      ).toEqual(["linear"]);
+      expect(assignableOwnConnection(view, "linear")).toBe(true);
+    },
+  );
+
+  it("offers the editor's connection only when it works", () => {
+    expect(
+      assignableOwnConnection(
+        connections({ status: "checking" }, { status: "missing" }),
+        "linear",
+      ),
+    ).toBe(false);
+    expect(
+      assignableOwnConnection(
+        connections({ status: "missing" }, { status: "missing" }),
+        "linear",
+      ),
+    ).toBe(false);
+  });
+
+  it("offers nothing where the agent's connection works or is not visible", () => {
+    expect(assignableOwnConnection(connections(ready, ready), "linear")).toBe(
+      false,
+    );
+    expect(
+      assignableOwnConnection(
+        connections(ready, { status: "forbidden" }),
+        "linear",
+      ),
+    ).toBe(false);
+  });
+
+  it("offers nothing while an agent is being created", () => {
+    const creating: OwnerConnections = {
+      byServer: new Map([["linear", ready]]),
+      refetch: async () => {},
+    };
+    expect(displayedConnections(creating).get("linear")).toEqual(ready);
+    expect(assignableOwnConnection(creating, "linear")).toBe(false);
   });
 });
