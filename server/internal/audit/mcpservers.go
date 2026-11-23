@@ -320,3 +320,34 @@ func (l *Logger) LogMcpServerScopePinUpdate(ctx context.Context, dbtx repo.DBTX,
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
 }
+
+type LogHostedNoUpstreamAuthenticationEvent struct {
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	Actor               urn.Principal
+	ActorDisplayName    *string
+	McpServerURN        urn.McpServer
+	ServerName          string
+	ServerSlug          string
+	PreviousRequirement *bool
+}
+
+// LogHostedNoUpstreamAuthentication records an explicit hosted setup decision.
+func (l *Logger) LogHostedNoUpstreamAuthentication(ctx context.Context, dbtx repo.DBTX, event LogHostedNoUpstreamAuthenticationEvent) error {
+	before, err := marshalAuditPayload(map[string]any{"requires_upstream_auth": event.PreviousRequirement})
+	if err != nil {
+		return fmt.Errorf("marshal hosted upstream intent before update: %w", err)
+	}
+	after, err := marshalAuditPayload(map[string]any{"requires_upstream_auth": false})
+	if err != nil {
+		return fmt.Errorf("marshal hosted upstream intent after update: %w", err)
+	}
+	return l.log(ctx, dbtx, auditEntry{OutboxEvent: events.McpServerV1, Params: repo.InsertAuditLogParams{
+		IsInternal: false, OrganizationID: event.OrganizationID,
+		ProjectID: conv.ToNullUUID(event.ProjectID), ActorID: event.Actor.ID, ActorType: string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionMcpServerUpstreamAuthRequirementUpdate), SubjectID: event.McpServerURN.ID.String(), SubjectType: string(subjectTypeMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ServerName), SubjectSlug: conv.ToPGTextEmpty(event.ServerSlug),
+		BeforeSnapshot: before, AfterSnapshot: after, Metadata: nil,
+	}})
+}

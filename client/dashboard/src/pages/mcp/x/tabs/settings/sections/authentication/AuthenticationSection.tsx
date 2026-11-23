@@ -1,3 +1,11 @@
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  invalidateAllMcpServerAuthentication,
+  useMcpServerAuthentication,
+} from "@gram/client/react-query/mcpServerAuthentication.js";
+import { useSetMcpServerUpstreamAuthRequirementMutation } from "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js";
+import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
 import type { ServerClientAssociation } from "@gram/client/models/components/serverclientassociation.js";
 import { useServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { Badge } from "@/components/ui/Badge";
@@ -162,7 +170,10 @@ function StandardAuthenticationSectionBody({
   const associations = useServerClientAssociations(
     { mcpServerId: serverId ?? "" },
     undefined,
-    { enabled: !!serverId && issuerConfigured, throwOnError: false },
+    {
+      enabled: !!serverId && (issuerConfigured || target.hosted === true),
+      throwOnError: false,
+    },
   );
   const attachedIssuerIds = useMemo(
     () => [
@@ -182,7 +193,7 @@ function StandardAuthenticationSectionBody({
     isLoading: isLoadingAssociatedIssuers,
     isError: isAssociatedIssuersError,
   } = useRemoteSessionIssuersByIds(attachedIssuerIds, {
-    enabled: issuerConfigured,
+    enabled: issuerConfigured || target.hosted === true,
   });
 
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -216,6 +227,44 @@ function StandardAuthenticationSectionBody({
     setDeleteOpen(true);
   };
 
+  const noUpstreamAction = target.hosted &&
+    serverId &&
+    !gatewayId &&
+    associations.data?.associations.length === 0 && (
+      <RequireScope scope="org:admin" level="section">
+        <RequireScope
+          scope="mcp:write"
+          resourceId={serverId}
+          projectId={target.projectId}
+          level="section"
+        >
+          <HostedNoUpstreamAction
+            key={serverId}
+            serverId={serverId}
+            invalidate={target.invalidate}
+          />
+        </RequireScope>
+      </RequireScope>
+    );
+
+  const registrationField = (
+    <RemoteIdentityProvidersField
+      associatedIssuers={associatedIssuers}
+      associations={associations.data?.associations}
+      allowAdditionalProviders={false}
+      projectId={target.projectId}
+      isLoading={associations.isLoading || isLoadingAssociatedIssuers}
+      isError={associations.isError || isAssociatedIssuersError}
+      onAdd={() => setSheetOpen(true)}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      readOnly={
+        userSessionIssuer?.projectId === "" &&
+        (!target.hosted || associations.data?.associations.length !== 0)
+      }
+    />
+  );
+
   let authenticationFields: ReactNode;
   if (!issuerConfigured && gatewayId) {
     authenticationFields = (
@@ -223,10 +272,16 @@ function StandardAuthenticationSectionBody({
     );
   } else if (!issuerConfigured) {
     authenticationFields = (
-      <IdentityProviderSetupField
-        onStartManual={() => setSheetOpen(true)}
-        additionalAction={additionalSetupAction}
-      />
+      <>
+        <IdentityProviderSetupField
+          onStartManual={() => setSheetOpen(true)}
+          additionalAction={additionalSetupAction}
+        />
+        {target.hosted &&
+          (associations.data?.associations.length ?? 0) > 0 &&
+          registrationField}
+        {noUpstreamAction}
+      </>
     );
   } else if (isLoadingUserSessionIssuer) {
     authenticationFields = <AuthenticationLoadingField />;
@@ -242,19 +297,9 @@ function StandardAuthenticationSectionBody({
         {gatewayId ? (
           <GatewayAuthorizationServersField metaMcpServerId={gatewayId} />
         ) : (
-          <RemoteIdentityProvidersField
-            associatedIssuers={associatedIssuers}
-            associations={associations.data?.associations}
-            allowAdditionalProviders={false}
-            projectId={target.projectId}
-            isLoading={associations.isLoading || isLoadingAssociatedIssuers}
-            isError={associations.isError || isAssociatedIssuersError}
-            onAdd={() => setSheetOpen(true)}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            readOnly={userSessionIssuer.projectId === ""}
-          />
+          registrationField
         )}
+        {noUpstreamAction}
         {/* Last: its footer Save closes the panel. */}
         <UserIdentitySessionControls userSessionIssuer={userSessionIssuer} />
       </>
@@ -355,5 +400,67 @@ function AuthenticationLoadErrorField() {
         again.
       </FieldError>
     </AuthRow>
+  );
+}
+
+function HostedNoUpstreamAction({
+  serverId,
+  invalidate,
+}: {
+  serverId: string;
+  invalidate: AuthTarget["invalidate"];
+}): JSX.Element {
+  // The legacy proxied setter is deprecated. This operation still owns the
+  // exact hosted no-upstream decision; typed offer mutations cannot save it.
+  const queryClient = useQueryClient();
+  const authentication = useMcpServerAuthentication(
+    { mcpServerId: serverId },
+    undefined,
+    { throwOnError: false },
+  );
+  const mutation = useSetMcpServerUpstreamAuthRequirementMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidate(queryClient),
+        invalidateAllMcpServerAuthentication(queryClient),
+      ]);
+    },
+  });
+  const noUpstream =
+    mutation.isSuccess || authentication.data?.status === "no_auth_required";
+  return (
+    <Field>
+      <FieldLabel>Upstream authentication</FieldLabel>
+      <FieldDescription>
+        {noUpstream
+          ? "No upstream authentication required. The server’s user sign-in settings are unchanged."
+          : "Assign an authorization server above, or confirm that this server does not need upstream authentication. This does not turn off user sign-in."}
+      </FieldDescription>
+      {!noUpstream && (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={mutation.isPending || authentication.isLoading}
+          onClick={() =>
+            mutation.mutate({
+              request: {
+                setMcpServerUpstreamAuthRequirementRequestBody: {
+                  mcpServerId: serverId,
+                  requiresUpstreamAuth: false,
+                },
+              },
+            })
+          }
+        >
+          <Button.Text>No upstream authentication</Button.Text>
+        </Button>
+      )}
+      {mutation.isError && (
+        <FieldError>
+          Could not save upstream authentication. Check that no registration is
+          assigned to this server.
+        </FieldError>
+      )}
+    </Field>
   );
 }

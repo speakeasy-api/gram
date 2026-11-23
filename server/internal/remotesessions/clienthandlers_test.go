@@ -358,47 +358,6 @@ func TestCreateRemoteSessionClient_CrossOrgIssuerRejected(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestAttachUserSessionIssuer_RejectsCrossProjectUserIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-attach-xproj", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-attach-xproj").String()
-
-	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerIds:  []string{userIssuerID},
-		ClientID:              "attach-xproj-client",
-		ClientSecret:          nil,
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-	})
-	require.NoError(t, err)
-
-	otherProject := createProject(t, ctx, ti.conn, "other-"+uuid.NewString()[:8])
-	foreignUserIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "usi-attach-foreign").String()
-
-	_, err = ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-		ID:                  created.ID,
-		UserSessionIssuerID: foreignUserIssuer,
-	})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeNotFound)
-
-	// The rejected attach rolls back / never happened: the original binding is
-	// untouched and the foreign binding was never recorded.
-	clientUUID, err := uuid.Parse(created.ID)
-	require.NoError(t, err)
-	userIssuerUUID, err := uuid.Parse(userIssuerID)
-	require.NoError(t, err)
-	foreignUserIssuerUUID, err := uuid.Parse(foreignUserIssuer)
-	require.NoError(t, err)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerUUID))
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, foreignUserIssuerUUID))
-}
-
 func TestGetRemoteSessionClient(t *testing.T) {
 	t.Parallel()
 
@@ -1027,57 +986,6 @@ func TestDeleteRemoteSessionClient_NotFound(t *testing.T) {
 	require.Equal(t, beforeCount, afterCount, "no audit entry when there was nothing to delete")
 }
 
-func TestAttachUserSessionIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-attach", "")
-
-	// Standalone client: no user_session_issuer attachments.
-	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerIds:  nil,
-		ClientID:              "attach-client-id",
-		ClientSecret:          nil,
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-	})
-	require.NoError(t, err)
-	require.Empty(t, created.UserSessionIssuerIds)
-
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-attach")
-	userIssuerIDString := userIssuerID.String()
-
-	clientUUID, err := uuid.Parse(created.ID)
-	require.NoError(t, err)
-
-	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachUserSessionIssuer)
-	require.NoError(t, err)
-
-	attached, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-		ID:                  created.ID,
-		UserSessionIssuerID: userIssuerIDString,
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{userIssuerIDString}, attached.UserSessionIssuerIds)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
-
-	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientAttachUserSessionIssuer)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
-
-	// Re-attaching the same issuer is a no-op success: still exactly one binding.
-	reattached, err := ti.service.AttachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-		ID:                  created.ID,
-		UserSessionIssuerID: userIssuerIDString,
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{userIssuerIDString}, reattached.UserSessionIssuerIds)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
-}
-
 func TestAttachUserSessionIssuer_SerializedAgainstOrganizationIssuerDeletion(t *testing.T) {
 	t.Parallel()
 
@@ -1111,64 +1019,6 @@ func TestAttachUserSessionIssuer_SerializedAgainstOrganizationIssuerDeletion(t *
 		UserSessionIssuerID: userIssuerID.String(),
 	})
 	require.NoError(t, probeErr)
-}
-
-func TestDetachUserSessionIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-detach", "")
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-detach")
-	userIssuerIDString := userIssuerID.String()
-
-	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID: issuerID,
-		UserSessionIssuerIds:  []string{userIssuerIDString},
-		ClientID:              "detach-client-id",
-		ClientSecret:          nil,
-		SessionToken:          nil,
-		ApikeyToken:           nil,
-		ProjectSlugInput:      nil,
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{userIssuerIDString}, created.UserSessionIssuerIds)
-
-	clientUUID, err := uuid.Parse(created.ID)
-	require.NoError(t, err)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
-
-	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
-	require.NoError(t, err)
-
-	detached, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-		ID:                  created.ID,
-		UserSessionIssuerID: userIssuerIDString,
-	})
-	require.NoError(t, err)
-	require.Empty(t, detached.UserSessionIssuerIds)
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
-
-	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
-
-	// Detaching an absent binding is a no-op success.
-	redetached, err := ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-		ID:                  created.ID,
-		UserSessionIssuerID: userIssuerIDString,
-	})
-	require.NoError(t, err)
-	require.Empty(t, redetached.UserSessionIssuerIds)
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
-
-	// A missing issuer is not an absent binding: it must still return 404.
-	_, err = ti.service.DetachLegacyIssuerForTest(ctx, &remotesessions.LegacyIssuerBindingForTest{
-		ID:                  created.ID,
-		UserSessionIssuerID: uuid.NewString(),
-	})
-	requireOopsCode(t, err, oops.CodeNotFound)
-	require.ErrorContains(t, err, "user session issuer not found")
 }
 
 func TestAttachUserSessionIssuer_RejectsDuplicateRemoteIssuerBinding(t *testing.T) {

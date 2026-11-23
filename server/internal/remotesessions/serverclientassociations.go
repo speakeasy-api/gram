@@ -512,6 +512,14 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
 	}
 
+	if server.ToolsetID.Valid && !server.RequiresUpstreamAuth.Valid {
+		// The presence of the old placement required credentials. Removing it
+		// must not also opt the server (including a gateway member) out.
+		if err := q.RequireHostedUpstreamAssignment(ctx, upstreamclientsrepo.RequireHostedUpstreamAssignmentParams{ServerID: server.ID, ProjectID: server.ProjectID}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "preserve hosted upstream authentication requirement").LogError(ctx, logger)
+		}
+	}
+
 	// The association is what the server's link to its typed auth client was
 	// derived from, so deciding again here keeps the two models in step: the
 	// link goes with the association, and the credential headers the client

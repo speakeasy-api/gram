@@ -147,7 +147,9 @@ function DeleteRemoteIdentityProviderDialogBody({
 
       <Alert variant="warning" dismissible={false}>
         Users who signed in through this registration may need to authenticate
-        again.
+        again. If this hosted server requires upstream authentication,
+        connecting will stop working until an administrator assigns a
+        replacement or explicitly selects No upstream authentication.
       </Alert>
 
       {error && (

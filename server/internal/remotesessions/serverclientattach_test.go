@@ -548,9 +548,15 @@ func TestHostedServerAssociationDoesNotRequireOrCreateIssuerLink(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, result.BoundUserSessionIssuerIds)
 	}
+	// An older placement may predate explicit intent. Detaching it is not an
+	// opt-out, even if the server's value was NULL before this request.
+	require.NoError(t, authclientbackfill.New(f.ti.conn).SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: first, RequiresUpstreamAuth: pgtype.Bool{}}))
 	require.NoError(t, detachServerClient(ctx, f.ti, first, client))
 	require.Empty(t, associatedClients(t, ctx, f.ti.conn, f.projectID, first))
 	require.Equal(t, []uuid.UUID{client}, associatedClients(t, ctx, f.ti.conn, f.projectID, second))
+	stored, err := testrepo.New(f.ti.conn).GetMCPServerRequiresUpstreamAuthFixture(ctx, first)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, stored)
 	count, err := q.CountRemoteSessionClientUserSessionIssuerBindings(ctx, repo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: client, UserSessionIssuerID: issuer})
 	require.NoError(t, err)
 	require.Zero(t, count)

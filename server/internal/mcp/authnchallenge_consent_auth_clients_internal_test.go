@@ -43,6 +43,17 @@ func TestSelectConsentAuthClientPreselection(t *testing.T) {
 	require.Equal(t, forwarded, selected(forwarded, personal, nil), "the person's pick wins over the remembered choice")
 	require.Equal(t, engineering, selected(uuid.Nil, uuid.New(), nil), "a remembered client no longer offered is ignored")
 
+	sharedRegistration := validUUID(uuid.New())
+	shareRegistration := func(options []consentAuthClientOption) {
+		for i := range options {
+			if options[i].ID == personal || options[i].ID == marketing {
+				options[i].registrationID = sharedRegistration
+			}
+		}
+	}
+	require.Equal(t, uuid.Nil, selected(uuid.Nil, personal, shareRegistration), "a remembered offer does not disambiguate a shared registration")
+	require.Equal(t, marketing, selected(marketing, personal, shareRegistration), "an exact pick disambiguates even when another offer was remembered")
+
 	ema := uuid.New()
 	withEMA := func(options []consentAuthClientOption) {
 		options[0] = option(ema, "Identity provider", authClientTypeEMA, consentClientReady)
