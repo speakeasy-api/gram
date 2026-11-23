@@ -12,7 +12,7 @@ import (
 
 const (
 	meterTurnStreamFrameBytes        = "chat.turn_stream.frame_bytes"
-	meterTurnStreamOmittedBodyBytes  = "chat.turn_stream.omitted_body_bytes"
+	meterTurnStreamOmittedFrameBytes = "chat.turn_stream.omitted_frame_bytes"
 	turnStreamMetricsInstrumentation = "github.com/speakeasy-api/gram/server/internal/chat"
 )
 
@@ -24,7 +24,7 @@ var turnStreamByteBuckets = []float64{
 	256,
 	1 << 10, // 1 KiB
 	4 << 10, // 4 KiB
-	turnFrameMaxBodyBytes,
+	turnFrameMaxBytes,
 	16 << 10,  // 16 KiB
 	64 << 10,  // 64 KiB
 	256 << 10, // 256 KiB
@@ -38,9 +38,9 @@ type turnStreamMetrics struct {
 	// frameBytes is the encoded size of each appended frame.
 	frameBytes metric.Int64Histogram
 
-	// omittedBodyBytes is the size of each body left out of a frame for
-	// being over the cap.
-	omittedBodyBytes metric.Int64Histogram
+	// omittedFrameBytes is the encoded size a frame would have had before
+	// its body was left out for being over the cap.
+	omittedFrameBytes metric.Int64Histogram
 }
 
 var (
@@ -63,7 +63,7 @@ func loadTurnStreamMetrics() *turnStreamMetrics {
 // not stop frames being published.
 func newTurnStreamMetrics(meterProvider metric.MeterProvider) *turnStreamMetrics {
 	meter := meterProvider.Meter(turnStreamMetricsInstrumentation)
-	m := &turnStreamMetrics{frameBytes: nil, omittedBodyBytes: nil}
+	m := &turnStreamMetrics{frameBytes: nil, omittedFrameBytes: nil}
 	if h, err := meter.Int64Histogram(meterTurnStreamFrameBytes,
 		metric.WithDescription("Encoded bytes of each frame appended to a chat's turn stream in Redis"),
 		metric.WithUnit("By"),
@@ -71,12 +71,12 @@ func newTurnStreamMetrics(meterProvider metric.MeterProvider) *turnStreamMetrics
 	); err == nil {
 		m.frameBytes = h
 	}
-	if h, err := meter.Int64Histogram(meterTurnStreamOmittedBodyBytes,
-		metric.WithDescription("Bytes of a tool output or tool-call JSON left out of a turn frame for exceeding the per-frame cap"),
+	if h, err := meter.Int64Histogram(meterTurnStreamOmittedFrameBytes,
+		metric.WithDescription("Encoded bytes a turn frame would have put in Redis before its tool output or tool-call arguments were left out for exceeding the per-frame cap"),
 		metric.WithUnit("By"),
 		metric.WithExplicitBucketBoundaries(turnStreamByteBuckets...),
 	); err == nil {
-		m.omittedBodyBytes = h
+		m.omittedFrameBytes = h
 	}
 	return m
 }
@@ -92,12 +92,12 @@ func (m *turnStreamMetrics) recordAppend(ctx context.Context, frame TurnFrame, p
 	))
 }
 
-// recordOmitted records the size of a body left out of a frame.
-func (m *turnStreamMetrics) recordOmitted(ctx context.Context, kind TurnFrameKind, bodyBytes int) {
-	if m == nil || m.omittedBodyBytes == nil {
+// recordOmitted records the size of a frame whose body was left out.
+func (m *turnStreamMetrics) recordOmitted(ctx context.Context, kind TurnFrameKind, frameBytes int) {
+	if m == nil || m.omittedFrameBytes == nil {
 		return
 	}
-	m.omittedBodyBytes.Record(ctx, int64(bodyBytes), metric.WithAttributes(
+	m.omittedFrameBytes.Record(ctx, int64(frameBytes), metric.WithAttributes(
 		attr.ChatTurnFrameKind(string(kind)),
 	))
 }

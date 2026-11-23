@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,23 +26,24 @@ import (
 // and a client with no usable cursor resyncs with a single chat.load.
 const (
 	// turnStreamMaxLen bounds the frame count of a chat's replay buffer.
-	// Together with turnFrameMaxBodyBytes it bounds the buffer's bytes too.
+	// Together with turnFrameMaxBytes it bounds the buffer's bytes too.
 	turnStreamMaxLen = 2000
-	// turnFrameMaxBodyBytes caps the body a single frame carries: a text
-	// fragment, a tool output, or a row's tool-call JSON. Text over it is
-	// split across frames; a tool output or tool-call arguments over it are
-	// left out and the frame is marked BodyOmitted, because those bodies are
-	// already durable in Postgres when the frame is published.
+	// turnFrameMaxBytes caps the encoded size of a single frame as stored in
+	// Redis. Text that would encode larger is split across frames; a tool
+	// output or tool-call arguments that would are left out and the frame is
+	// marked BodyOmitted, because those bodies are already durable in
+	// Postgres when the frame is published.
 	//
 	// Streamed text deltas are tens of bytes and an ordinary tool call's
 	// arguments well under a kilobyte, so 8 KiB never touches them. It does
 	// catch the large tool outputs (whole API responses, file contents) that
 	// filled Redis in INC-520, and each of those costs the dashboard one
-	// chat.load instead. At this size a full 2000-frame buffer holds at most
-	// about 16 MiB of bodies, and a typical turn's frames stay in the low
-	// hundreds of KiB. chat.turn_stream.omitted_body_bytes records what is cut, so the
-	// value can be tuned.
-	turnFrameMaxBodyBytes = 8 << 10 // 8 KiB
+	// chat.load instead. Because the cap is on the encoded frame, a full
+	// 2000-frame buffer holds at most about 16 MiB (a little more while
+	// approximate trimming lags), and a typical turn's frames stay in the low
+	// hundreds of KiB. chat.turn_stream.omitted_frame_bytes records what is
+	// cut, so the value can be tuned.
+	turnFrameMaxBytes = 8 << 10 // 8 KiB
 	// turnStreamReadCount bounds the entries one read takes from a stream,
 	// for both a replay and each tail read, so a reconnect never pulls an
 	// unbounded range in one reply. A replay that stops at this many frames
@@ -94,8 +96,10 @@ type TurnFrame struct {
 
 	// BodyOmitted marks a tool_output frame published without its Output, or
 	// a message frame whose ToolCalls keep each call's id, type and name but
-	// not its arguments. Set when the body is over turnFrameMaxBodyBytes or
-	// could not be encoded; the client reads the body from the persisted row.
+	// not its arguments, or no ToolCalls at all when even that list would be
+	// over turnFrameMaxBytes. Set when the frame would encode over the cap or
+	// its body could not be encoded; the client reads the body from the
+	// persisted row.
 	BodyOmitted bool `json:"body_omitted,omitempty"`
 }
 
@@ -150,7 +154,7 @@ func (t *TurnStream) Reset(ctx context.Context, chatID uuid.UUID) error {
 // non-fatal: a lost frame costs the watcher some responsiveness, and must
 // never fail the turn that produced it.
 //
-// A frame whose body is over turnFrameMaxBodyBytes is bounded first: text is
+// A frame that would encode over turnFrameMaxBytes is bounded first: text is
 // appended as several frames and the cursor returned is the last one's; a tool
 // output or tool-call arguments are left out (BodyOmitted).
 func (t *TurnStream) Publish(ctx context.Context, chatID uuid.UUID, frame TurnFrame) (string, error) {
@@ -158,72 +162,151 @@ func (t *TurnStream) Publish(ctx context.Context, chatID uuid.UUID, frame TurnFr
 		return "", nil
 	}
 
-	bounded, omittedBytes := boundTurnFrame(frame)
+	encoded, omittedBytes, err := encodeTurnFrame(frame)
 	if omittedBytes > 0 {
 		t.metrics.recordOmitted(ctx, frame.Kind, omittedBytes)
+	}
+	if err != nil {
+		return "", err
 	}
 
 	key := turnStreamKey(chatID)
 	cursor := ""
-	for _, f := range bounded {
-		payload, err := json.Marshal(f)
-		if err != nil {
-			return cursor, fmt.Errorf("marshal turn frame: %w", err)
-		}
-
+	for _, e := range encoded {
 		// Approximate trimming: exact trimming costs a scan on every append
 		// and the bound is a safety valve, not a contract. The TTL is
 		// refreshed per append so an active turn keeps its history alive and
 		// an abandoned chat expires on its own.
 		id, err := appendTurnFrameScript.Run(ctx, t.client, []string{key},
-			turnStreamMaxLen, payload, turnStreamTTL.Milliseconds(),
+			turnStreamMaxLen, e.payload, turnStreamTTL.Milliseconds(),
 		).Text()
 		if err != nil {
 			return cursor, fmt.Errorf("append turn frame: %w", err)
 		}
 		cursor = id
-		t.metrics.recordAppend(ctx, f, len(payload))
+		t.metrics.recordAppend(ctx, e.frame, len(e.payload))
 	}
 	return cursor, nil
 }
 
-// boundTurnFrame returns the frames to append in place of frame so that none
-// carries a body over turnFrameMaxBodyBytes, and how many body bytes were
-// left out. Frames already within the cap are returned unchanged.
-func boundTurnFrame(frame TurnFrame) ([]TurnFrame, int) {
+// turnTextPieceBytes is the size text is first split at: the cap less room
+// for the rest of the frame (its kind and field names), so a piece of plain
+// text encodes within the cap without being split again.
+const turnTextPieceBytes = turnFrameMaxBytes - 256
+
+// encodedTurnFrame is a frame and the bytes stored for it.
+type encodedTurnFrame struct {
+	// frame is the frame as bounded, for the metric's attributes.
+	frame TurnFrame
+
+	// payload is the frame's encoding, what the stream entry holds.
+	payload []byte
+}
+
+// encodeTurnFrame encodes frame for the stream so that no entry is over
+// turnFrameMaxBytes, splitting text and leaving out tool bodies as needed. It
+// also returns the encoded size of a frame whose body was left out (its raw
+// body size when it would not encode), for the omitted-bytes metric.
+func encodeTurnFrame(frame TurnFrame) ([]encodedTurnFrame, int, error) {
+	payload, err := marshalTurnFrame(frame)
+	omitted := len(payload)
+	if err != nil {
+		omitted = len(frame.Output) + len(frame.ToolCalls)
+	}
+
 	switch frame.Kind {
 	case TurnFrameText:
-		parts := splitTurnText(frame.Text, turnFrameMaxBodyBytes)
-		frames := make([]TurnFrame, 0, len(parts))
-		for _, part := range parts {
-			f := frame
-			f.Text = part
-			frames = append(frames, f)
+		if err != nil {
+			return nil, 0, err
 		}
-		return frames, 0
+		if len(payload) <= turnFrameMaxBytes {
+			return []encodedTurnFrame{{frame: frame, payload: payload}}, 0, nil
+		}
+		encoded, err := encodeTurnText(frame)
+		return encoded, 0, err
 	case TurnFrameToolOutput:
 		// A nil output is a tool row whose content would not encode; it is
 		// marked too, so the client reads the row rather than rendering an
 		// empty result.
-		if frame.Output != nil && len(frame.Output) <= turnFrameMaxBodyBytes {
-			return []TurnFrame{frame}, 0
+		if err == nil && frame.Output != nil && len(payload) <= turnFrameMaxBytes {
+			return []encodedTurnFrame{{frame: frame, payload: payload}}, 0, nil
 		}
-		omitted := len(frame.Output)
+		if frame.Output == nil {
+			omitted = 0
+		}
 		frame.Output = nil
 		frame.BodyOmitted = true
-		return []TurnFrame{frame}, omitted
+		encoded, err := encodeOneTurnFrame(frame)
+		return encoded, omitted, err
 	case TurnFrameMessage:
-		if len(frame.ToolCalls) <= turnFrameMaxBodyBytes {
-			return []TurnFrame{frame}, 0
+		if err == nil && len(payload) <= turnFrameMaxBytes {
+			return []encodedTurnFrame{{frame: frame, payload: payload}}, 0, nil
 		}
-		omitted := len(frame.ToolCalls)
-		frame.ToolCalls = toolCallSkeleton(frame.ToolCalls)
 		frame.BodyOmitted = true
-		return []TurnFrame{frame}, omitted
+		frame.ToolCalls = toolCallSkeleton(frame.ToolCalls)
+		if skeleton, err := marshalTurnFrame(frame); err == nil && len(skeleton) <= turnFrameMaxBytes {
+			return []encodedTurnFrame{{frame: frame, payload: skeleton}}, omitted, nil
+		}
+		// Even the ids and names are over the cap (hundreds of calls in one
+		// row). The client reads each call from the persisted row when its
+		// output arrives.
+		frame.ToolCalls = nil
+		encoded, err := encodeOneTurnFrame(frame)
+		return encoded, omitted, err
 	default:
 		// A done frame carries no body.
-		return []TurnFrame{frame}, 0
+		if err != nil {
+			return nil, 0, err
+		}
+		return []encodedTurnFrame{{frame: frame, payload: payload}}, 0, nil
 	}
+}
+
+// encodeOneTurnFrame encodes a frame that has no body left to bound.
+func encodeOneTurnFrame(frame TurnFrame) ([]encodedTurnFrame, error) {
+	payload, err := marshalTurnFrame(frame)
+	if err != nil {
+		return nil, err
+	}
+	return []encodedTurnFrame{{frame: frame, payload: payload}}, nil
+}
+
+// encodeTurnText splits a text frame into frames that each encode within
+// turnFrameMaxBytes. JSON escaping can grow text up to sixfold (a control
+// character becomes \u00XX), so a piece that still encodes over the cap is
+// halved until it fits; a piece's encoding shrinks with it, so this ends.
+func encodeTurnText(frame TurnFrame) ([]encodedTurnFrame, error) {
+	pending := splitTurnText(frame.Text, turnTextPieceBytes)
+	out := make([]encodedTurnFrame, 0, len(pending))
+	for len(pending) > 0 {
+		f := frame
+		f.Text = pending[0]
+		pending = pending[1:]
+
+		payload, err := marshalTurnFrame(f)
+		if err != nil {
+			return out, err
+		}
+		if len(payload) > turnFrameMaxBytes && len(f.Text) > 1 {
+			pending = append(splitTurnText(f.Text, (len(f.Text)+1)/2), pending...)
+			continue
+		}
+		out = append(out, encodedTurnFrame{frame: f, payload: payload})
+	}
+	return out, nil
+}
+
+// marshalTurnFrame encodes a frame without HTML escaping. Escaping <, > and &
+// would grow tool output and text sixfold for nothing: the frames are read
+// as JSON, never embedded in HTML.
+func marshalTurnFrame(frame TurnFrame) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(frame); err != nil {
+		return nil, fmt.Errorf("marshal turn frame: %w", err)
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // splitTurnText splits text into pieces of at most limit bytes, cutting only
@@ -274,9 +357,9 @@ type turnToolCallSkeletonFunction struct {
 }
 
 // toolCallSkeleton strips the arguments from a row's tool-call JSON. Its size
-// grows with the number of calls, not with what they carry, so it stays far
-// under the cap for any real turn. JSON that is not a list of calls yields
-// nil: the client still reads the row for it.
+// grows with the number of calls, not with what they carry; the caller drops
+// it too when even that is over the cap. JSON that is not a list of calls
+// yields nil: the client still reads the row for it.
 func toolCallSkeleton(raw json.RawMessage) json.RawMessage {
 	var calls []turnToolCallSkeleton
 	if err := json.Unmarshal(raw, &calls); err != nil {
