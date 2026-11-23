@@ -241,6 +241,9 @@ func DefaultGuardrail() Guardrail {
 	cs := make([]Contract, len(contracts))
 	for i, c := range contracts {
 		c.Conditions = slices.Clone(c.Conditions)
+		for j := range c.Conditions {
+			c.Conditions[j].Values = slices.Clone(c.Conditions[j].Values)
+		}
 		cs[i] = c
 	}
 	return Guardrail{

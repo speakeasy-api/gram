@@ -129,6 +129,9 @@ export function GuardrailView({
           <ul
             role="listbox"
             aria-label="Rules"
+            aria-activedescendant={
+              selected ? ruleOptionId(selected.id) : undefined
+            }
             tabIndex={0}
             onKeyDown={onKeyDown}
             className="focus-visible:outline-1 focus-visible:outline-[var(--border-focus)]"
@@ -253,6 +256,8 @@ function GuardrailSummary({
   );
 }
 
+const ruleOptionId = (id: string) => `guardrail-rule-${id}`;
+
 function RuleRow({
   contract,
   number,
@@ -272,6 +277,7 @@ function RuleRow({
   const first = hits?.[0];
   return (
     <li
+      id={ruleOptionId(contract.id)}
       role="option"
       aria-selected={selected}
       onClick={onClick}
@@ -527,15 +533,30 @@ function SessionHits({
   onOpenCall: (call: { messageId: string; toolCallId: string }) => void;
 }): JSX.Element {
   const calls = analysis.assessments;
+  const total = analysis.totals.calls;
+  const partial = calls.length < total;
   const hits = ruleHits(contract, calls);
   const first = hits[0];
   const name = (h: RuleHit) => `#${h.callIndex + 1} ${toolDisplayName(h.call)}`;
+  const refs = (hs: RuleHit[]) =>
+    hs.map((h) => `#${h.callIndex + 1}`).join(", ");
 
   let sentence: string;
   if (!first) {
-    sentence = `Abstained on all ${calls.length} ${calls.length === 1 ? "call" : "calls"}.`;
+    sentence = partial
+      ? `Abstained on the ${calls.length} of ${total} calls analyzed.`
+      : `Abstained on all ${calls.length} ${calls.length === 1 ? "call" : "calls"}.`;
   } else if (hits.length > 1) {
-    sentence = `Fired on ${hits.length} calls: ${hits.map((h) => `#${h.callIndex + 1}`).join(", ")}.`;
+    const fired = hits.filter((h) => h.result !== "error");
+    const errored = hits.filter((h) => h.result === "error");
+    sentence = [
+      fired.length > 0 &&
+        `Fired on ${fired.length} ${fired.length === 1 ? "call" : "calls"}: ${refs(fired)}.`,
+      errored.length > 0 &&
+        `Errored on ${refs(errored)}, which blocks ${errored.length === 1 ? "it" : "them"}.`,
+    ]
+      .filter(Boolean)
+      .join(" ");
   } else if (first.result === "error") {
     sentence = `Errored on ${name(first)}, which blocks it.`;
   } else if (first.overridden) {
@@ -553,8 +574,10 @@ function SessionHits({
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-[13px] text-foreground">{sentence}</span>
           <span className="font-mono text-[11px] text-muted-foreground">
-            {sessionName ?? "Session"} · {calls.length}{" "}
-            {calls.length === 1 ? "call" : "calls"}
+            {sessionName ?? "Session"} ·{" "}
+            {partial
+              ? `${calls.length} of ${total} calls analyzed`
+              : `${calls.length} ${calls.length === 1 ? "call" : "calls"}`}
           </span>
         </div>
         {first && (
@@ -627,7 +650,6 @@ function LabelsTable({
           return (
             <li
               key={q.key}
-              aria-pressed={active}
               onClick={() => onToggleLabel(q.key)}
               className={cn(
                 grid,
@@ -637,14 +659,23 @@ function LabelsTable({
                   : "hover:bg-surface-secondary-default",
               )}
             >
-              <span className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                aria-pressed={active}
+                aria-label={`Filter rules that read ${q.key}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleLabel(q.key);
+                }}
+                className="flex cursor-pointer flex-col items-start gap-0.5 self-start text-left"
+              >
                 <span className="font-mono text-[13px] text-foreground">
                   {q.key}
                 </span>
                 <span className="font-mono text-[10px] text-muted-foreground uppercase">
                   {KIND_LABEL[q.kind] ?? q.kind}
                 </span>
-              </span>
+              </button>
               <span className="flex flex-col gap-2">
                 <span className="text-[13px] leading-[1.55] text-[color:var(--text-default)]">
                   {q.instructions}

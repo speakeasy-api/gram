@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 
@@ -39,7 +38,8 @@ func newIntentPoliciesImportCommand() *cli.Command {
 			&cli.StringFlag{Name: "environment", Usage: "Deployment environment; must be local", EnvVars: []string{"GRAM_ENVIRONMENT"}, Value: "local"},
 		},
 		Action: func(c *cli.Context) error {
-			if c.String("environment") != "local" {
+			// The flag's default must not satisfy the guard.
+			if !c.IsSet("environment") || c.String("environment") != "local" {
 				return errors.New("intent-policies-import only runs against the local environment")
 			}
 			ctx := c.Context
@@ -68,22 +68,27 @@ func newIntentPoliciesImportCommand() *cli.Command {
 			for _, f := range files {
 				title := filepath.Base(filepath.Dir(f)) + "/" + filepath.Base(f)
 				chatID := uuid.NewSHA1(intentImportNamespace, []byte(projectID.String()+"/"+title))
-				_, err := chatrepo.New(db).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
-				switch {
-				case err == nil:
-					skipped++
-					continue
-				case !errors.Is(err, pgx.ErrNoRows):
+				// Counts messages of soft-deleted chats too, which GetChat hides.
+				existing, err := chatrepo.New(db).CountChatMessages(ctx, chatrepo.CountChatMessagesParams{ChatID: chatID, ProjectID: projectID})
+				if err != nil {
 					return fmt.Errorf("check existing chat %s: %w", title, err)
 				}
+				if existing > 0 {
+					skipped++
+					continue
+				}
 
+				info, err := os.Stat(f)
+				if err != nil {
+					return fmt.Errorf("stat %s: %w", f, err)
+				}
+				if info.Size() > intentpolicy.MaxTranscriptBytes {
+					logger.WarnContext(ctx, "skip oversized transcript", attr.SlogFilePath(f))
+					continue
+				}
 				raw, err := os.ReadFile(f) //nolint:gosec // local developer-supplied directory
 				if err != nil {
 					return fmt.Errorf("read %s: %w", f, err)
-				}
-				if len(raw) > intentpolicy.MaxTranscriptBytes {
-					logger.WarnContext(ctx, "skip oversized transcript", attr.SlogFilePath(f))
-					continue
 				}
 				transcript, err := intentpolicy.ParseTranscript(raw)
 				if err != nil {

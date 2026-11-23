@@ -172,7 +172,7 @@ function Time({ at }: { at: Date }): JSX.Element {
   );
 }
 
-export function TranscriptRow({
+function TranscriptRow({
   event,
   selected,
   dimmed,

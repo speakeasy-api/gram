@@ -143911,8 +143911,9 @@ components:
             properties:
                 content:
                     type: string
-                    description: The transcript file contents.
+                    description: The transcript file contents, at most 20 MiB.
                     minLength: 1
+                    maxLength: 20971520
                 name:
                     type: string
                     description: Title for the stored session, usually the file name.

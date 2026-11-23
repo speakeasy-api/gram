@@ -2,6 +2,7 @@ package gram
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/urfave/cli/v2"
@@ -16,13 +17,17 @@ import (
 var intentPoliciesKeyFlag = &cli.StringFlag{
 	Name:    "intent-policies-openrouter-api-key",
 	Usage:   "Platform OpenRouter key for the staff-only intent policy analysis; falls back to the sigint key, then locally to the OpenRouter dev key",
-	EnvVars: []string{"GRAM_INTENT_POLICIES_OPENROUTER_API_KEY", "GRAM_SIGINT_OPENROUTER_API_KEY"},
+	EnvVars: []string{"GRAM_INTENT_POLICIES_OPENROUTER_API_KEY"},
 }
 
 // newIntentPoliciesClassifier returns the pinned Jev classifier, or a disabled
 // one when no key resolves so analysis reports the missing key per call.
 func newIntentPoliciesClassifier(c *cli.Context, guardianPolicy *guardian.Policy) (classifier.Classifier, error) {
 	key := strings.TrimSpace(c.String(intentPoliciesKeyFlag.Name))
+	// Resolved here, not via EnvVars, which stops at a set-but-empty variable.
+	if key == "" {
+		key = strings.TrimSpace(os.Getenv("GRAM_SIGINT_OPENROUTER_API_KEY"))
+	}
 	if key == "" && c.String("environment") == "local" {
 		key = strings.TrimSpace(c.String("openrouter-dev-key"))
 	}

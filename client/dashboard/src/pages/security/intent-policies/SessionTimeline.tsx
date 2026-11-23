@@ -80,6 +80,11 @@ export function SessionTimeline({
     const d = drag.current;
     const el = scroller.current;
     if (!d || !el) return;
+    // The button was released outside the strip before capture began.
+    if ((e.buttons & 1) === 0) {
+      drag.current = null;
+      return;
+    }
     const dx = e.clientX - d.x;
     if (!d.moved && Math.abs(dx) <= DRAG_THRESHOLD_PX) return;
     if (!d.moved) {

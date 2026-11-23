@@ -53,8 +53,6 @@ export type CallEvent = {
   call?: IntentCallAssessment;
 };
 
-export type EventKind = SessionEvent["kind"];
-
 /** Which events the viewer steps through: all, calls only, or calls that need a person. */
 export type EventFilter = "all" | "calls" | "review";
 
@@ -91,8 +89,11 @@ export function buildSessionEvents(
       continue;
     }
     const { callMessage, toolCall, resultMessage } = row;
-    if (!callMessage || !toolCall?.id) continue;
-    const key = callKey(callMessage.id, toolCall.id);
+    if (!callMessage || !toolCall) continue;
+    // The server keys id-less calls by an empty id; extra ones in the same
+    // message can't be matched and only need a unique key.
+    let key = callKey(callMessage.id, toolCall.id ?? "");
+    if (placed.has(key)) key = `${key}#${events.length}`;
     const call = byKey.get(key);
     placed.add(key);
     events.push({
@@ -297,7 +298,7 @@ export function describeGap(
     : base;
 }
 
-export function formatBytes(bytes: number): string {
+function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;

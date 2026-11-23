@@ -33,8 +33,7 @@ export function formatCost(usd: number): string {
 }
 
 /** True when every contract that decided BLOCK did so because a label is missing. */
-export function blockedByEvaluatorFailure(call: IntentCallAssessment): boolean {
-  if (!call.evaluatorError) return false;
+function blockedByEvaluatorFailure(call: IntentCallAssessment): boolean {
   const deciders = call.outcomes.filter((o) =>
     call.decidedBy.includes(o.contractId),
   );
@@ -82,7 +81,8 @@ export const OUTCOME_LABEL: Record<CallOutcome, string> = {
 export const LOW_CONFIDENCE = 0.75;
 
 /** Guardrail label keys the session timeline reads. */
-const SECRET_LABELS = ["carries_secret", "touches_credential_store"];
+const CARRIES_SECRET = "carries_secret";
+const TOUCHES_CREDENTIAL_STORE = "touches_credential_store";
 const EFFECT_CLASS_LABEL = "effect_class";
 const RUNS_OR_SENDS = ["exec_task", "exec_program", "outbound"];
 
@@ -117,9 +117,7 @@ export type SecretExposure = {
 export function secretExposure(
   calls: IntentCallAssessment[],
 ): SecretExposure | null {
-  const firstIndex = calls.findIndex((c) =>
-    SECRET_LABELS.some((k) => findLabel(c, k)?.value === true),
-  );
+  const firstIndex = calls.findIndex(putsSecretInContext);
   if (firstIndex === -1) return null;
   const riskyIndexes = calls.flatMap((c, i) => {
     if (i <= firstIndex) return [];
@@ -130,6 +128,15 @@ export function secretExposure(
       : [];
   });
   return { firstIndex, riskyIndexes };
+}
+
+// Naming a credential store in an outbound call doesn't read it; only a read
+// brings its contents into context.
+function putsSecretInContext(call: IntentCallAssessment): boolean {
+  if (findLabel(call, CARRIES_SECRET)?.value === true) return true;
+  if (findLabel(call, TOUCHES_CREDENTIAL_STORE)?.value !== true) return false;
+  const effects = findLabel(call, EFFECT_CLASS_LABEL)?.value;
+  return Array.isArray(effects) && effects.map(String).includes("read");
 }
 
 /** The shell command a call ran, when its arguments carry one. */
@@ -151,6 +158,8 @@ export function shellSteps(command: string): string[] {
   const steps: string[] = [];
   let current = "";
   let quote: string | null = null;
+  // Nesting of `(`, covering `$(...)` and subshells.
+  let depth = 0;
   for (let i = 0; i < command.length; i++) {
     const ch = command[i] ?? "";
     if (quote) {
@@ -165,7 +174,10 @@ export function shellSteps(command: string): string[] {
       current += ch;
     } else if (ch === "\\" && i + 1 < command.length) {
       current += ch + (command[++i] ?? "");
-    } else if (ch === ";" || ch === "\n") {
+    } else if (ch === "(" || ch === ")") {
+      depth = Math.max(0, depth + (ch === "(" ? 1 : -1));
+      current += ch;
+    } else if (depth === 0 && (ch === ";" || ch === "\n")) {
       if (current.trim()) steps.push(current.trim());
       current = "";
     } else {

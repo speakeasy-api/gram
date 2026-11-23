@@ -47,6 +47,21 @@ describe("callOutcome", () => {
     expect(callOutcome(failed)).toBe("failed");
   });
 
+  it("treats an unanswered label as a failure even without an evaluator error", () => {
+    const failed = call({
+      decision: "block",
+      decidedBy: ["no_secret_egress"],
+      outcomes: [
+        {
+          contractId: "no_secret_egress",
+          error: "evaluator did not answer: carries_secret",
+          inputs: {},
+        },
+      ],
+    });
+    expect(callOutcome(failed)).toBe("failed");
+  });
+
   it("keeps a real block when a contract matched", () => {
     const blocked = call({
       decision: "block",
@@ -116,6 +131,15 @@ describe("secretExposure", () => {
     expect(exposure).toEqual({ firstIndex: 1, riskyIndexes: [3, 4] });
   });
 
+  it("ignores a credential store named only in an outbound call", () => {
+    expect(
+      secretExposure([
+        labeled({ effect_class: ["outbound"], touches_credential_store: true }),
+        labeled({ effect_class: ["exec_program"] }),
+      ]),
+    ).toBeNull();
+  });
+
   it("is null when no call touches a secret", () => {
     expect(
       secretExposure([labeled({ effect_class: ["exec_program"] })]),
@@ -138,6 +162,14 @@ describe("shell commands", () => {
       'echo "a; b"',
       "cat x || echo 'no; file'",
       "which curl",
+    ]);
+  });
+
+  it("keeps separators inside substitutions and subshells", () => {
+    expect(shellSteps("echo $(a; b); (cd x; make); ls")).toEqual([
+      "echo $(a; b)",
+      "(cd x; make)",
+      "ls",
     ]);
   });
 });

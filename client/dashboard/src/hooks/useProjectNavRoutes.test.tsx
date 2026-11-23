@@ -277,6 +277,7 @@ describe("useProjectNavRoutes", () => {
       expect(navRoutes).toContain(routes.assistants.href());
       expect(navRoutes).toContain(routes.watchdog.href());
       expect(navRoutes).not.toContain(routes.explore.href());
+      expect(navRoutes).not.toContain(routes.intentPolicies.href());
       expect(navRoutes).toContain(routes.deployments.href());
       expect(navRoutes).toContain(routes.riskEvents.href());
     },

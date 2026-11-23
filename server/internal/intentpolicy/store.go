@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 const (
@@ -74,15 +75,22 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 		chatID = id
 	}
 
-	if _, err := hooksrepo.New(db).UpsertClaudeCodeSession(ctx, hooksrepo.UpsertClaudeCodeSessionParams{
+	// One transaction, so a failed message write leaves no empty chat behind.
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin transcript transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	if _, err := hooksrepo.New(tx).UpsertClaudeCodeSession(ctx, hooksrepo.UpsertClaudeCodeSessionParams{
 		ID:             chatID,
 		ProjectID:      p.ProjectID,
 		OrganizationID: p.OrganizationID,
 		UserID:         conv.ToPGTextEmpty(p.UserID),
 		ExternalUserID: pgtype.Text{String: "", Valid: false},
 		UserAccountID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Title:          conv.ToPGText(p.Title),
-		Cwd:            conv.ToPGTextEmpty(t.Cwd),
+		Title:          conv.ToPGText(stripNUL(p.Title)),
+		Cwd:            conv.ToPGTextEmpty(stripNUL(t.Cwd)),
 	}); err != nil {
 		return uuid.Nil, fmt.Errorf("create chat: %w", err)
 	}
@@ -103,7 +111,7 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 		if len(m.ToolCalls) > 0 {
 			calls := make([]storedCall, 0, len(m.ToolCalls))
 			for _, c := range m.ToolCalls {
-				calls = append(calls, storedCall{ID: c.ID, Type: "function", Function: storedCallFunction{Name: stripNUL(c.Name), Arguments: stripNUL(string(c.Arguments))}})
+				calls = append(calls, storedCall{ID: stripNUL(c.ID), Type: "function", Function: storedCallFunction{Name: stripNUL(c.Name), Arguments: stripJSONNUL(string(c.Arguments))}})
 			}
 			encoded, err := json.Marshal(calls)
 			if err != nil {
@@ -124,7 +132,7 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 				StorageError:     pgtype.Text{String: "", Valid: false},
 				Model:            pgtype.Text{String: "", Valid: false},
 				MessageID:        pgtype.Text{String: "", Valid: false},
-				ToolCallID:       conv.ToPGTextEmpty(m.ToolCallID),
+				ToolCallID:       conv.ToPGTextEmpty(stripNUL(m.ToolCallID)),
 				UserID:           conv.ToPGTextEmpty(p.UserID),
 				ExternalUserID:   pgtype.Text{String: "", Valid: false},
 				FinishReason:     pgtype.Text{String: "", Valid: false},
@@ -154,14 +162,42 @@ func StoreTranscript(ctx context.Context, db *pgxpool.Pool, writer *chat.ChatMes
 		})
 	}
 
-	if _, err := writer.Write(ctx, p.ProjectID, writes); err != nil {
+	if _, err := writer.WriteInTx(ctx, tx, writes); err != nil {
 		return uuid.Nil, fmt.Errorf("write transcript messages: %w", err)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("commit transcript: %w", err)
+	}
+	writer.NotifyStoredRows(ctx, p.ProjectID, writes)
 	return chatID, nil
 }
 
-// stripNUL removes NUL characters, raw or JSON-escaped, which Postgres text
-// and jsonb columns reject. Captured tool output sometimes contains them.
+// stripNUL removes NUL characters, which Postgres text and jsonb columns
+// reject. Captured tool output sometimes contains them.
 func stripNUL(s string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(s, "\x00", ""), `\u0000`, "")
+	return strings.ReplaceAll(s, "\x00", "")
+}
+
+// stripJSONNUL removes raw NULs and \u0000 escapes from JSON text, leaving an
+// escaped backslash followed by "u0000" intact.
+func stripJSONNUL(s string) string {
+	s = stripNUL(s)
+	if !strings.Contains(s, `\u0000`) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 >= len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		if s[i+1] == 'u' && strings.HasPrefix(s[i:], `\u0000`) {
+			i += len(`\u0000`) - 1
+			continue
+		}
+		b.WriteString(s[i : i+2])
+		i++
+	}
+	return b.String()
 }

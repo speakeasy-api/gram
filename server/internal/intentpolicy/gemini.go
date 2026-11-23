@@ -1,6 +1,7 @@
 package intentpolicy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -202,6 +203,11 @@ func ParseGeminiLabels(qs []LabelQuestion, raw []byte) (LabelSet, error) {
 		got, ok := parsed[q.Key]
 		if !ok {
 			problems = append(problems, q.Key+": missing")
+			continue
+		}
+		// Unmarshal treats null as a no-op, which would read as false or empty.
+		if v := bytes.TrimSpace(got.Value); len(v) == 0 || bytes.Equal(v, []byte("null")) {
+			problems = append(problems, q.Key+": null")
 			continue
 		}
 		confidence := max(0, min(1, got.Confidence))

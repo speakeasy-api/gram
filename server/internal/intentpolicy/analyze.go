@@ -69,13 +69,11 @@ func Window(actions []Action, offset, limit int) []Action {
 	return actions[start:end]
 }
 
-// Analyze assesses up to MaxActions calls with bounded concurrency. Evaluator
+// Analyze assesses the session's Window(offset, limit) with bounded
+// concurrency; totals and LimitHit describe the whole session. Evaluator
 // failures become fail-closed assessments rather than errors.
-func Analyze(ctx context.Context, g Guardrail, engine *Engine, evaluator Evaluator, actions []Action) (Analysis, error) {
-	judged := actions
-	if len(judged) > MaxActions {
-		judged = judged[:MaxActions]
-	}
+func Analyze(ctx context.Context, g Guardrail, engine *Engine, evaluator Evaluator, actions []Action, offset, limit int) (Analysis, error) {
+	judged := Window(actions, offset, limit)
 
 	descriptor := evaluator.Descriptor()
 	assessments := make([]Assessment, len(judged))
@@ -132,6 +130,6 @@ func Analyze(ctx context.Context, g Guardrail, engine *Engine, evaluator Evaluat
 		Descriptor:  descriptor,
 		Assessments: assessments,
 		Totals:      totals,
-		LimitHit:    len(actions) > len(judged),
+		LimitHit:    len(actions) > MaxActions,
 	}, nil
 }

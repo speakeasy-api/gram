@@ -48,7 +48,7 @@ func TestRenderStateIsSharedAndUntrustedShaped(t *testing.T) {
 	encoded, err := json.Marshal(req.Input)
 	require.NoError(t, err)
 	require.JSONEq(t, string(state), string(encoded))
-	// Five effect classes plus six other labels.
+	// Six effect classes plus nine other labels (seven yes/no, two choice).
 	require.Len(t, req.Questions, 15)
 }
 
@@ -154,7 +154,7 @@ func TestParseGeminiLabels(t *testing.T) {
 func TestParseGeminiLabelsRejectsInvalidValues(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"effect_class": {"value": ["teleport"], "confidence": 0.5, "rationale": ""}, "carries_secret": {"value": "yes", "confidence": 0.5, "rationale": ""}}`
+	raw := `{"effect_class": {"value": ["teleport"], "confidence": 0.5, "rationale": ""}, "carries_secret": {"value": "yes", "confidence": 0.5, "rationale": ""}, "history_rewrite": {"value": null, "confidence": 0.5, "rationale": ""}}`
 	labels, err := intentpolicy.ParseGeminiLabels(intentpolicy.DefaultGuardrail().Questions, []byte(raw))
 	require.Error(t, err)
 	require.Empty(t, labels)
@@ -201,7 +201,7 @@ func TestAnalyzeCapsAndCounts(t *testing.T) {
 		actions[i] = mcpCall()
 	}
 	g := intentpolicy.DefaultGuardrail()
-	analysis, err := intentpolicy.Analyze(t.Context(), g, newEngine(t), fixedEvaluator{labels: benignLabels()}, actions)
+	analysis, err := intentpolicy.Analyze(t.Context(), g, newEngine(t), fixedEvaluator{labels: benignLabels()}, actions, 0, 0)
 	require.NoError(t, err)
 	require.True(t, analysis.LimitHit)
 	require.Equal(t, intentpolicy.MaxActions+5, analysis.Totals.Calls)

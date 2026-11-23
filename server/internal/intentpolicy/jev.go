@@ -31,8 +31,12 @@ func NewJevEvaluator(c classifier.Classifier) *JevEvaluator {
 	return &JevEvaluator{classifier: c}
 }
 
-// Descriptor identifies the Jev evaluator.
+// Descriptor identifies the Jev evaluator, or reports it disabled when no
+// key is configured.
 func (e *JevEvaluator) Descriptor() Descriptor {
+	if _, ok := e.classifier.(classifier.Noop); ok {
+		return Descriptor{Evaluator: "jev", Provider: "none", Model: "disabled", PromptVersion: jevPromptVersion}
+	}
 	return Descriptor{Evaluator: "jev", Provider: "openrouter", Model: JevModel, PromptVersion: jevPromptVersion}
 }
 
@@ -89,6 +93,7 @@ func (e *JevEvaluator) Label(ctx context.Context, in LabelInput) (LabelSet, Usag
 
 	start := time.Now()
 	result := e.classifier.Classify(ctx, req)
+	// The classifier reports no cost, and token counts may be partial (result.Usage.Complete).
 	usage := Usage{
 		InputTokens:  result.Usage.InputTokens,
 		OutputTokens: result.Usage.OutputTokens,

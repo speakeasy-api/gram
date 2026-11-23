@@ -8,6 +8,7 @@ import {
   defaultSelection,
   describeGap,
   groupTurns,
+  secretSinceEvent,
   stepEvent,
   transcriptWindow,
   turnNumbers,
@@ -108,6 +109,57 @@ describe("buildSessionEvents", () => {
   it("falls back to calls only without a transcript", () => {
     const events = buildSessionEvents([], calls);
     expect(events.map((e) => e.kind)).toEqual(["tool_call", "tool_call"]);
+  });
+
+  it("keeps calls without an id and joins them to their analysis", () => {
+    const idless = message({
+      id: "a1",
+      seq: 2,
+      role: "assistant",
+      toolCalls: JSON.stringify([
+        { type: "function", function: { name: "Bash", arguments: "{}" } },
+      ]),
+    });
+    const events = buildSessionEvents(
+      [idless],
+      [call({ toolCallId: "", decision: "block", decidedBy: ["c"] })],
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]?.kind === "tool_call" && events[0].call?.decision).toBe(
+      "block",
+    );
+  });
+});
+
+describe("secretSinceEvent", () => {
+  const label = (key: string, value: unknown) => ({
+    key,
+    value,
+    probability: 0.9,
+    rank: 0,
+  });
+
+  it("maps the exposure onto event indexes", () => {
+    const events = buildSessionEvents(messages, [
+      call({
+        toolCallId: "t1",
+        labels: [
+          label("touches_credential_store", true),
+          label("effect_class", ["read"]),
+        ],
+      }),
+      call({ toolCallId: "t2", labels: [label("effect_class", ["outbound"])] }),
+    ]);
+    // user, assistant, then the two calls at 2 and 3.
+    expect(secretSinceEvent(events)).toEqual({
+      since: 2,
+      sinceCall: 0,
+      risky: new Set([3]),
+    });
+  });
+
+  it("is null before analysis", () => {
+    expect(secretSinceEvent(buildSessionEvents(messages, []))).toBeNull();
   });
 });
 

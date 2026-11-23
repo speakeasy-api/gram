@@ -33,7 +33,7 @@ type AnalyzeSessionRequestBody struct {
 type UploadTranscriptRequestBody struct {
 	// Title for the stored session, usually the file name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The transcript file contents.
+	// The transcript file contents, at most 20 MiB.
 	Content string `form:"content" json:"content" xml:"content"`
 }
 

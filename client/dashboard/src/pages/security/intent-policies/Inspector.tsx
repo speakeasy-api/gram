@@ -10,23 +10,10 @@ import {
   type CallEvent,
   type SessionEvent,
 } from "./events";
-import {
-  callOutcome,
-  formatClock,
-  formatCost,
-  OUTCOME_LABEL,
-  type CallOutcome,
-} from "./model";
+import { callOutcome, formatClock, formatCost, OUTCOME_LABEL } from "./model";
 import type { SecretContext } from "./SessionTimeline";
-import { HATCH_STYLE } from "./styles";
+import { HATCH_STYLE, OUTCOME_FILL } from "./styles";
 import { CallRow } from "./Transcript";
-
-const ACCENT: Record<CallOutcome, string> = {
-  permit: "bg-[var(--border-neutral-default)]",
-  clarify: "bg-warning-default",
-  block: "bg-destructive-default",
-  failed: "text-muted-foreground",
-};
 
 export type AnalysisState = "none" | "running" | "done";
 
@@ -91,7 +78,9 @@ export function Inspector({
         body = (
           <>
             <p className="border bg-card px-4 py-3.5 text-sm text-muted-foreground">
-              {NOT_ANALYZED[analysisState]}
+              {event.call
+                ? "Loading the guardrail to show this call's decision."
+                : NOT_ANALYZED[analysisState]}
             </p>
             <ArgumentsBlock raw={event.arguments} />
             {viewResponse && (
@@ -109,7 +98,7 @@ export function Inspector({
       const { usage, mcpServer, mcpFunction } = event.call;
       header = (
         <Header
-          accent={ACCENT[outcome]}
+          accent={OUTCOME_FILL[outcome]}
           hatched={outcome === "failed"}
           eyebrow={`Call #${event.callIndex + 1} of ${totalCalls}`}
           title={event.call.toolName}

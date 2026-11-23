@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 
 export type UploadTranscriptRequestBody = {
   /**
-   * The transcript file contents.
+   * The transcript file contents, at most 20 MiB.
    */
   content: string;
   /**

@@ -85,8 +85,10 @@ var _ = Service("intentPolicies", func() {
 				MinLength(1)
 				MaxLength(255)
 			})
-			Attribute("content", String, "The transcript file contents.", func() {
+			Attribute("content", String, "The transcript file contents, at most 20 MiB.", func() {
 				MinLength(1)
+				// Characters, not bytes; the service also enforces intentpolicy.MaxTranscriptBytes.
+				MaxLength(20 << 20)
 			})
 			Required("name", "content")
 		})

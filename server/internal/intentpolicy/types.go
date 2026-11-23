@@ -1,8 +1,7 @@
 // Package intentpolicy assesses recorded tool calls against a fixed intent
 // guardrail. An evaluator infers labels about one call, then CEL contracts over
-// those labels decide permit, clarify, or block. Assessments are pure
-// functions of (action, guardrail version, evaluator descriptor): no state
-// carries between calls and nothing is enforced or persisted.
+// those labels decide permit, clarify, or block. Each call is assessed on its
+// own: no state carries between calls and nothing is enforced or persisted.
 package intentpolicy
 
 import (
@@ -114,7 +113,7 @@ type Contract struct {
 	Outcome Decision
 
 	// Conditions describe when the contract fires, for display. Expression is
-	// what runs; conditions_test keeps the two from drifting.
+	// what runs; TestContractConditionsMatchExpressions keeps them in step.
 	Conditions []Condition
 
 	// Expression evaluates to PERMIT, CLARIFY, BLOCK, or ABSTAIN.
@@ -290,7 +289,7 @@ type Assessment struct {
 	// Outcomes holds one entry per contract, in guardrail order.
 	Outcomes []ContractOutcome
 
-	// EvaluatorError is set when the evaluator failed to answer every label.
+	// EvaluatorError is set on any evaluator error, including partial failures.
 	EvaluatorError string
 
 	// Usage is the evaluator cost for this call.

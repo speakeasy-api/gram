@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -203,14 +202,10 @@ func (s *Service) AnalyzeSession(ctx context.Context, payload *gen.AnalyzeSessio
 	if payload.Limit != nil {
 		limit = int(*payload.Limit)
 	}
-	window := intentpolicy.Window(actions, int(payload.Offset), limit)
-	analysis, err := intentpolicy.Analyze(ctx, s.guardrail, s.engine, evaluator, window)
+	analysis, err := intentpolicy.Analyze(ctx, s.guardrail, s.engine, evaluator, actions, int(payload.Offset), limit)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "analyze session").LogError(ctx, logger)
 	}
-	// Totals describe the whole session, not just this window.
-	analysis.Totals.Calls = len(actions)
-	analysis.LimitHit = len(actions) > intentpolicy.MaxActions
 	return buildAnalysisView(chatID, *generation, analysis), nil
 }
 
@@ -256,7 +251,7 @@ func buildGuardrailView(g intentpolicy.Guardrail) *gen.IntentGuardrail {
 	for _, c := range g.Contracts {
 		conds := make([]*gen.IntentCondition, 0, len(c.Conditions))
 		for _, cond := range c.Conditions {
-			conds = append(conds, &gen.IntentCondition{Join: cond.Join, Label: cond.Label, Op: cond.Op, Values: slices.Clone(cond.Values), Pattern: cond.Pattern})
+			conds = append(conds, &gen.IntentCondition{Join: cond.Join, Label: cond.Label, Op: cond.Op, Values: append([]string{}, cond.Values...), Pattern: cond.Pattern})
 		}
 		cs = append(cs, &gen.IntentContract{ID: c.ID, Name: c.Name, Statement: c.Statement, Outcome: string(c.Outcome), Conditions: conds, Expression: c.Expression})
 	}

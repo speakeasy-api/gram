@@ -443,12 +443,26 @@ function Session({
   focus: ReplayFocus | null;
 }): JSX.Element {
   const client = useSdkClient();
-  const transcript = useQuery({
-    queryKey: ["intent-policies", "transcript", chatId],
+  const latest = useQuery({
+    queryKey: ["intent-policies", "transcript", chatId, "latest"],
     queryFn: () => fetchFullTranscript(client, chatId),
     staleTime: Infinity,
     throwOnError: false,
   });
+  // The chat can gain a generation after it loads; show the one analyzed.
+  const analyzedGeneration = analysis?.generation;
+  const stale =
+    analyzedGeneration !== undefined &&
+    latest.data?.[0] !== undefined &&
+    latest.data[0].generation !== analyzedGeneration;
+  const pinned = useQuery({
+    queryKey: ["intent-policies", "transcript", chatId, analyzedGeneration],
+    queryFn: () => fetchFullTranscript(client, chatId, analyzedGeneration),
+    enabled: stale,
+    staleTime: Infinity,
+    throwOnError: false,
+  });
+  const transcript = stale && pinned.data ? pinned : latest;
   const calls = useMemo(() => analysis?.assessments ?? [], [analysis]);
   const events = useMemo(
     () => buildSessionEvents(transcript.data ?? [], calls),
@@ -582,6 +596,7 @@ function ProgressCard({
       <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-2">
         <div
           role="progressbar"
+          aria-label="Calls labeled"
           aria-valuemin={0}
           aria-valuemax={total}
           aria-valuenow={done}

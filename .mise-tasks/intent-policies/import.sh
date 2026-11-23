@@ -8,5 +8,6 @@
 set -euo pipefail
 
 # Local only: transcripts are written to the dev org's project, never committed.
+dir="$(realpath "${usage_dir:?}")"
 cd server
-exec go run . intent-policies-import --dir "${usage_dir:?}" --limit "${usage_limit:?}"
+exec go run . intent-policies-import --dir "$dir" --limit "${usage_limit:?}"

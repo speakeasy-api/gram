@@ -268,7 +268,7 @@ type UploadTranscriptPayload struct {
 	ProjectSlugInput *string
 	// Title for the stored session, usually the file name.
 	Name string
-	// The transcript file contents.
+	// The transcript file contents, at most 20 MiB.
 	Content string
 }
 

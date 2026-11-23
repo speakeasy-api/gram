@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type { IntentGuardrail } from "@gram/client/models/components/intentguardrail.js";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   defaultSelection,
   eventOutcome,
@@ -39,6 +39,8 @@ export function SessionViewer({
   const groups = useMemo(() => groupTurns(events), [events]);
   const turns = useMemo(() => turnNumbers(events, groups), [events, groups]);
   const secret = useMemo(() => secretSinceEvent(events), [events]);
+  const root = useRef<HTMLElement>(null);
+  const appliedFocus = useRef<ReplayFocus | null>(null);
 
   const visible = events.flatMap((e, i) =>
     matchesFilter(e, filter) ? [i] : [],
@@ -60,15 +62,20 @@ export function SessionViewer({
     }
   };
 
+  // Applied once per request, so later batches don't pull the selection back.
   useEffect(() => {
-    if (!focus) return;
+    if (!focus || appliedFocus.current === focus) return;
     const index = events.findIndex((e) => e.key === focus.key);
-    if (index !== -1) setSelected(index);
+    if (index === -1) return;
+    appliedFocus.current = focus;
+    setSelected(index);
   }, [focus, events]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // The Replay tab stays mounted while hidden.
+      if (!root.current?.offsetParent) return;
       const t = e.target as HTMLElement | null;
       if (
         t &&
@@ -85,8 +92,9 @@ export function SessionViewer({
             : 0;
       if (!dir) return;
       const next = stepEvent(events, selected, dir, filter);
+      if (next === undefined) return;
       e.preventDefault();
-      if (next !== undefined) setSelected(next);
+      setSelected(next);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -97,6 +105,7 @@ export function SessionViewer({
 
   return (
     <section
+      ref={root}
       aria-labelledby="session-viewer"
       className="@container border bg-card"
     >

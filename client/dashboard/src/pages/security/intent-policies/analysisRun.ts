@@ -7,7 +7,7 @@ import { callOutcome, type CallOutcome } from "./model";
 export const ANALYSIS_BATCH = 8;
 
 // Mirrors the server's per-session cap (intentpolicy.MaxActions).
-export const MAX_ANALYZED_CALLS = 200;
+const MAX_ANALYZED_CALLS = 200;
 
 export type AnalysisProgress = { done: number; total: number };
 

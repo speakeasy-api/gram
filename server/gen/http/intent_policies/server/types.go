@@ -35,7 +35,7 @@ type AnalyzeSessionRequestBody struct {
 type UploadTranscriptRequestBody struct {
 	// Title for the stored session, usually the file name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The transcript file contents.
+	// The transcript file contents, at most 20 MiB.
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 }
 
@@ -1436,6 +1436,11 @@ func ValidateUploadTranscriptRequestBody(body *UploadTranscriptRequestBody) (err
 	if body.Content != nil {
 		if utf8.RuneCountInString(*body.Content) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", *body.Content, utf8.RuneCountInString(*body.Content), 1, true))
+		}
+	}
+	if body.Content != nil {
+		if utf8.RuneCountInString(*body.Content) > 20971520 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", *body.Content, utf8.RuneCountInString(*body.Content), 20971520, false))
 		}
 	}
 	return

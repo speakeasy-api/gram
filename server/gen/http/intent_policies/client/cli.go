@@ -124,6 +124,9 @@ func BuildUploadTranscriptPayload(intentPoliciesUploadTranscriptBody string, int
 		if utf8.RuneCountInString(body.Content) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", body.Content, utf8.RuneCountInString(body.Content), 1, true))
 		}
+		if utf8.RuneCountInString(body.Content) > 20971520 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.content", body.Content, utf8.RuneCountInString(body.Content), 20971520, false))
+		}
 		if err != nil {
 			return nil, err
 		}
