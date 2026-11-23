@@ -55,6 +55,9 @@ const attemptColumns = attemptEndingColumns + `,
 		groupUniqArray(remote_session_issuer_id), groupUniqArray(user_session_issuer_id),
 		groupUniqArray(remote_session_client_id))))) AS touched`
 
+// fixCandidates keeps reduced attempts that ended connected or carry a reason.
+const fixCandidates = `(has_final AND (final_outcome = '` + string(OutcomeConnected) + `' OR final_reason != '')) OR (NOT has_final AND last_reason != '')`
+
 // ExcludedOrganizations are left out of cross-organization reads: the demo organization's attempts are made up.
 func ExcludedOrganizations() []string {
 	return []string{constants.DemoOrganizationID}
@@ -117,15 +120,16 @@ func (f AttemptFilter) where() (string, []any, error) {
 		conds, args = append(conds, "server_id = ?"), append(args, f.ServerID)
 	}
 	if !f.PeopleFailingFrom.IsZero() {
+		from, before := f.PeopleFailingFrom.UnixNano(), f.PeopleFailingBefore.UnixNano()
+		window, windowArgs := "attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)", []any{from, before}
+		if f.OrganizationID != "" {
+			window, windowArgs = window+" AND organization_id = ?", append(windowArgs, f.OrganizationID)
+		}
 		conds = append(conds, `(organization_id, subject_urn) IN (
 		SELECT organization_id, subject_urn FROM `+EventsTable+`
-		WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
-			AND subject_urn != ''
-			AND attempt_id IN (
-				SELECT attempt_id FROM `+EventsTable+`
-				WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?) AND reason != ''))`)
-		from, before := f.PeopleFailingFrom.UnixNano(), f.PeopleFailingBefore.UnixNano()
-		args = append(args, from, before, from, before)
+		WHERE `+window+` AND subject_urn != ''
+			AND attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+window+` AND reason != ''))`)
+		args = append(append(args, windowArgs...), windowArgs...)
 		// A row without the person still belongs to the attempt, so select whole attempts.
 		inner := strings.Join(conds, " AND ")
 		return `attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil
@@ -141,7 +145,7 @@ func ReadAttempts(ctx context.Context, ch driver.Conn, filter AttemptFilter, eac
 	}
 	having := ""
 	if filter.FixCandidatesOnly {
-		having = ` HAVING (has_final AND (final_outcome = '` + string(OutcomeConnected) + `' OR final_reason != '')) OR (NOT has_final AND last_reason != '')`
+		having = ` HAVING ` + fixCandidates
 	}
 	rows, err := ch.Query(ctx, `SELECT`+attemptColumns+` FROM `+EventsTable+` WHERE `+where+` GROUP BY organization_id, attempt_id`+having, args...)
 	if err != nil {
