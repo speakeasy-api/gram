@@ -11832,12 +11832,31 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   installation_id BIGINT NOT NULL,
   repo_owner TEXT NOT NULL CHECK (repo_owner <> ''),
   repo_name TEXT NOT NULL CHECK (repo_name <> ''),
-  -- Opaque URL token issued at marketplace setup. The marketplace proxy uses
-  -- it to resolve a Claude Code install URL back to this connection, whose
-  -- installation_id + owner/repo locate the upstream content. Nullable so
-  -- existing connections (and any future connection without the marketplace
-  -- surface enabled) are unconstrained.
+  -- The marketplace token in plaintext, being replaced by
+  -- marketplace_token_hash and its two sealed copies below. Once the publish
+  -- path stores those instead, nothing writes this column: it is read only as a
+  -- fallback for connections the marketplace token backfill has not moved yet,
+  -- which clears it, and is dropped in a later contract migration.
   marketplace_token TEXT,
+  -- The organization that owns the connection's project, stored on the row so
+  -- the organization encryption fence of the marketplace token copies compares
+  -- against the row's own organization. Nullable so connections stored before
+  -- this column stay valid until the publish path or the marketplace token
+  -- backfill fills it in.
+  organization_id TEXT,
+  -- Hex-encoded SHA-256 of the marketplace token, the URL-as-secret credential
+  -- of the marketplace proxy. The proxy hashes the token from the install URL
+  -- and resolves the connection by this value, whose installation_id and
+  -- owner/repo locate the upstream content. Nullable so connections without a
+  -- marketplace token are unconstrained.
+  marketplace_token_hash TEXT CHECK (marketplace_token_hash <> ''),
+  -- The marketplace token sealed under the platform key, which the server opens
+  -- to show the marketplace install URL again. Written while the organization's
+  -- marketplace-tokens use case is in platform_key or dual_write.
+  marketplace_token_encrypted TEXT,
+  -- The marketplace token sealed under the organization's key. Written while
+  -- the organization's marketplace-tokens use case is in dual_write or org_kms.
+  marketplace_token_org_encrypted TEXT,
   -- DEPRECATED: superseded by published_mcp_fingerprint + published_hooks_version
   -- when hooks and MCP plugin generation were decoupled. No longer written or
   -- read; retained per expand-contract and dropped in a later contract migration.
@@ -11874,7 +11893,11 @@ CREATE TABLE IF NOT EXISTS plugin_github_connections (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT plugin_github_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT plugin_github_connections_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT plugin_github_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- organization_id must be the project's own organization: the encryption
+  -- fence reads it, and token copies are sealed for it.
+  CONSTRAINT plugin_github_connections_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN plugin_github_connections.id IS '@access: confidential';
@@ -11883,6 +11906,10 @@ COMMENT ON COLUMN plugin_github_connections.installation_id IS '@access: confide
 COMMENT ON COLUMN plugin_github_connections.repo_owner IS '@access: confidential-pii';
 COMMENT ON COLUMN plugin_github_connections.repo_name IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.marketplace_token IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.organization_id IS '@access: confidential';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN plugin_github_connections.marketplace_token_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN plugin_github_connections.published_fingerprint IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.published_mcp_fingerprints IS '@access: confidential';
 COMMENT ON COLUMN plugin_github_connections.published_hooks_version IS '@access: confidential';
@@ -11901,12 +11928,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_project_id_key
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_installation_repo_key
   ON plugin_github_connections (installation_id, LOWER(repo_owner), LOWER(repo_name));
 
--- Lookup index for the marketplace proxy. Partial so existing rows without a
--- token (and any future rows where the marketplace surface isn't enabled)
--- aren't constrained against each other.
+-- DEPRECATED: lookup index for the plaintext marketplace_token fallback,
+-- dropped with that column in a later contract migration.
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_key
   ON plugin_github_connections (marketplace_token)
   WHERE marketplace_token IS NOT NULL;
+
+-- Lookup index for the marketplace proxy, which resolves an install URL token
+-- by its hash. Partial so connections without a token aren't constrained
+-- against each other.
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_github_connections_marketplace_token_hash_key
+  ON plugin_github_connections (marketplace_token_hash)
+  WHERE marketplace_token_hash IS NOT NULL;
+
+-- The marketplace token backfill, verification and finalize of organization
+-- encryption read one organization's connections.
+CREATE INDEX IF NOT EXISTS plugin_github_connections_organization_id_idx
+  ON plugin_github_connections (organization_id)
+  WHERE organization_id IS NOT NULL;
 
 -- Hooks version rollout pins, set by Speakeasy staff from the admin dashboard.
 -- A pin names the highest hooksGeneratorVersion an organization is cleared to

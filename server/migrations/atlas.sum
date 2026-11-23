@@ -1,4 +1,4 @@
-h1:Y4NWUk2aX3/17nIMyA9Se7TtWjtttSNEFfhN8qzGARU=
+h1:YByp21rQIE5K7WI/J7egvgYwATWtl2HqB8yJJsSpOuY=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -555,3 +555,4 @@ h1:Y4NWUk2aX3/17nIMyA9Se7TtWjtttSNEFfhN8qzGARU=
 20261120091826_access-requests.sql h1:kJoq0BRgG4F373YiEOLzJq21T8fhzYdNuS4loHAYJrI=
 20261120104601_api-keys-org-created-at-idx.sql h1:Uze1ghEhfbfQa7R98kZ+qm3C3vq5klLrAiK4xLO12lY=
 20261120210548_chat_message_transcripts.sql h1:7A7K0e8VPfsebzS/VXpxaXrx4JWL33KFkBggLfkkMeY=
+20261120232024_plugin-github-connections-marketplace-token-hash.sql h1:LW8pTLoqphJSKCvDxctvF8Gtl3RuJXsyfp0wyAZ9vI0=

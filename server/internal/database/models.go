@@ -5782,6 +5782,14 @@ type PluginGithubConnection struct {
 	// @access: secret-restricted
 	MarketplaceToken pgtype.Text
 	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenHash pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenEncrypted pgtype.Text
+	// @access: secret-restricted
+	MarketplaceTokenOrgEncrypted pgtype.Text
+	// @access: confidential
 	PublishedFingerprint pgtype.Text
 	// @access: confidential
 	PublishedMcpFingerprints []byte
