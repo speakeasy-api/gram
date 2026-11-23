@@ -199,9 +199,6 @@ function GatewayNameSection({
           />
         </SettingsSection.Body>
         <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            {`Please use no more than ${NAME_MAX_LENGTH} characters.`}
-          </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
               <FooterSaveButton
