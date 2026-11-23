@@ -1,7 +1,13 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { missingSignInsSentence } from "./connectionAttention";
+import {
+  displayedConnections,
+  missingSignInsSentence,
+  serversNeedingConnection,
+} from "./connectionAttention";
 import type { ServerConnection, ServerSignIn } from "./ownerConnections";
+import type { OwnerConnections } from "./useOwnerConnections";
+import type { InventoryServer } from "./useServerInventory";
 
 const linear = { name: "Linear" };
 
@@ -100,5 +106,40 @@ describe("missingSignInsSentence", () => {
     expect(
       missingSignInsSentence(linear, { status: "ready", sessions: [] }),
     ).toBeNull();
+  });
+});
+
+describe("a connection the viewer may not see", () => {
+  const servers = [
+    { id: "grain", name: "Grain", issuerId: "issuer_grain" },
+    { id: "linear", name: "Linear", issuerId: "issuer_linear" },
+  ] as InventoryServer[];
+  const connections = (own: ServerConnection): OwnerConnections => ({
+    byServer: new Map([
+      ["grain", own],
+      ["linear", own],
+    ]),
+    assignedByServer: new Map<string, ServerConnection>([
+      ["grain", { status: "forbidden" }],
+      ["linear", { status: "missing" }],
+    ]),
+    refetch: async () => {},
+  });
+
+  it("is shown as not visible and not counted as needing a sign-in", () => {
+    const displayed = displayedConnections(
+      connections({ status: "missing", connected: 0 }),
+    );
+    expect(displayed.get("grain")).toEqual({ status: "forbidden" });
+    expect(
+      serversNeedingConnection(servers, displayed).map((server) => server.id),
+    ).toEqual(["linear"]);
+  });
+
+  it("is not replaced by the viewer's own connection, which they could not save", () => {
+    const displayed = displayedConnections(
+      connections({ status: "ready", sessions: [] }),
+    );
+    expect(displayed.get("grain")).toEqual({ status: "forbidden" });
   });
 });

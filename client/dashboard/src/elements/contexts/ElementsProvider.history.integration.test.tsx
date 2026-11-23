@@ -31,11 +31,6 @@ vi.mock("@/elements/hooks/useMCPTools", () => ({
     error: null,
   }),
 }));
-vi.mock("@/elements/lib/errorTracking", () => ({
-  initErrorTracking: vi.fn(),
-  trackError: vi.fn(),
-}));
-
 const API_URL = "https://elements.test";
 const SAVED_CHAT_ID = "saved-chat";
 const SERVER_CHAT_ID = "11111111-1111-4111-8111-111111111111";
