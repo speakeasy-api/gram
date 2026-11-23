@@ -95,19 +95,6 @@ const (
 	ReasonNotGranted Reason = "not_granted"
 )
 
-// DenialReasons returns each check's Reason. Replaced by Decide.
-func (e *Engine) DenialReasons(ctx context.Context, checks []Check) ([]Reason, error) {
-	d, err := e.Decide(WithoutChallenges(ctx), checks...)
-	if err != nil {
-		return nil, err
-	}
-	reasons := make([]Reason, len(checks))
-	for i, decision := range d.Each {
-		reasons[i] = decision.Reason
-	}
-	return reasons, nil
-}
-
 // RecordedCheck rebuilds a check that was stored earlier, such as the denied
 // request an access challenge keeps, from its scope, resource and dimensions.
 // A connect check that names a tool or a disposition was a tool call, so it is

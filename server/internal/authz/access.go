@@ -74,21 +74,21 @@ func (c Check) asConnection() Check {
 
 // Probe marks the check as a discovery question: could the caller act on
 // some resource matching it. A grant key the check leaves out matches any
-// value the grant names. Can and Filter accept a probe; Require refuses one,
+// value the grant names. Decide accepts a probe; Require refuses one,
 // because gating an action needs the concrete resource.
 func (c Check) Probe() Check {
 	c.probe = true
 	return c
 }
 
-// AnyOf requests any one of the alternatives, the way RequireAnyUnblocked
-// does: a block matching any alternative refuses the request, unless a
-// direct grant on the concrete resource outranks it, and otherwise one
-// alternative must be allowed. Use it when a project-wide grant and a grant
+// AnyOf requests any one of the alternatives: a block matching any
+// alternative refuses the request, unless a direct grant on the concrete
+// resource outranks it, and otherwise one alternative must be allowed. Use it when a project-wide grant and a grant
 // on the resource both authorize the operation, so a broad allow cannot
 // bypass a block on the actual resource.
 //
-// Only Require and Can accept the result, and only as their single check.
+// Decide accepts the result next to other checks; Require only as its single
+// check.
 func AnyOf(alternatives ...Check) Check {
 	var first Check
 	if len(alternatives) > 0 {

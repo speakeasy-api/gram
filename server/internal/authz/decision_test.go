@@ -31,7 +31,6 @@ func TestDecide_answersEachCheckInOrder(t *testing.T) {
 	require.Len(t, d.Each, 3)
 	require.Equal(t, []bool{true, false, true}, allowedOf(d))
 	require.Equal(t, []Reason{ReasonNone, ReasonNotGranted, ReasonNone}, reasonsOf(d))
-	require.Equal(t, "proj_b", d.Each[1].Check.ResourceID)
 	require.True(t, d.Each[1].Enforced)
 
 	d, err = engine.Decide(ctx, projectRead("proj_a"))
