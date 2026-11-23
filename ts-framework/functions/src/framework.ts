@@ -129,6 +129,12 @@ export type ResourceEntry = {
   description: string;
   mimeType?: string;
   title?: string;
+  /**
+   * Optional `_meta` for the resource, returned on `resources/list` and
+   * `resources/read`. For MCP Apps UI resources, set `ui.csp` here to allow
+   * external origins, e.g. `{ ui: { csp: { connectDomains: ["https://api.example.com"] } } }`.
+   */
+  meta?: Record<string, unknown>;
   content: string | (() => string | Promise<string>);
 };
 
@@ -419,6 +425,8 @@ export class Functions<
       description: string;
       title?: string;
       uri?: string;
+      /** Optional `_meta` for the resource, such as `{ ui: { csp: ... } }`. */
+      meta?: Record<string, unknown>;
     } & (
       | {
           /** Raw HTML content for the resource. */
@@ -442,6 +450,7 @@ export class Functions<
       title: def.title,
       mimeType: "text/html;profile=mcp-app",
       content,
+      ...(def.meta != null ? { meta: def.meta } : {}),
     });
   }
 
@@ -657,6 +666,9 @@ export class Functions<
       }
       if (r.title != null) {
         entry.title = r.title;
+      }
+      if (r.meta != null) {
+        entry.meta = r.meta;
       }
       return entry;
     });
