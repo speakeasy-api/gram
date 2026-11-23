@@ -564,12 +564,18 @@ describe("useGatewayCandidates", () => {
   });
 
   it("offers an Inspect action per gateway that opens its Inspect tab", () => {
-    mocks.gateways = [{ id: "gateway-1", name: "Support Gateway" }];
+    mocks.gateways = [
+      { id: "gateway-1", name: "Support Gateway" },
+      { id: "gateway-2", name: "Sales Gateway" },
+    ];
     const { result } = renderCandidates();
 
-    const [inspect, ...rest] = inspectActions(result.current);
-    expect(rest).toHaveLength(0);
-    expect(inspect?.id).toBe("gateway-inspect:gateway-1");
+    const actions = inspectActions(result.current);
+    expect(actions.map((c) => c.id)).toEqual([
+      "gateway-inspect:gateway-1",
+      "gateway-inspect:gateway-2",
+    ]);
+    const [inspect] = actions;
     expect(inspect?.kind).toBe("gateway");
     expect(inspect?.title).toBe("Support Gateway · Inspect");
     expect(inspect?.keywords).toEqual(
@@ -625,12 +631,18 @@ describe("useMcpServerCandidates", () => {
   });
 
   it("offers an Inspect action per proxied server that opens its Inspect tab", () => {
-    mocks.mcpServers = [mcpServer("Slack", "slack-a1", "private")];
+    mocks.mcpServers = [
+      mcpServer("Slack", "slack-a1", "private"),
+      mcpServer("Jira", "jira-b2", "disabled"),
+    ];
     const { result } = renderCandidates();
 
-    const [inspect, ...rest] = inspectActions(result.current);
-    expect(rest).toHaveLength(0);
-    expect(inspect?.id).toBe("mcp-inspect:server-slack-a1");
+    const actions = inspectActions(result.current);
+    expect(actions.map((c) => c.id)).toEqual([
+      "mcp-inspect:server-slack-a1",
+      "mcp-inspect:server-jira-b2",
+    ]);
+    const [inspect] = actions;
     expect(inspect?.kind).toBe("mcp_server");
     expect(inspect?.title).toBe("Slack · Inspect");
     expect(inspect?.keywords).toEqual(
