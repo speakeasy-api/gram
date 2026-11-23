@@ -57,11 +57,9 @@ describe("ticking tools on a rule limited to kinds", () => {
     kind: "annotations",
     dispositions: ["read_only"],
   };
-  // search is read-only, delete is destructive, plain has no annotations.
   const tools = kindTestTools();
 
   it("keeps the kinds and names the ticked tool beside them", () => {
-    // Read-only tools stay covered, including ones added later.
     expect(
       limitAfterToggle(readOnly, tools, "delete", ["search", "delete"]),
     ).toEqual({
@@ -80,7 +78,6 @@ describe("ticking tools on a rule limited to kinds", () => {
   });
 
   it("turns into a tool list when a tool a kind covers is unticked", () => {
-    // A kind cannot leave one of its tools out.
     expect(limitAfterToggle(readOnly, tools, "search", [])).toEqual({
       kind: "tools",
       tools: [],
@@ -88,16 +85,12 @@ describe("ticking tools on a rule limited to kinds", () => {
   });
 
   it("turns into a tool list when a named tool a kind also covers is unticked", () => {
-    // search is named and read-only: dropping only the name would leave the
-    // read-only kind reaching it.
     expect(
       limitAfterToggle({ ...readOnly, tools: ["search"] }, tools, "search", []),
     ).toEqual({ kind: "tools", tools: [] });
   });
 
   it("keeps the kinds when the last tool is ticked", () => {
-    // Read-only tools plus delete and plain is not every tool: a destructive
-    // tool added later is still left out.
     expect(
       limitAfterToggle({ ...readOnly, tools: ["delete"] }, tools, "plain", [
         "search",

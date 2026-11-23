@@ -43,7 +43,6 @@ export function ReviewGrantsStep({
   onConfirmedChange,
 }: {
   added: AddedPermission[];
-  /** Tool kinds the save stops covering on MCP Connect, such as read_only. */
   removedKinds?: Disposition[];
   /** What the save changes about which upstream credentials can be used. */
   credentialChanges?: CredentialChangeLine[];

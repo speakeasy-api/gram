@@ -531,7 +531,6 @@ describe("editing without losing rules", () => {
   const scoped = { resourceKind: "project", resourceId: "p2" } as Selector;
 
   it("reads kinds and named tools on one server as one limit", () => {
-    // Read-only tools plus tool a: both rules are the cell, none is left over.
     const grants = load([
       {
         scope: "mcp:connect",

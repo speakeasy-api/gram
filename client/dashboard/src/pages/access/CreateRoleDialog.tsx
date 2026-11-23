@@ -320,7 +320,6 @@ export function CreateRoleDialog({
     credentials: CredentialRule[];
     credentialChanges: CredentialChangeLine[];
     added: AddedPermission[];
-    /** Tool kinds the save stops covering, such as read_only. */
     removedKinds: Disposition[];
     newHolders: NewHolders | null;
     confirmed: boolean;

@@ -139,8 +139,6 @@ describe("addedPermissions", () => {
 
 describe("removedToolKindRules", () => {
   it("lists the tool kinds a save stops covering on MCP Connect", () => {
-    // A rule for read-only tools covers read-only tools added later; the tool
-    // list that replaces it does not, so the review names the kind.
     const removed: SdkRoleGrant[] = [
       {
         scope: "mcp:connect",
@@ -153,7 +151,6 @@ describe("removedToolKindRules", () => {
             tool: "*",
           },
           { resourceKind: "mcp", resourceId: "gh", tool: "update_task" },
-          // One tool, named with its kind: removing it removes no kind rule.
           {
             resourceKind: "mcp",
             resourceId: "gh",
@@ -177,7 +174,6 @@ describe("removedToolKindRules", () => {
   });
 
   it("leaves out a kind the saved grants still cover on that server", () => {
-    // Read-only moves from one server to every server; unannotated is gone.
     const removed: SdkRoleGrant[] = [
       {
         scope: "mcp:connect",

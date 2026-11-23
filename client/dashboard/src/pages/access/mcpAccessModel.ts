@@ -54,11 +54,6 @@ export type ToolLimit =
   | {
       kind: "annotations";
       dispositions: Disposition[];
-      /**
-       * Tools named on top of the kinds, on one server. Read-only tools plus
-       * update_task reaches every read-only tool, including ones added
-       * later, and update_task whatever its kind.
-       */
       tools?: string[];
     };
 
@@ -93,7 +88,6 @@ export function toolDisposition(tool: ServerTool): Disposition {
   return "unannotated";
 }
 
-/** Whether Use limited this way reaches the tool. */
 export function toolLimitReaches(limit: ToolLimit, tool: ServerTool): boolean {
   switch (limit.kind) {
     case "all":
@@ -109,11 +103,9 @@ export function toolLimitReaches(limit: ToolLimit, tool: ServerTool): boolean {
 }
 
 /**
- * The limit after a tool is ticked or unticked, given the tools that are then
- * on. A rule limited to kinds keeps them: ticking update_task on read-only
- * tools names update_task beside them, so read-only tools added later stay
- * covered, and the rule never widens to every tool. Unticking a tool one of
- * the kinds covers turns the rule into a list of the tools still on, since a
+ * Kinds are kept when a tool is ticked, so tools of that kind added later stay
+ * covered: ticking update_task on read-only tools names it beside them.
+ * Unticking a tool a kind covers turns the rule into a tool list, because a
  * kind cannot leave one tool out.
  */
 export function limitAfterToggle(

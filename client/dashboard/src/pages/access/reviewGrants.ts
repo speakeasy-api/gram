@@ -97,11 +97,9 @@ export function reviewNeedsConfirmation(
 }
 
 /**
- * The tool kinds a save stops covering on MCP Connect, once each. A rule
- * limited to read-only tools covers read-only tools added later, and a list
- * of tool names that replaces it does not, so the review says so. A kind the
- * saved grants still cover on that server is left out: moving a read-only
- * rule from one server to every server removes nothing.
+ * Tool kinds a save stops covering on MCP Connect. A read-only rule covers
+ * read-only tools added later and the tool list replacing it does not, so the
+ * review has to say so.
  */
 export function removedToolKindRules(
   removeGrants: readonly SdkRoleGrant[],
@@ -120,20 +118,11 @@ export function removedToolKindRules(
   return [...kinds];
 }
 
-/**
- * Whether a selector is limited to one named tool. A tool of "*" matches
- * every tool, so { disposition: "read_only", tool: "*" } is a kind rule.
- */
+// A tool of "*" matches every tool, so { disposition, tool: "*" } is a kind rule.
 function namesOneTool(selector: Selector): boolean {
   return !!selector.tool && selector.tool !== "*";
 }
 
-/**
- * Whether an MCP Connect grant in `after` reaches every tool the removed kind
- * selector reached: one with no selectors, or a selector with no tool name
- * whose kind is unset or the same, on the same server or on every server of
- * the same project.
- */
 function connectStillCoversKind(
   after: readonly SdkRoleGrant[],
   removed: Selector,

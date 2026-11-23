@@ -383,11 +383,6 @@ export function mcpToolLimit(
   return null;
 }
 
-/**
- * The selectors a limit is stored as on a row: one per tool and one per
- * kind. Read-only tools plus update_task on a server is two selectors, a
- * disposition one and a tool one.
- */
 function limitSelectors(base: Selector, limit: ToolLimit): Selector[] {
   switch (limit.kind) {
     case "all":
