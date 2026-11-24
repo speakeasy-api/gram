@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	pgvector_go "github.com/pgvector/pgvector-go"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -2822,84 +2821,6 @@ type ExternalKey struct {
 	CustomerGrantReference pgtype.Text
 	// @access: confidential
 	IdentityProviderConnectionID uuid.NullUUID
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
-type ExternalMcpAttachment struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	DeploymentID uuid.UUID
-	// @access: confidential
-	RegistryID uuid.NullUUID
-	// @access: confidential
-	Name string
-	// @access: confidential
-	Slug string
-	// @access: confidential
-	RegistryServerSpecifier string
-	// @access: opaque-restricted
-	SelectedRemotes []string
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-	// @access: confidential
-	DeletedAt pgtype.Timestamptz
-	// @access: confidential
-	Deleted bool
-}
-
-type ExternalMcpToolDefinition struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	ExternalMcpAttachmentID uuid.UUID
-	// @access: confidential
-	ToolUrn string
-	// @access: restricted
-	RemoteUrl string
-	// @access: confidential
-	TransportType types.TransportType
-	// @access: confidential
-	RequiresOauth bool
-	// @access: confidential
-	Type string
-	// @access: confidential
-	Name pgtype.Text
-	// @access: opaque-restricted
-	Description pgtype.Text
-	// @access: opaque-restricted
-	Schema []byte
-	// @access: confidential
-	OauthVersion string
-	// @access: restricted
-	OauthAuthorizationEndpoint pgtype.Text
-	// @access: restricted
-	OauthTokenEndpoint pgtype.Text
-	// @access: restricted
-	OauthRegistrationEndpoint pgtype.Text
-	// @access: opaque-restricted
-	OauthScopesSupported []string
-	// @access: opaque-restricted
-	HeaderDefinitions []byte
-	// @access: confidential
-	Title pgtype.Text
-	// @access: confidential
-	ReadOnlyHint pgtype.Bool
-	// @access: confidential
-	DestructiveHint pgtype.Bool
-	// @access: confidential
-	IdempotentHint pgtype.Bool
-	// @access: confidential
-	OpenWorldHint pgtype.Bool
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
