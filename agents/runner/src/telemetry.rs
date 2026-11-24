@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
-use agentkit_loop::{AgentEvent, LoopObserver};
+use agentkit_loop::{AgentEvent, LoopObserver, ObservedEvent};
+use agentkit_mcp::{McpCallToolRequestParams, McpExtensions, McpRequestDecorator};
 
 use opentelemetry::propagation::{Extractor, Injector, TextMapPropagator};
 use opentelemetry::trace::{Span as _, TraceContextExt as _};
@@ -94,9 +94,9 @@ pub struct FirstTokenObserver {
 }
 
 impl LoopObserver for FirstTokenObserver {
-    fn handle_event(&self, event: AgentEvent) {
+    fn handle_event(&self, observed: ObservedEvent) {
         let mut armed_at = self.armed_at.lock().unwrap_or_else(PoisonError::into_inner);
-        match event {
+        match observed.event {
             AgentEvent::TurnStarted { .. } | AgentEvent::ToolResultReceived(_) => {
                 *armed_at = Some(Instant::now());
             }
@@ -112,95 +112,26 @@ impl LoopObserver for FirstTokenObserver {
     }
 }
 
-/// Registered contexts per argument key, oldest first, tagged with an id so
-/// a call's guard can remove only its own entry.
-type PendingContexts = HashMap<String, Vec<(u64, Context)>>;
-
-/// Carries an MCP tool call's trace context from the task that dispatches it
-/// to the rmcp worker task that sends its HTTP request.
-///
-/// rmcp posts every message from its own transport task, so the caller's span
-/// is not current when the request is built. The dispatching tool registers
-/// the current span's context under the call's arguments, and the transport
-/// takes the oldest matching context when it posts a `tools/call` with those
-/// arguments. Concurrent calls with identical arguments may swap contexts;
-/// both parents are the same kind of span, so the trace stays readable.
+/// W3C trace headers captured for one MCP `tools/call` request, carried in
+/// the request's extensions to [`crate::http_layer::McpSessionClient`].
 #[derive(Clone, Debug, Default)]
-pub struct McpTraceContexts {
-    pending: Arc<Mutex<PendingContexts>>,
-    next_id: Arc<AtomicU64>,
-}
+pub struct McpTraceHeaders(pub HashMap<http::HeaderName, http::HeaderValue>);
 
-impl McpTraceContexts {
-    /// Key for a call's arguments. Matches both the tool request input and
-    /// the `params.arguments` of the JSON-RPC message built from it.
-    fn key(arguments: Option<&serde_json::Value>) -> String {
-        match arguments {
-            None | Some(serde_json::Value::Null) => "null".to_string(),
-            Some(value) => value.to_string(),
-        }
-    }
-
-    /// Registers the current span's context for a call with `arguments`.
-    /// The returned guard drops the entry if the transport never took it.
-    pub fn register(&self, arguments: &serde_json::Value) -> McpTraceRegistration {
-        let key = Self::key(Some(arguments));
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let cx = tracing::Span::current().context();
-        self.pending
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .entry(key.clone())
-            .or_default()
-            .push((id, cx));
-        McpTraceRegistration {
-            contexts: self.clone(),
-            key,
-            id,
-        }
-    }
-
-    /// Takes the context registered for a `tools/call` message, if any.
-    pub fn take_for_message(&self, message: &serde_json::Value) -> Option<Context> {
-        if message.get("method").and_then(serde_json::Value::as_str) != Some("tools/call") {
-            return None;
-        }
-        let key = Self::key(message.get("params").and_then(|p| p.get("arguments")));
-        let mut pending = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
-        let entries = pending.get_mut(&key)?;
-        if entries.is_empty() {
-            return None;
-        }
-        let (_, cx) = entries.remove(0);
-        if entries.is_empty() {
-            pending.remove(&key);
-        }
-        Some(cx)
-    }
-}
-
-/// Removes an unclaimed [`McpTraceContexts`] entry when the call ends.
-#[derive(Debug)]
-pub struct McpTraceRegistration {
-    contexts: McpTraceContexts,
-    key: String,
-    id: u64,
-}
-
-impl Drop for McpTraceRegistration {
-    fn drop(&mut self) {
-        let mut pending = self
-            .contexts
-            .pending
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
-        if let Some(entries) = pending.get_mut(&self.key) {
-            entries.retain(|(id, _)| *id != self.id);
-            if entries.is_empty() {
-                pending.remove(&self.key);
+/// agentkit request decorator that snapshots the current span into each
+/// `tools/call` request. agentkit calls it inside its `mcp.call_tool` span,
+/// so the server's MCP request links to the span for that wire call. When
+/// tracing filters that span out, the nearest enabled span (the runner's
+/// `assistant.tool`) is used instead, which still links the same tool call.
+pub fn mcp_trace_decorator() -> Arc<dyn McpRequestDecorator> {
+    Arc::new(
+        |_params: &McpCallToolRequestParams, extensions: &mut McpExtensions| {
+            let mut headers = HashMap::new();
+            inject_trace_context_into(&tracing::Span::current().context(), &mut headers);
+            if !headers.is_empty() {
+                extensions.insert(McpTraceHeaders(headers));
             }
-        }
-    }
+        },
+    )
 }
 
 /// Writes `cx` as W3C `traceparent`/`tracestate` into an MCP request's extra
@@ -304,50 +235,49 @@ mod tests {
 
     #[test]
     #[allow(clippy::unwrap_used)]
-    fn mcp_tool_calls_pick_up_the_dispatching_span_context() {
+    fn mcp_trace_decorator_captures_the_wire_call_span() {
         use opentelemetry::trace::TracerProvider as _;
         use tracing_subscriber::layer::SubscriberExt as _;
 
         let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder().build();
         let subscriber = tracing_subscriber::registry()
             .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
-        let contexts = McpTraceContexts::default();
-        let args = serde_json::json!({"days": 7});
-        let call = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {"name": "platform_overview", "arguments": {"days": 7}},
-        });
+        let decorator = mcp_trace_decorator();
 
         tracing::subscriber::with_default(subscriber, || {
-            let span = tracing::info_span!("assistant.tool");
-            let _entered = span.enter();
-            let expected = span.context().span().span_context().trace_id();
+            let tool = tracing::info_span!("assistant.tool");
+            let _tool = tool.enter();
+            let call = tracing::info_span!("mcp.call_tool");
+            let _call = call.enter();
+            let expected = call.context().span().span_context().clone();
 
-            let other = contexts.register(&serde_json::json!({"days": 30}));
-            let guard = contexts.register(&args);
-            let initialize = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize"});
-            assert!(contexts.take_for_message(&initialize).is_none());
-
-            let cx = contexts.take_for_message(&call).unwrap();
-            assert_eq!(cx.span().span_context().trace_id(), expected);
-            let mut headers = HashMap::new();
-            inject_trace_context_into(&cx, &mut headers);
-            assert!(headers.keys().any(|name| name.as_str() == "traceparent"));
-            assert!(contexts.take_for_message(&call).is_none(), "taken once");
-
-            drop(guard);
-            drop(other);
-            assert!(
-                contexts
-                    .pending
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .is_empty(),
-                "unclaimed entries leave with their call"
+            let mut extensions = McpExtensions::new();
+            decorator.decorate_call_tool(
+                &McpCallToolRequestParams::new("platform_overview"),
+                &mut extensions,
+            );
+            let McpTraceHeaders(headers) = extensions.get::<McpTraceHeaders>().unwrap();
+            let traceparent = headers
+                .get(&http::HeaderName::from_static("traceparent"))
+                .unwrap()
+                .to_str()
+                .unwrap();
+            assert_eq!(
+                traceparent,
+                format!("00-{}-{}-01", expected.trace_id(), expected.span_id()),
+                "the parent is the mcp.call_tool span itself"
             );
         });
+    }
+
+    #[test]
+    fn mcp_trace_decorator_adds_nothing_without_a_span() {
+        let mut extensions = McpExtensions::new();
+        mcp_trace_decorator().decorate_call_tool(
+            &McpCallToolRequestParams::new("platform_overview"),
+            &mut extensions,
+        );
+        assert!(extensions.get::<McpTraceHeaders>().is_none());
     }
 
     #[test]

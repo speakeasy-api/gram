@@ -35,7 +35,7 @@ use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{TokenRegistry, build_bootstrap_client, build_http};
 use crate::mcp_actor::{McpCmd, spawn_mcp_actor};
-use crate::telemetry::{FirstTokenObserver, McpTraceContexts, SpanIdentity};
+use crate::telemetry::{FirstTokenObserver, SpanIdentity};
 use crate::tools;
 use crate::wire::{McpServer, RunnerContent, RunnerContentPart, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
@@ -416,7 +416,6 @@ async fn spawn_thread(
         }
     });
 
-    let mcp_trace = McpTraceContexts::default();
     let (mcp_cmd_tx, mcp_catalog, mcp_known_tools) = spawn_mcp_actor(
         host.gram_client.clone(),
         host.mcp_http_client.clone(),
@@ -424,7 +423,6 @@ async fn spawn_thread(
         &bootstrap.mcp_servers,
         &tokens,
         mcp_inbox_tx,
-        &mcp_trace,
     )?;
 
     let chat_id = bootstrap.chat_id.clone();
@@ -527,10 +525,11 @@ async fn spawn_thread(
     // cache survives catalog churn. UnknownToolSource sits last so a call
     // to an undiscovered or hallucinated name returns a recovery hint
     // instead of a bare not-found.
-    let compose_source = agentkit_tool_compose::ComposeTool::wrap(
-        HiddenCatalogSource::new(mcp_catalog, mcp_cmd_tx.clone(), mcp_known_tools)
-            .with_trace_contexts(mcp_trace),
-    )
+    let compose_source = agentkit_tool_compose::ComposeTool::wrap(HiddenCatalogSource::new(
+        mcp_catalog,
+        mcp_cmd_tx.clone(),
+        mcp_known_tools,
+    ))
     .with_source(native_tools.merge(agentkit_tool_fs::registry()))
     .with_source(UnknownToolSource);
     let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());

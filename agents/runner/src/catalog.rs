@@ -24,14 +24,12 @@ use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::mcp_actor::{KnownTools, McpCmd};
-use crate::telemetry::McpTraceContexts;
 
 /// Exposes the MCP catalog for dispatch without advertising any specs.
 pub struct HiddenCatalogSource {
     catalog: Arc<CatalogReader>,
     cmd_tx: mpsc::Sender<McpCmd>,
     known: KnownTools,
-    trace: McpTraceContexts,
 }
 
 impl HiddenCatalogSource {
@@ -40,15 +38,7 @@ impl HiddenCatalogSource {
             catalog: Arc::new(catalog),
             cmd_tx,
             known,
-            trace: McpTraceContexts::default(),
         }
-    }
-
-    /// Shares the thread's trace hand-off with its MCP transports, so each
-    /// MCP request carries the trace context of the call that sent it.
-    pub fn with_trace_contexts(mut self, trace: McpTraceContexts) -> Self {
-        self.trace = trace;
-        self
     }
 }
 
@@ -62,7 +52,6 @@ impl ToolSource for HiddenCatalogSource {
             return Some(Arc::new(ReconnectingTool {
                 inner,
                 cmd_tx: self.cmd_tx.clone(),
-                trace: self.trace.clone(),
             }));
         }
         // A tool discovered earlier whose session has since closed: connect
@@ -72,7 +61,6 @@ impl ToolSource for HiddenCatalogSource {
                 spec: placeholder_spec(name),
                 catalog: self.catalog.clone(),
                 cmd_tx: self.cmd_tx.clone(),
-                trace: self.trace.clone(),
             }) as Arc<dyn Tool>
         })
     }
@@ -95,7 +83,6 @@ impl ToolSource for HiddenCatalogSource {
 struct ReconnectingTool {
     inner: Arc<dyn Tool>,
     cmd_tx: mpsc::Sender<McpCmd>,
-    trace: McpTraceContexts,
 }
 
 impl ReconnectingTool {
@@ -154,7 +141,6 @@ impl Tool for ReconnectingTool {
         request: ToolRequest,
         ctx: &mut ToolContext<'_>,
     ) -> Result<ToolResult, ToolError> {
-        let _trace = self.trace.register(&request.input);
         match self.inner.invoke(request, ctx).await {
             Err(err) if transport_suspect(&err) => Err(self.reconnected(err).await),
             other => other,
@@ -166,7 +152,6 @@ impl Tool for ReconnectingTool {
         request: ToolRequest,
         ctx: &mut ToolContext<'_>,
     ) -> ToolExecutionOutcome {
-        let _trace = self.trace.register(&request.input);
         match self.inner.invoke_outcome(request, ctx).await {
             ToolExecutionOutcome::Failed(err) if transport_suspect(&err) => {
                 ToolExecutionOutcome::Failed(self.reconnected(err).await)
@@ -184,7 +169,6 @@ struct DeferredMcpTool {
     spec: ToolSpec,
     catalog: Arc<CatalogReader>,
     cmd_tx: mpsc::Sender<McpCmd>,
-    trace: McpTraceContexts,
 }
 
 impl DeferredMcpTool {
@@ -221,7 +205,8 @@ impl Tool for DeferredMcpTool {
     ) -> Result<ToolResult, ToolError> {
         match self.invoke_outcome(request, ctx).await {
             ToolExecutionOutcome::Completed(result) => Ok(result),
-            ToolExecutionOutcome::Failed(error) => Err(error),
+            ToolExecutionOutcome::Failed(error)
+            | ToolExecutionOutcome::FailedBeforeInvocation(error) => Err(error),
             ToolExecutionOutcome::Interrupted(ToolInterruption::ApprovalRequired(req)) => Err(
                 ToolError::Unavailable(format!("tool requires approval: {}", req.summary)),
             ),
@@ -245,17 +230,18 @@ impl Tool for DeferredMcpTool {
         let tool = ReconnectingTool {
             inner,
             cmd_tx: self.cmd_tx.clone(),
-            trace: self.trace.clone(),
         };
         let requests = match tool.proposed_requests(&request) {
             Ok(requests) => requests,
-            Err(error) => return ToolExecutionOutcome::Failed(error),
+            Err(error) => return ToolExecutionOutcome::FailedBeforeInvocation(error),
         };
         for permission in requests {
             match ctx.permissions.evaluate(permission.as_ref()) {
                 PermissionDecision::Allow => {}
                 PermissionDecision::Deny(denial) => {
-                    return ToolExecutionOutcome::Failed(ToolError::PermissionDenied(denial));
+                    return ToolExecutionOutcome::FailedBeforeInvocation(
+                        ToolError::PermissionDenied(denial),
+                    );
                 }
                 PermissionDecision::RequireApproval(mut req) => {
                     req.call_id = Some(request.call_id.clone());

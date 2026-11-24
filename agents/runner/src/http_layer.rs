@@ -12,11 +12,12 @@ use http::{HeaderMap, HeaderName, HeaderValue};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, Middleware, Next};
 use reqwest_retry::RetryTransientMiddleware;
 use reqwest_retry::policies::ExponentialBackoff;
+use rmcp::model::ClientRequest;
 use rmcp::transport::streamable_http_client::StreamableHttpClient as RmcpStreamableHttpClient;
 use thiserror::Error;
 
 use crate::errors::RunnerError;
-use crate::telemetry::McpTraceContexts;
+use crate::telemetry::McpTraceHeaders;
 
 // Liberal retry bounds for every runner-originated request: chat
 // completions, MCP, /threads/turn, bootstrap. A turn that bubbles a
@@ -139,21 +140,14 @@ pub struct McpSessionClient {
     inner: reqwest::Client,
     token: String,
     static_headers: HeaderMap,
-    trace: McpTraceContexts,
 }
 
 impl McpSessionClient {
-    pub fn new(
-        inner: reqwest::Client,
-        token: String,
-        static_headers: HeaderMap,
-        trace: McpTraceContexts,
-    ) -> Self {
+    pub fn new(inner: reqwest::Client, token: String, static_headers: HeaderMap) -> Self {
         Self {
             inner,
             token,
             static_headers,
-            trace,
         }
     }
 
@@ -184,13 +178,11 @@ impl McpHttpClient for McpSessionClient {
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
         let token = self.bearer();
         let mut headers = self.merged_headers(custom_headers);
-        // Tool calls carry the dispatching span's trace context, so the
-        // server's MCP request can be tied to the runner trace.
-        if let Some(cx) = serde_json::to_value(&message)
-            .ok()
-            .and_then(|value| self.trace.take_for_message(&value))
-        {
-            crate::telemetry::inject_trace_context_into(&cx, &mut headers);
+        // Tool calls carry the trace context agentkit's request decorator
+        // captured for them, so the server's MCP request links to the runner
+        // trace.
+        if let Some(McpTraceHeaders(trace)) = call_trace_headers(&message) {
+            headers.extend(trace.clone());
         }
         RmcpStreamableHttpClient::post_message(
             &self.inner,
@@ -218,7 +210,7 @@ impl McpHttpClient for McpSessionClient {
     async fn get_stream(
         &self,
         uri: Arc<str>,
-        session_id: Arc<str>,
+        session_id: Option<Arc<str>>,
         last_event_id: Option<String>,
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
@@ -237,10 +229,51 @@ impl McpHttpClient for McpSessionClient {
     }
 }
 
+/// The trace headers attached to a `tools/call` request, if any.
+fn call_trace_headers(message: &ClientJsonRpcMessage) -> Option<&McpTraceHeaders> {
+    match message {
+        ClientJsonRpcMessage::Request(request) => match &request.request {
+            ClientRequest::CallToolRequest(call) => call.extensions.get::<McpTraceHeaders>(),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_call_tool_requests_carry_trace_headers() {
+        use rmcp::model::{
+            CallToolRequest, CallToolRequestParams, JsonRpcRequest, NumberOrString, PingRequest,
+        };
+        let mut trace = HashMap::new();
+        trace.insert(
+            HeaderName::from_static("traceparent"),
+            HeaderValue::from_static("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"),
+        );
+        let mut call = CallToolRequest::new(CallToolRequestParams::new("platform_overview"));
+        call.extensions.insert(McpTraceHeaders(trace.clone()));
+        let message = |request| {
+            ClientJsonRpcMessage::Request(JsonRpcRequest {
+                jsonrpc: Default::default(),
+                id: NumberOrString::Number(1),
+                request,
+            })
+        };
+        let call = message(ClientRequest::CallToolRequest(call));
+        assert_eq!(
+            call_trace_headers(&call).map(|McpTraceHeaders(h)| h),
+            Some(&trace)
+        );
+        assert!(
+            call_trace_headers(&message(ClientRequest::PingRequest(PingRequest::default())))
+                .is_none()
+        );
+    }
 
     #[test]
     fn scalar_bearer_recovers_after_lock_poison() {
