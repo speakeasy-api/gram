@@ -2195,19 +2195,28 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 // tool breakdowns. One grouped ClickHouse query serves all of them, so a page
 // load costs one scan and one connection.
 func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverviewSummaryParams, includeTimeSeries, toolCallsOnly bool) (*telem_gen.GetObservabilityOverviewResult, error) {
-	intervalSeconds := calculateInterval(scope.TimeStart, scope.TimeEnd)
+	intervalSeconds := CalculateInterval(scope.TimeStart, scope.TimeEnd)
 
-	overview, err := s.chRepo.GetObservabilityOverview(ctx, repo.GetObservabilityOverviewParams{
+	params := repo.GetObservabilityOverviewParams{
 		Scope:                    scope,
 		IntervalSeconds:          intervalSeconds,
 		IncludeTimeSeries:        includeTimeSeries,
 		ToolLimit:                10,
 		ToolCallsOnly:            toolCallsOnly,
-		ToolCallSummariesEnabled: toolCallsOnly && s.toolCallSummariesEnabled(ctx),
-	})
+		ToolCallSummariesEnabled: false,
+	}
+	params.ToolCallSummariesEnabled = params.ToolCallSummariesEligible() && s.toolCallSummariesEnabled(ctx)
+
+	overview, err := s.chRepo.GetObservabilityOverview(ctx, params)
+	if err != nil && params.ToolCallSummariesEnabled {
+		s.logger.WarnContext(ctx, "read overview from tool call summaries, falling back to telemetry_logs", attr.SlogError(err))
+		params.ToolCallSummariesEnabled = false
+		overview, err = s.chRepo.GetObservabilityOverview(ctx, params)
+	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving observability overview")
 	}
+	trace.SpanFromContext(ctx).SetAttributes(attr.TelemetryOverviewSource(string(overview.Source)))
 
 	return &telem_gen.GetObservabilityOverviewResult{
 		Summary:               toObservabilitySummary(overview.Summary),
@@ -2219,8 +2228,7 @@ func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverv
 	}, nil
 }
 
-// toolCallSummariesEnabled evaluates FlagMCPOverviewSummaryTable for the
-// caller's organization and project. Anything but an explicit on is off.
+// toolCallSummariesEnabled is true only when the flag is explicitly on.
 func (s *Service) toolCallSummariesEnabled(ctx context.Context) bool {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -2642,9 +2650,9 @@ func (s *Service) fetchOverviewChatMetrics(
 	return unavailable
 }
 
-// calculateInterval determines the appropriate time bucket interval based on the time range.
+// CalculateInterval determines the appropriate time bucket interval based on the time range.
 // Returns interval in seconds.
-func calculateInterval(timeStart, timeEnd int64) int64 {
+func CalculateInterval(timeStart, timeEnd int64) int64 {
 	durationNanos := timeEnd - timeStart
 	durationHours := durationNanos / (int64(time.Hour))
 

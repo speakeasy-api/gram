@@ -189,7 +189,8 @@ type GetObservabilityOverviewRequestBody struct {
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool `form:"include_time_series" json:"include_time_series" xml:"include_time_series"`
 	// Whether only tool call figures are needed (default: false). When true, chat,
-	// token, cost and session duration fields are returned as 0.
+	// token, cost and session duration fields are returned as 0, and figures may
+	// be aligned to 15-minute boundaries.
 	ToolCallsOnly bool `form:"tool_calls_only" json:"tool_calls_only" xml:"tool_calls_only"`
 }
 

@@ -58,7 +58,7 @@ export type GetObservabilityOverviewPayload = {
    */
   to: Date;
   /**
-   * Whether only tool call figures are needed (default: false). When true, chat, token, cost and session duration fields are returned as 0.
+   * Whether only tool call figures are needed (default: false). When true, chat, token, cost and session duration fields are returned as 0, and figures may be aligned to 15-minute boundaries.
    */
   toolCallsOnly?: boolean | undefined;
   /**

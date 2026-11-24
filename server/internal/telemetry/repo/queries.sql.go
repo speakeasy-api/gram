@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -2886,27 +2885,13 @@ func (arg GetOverviewSummaryParams) hasFilters() bool {
 	return !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
 }
 
-// toolCallSummariesCanServe reports whether every filter in the scope is a
-// column of mcp_tool_call_summaries. It clears the supported fields and
-// requires the rest to be zero, so a field added later takes the raw path.
+// toolCallSummariesCanServe reports whether every filter is a column of mcp_tool_call_summaries.
 func (arg GetOverviewSummaryParams) toolCallSummariesCanServe() bool {
-	rest := arg
-	rest.GramProjectIDs = nil
-	rest.TimeStart = 0
-	rest.TimeEnd = 0
-	rest.ToolsetSlug = ""
-	rest.ToolsetSlugServerID = ""
-	rest.RemoteMCPServerID = ""
-	rest.MCPServerID = ""
-	rest.MetaMCPServerID = ""
-	rest.HookSource = ""
-	rest.ExcludedHookSources = nil
-	// Organization gateway rows share the nil project; only a gateway filter
-	// tells them apart.
+	// Organization gateway rows share the nil project; only a gateway filter tells them apart.
 	if slices.Contains(arg.GramProjectIDs, uuid.Nil.String()) && arg.MetaMCPServerID == "" {
 		return false
 	}
-	return reflect.ValueOf(rest).IsZero()
+	return arg.User.IsEmpty() && !arg.CanonicalUser.Enabled() && arg.ExternalUserID == "" && arg.APIKeyID == "" && arg.EventSource == "" && arg.AccountType == "" && arg.ExternalOrgID == ""
 }
 
 // getOverviewSummaryMV builds a query against the pre-aggregated metrics_summaries table.

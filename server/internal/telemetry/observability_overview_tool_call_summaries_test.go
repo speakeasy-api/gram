@@ -14,19 +14,17 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
-// summaryParityDay is after the mcp_tool_call_summaries view's cutoff
-// (2026-12-02 00:00 UTC), so telemetry_logs rows reach the table.
-var summaryParityDay = time.Date(2026, 12, 10, 0, 0, 0, 0, time.UTC)
+// summaryParityDay keeps every parity period after the view's 2026-12-02 cutoff.
+var summaryParityDay = time.Date(2027, 3, 1, 0, 0, 0, 0, time.UTC)
 
-// summaryOnlyDay is before that cutoff: telemetry_logs rows there never reach
-// the table, so rows inserted into each table directly are seen by one path only.
+// summaryOnlyDay is before the cutoff, so each table's rows there are seen by one path only.
 var summaryOnlyDay = time.Date(2026, 11, 30, 0, 0, 0, 0, time.UTC)
 
-// latencyTolerance absorbs float summation order: the table sums latency per
-// bucket before the read sums the buckets.
+// latencyTolerance absorbs float summation order.
 const latencyTolerance = 1e-9
 
 type overviewLog struct {
@@ -115,30 +113,18 @@ func overviewScope(projectID string, timeStart, timeEnd time.Time) repo.GetOverv
 	}
 }
 
-// overviewIntervalSeconds mirrors calculateInterval for the ranges used here.
-func overviewIntervalSeconds(timeStart, timeEnd time.Time) int64 {
-	hours := int64(timeEnd.Sub(timeStart) / time.Hour)
-	switch {
-	case hours <= 1:
-		return 60
-	case hours <= 24:
-		return 900
-	case hours <= 168:
-		return 3600
-	case hours <= 720:
-		return 21600
-	default:
-		return 86400
-	}
+func readOverview(t *testing.T, ctx context.Context, q *repo.Queries, scope repo.GetOverviewSummaryParams, toolCallsOnly, summariesEnabled bool) *repo.ObservabilityOverview {
+	t.Helper()
+	return readOverviewWithSeries(t, ctx, q, scope, toolCallsOnly, summariesEnabled, true)
 }
 
-func readOverview(t *testing.T, ctx context.Context, q *repo.Queries, scope repo.GetOverviewSummaryParams, toolCallsOnly, summariesEnabled bool) *repo.ObservabilityOverview {
+func readOverviewWithSeries(t *testing.T, ctx context.Context, q *repo.Queries, scope repo.GetOverviewSummaryParams, toolCallsOnly, summariesEnabled, includeTimeSeries bool) *repo.ObservabilityOverview {
 	t.Helper()
 
 	got, err := q.GetObservabilityOverview(ctx, repo.GetObservabilityOverviewParams{
 		Scope:                    scope,
-		IntervalSeconds:          overviewIntervalSeconds(time.Unix(0, scope.TimeStart), time.Unix(0, scope.TimeEnd)),
-		IncludeTimeSeries:        true,
+		IntervalSeconds:          telemetry.CalculateInterval(scope.TimeStart, scope.TimeEnd),
+		IncludeTimeSeries:        includeTimeSeries,
 		ToolLimit:                10,
 		ToolCallsOnly:            toolCallsOnly,
 		ToolCallSummariesEnabled: summariesEnabled,
@@ -165,8 +151,7 @@ func requireSameToolCallSeries(t *testing.T, want, got []repo.TimeSeriesBucket) 
 	}
 }
 
-// The summary path must return the raw path's tool figures for every filter
-// the table supports, given range boundaries on 15-minute marks.
+// With range boundaries on 15-minute marks, both paths return the same tool figures.
 func TestGetObservabilityOverview_ToolCallSummariesMatchRawLogs(t *testing.T) {
 	t.Parallel()
 
@@ -180,12 +165,39 @@ func TestGetObservabilityOverview_ToolCallSummariesMatchRawLogs(t *testing.T) {
 	tools := []string{"tools:http:a:one", "tools:http:a:two", "tools:function:b:three", "tools:http:c:four"}
 	hookSources := []string{"", "cursor", "claude-code", "speakeasy-judge"}
 
+	end := summaryParityDay.Add(18 * time.Hour)
+	ranges := []struct {
+		name            string
+		start, end      time.Time
+		endsOffTheHour  bool
+		intervalSeconds int64
+	}{
+		{"12 hours", end.Add(-12 * time.Hour), end, false, 900},
+		{"12 hours ending on a quarter hour", end.Add(-12*time.Hour - 15*time.Minute), end.Add(-15 * time.Minute), true, 900},
+		{"3 days", end.Add(-72 * time.Hour), end, false, 3600},
+		{"10 days", end.Add(-240 * time.Hour), end, false, 21600},
+		{"40 days", end.Add(-960 * time.Hour), end, false, 86400},
+	}
+
+	// Sparse calls, dense calls past the end, and calls either side of every boundary.
+	var times []time.Time
+	for at := end.Add(-1920*time.Hour + 7*time.Second); at.Before(end.Add(-84 * time.Hour)); at = at.Add(7*time.Hour + 13*time.Minute) {
+		times = append(times, at)
+	}
+	for at := end.Add(-84*time.Hour + 7*time.Second); at.Before(end.Add(30 * time.Minute)); at = at.Add(41 * time.Minute) {
+		times = append(times, at)
+	}
+	for _, r := range ranges {
+		previousStart := r.start.Add(-r.end.Sub(r.start))
+		for _, boundary := range []time.Time{previousStart, r.start, r.end} {
+			for _, offset := range []time.Duration{-5 * time.Minute, 3 * time.Minute, 10 * time.Minute} {
+				times = append(times, boundary.Add(offset))
+			}
+		}
+	}
+
 	var logs []overviewLog
-	// Rows every 41 minutes from 2.5 days before summaryParityDay up to 18:00
-	// on it, so they land in both periods of every range below and none falls
-	// after a range's end.
-	first := summaryParityDay.Add(-60*time.Hour + 7*time.Second)
-	for i := 0; first.Add(time.Duration(i) * 41 * time.Minute).Before(summaryParityDay.Add(18 * time.Hour)); i++ {
+	for i, at := range times {
 		attrs := map[string]any{
 			"gram.toolset.slug": []string{"ts-a", "ts-b"}[i%2],
 		}
@@ -207,10 +219,10 @@ func TestGetObservabilityOverview_ToolCallSummariesMatchRawLogs(t *testing.T) {
 		if i%3 != 0 {
 			attrs["http.server.request.duration"] = 0.137 * float64(i%7+1)
 		}
-		logs = append(logs, overviewLog{at: first.Add(time.Duration(i) * 41 * time.Minute), gramURN: tools[i%4], attributes: attrs})
+		logs = append(logs, overviewLog{at: at, gramURN: tools[i%4], attributes: attrs})
 		if i%4 == 0 {
 			logs = append(logs, overviewLog{
-				at:      first.Add(time.Duration(i)*41*time.Minute + time.Minute),
+				at:      at.Add(time.Minute),
 				gramURN: "chat:resolution",
 				attributes: map[string]any{
 					"gram.mcp_server.id":         mcpA,
@@ -224,10 +236,6 @@ func TestGetObservabilityOverview_ToolCallSummariesMatchRawLogs(t *testing.T) {
 	}
 	insertOverviewLogs(t, ctx, ti.chConn, projectID, logs)
 
-	ranges := map[string][2]time.Time{
-		"12 hours": {summaryParityDay.Add(6 * time.Hour), summaryParityDay.Add(18 * time.Hour)},
-		"3 days":   {summaryParityDay.Add(-54 * time.Hour), summaryParityDay.Add(18 * time.Hour)},
-	}
 	filters := []struct {
 		name  string
 		apply func(*repo.GetOverviewSummaryParams)
@@ -258,17 +266,24 @@ func TestGetObservabilityOverview_ToolCallSummariesMatchRawLogs(t *testing.T) {
 		}},
 	}
 
-	for rangeName, r := range ranges {
+	for _, r := range ranges {
+		require.Equal(t, r.intervalSeconds, telemetry.CalculateInterval(r.start.UnixNano(), r.end.UnixNano()), r.name)
 		for _, f := range filters {
-			t.Run(fmt.Sprintf("%s, %s", rangeName, f.name), func(t *testing.T) {
+			// A project-only raw summary comes from metrics_summaries in whole hours.
+			if r.endsOffTheHour && f.name == "project only" {
+				continue
+			}
+			t.Run(fmt.Sprintf("%s, %s", r.name, f.name), func(t *testing.T) {
 				t.Parallel()
 
-				scope := overviewScope(projectID, r[0], r[1])
+				scope := overviewScope(projectID, r.start, r.end)
 				f.apply(&scope)
 
 				raw := readOverview(t, ctx, ti.chClient, scope, true, false)
 				summary := readOverview(t, ctx, ti.chClient, scope, true, true)
 
+				require.Equal(t, repo.OverviewSourceToolCallSummaries, summary.Source)
+				require.NotEqual(t, repo.OverviewSourceToolCallSummaries, raw.Source)
 				require.Positive(t, raw.Summary.TotalToolCalls, "fixture must cover this scope")
 				require.Positive(t, raw.Comparison.TotalToolCalls, "fixture must cover the previous period")
 				requireSameToolCallSummary(t, raw.Summary, summary.Summary)
@@ -278,6 +293,22 @@ func TestGetObservabilityOverview_ToolCallSummariesMatchRawLogs(t *testing.T) {
 				requireSameTools(t, raw.TopToolsByFailureRate, summary.TopToolsByFailureRate)
 			})
 		}
+		t.Run(r.name+", without time series", func(t *testing.T) {
+			t.Parallel()
+
+			scope := overviewScope(projectID, r.start, r.end)
+			scope.MCPServerID = mcpA
+			raw := readOverviewWithSeries(t, ctx, ti.chClient, scope, true, false, false)
+			summary := readOverviewWithSeries(t, ctx, ti.chClient, scope, true, true, false)
+
+			require.Equal(t, repo.OverviewSourceToolCallSummaries, summary.Source)
+			require.Empty(t, summary.TimeSeries)
+			require.Positive(t, raw.Summary.TotalToolCalls)
+			requireSameToolCallSummary(t, raw.Summary, summary.Summary)
+			requireSameToolCallSummary(t, raw.Comparison, summary.Comparison)
+			requireSameTools(t, raw.TopToolsByCount, summary.TopToolsByCount)
+			requireSameTools(t, raw.TopToolsByFailureRate, summary.TopToolsByFailureRate)
+		})
 	}
 }
 
@@ -298,8 +329,7 @@ func TestGetObservabilityOverview_ToolCallSummariesSnapUnalignedRange(t *testing
 		return overviewLog{at: ts, gramURN: "tools:http:a:one", attributes: map[string]any{"http.response.status_code": 200}}
 	}
 	insertOverviewLogs(t, ctx, ti.chConn, projectID, []overviewLog{
-		// Current period: the bucket at 10:00 is in, though 10:02 is before
-		// TimeStart, and so is the bucket at 16:00, though 16:10 is after TimeEnd.
+		// Current period: buckets 10:00 through 16:00.
 		call(at(10, 2)),
 		call(at(12, 0)),
 		call(at(16, 10)),
@@ -325,9 +355,7 @@ func TestGetObservabilityOverview_ToolCallSummariesSnapUnalignedRange(t *testing
 	require.Equal(t, at(16, 0).UnixNano(), got.TimeSeries[len(got.TimeSeries)-1].BucketTimeUnixNano)
 }
 
-// Rows here are in only one table each: two calls in telemetry_logs before the
-// view's cutoff, five calls inserted into mcp_tool_call_summaries. The total
-// tells which path ran.
+// Each table holds different calls (raw 2, summary 5), so the total shows which path ran.
 func TestGetObservabilityOverview_ToolCallSummariesPathSelection(t *testing.T) {
 	t.Parallel()
 
@@ -443,8 +471,7 @@ func TestGetObservabilityOverview_ToolCallSummariesPathSelection(t *testing.T) {
 	}
 }
 
-// tool_calls_only zeroes every chat, token, cost and session figure on both
-// paths, and leaves them alone when false.
+// tool_calls_only zeroes every non-tool figure on both paths.
 func TestGetObservabilityOverview_ToolCallsOnlyZeroesOtherFigures(t *testing.T) {
 	t.Parallel()
 
