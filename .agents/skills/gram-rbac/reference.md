@@ -180,7 +180,7 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
    </RequireScope>
    ```
 
-   Build every check with a constructor from `lib/authz.gen.ts` (`import * as authz from "@/lib/authz.gen"`). Each is the Go ref of the same name with the same required arguments, so a check cannot leave out the project or the resource the server checks. Older code still passes `scope`, `resourceId` and `projectId`; move a gate to `check` when you touch it.
+   Build every check with a constructor from `lib/authz.gen.ts` (`import * as authz from "@/lib/authz.gen"`). Each is the Go ref of the same name with the same required arguments, so a check cannot leave out the project or the resource the server checks. Older code still passes `scope`, `resourceId` and `projectId`; move a gate to `check` when you touch it. Kinds whose Go refs are hand-written (`mcp_auth_client`, `risk_policy`, `inference`) have no constructor yet, so their gates keep `scope` with `projectId`.
 
 2. **Several checks.** Pass an array and set `all` to switch between OR (default) and AND logic: `<RequireScope check={[authz.org(orgId).read(), authz.org(orgId).admin()]} level="page">`.
 
