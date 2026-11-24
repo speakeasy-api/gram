@@ -36,6 +36,15 @@ export const SIGN_IN_STEPS: readonly StepGroup[] = [
 /** Signing in to Speakeasy, or connecting to the service behind a server. */
 export type ProblemPart = "speakeasy" | "service";
 
+/** Who has to fix a suspected problem; person when each person fixes it themselves. */
+export type WhoFixes =
+  | "person"
+  | "admin"
+  | "provider"
+  | "app"
+  | "speakeasy"
+  | "nobody";
+
 /** The party that returned a failure. */
 export type Source =
   | "service"
@@ -271,6 +280,7 @@ export interface SuspectedProblem {
   rule: ProblemRule;
   /** Whether the failures are signing in to Speakeasy or connecting to the service. */
   part: ProblemPart;
+  whoFixes: WhoFixes;
   /** Opens Connection Logs with exactly this item's rows. */
   filters: { from: string } & AttemptFilters;
 }

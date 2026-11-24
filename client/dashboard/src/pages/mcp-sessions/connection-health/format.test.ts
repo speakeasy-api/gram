@@ -2,12 +2,56 @@ import { describe, expect, it } from "vitest";
 import {
   appKeyLabel,
   axisLabels,
+  formatAt,
   formatSessionLength,
   formatWeekdayDay,
   nowPosition,
   problemRule,
+  sourceSentence,
   stepResultLabel,
 } from "./format";
+
+describe("sourceSentence", () => {
+  it("says who returned the failures in a plain sentence", () => {
+    expect(sourceSentence("speakeasy_setting")).toBe(
+      "A setting in Speakeasy caused these failures.",
+    );
+    expect(sourceSentence("service", "mcp.linear.app")).toBe(
+      "The service (mcp.linear.app) returned these failures.",
+    );
+    expect(sourceSentence("service")).toBe(
+      "The service returned these failures.",
+    );
+    expect(sourceSentence("app", "Cursor 2.0.1")).toBe(
+      "The app (Cursor 2.0.1) caused these failures.",
+    );
+    expect(sourceSentence("server")).toBe(
+      "The MCP server returned these failures.",
+    );
+    expect(sourceSentence("identity_provider")).toBe(
+      "The identity provider returned these failures.",
+    );
+    expect(sourceSentence("speakeasy")).toBe(
+      "These failures came from Speakeasy itself.",
+    );
+  });
+});
+
+describe("formatAt", () => {
+  const now = new Date(2026, 10, 20, 12, 0);
+
+  it("shows only the time today", () => {
+    expect(formatAt(new Date(2026, 10, 20, 9, 48).toISOString(), now)).toMatch(
+      /^\d{2}:\d{2}$/,
+    );
+  });
+
+  it("adds the date on another day", () => {
+    const earlier = formatAt(new Date(2026, 10, 18, 16, 5).toISOString(), now);
+    expect(earlier).toMatch(/18/);
+    expect(earlier).toMatch(/, \d{2}:\d{2}$/);
+  });
+});
 
 describe("formatSessionLength", () => {
   it("never rounds hours into a day", () => {

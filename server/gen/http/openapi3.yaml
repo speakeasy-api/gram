@@ -124774,7 +124774,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SuspectedProblem'
-                    description: At most 100, most people first.
+                    description: At most 100. Problems someone other than each person fixes come first, then those each person fixes; most people first within each.
                 problems_total:
                     type: integer
                     description: Problems before the cap.
@@ -140602,10 +140602,22 @@ components:
                     type: string
                     description: When its earliest failure ended.
                     format: date-time
+                who_fixes:
+                    description: 'Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.'
+                    enum:
+                        - person
+                        - admin
+                        - provider
+                        - app
+                        - speakeasy
+                        - nobody
+                    type: string
+                    x-speakeasy-name-override: SuspectedProblemWhoFixes
             required:
                 - id
                 - rule
                 - part
+                - who_fixes
                 - scope
                 - since
                 - last_failed_at
@@ -140724,6 +140736,17 @@ components:
                         - speakeasy
                     type: string
                     x-speakeasy-name-override: ConnectionFailureSource
+                who_fixes:
+                    description: 'Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.'
+                    enum:
+                        - person
+                        - admin
+                        - provider
+                        - app
+                        - speakeasy
+                        - nobody
+                    type: string
+                    x-speakeasy-name-override: SuspectedProblemWhoFixes
             required:
                 - failed_per_10_minutes
                 - other_failures_on_service
@@ -140737,6 +140760,7 @@ components:
                 - id
                 - rule
                 - part
+                - who_fixes
                 - scope
                 - since
                 - last_failed_at

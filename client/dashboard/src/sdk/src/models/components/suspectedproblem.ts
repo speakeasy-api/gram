@@ -48,6 +48,24 @@ export type SuspectedProblemSuspectedProblemRule = OpenEnum<
   typeof SuspectedProblemSuspectedProblemRule
 >;
 
+/**
+ * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+ */
+export const SuspectedProblemSuspectedProblemWhoFixes = {
+  Person: "person",
+  Admin: "admin",
+  Provider: "provider",
+  App: "app",
+  Speakeasy: "speakeasy",
+  Nobody: "nobody",
+} as const;
+/**
+ * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+ */
+export type SuspectedProblemSuspectedProblemWhoFixes = OpenEnum<
+  typeof SuspectedProblemSuspectedProblemWhoFixes
+>;
+
 export type SuspectedProblem = {
   /**
    * What the data establishes about it, in plain words.
@@ -84,6 +102,10 @@ export type SuspectedProblem = {
    * When its earliest failure ended.
    */
   since: Date;
+  /**
+   * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+   */
+  suspectedProblemWhoFixes: SuspectedProblemSuspectedProblemWhoFixes;
 };
 
 /** @internal */
@@ -97,6 +119,11 @@ export const SuspectedProblemSuspectedProblemRule$inboundSchema: z.ZodMiniType<
   SuspectedProblemSuspectedProblemRule,
   unknown
 > = openEnums.inboundSchema(SuspectedProblemSuspectedProblemRule);
+
+/** @internal */
+export const SuspectedProblemSuspectedProblemWhoFixes$inboundSchema:
+  z.ZodMiniType<SuspectedProblemSuspectedProblemWhoFixes, unknown> = openEnums
+    .inboundSchema(SuspectedProblemSuspectedProblemWhoFixes);
 
 /** @internal */
 export const SuspectedProblem$inboundSchema: z.ZodMiniType<
@@ -121,6 +148,7 @@ export const SuspectedProblem$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    who_fixes: SuspectedProblemSuspectedProblemWhoFixes$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -129,6 +157,7 @@ export const SuspectedProblem$inboundSchema: z.ZodMiniType<
       "people_count": "peopleCount",
       "people_on_server_count": "peopleOnServerCount",
       "rule": "suspectedProblemRule",
+      "who_fixes": "suspectedProblemWhoFixes",
     });
   }),
 );

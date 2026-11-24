@@ -189,7 +189,8 @@ type ListSuspectedProblemsResponseBody struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled *bool   `form:"logging_enabled,omitempty" json:"logging_enabled,omitempty" xml:"logging_enabled,omitempty"`
 	ViewerScope    *string `form:"viewer_scope,omitempty" json:"viewer_scope,omitempty" xml:"viewer_scope,omitempty"`
-	// At most 100, most people first.
+	// At most 100. Problems someone other than each person fixes come first, then
+	// those each person fixes; most people first within each.
 	Problems []*SuspectedProblemResponseBody `form:"problems,omitempty" json:"problems,omitempty" xml:"problems,omitempty"`
 	// Problems before the cap.
 	ProblemsTotal *int64 `form:"problems_total,omitempty" json:"problems_total,omitempty" xml:"problems_total,omitempty"`
@@ -1924,10 +1925,11 @@ type ConnectionDeniedClientResponseBody struct {
 type SuspectedProblemResponseBody struct {
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
-	ID    *string                            `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	Rule  *string                            `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
-	Part  *string                            `form:"part,omitempty" json:"part,omitempty" xml:"part,omitempty"`
-	Scope *SuspectedProblemScopeResponseBody `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	ID       *string                            `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Rule     *string                            `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+	Part     *string                            `form:"part,omitempty" json:"part,omitempty" xml:"part,omitempty"`
+	WhoFixes *string                            `form:"who_fixes,omitempty" json:"who_fixes,omitempty" xml:"who_fixes,omitempty"`
+	Scope    *SuspectedProblemScopeResponseBody `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// When its earliest failure ended.
 	Since        *string `form:"since,omitempty" json:"since,omitempty" xml:"since,omitempty"`
 	LastFailedAt *string `form:"last_failed_at,omitempty" json:"last_failed_at,omitempty" xml:"last_failed_at,omitempty"`
@@ -2006,10 +2008,11 @@ type SuspectedProblemDetailResponseBody struct {
 	CountsWidened *bool `form:"counts_widened,omitempty" json:"counts_widened,omitempty" xml:"counts_widened,omitempty"`
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
-	ID    *string                            `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	Rule  *string                            `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
-	Part  *string                            `form:"part,omitempty" json:"part,omitempty" xml:"part,omitempty"`
-	Scope *SuspectedProblemScopeResponseBody `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	ID       *string                            `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Rule     *string                            `form:"rule,omitempty" json:"rule,omitempty" xml:"rule,omitempty"`
+	Part     *string                            `form:"part,omitempty" json:"part,omitempty" xml:"part,omitempty"`
+	WhoFixes *string                            `form:"who_fixes,omitempty" json:"who_fixes,omitempty" xml:"who_fixes,omitempty"`
+	Scope    *SuspectedProblemScopeResponseBody `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// When its earliest failure ended.
 	Since        *string `form:"since,omitempty" json:"since,omitempty" xml:"since,omitempty"`
 	LastFailedAt *string `form:"last_failed_at,omitempty" json:"last_failed_at,omitempty" xml:"last_failed_at,omitempty"`
@@ -6206,6 +6209,9 @@ func ValidateSuspectedProblemResponseBody(body *SuspectedProblemResponseBody) (e
 	if body.Part == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("part", "body"))
 	}
+	if body.WhoFixes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("who_fixes", "body"))
+	}
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
@@ -6235,6 +6241,11 @@ func ValidateSuspectedProblemResponseBody(body *SuspectedProblemResponseBody) (e
 	if body.Part != nil {
 		if !(*body.Part == "speakeasy" || *body.Part == "service") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.part", *body.Part, []any{"speakeasy", "service"}))
+		}
+	}
+	if body.WhoFixes != nil {
+		if !(*body.WhoFixes == "person" || *body.WhoFixes == "admin" || *body.WhoFixes == "provider" || *body.WhoFixes == "app" || *body.WhoFixes == "speakeasy" || *body.WhoFixes == "nobody") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.who_fixes", *body.WhoFixes, []any{"person", "admin", "provider", "app", "speakeasy", "nobody"}))
 		}
 	}
 	if body.Scope != nil {
@@ -6367,6 +6378,9 @@ func ValidateSuspectedProblemDetailResponseBody(body *SuspectedProblemDetailResp
 	if body.Part == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("part", "body"))
 	}
+	if body.WhoFixes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("who_fixes", "body"))
+	}
 	if body.Scope == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
@@ -6435,6 +6449,11 @@ func ValidateSuspectedProblemDetailResponseBody(body *SuspectedProblemDetailResp
 	if body.Part != nil {
 		if !(*body.Part == "speakeasy" || *body.Part == "service") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.part", *body.Part, []any{"speakeasy", "service"}))
+		}
+	}
+	if body.WhoFixes != nil {
+		if !(*body.WhoFixes == "person" || *body.WhoFixes == "admin" || *body.WhoFixes == "provider" || *body.WhoFixes == "app" || *body.WhoFixes == "speakeasy" || *body.WhoFixes == "nobody") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.who_fixes", *body.WhoFixes, []any{"person", "admin", "provider", "app", "speakeasy", "nobody"}))
 		}
 	}
 	if body.Scope != nil {

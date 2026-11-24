@@ -54,6 +54,7 @@ const PROBLEM: SuspectedProblem = {
   scope: { kind: "server", id: "srv_1", name: "Linear" },
   rule: "same_server",
   part: "service",
+  whoFixes: "admin",
   filters: {
     from: "2026-11-20T09:45:00Z",
     outcomes: ["failed"],
@@ -386,6 +387,45 @@ describe("ProblemDetailSheet", () => {
     expect(
       screen.getByText(/Failed attempts in the last 24 hours/),
     ).toBeTruthy();
+  });
+
+  it("says in a sentence where the failures came from", () => {
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: { ...DETAIL, source: "speakeasy_setting" },
+      },
+    };
+    renderSheet();
+    expect(
+      screen.getByText("A setting in Speakeasy caused these failures."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/a speakeasy setting/)).toBeNull();
+  });
+
+  it("dates a person's first failure from another day", () => {
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: {
+          ...DETAIL,
+          people: [
+            { ...person("old"), firstFailedAt: "2026-11-18T10:00:00Z" },
+            person("new"),
+          ],
+        },
+      },
+    };
+    renderSheet();
+    const started = screen
+      .getAllByText(/^started /)
+      .map((el) => el.textContent);
+    expect(started[0]).toMatch(/^started .*18.*, \d{2}:\d{2}$/);
+    expect(started[1]).toMatch(/^started \d{2}:\d{2}$/);
   });
 
   it("says the counts are wider when the filters had to be", () => {

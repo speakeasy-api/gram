@@ -269,9 +269,28 @@ func (s *Service) GetSuspectedProblem(ctx context.Context, payload *gen.GetSuspe
 	return result, nil
 }
 
-// capProblems keeps the first maxProblems, already sorted most people first, and counts them all.
+// capProblems puts the problems each person fixes themselves after the rest, keeping the
+// grouping's order inside each, then keeps the first maxProblems and counts them all.
 func capProblems(ps []problems.Problem) ([]problems.Problem, int64) {
+	slices.SortStableFunc(ps, func(a, b problems.Problem) int {
+		return cmp.Compare(personFixes(a), personFixes(b))
+	})
 	return ps[:min(len(ps), maxProblems)], int64(len(ps))
+}
+
+func personFixes(p problems.Problem) int {
+	if p.WhoFixes == mcpconnectionattempts.WhoPerson {
+		return 1
+	}
+	return 0
+}
+
+// whoFixesOf is the API's name for who fixes a problem.
+func whoFixesOf(w mcpconnectionattempts.WhoFixes) gen.SuspectedProblemWhoFixes {
+	if w == mcpconnectionattempts.WhoNobody {
+		return "nobody"
+	}
+	return gen.SuspectedProblemWhoFixes(w)
 }
 
 func later(a, b time.Time) time.Time {
@@ -309,6 +328,7 @@ func problemView(n names, p problems.Problem, serverID string) (*gen.SuspectedPr
 		ID:                  p.ID,
 		Rule:                gen.SuspectedProblemRule(p.Rule),
 		Part:                partOf(p.Part),
+		WhoFixes:            whoFixesOf(p.WhoFixes),
 		Scope:               scope,
 		Since:               formatTime(p.Since),
 		LastFailedAt:        formatTime(p.LastFailedAt),
@@ -541,6 +561,7 @@ func detailView(n names, p problems.Problem, view *gen.SuspectedProblem, widened
 		ID:                     view.ID,
 		Rule:                   view.Rule,
 		Part:                   view.Part,
+		WhoFixes:               view.WhoFixes,
 		Scope:                  view.Scope,
 		Since:                  view.Since,
 		LastFailedAt:           view.LastFailedAt,

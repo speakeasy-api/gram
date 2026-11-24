@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
@@ -38,6 +39,12 @@ func TestProblemText_EachRule(t *testing.T) {
 		meaning, _ := mcpconnectionattempts.MeaningOf(code.String())
 		return meaning.WhatHappenedForAdmin
 	}
+	token := func(subject string, server uuid.UUID, reason mcpconnectionattempts.Code) mcpconnectionattempts.FailingPerson {
+		e := ep(subject, server, mcpconnectionattempts.PartAppSignIn, reason)
+		e.Step = mcpconnectionattempts.StepInboundToken.String()
+		return e
+	}
+	notConnected := mcpconnectionattempts.CodeInvalidRemoteSession
 	app := problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.1.4"}
 	signIn, service, server := mcpconnectionattempts.PartAppSignIn, mcpconnectionattempts.PartServiceSignIn, mcpconnectionattempts.PartServer
 	cases := []struct {
@@ -152,6 +159,64 @@ func TestProblemText_EachRule(t *testing.T) {
 			headline: "Dana Reyes can't connect to Linear",
 			fact:     "On Linear. Requests with the saved sign-in for the service are failing.",
 		},
+		{
+			name: "same server where nobody has connected their account",
+			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 7,
+				Episodes:  []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), token("user:b", linear, notConnected)},
+				SharedApp: app, OtherAppsWorked: true},
+			headline: "7 people need to connect their account for Linear",
+			fact:     "Their apps asked for Linear, but each person has to connect their own account for it first, or reconnect if it expired. They can do that from the server's connect page. All use Claude Code 2.1.4.",
+		},
+		{
+			name: "one person who has not connected their account",
+			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 1,
+				Episodes: []mcpconnectionattempts.FailingPerson{token("user:dana", linear, notConnected)}},
+			headline: "Dana Reyes needs to connect their account for Linear",
+			fact:     "Their app asked for Linear, but they have to connect their own account for it first, or reconnect if it expired. They can do that from the server's connect page.",
+		},
+		{
+			name: "one person who has not connected their account on two servers",
+			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 1,
+				Episodes: []mcpconnectionattempts.FailingPerson{token("user:dana", linear, notConnected), token("user:dana", github, notConnected)}},
+			headline: "Dana Reyes needs to connect their account for 2 MCP servers",
+			fact:     "Their app asked for Linear and GitHub, but they have to connect their own account for each server first, or reconnect if it expired. They can do that from each server's connect page.",
+		},
+		{
+			name: "same service where nobody has connected their account",
+			problem: problems.Problem{Rule: problems.RuleSameService, Scope: problems.Scope{Kind: problems.ScopeService, Key: "mcp.linear.app"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), token("user:b", github, notConnected)}},
+			headline: "2 people need to connect their account for mcp.linear.app",
+			fact:     "Their apps asked for Linear and GitHub, but each person has to connect their own account for each server first, or reconnect if it expired. They can do that from each server's connect page.",
+		},
+		{
+			name: "same app version where nobody has connected their account",
+			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
+				Episodes:  []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), token("user:b", linear, notConnected)},
+				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}},
+			headline: "2 people on Claude Code 2.0.1 need to connect their account",
+			fact:     "Their apps asked for Linear, but each person has to connect their own account for it first, or reconnect if it expired. They can do that from the server's connect page.",
+		},
+		{
+			name: "some people have not connected their account and others must sign in again",
+			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{token("user:a", linear, notConnected), ep("user:b", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken)}},
+			headline: "2 people can't sign in to Linear",
+			fact:     "The app's sign-in to Speakeasy fails.",
+		},
+		{
+			name: "no usable connection recorded off the token step",
+			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoPerson, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:a", linear, signIn, notConnected), ep("user:b", linear, signIn, notConnected)}},
+			headline: "2 people can't sign in to Linear",
+			fact:     "The app's sign-in to Speakeasy fails. " + admin(notConnected),
+		},
+		{
+			name: "sign-in not set up on the token step",
+			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: signIn, WhoFixes: mcpconnectionattempts.WhoAdmin, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{token("user:a", linear, mcpconnectionattempts.CodeUpstreamSignInNotSetUp), token("user:b", linear, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)}},
+			headline: "2 people can't sign in to Linear",
+			fact:     "The app's sign-in to Speakeasy fails. " + admin(mcpconnectionattempts.CodeUpstreamSignInNotSetUp),
+		},
 	}
 	cases = append(cases, struct {
 		name     string
@@ -194,6 +259,9 @@ func TestProblemText_EachRule(t *testing.T) {
 				require.NotContains(t, view.Fact, second, "the fact line never speaks to the person")
 			}
 			require.NotContains(t, view.Fact, "not accepted")
+			if needsOwnConnection(tc.problem) {
+				require.NotContains(t, view.Headline, "can't sign in", "a person who has not connected their account is not failing to sign in")
+			}
 			if allSavedCredential(tc.problem) {
 				require.NotContains(t, view.Fact, "Signing in", "nobody signs in with a saved key")
 			}
@@ -211,6 +279,47 @@ func TestCapProblems_KeepsTheFirstHundred(t *testing.T) {
 	require.Len(t, shown, maxProblems)
 	require.Equal(t, int64(maxProblems+1), total)
 	require.Equal(t, "0", shown[0].ID, "the most people first stay")
+}
+
+func TestCapProblems_PutsWhatEachPersonFixesLast(t *testing.T) {
+	t.Parallel()
+	all := []problems.Problem{
+		{ID: "person-7", WhoFixes: mcpconnectionattempts.WhoPerson, People: 7},
+		{ID: "admin-3", WhoFixes: mcpconnectionattempts.WhoAdmin, People: 3},
+		{ID: "person-2", WhoFixes: mcpconnectionattempts.WhoPerson, People: 2},
+		{ID: "provider-2", WhoFixes: mcpconnectionattempts.WhoProvider, People: 2},
+		{ID: "speakeasy-1", WhoFixes: mcpconnectionattempts.WhoSpeakeasy, People: 1},
+		{ID: "unknown-1", WhoFixes: mcpconnectionattempts.WhoNobody, People: 1},
+	}
+	shown, total := capProblems(all)
+	require.Equal(t, int64(6), total)
+	ids := make([]string, len(shown))
+	for i, p := range shown {
+		ids[i] = p.ID
+	}
+	require.Equal(t, []string{"admin-3", "provider-2", "speakeasy-1", "unknown-1", "person-7", "person-2"}, ids, "the grouping's order stays inside each group")
+}
+
+func TestCapProblems_CapsAfterOrdering(t *testing.T) {
+	t.Parallel()
+	all := make([]problems.Problem, maxProblems+1)
+	for i := range all {
+		all[i].ID, all[i].WhoFixes = strconv.Itoa(i), mcpconnectionattempts.WhoPerson
+	}
+	all[maxProblems].WhoFixes = mcpconnectionattempts.WhoAdmin
+	shown, total := capProblems(all)
+	require.Len(t, shown, maxProblems)
+	require.Equal(t, int64(maxProblems+1), total)
+	require.Equal(t, strconv.Itoa(maxProblems), shown[0].ID, "an admin's problem past the cap is listed first")
+	require.Equal(t, strconv.Itoa(maxProblems-2), shown[maxProblems-1].ID, "the last person's problem is cut")
+}
+
+func TestWhoFixesOf_NamesEveryParty(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, gen.SuspectedProblemWhoFixes("nobody"), whoFixesOf(mcpconnectionattempts.WhoNobody))
+	for _, w := range []mcpconnectionattempts.WhoFixes{mcpconnectionattempts.WhoPerson, mcpconnectionattempts.WhoAdmin, mcpconnectionattempts.WhoProvider, mcpconnectionattempts.WhoApp, mcpconnectionattempts.WhoSpeakeasy} {
+		require.Equal(t, gen.SuspectedProblemWhoFixes(w), whoFixesOf(w))
+	}
 }
 
 func TestPastDeadline_IsTemporarilyUnavailableButKeepsRefusals(t *testing.T) {

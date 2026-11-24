@@ -20,6 +20,14 @@ var headlines = map[problems.Rule][2]string{
 	problems.RuleOnePerson:      {"{scope} can't sign in{place}", "{scope} can't connect{place}"},
 }
 
+// connectHeadlines are the headline per rule when every person has to connect their own account first.
+var connectHeadlines = map[problems.Rule]string{
+	problems.RuleSameServer:     "{people} need to connect their account for {scope}",
+	problems.RuleSameService:    "{people} need to connect their account for {scope}",
+	problems.RuleSameAppVersion: "{people} on {scope} need to connect their account",
+	problems.RuleOnePerson:      "{scope} needs to connect their account{place}",
+}
+
 // The fact sentences. Each states only what the episodes establish.
 const (
 	factOn            = "On {servers}."
@@ -33,6 +41,11 @@ const (
 	factOtherApp      = "Another app worked on {server} in this time."
 	factOtherAppSome  = "Another app worked on at least one of {servers} in this time."
 	factOtherAppEach  = "Another app worked on each of {servers} in this time."
+
+	factConnect        = "Their apps asked for {servers}, but each person has to connect their own account for it first, or reconnect if it expired. They can do that from the server's connect page."
+	factConnectOne     = "Their app asked for {servers}, but they have to connect their own account for it first, or reconnect if it expired. They can do that from the server's connect page."
+	factConnectEach    = "Their apps asked for {servers}, but each person has to connect their own account for each server first, or reconnect if it expired. They can do that from each server's connect page."
+	factConnectOneEach = "Their app asked for {servers}, but they have to connect their own account for each server first, or reconnect if it expired. They can do that from each server's connect page."
 )
 
 // savedCredentialReasons fail a saved key or shared credential: nobody signs in.
@@ -48,33 +61,57 @@ func fill(template string, values ...string) string {
 
 // headlinePlace names where one person fails: " to Linear", " to 3 MCP servers", or nothing when no server was reached.
 const (
-	headlineToServer  = " to {server}"
-	headlineToServers = " to {count} MCP servers"
+	headlineToServer   = " to {server}"
+	headlineToServers  = " to {count} MCP servers"
+	headlineForServer  = " for {server}"
+	headlineForServers = " for {count} MCP servers"
 )
+
+// needsOwnConnection reports that every person's app was refused a session on the
+// token step because their own account for the server is not connected or expired.
+// On that step the reason is recorded only for that cause.
+func needsOwnConnection(p problems.Problem) bool {
+	if p.Part != mcpconnectionattempts.PartAppSignIn || len(p.Episodes) == 0 {
+		return false
+	}
+	for _, e := range p.Episodes {
+		if e.Step != mcpconnectionattempts.StepInboundToken.String() || e.Reason != mcpconnectionattempts.CodeInvalidRemoteSession.String() || !e.OnMCPServer() {
+			return false
+		}
+	}
+	return true
+}
 
 func headline(n names, p problems.Problem, scope string) string {
 	part := 1
 	if p.Part == mcpconnectionattempts.PartAppSignIn {
 		part = 0
 	}
+	template, toServer, toServers := headlines[p.Rule][part], headlineToServer, headlineToServers
+	if needsOwnConnection(p) {
+		template, toServer, toServers = connectHeadlines[p.Rule], headlineForServer, headlineForServers
+	}
 	place := ""
 	if p.Rule == problems.RuleOnePerson {
 		switch places := namedPlaces(p); {
 		case reachedServers(p) > 1:
-			place = fill(headlineToServers, "{count}", strconv.Itoa(reachedServers(p)))
+			place = fill(toServers, "{count}", strconv.Itoa(reachedServers(p)))
 		case len(places) == 1:
 			name := episodeServerName(n, places[0])
 			if name == "" {
 				name = "an MCP server"
 			}
-			place = fill(headlineToServer, "{server}", name)
+			place = fill(toServer, "{server}", name)
 		}
 	}
-	return fill(headlines[p.Rule][part], "{people}", fmt.Sprintf("%d people", p.People), "{scope}", scope, "{place}", place)
+	return fill(template, "{people}", fmt.Sprintf("%d people", p.People), "{scope}", scope, "{place}", place)
 }
 
 // fact states what failed in plain words, using the catalog's own sentences.
 func fact(n names, p problems.Problem) string {
+	if needsOwnConnection(p) {
+		return strings.Join(append([]string{connectFact(n, p)}, sharedAppFact(p)...), " ")
+	}
 	var out []string
 	servers := problemServers(p)
 	// Whether the headline or the fact has named the server or servers.
@@ -132,14 +169,7 @@ func fact(n names, p problems.Problem) string {
 	if adminSentence != "" {
 		out = append(out, adminSentence)
 	}
-	if p.SharedApp.Family != "" && p.Rule != problems.RuleSameAppVersion {
-		app := attemptlog.AppName(p.SharedApp.Family) + " " + p.SharedApp.Version
-		if p.People == 1 {
-			out = append(out, fill(factUses, "{app}", app))
-		} else {
-			out = append(out, fill(factAllUse, "{app}", app))
-		}
-	}
+	out = append(out, sharedAppFact(p)...)
 	if p.OtherAppsWorked {
 		switch {
 		// An app version's servers each have another app working; its people on no server are not about a server.
@@ -154,6 +184,32 @@ func fact(n names, p problems.Problem) string {
 		}
 	}
 	return strings.Join(out, " ")
+}
+
+// connectFact says each person has to connect their own account for the servers their app asked for.
+func connectFact(n names, p problems.Problem) string {
+	template := factConnect
+	switch one, each := p.People == 1, reachedServers(p) > 1; {
+	case one && each:
+		template = factConnectOneEach
+	case one:
+		template = factConnectOne
+	case each:
+		template = factConnectEach
+	}
+	return fill(template, "{servers}", serversPhrase(n, p))
+}
+
+// sharedAppFact names the app every person uses, when the headline does not.
+func sharedAppFact(p problems.Problem) []string {
+	if p.SharedApp.Family == "" || p.Rule == problems.RuleSameAppVersion {
+		return nil
+	}
+	app := attemptlog.AppName(p.SharedApp.Family) + " " + p.SharedApp.Version
+	if p.People == 1 {
+		return []string{fill(factUses, "{app}", app)}
+	}
+	return []string{fill(factAllUse, "{app}", app)}
 }
 
 func hostOf(key string) string {

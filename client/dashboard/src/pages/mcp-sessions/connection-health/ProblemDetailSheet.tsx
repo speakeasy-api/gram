@@ -23,6 +23,7 @@ import { logsSearch } from "./filters";
 import {
   appLabel,
   axisLabels,
+  formatAt,
   formatClockMinutes,
   formatCount,
   formatDuration,
@@ -31,6 +32,7 @@ import {
   problemRule,
   serverLabel,
   SOURCE_LABELS,
+  sourceSentence,
 } from "./format";
 import type { SuspectedProblemDetail } from "./types";
 
@@ -213,7 +215,7 @@ function ProblemBody({
         </SheetTitle>
         <SheetDescription>
           Since {sinceLabel} · latest failure{" "}
-          {formatClockMinutes(problem.lastFailedAt)} ·{" "}
+          {formatAt(problem.lastFailedAt, now)} ·{" "}
           {formatDuration(
             Date.parse(problem.lastFailedAt) - Date.parse(problem.since),
           )}
@@ -237,9 +239,7 @@ function ProblemBody({
           <p className="text-muted-foreground">Rule: {problemRule(problem)}</p>
           {problem.source ? (
             <p className="text-muted-foreground">
-              The failures came from{" "}
-              {SOURCE_LABELS[problem.source].toLowerCase()}
-              {sourceName(problem) ? ` (${sourceName(problem)})` : ""}.
+              {sourceSentence(problem.source, sourceName(problem))}
             </p>
           ) : null}
           <p className="text-muted-foreground">
@@ -299,7 +299,7 @@ function ProblemBody({
                 </div>
                 <span className="text-destructive text-xs">
                   {p.attempts > 1 ? "started" : "at"}{" "}
-                  {formatClockMinutes(p.firstFailedAt)}
+                  {formatAt(p.firstFailedAt, now)}
                 </span>
                 <span className="text-right text-sm">{p.attempts}</span>
               </PersonRow>

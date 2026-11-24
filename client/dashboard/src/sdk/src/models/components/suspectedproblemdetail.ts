@@ -78,6 +78,24 @@ export type SuspectedProblemDetailConnectionFailureSource = OpenEnum<
   typeof SuspectedProblemDetailConnectionFailureSource
 >;
 
+/**
+ * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+ */
+export const SuspectedProblemWhoFixes = {
+  Person: "person",
+  Admin: "admin",
+  Provider: "provider",
+  App: "app",
+  Speakeasy: "speakeasy",
+  Nobody: "nobody",
+} as const;
+/**
+ * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+ */
+export type SuspectedProblemWhoFixes = OpenEnum<
+  typeof SuspectedProblemWhoFixes
+>;
+
 export type SuspectedProblemDetail = {
   /**
    * When the problem was read: the end of the chart, the message counts and the Connection Logs links.
@@ -157,6 +175,10 @@ export type SuspectedProblemDetail = {
   connectionFailureSource?:
     | SuspectedProblemDetailConnectionFailureSource
     | undefined;
+  /**
+   * Who has to act: person when each person fixes it themselves; admin, provider, app or speakeasy when someone else must; nobody when it is not known.
+   */
+  suspectedProblemWhoFixes: SuspectedProblemWhoFixes;
 };
 
 /** @internal */
@@ -175,6 +197,12 @@ export const SuspectedProblemRule$inboundSchema: z.ZodMiniType<
 export const SuspectedProblemDetailConnectionFailureSource$inboundSchema:
   z.ZodMiniType<SuspectedProblemDetailConnectionFailureSource, unknown> =
     openEnums.inboundSchema(SuspectedProblemDetailConnectionFailureSource);
+
+/** @internal */
+export const SuspectedProblemWhoFixes$inboundSchema: z.ZodMiniType<
+  SuspectedProblemWhoFixes,
+  unknown
+> = openEnums.inboundSchema(SuspectedProblemWhoFixes);
 
 /** @internal */
 export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
@@ -217,6 +245,7 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
     source: z.optional(
       SuspectedProblemDetailConnectionFailureSource$inboundSchema,
     ),
+    who_fixes: SuspectedProblemWhoFixes$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -233,6 +262,7 @@ export const SuspectedProblemDetail$inboundSchema: z.ZodMiniType<
       "rule": "suspectedProblemRule",
       "servers_total": "serversTotal",
       "source": "connectionFailureSource",
+      "who_fixes": "suspectedProblemWhoFixes",
     });
   }),
 );

@@ -470,7 +470,8 @@ type ListSuspectedProblemsResult struct {
 	// False when the organization has logging off. Nothing else is returned then.
 	LoggingEnabled bool
 	ViewerScope    ConnectionViewerScope
-	// At most 100, most people first.
+	// At most 100. Problems someone other than each person fixes come first, then
+	// those each person fixes; most people first within each.
 	Problems []*SuspectedProblem
 	// Problems before the cap.
 	ProblemsTotal int64
@@ -479,10 +480,11 @@ type ListSuspectedProblemsResult struct {
 type SuspectedProblem struct {
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
-	ID    string
-	Rule  SuspectedProblemRule
-	Part  SuspectedProblemPart
-	Scope *SuspectedProblemScope
+	ID       string
+	Rule     SuspectedProblemRule
+	Part     SuspectedProblemPart
+	WhoFixes SuspectedProblemWhoFixes
+	Scope    *SuspectedProblemScope
 	// When its earliest failure ended.
 	Since        string
 	LastFailedAt string
@@ -528,10 +530,11 @@ type SuspectedProblemDetail struct {
 	CountsWidened bool
 	// Stable for the same kind of failure on the same scope. It can change when
 	// the problem is regrouped.
-	ID    string
-	Rule  SuspectedProblemRule
-	Part  SuspectedProblemPart
-	Scope *SuspectedProblemScope
+	ID       string
+	Rule     SuspectedProblemRule
+	Part     SuspectedProblemPart
+	WhoFixes SuspectedProblemWhoFixes
+	Scope    *SuspectedProblemScope
 	// When its earliest failure ended.
 	Since        string
 	LastFailedAt string
@@ -619,6 +622,11 @@ type SuspectedProblemServer struct {
 	Member   *ConnectionServer
 	Attempts int64
 }
+
+// Who has to act: person when each person fixes it themselves; admin,
+// provider, app or speakeasy when someone else must; nobody when it is not
+// known.
+type SuspectedProblemWhoFixes string
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
 func MakeUnauthorized(err error) *goa.ServiceError {
