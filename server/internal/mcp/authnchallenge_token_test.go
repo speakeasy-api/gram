@@ -154,7 +154,7 @@ func TestHandleTokenCode_AgentAuthorizationUsesIsolatedGrantNamespace(t *testing
 		authz.SelectorKeyResourceID:   fx.target.MCPResourceID.String(),
 		authz.SelectorKeyProjectID:    fx.target.ProjectID.String(),
 	}, policy.Requested[0].Selector)
-	require.True(t, authz.GrantsSatisfy(policy.RuntimeGrants(), authz.MCPCheck(authz.ScopeMCPConnect, fx.target.MCPResourceID.String(), fx.target.ProjectID.String())))
+	require.True(t, authz.GrantsSatisfy(policy.RuntimeGrants(), authz.MCPServer(authz.MCPServerIDOf(fx.target.MCPResourceID), authz.ProjectIDOf(fx.target.ProjectID)).Connect()))
 
 	endpoint := &mcp.ResolvedMcpEndpoint{
 		AudienceURN:         urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(),

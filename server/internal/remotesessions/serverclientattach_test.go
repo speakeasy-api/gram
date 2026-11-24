@@ -356,6 +356,21 @@ func TestAttachServerClientAssociation_NotFound(t *testing.T) {
 	}
 }
 
+func TestServerClientAssociationsRejectNilServerID(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAttachFixture(t)
+	clientID := uuid.New()
+	_, err := f.ti.service.ListServerClientAssociations(ctx, &gen.ListServerClientAssociationsPayload{McpServerID: uuid.Nil.String()})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = f.attach(ctx, uuid.Nil, clientID)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	err = f.ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           uuid.Nil.String(),
+		RemoteSessionClientID: clientID.String(),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestAttachServerClientAssociation_RefusesAnotherTenantsResources(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAttachFixture(t)

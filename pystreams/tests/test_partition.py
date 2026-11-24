@@ -1,0 +1,71 @@
+"""The partition option and its closed set of values.
+
+The set mirrors ``server/internal/partition`` in the Go server. The golden
+values below must change together with ``partition.All`` there, so the two
+services never disagree about which partitions exist.
+"""
+
+import click
+import pytest
+from click.testing import CliRunner
+
+from pystreams import partition
+from pystreams.cmd.flags_service import service_options
+
+
+@pytest.fixture
+def parse(monkeypatch: pytest.MonkeyPatch):
+    """Parse argv/env through a command carrying only the service options.
+
+    Clears any ambient GRAM_PARTITION so a value exported in the shell cannot
+    change the outcome; tests pass the environment they need explicitly.
+    """
+    monkeypatch.delenv("GRAM_PARTITION", raising=False)
+
+    def _parse(args: list[str], env: dict[str, str] | None = None) -> dict:
+        captured: dict = {}
+
+        def _record(**kwargs) -> None:
+            captured.update(kwargs)
+
+        command = click.Command(
+            "probe", params=list(service_options()), callback=_record
+        )
+        CliRunner().invoke(
+            command, args, env=env, standalone_mode=False, catch_exceptions=False
+        )
+        return captured
+
+    return _parse
+
+
+def test_partitions_match_go_server():
+    # Golden values from server/internal/partition (partition.All).
+    assert partition.PARTITIONS == ("us", "eu")
+
+
+def test_partition_is_required(parse):
+    with pytest.raises(click.MissingParameter, match="partition"):
+        parse([])
+
+
+def test_partition_reads_environment_variable(parse):
+    assert parse([], env={"GRAM_PARTITION": "eu"})["partition"] == "eu"
+
+
+def test_empty_partition_environment_variable_is_rejected(parse):
+    # Matches the Go server, which rejects a set-but-empty GRAM_PARTITION.
+    with pytest.raises(click.MissingParameter, match="partition"):
+        parse([], env={"GRAM_PARTITION": ""})
+
+
+def test_explicit_partition_wins_over_empty_environment_variable(parse):
+    # Matches the Go server, where a --partition flag takes precedence over
+    # the environment variable.
+    assert parse(["--partition", "eu"], env={"GRAM_PARTITION": ""})["partition"] == "eu"
+
+
+@pytest.mark.parametrize("bad", ["apac", "US", ""])
+def test_unknown_partition_is_rejected(parse, bad):
+    with pytest.raises(click.UsageError):
+        parse(["--partition", bad])

@@ -149,14 +149,18 @@ func reconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 // records their auth clients. It is for a writer that has just configured those
 // bindings, for which the issuer's one server is the server being configured;
 // any other client on the issuer may be what a deleted server left behind and
-// stays out of it. A nil clientIDs takes every bound client, for a writer moving
-// a server that already signs in through them onto the issuer.
+// stays out of it. An empty clientIDs list is a no-op: a downstream issuer
+// does not prove intent to offer any registration, and some rows exist only
+// to satisfy the principal attachment foreign key.
 //
 // Only upstream auth enforcement needs this: without it Reconcile has already
 // captured them, so it writes nothing. dbtx is either the caller's transaction,
 // whose writer scope must predate its first mutation, or a pool to begin one
 // from.
 func CaptureSoleConsumers(ctx context.Context, dbtx repo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs, clientIDs []uuid.UUID) error {
+	if len(clientIDs) == 0 {
+		return nil
+	}
 	return inTx(ctx, dbtx, func(tx pgx.Tx) error {
 		enforced, err := authenforcement.ReadEnforced(ctx, tx, organizationID)
 		if err != nil {

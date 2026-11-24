@@ -338,7 +338,6 @@ describe("AuthenticationSectionBody", () => {
 });
 
 const standardTargetWithSessionIssuer: AuthTarget = {
-  kind: "standard",
   slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",

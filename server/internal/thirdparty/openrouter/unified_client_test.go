@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
@@ -247,6 +248,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -396,6 +398,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -523,6 +526,7 @@ func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkM
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
@@ -618,6 +622,7 @@ func TestChatClient_GetCompletion_FetchesFallbackUsageWhenInlineCostMissing(t *t
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
@@ -727,6 +732,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -826,6 +832,7 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		captureStrategy,
@@ -907,6 +914,7 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
@@ -988,6 +996,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			client := NewUnifiedClient(
 				testenv.NewLogger(t),
 				guardianPolicy,
+				EndpointsFor(partition.US),
 				provisioner,
 				&PlatformKeyResolver{Provisioner: provisioner},
 				captureStrategy,
@@ -1059,6 +1068,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -1224,6 +1234,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
@@ -1271,6 +1282,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
@@ -1336,6 +1348,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
@@ -1465,6 +1478,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -1581,6 +1595,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		provisioner,
 		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
@@ -1712,6 +1727,7 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
@@ -1770,6 +1786,7 @@ func TestChatClient_GetCompletion_AttributionFields(t *testing.T) {
 	client := NewUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
+		EndpointsFor(partition.US),
 		&mockProvisioner{apiKey: "test-api-key"},
 		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
@@ -1939,6 +1956,7 @@ func TestChatClient_GetCompletion_ForwardsMaxTokens(t *testing.T) {
 			client := NewUnifiedClient(
 				testenv.NewLogger(t),
 				guardianPolicy,
+				EndpointsFor(partition.US),
 				provisioner,
 				&PlatformKeyResolver{Provisioner: provisioner},
 				&mockMessageCaptureStrategy{},

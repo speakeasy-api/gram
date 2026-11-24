@@ -332,7 +332,7 @@ func (s *Service) keyScopes(ctx context.Context, orgID, keyScope string) ([]stri
 	case "", keyScopeAgentUser:
 		return []string{auth.APIKeyScopeAgentUser.String()}, nil
 	case keyScopeProducer:
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: orgID, Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(orgID)).Admin()); err != nil {
 			return nil, err
 		}
 		return []string{auth.APIKeyScopeProducer.String()}, nil

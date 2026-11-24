@@ -194,7 +194,7 @@ func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID 
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.evaluate(ctx, human, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
+	if err := a.evaluate(ctx, human, agentCheck(authz.AgentRef.Write, agentID)); err != nil {
 		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)
 	}
 	return human, nil
@@ -267,7 +267,7 @@ func (a *Authorizer) RequireAgentOwnerForUpdate(ctx context.Context, dbtx repo.D
 }
 
 func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, human HumanContext, agentID uuid.UUID, predicate OwnerPredicate, forUpdate bool) (HumanContext, repo.Agent, error) {
-	scope, ok := scopeForOwnerPredicate(predicate)
+	permission, ok := permissionForOwnerPredicate(predicate)
 	if !ok {
 		return HumanContext{}, repo.Agent{}, fmt.Errorf("unknown owner predicate %q", predicate)
 	}
@@ -293,7 +293,7 @@ func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, 
 	if a.authz == nil {
 		return HumanContext{}, repo.Agent{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.evaluate(ctx, human, agentCheck(scope, agent.ID)); err != nil {
+	if err := a.evaluate(ctx, human, agentCheck(permission, agent.ID)); err != nil {
 		// Selected-agent denials deliberately do not distinguish absent,
 		// cross-tenant, or unauthorized resources.
 		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
@@ -310,10 +310,10 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 	}
 
 	return AgentPermissions{
-		Read:      human.satisfies(agentCheck(authz.ScopeAgentRead, agent.ID)),
-		Write:     human.satisfies(agentCheck(authz.ScopeAgentWrite, agent.ID)),
-		Authorize: human.satisfies(agentCheck(authz.ScopeAgentAuthorize, agent.ID)),
-		Transfer:  human.satisfies(agentCheck(authz.ScopeAgentTransfer, agent.ID)),
+		Read:      human.satisfies(agentCheck(authz.AgentRef.Read, agent.ID)),
+		Write:     human.satisfies(agentCheck(authz.AgentRef.Write, agent.ID)),
+		Authorize: human.satisfies(agentCheck(authz.AgentRef.Authorize, agent.ID)),
+		Transfer:  human.satisfies(agentCheck(authz.AgentRef.Transfer, agent.ID)),
 	}, nil
 }
 
@@ -321,26 +321,21 @@ func ownsUnblockedAgent(human HumanContext, agent repo.Agent) bool {
 	return human.Auth != nil && agents.OwnsUnblocked(human.Auth.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt)
 }
 
-func scopeForOwnerPredicate(predicate OwnerPredicate) (authz.Scope, bool) {
+func permissionForOwnerPredicate(predicate OwnerPredicate) (func(authz.AgentRef) authz.Check, bool) {
 	switch predicate {
 	case OwnedAgentRead:
-		return authz.ScopeAgentRead, true
+		return authz.AgentRef.Read, true
 	case OwnedAgentSetup:
-		return authz.ScopeAgentWrite, true
+		return authz.AgentRef.Write, true
 	case OwnedAgentAuthorize:
-		return authz.ScopeAgentAuthorize, true
+		return authz.AgentRef.Authorize, true
 	case OwnedAgentTransfer:
-		return authz.ScopeAgentTransfer, true
+		return authz.AgentRef.Transfer, true
 	default:
-		return "", false
+		return nil, false
 	}
 }
 
-func agentCheck(scope authz.Scope, agentID uuid.UUID) authz.Check {
-	return authz.Check{
-		Scope:        scope,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agentID.String(),
-		Dimensions:   nil,
-	}
+func agentCheck(permission func(authz.AgentRef) authz.Check, agentID uuid.UUID) authz.Check {
+	return permission(authz.Agent(authz.AgentIDOf(agentID)))
 }

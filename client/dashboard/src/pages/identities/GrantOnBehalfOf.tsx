@@ -47,6 +47,8 @@ export function ServerOnBehalfOfLine({
       return <>Needs a person's connection, none assigned</>;
     case "error":
       return <>Could not check whose credential it uses</>;
+    case "forbidden":
+      return <>Whose credential it uses is not visible to you</>;
     case "unknown":
       return <>Credential not known</>;
     case "checking":

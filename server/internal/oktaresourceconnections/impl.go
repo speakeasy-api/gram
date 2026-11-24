@@ -137,7 +137,7 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Org(authz.OrgIDFrom(authCtx.ActiveOrganizationID)).Admin()); err != nil {
 		return nil, logger, err
 	}
 	if mutation {
@@ -156,7 +156,7 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 func (s *Service) readable(ctx context.Context, servers []repo.ListEligibleServersRow) ([]repo.ListEligibleServersRow, error) {
 	checks := make([]authz.Check, len(servers))
 	for i, sv := range servers {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, sv.ID.String(), sv.ProjectID.String())
+		checks[i] = authz.MCPServer(authz.MCPServerIDOf(sv.ID), authz.ProjectIDOf(sv.ProjectID)).Read()
 	}
 	allowedIDs, err := s.authz.Filter(ctx, checks)
 	if err != nil {
@@ -261,7 +261,7 @@ func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(client
 		switch {
 		case row == nil:
 			return none
-		case sv.TypedAuthEnforced:
+		case sv.UsesTypedOffers:
 			if !slices.Contains(sv.OfferedClientIds, clientID) {
 				return none
 			}
@@ -394,7 +394,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	if snap.discoverScopes {
 		var asks []remotesessions.ResourceOwnerQuery
 		for _, sv := range servers {
-			if sv.TypedAuthEnforced || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
+			if sv.UsesTypedOffers || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
 				continue
 			}
 			if _, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]; !ok {
@@ -489,7 +489,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		if sv.TypedAuthEnforced && !slices.Contains(sv.OfferedClientIds, c.ID) {
+		if sv.UsesTypedOffers && !slices.Contains(sv.OfferedClientIds, c.ID) {
 			continue
 		}
 		// Identity chaining requests the scopes recorded at Turn on.
@@ -517,7 +517,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 			continue
 		}
 		switch {
-		case sv.TypedAuthEnforced:
+		case sv.UsesTypedOffers:
 			if !slices.Contains(sv.OfferedClientIds, c.ID) {
 				continue
 			}

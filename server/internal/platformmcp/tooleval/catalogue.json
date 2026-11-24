@@ -1219,7 +1219,7 @@
     },
     {
       "name": "list_gateway_sessions",
-      "description": "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, an exact gateway ID, or a project_slug to list that project's Project Gateway (the Organization Gateway limited to the project's servers). Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
+      "description": "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, an exact gateway ID, or a project_slug to list that project's Project Gateway (the Organization Gateway limited to the project's servers). Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. For users, upstream_accounts counts grants recorded under this sign-in or reachable through live typed OAuth offers in scope; for agents, it counts exact pinned attachments. These counts do not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1310,7 +1310,7 @@
     },
     {
       "name": "list_agent_authorization_checks",
-      "description": "List one agent identity's recent authorization checks, denied checks first, then allowed ones. Each outcome is grouped by permission and resource with how many times it happened, when last, and why the latest was decided as it was; MCP server resources carry the server's name. total counts every check of that outcome in the period, and truncated says the groups cover only the newest 200. Allowed org:hooks_ingest checks, one per hook event the agent sends, are left out of the allowed list and its total, as hidden_allowed_scopes says; denied ones stay with the other denials. The period defaults to the seven days before to (now by default) and spans at most 90 days. Pass the exact agent_id. Requires the same access as the agent's Authorization checks panel in the dashboard: its owner or agent:read on the agent (agent:write does not include it), and org:read. Read-only.",
+      "description": "List one agent identity's recent authorization checks, denied checks first, then allowed ones. Each outcome is grouped by permission and resource with how many times it happened, when last, and why the latest was decided as it was; MCP server resources carry the server's name, and an auth client (upstream credential) check carries the server it was used for in server_id and resource_name. Reason connection_owner_mismatch means the agent was refused another member's personal connection, which serves only that member. total counts every check of that outcome in the period, and truncated says the groups cover only the newest 200. Allowed org:hooks_ingest checks, one per hook event the agent sends, are left out of the allowed list and its total, as hidden_allowed_scopes says; denied ones stay with the other denials. The period defaults to the seven days before to (now by default) and spans at most 90 days. Pass the exact agent_id. Requires the same access as the agent's Authorization checks panel in the dashboard: its owner or agent:read on the agent (agent:write does not include it), and org:read. Read-only.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1402,7 +1402,7 @@
     },
     {
       "name": "set_mcp_network_access",
-      "description": "Change network access for one exact MCP server (hosted, remote, or tunneled) or gateway in an explicit project to public_only, dual, or private_only. Call first without confirmed: true: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the current settings and the exact change; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the exact settings version, the same idempotency key, and confirmed: true once they confirm. This commits the local desired mode and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed. Private access is refused unless the organization may use it and a live network ingress covers every endpoint.",
+      "description": "Set whether one MCP server or gateway accepts public or private network connections. To lock down access to the private network only, select private_only; public_only and dual are also supported. Name the exact hosted, remote, or tunneled server or gateway in an explicit project. Call first without confirmed: true: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the current settings and the exact change; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the exact settings version, the same idempotency key, and confirmed: true once they confirm. This commits the local desired mode and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed. Private access is refused unless the organization may use it and a live network ingress covers every endpoint.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -3760,7 +3760,7 @@
     },
     {
       "name": "list_risk_presets",
-      "description": "List the use-case presets a risk policy can start from, with what each one detects, its policy type, default action and severity. Use a preset id with create_risk_policy to create the policy without choosing detectors by hand. can_scope_to_mcp says whether the preset can be limited to chosen MCP servers with create_risk_policy's mcp_scope. Presets marked requires_prompt_policies only work in projects where prompt policies are switched on.",
+      "description": "List the use-case presets a risk policy can start from, with what each one detects, its policy type, default action and severity. Use a preset id with create_risk_policy to create the policy without choosing detectors by hand. can_scope_to_mcp says whether the preset can be limited to chosen MCP servers with create_risk_policy's mcp_scope.",
       "input_schema": {
         "type": "object",
         "properties": {},
@@ -4294,7 +4294,7 @@
     },
     {
       "name": "get_mcp_network_traffic",
-      "description": "Summarize observed public and private inbound requests and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. Use before changing its network access mode; a quiet route is not proof all clients migrated.",
+      "description": "Read historical network traffic: public and private inbound request counts and last-seen times for one exact MCP server or gateway over 24 hours or 7 days. This does not change access. Use for traffic and migration-impact questions; a quiet route is not proof all clients migrated.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -8126,7 +8126,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],
@@ -8193,7 +8193,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],
@@ -8216,7 +8216,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],

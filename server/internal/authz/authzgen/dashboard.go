@@ -2,6 +2,8 @@ package authzgen
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -41,7 +43,7 @@ func renderDashboardTables(r registry.Registry) []byte {
 	b.WriteString("/** The resource kind each scope's checks and grant selectors name. */\n")
 	b.WriteString("export const scopeResourceKinds: Readonly<Record<string, string>> = {\n")
 	kinds := r.DeriveResourceKinds()
-	for _, scope := range sortedKeys(kinds) {
+	for _, scope := range slices.Sorted(maps.Keys(kinds)) {
 		fmt.Fprintf(&b, "  %s: %s,\n", strconv.Quote(string(scope)), strconv.Quote(kinds[scope]))
 	}
 	b.WriteString("};\n\n")
@@ -49,7 +51,7 @@ func renderDashboardTables(r registry.Registry) []byte {
 	b.WriteString("/**\n * The exclusion scopes a check of each scope must clear: its own exclusion,\n * then the broader blocks that also cover it. A block on read also takes\n * write away.\n */\n")
 	b.WriteString("export const scopeExclusions: Readonly<\n  Record<string, readonly string[]>\n> = {\n")
 	exclusions := DashboardExclusions(r)
-	for _, scope := range sortedKeys(exclusions) {
+	for _, scope := range slices.Sorted(maps.Keys(exclusions)) {
 		fmt.Fprintf(&b, "  %s: [\n", strconv.Quote(string(scope)))
 		for _, exclusion := range exclusions[scope] {
 			fmt.Fprintf(&b, "    %s,\n", strconv.Quote(string(exclusion)))

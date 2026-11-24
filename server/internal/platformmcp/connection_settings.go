@@ -174,7 +174,7 @@ func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, 
 	}
 	members, err := metamcprepo.New(s.db).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{MetaMcpServerID: gatewayID, ProjectID: projectID})
 	if err != nil {
-		return nil, fmt.Errorf("list proxied gateway members: %w", err)
+		return nil, fmt.Errorf("list proxied gateway members: %w: %w", ErrUnavailable, err)
 	}
 	readable := make([]MCPGatewayMemberSignIn, 0, len(members))
 	ids := make([]uuid.UUID, 0, len(members))
@@ -182,7 +182,7 @@ func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, 
 		if member.McpServerToolsetID.Valid || member.McpServerUnproxiedMcpServerID.Valid || member.McpServerSlug.String == "" || (!member.McpServerRemoteMcpServerID.Valid && !member.McpServerTunneledMcpServerID.Valid) {
 			continue
 		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, member.McpServerID.String(), projectID.String()))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(member.McpServerID), authz.ProjectIDOf(projectID)).Read())
 		if err != nil {
 			return nil, fmt.Errorf("authorize gateway member sign-in status: %w", err)
 		}
@@ -201,7 +201,7 @@ func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, 
 	}
 	statuses, err := authclients.ReadServerAuthenticationStatuses(ctx, s.db, principal.OrganizationID, projectID, ids)
 	if err != nil {
-		return nil, fmt.Errorf("read gateway member sign-in statuses: %w", err)
+		return nil, fmt.Errorf("read gateway member sign-in statuses: %w: %w", ErrUnavailable, err)
 	}
 	result := make([]MCPGatewayMemberSignIn, 0, len(readable))
 	for i, member := range readable {
@@ -228,18 +228,18 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
-	if err != nil {
+	if err != nil || projectID == uuid.Nil {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
 	targetID, err := uuid.Parse(input.TargetID)
-	if err != nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
+	if err != nil || targetID == uuid.Nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
 	grants, ok := authz.GrantsFromContext(ctx)
 	if !ok {
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
-	admin, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil})
+	admin, err := authz.GrantsAuthorize(grants, authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin())
 	if err != nil {
 		return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings admin: %w", err)
 	}
@@ -247,7 +247,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsNotFound
 	}
 	if input.TargetKind == MCPConnectionSettingsMCPServer {
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, targetID.String(), projectID.String()))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(targetID), authz.ProjectIDOf(projectID)).Read())
 		if err != nil {
 			return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings target: %w", err)
 		}

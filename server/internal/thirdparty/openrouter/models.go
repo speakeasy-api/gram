@@ -18,7 +18,7 @@ var _ ModelCatalogClient = (*ChatClient)(nil)
 // ListModels uses the same pooled HTTP transport and base URL as completions.
 // It retains upstream metadata and filters with the inference allowlist.
 func (c *ChatClient) ListModels(ctx context.Context) (map[string]json.RawMessage, error) {
-	catalog, err := modelcatalog.Fetch(ctx, c.httpClient, OpenRouterBaseURL, IsModelAllowed)
+	catalog, err := modelcatalog.Fetch(ctx, c.httpClient, c.inferenceURL, IsModelAllowed)
 	if err != nil {
 		return nil, fmt.Errorf("list supported models: %w", err)
 	}

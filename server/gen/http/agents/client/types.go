@@ -13943,8 +13943,8 @@ func ValidateAgentPolicySelectorRequestBodyRequestBody(body *AgentPolicySelector
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {
@@ -14003,8 +14003,8 @@ func ValidateAgentPolicySelectorResponse(body *AgentPolicySelectorResponse) (err
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {
@@ -14082,8 +14082,8 @@ func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {
@@ -14112,8 +14112,8 @@ func ValidateAgentPolicySelectorResponseBody(body *AgentPolicySelectorResponseBo
 		}
 	}
 	if body.Disposition != nil {
-		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world"}))
+		if !(*body.Disposition == "read_only" || *body.Disposition == "destructive" || *body.Disposition == "idempotent" || *body.Disposition == "open_world" || *body.Disposition == "unannotated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", *body.Disposition, []any{"read_only", "destructive", "idempotent", "open_world", "unannotated"}))
 		}
 	}
 	if body.ServerURL != nil {

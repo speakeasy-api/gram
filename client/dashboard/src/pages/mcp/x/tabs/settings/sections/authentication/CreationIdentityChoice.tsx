@@ -64,7 +64,7 @@ export function CreationIdentityChoice({
       </div>
       <Text muted small className="block">
         {advertisesOAuth
-          ? `${upstreamName} advertises OAuth sign-in, so User Identity is the default.`
+          ? `${upstreamName} advertises OAuth sign-in, so user identity is the default.`
           : `How callers are identified to ${upstreamName}.`}
       </Text>
 
@@ -121,7 +121,7 @@ export function CreationIdentityChoice({
 
       {value === "user" && !rbacLoading && !canCreateIdentity ? (
         <Alert variant="warning" dismissible={false}>
-          User Identity creates an authorization server and requires
+          User identity creates an authorization server and requires
           project:write. Choose another identity mode or ask a project
           administrator.
         </Alert>

@@ -63,7 +63,7 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 	if err != nil {
 		return fmt.Errorf("load typed login permissions: %w", err)
 	}
-	decision, err := authorization.DecideServerAdmission(a.OrganizationID, mandatoryVisibility(server.Visibility == mcpservers.VisibilityPublic), authz.MCPCheck(authz.ScopeMCPConnect, a.ServerID.String(), a.ProjectID.String()))
+	decision, err := authorization.DecideServerAdmission(a.OrganizationID, mandatoryVisibility(server.Visibility == mcpservers.VisibilityPublic), authz.MCPServer(authz.MCPServerIDOf(a.ServerID), authz.ProjectIDOf(a.ProjectID)).Connect())
 	if err != nil {
 		return fmt.Errorf("authorize typed login server: %w", err)
 	}

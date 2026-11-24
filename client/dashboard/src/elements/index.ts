@@ -56,9 +56,6 @@ export type {
 export { defineFrontendTool } from "./lib/tools";
 export type { FrontendTool } from "./lib/tools";
 
-// Error Tracking
-export { trackError } from "./lib/errorTracking";
-export type { ErrorContext } from "./lib/errorTracking";
 export {
   CREDITS_EXHAUSTED_MESSAGE,
   describeStreamError,
@@ -79,7 +76,6 @@ export type {
   ElementsConfig,
   ElementsTransportContext,
   ElementsTransportFactory,
-  ErrorTrackingConfigOption,
   GetSessionFn,
   HistoryConfig,
   LinkResolver,

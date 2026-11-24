@@ -68,7 +68,7 @@ func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
 	require.Equal(t, urn.PrincipalTypeAgent, actor.Type)
 	private, err = ti.authzEngine.PrepareContext(private)
 	require.NoError(t, err)
-	require.NoError(t, ti.authzEngine.Require(private, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), ac.ProjectID.String())))
+	require.NoError(t, ti.authzEngine.Require(private, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(*ac.ProjectID)).Connect()))
 
 	foreign := *endpoint
 	foreign.ToolsetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
