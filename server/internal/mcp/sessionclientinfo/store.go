@@ -6,10 +6,10 @@
 // There is deliberately no Postgres row. Two limits keep the Redis footprint
 // bounded instead.
 //
-// Records slide with use: every write and every read pushes the expiry of both
-// the record and its MCP server's live set out by recordIdleExpiry, so a
-// session in use keeps its identity however long it runs, and a session left
-// idle longer than that expires. Servers nobody uses any more therefore drop
+// Records slide with use: every write, and every read that finds its record,
+// pushes the expiry of both the record and its MCP server's live set out by
+// recordIdleExpiry, so a session in use keeps its identity however long it
+// runs, and a session left idle longer than that expires. Servers nobody uses any more therefore drop
 // out of Redis entirely instead of accumulating forever.
 //
 // Each MCP server also gets a fixed budget of records, and the least recently
@@ -46,7 +46,7 @@ const DefaultLiveRecordCap = 10000
 const recordIdleExpiry = 7 * 24 * time.Hour
 
 // ErrNotFound is returned when a session has no recorded identity — never
-// handshaked with one, or evicted since. Callers treat it as "caller unknown",
+// handshaked with one, or evicted or expired since. Callers treat it as "caller unknown",
 // which is an ordinary outcome rather than a failure.
 var ErrNotFound = errors.New("session client info not found")
 

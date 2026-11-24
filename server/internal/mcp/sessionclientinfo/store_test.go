@@ -1,6 +1,7 @@
 package sessionclientinfo
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -372,6 +373,40 @@ func TestCapEvictsRecordsReadmittedByLoad(t *testing.T) {
 	got, err := store.Load(ctx, projectID, "widgets", "newcomer", 5)
 	require.NoError(t, err)
 	require.Equal(t, "newcomer", got.Name)
+}
+
+// TestKeysWithoutExpiryGainOneOnUse covers records and live sets that carry no
+// expiry, as written before records expired: a load hit gives both keys a
+// fresh expiry, and admitting the same session again sets the record's.
+func TestKeysWithoutExpiryGainOneOnUse(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, 0)
+	projectID := uuid.New()
+	ctx := t.Context()
+	recordKey := recordKeyPrefix(projectID, "widgets") + member("session-1")
+	liveKey := liveSetKey(projectID, "widgets")
+
+	client, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	payload, err := json.Marshal(Info{Name: "claude-code", Version: "2.1", ProtocolVersion: ""})
+	require.NoError(t, err)
+	require.NoError(t, client.Set(ctx, recordKey, payload, 0).Err())
+	require.NoError(t, client.ZAdd(ctx, liveKey, redis.Z{Score: 1, Member: member("session-1")}).Err())
+
+	got, err := store.Load(ctx, projectID, "widgets", "session-1", 2)
+	require.NoError(t, err)
+	require.Equal(t, "claude-code", got.Name)
+
+	requireFreshIdleExpiry(t, client, recordKey)
+	requireFreshIdleExpiry(t, client, liveKey)
+
+	require.NoError(t, client.Persist(ctx, recordKey).Err())
+	require.NoError(t, store.Store(ctx, projectID, "widgets", "session-1", Info{Name: "claude-code", Version: "2.2"}, 3))
+
+	requireFreshIdleExpiry(t, client, recordKey)
+	requireFreshIdleExpiry(t, client, liveKey)
 }
 
 // TestStoreWithoutRedisIsInert keeps environments with no cache wired working:
