@@ -410,6 +410,27 @@ func TestRemoteSessionRecheck_PrivateOnlyEndpointIsProbedPrivately(t *testing.T)
 }
 
 // A gateway member's grant is placed through the gateway endpoint and judged by the member it routes to.
+func TestRemoteSessionRecheck_VerifiesExactHostedAssignment(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedHostedGatewayValidationFixture(t, "hosted-keepalive")
+	makeKeepaliveShaped(t, ctx, fx, "hosted-keepalive")
+	_, err := mcpendpoints_repo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID:       fx.endpoint.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID: fx.endpoint.MetaMcpServerID,
+		Slug:            fx.endpoint.Slug,
+	})
+	require.NoError(t, err)
+
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked)
+	require.Empty(t, fx.member.drain(), "hosted keepalive must not send its grant to a proxied sibling")
+	require.Equal(t, string(remotesessions.ValidationOutcomeInactive), storedSession(t, ctx, fx).ValidationStatus.String)
+	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
+}
+
 func TestRemoteSessionRecheck_ProbesMetaMemberThroughGateway(t *testing.T) {
 	t.Parallel()
 
