@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -85,7 +86,7 @@ func (a *healthAttempt) row(step mcpconnectionattempts.Step, what mcpconnectiona
 // metadata document, the others by a dynamic registration.
 func healthApp(family string) mcpconnectionattempts.App {
 	if family == mcpconnectionattempts.FamilyClaudeCode {
-		return mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted)
+		return mcpconnectionattempts.AppOf(aivendors.CompiledSnapshot(), demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted)
 	}
 	return mcpconnectionattempts.AppDCR
 }
