@@ -2093,15 +2093,23 @@ func (d orgEncryptionDeps) Migrator(logger *slog.Logger, db *pgxpool.Pool, platf
 	}
 
 	runner := orgencryption.NewRunner(logger, db, d.Cipher(logger, platform), meterProvider)
-	migrator, err := orgencryption.NewMigrator(logger, db, runner, d.Transitions, []orgencryption.UseCaseStores{
-		{UseCase: orgencryption.UseCaseOAuthClientSecrets, Stores: []orgencryption.CopyStore{clientsecrets.NewCopyStore(db)}},
-		{UseCase: orgencryption.UseCaseOAuthSessionTokens, Stores: upstreamtokens.CopyStores(db)},
-	}, meterProvider)
+	migrator, err := orgencryption.NewMigrator(logger, db, runner, d.Transitions, orgEncryptionUseCaseStores(db), meterProvider)
 	if err != nil {
 		return nil, fmt.Errorf("build organization encryption migrator: %w", err)
 	}
 
 	return migrator, nil
+}
+
+// orgEncryptionUseCaseStores lists every use case that moves from the platform
+// key to organization keys, with the copy stores of every value it holds. The
+// background migrator and the admin API share it, so both reach the same
+// values.
+func orgEncryptionUseCaseStores(db *pgxpool.Pool) []orgencryption.UseCaseStores {
+	return []orgencryption.UseCaseStores{
+		{UseCase: orgencryption.UseCaseOAuthClientSecrets, Stores: []orgencryption.CopyStore{clientsecrets.NewCopyStore(db)}},
+		{UseCase: orgencryption.UseCaseOAuthSessionTokens, Stores: upstreamtokens.CopyStores(db)},
+	}
 }
 
 // orgEncryptionSweeper keeps a nil provisioner a nil interface.

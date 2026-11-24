@@ -109,6 +109,16 @@ var (
 	// provider.
 	ErrFenced = errors.New("orgencryption: transition state changed since the decision, decide again")
 
+	// ErrUnreadableCountChanged means finalize was asked to expect a number of
+	// unreadable values that differs from the count under the state row lock.
+	// Nothing changed; the caller shows the new count and asks again.
+	ErrUnreadableCountChanged = errors.New("orgencryption: unreadable value count changed since it was acknowledged")
+
+	// ErrClearRunning means another call is already clearing the
+	// organization's platform-key copies for the use case. Nothing changed;
+	// that clear records completion when it finishes.
+	ErrClearRunning = errors.New("orgencryption: platform-key copies are already being cleared for this organization and use case")
+
 	// ErrBackfillRunning means another backfill run holds the claim for the
 	// organization and use case. Nothing changed; try again once it ends.
 	ErrBackfillRunning = errors.New("orgencryption: a backfill run is already in progress for this organization and use case")

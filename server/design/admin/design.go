@@ -1491,4 +1491,5 @@ var _ = Service("admin", func() {
 	assistantMethods()
 	hooksRolloutMethods()
 	tailscaleOAuthMigrationMethods()
+	organizationEncryptionMethods()
 })

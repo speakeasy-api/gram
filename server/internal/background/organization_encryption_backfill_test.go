@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // fakeOrganizationEncryptionMigrator records calls in order and fails the
@@ -31,6 +32,7 @@ type fakeOrganizationEncryptionMigrator struct {
 	dueErrs   map[string]error
 	finalized []orgencryption.Transition
 	errs      map[string]error
+	actors    []string
 }
 
 func (f *fakeOrganizationEncryptionMigrator) record(call, organizationID string) error {
@@ -74,6 +76,14 @@ func (f *fakeOrganizationEncryptionMigrator) ListFinalized(context.Context) ([]o
 
 func (f *fakeOrganizationEncryptionMigrator) ResumeClear(_ context.Context, organizationID string, _ orgencryption.UseCase) error {
 	return f.record("resume", organizationID)
+}
+
+func (f *fakeOrganizationEncryptionMigrator) RunOnDemand(_ context.Context, organizationID string, _ orgencryption.UseCase, actor orgencryption.Actor) (orgencryption.RunResult, error) {
+	f.mu.Lock()
+	f.actors = append(f.actors, actor.Principal.String())
+	f.mu.Unlock()
+
+	return orgencryption.RunResult{}, f.record("run", organizationID)
 }
 
 func (f *fakeOrganizationEncryptionMigrator) SweepStragglers(_ context.Context, organizationID string, _ orgencryption.UseCase) (int64, error) {
@@ -290,6 +300,8 @@ func TestOrganizationEncryptionBackfill_TimingsFitTheActivity(t *testing.T) {
 	require.Greater(t, organizationEncryptionBackfillHeartbeatTimeout, organizationEncryptionBackfillItemTimeout, "an item never misses a heartbeat")
 	require.Equal(t, organizationEncryptionBackfillStartToClose, organizationEncryptionBackfillBudget+organizationEncryptionBackfillItemTimeout+time.Minute, "the last item started inside the budget ends inside StartToClose")
 	require.Less(t, organizationEncryptionBackfillStartToClose*organizationEncryptionBackfillMaxAttempts, organizationEncryptionBackfillRunTimeout, "every attempt fits the run")
+	require.Greater(t, organizationEncryptionBackfillOrganizationStartToClose, organizationEncryptionBackfillItemTimeout, "an on-demand run fits a whole clear after finalize")
+	require.Less(t, organizationEncryptionBackfillOrganizationStartToClose*organizationEncryptionBackfillOrganizationMaxAttempts, organizationEncryptionBackfillOrganizationRunTimeout, "every on-demand attempt fits the run")
 }
 
 func TestOrganizationEncryptionBackfill_RetriesStartAfterADeadWorkersClaimExpires(t *testing.T) {
@@ -389,4 +401,43 @@ func TestOrganizationEncryptionBackfill_WorksThroughEveryCandidatePage(t *testin
 	require.Equal(t, 3, migrator.pageReads, "it reads every page, and no more")
 	require.Equal(t, []string{"backfill org_a", "backfill org_b", "backfill org_c", "backfill org_d"}, migrator.calls)
 	require.Equal(t, 4, result.Backfilled)
+}
+
+func TestOrganizationEncryptionBackfill_OnDemandRunsAsTheStaffMemberWhoAskedForIt(t *testing.T) {
+	t.Parallel()
+
+	migrator := &fakeOrganizationEncryptionMigrator{}
+	activities := newBackfillActivities(t, migrator)
+	staff := urn.NewPrincipal(urn.PrincipalTypeUser, "oidc-subject")
+
+	_, err := activities.BackfillOrganization(t.Context(), OrganizationEncryptionBackfillOrganizationParams{OrganizationID: "org_a", UseCase: string(orgencryption.UseCaseOAuthClientSecrets), ActorPrincipal: staff.String()})
+	require.NoError(t, err)
+
+	_, err = activities.BackfillOrganization(t.Context(), OrganizationEncryptionBackfillOrganizationParams{OrganizationID: "org_b", UseCase: string(orgencryption.UseCaseOAuthClientSecrets)})
+	require.NoError(t, err)
+
+	require.Equal(t, []string{staff.String(), orgencryption.SystemActor().Principal.String()}, migrator.actors, "a run without an actor is the system's")
+}
+
+func TestOrganizationEncryptionClearOrganizationWorkflowID_DiffersFromTheBackfill(t *testing.T) {
+	t.Parallel()
+
+	backfill := OrganizationEncryptionBackfillOrganizationWorkflowID("main", "org_a", orgencryption.UseCaseOAuthClientSecrets)
+	clearID := OrganizationEncryptionClearOrganizationWorkflowID("main", "org_a", orgencryption.UseCaseOAuthClientSecrets)
+	require.NotEqual(t, backfill, clearID, "a backfill still closing must not stand in for the clear finalize starts")
+	require.NotEqual(t, clearID, OrganizationEncryptionClearOrganizationWorkflowID("preview", "org_a", orgencryption.UseCaseOAuthClientSecrets), "scoped by queue")
+}
+
+func TestOrganizationEncryptionBackfill_SkipsAClearAnotherRunHolds(t *testing.T) {
+	t.Parallel()
+
+	migrator := &fakeOrganizationEncryptionMigrator{
+		finalized: []orgencryption.Transition{stalledClear("org_held")},
+		errs:      map[string]error{"org_held": orgencryption.ErrClearRunning},
+	}
+
+	result, err := newBackfillActivities(t, migrator).Backfill(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Skipped)
+	require.Zero(t, result.Failed)
 }

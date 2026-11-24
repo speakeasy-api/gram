@@ -1503,3 +1503,45 @@ ORDER BY o.name, o.id;
 SELECT o.id, o.name, o.slug
 FROM organization_metadata AS o
 WHERE o.id = @id;
+
+-- name: AdminListOrganizationEncryptionTransitions :many
+-- Every organization with its transition state for one use case, oldest first.
+-- An organization without a transition row for the use case is in
+-- platform_key, so the LEFT JOIN reports it there and the state filter matches
+-- it. Pages with LIMIT and OFFSET: the list is staff-only and small.
+SELECT
+  om.id AS organization_id,
+  om.name,
+  om.slug,
+  (om.disabled_at IS NOT NULL)::boolean AS disabled,
+  COALESCE(t.state, 'platform_key')::text AS state,
+  t.state_changed_at,
+  t.platform_copies_cleared_at,
+  t.last_backfill_started_at,
+  t.last_backfill_completed_at,
+  t.last_backfill_remaining_count,
+  t.last_backfill_unreadable_count,
+  t.last_backfill_error,
+  t.last_verified_at
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = @use_case
+WHERE sqlc.narg('state')::text IS NULL
+   OR COALESCE(t.state, 'platform_key') = sqlc.narg('state')::text
+ORDER BY om.created_at, om.id
+LIMIT @limit_value
+OFFSET @offset_value;
+
+-- name: AdminCountOrganizationEncryptionTransitionStates :many
+-- How many organizations are in each transition state for one use case,
+-- counting organizations without a row as platform_key.
+SELECT
+  COALESCE(t.state, 'platform_key')::text AS state,
+  count(*) AS organizations
+FROM organization_metadata om
+LEFT JOIN organization_encryption_transitions t
+  ON t.organization_id = om.id
+  AND t.use_case = @use_case
+GROUP BY 1
+ORDER BY 1;

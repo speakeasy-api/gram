@@ -241,7 +241,7 @@ func (m *Migrator) BackfillDue(ctx context.Context, transition Transition) (bool
 		return true, nil
 	}
 
-	counts, err := countStores(ctx, transition.OrganizationID, stores)
+	counts, err := CountStores(ctx, transition.OrganizationID, stores)
 	if err != nil {
 		return false, err
 	}
@@ -258,6 +258,29 @@ func (m *Migrator) Backfill(ctx context.Context, organizationID string, useCase 
 	}
 
 	return m.runner.Run(ctx, organizationID, useCase, stores)
+}
+
+// RunOnDemand does the work an operator asks for on one organization's use
+// case. In dual_write it backfills and verifies through Runner. In org_kms
+// with the clear unfinished, such as right after finalize, it finishes the
+// clear, attributed to actor; that waits the clear settle delay after each
+// pass. Any other state returns ErrTransitionNotAllowed.
+func (m *Migrator) RunOnDemand(ctx context.Context, organizationID string, useCase UseCase, actor Actor) (RunResult, error) {
+	empty := RunResult{Converted: 0, Counted: false, Remaining: 0, Unreadable: 0, Unattributed: 0, Verified: 0, Mismatched: 0, Unopenable: 0, VerificationPassed: false}
+
+	transition, err := m.transitions.GetFresh(ctx, organizationID, useCase)
+	if err != nil {
+		return empty, err
+	}
+
+	switch {
+	case transition.State == TransitionStateOrgKMS && transition.PlatformCopiesClearedAt == nil:
+		return empty, m.clear(ctx, organizationID, useCase, actor)
+	case transition.State == TransitionStateOrgKMS:
+		return empty, fmt.Errorf("%w: run in org_kms after clearing finished", ErrTransitionNotAllowed)
+	default:
+		return m.Backfill(ctx, organizationID, useCase)
+	}
 }
 
 // ListFinalized returns the org_kms transitions the sweep should visit:
@@ -290,12 +313,16 @@ func (m *Migrator) ListFinalized(ctx context.Context) ([]Transition, error) {
 // case whose clear never completed, as the system actor. It waits the clear
 // settle delay after each pass, so a call takes at least that long.
 func (m *Migrator) ResumeClear(ctx context.Context, organizationID string, useCase UseCase) error {
+	return m.clear(ctx, organizationID, useCase, SystemActor())
+}
+
+func (m *Migrator) clear(ctx context.Context, organizationID string, useCase UseCase, actor Actor) error {
 	stores, err := m.storesFor(useCase)
 	if err != nil {
 		return err
 	}
 
-	if _, err := m.transitions.ClearPlatformCopies(ctx, organizationID, useCase, stores, SystemActor()); err != nil {
+	if _, err := m.transitions.ClearPlatformCopies(ctx, organizationID, useCase, stores, actor); err != nil {
 		return fmt.Errorf("resume clearing platform-key copies: %w", err)
 	}
 
