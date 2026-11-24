@@ -1,5 +1,4 @@
 import { SettingsSection } from "@/components/detail/settings-section";
-import { useMcpServerAuthenticationReadiness } from "@/hooks/useMcpServerAuthenticationReadiness";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServerAuthTarget } from "./authentication/authTarget";
 import { UserSessionIssuerField } from "./authentication/UserSessionIssuerField";
@@ -14,24 +13,10 @@ export function RemoteMcpSessionsSection({
   mcpServer: McpServer;
   /** The URL clients connect to; undefined while it is unknown. */
   mcpUrl?: string;
-}): JSX.Element | null {
+}): JSX.Element {
   const target = useMcpServerAuthTarget(mcpServer, mcpUrl);
   const selectableIssuers = useSelectableUserSessionIssuers(target);
-  const readiness = useMcpServerAuthenticationReadiness(mcpServer);
-
-  // Where people sign in only matters when they sign in as themselves. Hide
-  // the card once the identity mode is known to be something else; keep it
-  // while loading, on error, and under enforced upstream auth, where the
-  // legacy mode does not describe the server.
-  if (
-    readiness.upstreamAuth === "legacy" &&
-    !readiness.isLoadingRemoteIdentity &&
-    !readiness.identityUnavailable &&
-    readiness.remoteIdentityMode !== "user"
-  ) {
-    return null;
-  }
-
+  // Downstream sessions remain configurable independently of upstream offers.
   // The provider's sign-in details and session settings live on its own
   // page in MCP Sessions, which the picker opens.
   return (

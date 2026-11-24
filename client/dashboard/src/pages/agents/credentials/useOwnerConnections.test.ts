@@ -386,7 +386,14 @@ describe("an agent whose attachments the viewer may not read", () => {
     Object.assign(new Error("request failed"), { statusCode });
 
   it("marks the agent's connection as not visible, and still reads the viewer's own", () => {
-    mocks.clients = [ownSignIn];
+    mocks.auth.set(server.id, {
+      data: {
+        status: "configured",
+        clients: [
+          { ...mocks.personalClient, remoteSessionClientId: ownSignIn.id },
+        ],
+      },
+    });
     mocks.bindingsError = httpError(403);
     const { result } = renderHook(() =>
       useOwnerConnections([server], true, "agent_example"),
