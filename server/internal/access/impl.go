@@ -1744,7 +1744,8 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	if storedView != nil {
 		link.RequestID = storedView.ID
 	}
-	if link.ResourceID != "" && strings.HasPrefix(payload.Scope, "mcp:") {
+	// Without a site URL there is no link, so the project need not be read.
+	if s.orgHosts.SiteURL(org.DefaultHost) != nil && link.ResourceID != "" && strings.HasPrefix(payload.Scope, "mcp:") {
 		projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, link.ResourceID)
 		if resolveErr != nil {
 			logger.WarnContext(ctx, "could not resolve MCP project for access request link",

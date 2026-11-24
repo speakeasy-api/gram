@@ -190,13 +190,22 @@ func TestListPendingAccessRequests_ReturnsAtMostFifty(t *testing.T) {
 	ctx, ti := newTestAgentService(t)
 	attachAccessRequests(t, ti, true)
 	grantOrgAdmin(t, ctx, ti, mockidp.MockUserID)
+	seeded := make([]string, 0, 55)
 	for i := range 55 {
-		seedPendingRequest(t, ctx, ti, ti.orgID, fmt.Sprintf("member-%d", i))
+		seeded = append(seeded, seedPendingRequest(t, ctx, ti, ti.orgID, fmt.Sprintf("member-%d", i)).String())
 	}
 
 	res, err := ti.service.ListPendingAccessRequests(perUserCtx(t, ctx), &gen.ListPendingAccessRequestsPayload{ApikeyToken: nil})
 	require.NoError(t, err)
 	require.Len(t, res.Requests, 50)
+	listed := make([]string, 0, len(res.Requests))
+	for _, request := range res.Requests {
+		listed = append(listed, request.ID)
+	}
+	for _, oldest := range seeded[:5] {
+		require.NotContains(t, listed, oldest, "the 50 newest requests are listed, so the oldest five are left out")
+	}
+	require.Equal(t, seeded[54], listed[0], "newest first")
 }
 
 func TestListPendingAccessRequests_RateLimitedPerMember(t *testing.T) {
