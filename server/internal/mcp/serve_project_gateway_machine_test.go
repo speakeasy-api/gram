@@ -111,7 +111,7 @@ func TestServeProjectGateway_AgentMachineAccess(t *testing.T) {
 	require.NoError(t, err)
 	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, grantedID.String())
 	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), grantedID)
-	token := mintAgentGatewayKey(t, ctx, ti, agent.ID, grantedID)
+	token := mintAgentKey(t, ctx, ti, agent.ID, grantedID)
 
 	_, err = serveProjectGatewayHTTP(t, ti, fixture, fixture.projectSlug, token, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)

@@ -6,8 +6,8 @@ import type { JSX } from "react";
 /**
  * Whether the thing we just provisioned actually works. The page watches the
  * key itself: a key that has been accessed is a runtime that reached the
- * gateway and was admitted, which is the one fact that separates "configured"
- * from "connected".
+ * project gateway and was admitted, which is the one fact that separates
+ * "configured" from "connected".
  *
  * Only checks the platform can observe appear here. A row that always said
  * "pending" would teach people to ignore the list.
@@ -28,7 +28,7 @@ export function StepVerify({
     {
       title: "Credential accepted",
       description:
-        "The API key was presented to the agent gateway and admitted.",
+        "The API key was presented to the project gateway and admitted.",
       done: state === "connected",
     },
     {

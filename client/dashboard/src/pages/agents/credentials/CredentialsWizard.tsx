@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
+import { useProjectGatewayEntry } from "@/components/mcp/useProjectGatewayEntry";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -42,12 +43,6 @@ import {
   hooksIngestKeyGrants,
   hooksIngestPolicyGrant,
 } from "../agent-hook-events";
-import {
-  agentGatewayURL,
-  isCredentialSafe,
-  mintInstallCommand,
-  useAgentGatewayURL,
-} from "./gateway";
 import { StepInstall } from "./StepInstall";
 import {
   StepServers,
@@ -706,32 +701,21 @@ export function CredentialsWizard({
   );
   const hookEvents = !existing && (createdHookEvents ?? canGrantHookEvents);
   // An existing agent that already holds hook ingestion keeps it on a key
-  // issued here, or reinstalling its hooks plugin with a new setup command
-  // leaves the plugin unable to send events. Its policy is not changed.
+  // issued here, so its runtime can continue sending events. Its policy is not changed.
   const existingHookEvents =
     existing &&
     (grants ?? []).some(
       (grant) => grant.effect === "allow" && grant.scope === HOOKS_INGEST_SCOPE,
     );
   const [secret, setSecret] = useState<string | null>(null);
-  const [command, setCommand] = useState<string | null>(null);
-  const [commandError, setCommandError] = useState<string | null>(null);
-  const [minting, setMinting] = useState(false);
   const [verify, setVerify] = useState<VerifyState>("waiting");
   const [firstCallAt, setFirstCallAt] = useState<Date | undefined>();
   const keyID = useRef<string | null>(null);
-  // Minting a setup command authenticates with the key, so the key's own
-  // access time moves before any runtime has called. Only an access after the
-  // last thing this page did counts as the agent's first call.
-  const lastSelfUse = useRef<number>(0);
-
   useEffect(() => {
-    // Minting counts as busy too: the key exists by then, and leaving while
-    // the setup command is still being prepared throws away the one chance
-    // to copy a secret that is shown once. So does saving: it writes one
-    // grant per request, and leaving part-way through stores half an edit.
-    onBusy?.(provisioning || minting || saving);
-  }, [provisioning, minting, saving, onBusy]);
+    // Saving writes one grant per request, and leaving part-way through stores
+    // half an edit. Provisioning also holds a key that is shown only once.
+    onBusy?.(provisioning || saving);
+  }, [provisioning, saving, onBusy]);
 
   // Where the agent lives, not a question anyone is asked: a new agent
   // belongs to the project it is being created in. It was offered as a
@@ -1012,7 +996,8 @@ export function CredentialsWizard({
   ];
   const connections = useOwnerConnections(connectionServers, true, agent?.id);
 
-  const gatewayURL = useAgentGatewayURL(agentID);
+  const projectGateway = useProjectGatewayEntry();
+  const gatewayURL = projectGateway.url ?? "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
   // What the platform's runtime needs beyond the servers, such as a device
   // agent's polling and hook events. Empty for an API key and for platforms
@@ -1095,11 +1080,7 @@ export function CredentialsWizard({
       try {
         const listed = await sdk.keys.list({ agentId: agentID });
         const issued = listed.keys.find((key) => key.id === keyID.current);
-        if (
-          !cancelled &&
-          issued?.lastAccessedAt &&
-          issued.lastAccessedAt.getTime() > lastSelfUse.current
-        ) {
+        if (!cancelled && issued?.lastAccessedAt) {
           setVerify("connected");
           setFirstCallAt(issued.lastAccessedAt);
         }
@@ -1114,28 +1095,6 @@ export function CredentialsWizard({
       window.clearInterval(timer);
     };
   }, [step, agentID, verify, sdk, verifyPollMs]);
-
-  const regenerate = (key: string, url: string) => {
-    // Minting authenticates with the key, so a plaintext endpoint would hand
-    // it to anyone on the path. Loopback is exempt: it never reaches a
-    // network. The same rule withholds the instructions on the step itself.
-    if (!isCredentialSafe(url)) {
-      setCommandError(
-        `This deployment serves MCP over plaintext HTTP at ${url}, so a setup command is not prepared: it would send the agent key unencrypted. Configure an HTTPS server URL and reload.`,
-      );
-      return;
-    }
-    setMinting(true);
-    setCommandError(null);
-    lastSelfUse.current = Date.now();
-    mintInstallCommand(url, key)
-      .then((next) => {
-        lastSelfUse.current = Date.now();
-        setCommand(next);
-      })
-      .catch((failure: Error) => setCommandError(failure.message))
-      .finally(() => setMinting(false));
-  };
 
   /**
    * The agent this flow provisions, created on first use. Both credentials
@@ -1739,8 +1698,8 @@ export function CredentialsWizard({
   }, [existing, step, defaultStep, firstStep, lastStep, setStep]);
 
   /**
-   * Create the agent, discover what it may delegate, issue its first key, and
-   * mint the setup command. Each step depends on the one before it, so a
+   * Create the agent, discover what it may delegate, and issue its first key.
+   * Each step depends on the one before it, so a
    * failure stops here and says which part did not happen.
    */
   const provision = async () => {
@@ -1872,7 +1831,6 @@ export function CredentialsWizard({
       keyID.current = issued.id;
       setSecret(issued.key ?? null);
       setStep(4);
-      if (issued.key) regenerate(issued.key, agentGatewayURL(target.id));
     } catch (failure) {
       const conflict =
         failure instanceof GramError && failure.statusCode === 409
@@ -2293,14 +2251,8 @@ export function CredentialsWizard({
       case 4:
         return (
           <StepInstall
-            command={command}
-            commandError={commandError}
-            minting={minting}
-            onRegenerate={() => {
-              if (secret && gatewayURL) regenerate(secret, gatewayURL);
-            }}
             onIssue={() => void provision()}
-            issuing={provisioning || minting}
+            issuing={provisioning}
             secret={secret}
             existingKey={existingKey}
             gatewayURL={gatewayURL}

@@ -3,7 +3,6 @@ import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useState, type JSX } from "react";
-import { OpenClawMaintenance } from "../OpenClawMaintenance";
 import { CodeBlock } from "./CodeBlock";
 import { PanelTab, PanelTabs } from "./PanelTabs";
 import { WizardStepHeader } from "./WizardChrome";
@@ -11,15 +10,13 @@ import { isCredentialSafe } from "./gateway";
 
 /** The ways the agent's runtime can be handed its key. */
 const INSTALL_TABS = [
-  { value: "one-line", label: "One-line setup" },
   { value: "manual", label: "Manual" },
   { value: "programmatic", label: "Programmatic" },
 ];
 
 /**
- * The step that hands the runtime its credential. One command for a machine
- * with a shell, the values themselves for a runtime configured by hand, and
- * the same pair in code for an SDK — each is the same key, shown once.
+ * The step that hands the runtime its credential: values for a runtime
+ * configured by hand, or the same pair in code for an SDK. The key is shown once.
  */
 
 const KEY_ENV = "SPEAKEASY_AGENT_KEY";
@@ -75,10 +72,6 @@ function keyCover(existingKey: ExistingAgentKey | null | undefined): {
 }
 
 export function StepInstall({
-  command,
-  commandError,
-  minting,
-  onRegenerate,
   onIssue,
   issuing,
   secret,
@@ -86,10 +79,6 @@ export function StepInstall({
   gatewayURL,
   serverCount,
 }: {
-  command: string | null;
-  commandError: string | null;
-  minting: boolean;
-  onRegenerate: () => void;
   /** Issue a key, for a step reached without one to show. */
   onIssue: () => void;
   issuing: boolean;
@@ -103,7 +92,7 @@ export function StepInstall({
   /** `"all"` where the agent's reach is a wildcard rather than a list. */
   serverCount: number | "all";
 }): JSX.Element {
-  const [tab, setTab] = useState("one-line");
+  const [tab, setTab] = useState("manual");
   // Every recipe here puts a bearer key on the wire, and the key itself is on
   // screen beside them, so a plaintext endpoint would hand it to anyone on
   // the path. Loopback is exempt: it never leaves the machine, and local
@@ -112,10 +101,6 @@ export function StepInstall({
   const unsafeTransport = gatewayURL !== "" && !isCredentialSafe(gatewayURL);
   // Counting is not available for a wildcard, and a count taken from today's
   // inventory would be a number that quietly changes behind the endpoint.
-  const reachPhrase =
-    serverCount === "all"
-      ? "every server"
-      : `${serverCount} ${serverCount === 1 ? "server" : "servers"}`;
   const reachClause =
     serverCount === "all"
       ? "Every server sits"
@@ -185,6 +170,21 @@ export function StepInstall({
     `asyncio.run(main())`,
   ].join("\n");
 
+  if (!gatewayURL) {
+    return (
+      <div className="space-y-5">
+        <WizardStepHeader
+          title="Connect the agent"
+          description="This project does not have an available gateway."
+        />
+        <Text role="alert">
+          Connection instructions are unavailable until the project gateway is
+          enabled and ready.
+        </Text>
+      </div>
+    );
+  }
+
   if (unsafeTransport) {
     return (
       <div className="space-y-5">
@@ -223,75 +223,6 @@ export function StepInstall({
           aria-hidden={!secret}
           inert={!secret ? true : undefined}
         >
-          <PanelTab value="one-line">
-            <Text muted small>
-              For runtimes with a shell: OpenClaw, Claude Code and Codex. Run
-              once on the machine the agent lives on.
-            </Text>
-            {command ? (
-              <CodeBlock
-                value={command}
-                label="setup command"
-                language="shell"
-              />
-            ) : (
-              <Text muted small>
-                {minting ? "Preparing the setup command…" : ""}
-              </Text>
-            )}
-            <div className="space-y-2">
-              <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
-                The script
-              </span>
-              <ol className="space-y-1 text-sm">
-                {[
-                  "Exchanges the setup code for this agent's API key.",
-                  `Configures the MCP clients it finds on PATH with the agent's gateway (${reachPhrase}).`,
-                  "Leaves the key out of your shell history: the code expires after 15 minutes.",
-                  "Reports what it configured, and exits non-zero if it found no client.",
-                ].map((line, index) => (
-                  <li key={line} className="flex gap-3">
-                    <span className="text-muted-foreground font-mono text-xs">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            {/* Only alongside a link there is one of: regenerating
-                  without a key to wrap is an action with nothing behind it,
-                  and an underlined word that silently does nothing reads as
-                  broken rather than as unavailable. */}
-            {secret && (
-              <Text muted small>
-                The setup link expires in 15 minutes.{" "}
-                <button
-                  type="button"
-                  className="underline disabled:no-underline disabled:opacity-60"
-                  disabled={minting}
-                  onClick={onRegenerate}
-                >
-                  Regenerate
-                </button>
-              </Text>
-            )}
-            {command && (
-              <Text muted small>
-                Piping to a shell runs whatever this deployment returns. To read
-                it first, fetch it to a file and run that instead. The code
-                stays valid for 15 minutes, so you can rerun it. The saved file
-                carries the key: delete it once you have run it.
-              </Text>
-            )}
-            {commandError && (
-              <Text role="alert" small>
-                {commandError}
-              </Text>
-            )}
-            <OpenClawMaintenance />
-          </PanelTab>
-
           <PanelTab value="manual">
             <Text muted small>
               For a runtime you configure by hand. Each block is the whole
@@ -336,7 +267,7 @@ export function StepInstall({
                 // config: OpenClaw saves the `${VAR}` reference and fills it
                 // in from its own environment when it connects. `add`'s
                 // pre-save check does not, hence --no-probe. The entry is
-                // named `speakeasy` like the one-line setup's.
+                // named `speakeasy` consistently with the hosted gateway.
                 `openclaw mcp add speakeasy --url ${gatewayURL} \\`,
                 "  --transport streamable-http --no-probe \\",
                 `  --header 'Authorization=Bearer \${${KEY_ENV}}'`,

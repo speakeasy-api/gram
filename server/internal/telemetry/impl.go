@@ -4199,10 +4199,6 @@ func toolsetHostingServerIDs(ctx context.Context, db *pgxpool.Pool, projectID uu
 	return ids, nil
 }
 
-// agentGatewayPathPrefix is the path an agent gateway is served under,
-// followed by the agent id.
-const agentGatewayPathPrefix = "/agent-mcp/"
-
 // agentGatewayName names the gateway that serves an agent.
 func agentGatewayName(agentName string) string {
 	return agentName + " gateway"
@@ -4327,14 +4323,11 @@ func loadMetaMCPMatchers(ctx context.Context, db *pgxpool.Pool, engine *authz.En
 	return append(anchoredMatchers, platformMatchers...), nil
 }
 
-// organizationGatewayMatchers matches the URLs of the gateways that have no
-// endpoint row: /agent-mcp/<agent id> for each agent, deleted ones included
-// because an agent id is never reused and its past calls keep their gateway,
-// and /mcp/gateway/<organization slug>, plus /projects/<project slug> for each
-// live project, for the organization and project gateways. Each is labelled
-// the way LoadGatewayLabels labels the gateway id it carries, so a gateway in
-// a project, or serving an agent, the caller may not read gets the neutral
-// name.
+// organizationGatewayMatchers matches the URLs of gateways that have no
+// endpoint row: /mcp/gateway/<organization slug>, plus /projects/<project slug>
+// for each live project. Each is labelled the way LoadGatewayLabels labels the
+// gateway id it carries, so a gateway in a project the caller may not read gets
+// the neutral name.
 func organizationGatewayMatchers(ctx context.Context, engine *authz.Engine, owners *gatewayOwners) ([]repo.MetaMCPMatcher, error) {
 	organization, err := owners.Organization(ctx)
 	if err != nil {
@@ -4344,19 +4337,9 @@ func organizationGatewayMatchers(ctx context.Context, engine *authz.Engine, owne
 	if err != nil {
 		return nil, err
 	}
-	agents, err := owners.Agents(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	organizationPath := "/" + mcproute.OrganizationGateway.String() + "/" + organization.Slug
-	candidates := make([]gatewayCandidate, 0, len(agents)+len(projects)+1)
-	suffixes := make([]string, 0, len(agents)+len(projects)+1)
-	for _, agent := range agents {
-		candidates = append(candidates, agentGatewayCandidate(authCtx, agent))
-		suffixes = append(suffixes, agentGatewayPathPrefix+agent.ID.String())
-	}
+	candidates := make([]gatewayCandidate, 0, len(projects)+1)
+	suffixes := make([]string, 0, len(projects)+1)
 	candidates = append(candidates, organizationGatewayCandidate(owners.organizationID, organization))
 	suffixes = append(suffixes, organizationPath)
 	// A deleted project's slug can be taken again. Its URL names its gateway
