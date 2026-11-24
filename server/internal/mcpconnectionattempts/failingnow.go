@@ -237,8 +237,12 @@ type ServedByFamily struct {
 	LastAnsweredAt time.Time `ch:"answered_at"`
 }
 
-// servedByFamilyQuery reads the latest served and answered request per server, member and
-// client family. Arguments: organization, server kinds, server ids.
+// OnGatewayMember reports whether the row is a gateway member's.
+func (s ServedByFamily) OnGatewayMember() bool {
+	return s.ServerKind == serverKindMeta && s.MemberID != ""
+}
+
+// servedByFamilyQuery takes organization, server kinds and server ids.
 const servedByFamilyQuery = `
 SELECT server_kind, server_id, member_id, client_family,
 	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
@@ -246,12 +250,11 @@ FROM ` + lastServedTable + `
 WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
 GROUP BY server_kind, server_id, member_id, client_family`
 
-// ReadServedByFamily reads when each client family was last served and answered on the
-// failing people's servers, servedByFamilyBatch server ids per query.
+// ReadServedByFamily reads when each client family was last served and answered on the failing people's servers.
 func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, failing []FailingPerson) ([]ServedByFamily, error) {
 	kindSet, idSet := map[string]bool{}, map[string]bool{}
 	for _, f := range failing {
-		if f.ServerID == "" {
+		if !f.OnMCPServer() {
 			continue
 		}
 		kindSet[f.ServerKind] = true

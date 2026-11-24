@@ -77,7 +77,11 @@ func randomInput(r *rand.Rand, n, servers, people int) ([]mcpconnectionattempts.
 		}
 		if r.IntN(4) == 0 {
 			at := internalNow.Add(-time.Duration(r.IntN(48*60)) * time.Minute)
-			served = append(served, mcpconnectionattempts.ServedByFamily{ServerKind: "meta", ServerID: fmt.Sprintf("gw-%d", s%7), MemberID: "", ClientFamily: families[r.IntN(len(families))], LastServedAt: at, LastAnsweredAt: at})
+			memberID := ""
+			if r.IntN(2) == 0 {
+				memberID = serverUUID(s)
+			}
+			served = append(served, mcpconnectionattempts.ServedByFamily{ServerKind: "meta", ServerID: fmt.Sprintf("gw-%d", s%7), MemberID: memberID, ClientFamily: families[r.IntN(len(families))], LastServedAt: at, LastAnsweredAt: at})
 		}
 	}
 	return eps, upstreams, served
@@ -92,6 +96,7 @@ func referenceGroup(organizationID string, episodes []mcpconnectionattempts.Fail
 		s Scope
 	}
 
+	dropped := map[key]bool{}
 	var out []Problem
 	for {
 		groups := map[key][]int{}
@@ -109,26 +114,28 @@ func referenceGroup(organizationID string, episodes []mcpconnectionattempts.Fail
 		var bestIdx []int
 		var bestPeople int
 		for k, idx := range groups {
+			if dropped[k] {
+				continue
+			}
+			if k.s.Kind == ScopeAppVersion {
+				idx = g.withEvidence(k.w.part, idx)
+			}
 			subjects, servers := map[string]bool{}, map[string]bool{}
 			for _, i := range idx {
 				subjects[episodes[i].SubjectURN] = true
-				if episodes[i].ReachedServer() {
+				if episodes[i].OnMCPServer() {
 					servers[g.servers[i]] = true
 				}
 			}
-			if len(subjects) < MinPeople {
+			if len(subjects) < minPeople {
 				continue
 			}
 			switch k.s.Kind {
 			case ScopeService:
-				if len(servers) < MinServersPerService {
+				if len(servers) < minServersPerService {
 					continue
 				}
-			case ScopeAppVersion:
-				if !g.otherAppsWorked(k.w.part, idx) {
-					continue
-				}
-			case ScopeServer, ScopePerson:
+			case ScopeAppVersion, ScopeServer, ScopePerson:
 			}
 			if !found || cmp.Or(rank(k.s, len(subjects), bestKey.s, bestPeople), cmp.Compare(k.w.part, bestKey.w.part), cmp.Compare(k.w.who, bestKey.w.who)) < 0 {
 				found, bestKey, bestIdx, bestPeople = true, k, idx, len(subjects)
@@ -139,6 +146,11 @@ func referenceGroup(organizationID string, episodes []mcpconnectionattempts.Fail
 		}
 		for _, i := range bestIdx {
 			taken[i] = true
+			for _, s := range g.scopes[i] {
+				if bestKey.s.Kind == ScopeServer && s.Kind == ScopeService {
+					dropped[key{bestKey.w, s}] = true
+				}
+			}
 		}
 		out = append(out, g.problem(bestKey.s, bestKey.w, bestIdx, bestPeople, bestKey.s.Kind == ScopeAppVersion || g.otherAppsWorked(bestKey.w.part, bestIdx)))
 	}
@@ -176,8 +188,7 @@ func BenchmarkReferenceGroup30k(b *testing.B) {
 	}
 }
 
-// BenchmarkGroup30kIndependentServers is 10k three-person servers on one app version with
-// nothing else served.
+// BenchmarkGroup30kIndependentServers is 10k three-person servers on one app version, nothing else served.
 func BenchmarkGroup30kIndependentServers(b *testing.B) {
 	eps := make([]mcpconnectionattempts.FailingPerson, 0, 30_000)
 	for s := range 10_000 {

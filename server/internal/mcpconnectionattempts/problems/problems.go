@@ -2,23 +2,26 @@
 //
 // An episode is one person's ongoing failure on one connection, from
 // mcpconnectionattempts.ReadFailingNow. Only people (users) count. The rule:
-//  1. Sort the failures by kind: which part of the connection broke, and who has to fix
-//     the latest error. Only failures of the same kind are grouped.
-//  2. Within each kind, a group is MinPeople or more people whose failures share one of:
-//     - a server (inbound): the Speakeasy MCP server, gateway or toolset the app connects
-//     to, as its mcp_servers row however reached;
-//     - a service (outbound), only for service sign-in or server failures the provider
-//     fixes: what the server connects out to (the remote session issuer for a service
-//     sign-in when the server has one, else the remote URL host), on MinServersPerService
-//     or more servers;
-//     - an app version: a named client family and version, when another named family
-//     worked on one of its servers after its first failure there (served for an app
-//     sign-in, answered by the server otherwise).
+//  1. Each failure has a way: the part that broke and who has to fix its latest error.
+//     The parts are the app's sign-in to the Speakeasy MCP server (inbound), and the
+//     server's sign-in to the outside service and its request to it (outbound). Only
+//     failures of the same way are grouped.
+//  2. Within each way, a group is minPeople or more people whose failures share one of:
+//     - a server: the Speakeasy MCP server, gateway or toolset the app connects to. A
+//     direct server or gateway member is its mcp_servers row, anything else its own kind
+//     and id;
+//     - a service, only for outbound failures the provider fixes: what the server connects
+//     out to (the remote session issuer for a service sign-in when the server has one,
+//     else the remote URL host), on minServersPerService or more servers;
+//     - an app version: a named client family and version, with only its failures on
+//     servers where another named family worked after the first failure there (was
+//     served for an app sign-in, else the outside service answered).
 //  3. Every group becomes a problem. A failure that fits several is counted in one: the
 //     group with the most people is taken first (ties: app version, server, service, then
 //     key), its failures are set aside, and the rest are grouped again until none is left.
-//  4. A failure in no group that opened OnePersonFor or more before now is a problem for
-//     that person, one per person and kind.
+//     Once a server is taken, its service is not a group in that way.
+//  4. A failure in no group that opened onePersonFor or more before now is a problem for
+//     that person, one per person and way.
 package problems
 
 import (
@@ -36,17 +39,17 @@ import (
 )
 
 const (
-	// MinPeople is how many distinct people make a server, service or app version a problem.
-	MinPeople = 2
+	// minPeople is how many distinct people make a server, service or app version a problem.
+	minPeople = 2
 
-	// MinServersPerService is how many servers must share an upstream for it to be a service problem.
-	MinServersPerService = 2
+	// minServersPerService is how many servers must share an upstream for it to be a service problem.
+	minServersPerService = 2
 
-	// OnePersonFor is how long one person must fail the same way to be a problem alone.
-	OnePersonFor = 24 * time.Hour
+	// onePersonFor is how long one person must fail the same way to be a problem alone.
+	onePersonFor = 24 * time.Hour
 
-	// TriedWithin is how recently a person must have tried to count.
-	TriedWithin = 24 * time.Hour
+	// triedWithin is how recently a person must have last failed.
+	triedWithin = 24 * time.Hour
 )
 
 // Rule is the rule a problem was listed by. The values are a contract with the dashboard.
@@ -62,7 +65,7 @@ const (
 	// RuleSameAppVersion is people failing the same way on one app version.
 	RuleSameAppVersion Rule = "same_app_version"
 
-	// RuleOnePerson is one person failing the same way for OnePersonFor.
+	// RuleOnePerson is one person failing the same way for onePersonFor.
 	RuleOnePerson Rule = "one_person"
 )
 
@@ -70,10 +73,10 @@ const (
 type ScopeKind string
 
 const (
-	// ScopeServer is the inbound side: one Speakeasy MCP server, gateway or toolset. Its key is the mcp_servers id, else kind:id.
+	// ScopeServer is one Speakeasy MCP server, gateway or toolset. Its key is the mcp_servers id, else kind:id.
 	ScopeServer ScopeKind = "server"
 
-	// ScopeService is the outbound side: what servers connect out to. Its key is the remote session issuer or the remote URL host.
+	// ScopeService is what servers connect out to. Its key is the remote session issuer or the remote URL host.
 	ScopeService ScopeKind = "service"
 
 	// ScopeAppVersion is one client family and version. Its key is family@version.
@@ -145,8 +148,8 @@ type Problem struct {
 	// SharedApp is the named family and version every episode has, zero otherwise.
 	SharedApp App
 
-	// OtherAppsServed is whether another named family worked on one of its servers after its first failure there.
-	OtherAppsServed bool
+	// OtherAppsWorked is whether another named family worked on one of its servers after its first failure there.
+	OtherAppsWorked bool
 }
 
 // way is how an episode failed: two episodes failed the same way when both are equal.
@@ -227,27 +230,33 @@ func newGrouper(organizationID string, episodes []mcpconnectionattempts.FailingP
 		}
 	}
 	for _, s := range served {
-		k := servedKey{kind: s.ServerKind, id: s.ServerID, member: s.MemberID}
-		if g.worked[k] == nil {
-			g.worked[k] = map[string]workedAt{}
+		g.addWorked(servedKey{kind: s.ServerKind, id: s.ServerID, member: s.MemberID}, s)
+		if s.OnGatewayMember() {
+			// Any member working shows the gateway itself works.
+			g.addWorked(servedKey{kind: s.ServerKind, id: s.ServerID, member: ""}, s)
 		}
-		w := g.worked[k][s.ClientFamily]
-		if s.LastServedAt.After(w.served) {
-			w.served = s.LastServedAt
-		}
-		if s.LastAnsweredAt.After(w.answered) {
-			w.answered = s.LastAnsweredAt
-		}
-		g.worked[k][s.ClientFamily] = w
 	}
 	return g
 }
 
-// scopesOf are the candidates an episode can join: a service only when the provider has
-// to fix a failure that involved it.
+func (g grouper) addWorked(k servedKey, s mcpconnectionattempts.ServedByFamily) {
+	if g.worked[k] == nil {
+		g.worked[k] = map[string]workedAt{}
+	}
+	w := g.worked[k][s.ClientFamily]
+	if s.LastServedAt.After(w.served) {
+		w.served = s.LastServedAt
+	}
+	if s.LastAnsweredAt.After(w.answered) {
+		w.answered = s.LastAnsweredAt
+	}
+	g.worked[k][s.ClientFamily] = w
+}
+
+// scopesOf are the candidates an episode can join.
 func scopesOf(e mcpconnectionattempts.FailingPerson, w way, server string, upstreams map[string]Upstream) []Scope {
 	var out []Scope
-	if e.ReachedServer() {
+	if e.OnMCPServer() {
 		out = append(out, Scope{Kind: ScopeServer, Key: server})
 		if w.part != mcpconnectionattempts.PartAppSignIn && w.who == mcpconnectionattempts.WhoProvider {
 			if key := serviceOf(e, upstreams); key != "" {
@@ -270,9 +279,13 @@ type candidate struct {
 	servers   map[string]int
 	dirty     bool
 	qualifies bool
+
+	// people and picks are what it would take now; an app version takes only episodes with evidence.
+	people int
+	picks  []int
 }
 
-// Group applies the package rule; upstreams is keyed by mcp_servers id.
+// Group applies the package rule, most people first, then earliest Since, then ID; upstreams is keyed by mcp_servers id.
 func Group(organizationID string, episodes []mcpconnectionattempts.FailingPerson, upstreams map[string]Upstream, served []mcpconnectionattempts.ServedByFamily, now time.Time) []Problem {
 	g := newGrouper(organizationID, episodes, upstreams, served)
 	taken := make([]bool, len(episodes))
@@ -303,13 +316,13 @@ func (g grouper) groupWay(w way, idx []int, taken []bool) []Problem {
 		for _, s := range g.scopes[i] {
 			c := cands[s]
 			if c == nil {
-				c = &candidate{scope: s, members: nil, alive: 0, subjects: map[string]int{}, servers: map[string]int{}, dirty: true, qualifies: false}
+				c = &candidate{scope: s, members: nil, alive: 0, subjects: map[string]int{}, servers: map[string]int{}, dirty: true, qualifies: false, people: 0, picks: nil}
 				cands[s] = c
 			}
 			c.members = append(c.members, i)
 			c.alive++
 			c.subjects[g.episodes[i].SubjectURN]++
-			if g.episodes[i].ReachedServer() {
+			if g.episodes[i].OnMCPServer() {
 				c.servers[g.servers[i]]++
 			}
 		}
@@ -317,8 +330,7 @@ func (g grouper) groupWay(w way, idx []int, taken []bool) []Problem {
 
 	var out []Problem
 	for {
-		// A candidate that fails can never qualify again: people and servers only leave,
-		// and each server's first failure only moves later.
+		// People, servers and evidence only leave, so a candidate that fails never qualifies again.
 		var best *candidate
 		for s, c := range cands {
 			if c.dirty {
@@ -328,7 +340,7 @@ func (g grouper) groupWay(w way, idx []int, taken []bool) []Problem {
 				delete(cands, s)
 				continue
 			}
-			if best == nil || rank(c.scope, len(c.subjects), best.scope, len(best.subjects)) < 0 {
+			if best == nil || rank(c.scope, c.people, best.scope, best.people) < 0 {
 				best = c
 			}
 		}
@@ -337,7 +349,7 @@ func (g grouper) groupWay(w way, idx []int, taken []bool) []Problem {
 		}
 
 		delete(cands, best.scope)
-		picked := g.aliveMembers(best, taken)
+		picked := best.picks
 		for _, i := range picked {
 			taken[i] = true
 			for _, s := range g.scopes[i] {
@@ -345,12 +357,17 @@ func (g grouper) groupWay(w way, idx []int, taken []bool) []Problem {
 				if c == nil {
 					continue
 				}
+				if best.scope.Kind == ScopeServer && s.Kind == ScopeService {
+					// One outage is one problem: its service is not listed on the servers left.
+					delete(cands, s)
+					continue
+				}
 				c.alive--
 				c.dirty = true
 				if c.subjects[g.episodes[i].SubjectURN]--; c.subjects[g.episodes[i].SubjectURN] == 0 {
 					delete(c.subjects, g.episodes[i].SubjectURN)
 				}
-				if g.episodes[i].ReachedServer() {
+				if g.episodes[i].OnMCPServer() {
 					if c.servers[g.servers[i]]--; c.servers[g.servers[i]] == 0 {
 						delete(c.servers, g.servers[i])
 					}
@@ -358,7 +375,7 @@ func (g grouper) groupWay(w way, idx []int, taken []bool) []Problem {
 			}
 		}
 		otherApps := best.scope.Kind == ScopeAppVersion || g.otherAppsWorked(w.part, picked)
-		out = append(out, g.problem(best.scope, w, picked, len(best.subjects), otherApps))
+		out = append(out, g.problem(best.scope, w, picked, best.people, otherApps))
 	}
 }
 
@@ -375,14 +392,26 @@ func (g grouper) aliveMembers(c *candidate, taken []bool) []int {
 // evaluate refreshes whether c qualifies from its episodes still in the pool.
 func (g grouper) evaluate(c *candidate, w way, taken []bool) {
 	c.dirty = false
-	c.qualifies = len(c.subjects) >= MinPeople
+	c.picks, c.people = g.aliveMembers(c, taken), len(c.subjects)
 	switch c.scope.Kind {
 	case ScopeService:
-		c.qualifies = c.qualifies && len(c.servers) >= MinServersPerService
+		if len(c.servers) < minServersPerService {
+			c.people = 0
+		}
 	case ScopeAppVersion:
-		c.qualifies = c.qualifies && g.otherAppsWorked(w.part, g.aliveMembers(c, taken))
+		c.picks = g.withEvidence(w.part, c.picks)
+		c.people = g.countPeople(c.picks)
 	case ScopeServer, ScopePerson:
 	}
+	c.qualifies = c.people >= minPeople
+}
+
+func (g grouper) countPeople(idx []int) int {
+	subjects := map[string]bool{}
+	for _, i := range idx {
+		subjects[g.episodes[i].SubjectURN] = true
+	}
+	return len(subjects)
 }
 
 // rank orders candidates: most people, then narrowest kind, then key.
@@ -403,7 +432,7 @@ type personWay struct {
 func (g grouper) longFailures(taken []bool, now time.Time) []Problem {
 	groups := map[personWay][]int{}
 	for i, e := range g.episodes {
-		if !g.people[i] || taken[i] || now.Sub(e.OpenedAt) < OnePersonFor {
+		if !g.people[i] || taken[i] || now.Sub(e.OpenedAt) < onePersonFor {
 			continue
 		}
 		k := personWay{subject: e.SubjectURN, way: g.ways[i]}
@@ -436,7 +465,7 @@ func (g grouper) problem(scope Scope, w way, idx []int, people int, otherApps bo
 		People:          people,
 		Episodes:        eps,
 		SharedApp:       sharedApp(eps),
-		OtherAppsServed: otherApps,
+		OtherAppsWorked: otherApps,
 	}
 	for _, e := range eps[1:] {
 		if e.LastFailureAt.After(p.LastFailedAt) {
@@ -446,16 +475,19 @@ func (g grouper) problem(scope Scope, w way, idx []int, people int, otherApps bo
 	return p
 }
 
-// otherAppsWorked is whether a named family none of the episodes failed with worked on one
-// of their servers (exact kind, id and member) after their first failure there. An app
-// sign-in works when served; anything else only when the server answered.
+// otherAppsWorked is whether withEvidence keeps any of idx.
 func (g grouper) otherAppsWorked(part mcpconnectionattempts.Part, idx []int) bool {
+	return len(g.withEvidence(part, idx)) > 0
+}
+
+// withEvidence keeps the episodes on servers where a named family none of idx failed with worked after idx's first failure there.
+func (g grouper) withEvidence(part mcpconnectionattempts.Part, idx []int) []int {
 	families := map[string]bool{}
 	first := map[servedKey]time.Time{}
 	for _, i := range idx {
 		e := g.episodes[i]
 		families[e.ClientFamily] = true
-		if !e.ReachedServer() {
+		if !e.OnMCPServer() {
 			continue
 		}
 		k := servedKeyOf(e)
@@ -463,6 +495,7 @@ func (g grouper) otherAppsWorked(part mcpconnectionattempts.Part, idx []int) boo
 			first[k] = e.OpenedAt
 		}
 	}
+	worked := map[servedKey]bool{}
 	for k, since := range first {
 		for family, w := range g.worked[k] {
 			at := w.answered
@@ -470,11 +503,18 @@ func (g grouper) otherAppsWorked(part mcpconnectionattempts.Part, idx []int) boo
 				at = w.served
 			}
 			if mcpconnectionattempts.NamedClient(family) && !families[family] && at.After(since) {
-				return true
+				worked[k] = true
+				break
 			}
 		}
 	}
-	return false
+	var out []int
+	for _, i := range idx {
+		if e := g.episodes[i]; e.OnMCPServer() && worked[servedKeyOf(e)] {
+			out = append(out, i)
+		}
+	}
+	return out
 }
 
 // serviceOf is the episode's configured upstream, empty when its server has none.

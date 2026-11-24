@@ -63,15 +63,13 @@ func (f *readFixture) read(org string, recordedSince time.Time) []Problem {
 
 func TestRead_LogsOffReturnsTheError(t *testing.T) {
 	t.Parallel()
-	f := newReadFixture(t)
-	_, err := Read(t.Context(), f.ch, f.db, logsOff, "org-"+uuid.NewString(), time.Time{}, f.now)
+	_, err := Read(t.Context(), nil, nil, logsOff, "org-"+uuid.NewString(), time.Time{}, time.Now())
 	require.ErrorIs(t, err, mcpconnectionattempts.ErrLogsOff)
 }
 
 func TestRead_RejectsAnEmptyOrganization(t *testing.T) {
 	t.Parallel()
-	f := newReadFixture(t)
-	_, err := Read(t.Context(), f.ch, f.db, mcpconnectionattemptstest.LogsOn, "", time.Time{}, f.now)
+	_, err := Read(t.Context(), nil, nil, mcpconnectionattemptstest.LogsOn, "", time.Time{}, time.Now())
 	require.Error(t, err)
 }
 
@@ -92,11 +90,45 @@ func TestRead_GroupsOneOrganizationsFailures(t *testing.T) {
 	require.Equal(t, orgA, got[0].OrganizationID)
 }
 
+// servedOn writes a request of family on server that p's app had served ago before now.
+func (f *readFixture) servedOn(org string, project, server uuid.UUID, p urn.SessionSubject, family string, ago time.Duration) {
+	f.t.Helper()
+	at := f.now.Add(-ago)
+	require.NoError(f.t, f.ch.Exec(f.t.Context(), `INSERT INTO mcp_connection_last_served (
+		organization_id, project_id, server_kind, server_id, member_id, subject_urn,
+		app_key, client_family, remote_session_client_id, last_served_at, last_answered_at)
+		VALUES (?, ?, 'mcp', ?, '', ?, ?, ?, '', ?, ?)`,
+		org, project, server.String(), p.String(), mcpconnectionattempts.AppDCR.String(), family, at, at))
+}
+
+func TestRead_GroupsAnAppVersionFromServedRows(t *testing.T) {
+	t.Parallel()
+	f := newReadFixture(t)
+	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
+	scope := mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)
+	for range minPeople {
+		p, at := urn.NewUserSubject("user-"+uuid.NewString()), f.now.Add(-time.Hour)
+		row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), at, scope), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken, true, at, mcpconnectionattempts.Subject(&p))
+		require.NoError(t, err)
+		row.ClientFamily, row.ClientVersion = mcpconnectionattempts.FamilyCursor, "2.0.1"
+		require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), f.ch, []mcpconnectionattempts.Row{row}))
+	}
+	require.Equal(t, RuleSameServer, f.read(org, time.Time{})[0].Rule, "nothing else worked on the server")
+
+	f.servedOn(org, project, server, urn.NewUserSubject("user-"+uuid.NewString()), mcpconnectionattempts.FamilyClaudeCode, 10*time.Minute)
+	got := f.read(org, time.Time{})
+	require.Len(t, got, 1)
+	require.Equal(t, RuleSameAppVersion, got[0].Rule)
+	require.Equal(t, Scope{Kind: ScopeAppVersion, Key: mcpconnectionattempts.FamilyCursor + "@2.0.1"}, got[0].Scope)
+	require.Equal(t, 2, got[0].People)
+	require.True(t, got[0].OtherAppsWorked)
+}
+
 func TestRead_StartsWhereRecordingStarted(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
 	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
-	for range MinPeople {
+	for range minPeople {
 		f.fail(mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR), 3*time.Hour)
 	}
 	require.Len(t, f.read(org, time.Time{}), 1)
@@ -124,7 +156,7 @@ func TestRead_DropsAFailureLastSeenBeforeRecordingStarted(t *testing.T) {
 	t.Parallel()
 	f := newReadFixture(t)
 	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
-	for range MinPeople {
+	for range minPeople {
 		p := urn.NewUserSubject("user-" + uuid.NewString())
 		started := f.now.Add(-100 * time.Minute)
 		row, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(uuid.New(), started, mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)),
@@ -142,7 +174,7 @@ func TestRead_AppliesGraceFromWhenRecordingStarted(t *testing.T) {
 	f := newReadFixture(t)
 	org, project, server := "org-"+uuid.NewString(), uuid.New(), uuid.New()
 	scope := mcpconnectionattempts.ServerScope(org, project, server, mcpconnectionattempts.AppDCR)
-	for range MinPeople {
+	for range minPeople {
 		p := urn.NewUserSubject("user-" + uuid.NewString())
 		f.failAs(p, scope, 3*time.Hour, mcpconnectionattempts.CodeProviderServerError)
 		f.failAs(p, scope, 9*time.Minute, mcpconnectionattempts.CodeProviderServerError)
