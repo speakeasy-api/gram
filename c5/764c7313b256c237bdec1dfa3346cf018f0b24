@@ -1,0 +1,21 @@
+server/internal/feature/flags.go
+  s_7f7b161a4d59e4::t_bc9725dcd29726 118-119
+server/internal/intentpolicies/impl.go
+  s_7f7b161a4d59e4::t_bc9725dcd29726 119-120,122,128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c5764c7313b256c237bdec1dfa3346cf018f0b24",
+  "prompts": {},
+  "sessions": {
+    "s_7f7b161a4d59e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5f8a32ee-f004-438b-97f5-eb7c5a009f3f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
