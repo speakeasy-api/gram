@@ -18,6 +18,7 @@ import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreate
 import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { invalidateAllRiskPoliciesGet } from "@gram/client/react-query/riskPoliciesGet.js";
 import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useSetAIToolDecisionMutation } from "@gram/client/react-query/setAIToolDecision.js";
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -45,6 +46,37 @@ import {
 } from "./shadow-ai/access-rows";
 import { ShadowAIAccessStep } from "./shadow-ai/ShadowAIAccessStep";
 import { type PolicyStep, useStepParam } from "./use-step-param";
+
+type DecisionFailure = "retry" | "refused" | "unknown";
+
+// Only a refusal is known not to have saved; anything else may have committed.
+function decisionFailure(error: unknown): DecisionFailure {
+  if (!(error instanceof GramError)) return "unknown";
+  if (error.statusCode === 503 || error.statusCode === 429) return "retry";
+  if (error.statusCode >= 400 && error.statusCode < 500) return "refused";
+  return "unknown";
+}
+
+function decisionFailureSentence(
+  failure: DecisionFailure,
+  names: string[],
+): string {
+  const list = names.join(", ");
+  const one = names.length === 1;
+  const notSaved = one
+    ? `The decision for ${list} could not be saved. It keeps the decision it had before.`
+    : `The decisions for ${list} could not be saved. They keep the decisions they had before.`;
+  switch (failure) {
+    case "retry":
+      return `${notSaved} Try again in a few minutes.`;
+    case "refused":
+      return notSaved;
+    case "unknown":
+      return one
+        ? `Speakeasy could not confirm whether the decision for ${list} was saved. Refresh the page to see the current decision.`
+        : `Speakeasy could not confirm whether the decisions for ${list} were saved. Refresh the page to see the current decisions.`;
+  }
+}
 
 const SHADOW_AI_STEPS: PolicyStep[] = [
   {
@@ -317,12 +349,14 @@ export function ShadowAIPolicyEditor({
   const trimmedName = name.trim() || SHADOW_AI_DEFAULT_NAME;
 
   // Every changed decision, one by one, after the policy write. A failure
-  // leaves the rest applied and is returned so the save can say which
-  // targets kept their previous decision; the draft keeps the failed entries, so
-  // Save offers them again.
-  const applyDecisions = async (): Promise<DecisionChange[]> => {
+  // leaves the rest applied and is returned so the save can say what happened
+  // to each target; the draft keeps the failed entries, so Save offers them
+  // again.
+  const applyDecisions = async (): Promise<
+    { change: DecisionChange; failure: DecisionFailure }[]
+  > => {
     const pending = changedDecisions(latest.current.rows, latest.current.draft);
-    const failed: DecisionChange[] = [];
+    const failed: { change: DecisionChange; failure: DecisionFailure }[] = [];
     for (const change of pending) {
       try {
         await decisionMutation.mutateAsync({
@@ -334,8 +368,8 @@ export function ShadowAIPolicyEditor({
             },
           },
         });
-      } catch {
-        failed.push(change);
+      } catch (error) {
+        failed.push({ change, failure: decisionFailure(error) });
       }
     }
     if (pending.length > 0) {
@@ -348,17 +382,25 @@ export function ShadowAIPolicyEditor({
     return failed;
   };
 
-  const reportDecisions = (failed: DecisionChange[], written: string) => {
+  const reportDecisions = (
+    failed: { change: DecisionChange; failure: DecisionFailure }[],
+    written: string,
+  ) => {
     if (failed.length === 0) {
       toast.success(written);
       return;
     }
-    const names = failed.map((change) => change.displayName).join(", ");
-    const outcome =
-      failed.length === 1
-        ? `the decision for ${names} could not be saved. It keeps the decision it had before.`
-        : `the decisions for ${names} could not be saved. They keep the decisions they had before.`;
-    toast.error(`${written}, but ${outcome} Try again in a few minutes.`);
+    const sentences = (["retry", "refused", "unknown"] as const)
+      .flatMap((failure) => {
+        const names = failed
+          .filter((f) => f.failure === failure)
+          .map((f) => f.change.displayName);
+        return names.length > 0
+          ? [decisionFailureSentence(failure, names)]
+          : [];
+      })
+      .join(" ");
+    toast.error(`${written}, but ${sentences.replace(/^The /, "the ")}`);
   };
 
   const save = async () => {
