@@ -36,15 +36,15 @@ function renderSheet() {
   render(
     <LogFilterSheet
       open
-      onOpenChange={vi.fn()}
+      onOpenChange={() => {}}
       accents={{}}
       schema={schema}
       values={{ person: ["a", "b"], server: [] }}
       optionsById={{}}
       facets={undefined}
       total={undefined}
-      onChange={vi.fn()}
-      onReset={vi.fn()}
+      onChange={() => {}}
+      onReset={() => {}}
     />,
   );
 }
