@@ -69,6 +69,9 @@ func BuildUpdateSettingsPayload(mcpFeedbackUpdateSettingsBody string, mcpFeedbac
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
 		if body.ToolName != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.tool_name", *body.ToolName, "^[A-Za-z0-9_-]+$"))
+		}
+		if body.ToolName != nil {
 			if utf8.RuneCountInString(*body.ToolName) > 64 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_name", *body.ToolName, utf8.RuneCountInString(*body.ToolName), 64, false))
 			}

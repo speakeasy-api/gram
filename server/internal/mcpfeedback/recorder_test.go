@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
@@ -403,21 +404,24 @@ func TestRecorderServesEarlierSettingsWhenTheyCannotBeRead(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := seedHostedServer(t, ctx, ti)
 	unread := seedHostedServer(t, ctx, ti)
-	recorder := newTestRecorder(t, ti, noLimits)
+	// The recorder's own pool, closed below, stands in for a database that
+	// stopped answering.
+	pool, err := pgxpool.New(ctx, ti.conn.Config().ConnString())
+	require.NoError(t, err)
+	recorder := mcpfeedback.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), pool, chatredact.New(), noLimits, mcpfeedback.WithSettingsFreshFor(0))
 
 	saveFeedbackConfig(t, ctx, ti, server, true)
 	_, offered, err := recorder.Tool(ctx, server.ProjectID, server.ID)
 	require.NoError(t, err)
 	require.True(t, offered)
 
-	unreachable, cancel := context.WithCancel(ctx)
-	cancel()
+	pool.Close()
 
-	_, offered, err = recorder.Tool(unreachable, server.ProjectID, server.ID)
+	_, offered, err = recorder.Tool(ctx, server.ProjectID, server.ID)
 	require.NoError(t, err)
 	require.True(t, offered)
 
-	_, _, err = recorder.Tool(unreachable, unread.ProjectID, unread.ID)
+	_, _, err = recorder.Tool(ctx, unread.ProjectID, unread.ID)
 	require.Error(t, err)
 }
 

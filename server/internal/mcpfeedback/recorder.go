@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -174,6 +175,10 @@ type Recorder struct {
 
 	// settings holds the feedback settings last read for each server.
 	settings map[cachedSettingsKey]cachedSettings
+
+	// settingsReads lets requests that need the same server's settings share
+	// one read.
+	settingsReads singleflight.Group
 }
 
 // cachedSettingsKey names one server's cached settings.
@@ -229,6 +234,7 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, db *pg
 		settingsFreshFor: defaultSettingsFreshFor,
 		settingsMu:       sync.Mutex{},
 		settings:         map[cachedSettingsKey]cachedSettings{},
+		settingsReads:    singleflight.Group{},
 	}
 	for _, opt := range opts {
 		opt(recorder)
@@ -264,6 +270,29 @@ func (r *Recorder) serverSettings(ctx context.Context, key cachedSettingsKey) (S
 		return cached.settings, nil
 	}
 
+	// Requests that find the same server's settings stale together share one
+	// read, so a busy server reads them once per refresh. The read outlives
+	// the request that started it, which the others are waiting on too.
+	read, err, _ := r.settingsReads.Do(key.mcpServerID.String()+"/"+key.projectID.String(), func() (any, error) {
+		return r.readSettings(context.WithoutCancel(ctx), key)
+	})
+	if err != nil {
+		if found && now.Sub(cached.readAt) < settingsUsableFor {
+			r.logger.WarnContext(ctx, "load feedback config; serving the settings read earlier", attr.SlogError(err), attr.SlogMcpServerID(key.mcpServerID.String()))
+			return cached.settings, nil
+		}
+		return Settings{Enabled: false, ToolName: "", ToolDescription: ""}, err
+	}
+
+	return read.(Settings), nil //nolint:forcetypeassert // readSettings returns only Settings
+}
+
+// readSettings reads a server's settings and caches them, unless settings
+// read later are already cached: a slow read must not put back settings an
+// admin has since changed.
+func (r *Recorder) readSettings(ctx context.Context, key cachedSettingsKey) (Settings, error) {
+	readAt := r.now()
+
 	settings := Settings{Enabled: false, ToolName: "", ToolDescription: ""}
 	config, err := repo.New(r.db).GetFeedbackConfig(ctx, repo.GetFeedbackConfigParams{
 		McpServerID: key.mcpServerID,
@@ -272,21 +301,20 @@ func (r *Recorder) serverSettings(ctx context.Context, key cachedSettingsKey) (S
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
-		if found && now.Sub(cached.readAt) < settingsUsableFor {
-			r.logger.WarnContext(ctx, "load feedback config; serving the settings read earlier", attr.SlogError(err), attr.SlogMcpServerID(key.mcpServerID.String()))
-			return cached.settings, nil
-		}
 		return settings, fmt.Errorf("load feedback config: %w", err)
 	default:
 		settings = SettingsFromConfig(config)
 	}
 
 	r.settingsMu.Lock()
+	defer r.settingsMu.Unlock()
+	if newer, ok := r.settings[key]; ok && newer.readAt.After(readAt) {
+		return newer.settings, nil
+	}
 	if len(r.settings) >= maxCachedSettings {
 		clear(r.settings)
 	}
-	r.settings[key] = cachedSettings{settings: settings, readAt: now}
-	r.settingsMu.Unlock()
+	r.settings[key] = cachedSettings{settings: settings, readAt: readAt}
 
 	return settings, nil
 }

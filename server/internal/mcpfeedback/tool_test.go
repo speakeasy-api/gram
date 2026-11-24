@@ -99,7 +99,9 @@ func TestSettingsValidate(t *testing.T) {
 		})
 	}
 
-	for _, name := range append([]string{"submit.feedback", "submit/feedback", "sübmit", "submit_feedback!"}, mcpfeedback.ReservedToolNames...) {
+	// The gateway's own tool names are listed here rather than read from
+	// ReservedToolNames, so dropping one from that list fails this test.
+	for _, name := range []string{"submit.feedback", "submit/feedback", "sübmit", "submit_feedback!", "search_tools", "list_tools", "describe_tools", "execute_tool"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			require.Error(t, mcpfeedback.Settings{Enabled: true, ToolName: name, ToolDescription: ""}.Validate())

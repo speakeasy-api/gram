@@ -143176,6 +143176,7 @@ components:
                 tool_name:
                     type: string
                     description: The name to list the tool under. Letters, digits, underscores and hyphens only. Leave out to use the default.
+                    pattern: ^[A-Za-z0-9_-]+$
                     maxLength: 64
             description: The feedback tool settings to store for an MCP server.
             required:

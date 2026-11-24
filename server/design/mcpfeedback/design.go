@@ -163,6 +163,7 @@ var UpdateMcpFeedbackSettingsForm = Type("UpdateMcpFeedbackSettingsForm", func()
 	})
 	Attribute("enabled", Boolean, "Whether the server offers the feedback tool.")
 	Attribute("tool_name", String, "The name to list the tool under. Letters, digits, underscores and hyphens only. Leave out to use the default.", func() {
+		Pattern(`^[A-Za-z0-9_-]+$`)
 		MaxLength(64)
 	})
 	Attribute("tool_description", String, "The description agents read. Leave out to use the default.", func() {

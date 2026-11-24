@@ -117,6 +117,9 @@ func handleHostedFeedbackToolCall(
 		ProjectID:      payload.projectID,
 		McpServerID:    serverID,
 	}, caller, arguments)
+	// Counted as a served call when it succeeds, like the gateway's other
+	// own tools, although no backend answered it.
+	payload.resultSucceeded = !outcome.IsError
 
 	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
 		Type:     "text",
