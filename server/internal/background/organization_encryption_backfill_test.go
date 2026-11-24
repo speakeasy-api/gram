@@ -282,15 +282,18 @@ func TestOrganizationEncryptionBackfill_TimingsFitTheActivity(t *testing.T) {
 func TestOrganizationEncryptionBackfill_RetriesStartAfterADeadWorkersClaimExpires(t *testing.T) {
 	t.Parallel()
 
-	// The hourly activity claims an organization right after a heartbeat, so
-	// Temporal notices a dead worker a heartbeat timeout after the claim at
-	// the earliest, and retries after the retry interval.
-	require.GreaterOrEqual(t, organizationEncryptionBackfillHeartbeatTimeout+organizationEncryptionBackfillRetryInterval, orgencryption.RunLease)
+	// The hourly activity heartbeats right before each run, which claims
+	// within ClaimTimeout. Temporal notices a dead worker a heartbeat timeout
+	// after that heartbeat at the earliest, and retries after the retry
+	// interval.
+	require.GreaterOrEqual(t, organizationEncryptionBackfillHeartbeatTimeout+organizationEncryptionBackfillRetryInterval, orgencryption.ClaimTimeout+orgencryption.RunLease)
 
-	// An on-demand attempt claims within its first minute. Its retry starts
-	// StartToClose plus the retry interval after the attempt started.
-	const claimWithin = time.Minute
-	require.GreaterOrEqual(t, organizationEncryptionBackfillOrganizationStartToClose+organizationEncryptionBackfillOrganizationRetryInterval, claimWithin+orgencryption.RunLease)
+	// An on-demand attempt starts its run at once, and the run claims within
+	// ClaimTimeout. runStartSlack covers the activity's setup before the run.
+	// The retry starts StartToClose plus the retry interval after the attempt
+	// started.
+	const runStartSlack = 30 * time.Second
+	require.GreaterOrEqual(t, organizationEncryptionBackfillOrganizationStartToClose+organizationEncryptionBackfillOrganizationRetryInterval, runStartSlack+orgencryption.ClaimTimeout+orgencryption.RunLease)
 	require.Less(t, organizationEncryptionBackfillOrganizationStartToClose*organizationEncryptionBackfillOrganizationMaxAttempts+organizationEncryptionBackfillOrganizationRetryInterval*3, organizationEncryptionBackfillOrganizationRunTimeout, "every attempt and its backoff fits the run")
 }
 

@@ -88,8 +88,9 @@ const (
 	// organizationEncryptionBackfillOrganizationRetryInterval is the wait
 	// before the first retry of an on-demand run. With StartToClose it puts
 	// the retry at least orgencryption.RunLease after any claim the failed
-	// attempt made in its first minute, so a retry after a worker died finds
-	// the claim expired instead of failing as already running.
+	// attempt made, which lands within orgencryption.ClaimTimeout of the run
+	// starting, so a retry after a worker died finds the claim expired
+	// instead of failing as already running.
 	organizationEncryptionBackfillOrganizationRetryInterval = time.Minute
 
 	// organizationEncryptionBackfillOrganizationRunTimeout covers every
@@ -313,6 +314,9 @@ backfills:
 				continue
 			}
 
+			// The run claims within ClaimTimeout of this heartbeat, so a
+			// dead worker's claim expires before Temporal retries.
+			a.heartbeat(ctx)
 			_, err = a.migrator.Backfill(ctx, transition.OrganizationID, transition.UseCase)
 			switch {
 			case errors.Is(err, orgencryption.ErrBackfillRunning), errors.Is(err, orgencryption.ErrFenced), errors.Is(err, orgencryption.ErrTransitionNotAllowed):

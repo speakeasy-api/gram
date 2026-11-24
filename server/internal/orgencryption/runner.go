@@ -41,12 +41,19 @@ const (
 	// records that it ended.
 	recordTimeout = 30 * time.Second
 
+	// ClaimTimeout bounds the work in Run up to and including its claim on
+	// the transition row, so a run claims within ClaimTimeout of starting or
+	// does not claim at all. Callers that retry a run whose process died
+	// size the retry delay from ClaimTimeout and RunLease.
+	ClaimTimeout = 30 * time.Second
+
 	// RunLease is how long a run's claim on the transition row holds. A live
 	// run never holds it longer than MaxRunDuration plus recordTimeout, and
 	// its end is recorded only on its own claim, so the lease only has to
 	// outlast that. It is kept short so that a retry of a run whose process
 	// died finds the claim expired: callers start retries at least RunLease
-	// after the claim was made.
+	// after the claim was made, which is at most ClaimTimeout after the run
+	// started.
 	RunLease = MaxRunDuration + time.Minute
 )
 
@@ -124,29 +131,16 @@ func (r *Runner) Run(ctx context.Context, organizationID string, useCase UseCase
 	ctx, cancel := context.WithTimeout(ctx, MaxRunDuration)
 	defer cancel()
 
-	d, err := r.cipher.Redecide(ctx, Decision{OrganizationID: organizationID, UseCase: useCase, State: "", Generation: 0, decidedAt: r.cipher.now()})
-	if err != nil {
-		return result, err
-	}
-	if d.State != TransitionStateDualWrite {
-		return result, fmt.Errorf("%w: run in %s", ErrTransitionNotAllowed, d.State)
-	}
-
 	q := repo.New(r.db)
 	logger := r.logger.With(attr.SlogOrganizationID(organizationID), attr.SlogOrgEncryptionUseCase(useCase))
 
-	claimedAt, err := q.RecordEncryptionTransitionBackfillStarted(ctx, repo.RecordEncryptionTransitionBackfillStartedParams{
-		OrganizationID: organizationID,
-		UseCase:        string(useCase),
-		Generation:     d.Generation,
-		Lease:          conv.PtrToPGInterval(new(RunLease)),
-	})
+	d, claimedAt, err := r.claim(ctx, q, organizationID, useCase)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		refused = true
 		return result, r.refusedClaim(ctx, d)
 	case err != nil:
-		return result, fmt.Errorf("record backfill start: %w", err)
+		return result, err
 	}
 
 	runErr := r.backfill(ctx, logger, q, &d, stores, &result)
@@ -199,6 +193,33 @@ func recordedError(runErr error, result RunResult) error {
 	}
 
 	return fmt.Errorf("orgencryption: verification failed: %d values mismatched, %d organization-key copies did not open", result.Mismatched, result.Unopenable)
+}
+
+// claim decides the use case's state and claims the run within ClaimTimeout.
+// Its error wraps pgx.ErrNoRows when the claim did not land.
+func (r *Runner) claim(ctx context.Context, q *repo.Queries, organizationID string, useCase UseCase) (Decision, pgtype.Timestamptz, error) {
+	ctx, cancel := context.WithTimeout(ctx, ClaimTimeout)
+	defer cancel()
+
+	d, err := r.cipher.Redecide(ctx, Decision{OrganizationID: organizationID, UseCase: useCase, State: "", Generation: 0, decidedAt: r.cipher.now()})
+	if err != nil {
+		return d, pgtype.Timestamptz{}, err
+	}
+	if d.State != TransitionStateDualWrite {
+		return d, pgtype.Timestamptz{}, fmt.Errorf("%w: run in %s", ErrTransitionNotAllowed, d.State)
+	}
+
+	claimedAt, err := q.RecordEncryptionTransitionBackfillStarted(ctx, repo.RecordEncryptionTransitionBackfillStartedParams{
+		OrganizationID: organizationID,
+		UseCase:        string(useCase),
+		Generation:     d.Generation,
+		Lease:          conv.PtrToPGInterval(new(RunLease)),
+	})
+	if err != nil {
+		return d, claimedAt, fmt.Errorf("record backfill start: %w", err)
+	}
+
+	return d, claimedAt, nil
 }
 
 // refusedClaim explains a claim that did not land: the transition moved on
