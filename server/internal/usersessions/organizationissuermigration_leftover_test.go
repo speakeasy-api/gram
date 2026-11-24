@@ -1,10 +1,8 @@
 package usersessions_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -152,10 +150,9 @@ func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t
 	}
 }
 
-// A server that moves onto a target with no other consumer offers the clients
-// the target bound, as the move configures. A binding only the source held for
-// another server stays out of it.
-func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourceBinding(t *testing.T) {
+// A server keeps its configured offer, but a downstream issuer move does not
+// turn leftover links at either issuer into upstream offers.
+func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerKeepsOnlyConfiguredOffer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -165,17 +162,15 @@ func TestOrganizationUserSessionIssuerMigrateMovedSoleConsumerSkipsLeftoverSourc
 	sourceID := seedIssuer(t, ctx, ti, "moved-leftover-source")
 	movedServer, ownRegistration := leftoverSeedServer(t, ctx, ti, sourceID)
 	leftoverSyncServers(t, ctx, ti, movedServer)
-	targetRegistration := leftoverSeedBoundRegistration(t, ctx, ti, targetID)
+	leftoverSeedBoundRegistration(t, ctx, ti, targetID)
 	leftoverSeedBoundRegistration(t, ctx, ti, sourceID)
 
 	_, err := ti.service.MigrateIssuer(ctx, confirmedMigratePayload(t, ctx, ti, sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 
-	want := []uuid.UUID{ownRegistration, targetRegistration}
-	slices.SortFunc(want, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
 	registrations, err := authclientbackfill.New(ti.conn).ListOAuthClientsOfServers(ctx, authclientbackfill.ListOAuthClientsOfServersParams{OrganizationID: auth.ActiveOrganizationID, McpServerIds: []uuid.UUID{movedServer}})
 	require.NoError(t, err)
-	assert.Equal(t, want, registrations)
+	assert.Equal(t, []uuid.UUID{ownRegistration}, registrations)
 }
 
 func leftoverEnableEnforcement(t *testing.T, ctx context.Context, ti *testInstance, enforced bool) {

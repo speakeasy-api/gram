@@ -14,10 +14,8 @@ import (
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
-// Moving a server onto a user session issuer configures its sign-in there.
-// Under upstream auth enforcement a server that is the issuer's only consumer
-// offers the clients bound to it, and one that shares the issuer offers none.
-func TestUpdateMcpServer_IssuerMoveOffersSoleConsumerClientsUnderEnforcement(t *testing.T) {
+// Moving to another downstream issuer must not add upstream offers.
+func TestUpdateMcpServer_IssuerMoveDoesNotInheritOffers(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -54,7 +52,7 @@ func TestUpdateMcpServer_IssuerMoveOffersSoleConsumerClientsUnderEnforcement(t *
 			if tc.shared {
 				create("already there", target)
 			}
-			_, client := linkRemoteClientWithID(t, ctx, ti, orgID, projectID, target)
+			linkRemoteClientWithID(t, ctx, ti, orgID, projectID, target)
 
 			_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 				ID: moved, RemoteMcpServerID: &movedBackend, UserSessionIssuerID: &target, Visibility: types.McpServerVisibility("disabled"),
@@ -63,11 +61,7 @@ func TestUpdateMcpServer_IssuerMoveOffersSoleConsumerClientsUnderEnforcement(t *
 
 			links, err := backfill.New(ti.conn).ListServerAuthClientsFixture(ctx, uuid.MustParse(moved))
 			require.NoError(t, err)
-			if tc.shared {
-				require.Empty(t, links, "an issuer another server uses configures nothing for the moved server")
-				return
-			}
-			require.Equal(t, []uuid.UUID{backfill.OAuthClientID(orgID, client, backfill.TypeRemoteSession)}, links)
+			require.Empty(t, links, "moving downstream issuer must not inherit an offer")
 		})
 	}
 }
