@@ -110,6 +110,10 @@ type CreateKeyResponseBody struct {
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoiceResponseBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -147,6 +151,10 @@ type RotateKeyResponseBody struct {
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoiceResponseBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -202,6 +210,10 @@ type UpdateKeyPolicyResponseBody struct {
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoiceResponseBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -1624,6 +1636,16 @@ type APIKeyPolicySelectorResponseBody struct {
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
 }
 
+// AgentKeyAuthClientChoiceResponseBody is used to define fields on response
+// body types.
+type AgentKeyAuthClientChoiceResponseBody struct {
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The auth client the key uses there. Omit for a server whose upstream needs
+	// no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
 // ExtendAgentKeyGrantFormRequestBody is used to define fields on request body
 // types.
 type ExtendAgentKeyGrantFormRequestBody struct {
@@ -1660,6 +1682,10 @@ type KeyResponseBody struct {
 	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
 	// An ordinary key's own policy
 	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key, as listed for its agent: the upstream credential the key
+	// was set up to use on each MCP server it names. Where typed upstream
+	// authentication is enforced, the key signs in to that server with it.
+	AuthClientChoices []*AgentKeyAuthClientChoiceResponseBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 	// Required expiry for an agent key; legacy keys may not expire.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// The creation date of the key.
@@ -1858,6 +1884,16 @@ func NewCreateKeyKeyOK(body *CreateKeyResponseBody) *keys.Key {
 			v.PolicyGrants[i] = unmarshalAPIKeyPolicyGrantResponseBodyToKeysAPIKeyPolicyGrant(val)
 		}
 	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = unmarshalAgentKeyAuthClientChoiceResponseBodyToKeysAgentKeyAuthClientChoice(val)
+		}
+	}
 
 	return v
 }
@@ -2043,6 +2079,16 @@ func NewRotateKeyKeyOK(body *RotateKeyResponseBody) *keys.Key {
 				continue
 			}
 			v.PolicyGrants[i] = unmarshalAPIKeyPolicyGrantResponseBodyToKeysAPIKeyPolicyGrant(val)
+		}
+	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = unmarshalAgentKeyAuthClientChoiceResponseBodyToKeysAgentKeyAuthClientChoice(val)
 		}
 	}
 
@@ -2712,6 +2758,16 @@ func NewUpdateKeyPolicyKeyOK(body *UpdateKeyPolicyResponseBody) *keys.Key {
 			v.PolicyGrants[i] = unmarshalAPIKeyPolicyGrantResponseBodyToKeysAPIKeyPolicyGrant(val)
 		}
 	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = unmarshalAgentKeyAuthClientChoiceResponseBodyToKeysAgentKeyAuthClientChoice(val)
+		}
+	}
 
 	return v
 }
@@ -3074,6 +3130,13 @@ func ValidateCreateKeyResponseBody(body *CreateKeyResponseBody) (err error) {
 			}
 		}
 	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
@@ -3124,6 +3187,13 @@ func ValidateRotateKeyResponseBody(body *RotateKeyResponseBody) (err error) {
 	for _, e := range body.PolicyGrants {
 		if e != nil {
 			if err2 := ValidateAPIKeyPolicyGrantResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3210,6 +3280,13 @@ func ValidateUpdateKeyPolicyResponseBody(body *UpdateKeyPolicyResponseBody) (err
 	for _, e := range body.PolicyGrants {
 		if e != nil {
 			if err2 := ValidateAPIKeyPolicyGrantResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -5142,6 +5219,21 @@ func ValidateAPIKeyPolicySelectorResponseBody(body *APIKeyPolicySelectorResponse
 	return
 }
 
+// ValidateAgentKeyAuthClientChoiceResponseBody runs the validations defined on
+// AgentKeyAuthClientChoiceResponseBody
+func ValidateAgentKeyAuthClientChoiceResponseBody(body *AgentKeyAuthClientChoiceResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateExtendAgentKeyGrantFormRequestBody runs the validations defined on
 // ExtendAgentKeyGrantFormRequestBody
 func ValidateExtendAgentKeyGrantFormRequestBody(body *ExtendAgentKeyGrantFormRequestBody) (err error) {
@@ -5196,6 +5288,13 @@ func ValidateKeyResponseBody(body *KeyResponseBody) (err error) {
 	for _, e := range body.PolicyGrants {
 		if e != nil {
 			if err2 := ValidateAPIKeyPolicyGrantResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}

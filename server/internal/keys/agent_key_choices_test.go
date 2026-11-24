@@ -109,6 +109,15 @@ func TestKeysService_AgentKeyRecordsCredentialChoices(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, openChoice.NoAuth, "a server needing no authentication takes a no-auth choice")
 
+	listed, err := ti.service.ListKeys(ctx, &gen.ListKeysPayload{AgentID: new(agentID.String())})
+	require.NoError(t, err)
+	listedChoices := make(map[string][]*gen.AgentKeyAuthClientChoice, len(listed.Keys))
+	for _, key := range listed.Keys {
+		listedChoices[key.ID] = key.AuthClientChoices
+	}
+	require.Equal(t, []*gen.AgentKeyAuthClientChoice{{McpServerID: serverID.String(), AuthClientID: new(serviceAccount.String())}}, listedChoices[serviceKey.ID], "the agent's key listing names each key's credential")
+	require.Equal(t, []*gen.AgentKeyAuthClientChoice{{McpServerID: noAuthServer.String(), AuthClientID: nil}}, listedChoices[open.ID], "a no-auth choice names no client")
+
 	payload := agentKeyPayload(agentID, projectID)
 	payload.AuthClientChoices = []*gen.AgentKeyAuthClientChoice{{McpServerID: serverID.String(), AuthClientID: new(shared.String())}}
 	created, err := ti.service.CreateKey(ctx, payload)

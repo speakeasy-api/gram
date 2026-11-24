@@ -12,11 +12,19 @@ import {
   AgentDelegatedPolicy$inboundSchema,
 } from "./agentdelegatedpolicy.js";
 import {
+  AgentKeyAuthClientChoice,
+  AgentKeyAuthClientChoice$inboundSchema,
+} from "./agentkeyauthclientchoice.js";
+import {
   APIKeyPolicyGrant,
   APIKeyPolicyGrant$inboundSchema,
 } from "./apikeypolicygrant.js";
 
 export type Key = {
+  /**
+   * For an agent key, as listed for its agent: the upstream credential the key was set up to use on each MCP server it names. Where typed upstream authentication is enforced, the key signs in to that server with it.
+   */
+  authClientChoices?: Array<AgentKeyAuthClientChoice> | undefined;
   /**
    * The creation date of the key.
    */
@@ -83,6 +91,9 @@ export type Key = {
 /** @internal */
 export const Key$inboundSchema: z.ZodMiniType<Key, unknown> = z.pipe(
   z.object({
+    auth_client_choices: z.optional(
+      z.array(AgentKeyAuthClientChoice$inboundSchema),
+    ),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -112,6 +123,7 @@ export const Key$inboundSchema: z.ZodMiniType<Key, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "auth_client_choices": "authClientChoices",
       "created_at": "createdAt",
       "created_by_user_id": "createdByUserId",
       "delegated_grants": "delegatedGrants",

@@ -4321,3 +4321,21 @@ JOIN projects AS project
 WHERE m.deleted IS FALSE
   AND (m.id = ANY(@resource_ids::uuid[]) OR m.toolset_id = ANY(@resource_ids::uuid[]))
 ORDER BY (m.id = m.toolset_id) DESC NULLS LAST, m.created_at, m.id;
+
+-- name: ListAgentLiveKeySharedCredentialChoices :many
+-- The auth clients an agent's live keys were set up to use on one MCP server.
+-- A key that is revoked or has expired signs nothing in, and a choice of no
+-- upstream authentication names no client.
+SELECT DISTINCT sel.auth_client_id::uuid AS auth_client_id
+FROM upstream_client_selections AS sel
+JOIN api_keys AS agent_key
+  ON agent_key.id = sel.credential_id
+ AND agent_key.organization_id = sel.organization_id
+WHERE sel.organization_id = @organization_id
+  AND sel.credential_kind = 'api_key'
+  AND sel.mcp_server_id = @mcp_server_id
+  AND sel.auth_client_id IS NOT NULL
+  AND sel.deleted IS FALSE
+  AND agent_key.subject_urn = @subject_urn
+  AND agent_key.deleted IS FALSE
+  AND agent_key.expires_at > clock_timestamp();

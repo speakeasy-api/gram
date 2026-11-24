@@ -388,3 +388,15 @@ FROM mcp_auth_clients
 WHERE organization_id = @organization_id
   AND id = ANY(@ids::uuid[])
   AND deleted IS FALSE;
+
+-- name: ListAgentKeyAuthClientChoices :many
+-- The upstream credential each of the given agent keys was set up to use on
+-- the MCP servers it names. A NULL auth_client_id is a server whose upstream
+-- needs no authentication.
+SELECT credential_id AS key_id, mcp_server_id, auth_client_id
+FROM upstream_client_selections
+WHERE organization_id = @organization_id
+  AND credential_kind = 'api_key'
+  AND credential_id = ANY(@key_ids::uuid[])
+  AND deleted IS FALSE
+ORDER BY credential_id, mcp_server_id;

@@ -120279,6 +120279,11 @@ components:
         Key:
             type: object
             properties:
+                auth_client_choices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentKeyAuthClientChoice'
+                    description: 'For an agent key, as listed for its agent: the upstream credential the key was set up to use on each MCP server it names. Where typed upstream authentication is enforced, the key signs in to that server with it.'
                 created_at:
                     type: string
                     description: The creation date of the key.

@@ -4,6 +4,9 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
  * The upstream credential an agent key uses on one MCP server.
@@ -19,6 +22,22 @@ export type AgentKeyAuthClientChoice = {
   mcpServerId: string;
 };
 
+/** @internal */
+export const AgentKeyAuthClientChoice$inboundSchema: z.ZodMiniType<
+  AgentKeyAuthClientChoice,
+  unknown
+> = z.pipe(
+  z.object({
+    auth_client_id: z.optional(z.string()),
+    mcp_server_id: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "auth_client_id": "authClientId",
+      "mcp_server_id": "mcpServerId",
+    });
+  }),
+);
 /** @internal */
 export type AgentKeyAuthClientChoice$Outbound = {
   auth_client_id?: string | undefined;
@@ -47,5 +66,14 @@ export function agentKeyAuthClientChoiceToJSON(
 ): string {
   return JSON.stringify(
     AgentKeyAuthClientChoice$outboundSchema.parse(agentKeyAuthClientChoice),
+  );
+}
+export function agentKeyAuthClientChoiceFromJSON(
+  jsonString: string,
+): SafeParseResult<AgentKeyAuthClientChoice, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AgentKeyAuthClientChoice$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AgentKeyAuthClientChoice' from JSON`,
   );
 }

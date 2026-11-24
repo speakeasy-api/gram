@@ -137,6 +137,7 @@ func (s *Service) UpdateKeyPolicy(ctx context.Context, payload *gen.UpdateKeyPol
 		DelegatedGrantsVersion: nil,
 		ExpiresAt:              nil,
 		PolicyGrants:           policyModel(policy),
+		AuthClientChoices:      nil,
 		CreatedAt:              key.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              updatedAt.Time.Format(time.RFC3339),
 		LastAccessedAt:         lastAccessedAt,

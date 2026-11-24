@@ -2190,6 +2190,9 @@ export function CredentialsWizard({
           <StepAuthentication
             // On the agent's MCP sign-in tab the tab's own title says this.
             showHeader={!section}
+            // There the agent has issued keys, whose chosen credentials the
+            // rows report.
+            keysAgentId={section ? agent?.id : undefined}
             servers={
               allServers ? listedServers : selected.map((entry) => entry.server)
             }

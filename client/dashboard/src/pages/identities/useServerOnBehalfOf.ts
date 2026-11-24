@@ -1,12 +1,15 @@
 import { useOwnerConnections } from "@/pages/agents/credentials/useOwnerConnections";
 import { useServerInventory } from "@/pages/agents/credentials/useServerInventory";
 import { serverOnBehalfOf, type ServerOnBehalfOf } from "./onBehalfOf";
+import { useAgentKeysUseSharedCredential } from "./useAgentKeysUseSharedCredential";
 
 /**
  * Whom an agent acts for on one MCP server: the people whose own connections
- * are assigned to it there, or no one when a shared credential signs it in.
- * The Permissions tab's MCP servers section and the Overview's "Acting on
- * behalf of" both read it, so they cannot disagree.
+ * are assigned to it there, or no one when a shared credential signs it in,
+ * whether the server asks no one to sign in or the agent's keys were set up
+ * to use a shared credential on it. The Permissions tab's MCP servers section
+ * and the Overview's "Acting on behalf of" both read it, so they cannot
+ * disagree.
  */
 export function useServerOnBehalfOf(
   agentId: string,
@@ -25,6 +28,7 @@ export function useServerOnBehalfOf(
     !!server,
     agentId,
   );
+  const keysShared = useAgentKeysUseSharedCredential(agentId, server);
   if (!resourceId) return { kind: "unknown" };
   // A failed server list says nothing about this server: it could not be
   // checked, which is not the same as no server going by this id.
@@ -33,5 +37,7 @@ export function useServerOnBehalfOf(
     server,
     server ? connections.assignedByServer?.get(server.id) : undefined,
     inventory.isLoading,
+    Date.now(),
+    keysShared,
   );
 }
