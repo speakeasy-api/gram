@@ -595,3 +595,31 @@ func TestRecordSkillRead_IsNilSafe(t *testing.T) {
 	empty := &Metrics{}
 	empty.RecordSkillRead(t.Context(), SurfacePlatform, SkillOriginEmbedded)
 }
+
+func TestRecordGatewayAdmission(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordGatewayAdmission(t.Context(), "workload", "project", false, "project_scope_mismatch")
+	got := collectMetric(t, reader, InstrumentMCPGatewayAdmission)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.McpGatewayCallerKind("workload"),
+		attr.McpGatewayType("project"),
+		attr.Outcome("refused"),
+		attr.McpGatewayRefusalReason("project_scope_mismatch"),
+	)
+}
+
+func TestRecordAgentGatewayRequest(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordAgentGatewayRequest(t.Context(), "org_test", "00000000-0000-0000-0000-000000000001")
+	got := collectMetric(t, reader, InstrumentMCPAgentGatewayRequest)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.OrganizationID("org_test"),
+		attr.AgentID("00000000-0000-0000-0000-000000000001"),
+	)
+}

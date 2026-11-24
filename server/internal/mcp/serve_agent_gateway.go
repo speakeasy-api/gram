@@ -67,6 +67,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 	}
 	r = r.WithContext(authedCtx)
 	ctx = authedCtx
+	s.metrics.RecordAgentGatewayRequest(ctx, authCtx.ActiveOrganizationID, agentID.String())
 
 	// The same lockdown ServePublic applies, at the only scope this
 	// surface has. enforceCustomDomainLockdown takes a project id purely to

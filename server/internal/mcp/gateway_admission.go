@@ -25,6 +25,19 @@ const (
 	gatewayCallerWorkload
 )
 
+func (k gatewayCallerKind) String() string {
+	switch k {
+	case gatewayCallerPerson:
+		return "person"
+	case gatewayCallerAgent:
+		return "agent"
+	case gatewayCallerWorkload:
+		return "workload"
+	default:
+		return "unknown"
+	}
+}
+
 // gatewayCaller is the request-scoped result of gateway caller admission.
 // ceiling contains only the immutable policy of the credential itself; live
 // principal and owner policies remain separate and are rechecked per request.
@@ -110,11 +123,12 @@ func (s *Service) admitGatewayCaller(
 			return ctx, nil, fmt.Errorf("check gateway machine access rollout: %w", err)
 		}
 	}
-	admitted, err := target.admits(caller, endpoint.ProjectID, machineAccess)
+	decision, err := target.admits(caller, endpoint.ProjectID, machineAccess)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("evaluate gateway target: %w", err)
 	}
-	if !admitted {
+	s.metrics.RecordGatewayAdmission(authedCtx, caller.kind.String(), target.kind.String(), decision.admitted, string(decision.refusalReason))
+	if !decision.admitted {
 		if reach, ok := workloadSessionReachFromContext(authedCtx); caller.kind == gatewayCallerWorkload && ok && reach == workloadSessionReachIssuer {
 			return ctx, nil, writeInsufficientScopeChallenge(w, authentication.protectedResourceURL, "access token does not grant access to this gateway")
 		}

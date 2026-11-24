@@ -19,6 +19,45 @@ const (
 	gatewayKindAgent
 )
 
+func (k gatewayKind) String() string {
+	switch k {
+	case gatewayKindStored:
+		return "stored"
+	case gatewayKindProject:
+		return "project"
+	case gatewayKindOrganization:
+		return "organization"
+	case gatewayKindAgent:
+		return "agent"
+	default:
+		return "unknown"
+	}
+}
+
+type gatewayRefusalReason string
+
+const (
+	gatewayRefusalMachineAccessDisabled  gatewayRefusalReason = "machine_access_disabled"
+	gatewayRefusalUnsupportedGatewayType gatewayRefusalReason = "unsupported_gateway_type"
+	gatewayRefusalMissingProject         gatewayRefusalReason = "missing_project"
+	gatewayRefusalProjectScopeMismatch   gatewayRefusalReason = "project_scope_mismatch"
+	gatewayRefusalCredentialCeiling      gatewayRefusalReason = "gateway_not_in_credential_ceiling"
+	gatewayRefusalUnsupportedCaller      gatewayRefusalReason = "unsupported_caller"
+)
+
+type gatewayAdmissionDecision struct {
+	admitted      bool
+	refusalReason gatewayRefusalReason
+}
+
+func admitGateway() gatewayAdmissionDecision {
+	return gatewayAdmissionDecision{admitted: true, refusalReason: ""}
+}
+
+func refuseGateway(reason gatewayRefusalReason) gatewayAdmissionDecision {
+	return gatewayAdmissionDecision{admitted: false, refusalReason: reason}
+}
+
 // gatewayTarget is the resource a credential asks to enter. It never decides
 // which member servers the caller may use; member authorization remains a
 // separate per-server decision.
@@ -65,34 +104,43 @@ func (t gatewayTarget) authorizationTarget(projectID uuid.UUID) (*AgentAuthoriza
 
 // admits reports only whether the credential may enter this gateway. It does
 // not authorize any member.
-func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, machineAccess bool) (bool, error) {
+func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, machineAccess bool) (gatewayAdmissionDecision, error) {
 	if caller.kind == gatewayCallerPerson {
-		return true, nil
+		return admitGateway(), nil
 	}
-	if !machineAccess || (t.kind != gatewayKindStored && t.kind != gatewayKindProject) || projectID == uuid.Nil {
-		return false, nil
+	if !machineAccess {
+		return refuseGateway(gatewayRefusalMachineAccessDisabled), nil
+	}
+	if t.kind != gatewayKindStored && t.kind != gatewayKindProject {
+		return refuseGateway(gatewayRefusalUnsupportedGatewayType), nil
+	}
+	if projectID == uuid.Nil {
+		return refuseGateway(gatewayRefusalMissingProject), nil
 	}
 	if caller.projectScope != nil && *caller.projectScope != projectID {
-		return false, nil
+		return refuseGateway(gatewayRefusalProjectScopeMismatch), nil
 	}
 
 	switch caller.kind {
 	case gatewayCallerAgent:
 		// An agent's grants are checked against each member. Pointing the agent
 		// at a gateway grants no authority of its own.
-		return true, nil
+		return admitGateway(), nil
 	case gatewayCallerWorkload:
 		// The workload credential ceiling must authorize this gateway target.
 		check, ok := t.authorizationTarget(projectID)
 		if !ok {
-			return false, nil
+			return refuseGateway(gatewayRefusalCredentialCeiling), nil
 		}
 		admitted, err := authz.GrantsAuthorize(caller.ceiling, check.connectCheck())
 		if err != nil {
-			return false, fmt.Errorf("authorize workload gateway target: %w", err)
+			return gatewayAdmissionDecision{admitted: false, refusalReason: ""}, fmt.Errorf("authorize workload gateway target: %w", err)
 		}
-		return admitted, nil
+		if !admitted {
+			return refuseGateway(gatewayRefusalCredentialCeiling), nil
+		}
+		return admitGateway(), nil
 	default:
-		return false, nil
+		return refuseGateway(gatewayRefusalUnsupportedCaller), nil
 	}
 }
