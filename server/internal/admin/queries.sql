@@ -211,6 +211,11 @@ filtered AS (
             OR (sqlc.arg('disabled_status')::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         AND (sqlc.narg('whitelisted')::boolean IS NULL OR om.whitelisted = sqlc.narg('whitelisted')::boolean)
+        AND (
+            sqlc.arg('internal_status')::text = 'all'
+            OR (sqlc.arg('internal_status')::text = 'internal' AND om.internal)
+            OR (sqlc.arg('internal_status')::text = 'external' AND NOT om.internal)
+        )
         -- Keep ID-shaped cursors compatible, but seek in the default creation
         -- order, not ID order. Resolve the anchor outside the filters so changes
         -- to its account/disabled state do not break an existing cursor. A
@@ -352,6 +357,11 @@ filtered AS (
             OR (sqlc.arg('disabled_status')::text = 'disabled' AND om.disabled_at IS NOT NULL)
         )
         AND (sqlc.narg('whitelisted')::boolean IS NULL OR om.whitelisted = sqlc.narg('whitelisted')::boolean)
+        AND (
+            sqlc.arg('internal_status')::text = 'all'
+            OR (sqlc.arg('internal_status')::text = 'internal' AND om.internal)
+            OR (sqlc.arg('internal_status')::text = 'external' AND NOT om.internal)
+        )
 )
 SELECT count(*)::bigint FROM filtered
 WHERE coalesce(cardinality(sqlc.arg('trial_states')::text[]), 0) = 0 OR trial_state = ANY(sqlc.arg('trial_states')::text[]);

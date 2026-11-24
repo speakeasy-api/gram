@@ -4076,6 +4076,9 @@ type ListOrganizationsPayload struct {
 	// organizations that are not whitelisted. Omitted matches both. Applies even
 	// to exact ID matches.
 	Whitelisted *bool
+	// Internal label: all (default), internal (marked internal by staff), or
+	// external (not marked). Applies even to exact ID matches.
+	InternalStatus *string
 	// Inclusive minimum active member count, from 0 through 9223372036854775807.
 	// The generated TypeScript SDK accepts bigint. The handwritten admin client
 	// accepts safe integers or decimal strings; use decimal strings above

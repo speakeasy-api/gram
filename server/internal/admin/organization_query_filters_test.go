@@ -93,9 +93,10 @@ func TestOrganizationQueryFilters(t *testing.T) {
 			if p.DisabledStatus == "" {
 				p.DisabledStatus = "all"
 			}
+			p.InternalStatus = "all"
 			p.PageLimit = 100
 			checkCount := func() {
-				count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{Q: p.Q, AccountTypes: p.AccountTypes, TrialStates: p.TrialStates, DisabledStatus: p.DisabledStatus, MinMembers: p.MinMembers, MaxMembers: p.MaxMembers, CreatedAtGte: p.CreatedAtGte, CreatedAtLt: p.CreatedAtLt})
+				count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{Q: p.Q, AccountTypes: p.AccountTypes, TrialStates: p.TrialStates, DisabledStatus: p.DisabledStatus, InternalStatus: p.InternalStatus, MinMembers: p.MinMembers, MaxMembers: p.MaxMembers, CreatedAtGte: p.CreatedAtGte, CreatedAtLt: p.CreatedAtLt})
 				require.NoError(t, err)
 				require.Equal(t, int64(len(tc.want)), count)
 			}
@@ -170,7 +171,7 @@ func TestOrganizationQueryFilters_LegacyCursor(t *testing.T) {
 		}
 	}
 	minMembers := pgtype.Int8{Int64: 1, Valid: true}
-	p := repo.AdminListOrganizationsParams{DisabledStatus: "active", MinMembers: minMembers, PageLimit: 1}
+	p := repo.AdminListOrganizationsParams{DisabledStatus: "active", InternalStatus: "all", MinMembers: minMembers, PageLimit: 1}
 	for _, id := range []string{"org_b", "org_d", ""} {
 		rows, err := queries.AdminListOrganizations(ctx, p)
 		require.NoError(t, err)
@@ -181,7 +182,7 @@ func TestOrganizationQueryFilters_LegacyCursor(t *testing.T) {
 			require.Equal(t, id, rows[0].ID)
 			p.AfterID = conv.ToPGText(id)
 		}
-		count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{DisabledStatus: p.DisabledStatus, MinMembers: minMembers})
+		count, err := queries.AdminCountOrganizations(ctx, repo.AdminCountOrganizationsParams{DisabledStatus: p.DisabledStatus, InternalStatus: p.InternalStatus, MinMembers: minMembers})
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
 	}

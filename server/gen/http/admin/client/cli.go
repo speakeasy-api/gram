@@ -694,7 +694,7 @@ func BuildListUserOrganizationsPayload(adminListUserOrganizationsUserID string, 
 
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
-func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsWhitelisted string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
+func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStatus string, adminListOrganizationsWhitelisted string, adminListOrganizationsInternalStatus string, adminListOrganizationsMinMembers string, adminListOrganizationsMaxMembers string, adminListOrganizationsCreatedFrom string, adminListOrganizationsCreatedTo string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
 	var err error
 	var q *string
 	{
@@ -746,6 +746,18 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 			whitelisted = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for whitelisted, must be BOOL")
+			}
+		}
+	}
+	var internalStatus *string
+	{
+		if adminListOrganizationsInternalStatus != "" {
+			internalStatus = &adminListOrganizationsInternalStatus
+			if !(*internalStatus == "all" || *internalStatus == "internal" || *internalStatus == "external") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("internal_status", *internalStatus, []any{"all", "internal", "external"}))
+			}
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -848,6 +860,7 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 	v.TrialStates = trialStates
 	v.DisabledStatus = disabledStatus
 	v.Whitelisted = whitelisted
+	v.InternalStatus = internalStatus
 	v.MinMembers = minMembers
 	v.MaxMembers = maxMembers
 	v.CreatedFrom = createdFrom

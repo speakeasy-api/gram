@@ -7044,6 +7044,17 @@ paths:
                     description: 'Whitelist filter: true matches only whitelisted organizations, false only organizations that are not whitelisted. Omitted matches both. Applies even to exact ID matches.'
                     type: boolean
                 - allowEmptyValue: true
+                  description: 'Internal label: all (default), internal (marked internal by staff), or external (not marked). Applies even to exact ID matches.'
+                  in: query
+                  name: internal_status
+                  schema:
+                    description: 'Internal label: all (default), internal (marked internal by staff), or external (not marked). Applies even to exact ID matches.'
+                    enum:
+                        - all
+                        - internal
+                        - external
+                    type: string
+                - allowEmptyValue: true
                   description: Inclusive minimum active member count, from 0 through 9223372036854775807. The generated TypeScript SDK accepts bigint. The handwritten admin client accepts safe integers or decimal strings; use decimal strings above Number.MAX_SAFE_INTEGER.
                   in: query
                   name: min_members

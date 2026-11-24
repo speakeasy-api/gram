@@ -641,13 +641,16 @@ func (w *adminCallbackWriter) WriteHeader(status int) {
 }
 
 // Goa's optional string query decoder treats present-but-empty values as absent,
-// before enum validation. Keep that distinction for this status parameter only;
+// before enum validation. Keep that distinction for the status parameters only;
 // omission is unrestricted, but an explicit empty value is not a valid status.
 func (s *Service) rejectEmptyOrganizationStatus(next http.Handler) http.Handler {
 	return oops.ErrHandle(s.logger, func(w http.ResponseWriter, r *http.Request) error {
 		query := r.URL.Query()
 		if query.Has("disabled_status") && query.Get("disabled_status") == "" {
 			return oops.E(oops.CodeInvalid, nil, "disabled_status must be all, active, or disabled")
+		}
+		if query.Has("internal_status") && query.Get("internal_status") == "" {
+			return oops.E(oops.CodeInvalid, nil, "internal_status must be all, internal, or external")
 		}
 		next.ServeHTTP(w, r)
 		return nil
@@ -1041,6 +1044,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		TrialStates:    payload.TrialStates,
 		DisabledStatus: bounds.disabledStatus,
 		Whitelisted:    conv.PtrToPGBool(payload.Whitelisted),
+		InternalStatus: bounds.internalStatus,
 		MinMembers:     bounds.minMembers,
 		MaxMembers:     bounds.maxMembers,
 		CreatedAtGte:   bounds.createdAtGte,
@@ -1064,6 +1068,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		TrialStates:    payload.TrialStates,
 		DisabledStatus: bounds.disabledStatus,
 		Whitelisted:    conv.PtrToPGBool(payload.Whitelisted),
+		InternalStatus: bounds.internalStatus,
 		MinMembers:     bounds.minMembers,
 		MaxMembers:     bounds.maxMembers,
 		CreatedAtGte:   bounds.createdAtGte,
