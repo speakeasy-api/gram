@@ -254,8 +254,9 @@ func requestedWindowIndex(requested time.Duration) int {
 
 // cardEndOfDay is the deadline of a card's End of day choice: the time the
 // requester asked for when they asked for one that is still far enough off,
-// otherwise 23:59 today in loc, the zone the card is read in. It is zero when
-// neither leaves enough time.
+// otherwise 23:59 today in loc. The notifier passes the requester's Slack time
+// zone as loc, and the reading administrator's only when the requester has
+// none. It is zero when neither leaves enough time.
 func cardEndOfDay(in cardInput, now time.Time, loc *time.Location) time.Time {
 	if lead := in.RequestedUntil.Sub(now); !in.RequestedUntil.IsZero() && lead >= access.MinEndOfDayLead && lead <= access.TemporaryGrantMaxDuration {
 		return in.RequestedUntil

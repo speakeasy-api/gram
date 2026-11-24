@@ -145,10 +145,7 @@ func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.Aut
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
 	}
-	requestedSeconds, requestedUntil, err := requestedWindowColumns(duration, until, now)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
-	}
+	requestedSeconds, requestedUntil := requestedWindowColumns(duration, until)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -223,27 +220,20 @@ func (s *Service) recordAccessRequest(ctx context.Context, ac *contextvalues.Aut
 	return &storedAccessRequest{view: view, created: true}, nil
 }
 
-// requestedWindowColumns checks what a requester asked for and turns it into
-// the stored columns: a duration of at most a day, or a deadline in the
-// future at most a day away, never both.
-func requestedWindowColumns(duration time.Duration, until time.Time, now time.Time) (pgtype.Int4, pgtype.Timestamptz, error) {
+// requestedWindowColumns turns what RequestedAccessWindow read into the
+// stored columns. It does no checks of its own: RequestedAccessWindow already
+// refused a duration and a deadline together, and a deadline that is past or
+// more than a day away.
+func requestedWindowColumns(duration time.Duration, until time.Time) (pgtype.Int4, pgtype.Timestamptz) {
 	seconds := pgtype.Int4{Int32: 0, Valid: false}
+	if duration > 0 {
+		seconds = pgtype.Int4{Int32: conv.SafeInt32(int(duration / time.Second)), Valid: true}
+	}
 	deadline := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
-	switch {
-	case duration != 0 && !until.IsZero():
-		return seconds, deadline, errDurationAndUntil
-	case duration < 0 || duration > TemporaryGrantMaxDuration:
-		return seconds, deadline, errors.New("the requested duration must be at most 24 hours")
-	case duration > 0:
-		seconds = pgtype.Int4{Int32: int32(duration / time.Second), Valid: true}
-	case !until.IsZero() && !until.After(now):
-		return seconds, deadline, errRequestedUntilPast
-	case !until.IsZero() && until.Sub(now) > TemporaryGrantMaxDuration:
-		return seconds, deadline, errRequestedUntilTooFar
-	case !until.IsZero():
+	if !until.IsZero() {
 		deadline = pgtype.Timestamptz{Time: until.UTC(), InfinityModifier: pgtype.Finite, Valid: true}
 	}
-	return seconds, deadline, nil
+	return seconds, deadline
 }
 
 // isMemberCaller reports a signed-in member acting for themselves: not an API

@@ -25,10 +25,10 @@ const rolesDeleteAccessRequests = `-- name: RolesDeleteAccessRequests :exec
 DELETE FROM access_requests WHERE organization_id = $1
 `
 
-// Access requests: two pending (one with a requested duration) and one
-// denied, so the Access Requests tab and the
-// grant dialog's approval choices have something to show. Messages
-// cascade with their request.
+// Access requests: three pending (one asking for a duration, one asking until
+// a deadline) and one denied, so the Access Requests tab and the grant
+// dialog's approval choices have something to show. Messages cascade with
+// their request.
 func (q *Queries) RolesDeleteAccessRequests(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolesDeleteAccessRequests, organizationID)
 	return err

@@ -85,7 +85,7 @@ func (s *Service) ListPendingForAdmin(ctx context.Context, organizationID, userI
 			RequesterUserID: view.RequesterUserID,
 			Scope:           view.Scope,
 			ResourceID:      resourceID,
-			ProjectID:       projects[resourceID],
+			ProjectID:       projects[canonicalResourceID(resourceID)],
 			RequestID:       view.ID,
 		})
 		out = append(out, PendingAccessRequest{Request: view, PermissionLabel: label, DecideURL: link})
@@ -128,4 +128,13 @@ func (s *Service) mcpRequestProjects(ctx context.Context, logger *slog.Logger, o
 		projects[row.ResourceID.String()] = row.ProjectID.String()
 	}
 	return projects
+}
+
+// canonicalResourceID is a resource id in the form the project lookup keys
+// it by: a UUID in its canonical lowercase form, anything else unchanged.
+func canonicalResourceID(resourceID string) string {
+	if id, err := uuid.Parse(resourceID); err == nil {
+		return id.String()
+	}
+	return resourceID
 }
