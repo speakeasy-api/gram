@@ -4,6 +4,7 @@ SELECT
     provider,
     dns_name,
     identity_required,
+    runtime,
     enabled,
     deleted
 FROM network_ingresses

@@ -64,14 +64,18 @@ func TestParseTailscaleCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, TailscaleCredentials{ClientID: "cid", ClientSecret: "csecret"}, parsed)
 
-	for _, encoded := range []string{
-		`{"client_id":"cid"}`,
-		`{"client_id":"cid","client_secret":"csecret","extra":true}`,
-		`{"client_id":"cid","client_secret":"csecret"}{}`,
-		`not-json`,
+	for _, tc := range []struct{ name, encoded string }{
+		{"missing secret", `{"client_id":"cid"}`},
+		{"unknown field", `{"client_id":"cid","client_secret":"csecret","extra":true}`},
+		{"trailing object", `{"client_id":"cid","client_secret":"csecret"}{}`},
+		{"trailing null", `{"client_id":"cid","client_secret":"csecret"} null`},
+		{"not JSON", `not-json`},
 	} {
-		_, err := ParseTailscaleCredentials([]byte(encoded))
-		require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState, encoded)
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseTailscaleCredentials([]byte(tc.encoded))
+			require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
+		})
 	}
 }
 

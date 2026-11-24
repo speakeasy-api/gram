@@ -211,7 +211,8 @@ func ParseTailscaleCredentials(encoded []byte) (TailscaleCredentials, error) {
 	if err := decoder.Decode(&credentials); err != nil {
 		return credentials, fmt.Errorf("%w: invalid Tailscale credential payload", ErrNetworkIngressInvalidDesiredState)
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return TailscaleCredentials{}, fmt.Errorf("%w: invalid Tailscale credential payload", ErrNetworkIngressInvalidDesiredState)
 	}
 	if credentials.ClientID == "" || credentials.ClientSecret == "" {

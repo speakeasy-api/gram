@@ -70,6 +70,7 @@ SELECT
     provider,
     dns_name,
     identity_required,
+    runtime,
     enabled,
     deleted
 FROM network_ingresses
@@ -87,6 +88,7 @@ type GetIngressServingStateRow struct {
 	Provider         string
 	DnsName          pgtype.Text
 	IdentityRequired bool
+	Runtime          pgtype.Text
 	Enabled          bool
 	Deleted          bool
 }
@@ -99,6 +101,7 @@ func (q *Queries) GetIngressServingState(ctx context.Context, arg GetIngressServ
 		&i.Provider,
 		&i.DnsName,
 		&i.IdentityRequired,
+		&i.Runtime,
 		&i.Enabled,
 		&i.Deleted,
 	)

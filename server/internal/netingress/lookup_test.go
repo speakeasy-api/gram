@@ -43,6 +43,7 @@ func TestIngressLookupRecheck(t *testing.T) {
 	unchanged := repo.GetIngressServingStateRow{
 		OrganizationID: "org_123", Provider: ProviderTailscale,
 		DnsName: pgtype.Text{String: "private.example.ts.net", Valid: true}, IdentityRequired: true, Enabled: true,
+		Runtime: pgtype.Text{String: "gateway", Valid: true},
 	}
 
 	for _, test := range []struct {
@@ -62,6 +63,7 @@ func TestIngressLookupRecheck(t *testing.T) {
 			return row
 		}(), want: ErrIngressChanged},
 		{name: "organization changed", row: func() repo.GetIngressServingStateRow { row := unchanged; row.OrganizationID = "org_other"; return row }(), want: ErrIngressChanged},
+		{name: "no longer on the gateway", row: func() repo.GetIngressServingStateRow { row := unchanged; row.Runtime = pgtype.Text{}; return row }(), want: ErrIngressChanged},
 		{name: "offline without DNS", row: func() repo.GetIngressServingStateRow { row := unchanged; row.DnsName = pgtype.Text{}; return row }(), want: ErrIngressChanged},
 		{name: "lookup failure", err: errors.New("database unavailable"), want: errors.New("database unavailable")},
 	} {

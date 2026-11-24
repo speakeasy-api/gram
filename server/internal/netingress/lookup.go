@@ -12,6 +12,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
+// gatewayRuntime is networkingress.RuntimeGateway, the only runtime the
+// listener serves.
+const gatewayRuntime = "gateway"
+
 var (
 	ErrIngressUnavailable = errors.New("private network ingress unavailable")
 	ErrIngressChanged     = errors.New("private network ingress changed")
@@ -68,7 +72,9 @@ func (l *IngressLookup) Recheck(ctx context.Context, cached Ingress) error {
 	if err != nil {
 		return fmt.Errorf("recheck private network ingress: %w", err)
 	}
-	if !row.Enabled || row.Deleted || row.OrganizationID != cached.OrganizationID || row.Provider != cached.Provider || row.IdentityRequired != cached.IdentityRequired {
+	// ByDNSName serves only gateway rows, so a row whose runtime changed no
+	// longer serves its cached host either.
+	if !row.Enabled || row.Deleted || row.Runtime.String != gatewayRuntime || row.OrganizationID != cached.OrganizationID || row.Provider != cached.Provider || row.IdentityRequired != cached.IdentityRequired {
 		return ErrIngressChanged
 	}
 	if !row.DnsName.Valid {
