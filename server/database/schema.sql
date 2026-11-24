@@ -2849,6 +2849,14 @@ CREATE TABLE IF NOT EXISTS network_ingresses (
   -- selected provider adapter owns its plaintext shape; APIs expose only
   -- configured/not-configured state.
   credentials_encrypted TEXT,
+  -- The same credential document sealed with the organization's key for the
+  -- tailscale-oauth-clients use case. A row holds the platform-key copy
+  -- (credentials_encrypted), this copy, or both while the organization moves:
+  -- the organization's transition state for that use case (package
+  -- orgencryption) decides which copies are written and read.
+  -- credentials_encrypted is dropped by a later contract migration once every
+  -- organization has moved.
+  credentials_org_encrypted TEXT,
   attestor_namespace TEXT NOT NULL,
   attestor_service_account TEXT NOT NULL,
   provider_resources JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -2892,6 +2900,7 @@ COMMENT ON COLUMN network_ingresses.custom_domain_id IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.enabled IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.identity_required IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.credentials_encrypted IS '@access: secret-restricted';
+COMMENT ON COLUMN network_ingresses.credentials_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN network_ingresses.attestor_namespace IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.attestor_service_account IS '@access: confidential';
 COMMENT ON COLUMN network_ingresses.provider_resources IS '@access: confidential';

@@ -870,6 +870,26 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 	return i, err
 }
 
+const adminGetTailscaleOAuthMigrationOrganization = `-- name: AdminGetTailscaleOAuthMigrationOrganization :one
+SELECT o.id, o.name, o.slug
+FROM organization_metadata AS o
+WHERE o.id = $1
+`
+
+type AdminGetTailscaleOAuthMigrationOrganizationRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// The organization a Tailscale OAuth client migration step targets.
+func (q *Queries) AdminGetTailscaleOAuthMigrationOrganization(ctx context.Context, id string) (AdminGetTailscaleOAuthMigrationOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, adminGetTailscaleOAuthMigrationOrganization, id)
+	var i AdminGetTailscaleOAuthMigrationOrganizationRow
+	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	return i, err
+}
+
 const adminGetUserSessionIssuer = `-- name: AdminGetUserSessionIssuer :one
 SELECT
     i.id,
@@ -2322,6 +2342,44 @@ func (q *Queries) AdminListRegistryOktaMappings(ctx context.Context) ([]AdminLis
 	for rows.Next() {
 		var i AdminListRegistryOktaMappingsRow
 		if err := rows.Scan(&i.RegistryEntryID, &i.EntryName, &i.OinName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListTailscaleOAuthMigrationOrganizations = `-- name: AdminListTailscaleOAuthMigrationOrganizations :many
+SELECT DISTINCT o.id, o.name, o.slug
+FROM network_ingresses AS n
+JOIN organization_metadata AS o ON o.id = n.organization_id
+WHERE n.credentials_encrypted IS NOT NULL
+   OR n.credentials_org_encrypted IS NOT NULL
+ORDER BY o.name, o.id
+`
+
+type AdminListTailscaleOAuthMigrationOrganizationsRow struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Organizations with saved network ingress credentials in either copy,
+// soft-deleted ingresses included, for the temporary Tailscale OAuth client
+// move to organization keys.
+func (q *Queries) AdminListTailscaleOAuthMigrationOrganizations(ctx context.Context) ([]AdminListTailscaleOAuthMigrationOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, adminListTailscaleOAuthMigrationOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListTailscaleOAuthMigrationOrganizationsRow
+	for rows.Next() {
+		var i AdminListTailscaleOAuthMigrationOrganizationsRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

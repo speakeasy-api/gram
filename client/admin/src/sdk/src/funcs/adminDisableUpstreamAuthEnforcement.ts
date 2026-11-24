@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * disableUpstreamAuthEnforcement admin
  *
  * @remarks
- * Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.
+ * Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.
  */
 export function adminDisableUpstreamAuthEnforcement(
   client: GramCore,
