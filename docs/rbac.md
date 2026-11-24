@@ -178,10 +178,12 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeLogRead:            nil,
 	ScopeMemoryRead:         {ScopeMemoryWrite},
 	ScopeMemoryWrite:        nil,
+	ScopeAgentCreate:        {ScopeAgentWrite},
+	ScopeAgentWrite:         nil,
 }
 ```
 
-Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`. Neither `mcp:read` nor `mcp:write` satisfies `mcp:connect`: only an explicit `mcp:connect` grant (or `root`) lets a caller connect to a server, so viewing or managing a server never implies using it. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `memory:write` satisfies `memory:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
+Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `assistant:write` grant satisfies `assistant:read`. An `mcp:write` grant satisfies `mcp:read`. Neither `mcp:read` nor `mcp:write` satisfies `mcp:connect`: only an explicit `mcp:connect` grant (or `root`) lets a caller connect to a server, so viewing or managing a server never implies using it. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `memory:write` satisfies `memory:read`. `agent:write` satisfies `agent:create`, so anyone who can manage agents can also add agents they own. `org:admin` satisfies `org:read`, and `root` satisfies every check.
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
