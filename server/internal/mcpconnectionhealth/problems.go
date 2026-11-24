@@ -94,7 +94,7 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 		return out, err
 	}
 
-	// The deployment-wide start is zero: failures from before served requests were recorded age out a day after that writer shipped.
+	// The start is when the organization's logs were last turned on, since nothing is recorded while they are off.
 	recordedSince, err := s.logsOnSince(ctx, c)
 	if err != nil {
 		return out, err
