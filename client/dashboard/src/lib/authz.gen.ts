@@ -1,6 +1,8 @@
 // Code generated from registry.Definitions by authzgen. DO NOT EDIT.
 // Regenerate with `mise run gen:authz`.
 
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+
 /** The resource kind each scope's checks and grant selectors name. */
 export const scopeResourceKinds: Readonly<Record<string, string>> = {
   "agent:authorize": "agent",
@@ -128,3 +130,349 @@ export const scopeExclusions: Readonly<
     "workload:blocked_read",
   ],
 };
+
+/**
+ * The grant keys a probe or a connection may leave out and still match a
+ * grant limited on them, per scope, in the API's spelling.
+ */
+export const scopeOpenKeys: Readonly<
+  Record<string, { readonly probe: readonly string[]; readonly connection: readonly string[] }>
+> = {
+  "org:hooks_ingest": { probe: ["projectId"], connection: [] },
+  "mcp:connect": { probe: ["tool", "disposition"], connection: ["tool", "disposition"] },
+  "risk_policy:evaluate": { probe: ["serverUrl", "serverIdentity"], connection: [] },
+  "risk_policy:bypass": { probe: ["serverUrl", "serverIdentity"], connection: [] },
+  "risk_policy:block": { probe: ["serverUrl", "serverIdentity"], connection: [] },
+};
+
+// Assigned in Check's static block, so only this module builds checks.
+let newCheck: (
+  scope: Scope,
+  resourceKind: string,
+  resourceId: string,
+  dimensions: Readonly<Record<string, string>>,
+  ids: readonly string[],
+  options?: { connection?: boolean; collection?: boolean },
+) => Check;
+
+/**
+ * One permission question, built by a constructor below and never by hand.
+ * Each constructor is the Go ref of the same name (authz.mcpServer(id,
+ * projectId).write() is authz.MCPServer(id, project).Write()), so every
+ * argument the server needs is required. An id that cannot name a resource
+ * (empty, "*", a "$" marker, or containing whitespace) makes the check
+ * invalid, and an invalid check is never allowed.
+ */
+export class Check {
+  readonly scope: Scope;
+  readonly resourceKind: string;
+  readonly resourceId: string;
+  /** Dimensions the check carries, in the API's spelling (projectId). */
+  readonly dimensions: Readonly<Record<string, string>>;
+  /** Built as a connection, which names no tool. */
+  readonly connection: boolean;
+  /** Names every resource of its kind in one parent. */
+  readonly collection: boolean;
+  readonly invalid: boolean;
+  readonly #probe: boolean;
+
+  private constructor(fields: CheckFields, probe: boolean) {
+    this.scope = fields.scope;
+    this.resourceKind = fields.resourceKind;
+    this.resourceId = fields.resourceId;
+    this.dimensions = fields.dimensions;
+    this.connection = fields.connection;
+    this.collection = fields.collection;
+    this.invalid = fields.invalid;
+    this.#probe = probe;
+  }
+
+  static {
+    newCheck = (scope, resourceKind, resourceId, dimensions, ids, options) =>
+      new Check(
+        {
+          scope,
+          resourceKind,
+          resourceId,
+          dimensions,
+          connection: options?.connection ?? false,
+          collection: options?.collection ?? false,
+          invalid: ids.some((id) => !namesResource(id)),
+        },
+        false,
+      );
+  }
+
+  get isProbe(): boolean {
+    return this.#probe;
+  }
+
+  /**
+   * The discovery question: could the caller act on some resource matching
+   * the check. On one resource it may leave out the keys its permission
+   * opens on a probe, as Check.Probe does on the server. On a collection it
+   * asks about any resource of the kind in that parent, which the server
+   * answers by listing them.
+   */
+  probe(): Check {
+    return new Check(this, true);
+  }
+}
+
+interface CheckFields {
+  readonly scope: Scope;
+  readonly resourceKind: string;
+  readonly resourceId: string;
+  readonly dimensions: Readonly<Record<string, string>>;
+  readonly connection: boolean;
+  readonly collection: boolean;
+  readonly invalid: boolean;
+}
+
+/** Mirrors idFromString in authz/ids.go. */
+function namesResource(id: string): boolean {
+  return (
+    id !== "" &&
+    id.toLowerCase() !== "00000000-0000-0000-0000-000000000000" &&
+    id !== "*" &&
+    !id.startsWith("$") &&
+    !/\s/.test(id)
+  );
+}
+
+/** One org resource: authz.Org(id). */
+export function org(id: string) {
+  return {
+    /** org:read: View organization */
+    read: (): Check =>
+      newCheck("org:read", "org", id, {}, [id]),
+    /** org:admin: Manage organization */
+    admin: (): Check =>
+      newCheck("org:admin", "org", id, {}, [id]),
+    /** org:device_agent_sync: Sync device agent plugins */
+    deviceAgentSync: (): Check =>
+      newCheck("org:device_agent_sync", "org", id, {}, [id]),
+    /** org:hooks_ingest: Send hook events */
+    hooksIngest: (projectId: string): Check =>
+      newCheck("org:hooks_ingest", "org", id, { projectId: projectId }, [id, projectId]),
+  };
+}
+
+/** One chat resource: authz.Chat(id). */
+export function chat(id: string) {
+  return {
+    /** chat:read: View agent sessions */
+    read: (): Check =>
+      newCheck("chat:read", "chat", id, {}, [id]),
+    /** chat:write: Manage agent sessions */
+    write: (): Check =>
+      newCheck("chat:write", "chat", id, {}, [id]),
+  };
+}
+
+/** Every chat resource of one parent: authz.Chats(project). */
+export function chats(projectId: string) {
+  return {
+    /** chat:read: View agent sessions */
+    read: (): Check =>
+      newCheck("chat:read", "chat", projectId, {}, [projectId], { collection: true }),
+    /** chat:write: Manage agent sessions */
+    write: (): Check =>
+      newCheck("chat:write", "chat", projectId, {}, [projectId], { collection: true }),
+  };
+}
+
+/** One project resource: authz.Project(id). */
+export function project(id: string) {
+  return {
+    /** channels:connect: Connect to Channels */
+    channelsConnect: (): Check =>
+      newCheck("channels:connect", "project", id, {}, [id]),
+    /** channels:admin: Manage Channels */
+    channelsAdmin: (): Check =>
+      newCheck("channels:admin", "project", id, {}, [id]),
+    /** channels:read_all: Read all Channels messages */
+    channelsReadAll: (): Check =>
+      newCheck("channels:read_all", "project", id, {}, [id]),
+    /** project:read: View projects */
+    read: (): Check =>
+      newCheck("project:read", "project", id, {}, [id]),
+    /** project:write: Manage projects */
+    write: (): Check =>
+      newCheck("project:write", "project", id, {}, [id]),
+    /** plugin:write: Publish plugins */
+    pluginWrite: (): Check =>
+      newCheck("plugin:write", "project", id, {}, [id]),
+    /** log:read: View tool logs */
+    logRead: (): Check =>
+      newCheck("log:read", "project", id, {}, [id]),
+    /** memory:read: Team memory */
+    memoryRead: (): Check =>
+      newCheck("memory:read", "project", id, {}, [id]),
+    /** memory:write: Team memos */
+    memoryWrite: (): Check =>
+      newCheck("memory:write", "project", id, {}, [id]),
+  };
+}
+
+/** One mcp resource: authz.MCPServer(id, project). */
+export function mcpServer(id: string, projectId: string) {
+  return {
+    /** mcp:read: View MCP servers */
+    read: (): Check =>
+      newCheck("mcp:read", "mcp", id, { projectId: projectId }, [id, projectId]),
+    /** mcp:write: Manage MCP servers */
+    write: (): Check =>
+      newCheck("mcp:write", "mcp", id, { projectId: projectId }, [id, projectId]),
+    /** mcp:connect: Connect to MCP servers */
+    connect: (): Check =>
+      newCheck("mcp:connect", "mcp", id, { projectId: projectId }, [id, projectId], { connection: true }),
+  };
+}
+
+/** Every mcp resource of one parent: authz.MCPServers(project). */
+export function mcpServers(projectId: string) {
+  return {
+    /** mcp:read: View MCP servers */
+    read: (): Check =>
+      newCheck("mcp:read", "mcp", projectId, { projectId: projectId }, [projectId], { collection: true }),
+    /** mcp:write: Manage MCP servers */
+    write: (): Check =>
+      newCheck("mcp:write", "mcp", projectId, { projectId: projectId }, [projectId], { collection: true }),
+    /** mcp:connect: Connect to MCP servers */
+    connect: (): Check =>
+      newCheck("mcp:connect", "mcp", projectId, { projectId: projectId }, [projectId], { connection: true, collection: true }),
+  };
+}
+
+/** One environment resource: authz.Environment(id, project). */
+export function environment(id: string, projectId: string) {
+  return {
+    /** environment:read: View environments */
+    read: (): Check =>
+      newCheck("environment:read", "environment", id, { projectId: projectId }, [id, projectId]),
+    /** environment:write: Manage environments */
+    write: (): Check =>
+      newCheck("environment:write", "environment", id, { projectId: projectId }, [id, projectId]),
+  };
+}
+
+/** Every environment resource of one parent: authz.Environments(project). */
+export function environments(projectId: string) {
+  return {
+    /** environment:read: View environments */
+    read: (): Check =>
+      newCheck("environment:read", "environment", projectId, { projectId: projectId }, [projectId], { collection: true }),
+    /** environment:write: Manage environments */
+    write: (): Check =>
+      newCheck("environment:write", "environment", projectId, { projectId: projectId }, [projectId], { collection: true }),
+  };
+}
+
+/** One skill resource: authz.Skill(id). */
+export function skill(id: string) {
+  return {
+    /** skill:read: View skills */
+    read: (): Check =>
+      newCheck("skill:read", "skill", id, {}, [id]),
+    /** skill:write: Manage skills */
+    write: (): Check =>
+      newCheck("skill:write", "skill", id, {}, [id]),
+  };
+}
+
+/** Every skill resource of one parent: authz.Skills(project). */
+export function skills(projectId: string) {
+  return {
+    /** skill:read: View skills */
+    read: (): Check =>
+      newCheck("skill:read", "skill", projectId, {}, [projectId], { collection: true }),
+    /** skill:write: Manage skills */
+    write: (): Check =>
+      newCheck("skill:write", "skill", projectId, {}, [projectId], { collection: true }),
+  };
+}
+
+/** One assistant resource: authz.Assistant(id, project). */
+export function assistant(id: string, projectId: string) {
+  return {
+    /** assistant:read: View assistants */
+    read: (): Check =>
+      newCheck("assistant:read", "assistant", id, { projectId: projectId }, [id, projectId]),
+    /** assistant:write: Manage assistants */
+    write: (): Check =>
+      newCheck("assistant:write", "assistant", id, { projectId: projectId }, [id, projectId]),
+  };
+}
+
+/** Every assistant resource of one parent: authz.Assistants(project). */
+export function assistants(projectId: string) {
+  return {
+    /** assistant:read: View assistants */
+    read: (): Check =>
+      newCheck("assistant:read", "assistant", projectId, { projectId: projectId }, [projectId], { collection: true }),
+    /** assistant:write: Manage assistants */
+    write: (): Check =>
+      newCheck("assistant:write", "assistant", projectId, { projectId: projectId }, [projectId], { collection: true }),
+  };
+}
+
+/** One agent resource: authz.Agent(id). */
+export function agent(id: string) {
+  return {
+    /** agent:read: View agents */
+    read: (): Check =>
+      newCheck("agent:read", "agent", id, {}, [id]),
+    /** agent:write: Manage agents */
+    write: (): Check =>
+      newCheck("agent:write", "agent", id, {}, [id]),
+    /** agent:authorize: Authorize agent credentials */
+    authorize: (): Check =>
+      newCheck("agent:authorize", "agent", id, {}, [id]),
+    /** agent:transfer: Transfer agent ownership */
+    transfer: (): Check =>
+      newCheck("agent:transfer", "agent", id, {}, [id]),
+  };
+}
+
+/** Every agent resource of one parent: authz.Agents(org). */
+export function agents(orgId: string) {
+  return {
+    /** agent:read: View agents */
+    read: (): Check =>
+      newCheck("agent:read", "agent", orgId, {}, [orgId], { collection: true }),
+    /** agent:write: Manage agents */
+    write: (): Check =>
+      newCheck("agent:write", "agent", orgId, {}, [orgId], { collection: true }),
+    /** agent:authorize: Authorize agent credentials */
+    authorize: (): Check =>
+      newCheck("agent:authorize", "agent", orgId, {}, [orgId], { collection: true }),
+    /** agent:transfer: Transfer agent ownership */
+    transfer: (): Check =>
+      newCheck("agent:transfer", "agent", orgId, {}, [orgId], { collection: true }),
+  };
+}
+
+/** One workload resource: authz.Workload(id). */
+export function workload(id: string) {
+  return {
+    /** workload:read: View workload identities */
+    read: (): Check =>
+      newCheck("workload:read", "workload", id, {}, [id]),
+    /** workload:write: Manage workload identities */
+    write: (): Check =>
+      newCheck("workload:write", "workload", id, {}, [id]),
+  };
+}
+
+/** Every workload resource of one parent: authz.Workloads(org). */
+export function workloads(orgId: string) {
+  return {
+    /** workload:read: View workload identities */
+    read: (): Check =>
+      newCheck("workload:read", "workload", orgId, {}, [orgId], { collection: true }),
+    /** workload:write: Manage workload identities */
+    write: (): Check =>
+      newCheck("workload:write", "workload", orgId, {}, [orgId], { collection: true }),
+  };
+}

@@ -12,8 +12,9 @@ import (
 
 // The dashboard reads the user's effective grants once and decides what to
 // show on its own (client/dashboard/src/hooks/useRBAC.ts). Two files keep it
-// in step with the server: the tables it needs, generated here from the
-// registry, and a list of cases answered by the server's evaluator, which
+// in step with the server: the tables and check constructors it needs,
+// generated here from the registry, and a list of cases answered by the
+// server's evaluator, which
 // package authzcases writes and the dashboard's tests replay against its own
 // matcher.
 const dashboardTablesPath = "../client/dashboard/src/lib/authz.gen.ts"
@@ -39,6 +40,7 @@ func DashboardExclusions(r registry.Registry) map[registry.Scope][]registry.Scop
 func renderDashboardTables(r registry.Registry) []byte {
 	var b strings.Builder
 	b.WriteString(tsHeader)
+	b.WriteString("import type { Scope } from \"@gram/client/models/components/rolegrant.js\";\n\n")
 
 	b.WriteString("/** The resource kind each scope's checks and grant selectors name. */\n")
 	b.WriteString("export const scopeResourceKinds: Readonly<Record<string, string>> = {\n")
@@ -58,6 +60,7 @@ func renderDashboardTables(r registry.Registry) []byte {
 		}
 		b.WriteString("  ],\n")
 	}
-	b.WriteString("};\n")
-	return []byte(b.String())
+	b.WriteString("};\n\n")
+	renderDashboardChecks(&b, r)
+	return []byte(strings.TrimRight(b.String(), "\n") + "\n")
 }

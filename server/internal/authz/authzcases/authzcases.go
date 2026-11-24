@@ -45,11 +45,41 @@ type effectiveGrant struct {
 // dashboardCase is one set of grants and the server's answers for checks
 // against it. Each check is [scope, resourceId, projectId, allowed], with an
 // empty projectId when the kind has no project.
+//
+// Calls ask the same through the dashboard's check constructors: each is
+// [constructor, args, method, probe, allowed], answered by the Go function of
+// the same name, so authz.mcpServer("resource-1", "project-1").write() must
+// get the answer authz.MCPServer(...).Write() gets.
 type dashboardCase struct {
 	Name   string           `json:"name"`
 	Grants []effectiveGrant `json:"grants"`
 	Checks [][4]any         `json:"checks"`
+	Calls  [][5]any         `json:"calls"`
 }
+
+// constructor is the Go twin of one dashboard check constructor method,
+// listed in constructors_gen.go.
+type constructor struct {
+	name, method, scope string
+	// parent is "project" or "org" for a collection, whose one argument is
+	// that parent's id, and empty for a constructor naming one resource.
+	parent string
+	// ref is, for a collection, the constructor naming one of its resources.
+	ref string
+	// keys has one entry per argument: the selector key it fills in, empty
+	// for the resource id or a collection's parent.
+	keys  []string
+	build func(args []string) authz.Check
+}
+
+// caseTarget is one resource a case asks about, and its project.
+type caseTarget struct{ resource, project string }
+
+// caseOtherResource is a resource no case grant names.
+const caseOtherResource = "resource-other"
+
+// caseOrg is the organization collections of org resources are asked about.
+const caseOrg = "org-1"
 
 func apiSelector(selector authz.Selector) map[string]string {
 	out := make(map[string]string, len(selector))
@@ -198,10 +228,9 @@ func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 			}
 		}
 
-		type target struct{ resource, project string }
-		targets := []target{{caseResource, ""}, {caseResource2, ""}}
+		targets := []caseTarget{{caseResource, ""}, {caseResource2, ""}}
 		if inProject {
-			targets = []target{{caseResource, caseProject}, {caseResource2, caseProject}, {caseResource2, caseProject2}}
+			targets = []caseTarget{{caseResource, caseProject}, {caseResource2, caseProject}, {caseResource2, caseProject2}}
 		}
 
 		// An allow is paired only with the exclusions that can take something
@@ -237,7 +266,7 @@ func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 				names = append(names, atom.name)
 				grants = append(grants, atom.grant)
 			}
-			c := dashboardCase{Name: strings.Join(names, ", "), Grants: toEffectiveGrants(grants), Checks: nil}
+			c := dashboardCase{Name: strings.Join(names, ", "), Grants: toEffectiveGrants(grants), Checks: nil, Calls: nil}
 			for _, scope := range set.checks {
 				for _, tg := range targets {
 					check := authz.Check{Scope: authz.Scope(scope), ResourceKind: "", ResourceID: tg.resource, Dimensions: nil} //nolint:glint // norawauthzchecks: generated cases pair every scope with every target to test the dashboard matcher
@@ -255,10 +284,110 @@ func dashboardCases(r registry.Registry) ([]dashboardCase, error) {
 					c.Checks = append(c.Checks, [4]any{string(scope), tg.resource, tg.project, allowed})
 				}
 			}
+			calls, err := constructorCalls(grants, set.checks, targets)
+			if err != nil {
+				return nil, fmt.Errorf("case %q: %w", c.Name, err)
+			}
+			c.Calls = calls
 			cases = append(cases, c)
 		}
 	}
 	return cases, nil
+}
+
+// constructorCalls answers, for one set of grants, every constructor method
+// whose scope the set checks: a ref on each target, a collection on each
+// parent, each also as a probe.
+func constructorCalls(grants []authz.Grant, scopes []registry.Scope, targets []caseTarget) ([][5]any, error) {
+	calls := [][5]any{}
+	answer := func(c constructor, args []string, probe bool) error {
+		allowed, err := constructorAnswer(grants, c, args, probe)
+		if err != nil {
+			return fmt.Errorf("%s(%s).%s: %w", c.name, strings.Join(args, ", "), c.method, err)
+		}
+		calls = append(calls, [5]any{c.name, args, c.method, probe, allowed})
+		return nil
+	}
+	for _, c := range constructors {
+		if !slices.Contains(scopes, registry.Scope(c.scope)) {
+			continue
+		}
+		var argSets [][]string
+		switch c.parent {
+		case "project":
+			argSets = [][]string{{caseProject}, {caseProject2}}
+		case "org":
+			argSets = [][]string{{caseOrg}}
+		default:
+			for _, tg := range targets {
+				argSets = append(argSets, refArgs(c, tg.resource, tg.project))
+			}
+		}
+		for _, args := range argSets {
+			for _, probe := range []bool{false, true} {
+				if err := answer(c, args, probe); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	return calls, nil
+}
+
+// refArgs fills in a constructor's arguments for one resource in project. A
+// kind without a project still gets one for a method that takes it.
+func refArgs(c constructor, resource, project string) []string {
+	if project == "" {
+		project = caseProject
+	}
+	args := make([]string, 0, len(c.keys))
+	for _, key := range c.keys {
+		if key == authz.SelectorKeyProjectID {
+			args = append(args, project)
+		} else {
+			args = append(args, resource)
+		}
+	}
+	return args
+}
+
+// constructorAnswer is the server's answer to one constructor call. A probe
+// on a collection asks whether the caller could act on any resource of the
+// kind in that parent, which the server answers by listing them: the
+// collection itself, each case resource, and one no grant names.
+func constructorAnswer(grants []authz.Grant, c constructor, args []string, probe bool) (bool, error) {
+	check := c.build(args)
+	if probe {
+		check = check.Probe()
+	}
+	allowed, err := authz.GrantsAuthorize(grants, check)
+	if err != nil || allowed || !probe || c.parent == "" {
+		return allowed, err
+	}
+	ref := findConstructor(c.ref, c.method)
+	if ref == nil {
+		return false, fmt.Errorf("collection %s has no %s.%s", c.name, c.ref, c.method)
+	}
+	project := ""
+	if c.parent == "project" {
+		project = args[0]
+	}
+	for _, resource := range []string{caseResource, caseResource2, caseOtherResource} {
+		allowed, err := authz.GrantsAuthorize(grants, ref.build(refArgs(*ref, resource, project)).Probe())
+		if err != nil || allowed {
+			return allowed, err
+		}
+	}
+	return false, nil
+}
+
+func findConstructor(name, method string) *constructor {
+	for i := range constructors {
+		if constructors[i].name == name && constructors[i].method == method {
+			return &constructors[i]
+		}
+	}
+	return nil
 }
 
 // Render writes the cases for r, one per line, so a change shows up as the
