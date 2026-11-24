@@ -120,22 +120,36 @@ func (p Product) withEmptyAsNil() Product {
 	return p
 }
 
-// CompiledSnapshot returns a snapshot of the compiled registry, shaped like a
-// database snapshot: families and aliases stay with the package-level registry.
-func CompiledSnapshot() *Snapshot {
+// CompiledSnapshot returns the process's one immutable snapshot of the compiled
+// registry, shaped like a database snapshot: families and aliases stay with the
+// package-level registry.
+func CompiledSnapshot() *Snapshot { return compiledSnapshot() }
+
+var compiledSnapshot = sync.OnceValue(func() *Snapshot {
 	products := Products()
 	for i := range products {
 		products[i].Family = ""
 		products[i].Aliases = nil
 	}
 	return NewSnapshot(products)
-}
+})
 
 // Fingerprint hashes the complete snapshot, including product and document order.
 func (s *Snapshot) Fingerprint() string { return s.fingerprint }
 
 // Version is the positive, opaque wire identifier echoed by device agents.
 func (s *Snapshot) Version() int32 { return s.version }
+
+// ScanProducts returns isolated copies of the live products devices scan for.
+func (s *Snapshot) ScanProducts() []Product {
+	out := make([]Product, 0, len(s.products))
+	for _, p := range s.products {
+		if p.IsScanned() {
+			out = append(out, p.clone())
+		}
+	}
+	return out
+}
 
 // Products returns isolated copies of the live products.
 func (s *Snapshot) Products() []Product {

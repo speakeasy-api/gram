@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -268,7 +269,7 @@ func (b *Builder) checkRawWhole(day time.Time) error {
 
 // outcomes works out the day's rows: how each attempt ended and what fixed it.
 func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, error) {
-	counts := newTally(b.staffOrg)
+	counts := newTally(aivendors.CompiledSnapshot(), b.staffOrg)
 	var failures []mcpconnectionattempts.AttemptSummary
 	dayFilter := mcpconnectionattempts.AttemptFilter{
 		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: mcpconnectionattempts.ExcludedOrganizations(),

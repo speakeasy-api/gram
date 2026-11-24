@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 )
 
 var (
@@ -51,7 +52,7 @@ func (l *PostgresShadowAILibrary) LoadLibrary(ctx context.Context, organizationI
 	if l == nil || l.queries == nil {
 		return nil, ErrShadowAIUnavailable
 	}
-	list, err := aitargets.LoadOrganizationList(ctx, l.queries, organizationID)
+	list, err := aitargets.LoadOrganizationList(ctx, l.queries, organizationID, aivendors.CompiledSnapshot())
 	if err != nil {
 		return nil, fmt.Errorf("load ai scan library: %w", err)
 	}

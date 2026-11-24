@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -106,7 +107,9 @@ func TestMemberChoicesTokens_RetriesAfterAFailure(t *testing.T) {
 func TestUpstreamSelectorFor_RefusesAMismatchedAuthContext(t *testing.T) {
 	t.Parallel()
 
-	s := &Service{}
+	s := &Service{
+		aiCatalog: aivendorstest.NewStore(),
+	}
 	endpoint := &ResolvedMcpEndpoint{OrganizationID: chainingTestOrg}
 	_, err := s.upstreamSelectorFor(humanChainingContext(t, "user-1", "another-org"), endpoint)
 	require.ErrorIs(t, err, errSessionAuthContextMismatch)

@@ -9,6 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -91,12 +92,12 @@ func gateHappened(valErr error) mcpconnectionattempts.Code {
 }
 
 // directConnectionOptions records a caller who presented a credential; anonymous calls stay in metrics.
-func directConnectionOptions(ctx context.Context, r *http.Request, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken, client mcpconnectionattempts.Option) []remotemcp.BuildOption {
+func directConnectionOptions(ctx context.Context, catalog *aivendors.Snapshot, r *http.Request, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken, client mcpconnectionattempts.Option) []remotemcp.BuildOption {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
 		return nil
 	}
 	return []remotemcp.BuildOption{remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
-		Scope:            mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx)),
+		Scope:            mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx, catalog)),
 		Details:          []mcpconnectionattempts.Option{callerSubject(ctx), client, mcpconnectionattempts.RemoteSessionClient(ownSignInClient(upstream))},
 		UpstreamOutcomes: true,
 		SelfCredential:   upstream.CredentialOwner == remotesessions.CredentialOwnerSelf,
@@ -170,7 +171,7 @@ func (s *Service) memberConnection(ctx context.Context, gate *metaGateContext, m
 // memberConnectionOption records a member proxy's refused tool calls under its gateway.
 func (s *Service) memberConnectionOption(ctx context.Context, gate *metaGateContext, member metaMember, serviceClient uuid.UUID) remotemcp.BuildOption {
 	return remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
-		Scope:            gate.connectionScope(ctx),
+		Scope:            gate.connectionScope(ctx, s.aiCatalog.Snapshot()),
 		Details:          s.memberConnection(ctx, gate, member, serviceClient),
 		UpstreamOutcomes: false,
 		SelfCredential:   false,
@@ -185,12 +186,12 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 		what = gate.memberNoCredentialHappened(member)
 	}
 	// Kept beside a provider_refresh row: only this row carries member_id.
-	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, append(s.memberConnection(ctx, gate, member, serviceClient), opts...)...)
+	s.recordRequestOutcome(ctx, gate.connectionScope(ctx, s.aiCatalog.Snapshot()), what, gate.request, append(s.memberConnection(ctx, gate, member, serviceClient), opts...)...)
 }
 
 // recordMemberServed records a member call its own server answered without an error, on the connection its failures name.
 func (s *Service) recordMemberServed(ctx context.Context, gate *metaGateContext, member metaMember, serviceClient uuid.UUID) {
-	s.connections.Served(ctx, gate.connectionScope(ctx), true, append(s.memberConnection(ctx, gate, member, serviceClient), mcpconnectionattempts.FromRequest(gate.request))...)
+	s.connections.Served(ctx, gate.connectionScope(ctx, s.aiCatalog.Snapshot()), true, append(s.memberConnection(ctx, gate, member, serviceClient), mcpconnectionattempts.FromRequest(gate.request))...)
 }
 
 // gatewayMemberCallsKey holds a gateway request's member tool calls.
@@ -223,7 +224,7 @@ func (s *Service) recordGatewayServed(ctx context.Context, gate *metaGateContext
 	if calls, ok := ctx.Value(gatewayMemberCallsKey{}).(*gatewayMemberCalls); ok && calls.called.Load() > 0 && calls.succeeded.Load() == 0 {
 		return
 	}
-	s.connections.Served(ctx, gate.connectionScope(ctx), false, gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate), mcpconnectionattempts.FromRequest(gate.request))
+	s.connections.Served(ctx, gate.connectionScope(ctx, s.aiCatalog.Snapshot()), false, gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate), mcpconnectionattempts.FromRequest(gate.request))
 }
 
 // consentRefusalHappened is the code for whoever a consent refusal's message tells to act first.
@@ -294,7 +295,7 @@ func (s *Service) recordHostedToolsCallOutcome(ctx context.Context, payload *mcp
 	if code == mcpconnectionattempts.CodeProviderRejected && resolvedCaller(ctx) == nil {
 		return
 	}
-	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx))
+	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx, s.aiCatalog.Snapshot()))
 	s.recordRequestOutcome(ctx, scope, code, payload.request, callerSubject(ctx), s.reportedClient(ctx, payload.request, sessionClientInfoProjectID(payload), sessionClientInfoScope(payload)))
 }
 
@@ -305,7 +306,7 @@ func (s *Service) recordHostedServed(ctx context.Context, toolset *toolsets_repo
 	if (method == mcpversions.MethodToolsCall || method == mcpversions.MethodResourcesRead) && !payload.resultSucceeded {
 		return
 	}
-	s.connections.Served(ctx, hostedConnectionScope(ctx, toolset, cfg), payload.backendAnswered,
+	s.connections.Served(ctx, hostedConnectionScope(ctx, s.aiCatalog.Snapshot(), toolset, cfg), payload.backendAnswered,
 		callerSubject(ctx), s.reportedClient(ctx, payload.request, toolset.ProjectID, toolset.Slug), mcpconnectionattempts.FromRequest(payload.request))
 }
 
