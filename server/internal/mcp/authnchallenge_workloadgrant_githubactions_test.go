@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -185,7 +186,7 @@ func TestGitHubActionsRule_OneAgentForPluginsMCPAndHooks(t *testing.T) {
 	// is checked against the engine that handler uses.
 	plugins := agent.NewService(aivendorstest.NewStore(), f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
 		f.ti.productFeatures, f.ti.serverURL.String(), orghost.New(orghost.Config{ServerURL: f.ti.serverURL, SiteURL: nil}),
-		assetstest.NewTestBlobStore(t), nil, nil, tokens)
+		assetstest.NewTestBlobStore(t), nil, nil, tokens, marketplacetokenstest.Tokens(t, f.ti.conn))
 	polling, err := plugins.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "getPlugins"), accessToken, &security.JWTScheme{Name: constants.DeviceAgentTokenSecurityScheme, Scopes: []string{}, RequiredScopes: []string{}})
 	require.NoError(t, err)
 	polled, err := plugins.GetPlugins(polling, &agentgen.GetPluginsPayload{})

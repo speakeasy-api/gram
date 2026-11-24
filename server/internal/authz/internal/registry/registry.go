@@ -16,9 +16,7 @@ import (
 // VocabularyFile is one registry source file that authzgen copies into
 // package authz.
 type VocabularyFile struct {
-	// Name is the file's name in this package, for example "selectors.go".
-	Name string
-	// Source is the file as written.
+	Name   string
 	Source string
 }
 
@@ -195,7 +193,7 @@ type OpenKeys struct {
 // legacyScopes are the only stored strings a permission may keep through
 // LegacyScope. They predate the registry and are stored in grants, API key
 // and agent policies, and the public scope enum. They go, with the field,
-// when R1 renames the scopes. The memory and channels scopes were added
+// once the scopes are renamed. The memory and channels scopes were added
 // alongside the registry and are checked against a project in the same way.
 var legacyScopes = []Scope{
 	"plugin:write", "log:read", "mcp:auth",
@@ -270,7 +268,6 @@ type Registry struct {
 	Retired []Scope
 }
 
-// RootPermission describes the root scope.
 type RootPermission struct {
 	Scope Scope
 	Agent AgentEligibility

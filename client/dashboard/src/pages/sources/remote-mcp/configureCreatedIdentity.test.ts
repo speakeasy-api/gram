@@ -246,7 +246,7 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(result).toMatchObject({
       status: "setup-required",
       mcpServer: { visibility: "disabled" },
-      message: expect.stringContaining("Settings > Identity"),
+      message: expect.stringContaining("Settings > Sign-in"),
     });
     expect(mocks.updateServer).not.toHaveBeenCalled();
   });

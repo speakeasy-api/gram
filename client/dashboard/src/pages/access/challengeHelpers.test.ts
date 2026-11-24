@@ -4,6 +4,7 @@ import {
   canAssignChallengeRole,
   countChallenges,
   hasActiveTemporaryGrant,
+  reasonLabel,
   resolutionSummary,
   scopeChallenges,
 } from "./challengeHelpers";
@@ -50,6 +51,14 @@ function makeChallenge(
     ...overrides,
   };
 }
+
+describe("reasonLabel", () => {
+  it("explains a refused personal connection without naming its owner", () => {
+    expect(reasonLabel("connection_owner_mismatch")).toBe(
+      "This connection belongs to another member and works only for them.",
+    );
+  });
+});
 
 describe("scopeChallenges", () => {
   const challenges = [

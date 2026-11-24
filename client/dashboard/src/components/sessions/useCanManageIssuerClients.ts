@@ -4,7 +4,7 @@ import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 
 /**
- * Whether the viewer may register agents against an issuer or edit their
+ * Whether the viewer may register OAuth clients against an issuer or edit their
  * redirect URIs. Mirrors the server: a project-owned issuer needs
  * project:write on its project, and an organization-owned issuer, which every
  * project in the organization shares, needs org:admin.

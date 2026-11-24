@@ -123,7 +123,7 @@ describe("MakeOfficialSheet", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Make official" }));
 
-    expect(await screen.findByText("Official server linked")).toBeTruthy();
+    expect(await screen.findByText("Official server set")).toBeTruthy();
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         url: "https://tracker.example.com/mcp",
@@ -173,7 +173,9 @@ describe("MakeOfficialSheet", () => {
     // how to link it instead of reporting a failed link.
     expect(mocks.save).not.toHaveBeenCalled();
     expect(screen.getByText("Server added")).toBeTruthy();
-    expect(screen.getByText(/then link it from this page/)).toBeTruthy();
+    expect(
+      screen.getByText(/then make it official from this page/),
+    ).toBeTruthy();
     expect(screen.queryByText(/The link could not be saved/)).toBeNull();
   });
 });

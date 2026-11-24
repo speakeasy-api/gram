@@ -233,7 +233,7 @@ function CreateRemoteMcpForm() {
       if (identityConfiguration.status === "setup-required") {
         toast.warning(
           shadowServerSlug
-            ? `MCP server added but kept disabled. ${identityConfiguration.message} Turn it on, then link it from its Shadow MCP page.`
+            ? `MCP server added but kept disabled. ${identityConfiguration.message} Turn it on, then make it official from its Shadow MCP page.`
             : `MCP server added but kept disabled. ${identityConfiguration.message}`,
         );
         void navigate(
@@ -280,7 +280,8 @@ function CreateRemoteMcpForm() {
           {shadowServerSlug ? (
             <Alert variant="info" dismissible={false}>
               This server becomes the official version of {shadowServerName}.
-              After you save it, you go back to its Shadow MCP page to link it.
+              After you save it, you go back to its Shadow MCP page to make it
+              official.
             </Alert>
           ) : null}
           <fieldset disabled={creationLocked} className="contents">

@@ -303,7 +303,7 @@ export default function AddMcpServer(): JSX.Element {
       <InputDialog
         open={gatewayDialogOpen}
         onOpenChange={setGatewayDialogOpen}
-        title="Create Gateway"
+        title="Create gateway"
         description="One MCP endpoint fronting a set of MCP servers. Add members after creating it."
         submitButtonText="Create"
         inputs={{
