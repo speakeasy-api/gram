@@ -595,3 +595,18 @@ func insertInvalidProduct(t *testing.T, db *pgxpool.Pool) {
 	})
 	require.NoError(t, err)
 }
+
+func TestLoadFlattensNestedArrays(t *testing.T) {
+	t.Parallel()
+	db, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	require.NoError(t, catalogseed.EnsureCatalog(t.Context(), db))
+	_, err = db.Exec(t.Context(), `UPDATE ai_products SET binaries = '{{nested-a,nested-b}}' WHERE id = 'zed'`)
+	require.NoError(t, err)
+	loaded, err := aivendors.Load(t.Context(), db, testenv.NewLogger(t), aitargets.ValidateCatalog)
+	require.NoError(t, err, "a nested array does not fail the read")
+	require.False(t, loaded.BuiltIn())
+	target, ok := aitargets.DefaultByID(loaded, "zed")
+	require.True(t, ok)
+	require.Equal(t, []string{"nested-a", "nested-b"}, target.Signatures.Binaries)
+}

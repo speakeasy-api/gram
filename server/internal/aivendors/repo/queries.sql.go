@@ -58,12 +58,12 @@ func (q *Queries) ListCatalogDocuments(ctx context.Context) ([]ListCatalogDocume
 
 const listCatalogProducts = `-- name: ListCatalogProducts :many
 SELECT id, vendor_key, display_name, category,
-  array_remove(bundle_ids, NULL)::text[] AS bundle_ids,
-  array_remove(binaries, NULL)::text[] AS binaries,
-  array_remove(config_dirs, NULL)::text[] AS config_dirs,
-  array_remove(process_names, NULL)::text[] AS process_names,
+  ARRAY(SELECT e FROM unnest(bundle_ids) AS e WHERE e IS NOT NULL)::text[] AS bundle_ids,
+  ARRAY(SELECT e FROM unnest(binaries) AS e WHERE e IS NOT NULL)::text[] AS binaries,
+  ARRAY(SELECT e FROM unnest(config_dirs) AS e WHERE e IS NOT NULL)::text[] AS config_dirs,
+  ARRAY(SELECT e FROM unnest(process_names) AS e WHERE e IS NOT NULL)::text[] AS process_names,
   version_plist_key,
-  array_remove(client_info_names, NULL)::text[] AS client_info_names
+  ARRAY(SELECT e FROM unnest(client_info_names) AS e WHERE e IS NOT NULL)::text[] AS client_info_names
 FROM ai_products
 WHERE deleted IS FALSE
 ORDER BY id COLLATE "C"
@@ -84,7 +84,7 @@ type ListCatalogProductsRow struct {
 
 // Catalog products and documents are global reference data.
 // Byte-order sorting by id, then url, makes database snapshots deterministic.
-// NULL array elements are dropped so one bad row cannot fail the scan.
+// NULL array elements are dropped and nested arrays flattened so one bad row cannot fail the read.
 func (q *Queries) ListCatalogProducts(ctx context.Context) ([]ListCatalogProductsRow, error) {
 	rows, err := q.db.Query(ctx, listCatalogProducts)
 	if err != nil {

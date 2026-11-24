@@ -26,14 +26,37 @@ keeps the current snapshot. The first refresh that validates replaces the
 built-in catalog. Each pod refreshes on its own timer, so for up to a minute
 after an edit pods can serve different snapshots.
 
+While the table is invalid, pods can disagree for longer than that. A running
+pod keeps its last database snapshot, and a pod that boots meanwhile serves the
+built-in catalog. If the two differ in a served field, a device that moves
+between pods sees the scan list version change and refetches the list on each
+poll until the table is fixed. Alert on `ai_catalog.built_in` being 1 on any
+pod of a seeded environment, and fix the table; the pods converge on their next
+refresh.
+
+## Removing a product or document
+
+A removed or disabled row stops being matched. An organization's block on that
+client then no longer applies: the client is unknown, and an issuer that admits
+unknown clients lets it in. Before soft-deleting or disabling a row, check for
+blocks on it:
+
+```sql
+SELECT count(*) FROM ai_scan_targets
+WHERE (ai_product_id = '<PRODUCT_ID>' OR id = '<PRODUCT_ID>') AND status = 'blocked';
+```
+
+If any exist, fix the row in place instead of removing it, or tell the
+organizations first. Nothing refuses the removal for you.
+
 Every load rejects an empty catalog, a malformed enabled pattern, more
 products, documents per product, client info names or enabled patterns than the
 caps, and two enabled patterns of different products that one client ID can
 match unless one is strictly narrower. Then the consumer validator runs; the
 `aitargets` one also checks every enabled document URL against the CIMD
 client_id rules. Pattern hosts are not tied to the hosts a vendor already uses.
-NULL elements in array columns are dropped when read, so no single row can fail
-the read itself.
+NULL elements in array columns are dropped and nested arrays are flattened when
+read, so no single row can fail the read itself.
 
 Metrics: `ai_catalog.refresh.failures` counts failed refreshes,
 `ai_catalog.snapshot.age` is the seconds since the served snapshot last matched
