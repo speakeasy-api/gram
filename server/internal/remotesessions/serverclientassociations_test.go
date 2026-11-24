@@ -449,9 +449,9 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, shareable.Code, "a second detach finds nothing to retire")
 }
 
-// An administrator can attach a backfilled credential independently of the
+// An administrator can attach a typed credential independently of the
 // association it came from. Detach must preserve that administrator-owned link.
-func TestDetachServerClientAssociation_KeepsAdministratorLinkToBackfilledClient(t *testing.T) {
+func TestDetachServerClientAssociation_KeepsAdministratorLinkToTypedClient(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)

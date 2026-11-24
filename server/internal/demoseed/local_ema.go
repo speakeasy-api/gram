@@ -188,7 +188,7 @@ func wireLocalEMA(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts Loca
 	}); err != nil {
 		return fmt.Errorf("wire local ema: insert typed auth client: %w", err)
 	}
-	if err := seedAuthClientEMA(ctx, q, authClient, s.det("ema-binding-tracker")); err != nil {
+	if err := seedAuthClientEMA(ctx, q, org, proj, authClient, s.det("ema-binding-tracker")); err != nil {
 		return err
 	}
 	if err := q.ServersInsertServerAuthClient(ctx, repo.ServersInsertServerAuthClientParams{
