@@ -16,6 +16,8 @@ export type SkillTextDiffProps<Annotation> = {
   newLabel: string;
   lineAnnotations?: DiffLineAnnotation<Annotation>[];
   renderAnnotation?: (annotation: DiffLineAnnotation<Annotation>) => ReactNode;
+  /** Highlighting language. SKILL.md is Markdown; supporting files vary. */
+  lang?: string;
 };
 
 export default function SkillTextDiff<Annotation = undefined>({
@@ -25,6 +27,7 @@ export default function SkillTextDiff<Annotation = undefined>({
   newLabel,
   lineAnnotations,
   renderAnnotation,
+  lang = "markdown",
 }: SkillTextDiffProps<Annotation>): JSX.Element {
   const isMobile = useIsMobile();
   const { theme } = useMoonshineConfig();
@@ -47,13 +50,13 @@ export default function SkillTextDiff<Annotation = undefined>({
   };
 
   return (
-    <HighlightProvider langs={["markdown"]}>
+    <HighlightProvider langs={[lang]}>
       {/* The diff paints its own square-cornered surface, so it is clipped to
           the rounded border rather than allowed to cut through it. */}
       <div className="overflow-hidden border">
         <MultiFileDiff
-          oldFile={{ name: oldLabel, contents: oldContent, lang: "markdown" }}
-          newFile={{ name: newLabel, contents: newContent, lang: "markdown" }}
+          oldFile={{ name: oldLabel, contents: oldContent, lang }}
+          newFile={{ name: newLabel, contents: newContent, lang }}
           options={options}
           lineAnnotations={lineAnnotations}
           renderAnnotation={renderAnnotation}

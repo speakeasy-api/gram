@@ -6,7 +6,9 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
+import { strToU8, zipSync } from "fflate";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SkillManifestDialog } from "./SkillManifestDialog";
@@ -16,7 +18,7 @@ import {
 } from "./skill-manifest";
 
 const testState = vi.hoisted(() => ({
-  queryClient: { id: "query-client" },
+  queryClient: { id: "query-client", fetchQuery: vi.fn() },
   create: {
     mutateAsync: vi.fn(),
     reset: vi.fn(),
@@ -78,6 +80,9 @@ vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
 vi.mock("@gram/client/react-query/skillTags.js", () => ({
   invalidateAllSkillTags: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({ id: "gram-client" }),
+}));
 vi.mock("nuqs", () => ({
   useQueryState: () => [null, testState.setSkillParam],
 }));
@@ -136,7 +141,39 @@ beforeEach(() => {
   testState.invalidateFeedback.mockReset().mockResolvedValue(undefined);
   testState.invalidateEfficacy.mockReset().mockResolvedValue(undefined);
   testState.setSkillParam.mockReset();
+  testState.queryClient.fetchQuery.mockReset();
 });
+
+const existingFiles = [
+  {
+    path: "references/REFERENCE.md",
+    sha256: "a".repeat(64),
+    sizeBytes: 5,
+    contentType: "text/markdown; charset=utf-8",
+  },
+  {
+    path: "scripts/run.sh",
+    sha256: "b".repeat(64),
+    sizeBytes: 9,
+    contentType: "text/x-shellscript; charset=utf-8",
+  },
+];
+
+function zipFile(entries: Record<string, string>, name = "skill.zip"): File {
+  const zip = zipSync(
+    Object.fromEntries(
+      Object.entries(entries).map(([path, text]) => [path, strToU8(text)]),
+    ),
+  );
+  return new File([zip], name, { type: "application/zip" });
+}
+
+function lastAddVersionBody(): Record<string, unknown> {
+  const call = testState.addVersion.mutateAsync.mock.calls.at(-1)?.[0] as {
+    request: { addSkillVersionRequestBody: Record<string, unknown> };
+  };
+  return call.request.addSkillVersionRequestBody;
+}
 
 afterEach(cleanup);
 
@@ -469,7 +506,7 @@ describe("SkillManifestDialog", () => {
     const read = vi.spyOn(file, "arrayBuffer");
     render(<SkillManifestDialog mode="create" open onOpenChange={() => {}} />);
 
-    fireEvent.change(screen.getByLabelText("Upload .md file"), {
+    fireEvent.change(screen.getByLabelText("Upload SKILL.md"), {
       target: { files: [file] },
     });
 
@@ -491,5 +528,181 @@ describe("SkillManifestDialog", () => {
         .getByRole("button", { name: "Insert template" })
         .hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  describe("supporting files", () => {
+    it("keeps existing files by omitting them when only SKILL.md changes", async () => {
+      testState.addVersion.mutateAsync.mockResolvedValue(validResult);
+      render(
+        <SkillManifestDialog
+          mode="edit"
+          open
+          onOpenChange={() => {}}
+          skillId="skill_a"
+          derivedFromVersionId="version_source"
+          initialContent={VALID_MANIFEST}
+          existingFiles={existingFiles}
+        />,
+      );
+      const files = screen.getByRole("region", { name: "Supporting files" });
+      expect(within(files).getByText("references/REFERENCE.md")).toBeTruthy();
+      expect(within(files).getByText("Script")).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText("SKILL.md content"), {
+        target: { value: UPDATED_MANIFEST },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+
+      await waitFor(() =>
+        expect(testState.addVersion.mutateAsync).toHaveBeenCalledOnce(),
+      );
+      const body = lastAddVersionBody();
+      expect(body.content).toBe(UPDATED_MANIFEST);
+      expect(body.files).toBeUndefined();
+      expect(testState.queryClient.fetchQuery).not.toHaveBeenCalled();
+    });
+
+    it("sends the kept files' stored bytes after a file is removed", async () => {
+      testState.addVersion.mutateAsync.mockResolvedValue(validResult);
+      const stored = strToU8("# Ref");
+      testState.queryClient.fetchQuery.mockResolvedValue({ content: stored });
+      render(
+        <SkillManifestDialog
+          mode="edit"
+          open
+          onOpenChange={() => {}}
+          skillId="skill_a"
+          derivedFromVersionId="version_source"
+          initialContent={VALID_MANIFEST}
+          existingFiles={existingFiles}
+        />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove scripts/run.sh" }),
+      );
+      expect(screen.queryByText("scripts/run.sh")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+
+      await waitFor(() =>
+        expect(testState.addVersion.mutateAsync).toHaveBeenCalledOnce(),
+      );
+      expect(testState.queryClient.fetchQuery).toHaveBeenCalledOnce();
+      expect(lastAddVersionBody().files).toEqual([
+        {
+          path: "references/REFERENCE.md",
+          content: stored,
+          contentType: "text/markdown; charset=utf-8",
+        },
+      ]);
+    });
+
+    it("sends an empty list when every file is removed", async () => {
+      testState.addVersion.mutateAsync.mockResolvedValue(validResult);
+      render(
+        <SkillManifestDialog
+          mode="edit"
+          open
+          onOpenChange={() => {}}
+          skillId="skill_a"
+          derivedFromVersionId="version_source"
+          initialContent={VALID_MANIFEST}
+          existingFiles={existingFiles.slice(0, 1)}
+        />,
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove references/REFERENCE.md" }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save new version" }));
+
+      await waitFor(() =>
+        expect(testState.addVersion.mutateAsync).toHaveBeenCalledOnce(),
+      );
+      expect(lastAddVersionBody().files).toEqual([]);
+    });
+
+    it("creates a skill from a zip and warns when the folder name differs", async () => {
+      testState.create.mutateAsync.mockResolvedValue(validResult);
+      render(
+        <SkillManifestDialog mode="create" open onOpenChange={() => {}} />,
+      );
+
+      fireEvent.change(screen.getByLabelText("Upload skill .zip"), {
+        target: {
+          files: [
+            zipFile({
+              "example-main/SKILL.md": VALID_MANIFEST,
+              "example-main/scripts/run.py": "print(1)",
+            }),
+          ],
+        },
+      });
+
+      expect(await screen.findByText("scripts/run.py")).toBeTruthy();
+      expect(
+        (screen.getByLabelText("SKILL.md content") as HTMLTextAreaElement)
+          .value,
+      ).toBe(VALID_MANIFEST);
+      expect(
+        screen.getByText(/named "example" but its folder is "example-main"/),
+      ).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Add skill" }));
+      await waitFor(() =>
+        expect(testState.create.mutateAsync).toHaveBeenCalledOnce(),
+      );
+      const body = testState.create.mutateAsync.mock.calls[0]?.[0] as {
+        request: {
+          createSkillRequestBody: {
+            files: { path: string; content: Uint8Array }[];
+          };
+        };
+      };
+      const sent = body.request.createSkillRequestBody.files;
+      expect(sent.map((f) => f.path)).toEqual(["scripts/run.py"]);
+      expect(new TextDecoder().decode(sent[0]?.content)).toBe("print(1)");
+    });
+
+    it("reports a zip without SKILL.md", async () => {
+      render(
+        <SkillManifestDialog mode="create" open onOpenChange={() => {}} />,
+      );
+      fireEvent.change(screen.getByLabelText("Upload skill .zip"), {
+        target: { files: [zipFile({ "notes.md": "# Notes" })] },
+      });
+      expect(await screen.findByText(/No SKILL.md found/)).toBeTruthy();
+    });
+
+    it("blocks saving files that break the path rules", async () => {
+      render(
+        <SkillManifestDialog mode="create" open onOpenChange={() => {}} />,
+      );
+      fireEvent.change(screen.getByLabelText("Upload skill .zip"), {
+        target: {
+          files: [
+            zipFile({
+              "SKILL.md": VALID_MANIFEST,
+              "Ref.md": "a",
+              "ref.md": "b",
+            }),
+          ],
+        },
+      });
+
+      expect(
+        await screen.findByText(/differ only by letter case/),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Add skill" }));
+      expect(testState.create.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("leaves files alone when approving a suggestion", () => {
+      render(<ApprovalHarness />);
+      expect(screen.queryByLabelText("Upload skill .zip")).toBeNull();
+      expect(screen.queryByLabelText("Upload skill folder")).toBeNull();
+      expect(
+        screen.queryByRole("region", { name: "Supporting files" }),
+      ).toBeNull();
+    });
   });
 });

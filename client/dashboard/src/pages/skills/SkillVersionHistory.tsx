@@ -1,6 +1,6 @@
 import { SettingsSection } from "@/components/detail/settings-section";
 import { RequireScope } from "@/components/require-scope";
-import { Alert, AlertDescription, ErrorAlert } from "@/components/ui/Alert";
+import { ErrorAlert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -11,11 +11,11 @@ import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { type Column, Table } from "@/components/ui/Table";
-import { lazy, Suspense, useEffect, useState } from "react";
-import { ErrorBoundary } from "react-error-boundary";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { RestoreSkillVersionDialog } from "./RestoreSkillVersionDialog";
 import { SkillServedDigest } from "./SkillServedDigest";
+import { SkillVersionDiff } from "./SkillVersionDiff";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 import { useSkillDetailContext } from "./SkillDetailContext";
 import { useSkillsOverMcpEnabled } from "./use-skills-over-mcp";
@@ -24,8 +24,6 @@ import {
   type VersionChangeDirection,
   versionChangeDirection,
 } from "./version-selection";
-
-const SkillTextDiff = lazy(() => import("./SkillTextDiff"));
 
 export default function SkillVersionHistory(): JSX.Element {
   const { skillQueryData } = useSkillDetailContext();
@@ -180,13 +178,20 @@ function VersionHistory({
               {loadMoreLabel}
             </Button>
           )}
-          <VersionDiff versions={diffVersions} />
+          {diffVersions && (
+            <SkillVersionDiff
+              skillId={skillId}
+              older={diffVersions[0]}
+              newer={diffVersions[1]}
+            />
+          )}
         </SettingsSection.Body>
       </SettingsSection.Panel>
       <RestoreSkillVersionDialog
         skillId={skillId}
         version={restoreTarget?.version ?? null}
         direction={restoreTarget?.direction ?? null}
+        currentVersion={currentVersion}
         onClose={() => setRestoreTarget(null)}
       />
     </SettingsSection>
@@ -354,41 +359,6 @@ function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
       <Button size="sm" variant="secondary" onClick={onRetry}>
         Retry
       </Button>
-    </div>
-  );
-}
-
-function VersionDiff({
-  versions,
-}: {
-  versions: [SkillVersion, SkillVersion] | null;
-}): JSX.Element | null {
-  if (!versions) return null;
-  const [older, newer] = versions;
-  return (
-    <div className="space-y-3">
-      <Text small muted mono className="text-xs tracking-wider">
-        Diff · {older.canonicalSha256.slice(0, 8)} →{" "}
-        {newer.canonicalSha256.slice(0, 8)}
-      </Text>
-      <ErrorBoundary
-        fallback={
-          <Alert variant="warning">
-            <AlertDescription>
-              Unable to load the diff. Try again.
-            </AlertDescription>
-          </Alert>
-        }
-      >
-        <Suspense fallback={<div className="h-80 w-full" />}>
-          <SkillTextDiff
-            oldContent={older.content}
-            newContent={newer.content}
-            oldLabel={older.canonicalSha256.slice(0, 8)}
-            newLabel={newer.canonicalSha256.slice(0, 8)}
-          />
-        </Suspense>
-      </ErrorBoundary>
     </div>
   );
 }

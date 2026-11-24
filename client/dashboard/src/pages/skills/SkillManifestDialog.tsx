@@ -6,10 +6,15 @@ import { Text } from "@/components/ui/Text";
 import { useQueryState } from "nuqs";
 import type { ApproveSkillSuggestionResultOutcome } from "@gram/client/models/components/approveskillsuggestionresult.js";
 import type { RecordSkillResult } from "@gram/client/models/components/recordskillresult.js";
+import type { SkillFile } from "@gram/client/models/components/skillfile.js";
+import type { SkillFileInput } from "@gram/client/models/components/skillfileinput.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildSkillVersionFileQuery } from "@gram/client/react-query/skillVersionFile.core.js";
 import { useAddSkillVersionMutation } from "@gram/client/react-query/addSkillVersion.js";
 import { useApproveSkillSuggestionMutation } from "@gram/client/react-query/approveSkillSuggestion.js";
 import { useCreateSkillMutation } from "@gram/client/react-query/createSkill.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -20,6 +25,18 @@ import {
   validateManifestContent,
 } from "./skill-manifest";
 import { invalidateSkillQueries } from "./invalidate-skill-queries";
+import {
+  type DraftSkillFile,
+  formatFileSize,
+  type SkillUploadEntry,
+  isSkillScript,
+  parseSkillUpload,
+  readSkillFolder,
+  readSkillZip,
+  rootNameWarning,
+  SkillUploadError,
+  validateSkillFiles,
+} from "./skill-files";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 
 export type SkillManifestDialogMode = "create" | "edit" | "approve-suggestion";
@@ -30,12 +47,14 @@ const MODE_COPY: Record<
 > = {
   create: {
     title: "Add skill",
-    description: "Paste a SKILL.md manifest or upload a Markdown file.",
+    description:
+      "Paste a SKILL.md manifest, or upload a skill folder or .zip to include its scripts, references, and assets.",
     submit: "Add skill",
   },
   edit: {
-    title: "Edit SKILL.md",
-    description: "Saving records your changes as a new immutable version.",
+    title: "Edit skill",
+    description:
+      "Edit SKILL.md or its supporting files. Saving records your changes as a new immutable version.",
     submit: "Save new version",
   },
   "approve-suggestion": {
@@ -55,6 +74,7 @@ export function SkillManifestDialog({
   suggestionId,
   onSuggestionApproved,
   initialContent = "",
+  existingFiles = [],
 }: {
   mode: SkillManifestDialogMode;
   open: boolean;
@@ -64,10 +84,22 @@ export function SkillManifestDialog({
   suggestionId?: string;
   onSuggestionApproved?: (outcome: ApproveSkillSuggestionResultOutcome) => void;
   initialContent?: string;
+  /** Supporting files of the version being edited, kept unless the user changes them. */
+  existingFiles?: SkillFile[];
 }): JSX.Element {
   const copy = MODE_COPY[mode];
   const [, setSelectedSkillId] = useQueryState("skill");
   const queryClient = useQueryClient();
+  const client = useGramContext();
+  // Suggestions only change SKILL.md, so approving one keeps the base files.
+  const managesFiles = mode !== "approve-suggestion";
+  const initialDraftFiles = (): DraftSkillFile[] =>
+    existingFiles.map((file) => ({
+      kind: "existing",
+      path: file.path,
+      sizeBytes: file.sizeBytes,
+      contentType: file.contentType,
+    }));
   const fieldId = useId();
   const helpId = `${fieldId}-help`;
   const errorId = `${fieldId}-error`;
@@ -85,6 +117,16 @@ export function SkillManifestDialog({
   const [noOpContent, setNoOpContent] = useState<string | null>(null);
   const [readingFile, setReadingFile] = useState(false);
   const fileReadSeq = useRef(0);
+  const [draftFiles, setDraftFiles] =
+    useState<DraftSkillFile[]>(initialDraftFiles);
+  // Files are sent only when the user changed the set; otherwise the new
+  // version keeps the base version's files on the server.
+  const [filesRevision, setFilesRevision] = useState(0);
+  const [uploadRootDir, setUploadRootDir] = useState<string | null>(null);
+  const [filesErrors, setFilesErrors] = useState<string[]>([]);
+  const [noOpFilesRevision, setNoOpFilesRevision] = useState<number | null>(
+    null,
+  );
   const createMutation = useCreateSkillMutation();
   const addVersionMutation = useAddSkillVersionMutation();
   const approveSuggestionMutation = useApproveSkillSuggestionMutation();
@@ -95,7 +137,10 @@ export function SkillManifestDialog({
   const isBusy = isPending || reconcilingApproval;
   const savedInvalid = savedResult?.version.specValid === false;
   const noChanges = savedResult?.createdVersion === false;
-  const unchangedNoOp = noOpContent === content;
+  const unchangedNoOp =
+    noOpContent === content && noOpFilesRevision === filesRevision;
+  const filesChanged = filesRevision > 0;
+  const nameWarning = rootNameWarning(content, uploadRootDir);
   const submitLabel = persistedSkillId ? "Add version" : copy.submit;
 
   const reset = (): void => {
@@ -109,6 +154,11 @@ export function SkillManifestDialog({
     setPersistedSkillId(null);
     setParentVersionId(derivedFromVersionId);
     setNoOpContent(null);
+    setNoOpFilesRevision(null);
+    setDraftFiles(initialDraftFiles());
+    setFilesRevision(0);
+    setUploadRootDir(null);
+    setFilesErrors([]);
     fileReadSeq.current += 1;
     setReadingFile(false);
     createMutation.reset();
@@ -122,11 +172,42 @@ export function SkillManifestDialog({
     onOpenChange(nextOpen);
   };
 
+  const resolveFileInputs = async (): Promise<SkillFileInput[] | undefined> => {
+    if (!managesFiles || !filesChanged) return undefined;
+    return Promise.all(
+      draftFiles.map(async (file): Promise<SkillFileInput> => {
+        if (file.kind === "new") {
+          return { path: file.path, content: file.content };
+        }
+        // A kept file's bytes live on the server; fetch them so the request
+        // can carry the complete new set.
+        if (!skillId || !derivedFromVersionId) {
+          throw new Error(`Unable to keep ${file.path}.`);
+        }
+        const stored = await queryClient.fetchQuery({
+          ...buildSkillVersionFileQuery(client, {
+            skillId,
+            versionId: derivedFromVersionId,
+            path: file.path,
+          }),
+          staleTime: Infinity,
+        });
+        return {
+          path: file.path,
+          content: stored.content,
+          contentType: file.contentType,
+        };
+      }),
+    );
+  };
+
   const submit = async (): Promise<void> => {
     const validationError = validateManifestContent(content);
     setFieldError(validationError);
     setMutationError(null);
-    if (validationError) return;
+    const fileErrors = managesFiles ? validateSkillFiles(draftFiles) : [];
+    setFilesErrors(fileErrors);
+    if (validationError || fileErrors.length > 0) return;
 
     try {
       if (mode === "approve-suggestion") {
@@ -170,9 +251,10 @@ export function SkillManifestDialog({
 
       let result: RecordSkillResult;
       const versionSkillId = persistedSkillId ?? skillId;
+      const files = await resolveFileInputs();
       if (mode === "create" && !versionSkillId) {
         result = await createMutation.mutateAsync({
-          request: { createSkillRequestBody: { content } },
+          request: { createSkillRequestBody: { content, files } },
         });
       } else {
         if (!versionSkillId) {
@@ -185,6 +267,7 @@ export function SkillManifestDialog({
               id: versionSkillId,
               content,
               derivedFromVersionId: parentVersionId,
+              files,
             },
           },
         });
@@ -194,6 +277,7 @@ export function SkillManifestDialog({
         setPersistedSkillId(result.skill.id);
         setParentVersionId(result.version.id);
         setNoOpContent(content);
+        setNoOpFilesRevision(filesRevision);
         setSavedResult(result);
         return;
       }
@@ -239,6 +323,44 @@ export function SkillManifestDialog({
     } finally {
       if (seq === fileReadSeq.current) setReadingFile(false);
     }
+  };
+
+  const handleSkillUpload = async (
+    read: () => Promise<SkillUploadEntry[]> | SkillUploadEntry[],
+  ): Promise<void> => {
+    const seq = ++fileReadSeq.current;
+    setReadingFile(true);
+    try {
+      const parsed = parseSkillUpload(await read());
+      if (seq !== fileReadSeq.current) return;
+      setContent(parsed.manifest);
+      setDraftFiles(parsed.files);
+      setFilesRevision((revision) => revision + 1);
+      setUploadRootDir(parsed.rootDir);
+      setSavedResult(null);
+      setContinuing(false);
+      setFieldError(validateManifestContent(parsed.manifest));
+      setFilesErrors(validateSkillFiles(parsed.files));
+    } catch (error) {
+      if (seq !== fileReadSeq.current) return;
+      setFieldError(
+        error instanceof SkillUploadError
+          ? error.message
+          : "Unable to read the selected files.",
+      );
+    } finally {
+      if (seq === fileReadSeq.current) setReadingFile(false);
+    }
+  };
+
+  const removeFile = (path: string): void => {
+    const next = draftFiles.filter((file) => file.path !== path);
+    setDraftFiles(next);
+    setFilesRevision((revision) => revision + 1);
+    setSavedResult(null);
+    setFilesErrors((errors) =>
+      errors.length > 0 ? validateSkillFiles(next) : errors,
+    );
   };
 
   const insertTemplate = (): void => {
@@ -301,7 +423,7 @@ export function SkillManifestDialog({
                   </Button>
                 )}
                 <label className="text-primary cursor-pointer text-sm font-medium hover:underline">
-                  Upload .md file
+                  Upload SKILL.md
                   <input
                     type="file"
                     accept=".md,text/markdown,text/plain"
@@ -313,6 +435,53 @@ export function SkillManifestDialog({
                     }}
                   />
                 </label>
+                {managesFiles && (
+                  <>
+                    <label className="text-primary cursor-pointer text-sm font-medium hover:underline">
+                      Upload folder
+                      <input
+                        type="file"
+                        multiple
+                        className="sr-only"
+                        aria-label="Upload skill folder"
+                        disabled={isBusy || savedInvalid}
+                        {...{ webkitdirectory: "" }}
+                        onChange={(event) => {
+                          const picked = Array.from(
+                            event.currentTarget.files ?? [],
+                          );
+                          if (picked.length > 0) {
+                            void handleSkillUpload(() =>
+                              readSkillFolder(picked),
+                            );
+                          }
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    <label className="text-primary cursor-pointer text-sm font-medium hover:underline">
+                      Upload .zip
+                      <input
+                        type="file"
+                        accept=".zip,application/zip"
+                        className="sr-only"
+                        aria-label="Upload skill .zip"
+                        disabled={isBusy || savedInvalid}
+                        onChange={(event) => {
+                          const zip = event.currentTarget.files?.[0];
+                          if (zip) {
+                            void handleSkillUpload(async () =>
+                              readSkillZip(
+                                new Uint8Array(await zip.arrayBuffer()),
+                              ),
+                            );
+                          }
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </>
+                )}
               </div>
             </div>
             <Textarea
@@ -346,6 +515,17 @@ export function SkillManifestDialog({
               )}
             </div>
           </div>
+
+          {managesFiles && (
+            <SupportingFilesField
+              files={draftFiles}
+              errors={filesErrors}
+              nameWarning={nameWarning}
+              replacesOnUpload={mode === "edit"}
+              disabled={isBusy || savedInvalid}
+              onRemove={removeFile}
+            />
+          )}
 
           {mutationError && (
             <ErrorAlert
@@ -382,6 +562,100 @@ export function SkillManifestDialog({
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
+  );
+}
+
+function SupportingFilesField({
+  files,
+  errors,
+  nameWarning,
+  replacesOnUpload,
+  disabled,
+  onRemove,
+}: {
+  files: DraftSkillFile[];
+  errors: string[];
+  nameWarning: string | null;
+  replacesOnUpload: boolean;
+  disabled: boolean;
+  onRemove: (path: string) => void;
+}): JSX.Element {
+  const total = files.reduce((sum, file) => sum + file.sizeBytes, 0);
+  return (
+    <section aria-label="Supporting files" className="space-y-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-sm font-medium">Supporting files</span>
+        {files.length > 0 && (
+          <Text small muted className="font-mono">
+            {files.length} {files.length === 1 ? "file" : "files"} ·{" "}
+            {formatFileSize(total)}
+          </Text>
+        )}
+      </div>
+      {files.length === 0 ? (
+        <Text small muted>
+          None. Upload a skill folder or .zip to add scripts, references, or
+          assets.
+        </Text>
+      ) : (
+        <ul className="divide-border max-h-56 divide-y overflow-y-auto border">
+          {files.map((file) => (
+            <li
+              key={file.path}
+              className="flex items-center gap-3 px-3 py-1.5 text-sm"
+            >
+              <span
+                className="min-w-0 flex-1 truncate font-mono"
+                title={file.path}
+              >
+                {file.path}
+              </span>
+              {isSkillScript(file.path) && (
+                <Text small muted>
+                  Script
+                </Text>
+              )}
+              <Text small muted className="shrink-0 font-mono">
+                {formatFileSize(file.sizeBytes)}
+              </Text>
+              <Button
+                type="button"
+                variant="tertiary"
+                size="xs"
+                className="h-6 w-6 shrink-0 p-0"
+                disabled={disabled}
+                aria-label={`Remove ${file.path}`}
+                onClick={() => onRemove(file.path)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Text small muted>
+        {replacesOnUpload
+          ? "Uploading a folder or .zip replaces SKILL.md and every supporting file. "
+          : ""}
+        Up to 100 files, 5 MB each and 10 MB in total.
+      </Text>
+      {nameWarning && (
+        <Text small className="text-warning" role="status">
+          {nameWarning}
+        </Text>
+      )}
+      {errors.length > 0 && (
+        <ul aria-live="polite" className="space-y-1">
+          {errors.map((error) => (
+            <li key={error}>
+              <Text small className="text-destructive">
+                {error}
+              </Text>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
