@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -36,7 +38,7 @@ func parseTranscriptShadowProjectIDs(values []string) ([]uuid.UUID, error) {
 
 // configureTranscriptShadow only opts explicit projects into encrypted shadow
 // writes. Plaintext remains authoritative; startup never backfills old messages.
-func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps) error {
+func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.Pool, writer *chat.ChatMessageWriter, orgEncryption orgEncryptionDeps, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider) error {
 	values := c.StringSlice(chatTranscriptShadowProjectIDsFlag)
 	if len(values) == 0 {
 		// An explicitly supplied blank must not silently disable the feature.
@@ -81,7 +83,7 @@ func configureTranscriptShadow(ctx context.Context, c *cli.Context, db *pgxpool.
 			return fmt.Errorf("provision chat transcript shadow encryption: %w", err)
 		}
 	}
-	store, err := transcriptstore.New(db, orgEncryption.Service)
+	store, err := transcriptstore.New(db, orgEncryption.Service, tracerProvider, meterProvider)
 	if err != nil {
 		return fmt.Errorf("create chat transcript shadow store: %w", err)
 	}
