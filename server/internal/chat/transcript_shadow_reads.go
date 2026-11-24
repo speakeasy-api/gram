@@ -105,7 +105,11 @@ func openSealedContentAssets(ctx context.Context, s *Service, organizationID str
 		}
 		hash, ok := transcriptstore.AssetContentHash(objectURL)
 		if !ok {
-			// Only content-addressed objects are ever sealed.
+			// The writer only seals content-addressed objects; any copy
+			// next to another object cannot be verified.
+			if err := s.sealedAssets.RefuseUnverifiable(ctx, objectURL); err != nil {
+				return fmt.Errorf("open encrypted chat content asset: %w", err)
+			}
 			continue
 		}
 		byURL[b.contentAssetURL.String] = &pending{
@@ -154,6 +158,11 @@ func (s *Service) readContentPart(ctx context.Context, authCtx *contextvalues.Au
 	}
 	hash, ok := transcriptstore.AssetContentHash(objectURL)
 	if !ok {
+		// The writer only seals content-addressed objects; any copy next to
+		// another object cannot be verified.
+		if err := s.sealedAssets.RefuseUnverifiable(ctx, objectURL); err != nil {
+			return "", fmt.Errorf("open encrypted chat content part: %w", err)
+		}
 		return s.loadContentPartContent(ctx, chatID, contentPartID, contentAssetURL), nil
 	}
 	identity := transcriptcrypto.AssetIdentity{Kind: transcriptcrypto.AssetContentPart, ProjectID: *authCtx.ProjectID, ChatID: chatID, SHA256: hash}

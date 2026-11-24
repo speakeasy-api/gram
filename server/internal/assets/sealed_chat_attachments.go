@@ -3,12 +3,15 @@ package assets
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/transcriptcrypto"
@@ -79,6 +82,55 @@ func (s *Service) sealChatAttachment(ctx context.Context, organizationID string,
 	return nil
 }
 
+// sealExistingChatAttachment seals the asset a deduplicated upload reuses,
+// when the project captures encrypted copies and the asset has none yet, for
+// example because it was uploaded before capture began. The upload's bytes are
+// the asset's bytes: both hash to contentHash.
+func (s *Service) sealExistingChatAttachment(ctx context.Context, organizationID string, projectID uuid.UUID, assetID string, contentHash string, file *os.File) error {
+	if s.sealed == nil {
+		return nil
+	}
+	if _, enabled := s.sealed.capture[projectID]; !enabled {
+		return nil
+	}
+	id, err := uuid.Parse(assetID)
+	if err != nil {
+		return fmt.Errorf("parse reused chat attachment id: %w", err)
+	}
+	row, err := s.repo.GetChatAttachmentAssetURL(ctx, repo.GetChatAttachmentAssetURLParams{ID: id, ProjectID: projectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Another kind of asset with the same bytes. It is not served as a
+		// chat attachment, so there is nothing to seal.
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load reused chat attachment: %w", err)
+	}
+	if row.Sha256 != contentHash || row.OrganizationID.String != organizationID {
+		return nil
+	}
+	assetURL, err := url.Parse(row.Url)
+	if err != nil {
+		return fmt.Errorf("parse reused chat attachment url: %w", err)
+	}
+	sealed, err := s.sealed.store.HasSealedCopy(ctx, assetURL)
+	if err != nil {
+		return fmt.Errorf("check reused chat attachment for an encrypted copy: %w", err)
+	}
+	if sealed {
+		return nil
+	}
+	objectPath, err := assetStorageKey(tierProject, projectID, organizationID, row.Name)
+	if err != nil {
+		return fmt.Errorf("resolve reused chat attachment storage key: %w", err)
+	}
+	// Seal only where readers will look: next to the stored object.
+	if !strings.HasSuffix(assetURL.Host+assetURL.Path, objectPath) {
+		return nil
+	}
+	return s.sealChatAttachment(ctx, organizationID, projectID, objectPath, contentHash, file)
+}
+
 // openSealedChatAttachment returns the attachment's encrypted copy for a read
 // project. found is false when the project reads plaintext or the attachment
 // has no encrypted copy. An encrypted copy that does not open is an error and
@@ -92,7 +144,11 @@ func (s *Service) openSealedChatAttachment(ctx context.Context, projectID uuid.U
 	}
 	if !row.OrganizationID.Valid || row.OrganizationID.String == "" || !transcriptcrypto.IsContentHash(row.Sha256) {
 		// Only attachments uploaded with an organization and content hash
-		// are ever sealed.
+		// are sealed. A copy next to one without them cannot be verified,
+		// and is never skipped in favour of plaintext.
+		if err := s.sealed.store.RefuseUnverifiable(ctx, assetURL); err != nil {
+			return nil, false, fmt.Errorf("open encrypted chat attachment: %w", err)
+		}
 		return nil, false, nil
 	}
 	opened, found, err := s.sealed.store.Open(ctx, row.OrganizationID.String, chatAttachmentIdentity(projectID, row.Sha256), assetURL, MaxFileSizeChatAttachment)

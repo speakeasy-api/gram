@@ -1456,6 +1456,9 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 		return nil, err
 	}
 	if existing != nil {
+		if err := s.sealExistingChatAttachment(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.ID, result.hash, result.file); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error writing document").LogError(ctx, s.logger)
+		}
 		existingServeURL := url.URL{
 			Path: srv.ServeChatAttachmentAssetsPath(),
 			RawQuery: url.Values{

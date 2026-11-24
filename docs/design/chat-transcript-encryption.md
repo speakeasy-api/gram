@@ -169,19 +169,25 @@ sealing happens at upload time, not in the transaction or an outbox:
   write, as a plaintext upload failure does.
 - Chat attachments (`UploadChatAttachment`): the copy is sealed before the
   asset row is created, so a failure leaves no row. An upload whose bytes match
-  an existing asset reuses that asset and does not seal it.
+  an existing chat attachment reuses that asset, and seals it first when it
+  has no encrypted copy yet.
 
-Writes are create-only-if-absent. Any authentic copy of the same bytes for the
-same identity is equivalent, so concurrent uploads agree. Uploading the same
-bytes again also seals a plaintext object written before capture began. A
-forged or corrupt copy is not overwritten; repair needs a delete first.
+Write semantics depend on the asset backend. GCS, the deployed backend, writes
+create-only-if-absent: concurrent uploads agree, because any authentic copy of
+the same bytes for the same identity is equivalent, and a forged or corrupt
+copy is never overwritten, so repair needs a delete first. The local filesystem
+backend overwrites in place. Uploading the same bytes again also seals a
+plaintext object written before capture began.
 
 **Reads.** For read-allowlist projects, `chat.load` opens the copy of each page
 message that has no inline `content_raw`, and of each content part. The asset
 service does the same for authenticated and signed attachment downloads. If no
 copy exists, the plaintext object is served (`plaintext_fallback`). A copy that
-exists but does not authenticate, has another identity, or holds other bytes
-fails the read. It is never replaced by plaintext.
+exists but does not authenticate, has another identity, holds other bytes, or
+opens to more than the reader's size limit fails the read. It is never replaced
+by plaintext. When the reader cannot name the object's identity (a row without
+an organization, or an object name that is not a content hash), it serves
+plaintext only if no copy exists next to the object, and fails otherwise.
 
 **Latency.** Sealing adds one AES-GCM pass and one object write per uploaded
 object, after the plaintext write. A read adds one existence check before the
@@ -196,8 +202,10 @@ Asset seals and reads emit `chat.transcript_shadow.asset_capture.*` and
 kind and outcome) and `transcriptstore.SealAsset` / `transcriptstore.OpenAsset`
 spans.
 
-Other object readers still read plaintext: assistant history loading,
-Platform MCP session recall, risk analysis batches, and risk reveals.
+Other object readers still read plaintext: assistant history loading, risk
+analysis batches, and risk reveals. Platform MCP session recall reads no
+objects (it counts offloaded bodies and skips them); it reads only inline
+message columns, so it belongs with the message-body readers.
 
 ## Scope that still needs implementation
 
@@ -208,7 +216,7 @@ Encrypting a message body is not equivalent to encrypting every transcript copy:
 | Message writes     | Shared `chat.MessageWrite` paths, transactional inserts, upserts, hook captures, assistant updates, compaction, and direct SQL writers must seal before committing.                                                                                                                                                                                                                                                                             |
 | Message reads      | Chat loads, hook reconciliation, assistant history/read-modify-write, background analysis, title generation, and risk evaluation must open before consuming content.                                                                                                                                                                                                                                                                            |
 | Raw content assets | Opted-in projects seal uploaded message body objects and `chat.load` opens them (see "Encrypted asset copies"). Still needed: other object readers, migrating existing objects, and removing plaintext objects under the retention policy.                                                                                                                                                                                                      |
-| Attachments        | Opted-in projects seal `chat_content_parts` bodies and asset-service chat attachments; `chat.load` and attachment downloads open them. Still needed: risk readers, sealing deduplicated uploads, and existing objects.                                                                                                                                                                                                                          |
+| Attachments        | Opted-in projects seal `chat_content_parts` bodies and asset-service chat attachments; `chat.load` and attachment downloads open them. Still needed: risk readers and existing objects.                                                                                                                                                                                                                                                         |
 | Derived text       | Chat titles/summaries, resolution/analysis results, risk evidence, and memory digests can contain transcript text. Explicitly include or exclude each store.                                                                                                                                                                                                                                                                                    |
 | Metadata           | `origin`, asset URLs, user identifiers, IP addresses, and user agents remain outside this body payload. `storage_error` is sensitive and is included in the encrypted payload, not treated as safe metadata.                                                                                                                                                                                                                                    |
 | Hashes             | `content_hash` and the shadow `source_hash` are unkeyed deterministic digests. Equality/guess-confirmation leakage is a known, temporary risk that this shadow-only change does not mitigate. Default-off capture and retained plaintext do not remove it. Before any encrypted-only rollout, remove these digests or replace them with organization-keyed fingerprints, and migrate existing rows; clearing plaintext alone is not sufficient. |

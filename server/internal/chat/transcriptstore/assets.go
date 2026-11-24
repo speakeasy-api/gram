@@ -82,6 +82,12 @@ func SealedAssetPath(objectPath string) string { return objectPath + SealedAsset
 // path, so this matches SealedAssetPath.
 func SealedAssetURL(objectURL *url.URL) *url.URL {
 	sealed := *objectURL
+	if sealed.Opaque != "" {
+		// A relative object path parses back as an opaque URL, such as
+		// file:name.txt.
+		sealed.Opaque += SealedAssetSuffix
+		return &sealed
+	}
 	sealed.Path += SealedAssetSuffix
 	sealed.RawPath = ""
 	return &sealed
@@ -227,7 +233,41 @@ func (s *AssetStore) open(ctx context.Context, organizationID string, identity t
 	if err != nil {
 		return nil, false, safe(err)
 	}
+	// The read limit above allows for envelope overhead, so it does not bound
+	// the opened body exactly.
+	if int64(len(body)) > maxBody {
+		return nil, false, ErrStale
+	}
 	return body, true, nil
+}
+
+// RefuseUnverifiable is for a reader that cannot name the identity of the
+// plaintext object at objectURL, for example because its row lacks an
+// organization or its object name is not a content hash. Without an encrypted
+// copy the reader serves plaintext. With one, it returns ErrStale: a copy that
+// exists is never skipped in favour of plaintext.
+func (s *AssetStore) RefuseUnverifiable(ctx context.Context, objectURL *url.URL) error {
+	exists, err := s.HasSealedCopy(ctx, objectURL)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return ErrStale
+	}
+	return nil
+}
+
+// HasSealedCopy reports whether the plaintext object at objectURL has an
+// encrypted copy, without opening it.
+func (s *AssetStore) HasSealedCopy(ctx context.Context, objectURL *url.URL) (bool, error) {
+	if s == nil || objectURL == nil {
+		return false, ErrInvalid
+	}
+	exists, err := s.blobs.Exists(ctx, SealedAssetURL(objectURL))
+	if err != nil {
+		return false, safe(err)
+	}
+	return exists, nil
 }
 
 type assetMetrics struct {

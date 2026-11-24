@@ -168,3 +168,70 @@ func TestService_SealedChatAttachment_UnopenableCopyFailsTheDownload(t *testing.
 	_, _, err = ti.service.ServeChatAttachmentSigned(ctx, &gen.ServeChatAttachmentSignedForm{Token: token})
 	require.Error(t, err)
 }
+
+func TestService_SealedChatAttachment_DeduplicatedUploadSealsTheReusedAsset(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAssetsService(t)
+	store, projectID := sealedAttachmentStore(t, ctx, ti)
+
+	// Uploaded before capture began: no encrypted copy.
+	assetID, objectURL := uploadAttachment(t, ctx, ti, inventedAttachment)
+	exists, err := ti.storage.Exists(ctx, transcriptstore.SealedAssetURL(objectURL))
+	require.NoError(t, err)
+	require.False(t, exists)
+
+	// The same bytes uploaded again reuse the asset and seal it.
+	ti.service.WithSealedChatAttachments(store, []uuid.UUID{projectID}, []uuid.UUID{projectID})
+	reusedID, _ := uploadAttachment(t, ctx, ti, inventedAttachment)
+	require.Equal(t, assetID, reusedID)
+	require.NotContains(t, string(readStored(t, ctx, ti, transcriptstore.SealedAssetURL(objectURL))), "orchard")
+
+	replaceStored(t, ctx, ti, objectURL, []byte(strings.Repeat("x", len(inventedAttachment))))
+	authenticated, signed := serveBoth(t, ctx, ti, projectID, assetID)
+	require.Equal(t, inventedAttachment, authenticated)
+	require.Equal(t, inventedAttachment, signed)
+}
+
+func TestService_SealedChatAttachment_UnverifiableRowFailsWhenACopyExists(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAssetsService(t)
+	store, projectID := sealedAttachmentStore(t, ctx, ti)
+	ti.service.WithSealedChatAttachments(store, []uuid.UUID{projectID}, []uuid.UUID{projectID})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// A row whose sha256 is not a content hash cannot name its sealed
+	// identity.
+	objectPath := projectID.String() + "/invented-notes.txt"
+	w, objectURL, err := ti.storage.Write(ctx, objectPath, "text/plain", int64(len(inventedAttachment)))
+	require.NoError(t, err)
+	_, err = io.Copy(w, strings.NewReader(inventedAttachment))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	asset, err := ti.repo.CreateAsset(ctx, repo.CreateAssetParams{
+		Name:           "invented-notes.txt",
+		Url:            objectURL.String(),
+		ProjectID:      projectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         "not-a-content-hash",
+		Kind:           "chat_attachment",
+		ContentType:    "text/plain",
+		ContentLength:  int64(len(inventedAttachment)),
+	})
+	require.NoError(t, err)
+
+	// Without a copy next to it, the download serves plaintext.
+	authenticated, _ := serveBoth(t, ctx, ti, projectID, asset.ID)
+	require.Equal(t, inventedAttachment, authenticated)
+
+	// With one, it fails instead of skipping the copy.
+	w, _, err = ti.storage.Write(ctx, objectPath+transcriptstore.SealedAssetSuffix, "application/octet-stream", 6)
+	require.NoError(t, err)
+	_, err = io.Copy(w, strings.NewReader("sealed"))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	_, _, err = ti.service.ServeChatAttachment(ctx, &gen.ServeChatAttachmentForm{
+		SessionToken: nil, ApikeyToken: nil, ProjectID: projectID.String(), ID: asset.ID.String(),
+	})
+	require.Error(t, err)
+}

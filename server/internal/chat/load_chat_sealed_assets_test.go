@@ -248,3 +248,54 @@ func TestLoadChat_OtherProjectsKeepReadingPlaintextObjects(t *testing.T) {
 
 	require.Equal(t, "plaintext object was served", loadedText(t, ctx, ti, m.ChatID, m.ID))
 }
+
+func TestLoadChat_UnverifiableContentPartFailsWhenACopyExists(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	f := newSealedAssetsFixture(t, ti)
+	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "unverifiable attachment")
+	msgID := seedMessageContent(t, ctx, ti, chatID, "please review the attached invented memo")
+
+	// An object whose name is not a content hash cannot name its sealed
+	// identity.
+	attachment := "Invented memo: the ferry timetable lists 14 crossings."
+	objectPath := path.Join(ti.projectID.String(), "chats", chatID.String(), "content-parts", "notes.txt")
+	w, objectURL, err := ti.assets.Write(ctx, objectPath, "text/plain", int64(len(attachment)))
+	require.NoError(t, err)
+	_, err = io.Copy(w, strings.NewReader(attachment))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	_, err = repo.New(ti.conn).CreateChatContentPart(ctx, []repo.CreateChatContentPartParams{{
+		ChatID:              chatID,
+		ProjectID:           ti.projectID,
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     objectURL.String(),
+		ExternalID:          pgtype.Text{String: "notes", Valid: true},
+		ParentChatMessageID: uuid.NullUUID{UUID: msgID, Valid: true},
+		Version:             pgtype.Int4{},
+		Source:              pgtype.Text{},
+		Metadata:            []byte(`{"display_path":"notes.txt","kind":"file"}`),
+		RiskAnalyzedAt:      pgtype.Timestamptz{},
+		CreatedAt:           pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}})
+	require.NoError(t, err)
+	ti.service.WithTranscriptShadowReads(f.shadow, ti.projectID).WithSealedAssetReads(f.assets)
+
+	// Without a copy next to it, the part serves plaintext.
+	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	require.Len(t, result.ContentParts, 1)
+	require.Equal(t, attachment, result.ContentParts[0].Content)
+
+	// With one, the read fails instead of skipping the copy.
+	w, _, err = ti.assets.Write(ctx, transcriptstore.SealedAssetPath(objectPath), "application/octet-stream", 6)
+	require.NoError(t, err)
+	_, err = io.Copy(w, strings.NewReader("sealed"))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	_, err = ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.ErrorIs(t, err, transcriptstore.ErrStale)
+}
