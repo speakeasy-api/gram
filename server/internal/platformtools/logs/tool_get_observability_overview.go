@@ -28,7 +28,7 @@ type getObservabilityOverviewInput struct {
 	MetaMcpServerID   *string `json:"meta_mcp_server_id,omitempty" jsonschema:"Optional gateway (meta MCP server) ID filter; scopes to traffic dispatched through that gateway."`
 	EventSource       *string `json:"event_source,omitempty" jsonschema:"Optional event source filter (e.g. 'hook')."`
 	HookSource        *string `json:"hook_source,omitempty" jsonschema:"Optional hook source filter (e.g. 'cursor', 'claude-code')."`
-	IncludeTimeSeries bool    `json:"include_time_series,omitempty" jsonschema:"Whether to include time series data. Defaults to true."`
+	IncludeTimeSeries bool    `json:"include_time_series,omitempty" jsonschema:"Include the bucketed time series (large: one row per bucket). Defaults to false; the summary, previous-period comparison and top tools answer most questions without it."`
 }
 
 func NewGetObservabilityOverviewTool(telemetrySvc TelemetryService) *GetObservabilityOverview {
@@ -40,7 +40,7 @@ func (s *GetObservabilityOverview) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "logs",
 		HandlerName: "get_observability_overview",
 		Name:        "platform_get_observability_overview",
-		Description: "Get a high-level observability overview (totals and trends) for the current project over a time window.",
+		Description: "Get a compact observability overview for the current project over a time window (default: the last 7 days): chat, tool-call, failure, token and cost totals, the same totals for the previous period of equal length for trends, and the top tools by call count and by failure rate. Start here for how-is-the-project-doing, what-is-failing and spend questions. The bucketed time series is omitted unless include_time_series is true.",
 		InputSchema: core.BuildInputSchema[getObservabilityOverviewInput](
 			core.WithPropertyFormat("from", "date-time"),
 			core.WithPropertyFormat("to", "date-time"),
@@ -58,8 +58,9 @@ func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCa
 		return fmt.Errorf("telemetry service not configured")
 	}
 
-	// Default include_time_series to true to mirror the telemetry API default,
-	// which the Goa transport would otherwise apply for us.
+	// Unlike the telemetry API, the tool leaves the time series out unless asked:
+	// it is most of the result's size, and an assistant re-reads every tool
+	// result on each later step of its turn.
 	input := getObservabilityOverviewInput{
 		From:              "",
 		To:                "",
@@ -72,7 +73,7 @@ func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCa
 		MetaMcpServerID:   nil,
 		EventSource:       nil,
 		HookSource:        nil,
-		IncludeTimeSeries: true,
+		IncludeTimeSeries: false,
 	}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err

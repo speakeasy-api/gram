@@ -665,8 +665,11 @@ fn mcp_disclosure_item(servers: &[McpServer]) -> String {
          declared tool schema. Use the tool_search tool to discover tool schemas and \
          per-server connection status, including authorization links for servers that \
          require auth. Call a discovered tool by its exact name — directly, or from a \
-         compose script via tool(name, input). Servers connect on first search, so an \
-         empty result before any search only means discovery has not run yet.\n</mcp-servers>",
+         compose script via tool(name, input). A server's tools are named \
+         mcp_<server id>_<tool name>; when you already know a tool's exact name and \
+         arguments (for example from your instructions), call it directly without \
+         searching first. Servers connect on first search or first call, so an empty \
+         result before either only means discovery has not run yet.\n</mcp-servers>",
         ids = ids.join(", "),
     )
 }

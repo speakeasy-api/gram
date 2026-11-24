@@ -13,10 +13,12 @@ use std::sync::{Arc, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use agentkit_mcp::{
-    McpError, McpServerConfig, McpServerId, McpServerManager, McpServerOptions,
-    McpTransportBinding, StreamableHttpTransportConfig,
+    CallToolResult, Content, ErrorResponderOutcome, McpError, McpErrorContext, McpErrorResponder,
+    McpHandlerConfig, McpInvocationError, McpServerConfig, McpServerId, McpServerManager,
+    McpServerOptions, McpTransportBinding, StreamableHttpTransportConfig,
 };
 use agentkit_tools_core::CatalogReader;
+use async_trait::async_trait;
 use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedSender;
@@ -35,12 +37,12 @@ const MCP_CMD_CAPACITY: usize = 32;
 const MCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Floor between connect retries against a hard-failing server, and between
-/// implicit reconnects of the same server. Every MCP call failure surfaces
-/// as `ToolError::ExecutionFailed` (agentkit folds JSON-RPC application
-/// errors and transport errors into one variant), so without a cooldown a
-/// model looping on bad arguments would pay a full disconnect + handshake
-/// per failed call, and every tool_search would re-pay the handshake
-/// timeout for a server that is down.
+/// implicit reconnects of the same server. JSON-RPC error responses reach the
+/// model as error tool results (see [`ErrorResponseAsToolError`]), so only
+/// transport failures surface as `ToolError::ExecutionFailed` and trigger a
+/// reconnect. Without a cooldown a server that keeps dropping connections
+/// would cost a full disconnect + handshake per failed call, and every
+/// tool_search would re-pay the handshake timeout for a server that is down.
 const MCP_RETRY_COOLDOWN: Duration = Duration::from_secs(30);
 
 /// Age past which a stored auth flow URL is re-minted on the next
@@ -64,8 +66,9 @@ pub enum McpCmd {
     },
     /// Sent by the catalog dispatch layer when the model calls a tool that a
     /// configured server exposed before its connection was closed — at a
-    /// credential boundary, typically. The actor connects the owning server
-    /// so the call can dispatch against the fresh session.
+    /// credential boundary, typically — or a namespaced tool of a configured
+    /// server that has not connected yet. The actor connects the owning
+    /// server so the call can dispatch against the fresh session.
     ConnectForTool {
         tool_name: String,
         reply: oneshot::Sender<Result<(), String>>,
@@ -165,7 +168,9 @@ pub fn spawn_mcp_actor(
     inbox_tx: UnboundedSender<String>,
 ) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, KnownTools), RunnerError> {
     // Each tool call carries its own trace context to the server.
-    let mut manager = McpServerManager::new().with_request_decorator(mcp_trace_decorator());
+    let mut manager = McpServerManager::new()
+        .with_handler_config(mcp_handler_config())
+        .with_request_decorator(mcp_trace_decorator());
     let catalog = manager.source();
     let mut configured = BTreeMap::new();
     let token = tokens.current()?;
@@ -342,16 +347,19 @@ impl McpActor {
         }
     }
 
-    /// Reconnects the configured server that last exposed `tool_name`, so a
-    /// discovered tool keeps dispatching after its session was closed.
+    /// Connects the configured server that owns `tool_name`: the one that last
+    /// exposed it, so a discovered tool keeps dispatching after its session
+    /// was closed, or else the one whose namespace the name carries, so a tool
+    /// the model already knows by name dispatches without a tool_search first.
     async fn connect_for_tool(&mut self, tool_name: &str) -> Result<(), String> {
-        let Some(id) = self
-            .known_tools
-            .server_for(tool_name)
-            .filter(|id| self.configured.contains_key(id))
-        else {
+        let owner = match self.known_tools.server_for(tool_name) {
+            Some(id) => Some(id).filter(|id| self.configured.contains_key(id)),
+            None => self.configured_server_for(tool_name),
+        };
+        let Some(id) = owner else {
             return Err(format!(
-                "tool {tool_name} does not map to a configured MCP server"
+                "tool {tool_name} does not map to a configured MCP server. Use tool_search \
+                 to discover available tools and their schemas."
             ));
         };
         if !self.is_connected(&id) {
@@ -419,13 +427,12 @@ impl McpActor {
             .collect()
     }
 
-    /// Reseats the connection owning `tool_name` after a transport-shaped
-    /// call failure. The server is recovered by inverting the manager's
-    /// tool namespace; the longest matching id wins so a server id that
-    /// prefixes another cannot capture its sibling's tools.
-    async fn reconnect_for_tool(&mut self, tool_name: &str) -> Result<(), String> {
-        let Some(id) = self
-            .configured
+    /// The configured server whose namespace `tool_name` carries, recovered
+    /// by inverting the manager's tool namespace; the longest matching id
+    /// wins so a server id that prefixes another cannot capture its
+    /// sibling's tools.
+    fn configured_server_for(&self, tool_name: &str) -> Option<String> {
+        self.configured
             .keys()
             .filter(|id| {
                 self.manager
@@ -435,7 +442,12 @@ impl McpActor {
             })
             .max_by_key(|id| id.len())
             .cloned()
-        else {
+    }
+
+    /// Reseats the connection owning `tool_name` after a transport-shaped
+    /// call failure.
+    async fn reconnect_for_tool(&mut self, tool_name: &str) -> Result<(), String> {
+        let Some(id) = self.configured_server_for(tool_name) else {
             return Err(format!(
                 "tool {tool_name} does not map to a configured MCP server"
             ));
@@ -790,6 +802,43 @@ pub fn validated_server_headers(server: &McpServer) -> Result<http::HeaderMap, R
     Ok(server_headers)
 }
 
+/// JSON-RPC code Speakeasy's MCP servers return when the caller lacks a
+/// permission the tool requires.
+const MCP_PERMISSION_DENIED: i32 = -32003;
+
+fn mcp_handler_config() -> McpHandlerConfig {
+    McpHandlerConfig::new().with_error_responder(Arc::new(ErrorResponseAsToolError))
+}
+
+/// Turns a JSON-RPC error response to a tool call into an error tool result.
+/// Left alone, agentkit surfaces it as `ToolError::ExecutionFailed` — the
+/// same variant as a dropped connection — so the dispatch layer reseats a
+/// connection that just answered and tells the model to retry a call the
+/// server has already refused. An error result reaches the model as is.
+struct ErrorResponseAsToolError;
+
+#[async_trait]
+impl McpErrorResponder for ErrorResponseAsToolError {
+    async fn handle(
+        &self,
+        error: &McpInvocationError,
+        _ctx: McpErrorContext<'_>,
+    ) -> ErrorResponderOutcome {
+        ErrorResponderOutcome::SynthesizeResult(CallToolResult::error(vec![Content::text(
+            invocation_error_text(error),
+        )]))
+    }
+}
+
+fn invocation_error_text(error: &McpInvocationError) -> String {
+    if error.code() == MCP_PERMISSION_DENIED {
+        return format!(
+            "permission denied: this assistant cannot use this tool now, so do not retry it in this turn ({error})"
+        );
+    }
+    error.to_string()
+}
+
 fn build_mcp_server_config(
     server: &McpServer,
     http_client: &reqwest::Client,
@@ -809,7 +858,7 @@ fn build_mcp_server_config(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -1032,6 +1081,119 @@ mod tests {
         assert!(actor.last_errors.is_empty());
         assert!(actor.last_reconnects.is_empty());
         assert!(actor.configured.contains_key("new"));
+    }
+
+    #[tokio::test]
+    async fn first_call_connects_by_namespace_and_error_responses_stay_tool_errors() {
+        use agentkit_core::ToolOutput;
+        use agentkit_tools_core::{
+            AllowAllPermissions, OwnedToolContext, ToolName, ToolRequest, ToolSource,
+        };
+        use axum::{Json, Router, response::IntoResponse, routing::post};
+        use serde_json::{Value, json};
+        let app = Router::new().route(
+            "/mcp",
+            post(|Json(message): Json<Value>| async move {
+                let method = message["method"].as_str().unwrap().to_string();
+                if message.get("id").is_none() {
+                    return axum::http::StatusCode::ACCEPTED.into_response();
+                }
+                let body = match method.as_str() {
+                    "initialize" => {
+                        json!({"result": {"protocolVersion": message["params"]["protocolVersion"], "capabilities": {"tools": {}}, "serverInfo": {"name": "fixture", "version": "1"}}})
+                    }
+                    "tools/list" => json!({"result": {"tools": [
+                        {"name": "denied", "inputSchema": {"type": "object"}},
+                        {"name": "picky", "inputSchema": {"type": "object"}},
+                    ]}}),
+                    _ if message["params"]["name"] == "denied" => {
+                        json!({"error": {"code": -32003, "message": "insufficient permissions"}})
+                    }
+                    _ => json!({"error": {"code": -32602, "message": "missing field `from`"}}),
+                };
+                let mut body = body.as_object().unwrap().clone();
+                body.insert("jsonrpc".into(), json!("2.0"));
+                body.insert("id".into(), message["id"].clone());
+                let mut response = Json(Value::Object(body)).into_response();
+                response
+                    .headers_mut()
+                    .insert("mcp-session-id", "session".parse().unwrap());
+                response
+            })
+            .get(|| async { axum::http::StatusCode::METHOD_NOT_ALLOWED })
+            .delete(|| async { axum::http::StatusCode::OK }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = reqwest::Client::new();
+        let (notice_tx, _notices) = mpsc::unbounded_channel();
+        let server = McpServer {
+            id: "srv".into(),
+            url: format!("http://{addr}/mcp"),
+            headers: BTreeMap::new(),
+        };
+        let (cmd, catalog, _known) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&server),
+            &TokenRegistry::new("opaque-a"),
+            notice_tx,
+        )
+        .unwrap();
+
+        // No tool_search ran, so nothing is known yet: the namespace alone
+        // routes the first call to its server.
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::ConnectForTool {
+            tool_name: "mcp_srv_denied".into(),
+            reply,
+            parent: tracing::Span::none(),
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+
+        let owned = OwnedToolContext {
+            session_id: "s".into(),
+            turn_id: "t".into(),
+            metadata: Default::default(),
+            permissions: Arc::new(AllowAllPermissions),
+            resources: Arc::new(()),
+            cancellation: None,
+            execution_scope: None,
+            approved_request: None,
+        };
+        for (name, expected) in [
+            (
+                "mcp_srv_denied",
+                "permission denied: this assistant cannot use this tool now, so do not retry it in this turn",
+            ),
+            ("mcp_srv_picky", "invalid params: missing field `from`"),
+        ] {
+            let tool = catalog.get(&ToolName::new(name)).expect("connected");
+            let request = ToolRequest::new("call", name, json!({}), "s", "t");
+            let result = tool
+                .invoke(request, &mut owned.borrowed())
+                .await
+                .expect("a JSON-RPC error response is a tool error result, not a failed call");
+            assert!(result.result.is_error, "{name}");
+            match result.result.output {
+                ToolOutput::Text(text) => assert!(text.contains(expected), "{name}: {text}"),
+                ToolOutput::Parts(parts) => {
+                    let text = serde_json::to_string(&parts).unwrap();
+                    assert!(text.contains(expected), "{name}: {text}");
+                }
+                other => panic!("{name}: unexpected output {other:?}"),
+            }
+        }
+        server_task.abort();
     }
 
     #[tokio::test]

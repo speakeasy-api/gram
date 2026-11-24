@@ -1,11 +1,15 @@
 //! Per-tool-result byte cap for the assistant runtime.
 //!
-//! OpenRouter caps a single tool message at 204800 bytes and 413s the next
-//! request when a tool result exceeds it. Token-aware compaction can't catch
-//! this: the trigger reads `usage.input_tokens` after the previous turn, and
-//! 200 KB ≈ 50 K tokens — well below the 80 % threshold for a 128 K+ window.
-//! Even when it does fire, [`SummarizeOlderStrategy`](agentkit_compaction)
-//! preserves the most recent items, so the offending tool result survives.
+//! Every tool result stays in the transcript for the rest of the turn, so
+//! each later model step re-reads it: a 100 KB result read across eight more
+//! steps costs ~200 K prompt tokens and the latency that goes with them.
+//! Token-aware compaction can't catch this: the trigger reads
+//! `usage.input_tokens` after the previous turn, well after a few large
+//! results have already inflated every step of this one. Even when it does
+//! fire, [`SummarizeOlderStrategy`](agentkit_compaction) preserves the most
+//! recent items, so the offending tool result survives. The cap also keeps
+//! every tool message far below OpenRouter's 204800-byte per-message limit,
+//! which 413s the next request when exceeded.
 //!
 //! When a tool result exceeds [`MAX_TOOL_BYTES`], the runner replaces it
 //! with a Structured envelope that always carries a truncated `preview` of
@@ -32,10 +36,12 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tracing::Instrument;
 
-/// 150 KB. Leaves ~50 KB headroom under OpenRouter's 204800-byte per-message
-/// cap to absorb provider-side JSON envelope overhead (call id, metadata,
-/// content-type discriminators).
-pub const MAX_TOOL_BYTES: usize = 150_000;
+/// 20 KB (~5 K tokens) inline per tool result. Large enough for a compact
+/// summary or a page of search results to arrive whole; anything bigger keeps
+/// a 20 KB preview inline and the full body in the spill file, where the agent
+/// reads or greps only the part it needs instead of carrying all of it through
+/// every later step of the turn.
+pub const MAX_TOOL_BYTES: usize = 20_000;
 
 /// 4 MiB. The assistant workdir is a fixed 256 MiB ext4 image
 /// (`agents/runtime-image/Dockerfile`), shared with `bun_run` temp files and
@@ -356,6 +362,15 @@ fn compose_envelope(
     if let Some((path, saved_bytes)) = spill {
         env.insert("saved_to".into(), Value::String(path.display().to_string()));
         env.insert("saved_bytes".into(), Value::from(*saved_bytes));
+        env.insert(
+            "hint".into(),
+            Value::String(
+                "The preview is the start of the result. Read or grep saved_to for the rest \
+                 instead of repeating the call. saved_to holds at most the first 4 MiB, so \
+                 when saved_bytes is less than original_bytes, use a narrower call for the remainder."
+                    .into(),
+            ),
+        );
     }
     ToolOutput::Structured(Value::Object(env))
 }
@@ -519,6 +534,7 @@ mod tests {
             map.get("saved_to").is_none(),
             "no saved_to when spill failed",
         );
+        assert!(map.get("hint").is_none(), "no read hint without a spill");
     }
 
     #[tokio::test]
@@ -575,6 +591,40 @@ mod tests {
         assert_eq!(map.get("truncated"), Some(&Value::Bool(true)));
         assert!(map.get("preview").is_some());
         assert!(map.get("saved_to").is_some());
+    }
+
+    #[tokio::test]
+    async fn default_cap_keeps_compact_results_and_spills_large_ones() {
+        let dir = tempdir();
+        let compact = json!({"rows": vec![json!({"tool": "list_notes", "failures": 7}); 200]});
+        assert!(model_bytes(&ToolOutput::Structured(compact.clone())).unwrap() < MAX_TOOL_BYTES);
+        let out = cap_output(
+            ToolOutput::Structured(compact.clone()),
+            MAX_TOOL_BYTES,
+            dir.path(),
+            &tool_name("t"),
+            &call_id("c1"),
+        )
+        .await;
+        assert!(matches!(out, ToolOutput::Structured(ref v) if *v == compact));
+
+        let series = json!({"time_series": vec![json!({"bucket_start_ns": "1794837600000000000", "event_count": 3}); 2000]});
+        let out = cap_output(
+            ToolOutput::Structured(series),
+            MAX_TOOL_BYTES,
+            dir.path(),
+            &tool_name("t"),
+            &call_id("c2"),
+        )
+        .await;
+        assert!(model_bytes(&out).unwrap() <= MAX_TOOL_BYTES);
+        let map = expect_envelope(&out);
+        assert!(map.get("saved_to").and_then(Value::as_str).is_some());
+        assert!(
+            map.get("hint")
+                .and_then(Value::as_str)
+                .is_some_and(|h| h.contains("saved_to"))
+        );
     }
 
     #[tokio::test]
