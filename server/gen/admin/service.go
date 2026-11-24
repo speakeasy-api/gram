@@ -2217,7 +2217,8 @@ type AdminTailscaleOAuthMigrationOrganization struct {
 	// When the platform-key copies were destroyed after finalize.
 	PlatformCopiesClearedAt *string
 	// Only returned by the backfill step: credentials whose two copies did not
-	// match, or whose organization-key copy did not open, in the verification that
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
 	// step just ran. Above zero means no clean verification was recorded, so
 	// finalize stays blocked.
 	VerificationFailures *int64

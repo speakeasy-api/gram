@@ -3538,7 +3538,8 @@ type RunTailscaleOAuthMigrationStepResponseBody struct {
 	// When the platform-key copies were destroyed after finalize.
 	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
 	// Only returned by the backfill step: credentials whose two copies did not
-	// match, or whose organization-key copy did not open, in the verification that
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
 	// step just ran. Above zero means no clean verification was recorded, so
 	// finalize stays blocked.
 	VerificationFailures *int64 `form:"verification_failures,omitempty" json:"verification_failures,omitempty" xml:"verification_failures,omitempty"`
@@ -30323,7 +30324,8 @@ type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
 	// When the platform-key copies were destroyed after finalize.
 	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
 	// Only returned by the backfill step: credentials whose two copies did not
-	// match, or whose organization-key copy did not open, in the verification that
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
 	// step just ran. Above zero means no clean verification was recorded, so
 	// finalize stays blocked.
 	VerificationFailures *int64 `form:"verification_failures,omitempty" json:"verification_failures,omitempty" xml:"verification_failures,omitempty"`

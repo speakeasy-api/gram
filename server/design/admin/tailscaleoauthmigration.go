@@ -26,7 +26,7 @@ var AdminTailscaleOAuthMigrationOrganization = Type("AdminTailscaleOAuthMigratio
 	Attribute("last_backfill_error", String, "Why the last backfill stopped early. Never carries values or key material.")
 	Attribute("last_verified_at", String, "When the last clean verification pass started.", func() { Format(FormatDateTime) })
 	Attribute("platform_copies_cleared_at", String, "When the platform-key copies were destroyed after finalize.", func() { Format(FormatDateTime) })
-	Attribute("verification_failures", Int64, "Only returned by the backfill step: credentials whose two copies did not match, or whose organization-key copy did not open, in the verification that step just ran. Above zero means no clean verification was recorded, so finalize stays blocked.")
+	Attribute("verification_failures", Int64, "Only returned by the backfill step: credentials whose two copies did not match, whose platform-key copy no longer decrypts beside an organization-key copy, or whose organization-key copy did not open, in the verification that step just ran. Above zero means no clean verification was recorded, so finalize stays blocked.")
 })
 
 var AdminTailscaleOAuthMigrationOrganizations = Type("AdminTailscaleOAuthMigrationOrganizations", func() {

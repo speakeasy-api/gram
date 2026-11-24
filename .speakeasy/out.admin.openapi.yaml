@@ -13891,7 +13891,7 @@ components:
           format: int64
         verification_failures:
           type: integer
-          description: 'Only returned by the backfill step: credentials whose two copies did not match, or whose organization-key copy did not open, in the verification that step just ran. Above zero means no clean verification was recorded, so finalize stays blocked.'
+          description: 'Only returned by the backfill step: credentials whose two copies did not match, whose platform-key copy no longer decrypts beside an organization-key copy, or whose organization-key copy did not open, in the verification that step just ran. Above zero means no clean verification was recorded, so finalize stays blocked.'
           format: int64
         waiting:
           type: integer
