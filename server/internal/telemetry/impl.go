@@ -2208,7 +2208,7 @@ func (s *Service) observabilityOverview(ctx context.Context, scope repo.GetOverv
 	params.ToolCallSummariesEnabled = params.ToolCallSummariesEligible() && s.toolCallSummariesEnabled(ctx)
 
 	overview, err := s.chRepo.GetObservabilityOverview(ctx, params)
-	if err != nil && params.ToolCallSummariesEnabled {
+	if err != nil && params.ToolCallSummariesEnabled && ctx.Err() == nil {
 		s.logger.WarnContext(ctx, "read overview from tool call summaries, falling back to telemetry_logs", attr.SlogError(err))
 		params.ToolCallSummariesEnabled = false
 		overview, err = s.chRepo.GetObservabilityOverview(ctx, params)

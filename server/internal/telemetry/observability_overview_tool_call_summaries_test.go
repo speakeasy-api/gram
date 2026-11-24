@@ -312,7 +312,7 @@ func TestGetObservabilityOverview_ToolCallSummariesMatchRawLogs(t *testing.T) {
 	}
 }
 
-// An unaligned range snaps to the table's 15-minute buckets.
+// An unaligned range snaps to whole buckets, with equal-length periods.
 func TestGetObservabilityOverview_ToolCallSummariesSnapUnalignedRange(t *testing.T) {
 	t.Parallel()
 
@@ -320,39 +320,64 @@ func TestGetObservabilityOverview_ToolCallSummariesSnapUnalignedRange(t *testing
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 
-	timeStart := summaryParityDay.Add(10*time.Hour + 7*time.Minute)
-	timeEnd := summaryParityDay.Add(16*time.Hour + 7*time.Minute)
 	at := func(h, m int) time.Time {
 		return summaryParityDay.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute)
 	}
-	call := func(ts time.Time) overviewLog {
-		return overviewLog{at: ts, gramURN: "tools:http:a:one", attributes: map[string]any{"http.response.status_code": 200}}
+	// One call per bucket from 03:00 to 17:00.
+	var logs []overviewLog
+	for ts := at(3, 1); ts.Before(at(17, 0)); ts = ts.Add(15 * time.Minute) {
+		logs = append(logs, overviewLog{at: ts, gramURN: "tools:http:a:one", attributes: map[string]any{"http.response.status_code": 200}})
 	}
-	insertOverviewLogs(t, ctx, ti.chConn, projectID, []overviewLog{
-		// Current period: buckets 10:00 through 16:00.
-		call(at(10, 2)),
-		call(at(12, 0)),
-		call(at(16, 10)),
-		// After the bucket holding TimeEnd: out.
-		call(at(16, 15)),
-		// Previous period: [04:00, 10:00), from floor15(10:00 - 6h).
-		call(at(4, 0)),
-		call(at(9, 59)),
-		// Before the previous period: out.
-		call(at(3, 58)),
-	})
+	insertOverviewLogs(t, ctx, ti.chConn, projectID, logs)
 
-	got := readOverview(t, ctx, ti.chClient, overviewScope(projectID, timeStart, timeEnd), true, true)
-	require.Equal(t, uint64(3), got.Summary.TotalToolCalls)
-	require.Equal(t, uint64(2), got.Comparison.TotalToolCalls)
+	// Current [10:00, 16:15) and previous [03:45, 10:00): 25 buckets each.
+	got := readOverview(t, ctx, ti.chClient, overviewScope(projectID, at(10, 7), at(16, 7)), true, true)
+	require.Equal(t, repo.OverviewSourceToolCallSummaries, got.Source)
+	require.Equal(t, uint64(25), got.Summary.TotalToolCalls)
+	require.Equal(t, got.Summary.TotalToolCalls, got.Comparison.TotalToolCalls)
 
 	var seriesCalls uint64
 	for _, b := range got.TimeSeries {
 		seriesCalls += b.TotalToolCalls
 	}
-	require.Equal(t, uint64(3), seriesCalls)
+	require.Equal(t, uint64(25), seriesCalls)
 	require.Equal(t, at(10, 0).UnixNano(), got.TimeSeries[0].BucketTimeUnixNano)
 	require.Equal(t, at(16, 0).UnixNano(), got.TimeSeries[len(got.TimeSeries)-1].BucketTimeUnixNano)
+}
+
+// Organization gateway rows share the nil project, so only the requested gateway's rows count.
+func TestGetObservabilityOverview_ToolCallSummariesNilProjectGateway(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	gateway, otherGateway := uuid.NewString(), uuid.NewString()
+
+	calls := func(n int, gatewayID string) []overviewLog {
+		var logs []overviewLog
+		for i := range n {
+			logs = append(logs, overviewLog{
+				at:         summaryParityDay.Add(time.Duration(i+1) * time.Hour),
+				gramURN:    "tools:http:a:one",
+				attributes: map[string]any{"gram.meta_mcp_server.id": gatewayID, "http.response.status_code": 200},
+			})
+		}
+		return logs
+	}
+	insertOverviewLogs(t, ctx, ti.chConn, projectID, calls(3, gateway))
+	insertOverviewLogs(t, ctx, ti.chConn, uuid.Nil.String(), calls(2, gateway))
+	insertOverviewLogs(t, ctx, ti.chConn, uuid.Nil.String(), calls(7, otherGateway))
+
+	scope := overviewScope(projectID, summaryParityDay, summaryParityDay.Add(12*time.Hour))
+	scope.GramProjectIDs = []string{projectID, uuid.Nil.String()}
+	scope.MetaMCPServerID = gateway
+
+	raw := readOverview(t, ctx, ti.chClient, scope, true, false)
+	summary := readOverview(t, ctx, ti.chClient, scope, true, true)
+	require.Equal(t, repo.OverviewSourceToolCallSummaries, summary.Source)
+	require.Equal(t, uint64(5), summary.Summary.TotalToolCalls)
+	require.Equal(t, raw.Summary.TotalToolCalls, summary.Summary.TotalToolCalls)
 }
 
 // Each table holds different calls (raw 2, summary 5), so the total shows which path ran.
@@ -413,6 +438,12 @@ func TestGetObservabilityOverview_ToolCallSummariesPathSelection(t *testing.T) {
 			s.TimeStart = 0
 			return s
 		}, true, true, rawCalls},
+		{"previous period before the epoch", func() repo.GetOverviewSummaryParams {
+			s := base()
+			s.TimeStart = time.Date(1970, 1, 1, 2, 0, 0, 0, time.UTC).UnixNano()
+			s.TimeEnd = time.Date(1970, 1, 1, 4, 1, 0, 0, time.UTC).UnixNano()
+			return s
+		}, true, true, 0},
 		{"user", func() repo.GetOverviewSummaryParams {
 			s := base()
 			s.User = repo.UserIdentity{UserIDs: []string{"user-1"}, Emails: nil}
@@ -467,6 +498,7 @@ func TestGetObservabilityOverview_ToolCallSummariesPathSelection(t *testing.T) {
 
 			got := readOverview(t, ctx, ti.chClient, tc.scope(), tc.toolCallsOnly, tc.summariesEnabled)
 			require.Equal(t, tc.want, got.Summary.TotalToolCalls)
+			require.Equal(t, tc.want == summaryCalls, got.Source == repo.OverviewSourceToolCallSummaries)
 		})
 	}
 }

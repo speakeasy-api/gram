@@ -33,23 +33,26 @@ const toolCallSummaryBucketNanos = int64(15 * time.Minute)
 
 // ToolCallSummariesEligible reports whether mcp_tool_call_summaries can serve the read.
 func (arg GetObservabilityOverviewParams) ToolCallSummariesEligible() bool {
+	previousStart, _, _ := toolCallSummaryPeriods(arg.Scope.TimeStart, arg.Scope.TimeEnd)
 	return arg.ToolCallsOnly &&
 		arg.IntervalSeconds*int64(time.Second) >= toolCallSummaryBucketNanos &&
-		toolCallSummariesPreviousStart(arg.Scope.TimeStart, arg.Scope.TimeEnd) >= 0 &&
+		previousStart >= 0 &&
 		arg.Scope.toolCallSummariesCanServe()
 }
 
-// toolCallSummariesPreviousStart is negative when a range starts near the epoch.
-func toolCallSummariesPreviousStart(timeStart, timeEnd int64) int64 {
-	return floorToolCallSummaryBucket(floorToolCallSummaryBucket(timeStart) - (timeEnd - timeStart))
+// toolCallSummaryPeriods snaps to whole buckets: current [currentStart, currentEnd), previous [previousStart, currentStart) of equal length.
+func toolCallSummaryPeriods(timeStart, timeEnd int64) (previousStart, currentStart, currentEnd int64) {
+	currentStart = floorToolCallSummaryBucket(timeStart)
+	currentEnd = floorToolCallSummaryBucket(timeEnd + toolCallSummaryBucketNanos - 1)
+	return currentStart - (currentEnd - currentStart), currentStart, currentEnd
 }
 
 func floorToolCallSummaryBucket(unixNano int64) int64 {
-	return (unixNano / toolCallSummaryBucketNanos) * toolCallSummaryBucketNanos
-}
-
-func ceilToolCallSummaryBucket(unixNano int64) int64 {
-	return floorToolCallSummaryBucket(unixNano + toolCallSummaryBucketNanos - 1)
+	floor := unixNano / toolCallSummaryBucketNanos
+	if unixNano%toolCallSummaryBucketNanos < 0 {
+		floor--
+	}
+	return floor * toolCallSummaryBucketNanos
 }
 
 // OverviewSource names the table that served an overview.
@@ -240,11 +243,10 @@ func (q *Queries) getObservabilityOverviewFromLogs(ctx context.Context, arg GetO
 	return result, nil
 }
 
-// Periods snap to whole buckets: [floor15(start), ceil15(end)) and the equal span before it.
 func (q *Queries) getObservabilityOverviewFromToolCallSummaries(ctx context.Context, arg GetObservabilityOverviewParams) (*ObservabilityOverview, error) {
 	scope := arg.Scope
-	currentStartSeconds := floorToolCallSummaryBucket(scope.TimeStart) / int64(time.Second)
-	previousStart := toolCallSummariesPreviousStart(scope.TimeStart, scope.TimeEnd)
+	previousStart, currentStart, currentEnd := toolCallSummaryPeriods(scope.TimeStart, scope.TimeEnd)
+	currentStartSeconds := currentStart / int64(time.Second)
 
 	bucketKey := squirrel.Expr("toInt64(0) AS bucket_key")
 	if arg.IncludeTimeSeries {
@@ -270,7 +272,7 @@ func (q *Queries) getObservabilityOverviewFromToolCallSummaries(ctx context.Cont
 		From("mcp_tool_call_summaries").
 		Where(squirrel.Eq{"gram_project_id": scope.GramProjectIDs}).
 		Where("time_bucket >= toDateTime(?, 'UTC')", previousStart/int64(time.Second)).
-		Where("time_bucket < toDateTime(?, 'UTC')", ceilToolCallSummaryBucket(scope.TimeEnd)/int64(time.Second))
+		Where("time_bucket < toDateTime(?, 'UTC')", currentEnd/int64(time.Second))
 	sb = withOverviewScopeFilters(sb, scope)
 
 	sets := []string{"(period, tool_key)", "(period)"}
