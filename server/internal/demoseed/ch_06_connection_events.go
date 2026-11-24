@@ -1,8 +1,11 @@
 package demoseed
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"time"
 
@@ -160,6 +163,32 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 	return rows, nil
 }
 
+// connectionRequestServed is an answered request a minute after the person's latest
+// refusal on each connection, so the daily refusals read as passing failures, never a
+// suspected problem. Served requests have no attempt rows, so the logs do not change.
+func (s *seeder) connectionRequestServed(rows []mcpconnectionattempts.Row) []mcpconnectionattempts.Served {
+	type key struct{ kind, server, member, subject, app, family string }
+	latest := map[key]mcpconnectionattempts.Served{}
+	for _, r := range rows {
+		if r.ServerID == "" || r.SubjectURN == "" || r.Outcome == string(mcpconnectionattempts.OutcomeConnected) {
+			continue
+		}
+		k := key{r.ServerKind, r.ServerID, r.MemberID, r.SubjectURN, r.AppKey, r.ClientFamily}
+		at := r.EventTime.Add(time.Minute)
+		if prev, ok := latest[k]; ok && !at.After(prev.ServedAt) {
+			continue
+		}
+		latest[k] = mcpconnectionattempts.Served{
+			OrganizationID: r.OrganizationID, ProjectID: r.ProjectID, ServerKind: r.ServerKind, ServerID: r.ServerID, MemberID: r.MemberID,
+			SubjectURN: r.SubjectURN, AppKey: r.AppKey, ClientFamily: r.ClientFamily, RemoteSessionClientID: r.RemoteSessionClientID,
+			ServedAt: at, AnsweredAt: at,
+		}
+	}
+	return slices.SortedFunc(maps.Values(latest), func(a, b mcpconnectionattempts.Served) int {
+		return cmp.Or(cmp.Compare(a.ServerID, b.ServerID), cmp.Compare(a.MemberID, b.MemberID), cmp.Compare(a.AppKey, b.AppKey), cmp.Compare(a.ClientFamily, b.ClientFamily))
+	})
+}
+
 // chConnectionEvents seeds connection attempts on a project server, a project
 // gateway and the organization gateway. Every tenth attempt stops with no final
 // row, which is how readers see an abandoned sign-in.
@@ -209,7 +238,7 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 	if err := mcpconnectionattempts.AppendRows(ctx, ch, rows); err != nil {
 		return fmt.Errorf("seed connection events: %w", err)
 	}
-	if err := mcpconnectionattempts.AppendServed(ctx, ch, healthServed); err != nil {
+	if err := mcpconnectionattempts.AppendServed(ctx, ch, append(healthServed, s.connectionRequestServed(requestRows)...)); err != nil {
 		return fmt.Errorf("seed served connections: %w", err)
 	}
 	return s.chRunChecks(ctx, ch, []chCheck{

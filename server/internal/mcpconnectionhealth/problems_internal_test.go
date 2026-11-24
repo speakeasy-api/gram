@@ -72,7 +72,7 @@ func TestProblemText_EachRule(t *testing.T) {
 			name: "one recorded error on two servers",
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: server, WhoFixes: mcpconnectionattempts.WhoProvider, People: 1,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, server, mcpconnectionattempts.CodeProviderServerError), ep("user:dana", github, server, mcpconnectionattempts.CodeProviderServerError)}},
-			headline: "Dana Reyes can't connect",
+			headline: "Dana Reyes can't connect to 2 MCP servers",
 			fact:     "On Linear and GitHub. Requests to these servers are failing.",
 		},
 		{
@@ -101,21 +101,21 @@ func TestProblemText_EachRule(t *testing.T) {
 			name: "one person with a rejected saved key on one server",
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: service, People: 1,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, service, mcpconnectionattempts.CodeStaticKeyRejected)}},
-			headline: "Dana Reyes can't connect",
+			headline: "Dana Reyes can't connect to Linear",
 			fact:     "On Linear. " + admin(mcpconnectionattempts.CodeStaticKeyRejected),
 		},
 		{
 			name: "one person with a rejected saved key on two servers",
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: service, People: 1,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, service, mcpconnectionattempts.CodeStaticKeyRejected), ep("user:dana", github, service, mcpconnectionattempts.CodeStaticKeyRejected)}},
-			headline: "Dana Reyes can't connect",
+			headline: "Dana Reyes can't connect to 2 MCP servers",
 			fact:     "On Linear and GitHub. Requests with the saved sign-in for the service are failing.",
 		},
 		{
 			name: "a sign-in check that failed on two servers",
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: server, WhoFixes: mcpconnectionattempts.WhoSpeakeasy, People: 1,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, server, mcpconnectionattempts.CodeAuthCheckUnavailable), ep("user:dana", github, server, mcpconnectionattempts.CodeAuthCheckUnavailable)}},
-			headline: "Dana Reyes can't connect",
+			headline: "Dana Reyes can't connect to 2 MCP servers",
 			fact:     "On Linear and GitHub. Requests to these servers are failing.",
 		},
 		{
@@ -129,10 +129,22 @@ func TestProblemText_EachRule(t *testing.T) {
 			name: "mixed saved credentials including a misconfiguration",
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: service, People: 1,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, service, mcpconnectionattempts.CodeStaticKeyRejected), ep("user:dana", linear, service, mcpconnectionattempts.CodeCredentialMisconfigured)}},
-			headline: "Dana Reyes can't connect",
+			headline: "Dana Reyes can't connect to Linear",
 			fact:     "On Linear. Requests with the saved sign-in for the service are failing.",
 		},
 	}
+	cases = append(cases, struct {
+		name     string
+		problem  problems.Problem
+		headline string
+		fact     string
+	}{
+		name: "one person signing in on no server",
+		problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: signIn, People: 1,
+			Episodes: []mcpconnectionattempts.FailingPerson{{Episode: mcpconnectionattempts.Episode{SubjectURN: "user:dana", ServerKind: "authorization_server", ServerID: "issuer", Part: signIn, Reason: mcpconnectionattempts.CodePKCEMismatch.String(), OpeningReason: mcpconnectionattempts.CodePKCEMismatch.String()}}}},
+		headline: "Dana Reyes can't sign in",
+		fact:     "The app's sign-in to Speakeasy fails. " + admin(mcpconnectionattempts.CodePKCEMismatch),
+	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

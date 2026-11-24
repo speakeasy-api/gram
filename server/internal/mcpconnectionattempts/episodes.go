@@ -43,6 +43,9 @@ type Episode struct {
 	// ClientVersion is the version on the row that named ClientFamily, empty when not recorded.
 	ClientVersion string
 
+	// Apps are the distinct apps of the run's failures, latest first, at most MaxEpisodeApps.
+	Apps []EpisodeApp
+
 	// ProviderHost is the provider of the latest failure.
 	ProviderHost string
 
@@ -70,6 +73,21 @@ type Episode struct {
 	// LastWorkedAt is when the broken part last worked before the run, zero when it was
 	// not seen working in the time read.
 	LastWorkedAt time.Time
+}
+
+// MaxEpisodeApps bounds the apps an episode keeps.
+const MaxEpisodeApps = 5
+
+// EpisodeApp is one app a run's failures came from.
+type EpisodeApp struct {
+	// Key is the app key.
+	Key string
+
+	// Family is the client family, empty when not named.
+	Family string
+
+	// Version is the client version, empty when not recorded.
+	Version string
 }
 
 // BackingServerID is the mcp_servers id reached (server or gateway member), else empty.
@@ -455,13 +473,19 @@ func openEpisodes(failures []failure, ev evidence, since time.Time) []Episode {
 			AppKey: a.AppKey, ClientFamily: a.ClientFamily, ClientVersion: a.ClientVersion, ProviderHost: a.ProviderHost,
 			Part: latest.part, OpeningReason: latest.end.Reason, Reason: latest.end.Reason, Step: latest.end.Step,
 			OpenedAt: latest.end.At, LastFailureAt: latest.end.At, Failures: 0, LastWorkedAt: worked,
+			Apps: []EpisodeApp{{Key: a.AppKey, Family: a.ClientFamily, Version: a.ClientVersion}},
 		}
 		opening := latest
+		// Newest first, so the kept apps are the latest when there are more than MaxEpisodeApps.
+		slices.SortFunc(fs, func(x, y failure) int { return y.end.At.Compare(x.end.At) })
 		for _, f := range fs {
 			if f.end.At.Before(worked) {
 				continue
 			}
 			e.Failures += f.a.Weight
+			if app := (EpisodeApp{Key: f.a.AppKey, Family: f.a.ClientFamily, Version: f.a.ClientVersion}); len(e.Apps) < MaxEpisodeApps && !slices.Contains(e.Apps, app) {
+				e.Apps = append(e.Apps, app)
+			}
 			if cmp.Or(f.end.At.Compare(opening.end.At), slices.Compare(f.a.AttemptID[:], opening.a.AttemptID[:])) < 0 {
 				opening = f
 			}

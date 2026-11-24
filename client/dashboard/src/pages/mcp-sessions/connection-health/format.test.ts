@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appKeyLabel,
+  axisLabels,
   formatSessionLength,
   formatWeekdayDay,
   nowPosition,
@@ -70,5 +71,29 @@ describe("problemRule", () => {
     expect(
       problemRule({ rule: "one_person", part: "service" } as never),
     ).toContain("has not connected since");
+  });
+});
+
+describe("axisLabels", () => {
+  const starts = (from: Date, count: number) =>
+    Array.from({ length: count }, (_, i) =>
+      new Date(from.getTime() + i * 10 * 60_000).toISOString(),
+    );
+
+  it("shows about five labels over a day of 10-minute buckets", () => {
+    const labels = axisLabels(starts(new Date(2026, 10, 20, 0, 0), 144));
+    expect(labels.filter(Boolean)).toHaveLength(5);
+    expect(labels.filter(Boolean).every((l) => /^\d{2}:\d{2}$/.test(l))).toBe(
+      true,
+    );
+  });
+
+  it("adds the day only where it changes across midnight", () => {
+    const labels = axisLabels(
+      starts(new Date(2026, 10, 20, 12, 0), 144),
+    ).filter(Boolean);
+    const withDay = labels.filter((l) => l.includes(" "));
+    expect(withDay).toHaveLength(2);
+    expect(labels[0]).toContain(" ");
   });
 });

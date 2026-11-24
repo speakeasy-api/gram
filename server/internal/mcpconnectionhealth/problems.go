@@ -297,7 +297,7 @@ func problemView(n names, p problems.Problem, serverID string) (*gen.SuspectedPr
 		LastFailedAt:        formatTime(p.LastFailedAt),
 		PeopleCount:         int64(p.People),
 		PeopleOnServerCount: nil,
-		Headline:            headline(p, scope.Name),
+		Headline:            headline(n, p, scope.Name),
 		Fact:                fact(n, p),
 		Filters:             filters,
 	}
@@ -465,11 +465,14 @@ func detailRowsOf(p problems.Problem) detailRows {
 			out.people = append(out.people, row)
 		}
 		row.attempts += e.Failures
-		if app := e.SubjectURN + "|" + e.ClientFamily + "|" + e.ClientVersion + "|" + e.AppKey; !seenApp[app] {
-			seenApp[app] = true
-			row.appsTotal++
-			if len(row.apps) < maxFolded {
-				row.apps = append(row.apps, appKey{e.ClientFamily, e.ClientVersion, e.AppKey})
+		// A server or service run keeps one key for every app, so fold each app it saw.
+		for _, a := range e.Apps {
+			if app := e.SubjectURN + "|" + a.Family + "|" + a.Version + "|" + a.Key; !seenApp[app] {
+				seenApp[app] = true
+				row.appsTotal++
+				if len(row.apps) < maxFolded {
+					row.apps = append(row.apps, appKey{a.Family, a.Version, a.Key})
+				}
 			}
 		}
 		if place := e.SubjectURN + "|" + k.kind + "|" + k.id + "|" + k.member; e.ReachedServer() && !seenPlace[place] {

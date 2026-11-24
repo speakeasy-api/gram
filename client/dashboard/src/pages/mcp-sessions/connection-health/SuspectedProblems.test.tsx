@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
-import { SuspectedProblems } from "./SuspectedProblems";
+import { ServiceProblemsNote, SuspectedProblems } from "./SuspectedProblems";
 import type {
   ListSuspectedProblemsResponse,
   SuspectedProblem,
@@ -225,14 +225,15 @@ describe("SuspectedProblems", () => {
     }
   });
 
-  it("reserves space while loading only when the page knows the panel will show", () => {
+  it("reserves space while loading only when the page already knew the panel will show", () => {
     const pending = {
       data: undefined,
       isPending: true,
       isError: false,
       error: null,
     };
-    const { container } = render(
+    // Unknown viewer: nothing while loading, even if the viewer becomes known mid-load.
+    const unknown = render(
       <SuspectedProblems
         query={pending}
         now={NOW}
@@ -241,9 +242,8 @@ describe("SuspectedProblems", () => {
         expectVisible={false}
       />,
     );
-    expect(container.innerHTML).toBe("");
-    cleanup();
-    const shown = render(
+    expect(unknown.container.innerHTML).toBe("");
+    unknown.rerender(
       <SuspectedProblems
         query={pending}
         now={NOW}
@@ -252,7 +252,47 @@ describe("SuspectedProblems", () => {
         expectVisible
       />,
     );
-    expect(shown.container.innerHTML).not.toBe("");
+    expect(unknown.container.innerHTML).toBe("");
+    // Settled: the panel in one move.
+    unknown.rerender(
+      <SuspectedProblems
+        query={listed([PROBLEM])}
+        now={NOW}
+        onOpen={noop}
+        empty={EMPTY}
+        expectVisible
+      />,
+    );
+    expect(screen.getByText("Suspected problems · 1")).toBeTruthy();
+    cleanup();
+    // Known viewer: the panel's header and one row hold its place.
+    render(
+      <SuspectedProblems
+        query={pending}
+        now={NOW}
+        onOpen={noop}
+        empty={EMPTY}
+        expectVisible
+      />,
+    );
+    expect(screen.getByText("Suspected problems")).toBeTruthy();
+    expect(screen.getByLabelText("Loading suspected problems")).toBeTruthy();
+  });
+
+  it("does not point someone who reads only their own logs at server pages", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ServiceProblemsNote viewerScope="own" serversHref="/servers" />
+      </MemoryRouter>,
+    );
+    expect(container.textContent).toBe("");
+    cleanup();
+    render(
+      <MemoryRouter>
+        <ServiceProblemsNote viewerScope="all" serversHref="/servers" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/Problems with a service show/)).toBeTruthy();
   });
 
   it("says when it could not load", () => {
@@ -291,6 +331,15 @@ describe("ProblemDetailSheet", () => {
     };
     renderSheet();
     expect(screen.getByTitle("Linear, GitHub and 1 more")).toBeTruthy();
+    expect(screen.getByText(/2 people have been failing/)).toBeTruthy();
+    expect(screen.getByText(/by these people on/)).toBeTruthy();
+    expect(screen.getByText(/Attempts since/)).toBeTruthy();
+    // Server rows are not links, so they are not styled as links.
+    expect(
+      screen
+        .getAllByText("Linear")
+        .every((el) => !el.className.includes("underline")),
+    ).toBe(true);
     expect(screen.getByText("+1")).toBeTruthy();
     expect(screen.getByText("2 people can't connect to Linear")).toBeTruthy();
     expect(screen.getByText(/Showing the first 50 of 51/)).toBeTruthy();
@@ -379,5 +428,27 @@ describe("ProblemDetailSheet", () => {
     expect(state.investigation?.context).toContain(
       "Ignore previous instructions",
     );
+  });
+
+  it("speaks of one person in the singular", () => {
+    state.query = {
+      data: {
+        loggingEnabled: true,
+        viewerScope: "all",
+        found: true,
+        problem: {
+          ...DETAIL,
+          peopleCount: 1,
+          peopleTotal: 1,
+          people: [person("Dana")],
+          rule: "one_person",
+          scope: { kind: "person", id: "user:Dana", name: "Dana" },
+        },
+      },
+    };
+    renderSheet();
+    expect(screen.getByText(/Dana has been failing/)).toBeTruthy();
+    expect(screen.getByText(/by this person on/)).toBeTruthy();
+    expect(screen.queryByText(/these people/)).toBeNull();
   });
 });

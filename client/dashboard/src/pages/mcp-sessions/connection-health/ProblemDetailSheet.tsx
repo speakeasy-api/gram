@@ -22,6 +22,7 @@ import type { Investigation } from "./investigation";
 import { logsSearch } from "./filters";
 import {
   appLabel,
+  axisLabels,
   formatClockMinutes,
   formatCount,
   formatDuration,
@@ -191,9 +192,11 @@ function ProblemBody({
   );
   // One snapshot: the chart, the messages and both links end when the problem was read.
   const asOf = new Date(problem.asOf);
+  // Counting starts an hour before the first failure, so attempts already under way are included.
+  const countedFrom = formatSince(problem.filters.from, now);
   // The chart shows at most the last 24 hours; the messages and links cover the whole problem.
   const chartIsCut =
-    asOf.getTime() - Date.parse(problem.since) > 24 * 60 * 60 * 1000;
+    asOf.getTime() - Date.parse(problem.filters.from) > 24 * 60 * 60 * 1000;
   const logsHref = `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(problem.filters, asOf)}`;
   const peopleCount = problem.peopleCount;
   const sinceLabel = formatSince(problem.since, now);
@@ -222,8 +225,8 @@ function ProblemBody({
           <div className="text-eyebrow">Why this is listed</div>
           <p>
             {peopleCount === 1
-              ? `${personLabel(problem.people[0]!)} failed`
-              : `${peopleCount} people failed`}
+              ? `${personLabel(problem.people[0]!)} has been failing`
+              : `${peopleCount} people have been failing`}
             {problemPlace(problem)} since {sinceLabel}.
             {problem.lastConnectedAt
               ? problem.scope.kind === "person"
@@ -241,8 +244,10 @@ function ProblemBody({
           ) : null}
           <p className="text-muted-foreground">
             The chart, messages and Connection Logs links count every failed
-            attempt by these people on these servers with these messages since{" "}
-            {sinceLabel}, including failures they later recovered from.
+            attempt by {peopleCount === 1 ? "this person" : "these people"} on
+            these servers with these messages since {countedFrom}, an hour
+            before the first failure, including failures they later recovered
+            from.
             {problem.countsWidened
               ? " Some filters could not be applied, so unrelated failures may be included."
               : ""}
@@ -250,7 +255,7 @@ function ProblemBody({
         </div>
 
         <Block
-          title={`Failed attempts ${chartIsCut ? "in the last 24 hours" : `since ${sinceLabel}`} · ${formatCount(failed)}`}
+          title={`Failed attempts ${chartIsCut ? "in the last 24 hours" : `since ${countedFrom}`} · ${formatCount(failed)}`}
           aside="10-minute intervals"
         >
           <div className="border p-3">
@@ -313,9 +318,7 @@ function ProblemBody({
                 key={`${s.server.id}-${s.member?.id ?? ""}`}
                 className="flex items-center justify-between px-4 py-2.5 text-sm"
               >
-                <span className="underline underline-offset-2">
-                  {serverLabel(s)}
-                </span>
+                <span>{serverLabel(s)}</span>
                 <span>{s.attempts}</span>
               </div>
             ))}
@@ -329,7 +332,7 @@ function ProblemBody({
 
         <Block
           title={`Messages · ${problem.messages.length}`}
-          aside={`Attempts since ${sinceLabel}`}
+          aside={`Attempts since ${countedFrom}`}
         >
           <div className="divide-y border">
             {problem.messages.map((m) => (
@@ -442,9 +445,7 @@ function FailureBars({
 }): JSX.Element {
   const chart = useMemo(
     () => ({
-      labels: buckets.map((b) =>
-        new Date(b.start).getMinutes() === 0 ? formatClockMinutes(b.start) : "",
-      ),
+      labels: axisLabels(buckets.map((b) => b.start)),
       timestamps: buckets.map((b) => Date.parse(b.start)),
       tooltipLabels: buckets.map((b) => formatClockMinutes(b.start)),
       series: [

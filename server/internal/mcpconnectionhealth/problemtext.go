@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -16,7 +17,7 @@ var headlines = map[problems.Rule][2]string{
 	problems.RuleSameServer:     {"{people} can't sign in to {scope}", "{people} can't connect to {scope}"},
 	problems.RuleSameService:    {"{people} can't sign in to {scope}", "{people} can't connect to {scope}"},
 	problems.RuleSameAppVersion: {"{people} on {scope} can't sign in", "{people} on {scope} can't connect"},
-	problems.RuleOnePerson:      {"{scope} can't sign in", "{scope} can't connect"},
+	problems.RuleOnePerson:      {"{scope} can't sign in{place}", "{scope} can't connect{place}"},
 }
 
 // The fact sentences. Each states only what the episodes establish.
@@ -43,12 +44,31 @@ func fill(template string, values ...string) string {
 	return strings.NewReplacer(values...).Replace(template)
 }
 
-func headline(p problems.Problem, scope string) string {
+// headlinePlace names where one person fails: " to Linear", " to 3 MCP servers", or nothing when no server was reached.
+const (
+	headlineToServer  = " to {server}"
+	headlineToServers = " to {count} MCP servers"
+)
+
+func headline(n names, p problems.Problem, scope string) string {
 	part := 1
 	if p.Part == mcpconnectionattempts.PartAppSignIn {
 		part = 0
 	}
-	return fill(headlines[p.Rule][part], "{people}", fmt.Sprintf("%d people", p.People), "{scope}", scope)
+	place := ""
+	if p.Rule == problems.RuleOnePerson {
+		switch places := namedPlaces(p); {
+		case reachedServers(p) > 1:
+			place = fill(headlineToServers, "{count}", strconv.Itoa(reachedServers(p)))
+		case len(places) == 1:
+			name := episodeServerName(n, places[0])
+			if name == "" {
+				name = "an MCP server"
+			}
+			place = fill(headlineToServer, "{server}", name)
+		}
+	}
+	return fill(headlines[p.Rule][part], "{people}", fmt.Sprintf("%d people", p.People), "{scope}", scope, "{place}", place)
 }
 
 // fact states what failed in plain words, using the catalog's own sentences.
@@ -185,14 +205,7 @@ func serversPhrase(n names, p problems.Problem) string {
 		}
 		named = append(named, name)
 	}
-	reached := 0
-	seen := map[string]bool{}
-	for _, e := range p.Episodes {
-		if key := e.ServerID + "/" + e.MemberID; e.ReachedServer() && !seen[key] {
-			seen[key] = true
-			reached++
-		}
-	}
+	reached := reachedServers(p)
 	switch {
 	case len(named) == 0:
 		return ""
@@ -203,4 +216,15 @@ func serversPhrase(n names, p problems.Problem) string {
 	default:
 		return fmt.Sprintf("%s and %d other servers", named[0], reached-1)
 	}
+}
+
+// reachedServers counts the distinct servers and gateway members the problem's people fail on.
+func reachedServers(p problems.Problem) int {
+	seen := map[string]bool{}
+	for _, e := range p.Episodes {
+		if e.ReachedServer() {
+			seen[e.ServerID+"/"+e.MemberID] = true
+		}
+	}
+	return len(seen)
 }

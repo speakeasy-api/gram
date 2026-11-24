@@ -3,9 +3,14 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router";
 import { problemHeadline } from "./format";
 import { isUnavailable } from "./api";
-import type { ListSuspectedProblemsResponse, SuspectedProblem } from "./types";
+import type {
+  ListSuspectedProblemsResponse,
+  SuspectedProblem,
+  ViewerScope,
+} from "./types";
 
 const VISIBLE = 3;
 
@@ -19,6 +24,63 @@ const MIXED_PROBLEMS_RULE =
 /** The rule as the provider Overview states it, which lists only problems signing in to Speakeasy. */
 export const SIGN_IN_PROBLEMS_RULE =
   "Failed to sign in the same way on this provider's servers and not signed in since: 2 or more people on one MCP server or one app version, or one person for 24 hours.";
+
+/** Where problems with a service are listed; not for someone who can never see problems. */
+export function ServiceProblemsNote({
+  viewerScope,
+  serversHref,
+}: {
+  viewerScope: ViewerScope | undefined;
+  serversHref: string;
+}): JSX.Element | null {
+  if (viewerScope === "own") return null;
+  return (
+    <p className="text-muted-foreground text-sm">
+      Problems with a service show on the page of each MCP server that uses it,
+      under{" "}
+      <Link
+        to={serversHref}
+        className="text-foreground underline-offset-4 hover:underline"
+      >
+        MCP servers
+      </Link>
+      .
+    </p>
+  );
+}
+
+/** The panel's header and one row, so the panel with one problem replaces it without moving the page. */
+function PanelSkeleton({ hint }: { hint: string }): JSX.Element {
+  const line = (className: string) => (
+    <>
+      {"\u200b"}
+      <Skeleton
+        className={`inline-block h-[0.9em] align-middle ${className}`}
+      />
+    </>
+  );
+  return (
+    <section
+      className="space-y-3"
+      aria-busy="true"
+      aria-label="Loading suspected problems"
+    >
+      <div>
+        <h2 className="text-eyebrow">Suspected problems</h2>
+        <p className="text-muted-foreground mt-1 text-sm">{hint}</p>
+      </div>
+      <div className="bg-card border border-l-2">
+        <div className="flex w-full items-center gap-3 px-5 py-4">
+          <span className="size-2 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px]">{line("w-2/3")}</span>
+            <span className="block text-xs">{line("w-1/2")}</span>
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 /** The one panel that says we suspect something, with its own loading, error and empty states. */
 export function SuspectedProblems({
@@ -43,9 +105,12 @@ export function SuspectedProblems({
   expectVisible: boolean;
 }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
-  // Loading and empty share one height, so the page does not jump.
+  // Decided once, when loading starts: a viewer learned about mid-load gets the panel in one move.
+  const [reserve] = useState(expectVisible);
   if (query.isPending)
-    return expectVisible ? <Skeleton className="h-28 w-full" /> : null;
+    return reserve ? (
+      <PanelSkeleton hint={rule ?? SUSPECTED_PROBLEMS_RULE} />
+    ) : null;
   if (query.isError)
     return (
       <InlineEmptyState

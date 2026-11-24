@@ -55,6 +55,11 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 
 	rows, served, err := s.connectionHealthRows()
 	require.NoError(t, err)
+	// The daily refusals of every reason, on the other providers' servers, list no problem.
+	requestRows, err := s.connectionRequestRows()
+	require.NoError(t, err)
+	rows = append(rows, requestRows...)
+	served = append(served, s.connectionRequestServed(requestRows)...)
 	ch, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	db, err := infra.CloneTestDatabase(t, "testdb")
@@ -83,6 +88,19 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 		}
 	}
 	require.Equal(t, 2, signIn, "the provider Overview lists two problems signing in, as the review steps say")
+
+	// On a provider page owning every server the daily refusals reach, their person is in no problem.
+	var refusedServers []string
+	for _, r := range requestRows {
+		if r.ServerID != "" && !slices.Contains(refusedServers, r.ServerID) {
+			refusedServers = append(refusedServers, r.ServerID)
+		}
+	}
+	elsewhere, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: uuid.New(), IssuerServerIDs: refusedServers,
+	}, time.Time{}, now)
+	require.NoError(t, err)
+	require.Empty(t, elsewhere, "the daily refusals end in answered requests")
 
 	subject := func(key string) string {
 		for _, p := range healthPeople {

@@ -46,7 +46,11 @@ import {
 } from "./format";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SummaryPanel, type SummaryMetric } from "./SummaryPanel";
-import { SIGN_IN_PROBLEMS_RULE, SuspectedProblems } from "./SuspectedProblems";
+import {
+  ServiceProblemsNote,
+  SIGN_IN_PROBLEMS_RULE,
+  SuspectedProblems,
+} from "./SuspectedProblems";
 import {
   SIGN_IN_STEPS,
   type ActiveKillswitch,
@@ -131,17 +135,10 @@ export function OverviewTab({
           }
         />
 
-        <p className="text-muted-foreground text-sm">
-          Problems with a service show on the page of each MCP server that uses
-          it, under{" "}
-          <Link
-            to={routes.mcpSessions.provider.mcpServers.href(providerId)}
-            className="text-foreground underline-offset-4 hover:underline"
-          >
-            MCP servers
-          </Link>
-          .
-        </p>
+        <ServiceProblemsNote
+          viewerScope={problems.data?.viewerScope ?? known?.viewerScope}
+          serversHref={routes.mcpSessions.provider.mcpServers.href(providerId)}
+        />
       </div>
 
       {activityPage?.viewerScope === "own" ? <OwnAttemptsNotice /> : null}

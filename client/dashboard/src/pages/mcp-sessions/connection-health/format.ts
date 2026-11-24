@@ -171,6 +171,29 @@ export const formatClockMinutes = (iso: string): string =>
   TIME_MINUTES.format(new Date(iso));
 export const formatFull = (iso: string): string => FULL.format(new Date(iso));
 
+/**
+ * Axis labels for evenly spaced bucket starts: about `ticks` labels spread over the
+ * window, "HH:mm", with the day added only where it changes in a window that crosses midnight.
+ */
+export function axisLabels(starts: string[], ticks = 5): string[] {
+  if (starts.length === 0) return [];
+  const step = Math.max(1, Math.ceil(starts.length / ticks));
+  const crossesMidnight = !sameDay(
+    new Date(starts[0]!),
+    new Date(starts[starts.length - 1]!),
+  );
+  let lastDay = "";
+  return starts.map((iso, i) => {
+    if (i % step !== 0) return "";
+    const date = new Date(iso);
+    const day = DAY_MONTH.format(date);
+    const time = TIME_MINUTES.format(date);
+    if (!crossesMidnight || day === lastDay) return time;
+    lastDay = day;
+    return `${day} ${time}`;
+  });
+}
+
 function sameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&

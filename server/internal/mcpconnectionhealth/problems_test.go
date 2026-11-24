@@ -327,7 +327,7 @@ func TestListSuspectedProblems_OnePersonNamesTheServer(t *testing.T) {
 	require.Equal(t, gen.SuspectedProblemRule("one_person"), p.Rule)
 	require.Equal(t, "person", p.Scope.Kind)
 	require.NotEqual(t, "Someone", p.Scope.Name, "the caller's own name resolves")
-	require.Equal(t, p.Scope.Name+" can't connect", p.Headline)
+	require.Equal(t, p.Scope.Name+" can't connect to Linear", p.Headline)
 	require.True(t, strings.HasPrefix(p.Fact, "On Linear. "), p.Fact)
 	require.False(t, slices.Contains(strings.Fields(p.Headline), mcpconnectionattempts.CodeStaticKeyRejected.String()))
 }
@@ -662,4 +662,30 @@ func TestSuspectedProblems_AStalledNameLookupIsUnavailable(t *testing.T) {
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeUnavailable, shareable.Code)
 	require.Equal(t, http.StatusServiceUnavailable, shareable.HTTPStatus(ctx))
+}
+
+// A person failing on one server from two apps is one row with both apps.
+func TestGetSuspectedProblem_FoldsEveryAppOfARun(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	p := urn.NewUserSubject("user-" + uuid.NewString())
+	ti.failWith(t, ti.server, p, 2*time.Hour, time.Second, mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.FamilyClaudeCode, "2.1.0")
+	ti.failWith(t, ti.server, p, time.Hour, time.Second, mcpconnectionattempts.CodeStaticKeyRejected, mcpconnectionattempts.FamilyCursor, "2.0.1")
+	ti.failPeople(t, ti.server, 1, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+
+	listed := ti.listProblems(t, ctx, nil, nil).Problems
+	require.Len(t, listed, 1)
+	got := ti.getProblem(t, ctx, listed[0].ID)
+	require.True(t, got.Found)
+	i := slices.IndexFunc(got.Problem.People, func(r *gen.SuspectedProblemPerson) bool { return r.Person.SubjectUrn == p.String() })
+	require.GreaterOrEqual(t, i, 0)
+	row := got.Problem.People[i]
+	require.Equal(t, int64(2), row.AppsTotal)
+	var names []string
+	for _, a := range row.Apps {
+		names = append(names, a.Name+" "+*a.Version)
+	}
+	require.ElementsMatch(t, []string{"Claude Code 2.1.0", "Cursor 2.0.1"}, names)
+	require.Equal(t, int64(2), row.Attempts)
 }
