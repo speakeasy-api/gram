@@ -439,7 +439,10 @@ FROM (
   JOIN remote_session_issuers AS provider ON provider.id = registration.remote_session_issuer_id AND NOT provider.deleted
   WHERE NOT session.deleted
     AND (session.organization_id IS NULL OR session.organization_id = $3::text)
-    AND (registration.project_id <> $2::uuid OR provider.project_id <> $2::uuid)
+    AND (
+      (registration.project_id = $2::uuid OR (registration.project_id IS NULL AND (registration.organization_id IS NULL OR registration.organization_id = $3::text))) IS NOT TRUE
+      OR (provider.project_id = $2::uuid OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = $3::text))) IS NOT TRUE
+    )
 ) AS incompatible
 `
 

@@ -60,12 +60,8 @@ func TestOrganizationUserSessionIssuerMigrateCreatesNoAuthClientForTypedServers(
 	}
 }
 
-// A registration still bound to a source issuer that no live server uses was
-// left behind by earlier configuration. Consolidation leaves that binding
-// behind, enforced or not, and the preview lists it as dropped: carried to the
-// target, it would become a client the target's only server serves from
-// without anyone having configured it there. Without a leftover binding the
-// same consolidation changes nothing about that server.
+// A leftover issuer link is neither a typed offer nor a preview impact.
+// Consolidation leaves the target server's configured offer unchanged.
 func TestOrganizationUserSessionIssuerMigrateLeavesLeftoverSourceBindingBehind(t *testing.T) {
 	t.Parallel()
 	for _, enforced := range []bool{false, true} {

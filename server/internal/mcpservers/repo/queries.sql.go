@@ -2259,6 +2259,9 @@ FROM derived
 WHERE server.id = derived.id
   AND NOT server.deleted
   AND server.user_session_issuer_id = derived.signin_id
+  AND server.project_id = $2::uuid
+  AND EXISTS (SELECT 1 FROM projects AS project
+              WHERE project.id = server.project_id AND project.organization_id = $3::text AND NOT project.deleted)
   AND server.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id
 `
 
