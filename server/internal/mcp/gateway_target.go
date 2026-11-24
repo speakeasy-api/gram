@@ -108,11 +108,11 @@ func (t gatewayTarget) admits(caller gatewayCaller, projectID uuid.UUID, machine
 	if caller.kind == gatewayCallerPerson {
 		return admitGateway(), nil
 	}
-	if !machineAccess {
-		return refuseGateway(gatewayRefusalMachineAccessDisabled), nil
-	}
 	if t.kind != gatewayKindStored && t.kind != gatewayKindProject {
 		return refuseGateway(gatewayRefusalUnsupportedGatewayType), nil
+	}
+	if !machineAccess {
+		return refuseGateway(gatewayRefusalMachineAccessDisabled), nil
 	}
 	if projectID == uuid.Nil {
 		return refuseGateway(gatewayRefusalMissingProject), nil

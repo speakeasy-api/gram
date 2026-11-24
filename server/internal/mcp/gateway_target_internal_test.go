@@ -44,7 +44,7 @@ func TestGatewayTargetFromEndpoint(t *testing.T) {
 	}
 }
 
-func TestGatewayTargetCallerMatrix(t *testing.T) {
+func TestSharedGatewayTargetCallerMatrix(t *testing.T) {
 	t.Parallel()
 
 	gatewayID, projectID := uuid.New(), uuid.New()
@@ -67,7 +67,6 @@ func TestGatewayTargetCallerMatrix(t *testing.T) {
 		{name: "stored", kind: gatewayKindStored},
 		{name: "project", kind: gatewayKindProject},
 		{name: "organization", kind: gatewayKindOrganization},
-		{name: "agent", kind: gatewayKindAgent},
 	} {
 		t.Run(gateway.name, func(t *testing.T) {
 			t.Parallel()
@@ -142,7 +141,7 @@ func TestGatewayTargetRefusalReasons(t *testing.T) {
 		want          gatewayRefusalReason
 	}{
 		{name: "machine access disabled", target: target, caller: gatewayCaller{kind: gatewayCallerAgent}, projectID: projectID, want: gatewayRefusalMachineAccessDisabled},
-		{name: "unsupported gateway", target: gatewayTarget{kind: gatewayKindOrganization}, caller: gatewayCaller{kind: gatewayCallerAgent}, projectID: projectID, machineAccess: true, want: gatewayRefusalUnsupportedGatewayType},
+		{name: "unsupported gateway", target: gatewayTarget{kind: gatewayKindOrganization}, caller: gatewayCaller{kind: gatewayCallerAgent}, projectID: projectID, want: gatewayRefusalUnsupportedGatewayType},
 		{name: "missing project", target: target, caller: gatewayCaller{kind: gatewayCallerAgent}, machineAccess: true, want: gatewayRefusalMissingProject},
 		{name: "project mismatch", target: target, caller: gatewayCaller{kind: gatewayCallerAgent, projectScope: &otherProjectID}, projectID: projectID, machineAccess: true, want: gatewayRefusalProjectScopeMismatch},
 		{name: "credential ceiling", target: target, caller: gatewayCaller{kind: gatewayCallerWorkload}, projectID: projectID, machineAccess: true, want: gatewayRefusalCredentialCeiling},

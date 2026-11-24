@@ -598,17 +598,35 @@ func TestRecordSkillRead_IsNilSafe(t *testing.T) {
 
 func TestRecordGatewayAdmission(t *testing.T) {
 	t.Parallel()
-	reader := sdkmetric.NewManualReader()
-	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
-	m := NewMetrics(meter, testenv.NewLogger(t))
-	m.RecordGatewayAdmission(t.Context(), "workload", "project", false, "project_scope_mismatch")
-	got := collectMetric(t, reader, InstrumentMCPGatewayAdmission)
-	metricdatatest.AssertHasAttributes(t, got,
-		attr.McpGatewayCallerKind("workload"),
-		attr.McpGatewayType("project"),
-		attr.Outcome("refused"),
-		attr.McpGatewayRefusalReason("project_scope_mismatch"),
-	)
+	for _, tc := range []struct {
+		name          string
+		admitted      bool
+		refusalReason string
+		wantOutcome   string
+	}{
+		{name: "refused", refusalReason: "project_scope_mismatch", wantOutcome: "refused"},
+		{name: "admitted", admitted: true, wantOutcome: "admitted"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reader := sdkmetric.NewManualReader()
+			meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+			m := NewMetrics(meter, testenv.NewLogger(t))
+			m.RecordGatewayAdmission(t.Context(), "workload", "project", tc.admitted, tc.refusalReason)
+			got := collectMetric(t, reader, InstrumentMCPGatewayAdmission)
+			sum, ok := got.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			require.Len(t, sum.DataPoints, 1)
+			require.EqualValues(t, 1, sum.DataPoints[0].Value)
+			metricdatatest.AssertHasAttributes(t, got,
+				attr.McpGatewayCallerKind("workload"),
+				attr.McpGatewayType("project"),
+				attr.Outcome(tc.wantOutcome),
+			)
+			_, hasRefusalReason := sum.DataPoints[0].Attributes.Value(attr.McpGatewayRefusalReason("").Key)
+			require.Equal(t, !tc.admitted, hasRefusalReason)
+		})
+	}
 }
 
 func TestRecordAgentGatewayRequest(t *testing.T) {
