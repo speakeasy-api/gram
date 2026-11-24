@@ -115,8 +115,9 @@ WHERE n.organization_id = @organization_id;
 
 -- name: ClearNetworkIngressCredentialPlatformCopies :execrows
 -- Destroys up to limit platform-key copies of the organization's credentials
--- after finalize. The organization-key copy stays, so this is not new desired
--- state and updated_at stays.
+-- after finalize. Credentials with an organization-key copy keep it; those
+-- recorded as unreadable have none, so they are left with no credentials at
+-- all. Either way this is not new desired state, so updated_at stays.
 UPDATE network_ingresses AS n
 SET credentials_encrypted = NULL
 WHERE n.id IN (

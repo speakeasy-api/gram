@@ -2073,8 +2073,12 @@ func (d orgEncryptionDeps) RunnerKeys(logger *slog.Logger, platform *encryption.
 
 // NetworkIngressCredentials builds the seal and storage seam for network
 // ingress provider credentials over the process's organization encryption and
-// transition state.
+// transition state. It is nil without a platform key, which keeps the
+// reconciler's missing-key gate and teardown without credentials working.
 func (d orgEncryptionDeps) NetworkIngressCredentials(logger *slog.Logger, platform *encryption.Client) *ingresscredentials.Credentials {
+	if platform == nil {
+		return nil
+	}
 	return ingresscredentials.New(logger, d.Cipher(logger, platform))
 }
 

@@ -219,10 +219,15 @@ func credentialDocument(clientID, clientSecret string) ([]byte, error) {
 // storeCredentials seals the credential document for the organization's
 // transition state and stores it on the ingress, inside dbtx.
 func (s *Service) storeCredentials(ctx context.Context, dbtx repo.DBTX, ingressID uuid.UUID, organizationID string, document []byte) (repo.NetworkIngress, error) {
+	if s.credentials == nil {
+		return repo.NetworkIngress{}, oops.E(oops.CodeUnavailable, nil, "provider credentials cannot be stored: no encryption key is configured").LogError(ctx, s.logger)
+	}
 	ingress, err := s.credentials.Set(ctx, dbtx, ingressID, organizationID, document)
 	switch {
 	case errors.Is(err, ingresscredentials.ErrIngressNotFound):
 		return repo.NetworkIngress{}, oops.E(oops.CodeNotFound, err, "no network ingress found for organization")
+	case errors.Is(err, orgencryption.ErrSuspended), errors.Is(err, orgencryption.ErrInvalidKey):
+		return repo.NetworkIngress{}, oops.E(oops.CodeFailedPrecondition, err, "the organization's encryption key is suspended or invalid, so credentials can't be stored until it is fixed").LogWarn(ctx, s.logger)
 	case err != nil && orgencryption.IsKeyProblem(err):
 		return repo.NetworkIngress{}, oops.E(oops.CodeUnavailable, err, "the organization's encryption key is unavailable; try again later").LogError(ctx, s.logger)
 	case err != nil:

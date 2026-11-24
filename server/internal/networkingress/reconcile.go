@@ -240,7 +240,14 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 		// A missing permission blocks cleanup the same way rejected
 		// credentials do, and the dashboard explains both with one message.
 		blocker := ""
-		if errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected) {
+		var reconcileErr *ReconcileError
+		switch {
+		case errors.As(err, &reconcileErr):
+			// The saved credentials could not be opened yet; the code says
+			// why, and the dashboard shows it until the key comes back.
+			failure = reconcileErr
+			blocker = reconcileErr.Code
+		case errors.Is(err, k8s.ErrNetworkIngressProviderCredentialsRejected):
 			blocker = k8s.NetworkIngressErrorProviderCredentialsRejected
 		}
 		if err := recordCleanupBlocker(ctx, repo.New(conn), row, blocker); err != nil {
