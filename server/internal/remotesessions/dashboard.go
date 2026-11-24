@@ -164,9 +164,9 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
 
-	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.ID.String(), target.ProjectID.String())}
+	checks := []authz.Check{authz.MCPServer(authz.MCPServerIDOf(target.ID), authz.ProjectIDOf(target.ProjectID)).Write()}
 	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting {
-		checks = append(checks, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		checks = append(checks, authz.Project(authz.ProjectIDOf(*authCtx.ProjectID)).Write())
 	}
 	// A user session issuer is not unique to one MCP server. The client binding
 	// this commit rewrites is keyed by issuer, and ResyncMCPServerRemoteSessionIssuers
@@ -176,7 +176,7 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 	// one can reach the client through a gateway or an organization issuer.
 	if req.replacement != nil {
 		for _, id := range req.replacement.ServerIDs {
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
+			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(target.ProjectID)).Write())
 		}
 	}
 	if target.UserSessionIssuerID.Valid {
@@ -191,7 +191,7 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 			if id == target.ID {
 				continue
 			}
-			checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), target.ProjectID.String()))
+			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(target.ProjectID)).Write())
 		}
 	}
 	if err := s.authz.Require(ctx, checks...); err != nil {
@@ -205,7 +205,7 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 // project-level commit change bindings every project on an organization-level
 // user session issuer shares.
 func (s *Service) actorIsOrganizationAdmin(ctx context.Context, organizationID string) (bool, error) {
-	admin, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil})
+	admin, err := s.authz.Evaluate(ctx, authz.Org(authz.OrgIDFrom(organizationID)).Admin())
 	if err != nil {
 		return false, fmt.Errorf("evaluate organization admin: %w", err)
 	}
@@ -443,6 +443,9 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 			if err != nil {
 				return serverIdentityRequest{}, fmt.Errorf("parse replace_client_server_ids: %w", err)
 			}
+			if serverID == uuid.Nil {
+				return serverIdentityRequest{}, errors.New("replace_client_server_ids must not contain the nil id")
+			}
 			serverIDs = append(serverIDs, serverID)
 		}
 		req.replacement = &ClientReplacement{ServerIDs: serverIDs}
@@ -453,6 +456,9 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 	req.mcpServerID, err = uuid.Parse(payload.McpServerID)
 	if err != nil {
 		return serverIdentityRequest{}, fmt.Errorf("parse mcp_server_id: %w", err)
+	}
+	if req.mcpServerID == uuid.Nil {
+		return serverIdentityRequest{}, errors.New("mcp_server_id must not be the nil id")
 	}
 	if (payload.ProviderID == nil) == (payload.CreateProvider == nil) {
 		return serverIdentityRequest{}, errors.New("exactly one of provider_id or create_provider is required")

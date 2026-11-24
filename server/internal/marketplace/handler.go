@@ -68,8 +68,8 @@ func (s *Server) IsMarketplaceRoute(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, RoutePrefix)
 }
 
-// validTokenPattern matches the shape of a marketplace_token minted by
-// generateMarketplaceToken — 32 random bytes encoded as base64url-without-
+// validTokenPattern matches the shape of a marketplace token minted by
+// marketplacetokens.Mint — 32 random bytes encoded as base64url-without-
 // padding, which lands at exactly 43 characters from the [A-Za-z0-9_-] set.
 // Rejecting malformed tokens at the handler boundary keeps the resolver's DB
 // lookup off the path for anyone hammering the proxy with random URLs.

@@ -126,7 +126,7 @@ func TestDeviceKey_LogsOffHashesNothing(t *testing.T) {
 	t.Parallel()
 
 	captured := 0
-	recorder := NewCapturing(func(Row) { captured++ }, func(context.Context, string) (bool, error) { return false, nil })
+	recorder := NewCapturing(func(Row) { captured++ }, nil, func(context.Context, string) (bool, error) { return false, nil })
 	derived := 0
 	recorder.deviceKeys = func(string, string) ([]byte, error) {
 		derived++

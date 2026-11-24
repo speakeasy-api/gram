@@ -6,12 +6,19 @@ export type ToolAnnotation =
   | "idempotent"
   | "open_world";
 
-export const TOOL_ANNOTATIONS: readonly ToolAnnotation[] = [
+const TOOL_ANNOTATIONS: readonly ToolAnnotation[] = [
   "read_only",
   "destructive",
   "idempotent",
   "open_world",
 ];
+
+export function isToolAnnotation(value: unknown): value is ToolAnnotation {
+  return (
+    typeof value === "string" &&
+    (TOOL_ANNOTATIONS as readonly string[]).includes(value)
+  );
+}
 
 export const ANNOTATION_OPTIONS: {
   key: ToolAnnotation;

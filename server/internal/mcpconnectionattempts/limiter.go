@@ -50,6 +50,9 @@ type onceKey struct {
 	memberID       string
 	method         string
 	fold           string
+
+	// remoteSessionClientID keeps two service connections' repeats apart.
+	remoteSessionClientID string
 }
 
 // onceEntry is one key's limit and the rows it has held back.
@@ -112,7 +115,7 @@ func onceKeyOf(row Row) onceKey {
 	if what == "" {
 		what = row.StepResult
 	}
-	return onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject, providerHost: row.ProviderHost, memberID: row.MemberID, method: row.foldMethod, fold: row.foldSubjects}
+	return onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject, providerHost: row.ProviderHost, memberID: row.MemberID, method: row.foldMethod, fold: row.foldSubjects, remoteSessionClientID: row.RemoteSessionClientID}
 }
 
 func (l *onceLimiter) entry(key onceKey) *onceEntry {

@@ -2,6 +2,8 @@ from collections.abc import Sequence
 
 import click
 
+from pystreams import partition
+
 
 def service_options() -> Sequence[click.Option]:
     return [
@@ -16,6 +18,20 @@ def service_options() -> Sequence[click.Option]:
             type=str,
             envvar="GRAM_ENVIRONMENT",
             help="Set the environment.",
+        ),
+        click.Option(
+            ["--partition"],
+            type=click.Choice(partition.PARTITIONS, case_sensitive=True),
+            # No default: a deployment that forgets the partition fails at
+            # startup instead of running as the wrong one. Click treats a set
+            # but empty GRAM_PARTITION as unset, so it fails the same way,
+            # matching the Go server.
+            required=True,
+            envvar="GRAM_PARTITION",
+            show_envvar=True,
+            help="Partition this deployment runs in. A partition is an "
+            "independent production deployment with its own data stores and "
+            "hosts.",
         ),
         click.Option(
             ["--git-sha"],

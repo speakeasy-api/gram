@@ -1310,7 +1310,7 @@
     },
     {
       "name": "list_agent_authorization_checks",
-      "description": "List one agent identity's recent authorization checks, denied checks first, then allowed ones. Each outcome is grouped by permission and resource with how many times it happened, when last, and why the latest was decided as it was; MCP server resources carry the server's name. total counts every check of that outcome in the period, and truncated says the groups cover only the newest 200. Allowed org:hooks_ingest checks, one per hook event the agent sends, are left out of the allowed list and its total, as hidden_allowed_scopes says; denied ones stay with the other denials. The period defaults to the seven days before to (now by default) and spans at most 90 days. Pass the exact agent_id. Requires the same access as the agent's Authorization checks panel in the dashboard: its owner or agent:read on the agent (agent:write does not include it), and org:read. Read-only.",
+      "description": "List one agent identity's recent authorization checks, denied checks first, then allowed ones. Each outcome is grouped by permission and resource with how many times it happened, when last, and why the latest was decided as it was; MCP server resources carry the server's name, and an auth client (upstream credential) check carries the server it was used for in server_id and resource_name. Reason connection_owner_mismatch means the agent was refused another member's personal connection, which serves only that member. total counts every check of that outcome in the period, and truncated says the groups cover only the newest 200. Allowed org:hooks_ingest checks, one per hook event the agent sends, are left out of the allowed list and its total, as hidden_allowed_scopes says; denied ones stay with the other denials. The period defaults to the seven days before to (now by default) and spans at most 90 days. Pass the exact agent_id. Requires the same access as the agent's Authorization checks panel in the dashboard: its owner or agent:read on the agent (agent:write does not include it), and org:read. Read-only.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -3760,7 +3760,7 @@
     },
     {
       "name": "list_risk_presets",
-      "description": "List the use-case presets a risk policy can start from, with what each one detects, its policy type, default action and severity. Use a preset id with create_risk_policy to create the policy without choosing detectors by hand. can_scope_to_mcp says whether the preset can be limited to chosen MCP servers with create_risk_policy's mcp_scope. Presets marked requires_prompt_policies only work in projects where prompt policies are switched on.",
+      "description": "List the use-case presets a risk policy can start from, with what each one detects, its policy type, default action and severity. Use a preset id with create_risk_policy to create the policy without choosing detectors by hand. can_scope_to_mcp says whether the preset can be limited to chosen MCP servers with create_risk_policy's mcp_scope.",
       "input_schema": {
         "type": "object",
         "properties": {},
@@ -8126,7 +8126,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],
@@ -8193,7 +8193,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],
@@ -8216,7 +8216,7 @@
                 },
                 "disposition": {
                   "type": "string",
-                  "description": "optional closed tool disposition: read_only, destructive, idempotent, or open_world"
+                  "description": "optional closed tool disposition: read_only, destructive, idempotent, open_world, or unannotated (tools that declare no hints)"
                 }
               },
               "required": ["mcp_id"],

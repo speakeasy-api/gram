@@ -65,6 +65,8 @@ export type ServerOnBehalfOf =
   /** The server asks for a person's connection and none is assigned. */
   | { kind: "missing" }
   | { kind: "error" }
+  /** The viewer may not see whose connection the agent uses. */
+  | { kind: "forbidden" }
   /** No server the dashboard can list goes by this id. */
   | { kind: "unknown" };
 
@@ -87,6 +89,7 @@ export function serverOnBehalfOf(
   }
   if (connection.status === "checking") return { kind: "checking" };
   if (connection.status === "error") return { kind: "error" };
+  if (connection.status === "forbidden") return { kind: "forbidden" };
   if (connection.status === "missing") return { kind: "missing" };
   const people = onBehalfOfPeople(connection, now);
   if (people.length === 0) return { kind: "shared" };

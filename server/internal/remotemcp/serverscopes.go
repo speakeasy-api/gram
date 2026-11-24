@@ -44,7 +44,7 @@ type pinnableServer struct {
 }
 
 func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerScopesPayload) (*gen.RemoteMcpServerScopes, error) {
-	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, authz.ScopeMCPRead, payload.McpServerID)
+	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, authz.MCPServerRef.Read, payload.McpServerID)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 }
 
 func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerScopePinPayload) (*gen.RemoteMcpServerScopes, error) {
-	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, authz.ScopeMCPWrite, payload.McpServerID)
+	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, authz.MCPServerRef.Write, payload.McpServerID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,8 +207,8 @@ func writeScopePin(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, 
 	return &updated, nil
 }
 
-// authorizeServerScopes requires scope on the server: mcp:read to view, mcp:write to pin.
-func (s *Service) authorizeServerScopes(ctx context.Context, scope authz.Scope, rawID string) (*contextvalues.AuthContext, *slog.Logger, uuid.UUID, error) {
+// authorizeServerScopes requires permission on the server: mcp:read to view, mcp:write to pin.
+func (s *Service) authorizeServerScopes(ctx context.Context, permission func(authz.MCPServerRef) authz.Check, rawID string) (*contextvalues.AuthContext, *slog.Logger, uuid.UUID, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, nil, uuid.Nil, oops.C(oops.CodeUnauthorized)
@@ -218,7 +218,7 @@ func (s *Service) authorizeServerScopes(ctx context.Context, scope authz.Scope, 
 	if err != nil {
 		return nil, nil, uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(scope, mcpServerID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, permission(authz.MCPServer(authz.MCPServerIDOf(mcpServerID), authz.ProjectIDOf(*authCtx.ProjectID)))); err != nil {
 		return nil, nil, uuid.Nil, err
 	}
 	return authCtx, logger, mcpServerID, nil
@@ -245,7 +245,7 @@ func (s *Service) authorizeSharingServers(ctx context.Context, logger *slog.Logg
 		if id == target.server.ID {
 			continue
 		}
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), authCtx.ProjectID.String()))
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(*authCtx.ProjectID)).Write())
 	}
 	if len(checks) > 0 {
 		if err := s.authz.Require(ctx, checks...); err != nil {
@@ -258,12 +258,12 @@ func (s *Service) authorizeSharingServers(ctx context.Context, logger *slog.Logg
 // canPin reports whether the caller holds mcp:write on every sharing server
 // (the target included) without recording a denial; failures read as false.
 func (s *Service) canPin(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer, sharing []uuid.UUID) bool {
-	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.server.ID.String(), authCtx.ProjectID.String())}
+	checks := []authz.Check{authz.MCPServer(authz.MCPServerIDOf(target.server.ID), authz.ProjectIDOf(*authCtx.ProjectID)).Write()}
 	for _, id := range sharing {
 		if id == target.server.ID {
 			continue
 		}
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), authCtx.ProjectID.String()))
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(*authCtx.ProjectID)).Write())
 	}
 	ok, err := s.authz.Evaluate(ctx, checks...)
 	if err != nil {

@@ -35,11 +35,6 @@ vi.mock("@/elements/hooks/useMCPTools", () => ({
     error: null,
   }),
 }));
-vi.mock("@/elements/lib/errorTracking", () => ({
-  initErrorTracking: vi.fn(),
-  trackError: vi.fn(),
-}));
-
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
