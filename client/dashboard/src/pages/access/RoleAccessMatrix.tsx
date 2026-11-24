@@ -252,8 +252,8 @@ function toolLimitText(limit: ToolLimit): string {
       const named = limit.tools?.length ?? 0;
       const namedText = named === 1 ? "1 tool" : `${named} tools`;
       if (labels.length === 0) return named === 0 ? "No tools" : namedText;
-      const kinds = `${labels.join(", ")} tools`;
-      return named === 0 ? kinds : `${kinds} + ${namedText}`;
+      const kinds = labels.join(", ");
+      return named === 0 ? `${kinds} tools` : `${kinds} + ${namedText}`;
     }
   }
 }
@@ -703,7 +703,10 @@ function McpMatrix({
             );
           }}
         />
-        <span className={cn("truncate", !every && "text-muted-foreground")}>
+        <span
+          className={cn("truncate", !every && "text-muted-foreground")}
+          title={every ? undefined : toolLimitText(access.limit)}
+        >
           {every ? "All tools" : toolLimitText(access.limit)}
         </span>
       </span>
