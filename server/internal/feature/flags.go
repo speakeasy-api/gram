@@ -114,8 +114,9 @@ const (
 	FlagMCPConnectionHealth Flag = "mcp-connection-health"
 	// FlagIntentPolicies gates the Intent-based policies page and its
 	// intentPolicies endpoints (guardrail, analyze, upload). Evaluated on the
-	// server and in the dashboard under the same key; targeted by PostHog
-	// organization group (org slug). Fails closed. A rollout gate on top of the
+	// server and in the dashboard under the same key; targeted per person by
+	// the `email` person property (the server passes it for local evaluation,
+	// the dashboard identifies with it). Fails closed. A rollout gate on top of the
 	// endpoints' chat and project RBAC checks, not authorization. Removed once
 	// the feature is GA.
 	FlagIntentPolicies Flag = "intent-policies"

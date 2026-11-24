@@ -1,6 +1,7 @@
 package intentpolicies_test
 
 import (
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -34,6 +35,23 @@ func TestEndpointsRequireRolloutFlag(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	_, err = svc.UploadTranscript(ctx, &gen.UploadTranscriptPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "x", Content: transcript})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestRolloutTargetsPeopleByEmail(t *testing.T) {
+	t.Parallel()
+
+	member := new(feature.InMemory)
+	member.SetFlag(feature.FlagIntentPolicies, mockidp.MockUserEmail, true)
+	ctx, svc := newTestServiceWithFlags(t, classifier.Noop{}, member)
+	_, err := svc.GetGuardrail(ctx, &gen.GetGuardrailPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+
+	// Rolled out to someone else in the same organization.
+	other := new(feature.InMemory)
+	other.SetFlag(feature.FlagIntentPolicies, "someone-else@example.com", true)
+	ctx, svc = newTestServiceWithFlags(t, classifier.Noop{}, other)
+	_, err = svc.GetGuardrail(ctx, &gen.GetGuardrailPayload{SessionToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 

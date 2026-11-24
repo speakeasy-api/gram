@@ -54,7 +54,7 @@ export type AnalyzeIntentSessionMutationError =
  * analyzeSession intentPolicies
  *
  * @remarks
- * Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the intent-policies rollout for the organization.
+ * Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.
  */
 export function useAnalyzeIntentSessionMutation(
   options?: MutationHookOptions<

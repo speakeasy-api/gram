@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getGuardrail intentPolicies
  *
  * @remarks
- * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.
+ * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.
  */
 export function intentPoliciesGetGuardrail(
   client: GramCore,

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -106,8 +107,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// authorize admits a caller whose organization has the intent-policies
-// rollout and who passes check for the active project.
+// authorize admits a caller who is in the intent-policies rollout and passes
+// check for the active project.
 func (s *Service) authorize(ctx context.Context, check func(authz.ProjectID) authz.Check) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -115,11 +116,20 @@ func (s *Service) authorize(ctx context.Context, check func(authz.ProjectID) aut
 	}
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	evaluation, err := feature.EvaluateFlag(ctx, s.features, feature.FlagIntentPolicies, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+	// The rollout targets people by email, the same distinct id and person
+	// property the dashboard identifies with. No email, no access.
+	email := ""
+	if authCtx.Email != nil {
+		email = strings.TrimSpace(*authCtx.Email)
+	}
+	if email == "" {
+		return nil, logger, oops.C(oops.CodeNotFound)
+	}
+	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagIntentPolicies, email, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""), map[string]string{"email": email})
 	if err != nil {
 		logger.WarnContext(ctx, "evaluate intent-policies flag", attr.SlogError(err))
 	}
-	if evaluation != feature.EvaluationEnabled {
+	if !enabled {
 		return nil, logger, oops.C(oops.CodeNotFound)
 	}
 

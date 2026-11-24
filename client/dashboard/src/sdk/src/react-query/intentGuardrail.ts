@@ -59,7 +59,7 @@ export type IntentGuardrailQueryError =
  * getGuardrail intentPolicies
  *
  * @remarks
- * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.
+ * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.
  */
 export function useIntentGuardrail(
   request?: GetIntentGuardrailRequest | undefined,
@@ -85,7 +85,7 @@ export function useIntentGuardrail(
  * getGuardrail intentPolicies
  *
  * @remarks
- * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the intent-policies rollout for the organization.
+ * Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.
  */
 export function useIntentGuardrailSuspense(
   request?: GetIntentGuardrailRequest | undefined,

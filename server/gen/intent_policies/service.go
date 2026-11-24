@@ -19,16 +19,16 @@ import (
 // nothing is enforced.
 type Service interface {
 	// Get the built-in intent guardrail: grounding statements, label questions,
-	// and contracts. Requires the intent-policies rollout for the organization.
+	// and contracts. Requires the caller to be in the intent-policies rollout.
 	GetGuardrail(context.Context, *GetGuardrailPayload) (res *IntentGuardrail, err error)
 	// Label every tool call of one chat session and evaluate the guardrail
 	// contracts. Synchronous, judges at most the first 200 calls of the latest
 	// generation by default, and persists nothing. Use offset and limit to analyze
-	// in batches. Requires the intent-policies rollout for the organization.
+	// in batches. Requires the caller to be in the intent-policies rollout.
 	AnalyzeSession(context.Context, *AnalyzeSessionPayload) (res *IntentSessionAnalysis, err error)
 	// Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as
 	// a chat session in the current project so it can be analyzed. Requires the
-	// intent-policies rollout for the organization.
+	// caller to be in the intent-policies rollout.
 	UploadTranscript(context.Context, *UploadTranscriptPayload) (res *UploadTranscriptResult, err error)
 }
 

@@ -120,7 +120,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.shadowMCP, scope: ["org:admin"] as Scope[] },
-      // Rollout-gated per org; the server enforces the same flag and chat RBAC.
+      // Rollout-gated per person; the server enforces the same flag and chat RBAC.
       ...(isIntentPoliciesEnabled
         ? [{ route: routes.intentPolicies, scope: ["chat:read"] as Scope[] }]
         : []),

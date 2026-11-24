@@ -54,7 +54,7 @@ export type UploadIntentTranscriptMutationError =
  * uploadTranscript intentPolicies
  *
  * @remarks
- * Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the intent-policies rollout for the organization.
+ * Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.
  */
 export function useUploadIntentTranscriptMutation(
   options?: MutationHookOptions<
