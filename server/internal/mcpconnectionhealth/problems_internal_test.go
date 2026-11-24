@@ -106,6 +106,18 @@ func TestProblemText_EachRule(t *testing.T) {
 			fact:     "On Linear. The app's sign-in to Speakeasy fails. " + admin(mcpconnectionattempts.CodeInvalidBearerToken) + " Another app worked on this server in this time.",
 		},
 		{
+			name: "same app version on one server and before reaching a server",
+			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, People: 2,
+				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:a", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken), func() mcpconnectionattempts.FailingPerson {
+					e := ep("user:b", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken)
+					e.ServerKind, e.ServerID = "authorization_server", "https://auth.example.com"
+					return e
+				}()},
+				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}, OtherAppsWorked: true},
+			headline: "2 people on Claude Code 2.0.1 can't sign in",
+			fact:     "On Linear, and before reaching an MCP server. The app's sign-in to Speakeasy fails. Another app worked on this server in this time.",
+		},
+		{
 			name: "one person with a rejected saved key on one server",
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: service, People: 1,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, service, mcpconnectionattempts.CodeStaticKeyRejected)}},

@@ -23,6 +23,7 @@ var headlines = map[problems.Rule][2]string{
 // The fact sentences. Each states only what the episodes establish.
 const (
 	factOn            = "On {servers}."
+	factOnAndNoServer = "On {servers}, and before reaching an MCP server."
 	factAppSignIn     = "The app's sign-in to Speakeasy fails."
 	factServiceSignIn = "Signing in to {service} fails."
 	factSavedSignIn   = "Requests with the saved sign-in for {service} are failing."
@@ -80,7 +81,11 @@ func fact(n names, p problems.Problem) string {
 	named := p.Rule == problems.RuleSameServer
 	if p.Rule == problems.RuleOnePerson || p.Rule == problems.RuleSameAppVersion {
 		if where := serversPhrase(n, p); where != "" {
-			out = append(out, fill(factOn, "{servers}", where))
+			on := factOn
+			if slices.ContainsFunc(p.Episodes, func(e mcpconnectionattempts.FailingPerson) bool { return !e.OnMCPServer() }) {
+				on = factOnAndNoServer
+			}
+			out = append(out, fill(on, "{servers}", where))
 			named = true
 		}
 	}
@@ -137,11 +142,13 @@ func fact(n names, p problems.Problem) string {
 	}
 	if p.OtherAppsWorked {
 		switch {
+		// An app version's servers each have another app working; its people on no server are not about a server.
+		case p.Rule == problems.RuleSameAppVersion && reachedServers(p) == 1:
+			out = append(out, fill(factOtherApp, "{server}", "this server"))
+		case p.Rule == problems.RuleSameAppVersion:
+			out = append(out, fill(factOtherAppEach, "{servers}", "these servers"))
 		case servers == 1:
 			out = append(out, fill(factOtherApp, "{server}", server))
-		// An app version takes only failures on servers where another app worked.
-		case p.Rule == problems.RuleSameAppVersion:
-			out = append(out, fill(factOtherAppEach, "{servers}", several))
 		default:
 			out = append(out, fill(factOtherAppSome, "{servers}", several))
 		}
