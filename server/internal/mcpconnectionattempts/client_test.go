@@ -297,7 +297,7 @@ func TestReportedClient_HeldBackRowsReadNothing(t *testing.T) {
 
 	var reads atomic.Int32
 	var written atomic.Int32
-	recorder := NewCapturing(func(Row) { written.Add(1) }, logsOn)
+	recorder := NewCapturing(func(Row) { written.Add(1) }, nil, logsOn)
 	recorder.limiter = newOnceLimiter()
 	recorder.queue = make(chan Row, 1)
 	scope := testScope()

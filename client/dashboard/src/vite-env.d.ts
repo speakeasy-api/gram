@@ -22,10 +22,6 @@ interface ImportMetaEnv {
   readonly VITE_AGENTATION_ENABLED?: string | undefined;
   readonly VITE_AGENTATION_URL?: string | undefined;
   readonly VITE_DEV_HOSTNAMES?: string | undefined;
-  readonly VITE_DATADOG_APPLICATION_ID?: string | undefined;
-  readonly VITE_DATADOG_CLIENT_TOKEN?: string | undefined;
-  readonly VITE_DATADOG_SITE?: string | undefined;
-  readonly VITE_DATADOG_ENV?: string | undefined;
   readonly VITE_ELEMENTS_ENABLE_CASSETTE_RECORDING?: string | undefined;
 }
 

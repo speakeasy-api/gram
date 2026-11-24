@@ -14,13 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -101,7 +101,7 @@ func (p *stubProvisioner) GetModelUsage(ctx context.Context, generationID string
 type testInstance struct {
 	service     *modelkeys.Service
 	conn        *pgxpool.Pool
-	enc         *encryption.Client
+	keys        *aiproviderkeys.Keys
 	provisioner *stubProvisioner
 	features    *productfeatures.Client
 }
@@ -143,7 +143,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	enc := testenv.NewEncryptionClient(t)
+	keys := testenv.NewAIProviderKeys(t, conn)
 
 	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil, usageCalls: 0}
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
@@ -154,7 +154,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		conn,
 		sessionManager,
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		enc,
+		keys,
 		provisioner,
 		features,
 		audit.NewLogger(),
@@ -163,7 +163,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	return ctx, &testInstance{
 		service:     svc,
 		conn:        conn,
-		enc:         enc,
+		keys:        keys,
 		provisioner: provisioner,
 		features:    features,
 	}

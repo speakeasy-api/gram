@@ -3,6 +3,7 @@ package modelkeys
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -19,18 +20,19 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/model_keys/server"
 	gen "github.com/speakeasy-api/gram/server/gen/model_keys"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -42,7 +44,7 @@ type Service struct {
 	db          *pgxpool.Pool
 	auth        *auth.Auth
 	authz       *authz.Engine
-	enc         *encryption.Client
+	keys        *aiproviderkeys.Keys
 	provisioner openrouter.Provisioner
 	features    *productfeatures.Client
 	audit       *audit.Logger
@@ -57,7 +59,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
-	enc *encryption.Client,
+	keys *aiproviderkeys.Keys,
 	provisioner openrouter.Provisioner,
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
@@ -70,7 +72,7 @@ func NewService(
 		db:          db,
 		auth:        auth.New(logger, db, sessions, authzEngine),
 		authz:       authzEngine,
-		enc:         enc,
+		keys:        keys,
 		provisioner: provisioner,
 		features:    features,
 		audit:       auditLogger,
@@ -157,11 +159,6 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "the model provider rejected the API key").LogError(ctx, logger)
 	}
 
-	encrypted, err := s.enc.Encrypt([]byte(apiKey))
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "encrypt model provider key").LogError(ctx, logger)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin model provider key transaction").LogError(ctx, logger)
@@ -183,13 +180,12 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 		snapshotBefore = modelProviderKeySnapshot(replaced[0])
 	}
 
-	row, err := queries.InsertKey(ctx, repo.InsertKeyParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       *authCtx.ProjectID,
-		Slot:            slot,
-		Provider:        provider,
-		ApiKeyEncrypted: encrypted,
-		Enabled:         payload.Enabled,
+	inserted, err := queries.InsertKey(ctx, repo.InsertKeyParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Slot:           slot,
+		Provider:       provider,
+		Enabled:        payload.Enabled,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -197,6 +193,22 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 			return nil, oops.E(oops.CodeConflict, err, "model provider key was updated concurrently, retry").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "save model provider key").LogError(ctx, logger)
+	}
+
+	var row repo.ModelProviderKey
+	err = s.keys.Store(ctx, dbtx, authCtx.ActiveOrganizationID, aiproviderkeys.ModelProviderKeys, []byte(apiKey), func(ctx context.Context, copies orgencryption.Copies, generation int64) (bool, error) {
+		stored, err := queries.SetKeyAPIKey(ctx, repo.SetKeyAPIKeyParams{PlatformCopy: copies.Platform, OrgCopy: copies.Org, ID: inserted.ID, OrganizationID: authCtx.ActiveOrganizationID, DecidedGeneration: generation})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("set model provider key: %w", err)
+		}
+		row = stored
+		return true, nil
+	})
+	if err != nil {
+		return nil, aiproviderkeys.Error(err, "encrypt model provider key").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogModelProviderKeyUpsert(ctx, dbtx, audit.LogModelProviderKeyUpsertEvent{

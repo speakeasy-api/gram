@@ -1,6 +1,13 @@
 // oxlint-disable react/only-export-components -- the layout and the hook its sections report through belong together
 import { ReadinessIssueMarker } from "./readiness-issues";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { scrollWithinPage } from "@/lib/scroll-within-page";
 import { cn } from "@/lib/utils";
 import {
@@ -71,6 +78,8 @@ type IndexArea = {
   group: SettingsGroup;
   /** How many section headings the area shows. */
   headingCount: number;
+  /** The heading of the area's only section, when it has exactly one. */
+  soleTitle: string | undefined;
   links: IndexLink[];
 };
 
@@ -131,6 +140,7 @@ export function SettingsLayout({
     return {
       group,
       headingCount: titled.length,
+      soleTitle: titled.length === 1 ? titled[0]?.title : undefined,
       links:
         titled.length === 0
           ? [{ key: group.id, title: group.title, ...area }]
@@ -202,14 +212,47 @@ export function SettingsLayout({
             the scroll container and a long index never scrolls out under the
             tabs at the end of the page. */}
         <div className="min-w-0 lg:pb-32">
-          {areas.map(({ group, headingCount }) => (
+          {/* Below lg the index is hidden; this select stands in for it. */}
+          <div className="mb-8 lg:hidden">
+            <Select
+              value={activeKey ?? ""}
+              onValueChange={(key) => {
+                const link = links.find((entry) => entry.key === key);
+                if (link) select(link);
+              }}
+            >
+              <SelectTrigger
+                className="w-full max-w-xs"
+                aria-label="Jump to settings section"
+              >
+                <span className="text-muted-foreground mr-1">Jump to</span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {links.map((link) => (
+                  <SelectItem key={link.key} value={link.key}>
+                    {link.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {areas.map(({ group, headingCount, soleTitle }) => (
             <SettingsGroupSection
               key={group.id}
               group={group}
               report={report}
-              // A lone section's heading names the area in the index, so the
-              // eyebrow only shows where the index is hidden.
-              labelHiddenOnWide={headingCount === 1}
+              // A lone section whose heading repeats the area's name needs no
+              // eyebrow at any width. Any other lone section's heading names
+              // the area in the index, so the eyebrow only shows where the
+              // index is hidden.
+              label={
+                soleTitle === group.title
+                  ? "hidden"
+                  : headingCount === 1
+                    ? "narrow-only"
+                    : "shown"
+              }
             />
           ))}
         </div>
@@ -221,11 +264,11 @@ export function SettingsLayout({
 function SettingsGroupSection({
   group,
   report,
-  labelHiddenOnWide,
+  label,
 }: {
   group: SettingsGroup;
   report: ReportHeading;
-  labelHiddenOnWide: boolean;
+  label: "shown" | "narrow-only" | "hidden";
 }): JSX.Element {
   const context = useMemo(
     () => ({ groupId: group.id, report }),
@@ -237,11 +280,15 @@ function SettingsGroupSection({
       aria-labelledby={`${group.id}-title`}
       // The last area keeps a viewport of room below it, so the index can
       // bring even a short final area to the top.
-      className="border-border scroll-mt-8 border-t pt-8 pb-14 first:border-t-0 first:pt-0 last:min-h-[calc(100vh-24rem)] last:pb-0"
+      className="border-border scroll-mt-8 border-t pt-8 pb-14 first-of-type:border-t-0 first-of-type:pt-0 last:min-h-[calc(100vh-24rem)] last:pb-0"
     >
       <h2
         id={`${group.id}-title`}
-        className={cn("text-eyebrow mb-6", labelHiddenOnWide && "lg:sr-only")}
+        className={cn(
+          "text-eyebrow mb-6",
+          label === "narrow-only" && "lg:sr-only",
+          label === "hidden" && "sr-only",
+        )}
       >
         {group.title}
       </h2>

@@ -1,5 +1,12 @@
 # @gram-ai/functions
 
+## 0.21.0
+
+### Patch Changes
+
+- Updated dependencies [8ec032b]
+  - @speakeasy-api/functions@0.21.0
+
 ## 0.20.1
 
 ### Patch Changes

@@ -310,7 +310,7 @@ func seedMarketplaceConnection(t *testing.T, ctx context.Context, conn *pgxpool.
 
 	_, err := pluginsrepo.New(conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{
 		ProjectID: projectID, InstallationID: 1, RepoOwner: "example-owner", RepoName: "example-marketplace",
-		MarketplaceToken: pgtype.Text{}, PublishedMcpFingerprints: publishedFingerprints, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
+		PublishedMcpFingerprints: publishedFingerprints, PublishedHooksVersion: pgtype.Text{}, PublishedHooksConfig: nil,
 	})
 	require.NoError(t, err)
 }

@@ -397,6 +397,9 @@ export function fromFunctions(
             description: r.description,
             mimeType: r.mimeType,
             title: r.title,
+            ...(r.meta != null
+              ? { _meta: r.meta as Record<string, unknown> }
+              : {}),
           })),
         };
       },
@@ -408,12 +411,16 @@ export function fromFunctions(
         const { uri } = req.params;
         const resp = await g.handleResourceRead({ uri });
         const text = await resp.text();
+        const meta = manifest.resources?.find((r) => r.uri === uri)?.meta;
         return {
           contents: [
             {
               uri,
               mimeType: resp.headers.get("Content-Type") || "text/plain",
               text,
+              ...(meta != null
+                ? { _meta: meta as Record<string, unknown> }
+                : {}),
             },
           ],
         };

@@ -520,6 +520,7 @@ const (
 	NetworkIngressKubernetesResourceKey = attribute.Key("gram.network_ingress.kubernetes.resource")
 
 	TailnetGatewaySlotKey         = attribute.Key("gram.tailnet_gateway.slot")
+	TailnetGatewayTsnetPortKey    = attribute.Key("gram.tailnet_gateway.tsnet_port")
 	TailnetGatewayNodeStatusKey   = attribute.Key("gram.tailnet_gateway.node_status")
 	TailnetGatewayOperationKey    = attribute.Key("gram.tailnet_gateway.operation")
 	TailnetGatewayResultKey       = attribute.Key("gram.tailnet_gateway.result")
@@ -708,6 +709,10 @@ const (
 	// the encryption key a process holds, so pods with different keys can be
 	// told apart without revealing the key.
 	EncryptionKeyFingerprintKey = attribute.Key("gram.encryption.key_fingerprint")
+
+	// PartitionKey is the Speakeasy partition (an independent production
+	// deployment, such as us or eu) that emitted the telemetry.
+	PartitionKey = attribute.Key("gram.partition")
 
 	// OrgEncryptionUseCaseKey is the organization encryption use case a value
 	// or key belongs to, such as oauth-session-tokens.
@@ -2625,6 +2630,10 @@ func SlogTailnetGatewaySlot(v int32) slog.Attr {
 	return slog.Int(string(TailnetGatewaySlotKey), int(v))
 }
 
+func SlogTailnetGatewayTsnetPort(v uint16) slog.Attr {
+	return slog.Int(string(TailnetGatewayTsnetPortKey), int(v))
+}
+
 // TailnetGatewayCertificateExpiresAtKey is when a gateway node's TLS
 // certificate expires.
 const TailnetGatewayCertificateExpiresAtKey = attribute.Key("gram.tailnet_gateway.certificate_expires_at")
@@ -2775,6 +2784,14 @@ func OAuthStoredToken[V ~string](v V) attribute.KeyValue {
 
 func SlogEncryptionKeyFingerprint(v string) slog.Attr {
 	return slog.String(string(EncryptionKeyFingerprintKey), v)
+}
+
+func Partition[V ~string](v V) attribute.KeyValue {
+	return PartitionKey.String(string(v))
+}
+
+func SlogPartition[V ~string](v V) slog.Attr {
+	return slog.String(string(PartitionKey), string(v))
 }
 
 func OrgEncryptionUseCase[V ~string](v V) attribute.KeyValue {
