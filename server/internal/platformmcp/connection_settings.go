@@ -182,7 +182,7 @@ func (s *MCPConnectionSettingsService) gatewayMemberSignIn(ctx context.Context, 
 		if member.McpServerToolsetID.Valid || member.McpServerUnproxiedMcpServerID.Valid || member.McpServerSlug.String == "" || (!member.McpServerRemoteMcpServerID.Valid && !member.McpServerTunneledMcpServerID.Valid) {
 			continue
 		}
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, member.McpServerID.String(), projectID.String()))
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(member.McpServerID), authz.ProjectIDOf(projectID)).Read())
 		if err != nil {
 			return nil, fmt.Errorf("authorize gateway member sign-in status: %w", err)
 		}
