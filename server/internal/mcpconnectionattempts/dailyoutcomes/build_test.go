@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -47,6 +48,9 @@ const (
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
 
+// staffOrganizationID is the staff organization newFixture's builder configures.
+const staffOrganizationID = "org-staff"
+
 type fixture struct {
 	t     *testing.T
 	b     *Builder
@@ -64,7 +68,7 @@ func newFixture(t *testing.T) *fixture {
 	db, err := infra.CloneTestDatabase(t, "dailyoutcomes")
 	require.NoError(t, err)
 	now := time.Now().UTC()
-	return &fixture{t: t, b: NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, ch), ch: ch, db: db, org: "org-" + uuid.NewString(), now: now, today: StartOfDay(now)}
+	return &fixture{t: t, b: NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, ch, staff.NewOrganization(staffOrganizationID)), ch: ch, db: db, org: "org-" + uuid.NewString(), now: now, today: StartOfDay(now)}
 }
 
 func (f *fixture) day(daysAgo int) time.Time {
@@ -396,7 +400,7 @@ func TestDaysToBuild(t *testing.T) {
 	require.NotContains(t, days, old, "a settled day is left alone")
 	require.NotContains(t, days, demoOnly, "the demo organization is left out")
 
-	limited := NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.db, f.ch)
+	limited := NewBuilder(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.db, f.ch, staff.NewOrganization(staffOrganizationID))
 	limited.backfillStart = recent
 	days, err = limited.DaysToBuild(t.Context(), f.now)
 	require.NoError(t, err)
@@ -418,10 +422,10 @@ func TestBuildDayKeepsVendorNamesOnlyWhenSeveralOrganizationsUseThem(t *testing.
 	}
 	// GitHub and the catalog app are each shared, but only one organization uses them together.
 	write(f.org, "https://github.com", catalogApp)
-	// Speakeasy's own organization does not count toward the threshold.
+	// The staff organization does not count toward the threshold.
 	write(newOrg(), "https://slack.com", "dcr-client")
 	write(newOrg(), "https://slack.com", "dcr-client")
-	write("5a25158b-24dc-4d49-b03d-e85acfbea59c", "https://slack.com", "dcr-client")
+	write(staffOrganizationID, "https://slack.com", "dcr-client")
 	write(newOrg(), "https://linear.app", "https://zed.dev/oauth/client-metadata.json")
 
 	f.build(day)
@@ -555,8 +559,9 @@ func TestBuildDayCountsTheProviderThatEndedTheAttempt(t *testing.T) {
 	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }
 
-// A refused used token now names its owner, which must not change the stored day.
-func TestBuildDayLeavesAnAttributedUsedTokenUnpaired(t *testing.T) {
+// A refused used token names its owner, so the owner's next connection on the same app
+// fixes it, as for every other refused refresh. A day stored before showed it unfixed.
+func TestBuildDayPairsAnAttributedUsedTokenWithTheNextConnection(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	day := f.day(daysAgoUsedToken)
@@ -570,10 +575,12 @@ func TestBuildDayLeavesAnAttributedUsedTokenUnpaired(t *testing.T) {
 		f.row(refused, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true, 0, mcpconnectionattempts.Subject(&subject)),
 		f.row(connected, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 0, mcpconnectionattempts.Subject(&subject)),
 	)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|connected||", 1)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|", 1)
 
 	f.build(day)
 	require.Equal(t, map[string]uint64{
-		"|dcr||inbound_token|connected||":                                   1,
-		"|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|": 1,
-	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day), "the same as when the row named nobody")
+		"|dcr||inbound_token|connected||":                                        1,
+		"|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|retry": 1,
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }

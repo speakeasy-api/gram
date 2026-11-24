@@ -47,10 +47,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
@@ -121,6 +123,10 @@ type Service struct {
 
 	// crashReports counts forwarded crash reports. Nil only logs them.
 	crashReports metric.Int64Counter
+
+	// marketplaceTokens opens each served project's marketplace token into
+	// its install URL.
+	marketplaceTokens *marketplacetokens.Tokens
 }
 
 // WorkloadTokenTargets resolves where a workload exchanges an identity
@@ -149,6 +155,7 @@ func NewService(aiCatalog *aivendors.Store,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
 	deviceAgentTokens *deviceagenttoken.Issuer,
+	marketplaceTokens *marketplacetokens.Tokens,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
@@ -177,6 +184,7 @@ func NewService(aiCatalog *aivendors.Store,
 		claudePlugins:                nil,
 		stateReportLimiter:           nil,
 		newStateReportLimiter:        nil,
+		marketplaceTokens:            marketplaceTokens,
 	}
 }
 
@@ -645,7 +653,21 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		servers = nil
 	}
 
-	result := mv.BuildAgentPluginsView(rows, marketplaceURL, servers)
+	// A token that does not open fails the whole poll rather than leaving its
+	// marketplace out: the device keeps its cached policy when a poll fails,
+	// but removes a marketplace a successful poll omits.
+	openToken := func(row repo.GetAgentPluginSetRow) (string, error) {
+		return s.marketplaceTokens.Open(ctx, s.db, marketplacetokens.Stored{
+			OrganizationID: row.ConnectionOrganizationID,
+			Hash:           row.MarketplaceTokenHash,
+			Copies:         orgencryption.Copies{Platform: row.MarketplaceTokenEncrypted, Org: row.MarketplaceTokenOrgEncrypted},
+			Legacy:         row.MarketplaceToken,
+		})
+	}
+	result, err := mv.BuildAgentPluginsView(rows, openToken, marketplaceURL, servers)
+	if err != nil {
+		return nil, nil, marketplacetokens.OpenError(ctx, s.logger, err, authCtx.ActiveOrganizationID)
+	}
 	configuration := defaultDeviceAgentConfigurationView()
 	if hasConfiguration {
 		built, err := buildDeviceAgentConfigurationView(configurationRow)

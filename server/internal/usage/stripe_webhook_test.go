@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -390,7 +391,7 @@ func stripeLifecycleOpenRouterProvisioner(t *testing.T, db *pgxpool.Pool, baseUR
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	return openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 }
 
@@ -1626,7 +1627,7 @@ func TestStripeCheckoutCompletionConvertsActiveEnterpriseTrialAtomicallyOnce(t *
 	require.False(t, ssoEnabled)
 	require.NotContains(t, featureCache.snapshot(), productfeatures.FeatureSSO)
 
-	enterpriseFloor, ok := openrouter.DefaultCreditLimit(stripeWebhookOrganizationID, "enterprise", false)
+	enterpriseFloor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, stripeWebhookOrganizationID, "enterprise", false)
 	require.True(t, ok)
 	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
 	require.False(t, chat.Disabled)
@@ -1733,7 +1734,7 @@ func TestStripeCheckoutTrialConversionAuditTreatsLimitOnlyChangeAsUnchangedAcces
 	require.Equal(t, false, chatBefore["key_access_changed"])
 	require.Equal(t, false, chatAfter["key_access_changed"])
 	require.EqualValues(t, 17, chatBefore["monthly_credits"])
-	enterpriseFloor, ok := openrouter.DefaultCreditLimit(stripeWebhookOrganizationID, "enterprise", false)
+	enterpriseFloor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, stripeWebhookOrganizationID, "enterprise", false)
 	require.True(t, ok)
 	require.EqualValues(t, enterpriseFloor, chatAfter["monthly_credits"])
 	require.NotEqual(t, chatBefore["monthly_credits"], chatAfter["monthly_credits"])
@@ -1757,7 +1758,7 @@ func TestStripeCheckoutCompletionAfterTrialExpiryConvertsBothKeys(t *testing.T) 
 	converted, err := trialsrepo.New(db).GetTrial(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.True(t, converted.ConvertedAt.Valid)
-	floor, ok := openrouter.DefaultCreditLimit(stripeWebhookOrganizationID, "enterprise", false)
+	floor, ok := openrouter.DefaultCreditLimit(staff.Organization{}, stripeWebhookOrganizationID, "enterprise", false)
 	require.True(t, ok)
 	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
 	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
@@ -1829,7 +1830,7 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
@@ -1934,7 +1935,7 @@ func TestStripeCheckoutFinalBillingCauseRecoveryReconcilesStaleDisabledMirror(t 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "final cause recovery").Code)
@@ -1983,7 +1984,7 @@ func TestStripeCheckoutLayeredBillingRecoveryDoesNotReconcileUnchangedAccess(t *
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "layered recovery").Code)
@@ -2134,7 +2135,7 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2356,7 +2357,7 @@ func TestStripeCheckoutExactReplayRepairsPostCommitOpenRouterFailure(t *testing.
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2634,6 +2635,7 @@ func TestStripeSubscriptionDeletionPostCommitReconcileFailurePreservesDurableInt
 		nil,
 		nil,
 		testenv.NewEncryptionClient(t),
+		staff.Organization{},
 		option,
 	)
 
@@ -2679,7 +2681,7 @@ func TestStripeSubscriptionDeletionExactReplayRepairsPostCommitOpenRouterFailure
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2732,7 +2734,7 @@ func TestStripeSubscriptionDeletionReplayCannotOverrideLaterConversion(t *testin
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "loss").Code)
@@ -2796,7 +2798,7 @@ func TestConvertedDemotedTrialSubscriptionLossWinsBeforeDelayedActivationReconci
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 	require.NoError(t, RepairPaygOpenRouterChatKey(
 		t.Context(), testenv.NewLogger(t), db, production, stripeWebhookOrganizationID, openrouter.KeyDesiredStateEnabled,

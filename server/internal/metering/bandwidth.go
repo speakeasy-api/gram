@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 const (
@@ -118,6 +119,10 @@ func NewMCPBandwidthMiddleware(logger *slog.Logger, publisher gcp.Publisher[*met
 			if domainCtx := customdomains.FromContext(r.Context()); domainCtx != nil {
 				customDomain = domainCtx.Domain
 			}
+			networkIngressID := ""
+			if origin, ok := requestorigin.FromContext(r.Context()); ok && origin.Surface == requestorigin.SurfacePrivateNetwork && origin.NetworkIngressID != uuid.Nil {
+				networkIngressID = origin.NetworkIngressID.String()
+			}
 
 			exchange := new(mcpBandwidthExchange)
 			if r.Body != nil {
@@ -150,6 +155,9 @@ func NewMCPBandwidthMiddleware(logger *slog.Logger, publisher gcp.Publisher[*met
 			attributes := map[string]string{AttributeRequestPath: requestPath}
 			if customDomain != "" {
 				attributes[AttributeCustomDomain] = customDomain
+			}
+			if networkIngressID != "" {
+				attributes[AttributeNetworkIngressID] = networkIngressID
 			}
 			if serverAttributed {
 				attributes[AttributeMCPServerType] = string(serverType)
@@ -213,9 +221,13 @@ func publishReadings(ctx context.Context, publisher gcp.Publisher[*meteringv1.Me
 	return errors.Join(errs...)
 }
 
+// isMCPRuntimePath matches the slug-scoped runtime routes. A single trailing
+// slash is accepted because the runtime verbs also mount at "/mcp/{slug}/" for
+// Gateway prefix rewrites and private ingress.
 func isMCPRuntimePath(path string) bool {
 	for _, prefix := range [...]string{"/mcp/", "/platform/mcp/"} {
 		if remainder, ok := strings.CutPrefix(path, prefix); ok {
+			remainder = strings.TrimSuffix(remainder, "/")
 			return remainder != "" && !strings.ContainsRune(remainder, '/')
 		}
 	}

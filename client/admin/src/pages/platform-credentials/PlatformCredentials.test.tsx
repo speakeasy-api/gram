@@ -116,14 +116,15 @@ describe("PlatformCredentialList", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Create credential" }),
     );
-    fireEvent.change(screen.getByLabelText("Name"), {
+    const fields = within(await screen.findByRole("dialog"));
+    fireEvent.change(fields.getByLabelText("Name"), {
       target: { value: "New signer" },
     });
-    fireEvent.change(screen.getByLabelText(/Service account to impersonate/), {
+    fireEvent.change(fields.getByLabelText(/Service account to impersonate/), {
       target: { value: "new@example-project.iam.gserviceaccount.com" },
     });
     fireEvent.click(
-      within(screen.getByRole("dialog")).getByRole("button", {
+      fields.getByRole("button", {
         name: "Create credential",
       }),
     );
@@ -174,8 +175,9 @@ describe("PlatformCredentialDetail", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     expect(mocks.remove).not.toHaveBeenCalled();
 
+    const dialog = await screen.findByRole("dialog");
     fireEvent.click(
-      await screen.findByRole("button", { name: "Delete credential" }),
+      within(dialog).getByRole("button", { name: "Delete credential" }),
     );
 
     await waitFor(() =>
@@ -192,8 +194,9 @@ describe("PlatformCredentialDetail", () => {
     await renderRouteTree(routeTree, { initialPath: path });
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog");
     fireEvent.click(
-      await screen.findByRole("button", { name: "Delete credential" }),
+      within(dialog).getByRole("button", { name: "Delete credential" }),
     );
 
     expect(await screen.findByText(/rotate them first/)).toBeTruthy();
