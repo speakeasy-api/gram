@@ -229,24 +229,6 @@ function isToolLimitSelector(s: Selector, row: McpRow): boolean {
   return row.kind === "all" && !!s.disposition;
 }
 
-/**
- * Use on a server limited both to tools and to annotations, which the tool
- * sheet cannot show at once. The tools are the cell; the annotation rows stay
- * as stored and are listed as other rules.
- */
-function isHiddenAnnotationLimit(
-  allow: Selector[],
-  s: Selector,
-  row: McpRow,
-): boolean {
-  return (
-    row.kind === "server" &&
-    !!s.disposition &&
-    isToolLimitSelector(s, row) &&
-    allow.some((t) => !!t.tool && isToolLimitSelector(t, row))
-  );
-}
-
 function cellSelectors(row: McpRow, level: Level): (s: Selector) => boolean {
   return (s) =>
     isPlainRowSelector(s, row) ||
@@ -390,12 +372,32 @@ export function mcpToolLimit(
   }
   const limited = flat.allow.filter((s) => isToolLimitSelector(s, row));
   const tools = limited.flatMap((s) => (s.tool ? [s.tool] : []));
-  if (tools.length > 0) return { kind: "tools", tools };
   const dispositions = limited.flatMap((s) =>
     s.disposition ? [s.disposition] : [],
   );
+  if (dispositions.length > 0 && tools.length > 0) {
+    return { kind: "annotations", dispositions, tools };
+  }
   if (dispositions.length > 0) return { kind: "annotations", dispositions };
+  if (tools.length > 0) return { kind: "tools", tools };
   return null;
+}
+
+function limitSelectors(base: Selector, limit: ToolLimit): Selector[] {
+  switch (limit.kind) {
+    case "all":
+      return [base];
+    case "tools":
+      return limit.tools.map((tool) => ({ ...base, tool }));
+    case "annotations":
+      return [
+        ...limit.dispositions.map((disposition: Disposition) => ({
+          ...base,
+          disposition,
+        })),
+        ...(limit.tools ?? []).map((tool) => ({ ...base, tool })),
+      ];
+  }
 }
 
 /** Limit Use on a row to some tools; the row keeps Use whatever the limit. */
@@ -405,10 +407,7 @@ export function setMcpToolLimit(
   limit: ToolLimit,
 ): Record<string, RoleGrant> {
   return editFlat(grants, MCP_LEVEL_SCOPE.use, (flat) => {
-    const inCell = cellSelectors(row, "use");
-    const matches = (s: Selector) =>
-      inCell(s) && !isHiddenAnnotationLimit(flat.allow, s, row);
-    const allow = flat.allow.filter((s) => !matches(s));
+    const allow = flat.allow.filter((s) => !cellSelectors(row, "use")(s));
     const base = rowSelector(row);
     switch (limit.kind) {
       case "all":
@@ -424,13 +423,7 @@ export function setMcpToolLimit(
         return {
           ...flat,
           allowAll: row.kind === "all" ? false : flat.allowAll,
-          allow: [
-            ...allow,
-            ...limit.dispositions.map((disposition: Disposition) => ({
-              ...base,
-              disposition,
-            })),
-          ],
+          allow: [...allow, ...limitSelectors(base, limit)],
         };
     }
   });
@@ -469,14 +462,7 @@ export function splitMcpToolLimit(
       return;
     }
     // Both limited: keep the server's own rows and add the broader ones.
-    const base = rowSelector(row);
-    const extra: Selector[] =
-      rowLimit.kind === "tools"
-        ? rowLimit.tools.map((tool) => ({ ...base, tool }))
-        : rowLimit.dispositions.map((disposition) => ({
-            ...base,
-            disposition,
-          }));
+    const extra = limitSelectors(rowSelector(row), rowLimit);
     next = editFlat(next, MCP_LEVEL_SCOPE.use, (flat) => ({
       ...flat,
       allow: [...flat.allow, ...extra],
@@ -562,8 +548,7 @@ export function otherMcpRules(
           ? isPlainRowSelector(s, row) ||
             // A denied tool has its own row under its server.
             (level === "use" && isToolBlockSelector(s, row))
-          : cellSelectors(row, level)(s) &&
-            !isHiddenAnnotationLimit(flat.allow, s, row),
+          : cellSelectors(row, level)(s),
       );
     for (const [blocked, list] of [
       [false, flat.allow],
@@ -1105,11 +1090,7 @@ function addUseLimit(
   const own = mcpToolLimit(grants, row);
   if (own?.kind === "all") return grants;
   if (!own || limit.kind === "all") return setMcpToolLimit(grants, row, limit);
-  const base = rowSelector(row);
-  const extra: Selector[] =
-    limit.kind === "tools"
-      ? limit.tools.map((tool) => ({ ...base, tool }))
-      : limit.dispositions.map((disposition) => ({ ...base, disposition }));
+  const extra = limitSelectors(rowSelector(row), limit);
   return editFlat(grants, MCP_LEVEL_SCOPE.use, (flat) => ({
     ...flat,
     allow: [...flat.allow, ...extra],

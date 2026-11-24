@@ -53,6 +53,44 @@ function formatDate(date: Date, pattern: "short" | "medium" = "short"): string {
   });
 }
 
+function isLocalMidnight(date: Date): boolean {
+  return (
+    date.getHours() === 0 &&
+    date.getMinutes() === 0 &&
+    date.getSeconds() === 0 &&
+    date.getMilliseconds() === 0
+  );
+}
+
+/** 23:59:59, at any sub-second: the AI parser ends whole days on the second. */
+function isLocalEndOfDay(date: Date): boolean {
+  return (
+    date.getHours() === 23 &&
+    date.getMinutes() === 59 &&
+    date.getSeconds() === 59
+  );
+}
+
+/**
+ * A range that starts and ends on day boundaries reads as days. Anything else
+ * (a range dragged across a chart, say) names its times, or "Nov 16 – Nov 17"
+ * hides that the window opens at 11:34 AM and closes at 11:34 PM. The end may
+ * be the final day's midnight or its last second.
+ */
+export function formatTimeRangeLabel(from: Date, to: Date): string {
+  const wholeDays =
+    isLocalMidnight(from) && (isLocalMidnight(to) || isLocalEndOfDay(to));
+  if (wholeDays) return `${formatDate(from)} – ${formatDate(to)}`;
+  const withTime = (date: Date) =>
+    date.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  return `${withTime(from)} – ${withTime(to)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Presets Configuration
 // ---------------------------------------------------------------------------
@@ -657,7 +695,7 @@ function TimeRangePicker({
   // Get label text (preset label or custom range description)
   const getLabelText = () => {
     if (customRange) {
-      return `${formatDate(customRange.from)} – ${formatDate(customRange.to)}`;
+      return formatTimeRangeLabel(customRange.from, customRange.to);
     }
     if (preset) {
       const presetObj = getPresetByValue(preset);
@@ -720,6 +758,9 @@ function TimeRangePicker({
             ref={inputRef}
             type="text"
             value={isEditing ? inputValue : getLabelText()}
+            // An input does not grow to its value; without this a range that
+            // names its times is cut off at the browser's 20-character default.
+            size={Math.max(20, getLabelText().length)}
             onChange={handleInputChange}
             onClick={handleInputClick}
             onFocus={handleInputFocus}

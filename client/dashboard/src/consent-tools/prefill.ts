@@ -1,5 +1,5 @@
 import {
-  TOOL_ANNOTATIONS,
+  isToolAnnotation,
   type ToolAnnotation,
 } from "@/components/tool-selection/annotations";
 
@@ -16,13 +16,6 @@ export type ConsentSelection = null | {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function isToolAnnotation(value: unknown): value is ToolAnnotation {
-  return (
-    typeof value === "string" &&
-    (TOOL_ANNOTATIONS as readonly string[]).includes(value)
-  );
 }
 
 /**

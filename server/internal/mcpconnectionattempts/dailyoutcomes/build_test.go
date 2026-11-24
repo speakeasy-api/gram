@@ -558,8 +558,9 @@ func TestBuildDayCountsTheProviderThatEndedTheAttempt(t *testing.T) {
 	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }
 
-// A refused used token now names its owner, which must not change the stored day.
-func TestBuildDayLeavesAnAttributedUsedTokenUnpaired(t *testing.T) {
+// A refused used token names its owner, so the owner's next connection on the same app
+// fixes it, as for every other refused refresh. A day stored before showed it unfixed.
+func TestBuildDayPairsAnAttributedUsedTokenWithTheNextConnection(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	day := f.day(daysAgoUsedToken)
@@ -573,10 +574,12 @@ func TestBuildDayLeavesAnAttributedUsedTokenUnpaired(t *testing.T) {
 		f.row(refused, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true, 0, mcpconnectionattempts.Subject(&subject)),
 		f.row(connected, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, 0, mcpconnectionattempts.Subject(&subject)),
 	)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|connected||", 1)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|", 1)
 
 	f.build(day)
 	require.Equal(t, map[string]uint64{
-		"|dcr||inbound_token|connected||":                                   1,
-		"|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|": 1,
-	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day), "the same as when the row named nobody")
+		"|dcr||inbound_token|connected||":                                        1,
+		"|dcr||inbound_token|failed|refresh_token_unknown_or_already_used|retry": 1,
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }

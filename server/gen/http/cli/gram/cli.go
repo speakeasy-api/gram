@@ -53,12 +53,14 @@ import (
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
 	identityproviderconnectionsc "github.com/speakeasy-api/gram/server/gen/http/identity_provider_connections/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
+	intentpoliciesc "github.com/speakeasy-api/gram/server/gen/http/intent_policies/client"
 	internalsessionissuersc "github.com/speakeasy-api/gram/server/gen/http/internal_session_issuers/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
 	killswitchesc "github.com/speakeasy-api/gram/server/gen/http/killswitches/client"
 	litellmc "github.com/speakeasy-api/gram/server/gen/http/litellm/client"
 	mcpapprovalc "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/client"
+	mcpconnectionhealthc "github.com/speakeasy-api/gram/server/gen/http/mcp_connection_health/client"
 	mcpendpointsc "github.com/speakeasy-api/gram/server/gen/http/mcp_endpoints/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
@@ -154,11 +156,13 @@ func UsageCommands() []string {
 		"identity resolve",
 		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"integrations (get|list)",
+		"intent-policies (get-guardrail|analyze-session|upload-transcript)",
 		"internal-session-issuers (get|set-enabled|rotate)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|rotate-key|extend-agent-keys|list-keys|revoke-key|update-key-policy|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
+		"mcp-connection-health (list-attempts|get-attempt-counts|get-attempt|get-sign-in-summary|get-session-activity|list-denied-clients)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"registry-discovery (discover-servers|discover-versions|discover-version)",
@@ -1686,6 +1690,22 @@ func ParseEndpoint(
 		integrationsListSessionTokenFlag     = integrationsListFlags.String("session-token", "", "")
 		integrationsListProjectSlugInputFlag = integrationsListFlags.String("project-slug-input", "", "")
 
+		intentPoliciesFlags = flag.NewFlagSet("intent-policies", flag.ContinueOnError)
+
+		intentPoliciesGetGuardrailFlags                = flag.NewFlagSet("get-guardrail", flag.ExitOnError)
+		intentPoliciesGetGuardrailSessionTokenFlag     = intentPoliciesGetGuardrailFlags.String("session-token", "", "")
+		intentPoliciesGetGuardrailProjectSlugInputFlag = intentPoliciesGetGuardrailFlags.String("project-slug-input", "", "")
+
+		intentPoliciesAnalyzeSessionFlags                = flag.NewFlagSet("analyze-session", flag.ExitOnError)
+		intentPoliciesAnalyzeSessionBodyFlag             = intentPoliciesAnalyzeSessionFlags.String("body", "REQUIRED", "")
+		intentPoliciesAnalyzeSessionSessionTokenFlag     = intentPoliciesAnalyzeSessionFlags.String("session-token", "", "")
+		intentPoliciesAnalyzeSessionProjectSlugInputFlag = intentPoliciesAnalyzeSessionFlags.String("project-slug-input", "", "")
+
+		intentPoliciesUploadTranscriptFlags                = flag.NewFlagSet("upload-transcript", flag.ExitOnError)
+		intentPoliciesUploadTranscriptBodyFlag             = intentPoliciesUploadTranscriptFlags.String("body", "REQUIRED", "")
+		intentPoliciesUploadTranscriptSessionTokenFlag     = intentPoliciesUploadTranscriptFlags.String("session-token", "", "")
+		intentPoliciesUploadTranscriptProjectSlugInputFlag = intentPoliciesUploadTranscriptFlags.String("project-slug-input", "", "")
+
 		internalSessionIssuersFlags = flag.NewFlagSet("internal-session-issuers", flag.ContinueOnError)
 
 		internalSessionIssuersGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
@@ -1858,6 +1878,44 @@ func ParseEndpoint(
 		mcpApprovalRecordDecisionSessionTokenFlag     = mcpApprovalRecordDecisionFlags.String("session-token", "", "")
 		mcpApprovalRecordDecisionApikeyTokenFlag      = mcpApprovalRecordDecisionFlags.String("apikey-token", "", "")
 		mcpApprovalRecordDecisionProjectSlugInputFlag = mcpApprovalRecordDecisionFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthFlags = flag.NewFlagSet("mcp-connection-health", flag.ContinueOnError)
+
+		mcpConnectionHealthListAttemptsFlags                = flag.NewFlagSet("list-attempts", flag.ExitOnError)
+		mcpConnectionHealthListAttemptsBodyFlag             = mcpConnectionHealthListAttemptsFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthListAttemptsSessionTokenFlag     = mcpConnectionHealthListAttemptsFlags.String("session-token", "", "")
+		mcpConnectionHealthListAttemptsApikeyTokenFlag      = mcpConnectionHealthListAttemptsFlags.String("apikey-token", "", "")
+		mcpConnectionHealthListAttemptsProjectSlugInputFlag = mcpConnectionHealthListAttemptsFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthGetAttemptCountsFlags                = flag.NewFlagSet("get-attempt-counts", flag.ExitOnError)
+		mcpConnectionHealthGetAttemptCountsBodyFlag             = mcpConnectionHealthGetAttemptCountsFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthGetAttemptCountsSessionTokenFlag     = mcpConnectionHealthGetAttemptCountsFlags.String("session-token", "", "")
+		mcpConnectionHealthGetAttemptCountsApikeyTokenFlag      = mcpConnectionHealthGetAttemptCountsFlags.String("apikey-token", "", "")
+		mcpConnectionHealthGetAttemptCountsProjectSlugInputFlag = mcpConnectionHealthGetAttemptCountsFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthGetAttemptFlags                = flag.NewFlagSet("get-attempt", flag.ExitOnError)
+		mcpConnectionHealthGetAttemptBodyFlag             = mcpConnectionHealthGetAttemptFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthGetAttemptSessionTokenFlag     = mcpConnectionHealthGetAttemptFlags.String("session-token", "", "")
+		mcpConnectionHealthGetAttemptApikeyTokenFlag      = mcpConnectionHealthGetAttemptFlags.String("apikey-token", "", "")
+		mcpConnectionHealthGetAttemptProjectSlugInputFlag = mcpConnectionHealthGetAttemptFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthGetSignInSummaryFlags                = flag.NewFlagSet("get-sign-in-summary", flag.ExitOnError)
+		mcpConnectionHealthGetSignInSummaryBodyFlag             = mcpConnectionHealthGetSignInSummaryFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthGetSignInSummarySessionTokenFlag     = mcpConnectionHealthGetSignInSummaryFlags.String("session-token", "", "")
+		mcpConnectionHealthGetSignInSummaryApikeyTokenFlag      = mcpConnectionHealthGetSignInSummaryFlags.String("apikey-token", "", "")
+		mcpConnectionHealthGetSignInSummaryProjectSlugInputFlag = mcpConnectionHealthGetSignInSummaryFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthGetSessionActivityFlags                = flag.NewFlagSet("get-session-activity", flag.ExitOnError)
+		mcpConnectionHealthGetSessionActivityBodyFlag             = mcpConnectionHealthGetSessionActivityFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthGetSessionActivitySessionTokenFlag     = mcpConnectionHealthGetSessionActivityFlags.String("session-token", "", "")
+		mcpConnectionHealthGetSessionActivityApikeyTokenFlag      = mcpConnectionHealthGetSessionActivityFlags.String("apikey-token", "", "")
+		mcpConnectionHealthGetSessionActivityProjectSlugInputFlag = mcpConnectionHealthGetSessionActivityFlags.String("project-slug-input", "", "")
+
+		mcpConnectionHealthListDeniedClientsFlags                = flag.NewFlagSet("list-denied-clients", flag.ExitOnError)
+		mcpConnectionHealthListDeniedClientsBodyFlag             = mcpConnectionHealthListDeniedClientsFlags.String("body", "REQUIRED", "")
+		mcpConnectionHealthListDeniedClientsSessionTokenFlag     = mcpConnectionHealthListDeniedClientsFlags.String("session-token", "", "")
+		mcpConnectionHealthListDeniedClientsApikeyTokenFlag      = mcpConnectionHealthListDeniedClientsFlags.String("apikey-token", "", "")
+		mcpConnectionHealthListDeniedClientsProjectSlugInputFlag = mcpConnectionHealthListDeniedClientsFlags.String("project-slug-input", "", "")
 
 		mcpEndpointsFlags = flag.NewFlagSet("mcp-endpoints", flag.ContinueOnError)
 
@@ -6065,6 +6123,11 @@ func ParseEndpoint(
 	integrationsGetFlags.Usage = integrationsGetUsage
 	integrationsListFlags.Usage = integrationsListUsage
 
+	intentPoliciesFlags.Usage = intentPoliciesUsage
+	intentPoliciesGetGuardrailFlags.Usage = intentPoliciesGetGuardrailUsage
+	intentPoliciesAnalyzeSessionFlags.Usage = intentPoliciesAnalyzeSessionUsage
+	intentPoliciesUploadTranscriptFlags.Usage = intentPoliciesUploadTranscriptUsage
+
 	internalSessionIssuersFlags.Usage = internalSessionIssuersUsage
 	internalSessionIssuersGetFlags.Usage = internalSessionIssuersGetUsage
 	internalSessionIssuersSetEnabledFlags.Usage = internalSessionIssuersSetEnabledUsage
@@ -6109,6 +6172,14 @@ func ParseEndpoint(
 	mcpApprovalRefreshEvidenceFlags.Usage = mcpApprovalRefreshEvidenceUsage
 	mcpApprovalStartResearchFlags.Usage = mcpApprovalStartResearchUsage
 	mcpApprovalRecordDecisionFlags.Usage = mcpApprovalRecordDecisionUsage
+
+	mcpConnectionHealthFlags.Usage = mcpConnectionHealthUsage
+	mcpConnectionHealthListAttemptsFlags.Usage = mcpConnectionHealthListAttemptsUsage
+	mcpConnectionHealthGetAttemptCountsFlags.Usage = mcpConnectionHealthGetAttemptCountsUsage
+	mcpConnectionHealthGetAttemptFlags.Usage = mcpConnectionHealthGetAttemptUsage
+	mcpConnectionHealthGetSignInSummaryFlags.Usage = mcpConnectionHealthGetSignInSummaryUsage
+	mcpConnectionHealthGetSessionActivityFlags.Usage = mcpConnectionHealthGetSessionActivityUsage
+	mcpConnectionHealthListDeniedClientsFlags.Usage = mcpConnectionHealthListDeniedClientsUsage
 
 	mcpEndpointsFlags.Usage = mcpEndpointsUsage
 	mcpEndpointsCreateMcpEndpointFlags.Usage = mcpEndpointsCreateMcpEndpointUsage
@@ -7025,6 +7096,8 @@ func ParseEndpoint(
 			svcf = identityProviderConnectionsFlags
 		case "integrations":
 			svcf = integrationsFlags
+		case "intent-policies":
+			svcf = intentPoliciesFlags
 		case "internal-session-issuers":
 			svcf = internalSessionIssuersFlags
 		case "json-web-key-sets":
@@ -7035,6 +7108,8 @@ func ParseEndpoint(
 			svcf = litellmFlags
 		case "mcp-approval":
 			svcf = mcpApprovalFlags
+		case "mcp-connection-health":
+			svcf = mcpConnectionHealthFlags
 		case "mcp-endpoints":
 			svcf = mcpEndpointsFlags
 		case "mcp-metadata":
@@ -8099,6 +8174,19 @@ func ParseEndpoint(
 
 			}
 
+		case "intent-policies":
+			switch epn {
+			case "get-guardrail":
+				epf = intentPoliciesGetGuardrailFlags
+
+			case "analyze-session":
+				epf = intentPoliciesAnalyzeSessionFlags
+
+			case "upload-transcript":
+				epf = intentPoliciesUploadTranscriptFlags
+
+			}
+
 		case "internal-session-issuers":
 			switch epn {
 			case "get":
@@ -8221,6 +8309,28 @@ func ParseEndpoint(
 
 			case "record-decision":
 				epf = mcpApprovalRecordDecisionFlags
+
+			}
+
+		case "mcp-connection-health":
+			switch epn {
+			case "list-attempts":
+				epf = mcpConnectionHealthListAttemptsFlags
+
+			case "get-attempt-counts":
+				epf = mcpConnectionHealthGetAttemptCountsFlags
+
+			case "get-attempt":
+				epf = mcpConnectionHealthGetAttemptFlags
+
+			case "get-sign-in-summary":
+				epf = mcpConnectionHealthGetSignInSummaryFlags
+
+			case "get-session-activity":
+				epf = mcpConnectionHealthGetSessionActivityFlags
+
+			case "list-denied-clients":
+				epf = mcpConnectionHealthListDeniedClientsFlags
 
 			}
 
@@ -11572,6 +11682,19 @@ func ParseEndpoint(
 				endpoint = c.List()
 				data, err = integrationsc.BuildListPayload(*integrationsListKeywordsFlag, *integrationsListSessionTokenFlag, *integrationsListProjectSlugInputFlag)
 			}
+		case "intent-policies":
+			c := intentpoliciesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-guardrail":
+				endpoint = c.GetGuardrail()
+				data, err = intentpoliciesc.BuildGetGuardrailPayload(*intentPoliciesGetGuardrailSessionTokenFlag, *intentPoliciesGetGuardrailProjectSlugInputFlag)
+			case "analyze-session":
+				endpoint = c.AnalyzeSession()
+				data, err = intentpoliciesc.BuildAnalyzeSessionPayload(*intentPoliciesAnalyzeSessionBodyFlag, *intentPoliciesAnalyzeSessionSessionTokenFlag, *intentPoliciesAnalyzeSessionProjectSlugInputFlag)
+			case "upload-transcript":
+				endpoint = c.UploadTranscript()
+				data, err = intentpoliciesc.BuildUploadTranscriptPayload(*intentPoliciesUploadTranscriptBodyFlag, *intentPoliciesUploadTranscriptSessionTokenFlag, *intentPoliciesUploadTranscriptProjectSlugInputFlag)
+			}
 		case "internal-session-issuers":
 			c := internalsessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -11696,6 +11819,28 @@ func ParseEndpoint(
 			case "record-decision":
 				endpoint = c.RecordDecision()
 				data, err = mcpapprovalc.BuildRecordDecisionPayload(*mcpApprovalRecordDecisionBodyFlag, *mcpApprovalRecordDecisionSessionTokenFlag, *mcpApprovalRecordDecisionApikeyTokenFlag, *mcpApprovalRecordDecisionProjectSlugInputFlag)
+			}
+		case "mcp-connection-health":
+			c := mcpconnectionhealthc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-attempts":
+				endpoint = c.ListAttempts()
+				data, err = mcpconnectionhealthc.BuildListAttemptsPayload(*mcpConnectionHealthListAttemptsBodyFlag, *mcpConnectionHealthListAttemptsSessionTokenFlag, *mcpConnectionHealthListAttemptsApikeyTokenFlag, *mcpConnectionHealthListAttemptsProjectSlugInputFlag)
+			case "get-attempt-counts":
+				endpoint = c.GetAttemptCounts()
+				data, err = mcpconnectionhealthc.BuildGetAttemptCountsPayload(*mcpConnectionHealthGetAttemptCountsBodyFlag, *mcpConnectionHealthGetAttemptCountsSessionTokenFlag, *mcpConnectionHealthGetAttemptCountsApikeyTokenFlag, *mcpConnectionHealthGetAttemptCountsProjectSlugInputFlag)
+			case "get-attempt":
+				endpoint = c.GetAttempt()
+				data, err = mcpconnectionhealthc.BuildGetAttemptPayload(*mcpConnectionHealthGetAttemptBodyFlag, *mcpConnectionHealthGetAttemptSessionTokenFlag, *mcpConnectionHealthGetAttemptApikeyTokenFlag, *mcpConnectionHealthGetAttemptProjectSlugInputFlag)
+			case "get-sign-in-summary":
+				endpoint = c.GetSignInSummary()
+				data, err = mcpconnectionhealthc.BuildGetSignInSummaryPayload(*mcpConnectionHealthGetSignInSummaryBodyFlag, *mcpConnectionHealthGetSignInSummarySessionTokenFlag, *mcpConnectionHealthGetSignInSummaryApikeyTokenFlag, *mcpConnectionHealthGetSignInSummaryProjectSlugInputFlag)
+			case "get-session-activity":
+				endpoint = c.GetSessionActivity()
+				data, err = mcpconnectionhealthc.BuildGetSessionActivityPayload(*mcpConnectionHealthGetSessionActivityBodyFlag, *mcpConnectionHealthGetSessionActivitySessionTokenFlag, *mcpConnectionHealthGetSessionActivityApikeyTokenFlag, *mcpConnectionHealthGetSessionActivityProjectSlugInputFlag)
+			case "list-denied-clients":
+				endpoint = c.ListDeniedClients()
+				data, err = mcpconnectionhealthc.BuildListDeniedClientsPayload(*mcpConnectionHealthListDeniedClientsBodyFlag, *mcpConnectionHealthListDeniedClientsSessionTokenFlag, *mcpConnectionHealthListDeniedClientsApikeyTokenFlag, *mcpConnectionHealthListDeniedClientsProjectSlugInputFlag)
 			}
 		case "mcp-endpoints":
 			c := mcpendpointsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -20638,6 +20783,83 @@ func integrationsListUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations list --keywords '[\n      \"aaa\",\n      \"aaa\",\n      \"aaa\"\n   ]' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+// intentPoliciesUsage displays the usage of the intent-policies command and
+// its subcommands.
+func intentPoliciesUsage() {
+	fmt.Fprintln(os.Stderr, `Staff-only retroactive analysis of recorded tool calls against the intent-based guardrail. Read-only apart from storing uploaded transcripts; nothing is enforced.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] intent-policies COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-guardrail: Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr, `    analyze-session: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr, `    upload-transcript: Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s intent-policies COMMAND --help\n", os.Args[0])
+}
+func intentPoliciesGetGuardrailUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies get-guardrail", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies get-guardrail --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func intentPoliciesAnalyzeSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies analyze-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies analyze-session --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"evaluator\": \"gemini\",\n      \"generation\": 1,\n      \"limit\": 2,\n      \"offset\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func intentPoliciesUploadTranscriptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies upload-transcript", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies upload-transcript --body '{\n      \"content\": \"aa\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // internalSessionIssuersUsage displays the usage of the
 // internal-session-issuers command and its subcommands.
 func internalSessionIssuersUsage() {
@@ -21465,6 +21687,166 @@ func mcpApprovalRecordDecisionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval record-decision --body '{\n      \"decision\": \"denied\",\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"abc123\",\n      \"rationale\": \"abc123\",\n      \"research_report_id\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// mcpConnectionHealthUsage displays the usage of the mcp-connection-health
+// command and its subcommands.
+func mcpConnectionHealthUsage() {
+	fmt.Fprintln(os.Stderr, `Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-connection-health COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-attempts: List connection attempts for a provider, newest first. Repeats of the same failure fold into one row.`)
+	fmt.Fprintln(os.Stderr, `    get-attempt-counts: Count connection attempts for a provider: the total and the count for each filter value.`)
+	fmt.Fprintln(os.Stderr, `    get-attempt: Get one connection attempt by its reference.`)
+	fmt.Fprintln(os.Stderr, `    get-sign-in-summary: Count sign-ins and renewals through a provider per time bucket, split by whether they succeeded.`)
+	fmt.Fprintln(os.Stderr, `    get-session-activity: Count a provider's active sessions per day and report the average session length.`)
+	fmt.Fprintln(os.Stderr, `    list-denied-clients: List apps refused at sign-in through a provider, with the reason and the last time.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s mcp-connection-health COMMAND --help\n", os.Args[0])
+}
+func mcpConnectionHealthListAttemptsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health list-attempts", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List connection attempts for a provider, newest first. Repeats of the same failure fold into one row.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health list-attempts --body '{\n      \"cursor\": \"abc123\",\n      \"filters\": {\n         \"app_versions\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"apps\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"member_ids\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"networks\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"outcomes\": [\n            \"failed\",\n            \"failed\",\n            \"failed\"\n         ],\n         \"people\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"reasons\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"server_ids\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"services\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"steps\": [\n            \"sign_in\",\n            \"sign_in\",\n            \"sign_in\"\n         ]\n      },\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthGetAttemptCountsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health get-attempt-counts", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Count connection attempts for a provider: the total and the count for each filter value.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health get-attempt-counts --body '{\n      \"filters\": {\n         \"app_versions\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"apps\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"member_ids\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"networks\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"outcomes\": [\n            \"failed\",\n            \"failed\",\n            \"failed\"\n         ],\n         \"people\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"reasons\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"server_ids\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"services\": [\n            \"abc123\",\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"steps\": [\n            \"sign_in\",\n            \"sign_in\",\n            \"sign_in\"\n         ]\n      },\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthGetAttemptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health get-attempt", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get one connection attempt by its reference.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health get-attempt --body '{\n      \"reference\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthGetSignInSummaryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health get-sign-in-summary", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Count sign-ins and renewals through a provider per time bucket, split by whether they succeeded.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health get-sign-in-summary --body '{\n      \"bucket\": \"six_hours\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"steps\": [\n         \"sign_in\",\n         \"sign_in\",\n         \"sign_in\"\n      ],\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthGetSessionActivityUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health get-session-activity", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Count a provider's active sessions per day and report the average session length.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health get-session-activity --body '{\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpConnectionHealthListDeniedClientsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-connection-health list-denied-clients", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List apps refused at sign-in through a provider, with the reason and the last time.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-connection-health list-denied-clients --body '{\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpEndpointsUsage displays the usage of the mcp-endpoints command and its
