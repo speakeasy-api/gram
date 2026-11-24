@@ -663,9 +663,14 @@ WHERE l.remote_session_client_id = c.id
       AND binding.revoked_at IS NULL
   )
   AND NOT EXISTS (
-    -- Count remaining gateway consumers in the project being updated.
+    -- Project-owned links are local. A shared client on an organization
+    -- issuer must keep its link for consumers in every live project.
     SELECT 1
     FROM mcp_servers AS s
+    JOIN projects AS consumer_project
+      ON consumer_project.id = s.project_id
+     AND consumer_project.organization_id = @organization_id::text
+     AND NOT consumer_project.deleted
     JOIN mcp_server_remote_session_clients AS a
       ON a.mcp_server_id = s.id
      AND a.project_id = s.project_id
@@ -684,9 +689,13 @@ WHERE l.remote_session_client_id = c.id
     JOIN meta_mcp_servers AS mm
       ON mm.project_id = m.project_id
      AND mm.id = m.meta_mcp_server_id
+     AND mm.organization_id = consumer_project.organization_id
      AND mm.deleted IS FALSE
+    JOIN user_session_issuers AS gateway_issuer
+      ON gateway_issuer.id = mm.user_session_issuer_id
+     AND (gateway_issuer.project_id = s.project_id OR (gateway_issuer.project_id IS NULL AND gateway_issuer.organization_id = consumer_project.organization_id))
     WHERE s.deleted IS FALSE
-      AND s.project_id = @project_id
+      AND (c.project_id IS NULL OR c.project_id = s.project_id)
       AND mm.user_session_issuer_id = @gateway_issuer_id
   );
 
