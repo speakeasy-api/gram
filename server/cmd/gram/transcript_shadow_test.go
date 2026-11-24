@@ -24,7 +24,9 @@ func newTranscriptShadowCLIContext(t *testing.T, values map[string]string) *cli.
 	// shell cannot change what these tests see. Parallel tests cannot use
 	// t.Setenv, so the isolation lives here.
 	for _, f := range []cli.Flag{transcriptShadowFlag(), transcriptShadowReadFlag()} {
-		withoutEnv := *f.(*cli.StringSliceFlag)
+		sliceFlag, ok := f.(*cli.StringSliceFlag)
+		require.True(t, ok)
+		withoutEnv := *sliceFlag
 		withoutEnv.EnvVars = nil
 		require.NoError(t, withoutEnv.Apply(set))
 	}
