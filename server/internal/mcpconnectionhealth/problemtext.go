@@ -31,6 +31,7 @@ const (
 	factUses          = "Uses {app}."
 	factOtherApp      = "Another app worked on {server} in this time."
 	factOtherAppSome  = "Another app worked on at least one of {servers} in this time."
+	factOtherAppEach  = "Another app worked on each of {servers} in this time."
 )
 
 // savedCredentialReasons fail a saved key or shared credential: nobody signs in.
@@ -135,9 +136,13 @@ func fact(n names, p problems.Problem) string {
 		}
 	}
 	if p.OtherAppsWorked {
-		if servers == 1 {
+		switch {
+		case servers == 1:
 			out = append(out, fill(factOtherApp, "{server}", server))
-		} else {
+		// An app version takes only failures on servers where another app worked.
+		case p.Rule == problems.RuleSameAppVersion:
+			out = append(out, fill(factOtherAppEach, "{servers}", several))
+		default:
 			out = append(out, fill(factOtherAppSome, "{servers}", several))
 		}
 	}

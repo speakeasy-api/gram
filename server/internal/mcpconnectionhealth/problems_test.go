@@ -639,7 +639,7 @@ func TestSuspectedProblems_AnAppVersionSplitAcrossProvidersIsNotListed(t *testin
 	require.Empty(t, ti.listFor(t, ctx, otherIssuer))
 }
 
-// An app version qualified only by another app working on the other provider's server is not listed.
+// Another app working on the other provider's server takes no failures on this provider's servers.
 func TestSuspectedProblems_AnAppVersionQualifiedElsewhereIsNotListed(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -652,8 +652,7 @@ func TestSuspectedProblems_AnAppVersionQualifiedElsewhereIsNotListed(t *testing.
 	ti.answeredFor(t, otherGateway, mcpconnectionattempts.FamilyCodexCLI, 30*time.Minute)
 	projectWide, err := problems.Read(t.Context(), ti.ch, ti.conn, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: ti.org, ProjectID: ti.project}, time.Time{}, time.Now())
 	require.NoError(t, err)
-	require.Len(t, projectWide, 1)
-	require.Equal(t, problems.RuleSameAppVersion, projectWide[0].Rule)
+	require.Empty(t, projectWide, "an app version takes only the one person on the server where another app worked")
 	require.Empty(t, ti.listFor(t, ctx, ti.issuer), "this provider's two people have no other app working on their servers")
 }
 
@@ -728,4 +727,16 @@ func TestGetSuspectedProblem_CountsAppsPastTheCap(t *testing.T) {
 	require.GreaterOrEqual(t, i, 0)
 	require.Equal(t, int64(versions), got.Problem.People[i].AppsTotal)
 	require.Len(t, got.Problem.People[i].Apps, mcpconnectionattempts.MaxEpisodeApps)
+}
+
+// Nothing is recorded while logs are off, so failures from before they were last turned on are not listed.
+func TestSuspectedProblems_StartWhenLogsWereLastTurnedOn(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	ti.failPeople(t, ti.server, 2, 3*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Len(t, ti.listProblems(t, ctx, nil, nil).Problems, 1)
+
+	require.NoError(t, repo.New(ti.conn).TurnLogsOnFixture(t.Context(), repo.TurnLogsOnFixtureParams{OrganizationID: ti.org, CreatedAt: pgtype.Timestamptz{Time: ti.now.Add(-time.Hour), InfinityModifier: pgtype.Finite, Valid: true}}))
+	require.Empty(t, ti.listProblems(t, ctx, nil, nil).Problems, "the failures are from before logs were turned back on")
 }

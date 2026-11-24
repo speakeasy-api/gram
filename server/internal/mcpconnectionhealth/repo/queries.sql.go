@@ -12,6 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getLogsOnSince = `-- name: GetLogsOnSince :one
+SELECT created_at
+FROM organization_features
+WHERE organization_id = $1
+  AND feature_name = $2
+  AND deleted IS FALSE
+`
+
+type GetLogsOnSinceParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// When the organization's logs were last turned on: the active row's creation, none while off.
+func (q *Queries) GetLogsOnSince(ctx context.Context, arg GetLogsOnSinceParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getLogsOnSince, arg.OrganizationID, arg.FeatureName)
+	var created_at pgtype.Timestamptz
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
 const getProviderIssuer = `-- name: GetProviderIssuer :one
 SELECT issuer.id, issuer.session_duration
 FROM user_session_issuers AS issuer
@@ -342,4 +363,20 @@ func (q *Queries) SetGatewayIssuerFixture(ctx context.Context, arg SetGatewayIss
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const turnLogsOnFixture = `-- name: TurnLogsOnFixture :exec
+INSERT INTO organization_features (organization_id, feature_name, created_at)
+VALUES ($1, 'logs', $2)
+`
+
+type TurnLogsOnFixtureParams struct {
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+}
+
+// Test fixture: turns an organization's logs on at a given time.
+func (q *Queries) TurnLogsOnFixture(ctx context.Context, arg TurnLogsOnFixtureParams) error {
+	_, err := q.db.Exec(ctx, turnLogsOnFixture, arg.OrganizationID, arg.CreatedAt)
+	return err
 }

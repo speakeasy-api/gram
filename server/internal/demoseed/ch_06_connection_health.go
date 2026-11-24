@@ -594,7 +594,7 @@ func (g *healthGen) storyLinear() {
 }
 
 // storyCursor: Cursor 2.0.1 cannot renew its MCP sign-in on GitHub for three people since
-// two days ago; Cursor 2.0.2 renews fine there.
+// two days ago; Cursor 2.0.2 renews fine there, and Claude Code works there.
 func (g *healthGen) storyCursor() {
 	at := g.clk.at
 	for i, who := range []struct {
@@ -632,6 +632,7 @@ func (g *healthGen) storyCursor() {
 	for _, t := range g.spread(at(-2, 11, 0, 0), g.clk.now.Add(-time.Hour), 9) {
 		g.renewal(g.personByKey("sofia"), "github", t, mcpconnectionattempts.ResultRefreshed)
 	}
+	g.servedRequest(g.personByKey("sam"), "github", "", g.clk.now.Add(-25*time.Minute))
 }
 
 // storyWiki: Internal Wiki rejects its saved key since yesterday afternoon.
@@ -708,6 +709,8 @@ func (g *healthGen) storyNow() {
 	g.signIn(g.personByKey("noor"), "notion", now.Add(-6*time.Minute), signInEnd{step: mcpconnectionattempts.StepInboundToken, what: mcpconnectionattempts.ResultCodeIssued, unfinished: true})
 	g.begin(now.Add(-19*time.Minute), "notion", mcpconnectionattempts.AppDCR).row(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, now.Add(-19*time.Minute), false, g.network(1, mcpconnectionattempts.FamilyBrowser, ""))
 	g.renewal(g.personByKey("felix"), "notion", now.Add(-14*time.Minute), mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp)
+	// Claude Code works on Notion after it, so Felix's failure there joins the Cursor 2.0.1 problem.
+	g.servedRequest(g.personByKey("jonas"), "notion", "", now.Add(-4*time.Minute))
 	g.signIn(g.personByKey("theo"), "support", now.Add(-33*time.Minute), signInEnd{step: mcpconnectionattempts.StepInboundConsent, what: mcpconnectionattempts.CodeCanceled, unfinished: false})
 	for i, key := range []string{"sam", "priya", "ana", "mei", "sofia", "jonas", "omar"} {
 		p := g.personByKey(key)

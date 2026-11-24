@@ -119,25 +119,38 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 		slices.Sort(out)
 		return out
 	}
+	serverIDs := func(keys ...string) []string {
+		out := make([]string, len(keys))
+		for i, k := range keys {
+			out[i] = s.healthServerID(k).String()
+		}
+		slices.Sort(out)
+		return out
+	}
 	type listed struct {
-		Rule   problems.Rule
-		Scope  problems.Scope
-		People []string
+		Rule    problems.Rule
+		Scope   problems.Scope
+		People  []string
+		Servers []string
 	}
 	var listedProblems []listed
 	for _, p := range got {
-		var subjects []string
+		var subjects, onServers []string
 		for _, e := range p.Episodes {
 			if !slices.Contains(subjects, e.SubjectURN) {
 				subjects = append(subjects, e.SubjectURN)
 			}
+			if !slices.Contains(onServers, e.ServerID) {
+				onServers = append(onServers, e.ServerID)
+			}
 		}
 		slices.Sort(subjects)
-		listedProblems = append(listedProblems, listed{Rule: p.Rule, Scope: p.Scope, People: subjects})
+		slices.Sort(onServers)
+		listedProblems = append(listedProblems, listed{Rule: p.Rule, Scope: p.Scope, People: subjects, Servers: onServers})
 	}
 	require.ElementsMatch(t, []listed{
-		{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyCursor + "@2.0.1"}, People: people("lena", "felix", "lars")},
-		{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: s.healthServerID("wiki").String()}, People: people("ken", "ivy", "theo", "amara")},
-		{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: subject("dana")}, People: people("dana")},
-	}, listedProblems)
+		{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyCursor + "@2.0.1"}, People: people("lena", "felix", "lars"), Servers: serverIDs("github", "notion")},
+		{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: s.healthServerID("wiki").String()}, People: people("ken", "ivy", "theo", "amara"), Servers: serverIDs("wiki")},
+		{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: subject("dana")}, People: people("dana"), Servers: serverIDs("linear")},
+	}, listedProblems, "an app version takes only servers where another app worked: Claude Code on GitHub and on Notion")
 }

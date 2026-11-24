@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_connection_health"
@@ -18,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/attemptlog"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/problems"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionhealth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 const (
@@ -91,12 +94,15 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 		return out, err
 	}
 
-	// Zero: a person who has not tried for a day no longer counts, so failures from before
-	// served requests were recorded age out a day after that writer shipped.
+	// The deployment-wide start is zero: failures from before served requests were recorded age out a day after that writer shipped.
+	recordedSince, err := s.logsOnSince(ctx, c)
+	if err != nil {
+		return out, err
+	}
 	all, err := problems.Read(ctx, s.ch, s.db, s.logsEnabled, problems.ReadScope{
 		OrganizationID: c.organizationID, ProjectID: c.projectID, WholeOrganization: false,
 		IssuerID: issuer.ID, IssuerServerIDs: out.issuerServers,
-	}, time.Time{}, now)
+	}, recordedSince, now)
 	switch {
 	case errors.Is(err, mcpconnectionattempts.ErrLogsOff):
 		out.loggingEnabled = false
@@ -110,6 +116,18 @@ func (s *Service) readProblems(ctx context.Context, c caller, issuerID string, s
 		}
 	}
 	return out, nil
+}
+
+// logsOnSince is when the organization's logs were last turned on, zero when no row says so; nothing is recorded while they are off.
+func (s *Service) logsOnSince(ctx context.Context, c caller) (time.Time, error) {
+	at, err := repo.New(s.db).GetLogsOnSince(ctx, repo.GetLogsOnSinceParams{OrganizationID: c.organizationID, FeatureName: string(productfeatures.FeatureLogs)})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return time.Time{}, nil
+	case err != nil:
+		return time.Time{}, oops.E(oops.CodeUnexpected, err, "read when logs were turned on").LogError(ctx, s.logger)
+	}
+	return at.Time, nil
 }
 
 // pastDeadline turns any failure after the request's budget ran out into temporarily

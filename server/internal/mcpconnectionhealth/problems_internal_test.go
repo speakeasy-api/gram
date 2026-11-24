@@ -95,7 +95,15 @@ func TestProblemText_EachRule(t *testing.T) {
 				Episodes:  []mcpconnectionattempts.FailingPerson{ep("user:a", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken), ep("user:b", github, signIn, mcpconnectionattempts.CodeInvalidBearerToken)},
 				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}, OtherAppsWorked: true},
 			headline: "2 people on Claude Code 2.0.1 can't sign in",
-			fact:     "On Linear and GitHub. The app's sign-in to Speakeasy fails. Another app worked on at least one of these servers in this time.",
+			fact:     "On Linear and GitHub. The app's sign-in to Speakeasy fails. Another app worked on each of these servers in this time.",
+		},
+		{
+			name: "same app version on one server",
+			problem: problems.Problem{Rule: problems.RuleSameAppVersion, Scope: problems.Scope{Kind: problems.ScopeAppVersion, Key: mcpconnectionattempts.FamilyClaudeCode + "@2.0.1"}, Part: signIn, People: 2,
+				Episodes:  []mcpconnectionattempts.FailingPerson{ep("user:a", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken), ep("user:b", linear, signIn, mcpconnectionattempts.CodeInvalidBearerToken)},
+				SharedApp: problems.App{Family: mcpconnectionattempts.FamilyClaudeCode, Version: "2.0.1"}, OtherAppsWorked: true},
+			headline: "2 people on Claude Code 2.0.1 can't sign in",
+			fact:     "On Linear. The app's sign-in to Speakeasy fails. " + admin(mcpconnectionattempts.CodeInvalidBearerToken) + " Another app worked on this server in this time.",
 		},
 		{
 			name: "one person with a rejected saved key on one server",
