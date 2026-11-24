@@ -208,6 +208,15 @@ func TestNewClientWithoutNextKeepsAnEmptyAddressAsBefore(t *testing.T) {
 	require.Equal(t, "localhost:6379", client.Options().Addr, "go-redis's default, as before")
 }
 
+func TestNewClientWithoutNextRejectsUnknownAuthMode(t *testing.T) {
+	t.Parallel()
+
+	config := binding("localhost:6379", "")
+	config.Current.Auth = "unknown"
+	_, err := NewClient(t.Context(), discard(), &redis.Options{}, config)
+	require.ErrorContains(t, err, "unknown auth mode")
+}
+
 func TestNewClientWithoutNextConnectsToATLSInstance(t *testing.T) {
 	t.Parallel()
 
@@ -793,6 +802,8 @@ func TestDialStalledAcrossAMoveNeverSendsTheNextCredentials(t *testing.T) {
 	var mu sync.Mutex
 	var written bytes.Buffer
 	stalled, release := make(chan struct{}), make(chan struct{})
+	releaseDial := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(releaseDial)
 	f.sw.dialTCP = func(ctx context.Context, network, addr string, timeout time.Duration) (net.Conn, error) {
 		close(stalled)
 		<-release
@@ -812,9 +823,13 @@ func TestDialStalledAcrossAMoveNeverSendsTheNextCredentials(t *testing.T) {
 		result <- err
 	}()
 
-	<-stalled
+	select {
+	case <-stalled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("dial did not reach the stalled socket")
+	}
 	f.move(t)
-	close(release)
+	releaseDial()
 
 	require.ErrorIs(t, <-result, ErrHolding, "the instance that was left refuses the socket")
 
@@ -943,6 +958,10 @@ func TestTwoRolesOnOneInstanceMoveIndependently(t *testing.T) {
 	ambiguous := Wrap(&copied)
 	t.Cleanup(func() { _ = ambiguous.Close() })
 	require.ErrorIs(t, ambiguous.Ping(t.Context()).Err(), ErrAmbiguousRole)
+
+	unknown := WrapRole(&copied, "unknown")
+	t.Cleanup(func() { _ = unknown.Close() })
+	require.ErrorIs(t, unknown.Ping(t.Context()).Err(), ErrUnknownRole)
 
 	named := WrapRole(&copied, RoleOps)
 	t.Cleanup(func() { _ = named.Close() })
