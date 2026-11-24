@@ -1,0 +1,19 @@
+server/internal/mcp/consent_assets/consent-tools.js
+  s_17d395d37593c0::t_2ac69dc9bac780 3,10-11,13,63,65-66,68,70,72-75,78,81-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ae2378dcc5adb495d2eb9983954b3ae7ddf1702c",
+  "prompts": {},
+  "sessions": {
+    "s_17d395d37593c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "062a4dd2-f0db-44a1-b66b-3f189a69fe31",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
