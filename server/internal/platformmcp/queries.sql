@@ -455,9 +455,9 @@ WHERE session.organization_id = @organization_id
 WITH default_project AS (
     SELECT id
     FROM projects
-    WHERE organization_id = @organization_id
-      AND slug = 'default'
-      AND deleted IS FALSE
+    WHERE projects.organization_id = @organization_id
+      AND projects.slug = 'default'
+      AND projects.deleted IS FALSE
     LIMIT 1
 )
 SELECT
@@ -3241,7 +3241,7 @@ JOIN projects
   AND projects.deleted IS FALSE
 JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-  AND gc.marketplace_token IS NOT NULL
+  AND (gc.marketplace_token_hash IS NOT NULL OR gc.marketplace_token IS NOT NULL)
 WHERE p.project_id = @project_id
   AND p.organization_id = @organization_id
   AND p.deleted IS FALSE
@@ -3289,7 +3289,7 @@ JOIN projects
   AND projects.deleted IS FALSE
 JOIN plugin_github_connections gc
   ON gc.project_id = p.project_id
-  AND gc.marketplace_token IS NOT NULL
+  AND (gc.marketplace_token_hash IS NOT NULL OR gc.marketplace_token IS NOT NULL)
 WHERE p.project_id = @project_id
   AND p.organization_id = @organization_id
   AND p.deleted IS FALSE
@@ -3447,7 +3447,7 @@ SELECT
     ingress.custom_domain_id,
     ingress.enabled,
     ingress.identity_required,
-    (ingress.credentials_encrypted IS NOT NULL)::boolean AS credentials_configured,
+    (ingress.credentials_encrypted IS NOT NULL OR ingress.credentials_org_encrypted IS NOT NULL)::boolean AS credentials_configured,
     ingress.status,
     ingress.dns_name,
     ingress.last_error,
@@ -4047,7 +4047,7 @@ SELECT
     -- The project predicate is load-bearing, not tidiness. mcp_servers.
     -- toolset_id has no composite constraint pairing it with project_id, so a
     -- server in another project can front this toolset. Each id here is
-    -- authorized with authz.MCPCheck(ScopeMCPWrite, id, <this project>), and
+    -- authorized with authz.MCPServer(id, <this project>).Write(), and
     -- that check injects the project as a selector dimension so a
     -- project-scoped grant matches — which means a project-wide mcp:write in
     -- THIS project would wave through a server id belonging to another one.

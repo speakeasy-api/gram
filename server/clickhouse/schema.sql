@@ -1925,6 +1925,24 @@ TTL day + INTERVAL 13 MONTH
 SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
 COMMENT 'Holds one day of mcp_connection_outcomes_daily while the daily job builds it. Only that job reads it. Its TTL must match the main table because REPLACE PARTITION copies TTL info onto the main table, so a shorter TTL here deletes main table rows.';
 
+CREATE TABLE IF NOT EXISTS mcp_connection_last_served (
+    organization_id String COMMENT 'Organization the connection belongs to. Readers always filter on it.\n@access: confidential' CODEC(ZSTD),
+    project_id UUID COMMENT 'Project of the server, nil for an organization gateway.\n@access: confidential',
+    server_kind LowCardinality(String) COMMENT 'Kind of server the request was for, such as mcp, meta or toolset.\n@access: confidential',
+    server_id String COMMENT 'ID of the MCP server, gateway or toolset the request was for.\n@access: confidential' CODEC(ZSTD),
+    member_id String COMMENT 'Gateway member MCP server ID when the request was for one member, empty otherwise.\n@access: confidential' CODEC(ZSTD),
+    subject_urn String COMMENT 'Session subject URN of the user, API key, agent or workload the request was served for. Never empty or anonymous.\n@access: confidential-pii' CODEC(ZSTD),
+    app_key String COMMENT 'App the request came through, as on mcp_connection_events.\n@access: restricted',
+    client_family LowCardinality(String) COMMENT 'Kind of client from the User-Agent, as on mcp_connection_events.\n@access: confidential',
+    remote_session_client_id String COMMENT 'ID in remote_session_clients of the service sign-in of this person that the request used, empty when it used none of theirs.\n@access: confidential' CODEC(ZSTD),
+    last_served_at SimpleAggregateFunction(max, DateTime64(9, 'UTC')) COMMENT 'Latest time a request on this connection was served without an error, whoever answered it.\n@access: confidential',
+    last_answered_at SimpleAggregateFunction(max, DateTime64(9, 'UTC')) COMMENT 'Latest time the server itself answered a request on this connection without an error. The epoch when only Speakeasy has answered.\n@access: confidential'
+) ENGINE = AggregatingMergeTree
+ORDER BY (organization_id, server_kind, server_id, member_id, subject_urn, app_key, client_family, remote_session_client_id, project_id)
+TTL toDateTime(last_served_at) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'When each MCP connection last had a request served: one row per person, server, gateway member, app, client and service sign-in. A write for the same connection folds into its row, so no history is kept. Read with max() per connection. A connection not served for 90 days is dropped.';
+
 CREATE TABLE IF NOT EXISTS authz_challenge_bucket_summaries (
     challenge_date Date COMMENT 'UTC date of the summarized challenge rows.\n@access: confidential',
 

@@ -93,7 +93,7 @@ func TestGetClaudeObservabilityPlugin_NotFoundWithoutObservabilityPlugin(t *test
 		"unpublished": func(t *testing.T, _ context.Context, _ *testInstance) {
 			t.Helper()
 		},
-		"empty marketplace token": func(t *testing.T, ctx context.Context, ti *testInstance) {
+		"connection without a marketplace token": func(t *testing.T, ctx context.Context, ti *testInstance) {
 			t.Helper()
 			publishMarketplace(t, ctx, ti.conn, ti.projectID, "")
 		},

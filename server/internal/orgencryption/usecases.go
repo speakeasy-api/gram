@@ -25,6 +25,28 @@ const (
 	// and related values Speakeasy stores for remote sessions, trusted issuer
 	// sessions and EMA credentials.
 	UseCaseOAuthSessionTokens UseCase = "oauth-session-tokens" //nolint:gosec // G101: a use case name, not a credential
+
+	// UseCaseChatTranscripts isolates transcript payloads from other consumers.
+	// Storage integration is not yet enabled, so platform-key transitions are
+	// deliberately unavailable for this use case.
+	UseCaseChatTranscripts UseCase = "chat-transcripts"
+
+	// UseCaseAIProviderKeys is the use case for AI provider and model keys:
+	// AI integration API keys and webhook signing secrets, customer model
+	// provider keys, and provisioned OpenRouter keys.
+	UseCaseAIProviderKeys UseCase = "ai-provider-keys"
+
+	// UseCaseMarketplaceTokens is the use case for the plugin marketplace
+	// tokens, the URL-as-secret credentials of marketplace install URLs.
+	UseCaseMarketplaceTokens UseCase = "marketplace-tokens"
+
+	// UseCaseFunctionRunnerKeys is the use case for the per-function keys
+	// Speakeasy Functions runners and the server authenticate each other with.
+	UseCaseFunctionRunnerKeys UseCase = "function-runner-keys"
+
+	// UseCaseTailscaleOAuthClients is the use case for the Tailscale OAuth
+	// clients organizations connect their private network ingress with.
+	UseCaseTailscaleOAuthClients UseCase = "tailscale-oauth-clients"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
@@ -33,6 +55,11 @@ var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
 	UseCaseOAuthClientSecrets,
 	UseCaseOAuthSessionTokens,
+	UseCaseChatTranscripts,
+	UseCaseAIProviderKeys,
+	UseCaseMarketplaceTokens,
+	UseCaseFunctionRunnerKeys,
+	UseCaseTailscaleOAuthClients,
 }
 
 // ParseUseCase returns the registered use case named value.
@@ -48,6 +75,20 @@ func ParseUseCase(value string) (UseCase, error) {
 func (u UseCase) validate() error {
 	if !slices.Contains(registeredUseCases, u) {
 		return fmt.Errorf("%w: %q", ErrUnknownUseCase, string(u))
+	}
+
+	return nil
+}
+
+// validateTransition refuses to report or change migration state until a
+// consumer has a complete storage integration. In particular, existing chat
+// transcripts are plaintext, not platform-key ciphertexts that Cipher can open.
+func (u UseCase) validateTransition() error {
+	if err := u.validate(); err != nil {
+		return err
+	}
+	if u == UseCaseChatTranscripts {
+		return fmt.Errorf("%w: chat transcript storage migration is not available", ErrTransitionNotAllowed)
 	}
 
 	return nil

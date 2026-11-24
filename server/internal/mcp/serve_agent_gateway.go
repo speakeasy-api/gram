@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentgateway"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -223,7 +224,7 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 	// inputs. Proxied members must never turn a missing attachment into an
 	// anonymous upstream request.
 	if member.backend != metaMemberBackendProxied {
-		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx))).NotingSkips(gate.skippedUpstreams).FromRequest(gate.request), member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
 		if err != nil {
 			return nil, nil, memberConnectionError{fmt.Errorf("resolve hosted member credentials: %w", err), resolveFailureHappened(err)}
 		}
@@ -310,10 +311,10 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 			Subject:             subject,
 			RegistrationID:      clientID,
 			SkipUnusable:        false,
-			Attribution:         remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request),
+			Attribution:         remotesessions.RefreshIn(gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx))).FromRequest(gate.request),
 		})
 	} else {
-		resolved, err = s.upstreamTokenSource().ResolveClientAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)).FromRequest(gate.request), member.projectID, gate.organizationID, issuer, subject, clientID, false)
+		resolved, err = s.upstreamTokenSource().ResolveClientAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx, s.aiCatalog.SnapshotFor(ctx))).FromRequest(gate.request), member.projectID, gate.organizationID, issuer, subject, clientID, false)
 	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
@@ -490,7 +491,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		OrganizationID: target.organizationID, ProjectID: target.projectID, ServerID: target.serverID,
 		ClientID: res.clientID, ClientType: clientType, RegistrationID: registration,
 		Subject: urn.NewAgentSubject(target.agentID), UserSessionIssuerID: issuer,
-		CredentialKind: "", CredentialID: uuid.Nil, ConnectionOwner: "",
+		CredentialKind: "", CredentialID: uuid.Nil, ConnectionOwner: "", AttachedConsent: authz.AttachedConnectionConsent{},
 	}
 	if res.clientType != "" {
 		permit.ClientType = res.clientType
@@ -510,6 +511,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		return none, noCredential, agentServerCredentialError(target.slug)
 	}
 	permit.ConnectionOwner = connection.owner
+	permit.AttachedConsent = connection.consent
 	if res.clientID != uuid.Nil {
 		permitter, err := s.authClientPermitFor(ctx, target.organizationID)
 		if err != nil {

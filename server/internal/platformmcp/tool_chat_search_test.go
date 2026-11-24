@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -40,6 +41,7 @@ func TestChatSearchToolContractAndDiscovery(t *testing.T) {
 	tools := []*mcp.Tool{{Name: searchChatsToolName}, {Name: readChatToolName}}
 	for _, scope := range []authz.Scope{authz.ScopeChatRead, authz.ScopeChatWrite} {
 		scopeCtx := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(scope, authz.WildcardResource)})
+		live.withAICatalog(aivendorstest.NewStore())
 		require.Len(t, live.FilterExternalTools(scopeCtx, f.principal, tools), 2)
 	}
 	admin := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, authz.WildcardResource)})

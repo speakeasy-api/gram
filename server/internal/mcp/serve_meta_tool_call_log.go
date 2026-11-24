@@ -69,6 +69,10 @@ type metaToolCallAttempt struct {
 	// call's tool_call row.
 	logged bool
 
+	// localTool is set when the call names one of the member's local tools,
+	// whose calls are not written to the tool logs.
+	localTool bool
+
 	// proxied is set once a proxied member's tools/call is sent upstream,
 	// where the remotemcp interceptor writes the row. A dial or session
 	// failure before that is logged from the attempt.
@@ -79,19 +83,28 @@ type metaToolCallAttempt struct {
 
 	// message is what the caller was told about that failure.
 	message string
+
+	// succeeded is set when the member's result is not an error.
+	succeeded bool
+
+	// dispositions is which member tools the call may run.
+	dispositions memberToolDispositions
 }
 
 // newMetaToolCallAttempt starts an attempt for a call received at start.
 func newMetaToolCallAttempt(start time.Time) *metaToolCallAttempt {
 	return &metaToolCallAttempt{
-		start:       start,
-		member:      nil,
-		toolsetSlug: "",
-		descriptor:  nil,
-		logged:      false,
-		proxied:     false,
-		status:      0,
-		message:     "",
+		start:        start,
+		member:       nil,
+		localTool:    false,
+		toolsetSlug:  "",
+		descriptor:   nil,
+		logged:       false,
+		proxied:      false,
+		status:       0,
+		message:      "",
+		succeeded:    false,
+		dispositions: memberToolAnyDisposition,
 	}
 }
 
@@ -100,6 +113,13 @@ func newMetaToolCallAttempt(start time.Time) *metaToolCallAttempt {
 func markMetaToolCallProxied(ctx context.Context) {
 	if attempt, ok := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt); ok && attempt != nil {
 		attempt.proxied = true
+	}
+}
+
+// markMetaToolCallSucceeded records that the call on ctx got a result that is not an error.
+func markMetaToolCallSucceeded(ctx context.Context) {
+	if attempt, ok := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt); ok && attempt != nil {
+		attempt.succeeded = true
 	}
 }
 
@@ -135,6 +155,9 @@ func metaMemberErrorStatus(err error) int {
 // otherwise; a call on an agent gateway that reached no member has no project
 // to be logged under and is skipped.
 func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error) {
+	if attempt.localTool {
+		return
+	}
 	params := metaToolCallFailureLogParams(ctx, gate, qualified, arguments, attempt, handlerErr, metaFailureRow{unstamped: false, source: ""})
 	if params == nil {
 		return

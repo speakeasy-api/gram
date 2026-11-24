@@ -424,7 +424,7 @@ describe("IdentityChainingSection", () => {
     expect(screen.queryByText(/team-only/)).toBeNull();
     expect(
       screen
-        .getByRole("link", { name: "Change in Sessions" })
+        .getByRole("link", { name: "Change in MCP sign-in" })
         .getAttribute("href"),
     ).toBe("/#sessions");
   });

@@ -165,7 +165,7 @@ it("stays neutral when members fail to load", () => {
 
 it("treats sign-in as optional, so an anonymous gateway can be ready", () => {
   renderReadiness();
-  expect(row("Authentication").getAttribute("data-optional")).toBe("true");
+  expect(row("Sign-in").getAttribute("data-optional")).toBe("true");
 });
 
 it("flags a hosted member missing environment variables as broken", () => {

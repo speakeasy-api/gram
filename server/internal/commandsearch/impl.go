@@ -449,10 +449,10 @@ func (s *Service) adapters(org string, project uuid.UUID, searchQuery string, al
 		}
 	}
 	rowCheck("assistant", func(id string) authz.Check {
-		return authz.AssistantCheck(authz.ScopeAssistantRead, id, project.String())
+		return authz.Assistant(authz.AssistantIDFrom(id), authz.ProjectIDOf(project)).Read()
 	})
 	rowCheck("mcp", func(id string) authz.Check {
-		return authz.MCPCheck(authz.ScopeMCPRead, id, project.String())
+		return authz.MCPServer(authz.MCPServerIDFrom(id), authz.ProjectIDOf(project)).Read()
 	})
 	return out
 }
@@ -471,17 +471,17 @@ func (s *Service) authorizedKinds(ctx context.Context, organizationID string, pr
 		kinds []string
 		check authz.Check
 	}{
-		{[]string{"environment"}, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
+		{[]string{"environment"}, authz.Project(authz.ProjectIDOf(projectID)).Read()},
 		// Matches metamcp.ListMetaMcpServers. MCP checks must carry the project
 		// dimension: the engine rejects one without it as malformed.
-		{[]string{"gateway"}, authz.MCPCheck(authz.ScopeMCPRead, projectID.String(), projectID.String())},
+		{[]string{"gateway"}, authz.MCPServers(authz.ProjectIDOf(projectID)).Read()},
 		// Match access.listMembers: organization readers and project readers can
 		// both use the active member roster. Duplicate kind checks are ORed below.
-		{[]string{"person"}, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
-		{[]string{"person"}, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
-		{[]string{"plugin"}, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: authz.ResourceKindOrg, ResourceID: organizationID, Dimensions: nil}},
-		{[]string{"rule"}, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}},
-		{[]string{"skill"}, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}},
+		{[]string{"person"}, authz.Org(authz.OrgIDFrom(organizationID)).Read()},
+		{[]string{"person"}, authz.Project(authz.ProjectIDOf(projectID)).Read()},
+		{[]string{"plugin"}, authz.Org(authz.OrgIDFrom(organizationID)).Read()},
+		{[]string{"rule"}, authz.Org(authz.OrgIDFrom(organizationID)).Admin()},
+		{[]string{"skill"}, authz.Skills(authz.ProjectIDOf(projectID)).Read()},
 	}
 	// Assistant and MCP rows are authorized after their bounded prefix queries,
 	// matching their list endpoints and allowing resource-specific grants.

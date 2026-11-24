@@ -33,8 +33,6 @@ func SetUpstreamSelectorWriteGate(gate UpstreamSelectorWriteGate) {
 	upstreamSelectorWriteGate.Store(&gate)
 }
 
-// WithUpstreamSelectorWriteGate overrides the process-wide gate for writes
-// made with ctx.
 func WithUpstreamSelectorWriteGate(ctx context.Context, gate UpstreamSelectorWriteGate) context.Context {
 	return context.WithValue(ctx, upstreamSelectorWriteGateKey{}, gate)
 }
@@ -59,8 +57,6 @@ func UpstreamSelectorWritesAllowed(ctx context.Context, organizationID string) b
 	return err == nil && allowed
 }
 
-// NamesUpstreamClient reports whether a selector carries the upstream_client
-// dimension.
 func NamesUpstreamClient(selector Selector) bool {
 	_, ok := selector[SelectorKeyUpstreamClient]
 	return ok
@@ -83,8 +79,6 @@ func RequireUpstreamSelectorWrites(ctx context.Context, organizationID string, s
 	return nil
 }
 
-// RequireUpstreamSelectorWritesRaw is RequireUpstreamSelectorWrites for a
-// stored selector.
 func RequireUpstreamSelectorWritesRaw(ctx context.Context, organizationID string, raw []byte) error {
 	selector, err := SelectorFromRow(raw)
 	if err != nil {
@@ -93,7 +87,6 @@ func RequireUpstreamSelectorWritesRaw(ctx context.Context, organizationID string
 	return RequireUpstreamSelectorWrites(ctx, organizationID, selector)
 }
 
-// RequireUpstreamSelectorWritesForGrants checks every selector of grants.
 func RequireUpstreamSelectorWritesForGrants(ctx context.Context, organizationID string, grants []*RoleGrant) error {
 	for _, grant := range grants {
 		if grant == nil {

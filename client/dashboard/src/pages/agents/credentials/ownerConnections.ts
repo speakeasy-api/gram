@@ -18,6 +18,12 @@ import type { InventoryServer } from "./useServerInventory";
 export type ServerConnection =
   | { status: "checking" }
   | { status: "error" }
+  /**
+   * The agent's attached connection exists to be read, but the viewer may not
+   * see it: reading an agent's attachments takes permission to manage it or
+   * its credentials. Nothing is known about it, so nothing is asked of them.
+   */
+  | { status: "forbidden" }
   /** The server asks for no personal upstream sign-in, so a key alone works. */
   | { status: "not-required" }
   /**

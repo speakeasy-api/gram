@@ -225,9 +225,9 @@ function connectionFailure(
   if (result.code === "scope_mismatch")
     return "Slack is still granting write access. Remove write scopes and revoke the app’s existing authorization in Slack, then sign in again.";
   if (result.code === "authorization_header_conflict")
-    return "Remove the saved Authorization header in identity settings before testing User Identity.";
+    return "Remove the saved Authorization header in identity settings before testing user identity.";
   if (result.status === "configuration_required")
-    return "Review this server’s User Identity configuration before continuing.";
+    return "Review this server’s user identity settings before continuing.";
   if (result.status === "authorization_required")
     return `Sign in to ${name}, then test the connection again.`;
   return action === "signin"

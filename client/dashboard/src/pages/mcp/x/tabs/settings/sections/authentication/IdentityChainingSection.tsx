@@ -315,7 +315,7 @@ export function IdentityChainingSection({
               className="underline underline-offset-4"
               to={`#${MCP_SESSIONS_SECTION_ID}`}
             >
-              Change in Sessions
+              Change in MCP sign-in
             </Link>
           </Text>
         </SettingsSection.Body>

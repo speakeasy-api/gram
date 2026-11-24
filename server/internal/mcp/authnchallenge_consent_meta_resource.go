@@ -187,7 +187,7 @@ func (s *Service) authorizedMetaMembers(
 		// redundant with the query's one-named-value visibility filter. Only
 		// a refusal drops a member; dropping on a fault narrows the candidate
 		// set and turns ambiguous into a confident wrong answer.
-		connect := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), row.ProjectID.String())
+		connect := authz.MCPServer(authz.MCPServerIDOf(row.McpServerID), authz.ProjectIDOf(row.ProjectID)).Connect()
 		refusal, err := s.memberConnectDecision(filterCtx, shadow, mandatorySurfaceConsent, row.McpServerVisibility, connect)
 		if err != nil {
 			return nil, fmt.Errorf("authorize meta MCP member access: %w", err)

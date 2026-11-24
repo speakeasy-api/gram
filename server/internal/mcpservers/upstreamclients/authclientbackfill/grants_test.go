@@ -145,7 +145,7 @@ func TestRun_LegacyKeysGetTheirCurrentReach(t *testing.T) {
 	keyCtx := func(id uuid.UUID) context.Context {
 		return contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: id.String(), AccountType: "enterprise"})
 	}
-	connect := authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String())
+	connect := authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(f.projectID)).Connect()
 	useClient := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
 	require.False(t, mandatory(t, keyCtx(orgWide), f, connect).Allowed, "no policy before the backfill")
 
@@ -153,8 +153,8 @@ func TestRun_LegacyKeysGetTheirCurrentReach(t *testing.T) {
 	require.Equal(t, 4, report.PendingGrantsByKind[GrantAPIKey], "org-wide: two projects and one client; bound: its project")
 
 	require.True(t, mandatory(t, keyCtx(orgWide), f, connect, useClient).Allowed)
-	require.True(t, mandatory(t, keyCtx(orgWide), f, authz.MCPCheck(authz.ScopeMCPConnect, uuid.NewString(), second.String())).Allowed)
-	require.True(t, mandatory(t, keyCtx(bound), f, authz.MCPCheck(authz.ScopeMCPConnect, uuid.NewString(), second.String())).Allowed)
+	require.True(t, mandatory(t, keyCtx(orgWide), f, authz.MCPServer(authz.MCPServerIDFrom(uuid.NewString()), authz.ProjectIDOf(second)).Connect()).Allowed)
+	require.True(t, mandatory(t, keyCtx(bound), f, authz.MCPServer(authz.MCPServerIDFrom(uuid.NewString()), authz.ProjectIDOf(second)).Connect()).Allowed)
 	require.False(t, mandatory(t, keyCtx(bound), f, connect).Allowed, "a bound key keeps its project")
 
 	require.Equal(t, []authz.Grant{{PrincipalUrn: urn.NewAPIKeyPrincipal(explicit).String(), Scope: authz.ScopeMCPConnect, Selector: explicitPolicy}}, f.grantsOf(urn.NewAPIKeyPrincipal(explicit)), "an explicit policy is never widened")
@@ -214,7 +214,7 @@ func TestRun_ProvisionedKeyPoliciesGetLaterClients(t *testing.T) {
 	serverID, clientID := f.sharedClient()
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: key.String(), AccountType: "enterprise"})
 	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
-	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String()), use).Allowed,
+	require.True(t, mandatory(t, ctx, f, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(f.projectID)).Connect(), use).Allowed,
 		"a policy the backfill wrote gets clients recorded since")
 	require.Zero(t, f.run(false).PendingGrants)
 }
@@ -320,7 +320,7 @@ func TestRunGrants_KeyPoliciesWaitForRecordedClients(t *testing.T) {
 	}
 	ctx := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: f.orgID, APIKeyID: key.String(), AccountType: "enterprise"})
 	use := authz.MCPAuthClientCheck(clientID.String(), authz.MCPAuthClientDimensions{ClientType: TypeServiceAccount, ProjectID: f.projectID.String(), ConnectionOwner: "", UpstreamClient: ""})
-	require.True(t, mandatory(t, ctx, f, authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), f.projectID.String()), use).Allowed)
+	require.True(t, mandatory(t, ctx, f, authz.MCPServer(authz.MCPServerIDOf(serverID), authz.ProjectIDOf(f.projectID)).Connect(), use).Allowed)
 
 	settled, err := RunGrants(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false, PageSize: 0})
 	require.NoError(t, err)
@@ -449,7 +449,7 @@ func TestRun_SharedClientGrantsNeverReachOtherClients(t *testing.T) {
 	// Granting server access afterwards grants no use of its client.
 	f.grant(concreteUser, authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: serverB.String()})
 	grants := f.grantsOf(concreteUser)
-	require.True(t, mandatory(t, userCtx(concreteUser, grants), f, authz.MCPCheck(authz.ScopeMCPConnect, serverB.String(), project)).Allowed)
+	require.True(t, mandatory(t, userCtx(concreteUser, grants), f, authz.MCPServer(authz.MCPServerIDOf(serverB), authz.ProjectIDFrom(project)).Connect()).Allowed)
 	require.False(t, mandatory(t, userCtx(concreteUser, grants), f, useClient(clientB)).Allowed, "connect access to B does not grant B's upstream identity")
 	require.False(t, mandatory(t, userCtx(concreteUser, grants), f, useClient(later)).Allowed)
 }
