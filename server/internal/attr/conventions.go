@@ -1205,6 +1205,9 @@ const (
 	// InferenceMessageCountKey is the number of conversation messages in an
 	// Anthropic inference frame.
 	InferenceMessageCountKey = attribute.Key("gram.inference.message_count")
+	// TranscriptShadowMessageCountKey is the number of chat messages in one
+	// encrypted transcript shadow capture batch.
+	TranscriptShadowMessageCountKey = attribute.Key("gram.transcript_shadow.message_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -4595,6 +4598,10 @@ func SlogInferenceHasSessionID(v bool) slog.Attr {
 
 func SlogInferenceMessageCount(v int) slog.Attr {
 	return slog.Int(string(InferenceMessageCountKey), v)
+}
+
+func TranscriptShadowMessageCount(v int) attribute.KeyValue {
+	return TranscriptShadowMessageCountKey.Int(v)
 }
 
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
