@@ -14,6 +14,14 @@ const (
 	RequestedDuration4h = "4h"
 )
 
+// requestedDurations maps each duration a requester can ask for to its
+// length.
+var requestedDurations = map[string]time.Duration{
+	RequestedDuration1h: time.Hour,
+	RequestedDuration2h: 2 * time.Hour,
+	RequestedDuration4h: 4 * time.Hour,
+}
+
 // MinEndOfDayLead hides or refuses End of day when the day ends sooner than
 // this. A temporary grant needs at least five minutes, so ten leaves room to
 // decide.
@@ -52,15 +60,11 @@ func RequestedAccessWindow(duration, requestedUntil *string, now time.Time) (tim
 		return 0, time.Time{}, errDurationAndUntil
 	}
 	if duration != nil {
-		switch *duration {
-		case RequestedDuration1h:
-			return time.Hour, time.Time{}, nil
-		case RequestedDuration2h:
-			return 2 * time.Hour, time.Time{}, nil
-		case RequestedDuration4h:
-			return 4 * time.Hour, time.Time{}, nil
+		length, ok := requestedDurations[*duration]
+		if !ok {
+			return 0, time.Time{}, fmt.Errorf("unknown duration %q", *duration)
 		}
-		return 0, time.Time{}, fmt.Errorf("unknown duration %q", *duration)
+		return length, time.Time{}, nil
 	}
 	if requestedUntil != nil {
 		until, err := time.Parse(time.RFC3339, *requestedUntil)
