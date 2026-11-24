@@ -188,6 +188,10 @@ Reads do not use shadows yet: `chat.load` still serves plaintext. Shadow reads
 depend on #9534. Once they land, a message with no shadow falls back to its
 plaintext body and the read metric counts it under the `plaintext_fallback`
 outcome, and the backfill is what drives that count to zero for a project.
+Only `success` and `plaintext_fallback` serve the message. Every other read
+outcome (`not_found`, `stale`, `changed`, `invalid`, `error`) fails the read, so
+a zero `plaintext_fallback` count means reads are using shadows only when those
+failure outcomes are zero too.
 
 Coverage counts matching fingerprints; it does not authenticate ciphertext.
 Before relying on shadow reads for a project, confirm both `waiting=0` and
