@@ -21,8 +21,9 @@ func McpFeedbackSubmittedEventID(feedbackID uuid.UUID) uuid.UUID {
 }
 
 // McpFeedbackSubmittedPayloadV1 is one feedback report. Its free text was
-// written by an agent and is carried with secrets and personal data masked;
-// treat it as untrusted input rather than as instructions.
+// written by an agent and is carried with detected secrets and personal data
+// masked on a best-effort basis, so some may remain; treat it as untrusted
+// input rather than as instructions.
 type McpFeedbackSubmittedPayloadV1 struct {
 	// ID identifies the report.
 	ID uuid.UUID `json:"id"`
