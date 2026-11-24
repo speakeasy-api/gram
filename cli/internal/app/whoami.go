@@ -34,7 +34,11 @@ type WhoamiOptions struct {
 }
 
 type WhoamiResult struct {
-	Profile            *profile.Profile
+	Profile *profile.Profile
+
+	// APIURL is the Speakeasy host the profile was verified against.
+	APIURL string
+
 	Organization       keys.ValidateKeyOrganization
 	Scopes             []string
 	CurrentProjectSlug string
@@ -82,6 +86,7 @@ func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 
 	return &WhoamiResult{
 		Profile:            prof,
+		APIURL:             apiURL.String(),
 		Organization:       *result.Organization,
 		Scopes:             result.Scopes,
 		CurrentProjectSlug: projectSlug,
@@ -113,7 +118,7 @@ If no profile is configured, the command will indicate that no profile is set up
 			result, err := DoWhoami(ctx, WhoamiOptions{
 				Profile: profile.FromContext(ctx),
 				APIKey:  c.String("api-key"),
-				APIURL:  c.String("api-url"),
+				APIURL:  explicitAPIURL(c),
 			})
 			if err != nil {
 				return whoamiError(err)
@@ -121,6 +126,7 @@ If no profile is configured, the command will indicate that no profile is set up
 
 			if c.Bool("json") {
 				out, err := json.MarshalIndent(ProfileInfo{
+					APIURL:             result.APIURL,
 					Organization:       result.Organization,
 					Scopes:             result.Scopes,
 					CurrentProjectSlug: result.CurrentProjectSlug,
@@ -134,6 +140,7 @@ If no profile is configured, the command will indicate that no profile is set up
 			}
 
 			printProfile(ProfileInfo{
+				APIURL:             result.APIURL,
 				Organization:       result.Organization,
 				Scopes:             result.Scopes,
 				CurrentProjectSlug: result.CurrentProjectSlug,
@@ -146,6 +153,9 @@ If no profile is configured, the command will indicate that no profile is set up
 }
 
 type ProfileInfo struct {
+	// APIURL is the Speakeasy host the profile uses.
+	APIURL string `json:"api_url"`
+
 	Organization       keys.ValidateKeyOrganization `json:"org"`
 	Scopes             []string                     `json:"scopes"`
 	CurrentProjectSlug string                       `json:"project"`
@@ -172,6 +182,7 @@ func printProfile(profile ProfileInfo) {
 		Rows(
 			[]string{"Name:", profile.Organization.Name},
 			[]string{"Slug:", profile.Organization.Slug},
+			[]string{"Host:", profile.APIURL},
 		)
 
 	fmt.Println(orgTable.Render())
