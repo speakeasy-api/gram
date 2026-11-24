@@ -42,22 +42,30 @@ func (q *Queries) ClearDeletedNetworkIngressResources(ctx context.Context, arg C
 	return result.RowsAffected(), nil
 }
 
-const clearNetworkIngressCredentialPlatformCopies = `-- name: ClearNetworkIngressCredentialPlatformCopies :execrows
-UPDATE network_ingresses AS n
-SET credentials_encrypted = NULL
-WHERE n.id IN (
-    SELECT target.id FROM network_ingresses AS target
-    WHERE target.organization_id = $1
-      AND target.credentials_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND n.organization_id = $1
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = n.organization_id AND t.use_case = 'tailscale-oauth-clients'
-    FOR KEY SHARE
-  ), 0) = $3
+const clearNetworkIngressCredentialPlatformCopies = `-- name: ClearNetworkIngressCredentialPlatformCopies :one
+WITH cleared AS (
+    UPDATE network_ingresses AS n
+    SET credentials_encrypted = NULL
+    WHERE n.id IN (
+        SELECT target.id FROM network_ingresses AS target
+        WHERE target.organization_id = $1
+          AND target.credentials_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND n.organization_id = $1
+      AND n.credentials_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = n.organization_id AND t.use_case = 'tailscale-oauth-clients'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (n.credentials_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearNetworkIngressCredentialPlatformCopiesParams struct {
@@ -66,16 +74,24 @@ type ClearNetworkIngressCredentialPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
+type ClearNetworkIngressCredentialPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
+}
+
 // Destroys up to limit platform-key copies of the organization's credentials
 // after finalize. Credentials with an organization-key copy keep it; those
 // recorded as unreadable have none, so they are left with no credentials at
 // all. Either way this is not new desired state, so updated_at stays.
-func (q *Queries) ClearNetworkIngressCredentialPlatformCopies(ctx context.Context, arg ClearNetworkIngressCredentialPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearNetworkIngressCredentialPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
+func (q *Queries) ClearNetworkIngressCredentialPlatformCopies(ctx context.Context, arg ClearNetworkIngressCredentialPlatformCopiesParams) (ClearNetworkIngressCredentialPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearNetworkIngressCredentialPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearNetworkIngressCredentialPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
 }
 
 const countNetworkIngressCredentialCopies = `-- name: CountNetworkIngressCredentialCopies :one
