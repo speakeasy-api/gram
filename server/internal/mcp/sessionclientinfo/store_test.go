@@ -303,6 +303,77 @@ func TestLiveSetExpiryDoesNotBreakAdmitOrLoad(t *testing.T) {
 	requireFreshIdleExpiry(t, client, recordKeyPrefix(projectID, "widgets")+member("session-2"))
 }
 
+// TestLoadReadmitsRecordAfterLiveSetLoss covers a live set that expired or was
+// evicted while a record survived: a hit puts the record back in the set with a
+// fresh expiry, so it counts against the cap again.
+func TestLoadReadmitsRecordAfterLiveSetLoss(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, 0)
+	projectID := uuid.New()
+	ctx := t.Context()
+	recordKey := recordKeyPrefix(projectID, "widgets") + member("session-1")
+	liveKey := liveSetKey(projectID, "widgets")
+
+	require.NoError(t, store.Store(ctx, projectID, "widgets", "session-1", Info{Name: "claude-code", Version: "2.1"}, 1))
+
+	client, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	require.NoError(t, client.Del(ctx, liveKey).Err())
+
+	_, err = store.Load(ctx, projectID, "widgets", "session-1", 2)
+	require.NoError(t, err)
+
+	score, err := client.ZScore(ctx, liveKey, member("session-1")).Result()
+	require.NoError(t, err, "the hit must re-admit the record to the live set")
+	require.EqualValues(t, 2, int64(score), "the re-admitted member carries the load's timestamp")
+
+	requireFreshIdleExpiry(t, client, recordKey)
+	requireFreshIdleExpiry(t, client, liveKey)
+}
+
+// TestCapEvictsRecordsReadmittedByLoad checks that re-admission on a hit
+// cannot grow a server past its budget: a load may push the live set over the
+// cap, and the next admit evicts the excess least recently used first.
+func TestCapEvictsRecordsReadmittedByLoad(t *testing.T) {
+	t.Parallel()
+
+	store := newTestStore(t, 1)
+	projectID := uuid.New()
+	ctx := t.Context()
+	liveKey := liveSetKey(projectID, "widgets")
+
+	require.NoError(t, store.Store(ctx, projectID, "widgets", "orphaned", Info{Name: "orphaned", Version: ""}, 1))
+
+	client, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	require.NoError(t, client.Del(ctx, liveKey).Err())
+	require.NoError(t, store.Store(ctx, projectID, "widgets", "tracked", Info{Name: "tracked", Version: ""}, 2))
+
+	_, err = store.Load(ctx, projectID, "widgets", "orphaned", 3)
+	require.NoError(t, err)
+
+	live, err := client.ZCard(ctx, liveKey).Result()
+	require.NoError(t, err)
+	require.EqualValues(t, 2, live, "the hit re-admits the orphaned record above the cap")
+
+	require.NoError(t, store.Store(ctx, projectID, "widgets", "newcomer", Info{Name: "newcomer", Version: ""}, 4))
+
+	live, err = client.ZCard(ctx, liveKey).Result()
+	require.NoError(t, err)
+	require.EqualValues(t, 1, live, "the next admit brings the live set back to the cap")
+
+	records, err := client.Keys(ctx, recordKeyPrefix(projectID, "widgets")+"*").Result()
+	require.NoError(t, err)
+	require.Len(t, records, 1, "evicted records are deleted")
+
+	got, err := store.Load(ctx, projectID, "widgets", "newcomer", 5)
+	require.NoError(t, err)
+	require.Equal(t, "newcomer", got.Name)
+}
+
 // TestStoreWithoutRedisIsInert keeps environments with no cache wired working:
 // every caller simply resolves as unknown rather than erroring.
 func TestStoreWithoutRedisIsInert(t *testing.T) {

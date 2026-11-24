@@ -143,6 +143,11 @@ return 1
 // milliseconds) of both the record and the live set out again. A record that
 // is gone drops its (stale) live-set member too, so the budget accounting
 // converges.
+//
+// The ZADD on a hit is unconditional: if the live set expired or was evicted
+// while the record survived, the hit admits the record again, so it counts
+// against the cap and the next admit evicts any excess. Only a present record
+// reaches it, so an evicted session is never brought back.
 var loadScript = redis.NewScript(`
 local value = redis.call('GET', KEYS[1])
 if not value then
@@ -150,7 +155,7 @@ if not value then
   return false
 end
 redis.call('PEXPIRE', KEYS[1], ARGV[3])
-redis.call('ZADD', KEYS[2], 'XX', ARGV[2], ARGV[1])
+redis.call('ZADD', KEYS[2], ARGV[2], ARGV[1])
 redis.call('PEXPIRE', KEYS[2], ARGV[3])
 return value
 `)
