@@ -22,7 +22,8 @@ JOIN organization_user_relationships membership
   ON membership.user_id = editor.id
   AND membership.organization_id = config.organization_id
   AND membership.deleted_at IS NULL
-WHERE config.mcp_server_id = @mcp_server_id
+WHERE editor.deleted_at IS NULL
+  AND config.mcp_server_id = @mcp_server_id
   AND config.project_id = @project_id;
 
 -- name: UpsertFeedbackConfig :one
@@ -100,6 +101,7 @@ LEFT JOIN organization_user_relationships membership
   AND membership.deleted_at IS NULL
 LEFT JOIN users member
   ON member.id = membership.user_id
+  AND member.deleted_at IS NULL
 WHERE feedback.project_id = @project_id
   AND feedback.mcp_server_id = @mcp_server_id
   AND (sqlc.narg(severity)::text IS NULL OR feedback.severity = sqlc.narg(severity)::text)

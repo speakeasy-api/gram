@@ -52,6 +52,10 @@ export type McpFeedbackSettings = {
    * The email of the person who last changed the settings; for a change made with an API key, the key's creator. Absent when that person has since been removed.
    */
   updatedByEmail?: string | undefined;
+  /**
+   * Identifies these stored settings, and changes whenever they do. Empty when the server never had any. Send it back as expected_version so a change made from settings someone else has since changed is refused.
+   */
+  version: string;
 };
 
 /** @internal */
@@ -71,6 +75,7 @@ export const McpFeedbackSettings$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     updated_by_email: z.optional(z.string()),
+    version: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {

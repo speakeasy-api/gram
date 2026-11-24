@@ -137,10 +137,10 @@ type UpdateSettingsPayload struct {
 	ToolName *string
 	// The description agents read. Leave out to use the default.
 	ToolDescription *string
-	// The updated_at of the settings this change was made from. When set, the
-	// change is refused with a conflict if the settings were changed since, so one
-	// admin's change does not silently undo another's.
-	ExpectedUpdatedAt *string
+	// The version of the settings this change was made from, empty when the server
+	// had none. When set, the change is refused with a conflict if the settings
+	// were changed since, so one admin's change does not silently undo another's.
+	ExpectedVersion *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

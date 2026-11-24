@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -20,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/requestip"
 )
 
 // SetFeedback has the gateway serve the feedback tool on the MCP servers that
@@ -153,14 +156,18 @@ func handleHostedFeedbackToolCall(
 // organization's feedback may name.
 //
 // The caller's rate limit follows the most durable identity the request has,
-// whatever its organization: its principal, else its API key, else the MCP
-// session the client sent. The session only picks the bucket and is never
-// stored, because on a public server it is the caller's only credential.
+// whatever its organization: its principal, else its API key, else the client
+// address the edge resolved, else a hash of the MCP session the client sent.
+// The session only picks the bucket, hashed because on a public server it is
+// the caller's only credential.
 func feedbackCaller(ctx context.Context, organizationID string, r *http.Request, authenticated bool) mcpfeedback.Caller {
 	caller := mcpfeedback.Caller{UserID: "", UserEmail: "", ExternalUserID: "", ClientName: "", ClientVersion: "", LimitSubject: ""}
-	if r != nil {
+	if address, ok := requestip.FromContext(ctx); ok && address.Addr.IsValid() {
+		caller.LimitSubject = "address:" + address.String()
+	} else if r != nil {
 		if session := r.Header.Get(proxy.McpSessionIDHeader); session != "" {
-			caller.LimitSubject = "session:" + session
+			digest := sha256.Sum256([]byte(session))
+			caller.LimitSubject = "session:" + hex.EncodeToString(digest[:])
 		}
 	}
 	if !authenticated {

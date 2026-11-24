@@ -27,10 +27,10 @@ type UpdateSettingsRequestBody struct {
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// The description agents read. Leave out to use the default.
 	ToolDescription *string `form:"tool_description,omitempty" json:"tool_description,omitempty" xml:"tool_description,omitempty"`
-	// The updated_at of the settings this change was made from. When set, the
-	// change is refused with a conflict if the settings were changed since, so one
-	// admin's change does not silently undo another's.
-	ExpectedUpdatedAt *string `form:"expected_updated_at,omitempty" json:"expected_updated_at,omitempty" xml:"expected_updated_at,omitempty"`
+	// The version of the settings this change was made from, empty when the server
+	// had none. When set, the change is refused with a conflict if the settings
+	// were changed since, so one admin's change does not silently undo another's.
+	ExpectedVersion *string `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
 }
 
 // GetSettingsResponseBody is the type of the "mcpFeedback" service
@@ -57,6 +57,10 @@ type GetSettingsResponseBody struct {
 	// with an API key, the key's creator. Absent when that person has since been
 	// removed.
 	UpdatedByEmail *string `form:"updated_by_email,omitempty" json:"updated_by_email,omitempty" xml:"updated_by_email,omitempty"`
+	// Identifies these stored settings, and changes whenever they do. Empty when
+	// the server never had any. Send it back as expected_version so a change made
+	// from settings someone else has since changed is refused.
+	Version string `form:"version" json:"version" xml:"version"`
 }
 
 // UpdateSettingsResponseBody is the type of the "mcpFeedback" service
@@ -83,6 +87,10 @@ type UpdateSettingsResponseBody struct {
 	// with an API key, the key's creator. Absent when that person has since been
 	// removed.
 	UpdatedByEmail *string `form:"updated_by_email,omitempty" json:"updated_by_email,omitempty" xml:"updated_by_email,omitempty"`
+	// Identifies these stored settings, and changes whenever they do. Empty when
+	// the server never had any. Send it back as expected_version so a change made
+	// from settings someone else has since changed is refused.
+	Version string `form:"version" json:"version" xml:"version"`
 }
 
 // ListResponseBody is the type of the "mcpFeedback" service "list" endpoint
@@ -734,6 +742,7 @@ func NewGetSettingsResponseBody(res *types.McpFeedbackSettings) *GetSettingsResp
 		DefaultToolDescription: res.DefaultToolDescription,
 		UpdatedAt:              res.UpdatedAt,
 		UpdatedByEmail:         res.UpdatedByEmail,
+		Version:                res.Version,
 	}
 	if res.Tool != nil {
 		body.Tool = marshalTypesMcpFeedbackToolToMcpFeedbackToolResponseBody(res.Tool)
@@ -753,6 +762,7 @@ func NewUpdateSettingsResponseBody(res *types.McpFeedbackSettings) *UpdateSettin
 		DefaultToolDescription: res.DefaultToolDescription,
 		UpdatedAt:              res.UpdatedAt,
 		UpdatedByEmail:         res.UpdatedByEmail,
+		Version:                res.Version,
 	}
 	if res.Tool != nil {
 		body.Tool = marshalTypesMcpFeedbackToolToMcpFeedbackToolResponseBody(res.Tool)
@@ -1234,11 +1244,11 @@ func NewGetSettingsPayload(mcpServerID string, sessionToken *string, apikeyToken
 // endpoint payload.
 func NewUpdateSettingsPayload(body *UpdateSettingsRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpfeedback.UpdateSettingsPayload {
 	v := &mcpfeedback.UpdateSettingsPayload{
-		McpServerID:       *body.McpServerID,
-		Enabled:           *body.Enabled,
-		ToolName:          body.ToolName,
-		ToolDescription:   body.ToolDescription,
-		ExpectedUpdatedAt: body.ExpectedUpdatedAt,
+		McpServerID:     *body.McpServerID,
+		Enabled:         *body.Enabled,
+		ToolName:        body.ToolName,
+		ToolDescription: body.ToolDescription,
+		ExpectedVersion: body.ExpectedVersion,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -1286,9 +1296,6 @@ func ValidateUpdateSettingsRequestBody(body *UpdateSettingsRequestBody) (err err
 		if utf8.RuneCountInString(*body.ToolDescription) > 2000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_description", *body.ToolDescription, utf8.RuneCountInString(*body.ToolDescription), 2000, false))
 		}
-	}
-	if body.ExpectedUpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_updated_at", *body.ExpectedUpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

@@ -22114,7 +22114,7 @@ func mcpFeedbackUpdateSettingsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-feedback update-settings --body '{\n      \"enabled\": false,\n      \"expected_updated_at\": \"1970-01-01T00:00:01Z\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_description\": \"aaa\",\n      \"tool_name\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-feedback update-settings --body '{\n      \"enabled\": false,\n      \"expected_version\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_description\": \"aaa\",\n      \"tool_name\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpFeedbackListUsage() {

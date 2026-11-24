@@ -137,14 +137,6 @@ func (s *Service) UpdateSettings(ctx context.Context, payload *gen.UpdateSetting
 	if err := settings.Validate(); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err.Error())
 	}
-	var expectedUpdatedAt *time.Time
-	if payload.ExpectedUpdatedAt != nil {
-		expected, err := time.Parse(time.RFC3339Nano, *payload.ExpectedUpdatedAt)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid expected_updated_at")
-		}
-		expectedUpdatedAt = &expected
-	}
 
 	// Checked before the transaction so a caller who may not write the server
 	// never takes its row lock.
@@ -189,9 +181,7 @@ func (s *Service) UpdateSettings(ctx context.Context, payload *gen.UpdateSetting
 		before = SettingsFromConfig(existing)
 		beforeUpdatedAt = &existing.UpdatedAt.Time
 	}
-	// Compared to the millisecond: the dashboard holds the time as a
-	// JavaScript Date, which keeps no finer precision than that.
-	if expectedUpdatedAt != nil && (beforeUpdatedAt == nil || !beforeUpdatedAt.Truncate(time.Millisecond).Equal(expectedUpdatedAt.Truncate(time.Millisecond))) {
+	if payload.ExpectedVersion != nil && *payload.ExpectedVersion != settingsVersion(beforeUpdatedAt) {
 		return nil, oops.E(oops.CodeConflict, nil, "these feedback settings were changed by someone else since you opened them; reload to see the change").LogInfo(ctx, logger)
 	}
 

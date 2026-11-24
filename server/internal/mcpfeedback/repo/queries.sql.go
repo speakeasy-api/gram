@@ -106,7 +106,8 @@ JOIN organization_user_relationships membership
   ON membership.user_id = editor.id
   AND membership.organization_id = config.organization_id
   AND membership.deleted_at IS NULL
-WHERE config.mcp_server_id = $1
+WHERE editor.deleted_at IS NULL
+  AND config.mcp_server_id = $1
   AND config.project_id = $2
 `
 
@@ -241,6 +242,7 @@ LEFT JOIN organization_user_relationships membership
   AND membership.deleted_at IS NULL
 LEFT JOIN users member
   ON member.id = membership.user_id
+  AND member.deleted_at IS NULL
 WHERE feedback.project_id = $1
   AND feedback.mcp_server_id = $2
   AND ($3::text IS NULL OR feedback.severity = $3::text)
