@@ -61,15 +61,36 @@ func (ti *transitionInstance) finalize(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// candidateOrganizations pages through one pass of backfill candidates and
+// returns their organizations in order.
+func candidateOrganizations(t *testing.T, migrator *orgencryption.Migrator) []orgencryption.Transition {
+	t.Helper()
+
+	var candidates []orgencryption.Transition
+	var cursor orgencryption.BackfillCursor
+	for {
+		page, err := migrator.NextBackfillCandidates(t.Context(), cursor)
+		require.NoError(t, err)
+		candidates = append(candidates, page.Candidates...)
+		if !page.More {
+			return candidates
+		}
+		cursor = page.Next
+	}
+}
+
+// dueOrganizations returns the organizations of one pass's candidates that
+// BackfillDue reports due, in order.
 func dueOrganizations(t *testing.T, migrator *orgencryption.Migrator) []string {
 	t.Helper()
 
-	due, err := migrator.ListDueBackfills(t.Context())
-	require.NoError(t, err)
-
-	ids := make([]string, 0, len(due))
-	for _, transition := range due {
-		ids = append(ids, transition.OrganizationID)
+	var ids []string
+	for _, candidate := range candidateOrganizations(t, migrator) {
+		due, err := migrator.BackfillDue(t.Context(), candidate)
+		require.NoError(t, err)
+		if due {
+			ids = append(ids, candidate.OrganizationID)
+		}
 	}
 
 	return ids
@@ -146,7 +167,7 @@ func TestMigrator_BackfillRefusesAUseCaseWithoutStores(t *testing.T) {
 	require.ErrorIs(t, err, orgencryption.ErrNoCopyStores)
 }
 
-func TestMigrator_ListDueBackfillsOffersANewlyEnrolledOrganization(t *testing.T) {
+func TestMigrator_BackfillDueOffersANewlyEnrolledOrganization(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -155,7 +176,7 @@ func TestMigrator_ListDueBackfillsOffersANewlyEnrolledOrganization(t *testing.T)
 	require.Equal(t, []string{ti.orgID}, dueOrganizations(t, ti.migrator(t)), "it has never been verified")
 }
 
-func TestMigrator_ListDueBackfillsSkipsOrganizationsNotInDualWrite(t *testing.T) {
+func TestMigrator_BackfillDueSkipsOrganizationsNotInDualWrite(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -169,7 +190,7 @@ func TestMigrator_ListDueBackfillsSkipsOrganizationsNotInDualWrite(t *testing.T)
 	require.Empty(t, dueOrganizations(t, ti.migrator(t)), "org_kms organizations are done")
 }
 
-func TestMigrator_ListDueBackfillsSkipsVerifiedOrganizationsWithNothingWaiting(t *testing.T) {
+func TestMigrator_BackfillDueSkipsVerifiedOrganizationsWithNothingWaiting(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -187,7 +208,7 @@ func TestMigrator_ListDueBackfillsSkipsVerifiedOrganizationsWithNothingWaiting(t
 	require.Equal(t, []string{ti.orgID}, dueOrganizations(t, migrator), "a value written without an organization-key copy makes it due again")
 }
 
-func TestMigrator_ListDueBackfillsWaitsBeforeRetryingAFailedVerification(t *testing.T) {
+func TestMigrator_BackfillDueWaitsBeforeRetryingAFailedVerification(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -207,7 +228,7 @@ func TestMigrator_ListDueBackfillsWaitsBeforeRetryingAFailedVerification(t *test
 	require.Equal(t, []string{ti.orgID}, dueOrganizations(t, migrator), "the retry interval has passed")
 }
 
-func TestMigrator_ListDueBackfillsOffersAVerificationOlderThanTheLastBackfill(t *testing.T) {
+func TestMigrator_BackfillDueOffersAVerificationOlderThanTheLastBackfill(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -360,7 +381,7 @@ func TestRunner_RecordsAFailedVerificationAsTheRunsError(t *testing.T) {
 	require.Contains(t, *transition.LastBackfill.Error, "verification failed")
 }
 
-func TestMigrator_ListDueBackfillsOffersARunThatNeverEndedOnceItsClaimExpires(t *testing.T) {
+func TestMigrator_BackfillDueOffersARunThatNeverEndedOnceItsClaimExpires(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -396,7 +417,7 @@ func (f failingCountStore) Count(ctx context.Context, organizationID string) (or
 	return f.fakeCopyStore.Count(ctx, organizationID)
 }
 
-func TestMigrator_ListDueBackfillsLeavesOutAnOrganizationWhoseCountsFail(t *testing.T) {
+func TestMigrator_BackfillDueReportsAFailedCount(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -408,16 +429,23 @@ func TestMigrator_ListDueBackfillsLeavesOutAnOrganizationWhoseCountsFail(t *test
 	recent := time.Now().Add(-time.Minute)
 	ti.setRunTimes(t, ti.orgID, &recent, &recent, nil)
 	ti.setRunTimes(t, other, &recent, &recent, nil)
-	ti.store.put(ti.orgID, "a", orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "alpha")), Org: orgencryption.ErasedCopies().Org})
 	ti.store.put(other, "b", orgencryption.Copies{Platform: conv.ToPGText(ti.platformCopy(t, "beta")), Org: orgencryption.ErasedCopies().Org})
 
 	migrator, err := orgencryption.NewMigrator(testenv.NewLogger(t), ti.conn, ti.runner, ti.transitions, []orgencryption.UseCaseStores{{UseCase: useCase, Stores: []orgencryption.CopyStore{failingCountStore{fakeCopyStore: ti.store, organizationID: ti.orgID}}}}, testenv.NewMeterProvider(t))
 	require.NoError(t, err)
 
-	require.Equal(t, []string{other}, dueOrganizations(t, migrator))
+	for _, candidate := range candidateOrganizations(t, migrator) {
+		due, err := migrator.BackfillDue(t.Context(), candidate)
+		if candidate.OrganizationID == ti.orgID {
+			require.Error(t, err, "the failed count is reported to the caller, which moves on")
+			continue
+		}
+		require.NoError(t, err)
+		require.True(t, due)
+	}
 }
 
-func TestMigrator_ListDueBackfillsOffersTheLeastRecentlyAttemptedFirst(t *testing.T) {
+func TestMigrator_BackfillDueOffersTheLeastRecentlyAttemptedFirst(t *testing.T) {
 	t.Parallel()
 
 	ti := newTransitionInstance(t)
@@ -468,4 +496,62 @@ func TestTransitions_SweepPlatformCopiesReportsWhatTheClearDestroyed(t *testing.
 	stragglers, err := ti.transitions.SweepPlatformCopies(t.Context(), ti.orgID, useCase, []orgencryption.CopyStore{&arrivingStore{fakeCopyStore: ti.store, ti: ti, arrived: false}})
 	require.NoError(t, err)
 	require.Equal(t, []orgencryption.StragglerCount{{Columns: fakeColumns, Cleared: orgencryption.ClearedCopies{PlatformOnly: 1, BesideOrgCopy: 1}}}, stragglers, "a platform-only copy that lands just before the clear is reported as platform-only")
+}
+
+func TestMigrator_NextBackfillCandidatesPagesLeastRecentlyAttemptedFirst(t *testing.T) {
+	t.Parallel()
+
+	ti := newTransitionInstance(t)
+	other := createOrganization(t, ti.conn)
+	never := createOrganization(t, ti.conn)
+	for _, organizationID := range []string{ti.orgID, other, never} {
+		_, err := ti.transitions.Enroll(t.Context(), organizationID, useCase, orgencryption.SystemActor())
+		require.NoError(t, err)
+	}
+	older := time.Now().Add(-2 * time.Hour)
+	newer := time.Now().Add(-time.Hour)
+	ti.setRunTimes(t, ti.orgID, &newer, &newer, nil)
+	ti.setRunTimes(t, other, &older, &older, nil)
+
+	migrator := ti.migrator(t)
+	migrator.SetCandidatePageSize(1)
+
+	var ids []string
+	for _, candidate := range candidateOrganizations(t, migrator) {
+		ids = append(ids, candidate.OrganizationID)
+	}
+	require.Equal(t, []string{never, other, ti.orgID}, ids, "one candidate per page, never attempted first")
+}
+
+func TestMigrator_NextBackfillCandidatesLeavesOutRunsStartedDuringThePass(t *testing.T) {
+	t.Parallel()
+
+	ti := newTransitionInstance(t)
+	other := createOrganization(t, ti.conn)
+	ti.enroll(t)
+	_, err := ti.transitions.Enroll(t.Context(), other, useCase, orgencryption.SystemActor())
+	require.NoError(t, err)
+
+	migrator := ti.migrator(t)
+	migrator.SetCandidatePageSize(1)
+
+	first, err := migrator.NextBackfillCandidates(t.Context(), orgencryption.BackfillCursor{})
+	require.NoError(t, err)
+	require.Len(t, first.Candidates, 1)
+	require.True(t, first.More)
+
+	// The organization the second page would offer is backfilled after the
+	// pass began, as a concurrent on-demand run would.
+	later := first.Candidates[0].OrganizationID
+	if later == ti.orgID {
+		later = other
+	} else {
+		later = ti.orgID
+	}
+	_, err = migrator.Backfill(t.Context(), later, useCase)
+	require.NoError(t, err)
+
+	second, err := migrator.NextBackfillCandidates(t.Context(), first.Next)
+	require.NoError(t, err)
+	require.Empty(t, second.Candidates, "a transition backfilled during the pass is not offered again")
 }

@@ -24,10 +24,12 @@ import (
 // for platform-key copies that appeared after clearing (SQL only, no KMS), then
 // backfills and verifies the dual_write organizations that are due. The work
 // lists come from SQL and the activity loops over them itself; it starts no
-// workflow per organization. Due organizations not reached within the budget
-// are first in line next hour, because they are taken least recently attempted
-// first; stalled clears are taken in random order, since a failed clear
-// records no attempt.
+// workflow per organization. Backfill candidates are read a page at a time,
+// least recently attempted first, and each is checked and backfilled before
+// the next, with a heartbeat between them, so work starts without scanning
+// every organization first. Organizations not reached within the budget are
+// first in line next hour; stalled clears are taken in random order, since a
+// failed clear records no attempt.
 //
 // An operator can also start one organization's run on demand through
 // StartOrganizationEncryptionBackfill. Runs claim the transition row, so an
@@ -109,7 +111,8 @@ const (
 // OrganizationEncryptionMigrator is the background side of moving use cases
 // to organization keys.
 type OrganizationEncryptionMigrator interface {
-	ListDueBackfills(ctx context.Context) ([]orgencryption.Transition, error)
+	NextBackfillCandidates(ctx context.Context, cursor orgencryption.BackfillCursor) (orgencryption.BackfillPage, error)
+	BackfillDue(ctx context.Context, transition orgencryption.Transition) (bool, error)
 	Backfill(ctx context.Context, organizationID string, useCase orgencryption.UseCase) (orgencryption.RunResult, error)
 	ListFinalized(ctx context.Context) ([]orgencryption.Transition, error)
 	ResumeClear(ctx context.Context, organizationID string, useCase orgencryption.UseCase) error
@@ -125,7 +128,8 @@ type OrganizationEncryptionBackfillResult struct {
 	// another run held the claim or the transition state moved.
 	Skipped int
 
-	// Failed counts organizations whose run or sweep returned an error.
+	// Failed counts organizations whose due check, run or sweep returned an
+	// error.
 	Failed int
 
 	// ClearsResumed counts finalized organizations whose clear this run
@@ -280,33 +284,54 @@ func (a *OrganizationEncryptionBackfillActivities) Backfill(ctx context.Context)
 		}
 	}
 
-	due, err := a.migrator.ListDueBackfills(ctx)
-	if err != nil {
-		errs = append(errs, err)
-	}
-	a.heartbeat(ctx)
-
-	for _, transition := range due {
-		if ctx.Err() != nil || !a.now().Before(deadline) {
+	var cursor orgencryption.BackfillCursor
+backfills:
+	for ctx.Err() == nil && a.now().Before(deadline) {
+		page, err := a.migrator.NextBackfillCandidates(ctx, cursor)
+		a.heartbeat(ctx)
+		if err != nil {
+			errs = append(errs, err)
 			break
 		}
-		a.heartbeat(ctx)
 
-		logger := a.logger.With(attr.SlogOrganizationID(transition.OrganizationID), attr.SlogOrgEncryptionUseCase(transition.UseCase))
+		for _, transition := range page.Candidates {
+			if ctx.Err() != nil || !a.now().Before(deadline) {
+				break backfills
+			}
+			a.heartbeat(ctx)
 
-		_, err := a.migrator.Backfill(ctx, transition.OrganizationID, transition.UseCase)
-		switch {
-		case errors.Is(err, orgencryption.ErrBackfillRunning), errors.Is(err, orgencryption.ErrFenced), errors.Is(err, orgencryption.ErrTransitionNotAllowed):
-			result.Skipped++
-			logger.InfoContext(ctx, "skipped organization encryption backfill", attr.SlogError(err))
-		case err != nil:
-			result.Failed++
-			errs = append(errs, err)
-			logger.ErrorContext(ctx, "organization encryption backfill failed", attr.SlogError(err))
-		default:
-			result.Backfilled++
-			succeeded = true
+			logger := a.logger.With(attr.SlogOrganizationID(transition.OrganizationID), attr.SlogOrgEncryptionUseCase(transition.UseCase))
+
+			due, err := a.migrator.BackfillDue(ctx, transition)
+			if err != nil {
+				result.Failed++
+				errs = append(errs, err)
+				logger.ErrorContext(ctx, "check whether an organization encryption backfill is due", attr.SlogError(err))
+				continue
+			}
+			if !due {
+				continue
+			}
+
+			_, err = a.migrator.Backfill(ctx, transition.OrganizationID, transition.UseCase)
+			switch {
+			case errors.Is(err, orgencryption.ErrBackfillRunning), errors.Is(err, orgencryption.ErrFenced), errors.Is(err, orgencryption.ErrTransitionNotAllowed):
+				result.Skipped++
+				logger.InfoContext(ctx, "skipped organization encryption backfill", attr.SlogError(err))
+			case err != nil:
+				result.Failed++
+				errs = append(errs, err)
+				logger.ErrorContext(ctx, "organization encryption backfill failed", attr.SlogError(err))
+			default:
+				result.Backfilled++
+				succeeded = true
+			}
 		}
+
+		if !page.More {
+			break
+		}
+		cursor = page.Next
 	}
 
 	if err := errors.Join(errs...); err != nil {

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
@@ -17,15 +18,19 @@ import (
 )
 
 const (
-	// migratorPageSize bounds the transitions one list query returns. There
-	// are tens of organizations per use case to move. ListDueBackfills pages
-	// through every dual_write transition; ListFinalized returns one page and
-	// leaves the rest for the next run.
+	// migratorPageSize bounds the finalized transitions ListFinalized
+	// returns. A list that fills up leaves the rest for the next run.
 	migratorPageSize = 500
+
+	// backfillCandidatePageSize is how many candidates one
+	// NextBackfillCandidates page holds. Callers check and backfill each
+	// candidate before reading the next page, so a small page keeps the work
+	// between list queries short.
+	backfillCandidatePageSize = 100
 
 	// VerificationRetryInterval is how long an organization with nothing
 	// waiting, but no clean verification since its last backfill, waits
-	// before ListDueBackfills offers it again. A failed verification needs a
+	// before BackfillDue reports it due again. A failed verification needs a
 	// person to look, and re-verifying every hour would repeat the same
 	// failure and its error logs.
 	VerificationRetryInterval = 6 * time.Hour
@@ -76,13 +81,14 @@ type UseCaseStores struct {
 // resumes clears that never finished, and sweeps finalized organizations for
 // platform-key copies that appeared after clearing.
 type Migrator struct {
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	runner      *Runner
-	transitions *Transitions
-	stores      map[UseCase][]CopyStore
-	useCases    []string
-	stragglers  metric.Int64Counter
+	logger            *slog.Logger
+	db                *pgxpool.Pool
+	runner            *Runner
+	transitions       *Transitions
+	stores            map[UseCase][]CopyStore
+	useCases          []string
+	stragglers        metric.Int64Counter
+	candidatePageSize int32
 }
 
 // NewMigrator builds a Migrator over the use cases it moves, each listed
@@ -112,102 +118,135 @@ func NewMigrator(logger *slog.Logger, db *pgxpool.Pool, runner *Runner, transiti
 	logger = logger.With(attr.SlogComponent("orgencryption.migrator"))
 
 	return &Migrator{
-		logger:      logger,
-		db:          db,
-		runner:      runner,
-		transitions: transitions,
-		stores:      stores,
-		useCases:    useCases,
-		stragglers:  newStragglerCounter(logger, meterProvider),
+		logger:            logger,
+		db:                db,
+		runner:            runner,
+		transitions:       transitions,
+		stores:            stores,
+		useCases:          useCases,
+		stragglers:        newStragglerCounter(logger, meterProvider),
+		candidatePageSize: backfillCandidatePageSize,
 	}, nil
 }
 
-// ListDueBackfills returns the dual_write transitions due a backfill, least
-// recently attempted first. A transition is due while values wait for an
-// organization-key copy; while it has no clean verification since it entered
-// dual_write or since its last backfill started, once that attempt started at
-// least VerificationRetryInterval ago; or when its last run started but never
-// recorded its end, once that run's claim expired. A transition whose counts
-// fail is logged and left out, so one organization never holds up the rest.
-func (m *Migrator) ListDueBackfills(ctx context.Context) ([]Transition, error) {
-	q := repo.New(m.db)
-
-	now, err := q.GetEncryptionClock(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("read database clock: %w", err)
-	}
-
-	var due []Transition
-	afterOrganizationID, afterUseCase := "", ""
-	for {
-		rows, err := q.ListEncryptionTransitionsInDualWrite(ctx, repo.ListEncryptionTransitionsInDualWriteParams{
-			UseCases:            m.useCases,
-			AfterOrganizationID: afterOrganizationID,
-			AfterUseCase:        afterUseCase,
-			LimitValue:          migratorPageSize,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("list dual_write encryption transitions: %w", err)
-		}
-
-		for _, row := range rows {
-			if m.backfillDue(ctx, row, now.Time) {
-				transition, err := toTransition(row)
-				if err != nil {
-					m.logger.ErrorContext(ctx, "read encryption transition", attr.SlogOrganizationID(row.OrganizationID), attr.SlogError(err))
-					continue
-				}
-				due = append(due, transition)
-			}
-		}
-
-		if len(rows) < migratorPageSize {
-			break
-		}
-		afterOrganizationID, afterUseCase = rows[len(rows)-1].OrganizationID, rows[len(rows)-1].UseCase
-	}
-
-	slices.SortStableFunc(due, func(a, b Transition) int {
-		switch {
-		case a.LastBackfill.StartedAt == nil && b.LastBackfill.StartedAt == nil:
-			return 0
-		case a.LastBackfill.StartedAt == nil:
-			return -1
-		case b.LastBackfill.StartedAt == nil:
-			return 1
-		default:
-			return a.LastBackfill.StartedAt.Compare(*b.LastBackfill.StartedAt)
-		}
-	})
-
-	return due, nil
+// BackfillCursor is a position in one pass over the backfill candidates.
+// The zero value starts a new pass.
+type BackfillCursor struct {
+	started             bool
+	cutoff              time.Time
+	afterStarted        pgtype.Timestamptz
+	afterOrganizationID string
+	afterUseCase        string
 }
 
-// backfillDue reports whether a dual_write transition is due a backfill at
-// now, the database clock.
-func (m *Migrator) backfillDue(ctx context.Context, row repo.OrganizationEncryptionTransition, now time.Time) bool {
-	started, completed, verified := row.LastBackfillStartedAt, row.LastBackfillCompletedAt, row.LastVerifiedAt
+// BackfillPage is one page of backfill candidates.
+type BackfillPage struct {
+	// Candidates are dual_write transitions that may be due a backfill,
+	// least recently attempted first. BackfillDue decides each one.
+	Candidates []Transition
 
-	if started.Valid && !completed.Valid {
+	// Next continues the pass after this page.
+	Next BackfillCursor
+
+	// More reports whether another page may follow.
+	More bool
+}
+
+// NextBackfillCandidates returns the page of backfill candidates after
+// cursor. A pass covers every dual_write transition of the migrator's use
+// cases, least recently attempted first, except those whose backfill started
+// after the pass began, so an organization backfilled during the pass is not
+// offered again. Check and backfill each candidate before reading the next
+// page, so work starts without scanning every organization first.
+func (m *Migrator) NextBackfillCandidates(ctx context.Context, cursor BackfillCursor) (BackfillPage, error) {
+	q := repo.New(m.db)
+	page := BackfillPage{Candidates: nil, Next: cursor, More: false}
+
+	if !cursor.started {
+		now, err := q.GetEncryptionClock(ctx)
+		if err != nil {
+			return page, fmt.Errorf("read database clock: %w", err)
+		}
+		cursor = BackfillCursor{
+			started:             true,
+			cutoff:              now.Time,
+			afterStarted:        pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.NegativeInfinity, Valid: true},
+			afterOrganizationID: "",
+			afterUseCase:        "",
+		}
+	}
+
+	rows, err := q.ListEncryptionBackfillCandidates(ctx, repo.ListEncryptionBackfillCandidatesParams{
+		UseCases:            m.useCases,
+		Cutoff:              pgtype.Timestamptz{Time: cursor.cutoff, InfinityModifier: pgtype.Finite, Valid: true},
+		AfterStarted:        cursor.afterStarted,
+		AfterOrganizationID: cursor.afterOrganizationID,
+		AfterUseCase:        cursor.afterUseCase,
+		LimitValue:          m.candidatePageSize,
+	})
+	if err != nil {
+		return page, fmt.Errorf("list encryption backfill candidates: %w", err)
+	}
+
+	page.Candidates = make([]Transition, 0, len(rows))
+	for _, row := range rows {
+		transition, err := toTransition(row)
+		if err != nil {
+			return page, err
+		}
+		page.Candidates = append(page.Candidates, transition)
+	}
+
+	page.Next = cursor
+	if len(rows) == int(m.candidatePageSize) {
+		last := rows[len(rows)-1]
+		page.Next.afterStarted = last.LastBackfillStartedAt
+		if !page.Next.afterStarted.Valid {
+			page.Next.afterStarted = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.NegativeInfinity, Valid: true}
+		}
+		page.Next.afterOrganizationID = last.OrganizationID
+		page.Next.afterUseCase = last.UseCase
+		page.More = true
+	}
+
+	return page, nil
+}
+
+// BackfillDue reports whether a candidate is due a backfill now: values wait
+// for an organization-key copy; or it has no clean verification since it
+// entered dual_write or since its last backfill started, and that attempt
+// started at least VerificationRetryInterval ago; or its last run started but
+// never recorded its end, and that run's claim expired.
+func (m *Migrator) BackfillDue(ctx context.Context, transition Transition) (bool, error) {
+	stores, err := m.storesFor(transition.UseCase)
+	if err != nil {
+		return false, err
+	}
+
+	now, err := repo.New(m.db).GetEncryptionClock(ctx)
+	if err != nil {
+		return false, fmt.Errorf("read database clock: %w", err)
+	}
+
+	started, completed, verified := transition.LastBackfill.StartedAt, transition.LastBackfill.CompletedAt, transition.LastVerifiedAt
+	if started != nil && completed == nil {
 		// A run holds the claim, or its process died before it recorded its
 		// end. Once the claim expires nothing would pick it up otherwise,
 		// and finalize refuses until a run completes.
-		return now.Sub(started.Time) >= RunLease
+		return now.Time.Sub(*started) >= RunLease, nil
 	}
 
-	cleanlyVerified := verified.Valid && !verified.Time.Before(row.StateChangedAt.Time) && (!started.Valid || !verified.Time.Before(started.Time))
-	if !cleanlyVerified && (!started.Valid || now.Sub(started.Time) >= VerificationRetryInterval) {
-		return true
+	cleanlyVerified := verified != nil && !verified.Before(transition.StateChangedAt) && (started == nil || !verified.Before(*started))
+	if !cleanlyVerified && (started == nil || now.Time.Sub(*started) >= VerificationRetryInterval) {
+		return true, nil
 	}
 
-	counts, err := countStores(ctx, row.OrganizationID, m.stores[UseCase(row.UseCase)])
+	counts, err := countStores(ctx, transition.OrganizationID, stores)
 	if err != nil {
-		m.logger.ErrorContext(ctx, "count values waiting for an organization-key copy",
-			attr.SlogOrganizationID(row.OrganizationID), attr.SlogOrgEncryptionUseCase(row.UseCase), attr.SlogError(err))
-		return false
+		return false, err
 	}
 
-	return counts.Waiting > 0
+	return counts.Waiting > 0, nil
 }
 
 // Backfill runs one organization's use case through Runner. It returns

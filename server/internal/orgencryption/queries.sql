@@ -489,16 +489,21 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- Lists a page of the dual_write transitions of the given use cases across
--- organizations, keyed by organization and use case. after_organization_id
--- and after_use_case are the last row of the previous page, or '' for the
--- first page.
--- name: ListEncryptionTransitionsInDualWrite :many
+-- organizations that may be due a backfill, least recently attempted first: a
+-- transition that never started a backfill sorts as -infinity. It leaves out
+-- transitions whose last backfill started at or after cutoff, the start of
+-- the pass, so a transition backfilled during the pass is not offered again.
+-- after_started, after_organization_id and after_use_case are the sort key of
+-- the previous page's last row; the first page passes -infinity, '' and ''.
+-- name: ListEncryptionBackfillCandidates :many
 SELECT *
 FROM organization_encryption_transitions
 WHERE state = 'dual_write'
   AND use_case = ANY(@use_cases::text[])
-  AND (organization_id, use_case) > (@after_organization_id::text, @after_use_case::text)
-ORDER BY organization_id, use_case
+  AND (last_backfill_started_at IS NULL OR last_backfill_started_at < @cutoff::timestamptz)
+  AND (COALESCE(last_backfill_started_at, '-infinity'::timestamptz), organization_id, use_case)
+    > (@after_started::timestamptz, @after_organization_id::text, @after_use_case::text)
+ORDER BY COALESCE(last_backfill_started_at, '-infinity'::timestamptz), organization_id, use_case
 LIMIT @limit_value;
 
 -- Lists the org_kms transitions of the given use cases that may still need

@@ -18,11 +18,14 @@ import (
 )
 
 // fakeOrganizationEncryptionMigrator records calls in order and fails the
-// organizations named in errs.
+// organizations named in errs. Every candidate in due is due, except those in
+// notDue, and its due check fails for those in dueErrs.
 type fakeOrganizationEncryptionMigrator struct {
 	mu        sync.Mutex
 	calls     []string
 	due       []orgencryption.Transition
+	notDue    map[string]bool
+	dueErrs   map[string]error
 	finalized []orgencryption.Transition
 	errs      map[string]error
 }
@@ -36,8 +39,16 @@ func (f *fakeOrganizationEncryptionMigrator) record(call, organizationID string)
 	return f.errs[organizationID]
 }
 
-func (f *fakeOrganizationEncryptionMigrator) ListDueBackfills(context.Context) ([]orgencryption.Transition, error) {
-	return f.due, nil
+func (f *fakeOrganizationEncryptionMigrator) NextBackfillCandidates(context.Context, orgencryption.BackfillCursor) (orgencryption.BackfillPage, error) {
+	return orgencryption.BackfillPage{Candidates: f.due, More: false}, nil
+}
+
+func (f *fakeOrganizationEncryptionMigrator) BackfillDue(_ context.Context, transition orgencryption.Transition) (bool, error) {
+	if err := f.dueErrs[transition.OrganizationID]; err != nil {
+		return false, err
+	}
+
+	return !f.notDue[transition.OrganizationID], nil
 }
 
 func (f *fakeOrganizationEncryptionMigrator) Backfill(_ context.Context, organizationID string, _ orgencryption.UseCase) (orgencryption.RunResult, error) {
@@ -175,9 +186,11 @@ func TestOrganizationEncryptionBackfill_StopsStartingWorkAtTheBudget(t *testing.
 
 	start := time.Now()
 	calls := 0
+	// The deadline, the page and the first candidate read the clock before
+	// it passes the budget.
 	activities.now = func() time.Time {
 		calls++
-		if calls <= 2 {
+		if calls <= 3 {
 			return start
 		}
 		return start.Add(organizationEncryptionBackfillBudget)
@@ -326,4 +339,20 @@ func TestOrganizationEncryptionBackfillOrganizationWorkflowID_IsScopedByQueue(t 
 		OrganizationEncryptionBackfillOrganizationWorkflowID("main", "org_a", orgencryption.UseCaseOAuthSessionTokens),
 		OrganizationEncryptionBackfillOrganizationWorkflowID("preview-123", "org_a", orgencryption.UseCaseOAuthSessionTokens),
 	)
+}
+
+func TestOrganizationEncryptionBackfill_ChecksEachCandidateBeforeBackfillingIt(t *testing.T) {
+	t.Parallel()
+
+	migrator := &fakeOrganizationEncryptionMigrator{
+		due:     []orgencryption.Transition{dualWrite("org_failing"), dualWrite("org_idle"), dualWrite("org_due")},
+		notDue:  map[string]bool{"org_idle": true},
+		dueErrs: map[string]error{"org_failing": errors.New("count failed")},
+	}
+
+	result, err := newBackfillActivities(t, migrator).Backfill(t.Context())
+	require.NoError(t, err, "a run that backfilled one organization is not retried")
+	require.Equal(t, []string{"backfill org_due"}, migrator.calls, "only due candidates are backfilled, and a failed check moves on")
+	require.Equal(t, 1, result.Backfilled)
+	require.Equal(t, 1, result.Failed)
 }

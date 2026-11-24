@@ -945,6 +945,78 @@ func (q *Queries) ListDataEncryptionKeyWrapsForKey(ctx context.Context, arg List
 	return items, nil
 }
 
+const listEncryptionBackfillCandidates = `-- name: ListEncryptionBackfillCandidates :many
+SELECT id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
+FROM organization_encryption_transitions
+WHERE state = 'dual_write'
+  AND use_case = ANY($1::text[])
+  AND (last_backfill_started_at IS NULL OR last_backfill_started_at < $2::timestamptz)
+  AND (COALESCE(last_backfill_started_at, '-infinity'::timestamptz), organization_id, use_case)
+    > ($3::timestamptz, $4::text, $5::text)
+ORDER BY COALESCE(last_backfill_started_at, '-infinity'::timestamptz), organization_id, use_case
+LIMIT $6
+`
+
+type ListEncryptionBackfillCandidatesParams struct {
+	UseCases            []string
+	Cutoff              pgtype.Timestamptz
+	AfterStarted        pgtype.Timestamptz
+	AfterOrganizationID string
+	AfterUseCase        string
+	LimitValue          int32
+}
+
+// Lists a page of the dual_write transitions of the given use cases across
+// organizations that may be due a backfill, least recently attempted first: a
+// transition that never started a backfill sorts as -infinity. It leaves out
+// transitions whose last backfill started at or after cutoff, the start of
+// the pass, so a transition backfilled during the pass is not offered again.
+// after_started, after_organization_id and after_use_case are the sort key of
+// the previous page's last row; the first page passes -infinity, ” and ”.
+func (q *Queries) ListEncryptionBackfillCandidates(ctx context.Context, arg ListEncryptionBackfillCandidatesParams) ([]OrganizationEncryptionTransition, error) {
+	rows, err := q.db.Query(ctx, listEncryptionBackfillCandidates,
+		arg.UseCases,
+		arg.Cutoff,
+		arg.AfterStarted,
+		arg.AfterOrganizationID,
+		arg.AfterUseCase,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationEncryptionTransition
+	for rows.Next() {
+		var i OrganizationEncryptionTransition
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.UseCase,
+			&i.State,
+			&i.Generation,
+			&i.StateChangedAt,
+			&i.PlatformCopiesClearedAt,
+			&i.LastBackfillStartedAt,
+			&i.LastBackfillCompletedAt,
+			&i.LastBackfillConvertedCount,
+			&i.LastBackfillRemainingCount,
+			&i.LastBackfillUnreadableCount,
+			&i.LastBackfillError,
+			&i.LastVerifiedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEncryptionConfigsDueForCheck = `-- name: ListEncryptionConfigsDueForCheck :many
 SELECT c.organization_id
 FROM organization_encryption_configs AS c
@@ -1052,69 +1124,6 @@ ORDER BY use_case
 
 func (q *Queries) ListEncryptionTransitions(ctx context.Context, organizationID string) ([]OrganizationEncryptionTransition, error) {
 	rows, err := q.db.Query(ctx, listEncryptionTransitions, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []OrganizationEncryptionTransition
-	for rows.Next() {
-		var i OrganizationEncryptionTransition
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.UseCase,
-			&i.State,
-			&i.Generation,
-			&i.StateChangedAt,
-			&i.PlatformCopiesClearedAt,
-			&i.LastBackfillStartedAt,
-			&i.LastBackfillCompletedAt,
-			&i.LastBackfillConvertedCount,
-			&i.LastBackfillRemainingCount,
-			&i.LastBackfillUnreadableCount,
-			&i.LastBackfillError,
-			&i.LastVerifiedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listEncryptionTransitionsInDualWrite = `-- name: ListEncryptionTransitionsInDualWrite :many
-SELECT id, organization_id, use_case, state, generation, state_changed_at, platform_copies_cleared_at, last_backfill_started_at, last_backfill_completed_at, last_backfill_converted_count, last_backfill_remaining_count, last_backfill_unreadable_count, last_backfill_error, last_verified_at, created_at, updated_at
-FROM organization_encryption_transitions
-WHERE state = 'dual_write'
-  AND use_case = ANY($1::text[])
-  AND (organization_id, use_case) > ($2::text, $3::text)
-ORDER BY organization_id, use_case
-LIMIT $4
-`
-
-type ListEncryptionTransitionsInDualWriteParams struct {
-	UseCases            []string
-	AfterOrganizationID string
-	AfterUseCase        string
-	LimitValue          int32
-}
-
-// Lists a page of the dual_write transitions of the given use cases across
-// organizations, keyed by organization and use case. after_organization_id
-// and after_use_case are the last row of the previous page, or ” for the
-// first page.
-func (q *Queries) ListEncryptionTransitionsInDualWrite(ctx context.Context, arg ListEncryptionTransitionsInDualWriteParams) ([]OrganizationEncryptionTransition, error) {
-	rows, err := q.db.Query(ctx, listEncryptionTransitionsInDualWrite,
-		arg.UseCases,
-		arg.AfterOrganizationID,
-		arg.AfterUseCase,
-		arg.LimitValue,
-	)
 	if err != nil {
 		return nil, err
 	}
