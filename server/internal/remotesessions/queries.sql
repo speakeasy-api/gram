@@ -869,6 +869,18 @@ FROM remote_session_client_user_session_issuers AS link
 WHERE link.remote_session_client_id = @remote_session_client_id
 ORDER BY link.user_session_issuer_id;
 
+-- name: ListVisibleUserSessionIssuerIDsForRemoteSessionClient :many
+-- The caller must already have selected a client visible in this scope.
+-- A platform-global client can be offered in multiple tenants, so only
+-- return live issuer links visible in this project or its organization.
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.remote_session_client_id = @remote_session_client_id::uuid
+  AND usi.deleted IS FALSE
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+ORDER BY link.user_session_issuer_id;
+
 -- name: ReplaceRemoteSessionClientRegistration :one
 -- Swaps the row onto a freshly registered upstream client in place, so the
 -- issuer bindings, MCP server attachments, and key set links that reference
@@ -1164,6 +1176,7 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.deleted IS FALSE
           AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c

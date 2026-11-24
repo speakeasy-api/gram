@@ -151,8 +151,6 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 		return Result{}, fmt.Errorf("delete meta mcp memberships: %w", err)
 	}
 	for _, membership := range deletedMemberships {
-		// The membership bound the server's provider client to the gateway's
-		// issuer, so the deletion that ends the membership removes the binding.
 		if err := auditLogger.LogMetaMcpMemberRemove(ctx, tx, audit.LogMetaMcpMemberEvent{
 			OrganizationID:   input.OrganizationID,
 			ProjectID:        input.ProjectID,
