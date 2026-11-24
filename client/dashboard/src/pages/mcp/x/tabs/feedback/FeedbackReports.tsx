@@ -155,7 +155,7 @@ export function FeedbackReports({
       <div ref={reportList} className="scroll-mt-6">
         <Stack gap={3}>
           <Stack gap={1}>
-            <Text variant="subheading">Reports</Text>
+            <Text variant="subheading">Agent Feedback</Text>
             <Text small muted>
               Newest first. Secrets and personal data were masked before each
               report was stored. {sendElsewhere}

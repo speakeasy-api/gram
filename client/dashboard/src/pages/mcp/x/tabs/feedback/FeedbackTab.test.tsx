@@ -312,6 +312,7 @@ describe("a server with feedback on", () => {
     renderTab();
 
     expect(screen.getByText("Last 30 days")).toBeTruthy();
+    expect(screen.getByText("Agent Feedback")).toBeTruthy();
     expect(within(tile("Reports")).getByText("3")).toBeTruthy();
     expect(within(tile("Blocked")).getByText("1")).toBeTruthy();
     // Severity is optional, so the total says where the rest of it went.
