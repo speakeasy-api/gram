@@ -405,9 +405,13 @@ func (f failure) sameServer(s signIn) bool {
 	return a.ServerID != "" || (s.project == a.ProjectID && s.remoteClientID == a.RemoteSessionClientID)
 }
 
-// sameApp treats a failure filed under no verified app as any app's, and compares the
-// client only when both rows name a real one: one registration kind covers many apps.
+// sameApp treats a failure of an unnamed client, or filed under no verified app, as any
+// app's: an unnamed app can sign in again under another registration. Otherwise it
+// compares the client only when both rows name a real one: one registration kind covers many apps.
 func (f failure) sameApp(app, clientFamily string) bool {
+	if !NamedClient(f.a.ClientFamily) {
+		return true
+	}
 	if f.a.AppKey != AppUnverified.key && app != f.a.AppKey {
 		return false
 	}

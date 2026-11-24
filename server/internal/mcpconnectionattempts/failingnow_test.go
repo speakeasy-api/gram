@@ -270,6 +270,107 @@ func TestFailingNow_AGatewayAppSignInFailureEndsOnAnyOwnRequestThroughIt(t *test
 	}
 }
 
+// unnamedRenewalsFail writes an unnamed app's working renewal four days ago, then expired renewals on the direct server.
+func (f *failingFixture) unnamedRenewalsFail(p urn.SessionSubject, opts ...Option) {
+	f.t.Helper()
+	f.attempt(f.direct(AppDCR), 96*time.Hour, StepInboundToken, ResultRefreshed, append(opts, Subject(&p))...)
+	f.attempt(f.direct(AppDCR), 26*time.Hour, StepInboundToken, CodeRefreshTokenExpired, append(opts, Subject(&p))...)
+	f.attempt(f.direct(AppDCR), 30*time.Minute, StepInboundToken, CodeRefreshTokenExpired, append(opts, Subject(&p), Option{apply: func(r *Row) { r.Repeats = 1 }})...)
+}
+
+// unnamedServed is p's unnamed metadata-URL app's connection to the direct server, as the served table stores it.
+func (f *failingFixture) unnamedServed(p urn.SessionSubject) Served {
+	s := f.onServer(p, AppOtherMetadataURL)
+	s.ClientFamily, s.RemoteSessionClientID = FamilyOther, uuid.NewString()
+	return s
+}
+
+// An unnamed app that gave up its expired registration and signed in under another one got in.
+func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnSignInThere(t *testing.T) {
+	t.Parallel()
+	for _, family := range []string{"", FamilyOther} {
+		f := newFailingFixture(t)
+		p := person()
+		f.unnamedRenewalsFail(p, client(family))
+		got := f.failing()
+		require.Len(t, got, 1, "family %q", family)
+		require.Equal(t, PartAppSignIn, got[0].Part)
+		require.Equal(t, f.at(96*time.Hour), got[0].LastWorkedAt.UTC())
+
+		f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+		require.Empty(t, f.failing(), "family %q", family)
+	}
+}
+
+func TestFailingNow_AnUnnamedAppSignInFailureEndsOnAnyOwnServedRequestThere(t *testing.T) {
+	t.Parallel()
+	for _, family := range []string{"", FamilyOther} {
+		f := newFailingFixture(t)
+		p := person()
+		f.unnamedRenewalsFail(p, client(family))
+		require.Len(t, f.failing(), 1, "family %q", family)
+
+		f.answered(f.unnamedServed(p), 10*time.Minute)
+		require.Empty(t, f.failing(), "family %q", family)
+	}
+}
+
+func TestFailingNow_AnUnnamedAppSignInFailureEndsOnANamedAppsSignInThere(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyClaudeCode))
+	require.Empty(t, f.failing())
+}
+
+func TestFailingNow_AnUnnamedAppSignInFailureStaysForOtherServersPeopleAndOrganizations(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p, other := person(), person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(ServerScope(f.org, f.project, uuid.New(), AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+	otherServer := f.unnamedServed(p)
+	otherServer.ServerID = uuid.NewString()
+	f.answered(otherServer, 20*time.Minute)
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&other))
+	f.answered(f.unnamedServed(other), 20*time.Minute)
+	otherOrg := "org-" + uuid.NewString()
+	f.attempt(ServerScope(otherOrg, f.project, f.server, AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+	elsewhere := f.unnamedServed(p)
+	elsewhere.OrganizationID = otherOrg
+	f.answered(elsewhere, 20*time.Minute)
+	require.Len(t, f.failing(), 1, "another server's, person's or organization's success does not end it")
+}
+
+// Later means after the last failed attempt ended; a success at or before it does not end the run.
+func TestFailingNow_AnUnnamedAppSignInFailureStaysAfterAnEarlierSuccess(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.unnamedRenewalsFail(p)
+	f.attempt(f.direct(AppOtherMetadataURL), 40*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p))
+	f.answered(f.unnamedServed(p), 30*time.Minute)
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, f.at(30*time.Minute), got[0].LastWorkedAt.UTC())
+}
+
+// A named app that keeps failing stays listed while another named app works for the same person.
+func TestFailingNow_ANamedAppSignInFailureStaysWhileAnotherNamedAppWorks(t *testing.T) {
+	t.Parallel()
+	f := newFailingFixture(t)
+	p := person()
+	f.attempt(f.direct(AppDCR), 40*time.Minute, StepInboundToken, CodeRefreshTokenExpired, Subject(&p), client(FamilyCodexCLI))
+	f.attempt(f.direct(AppOtherMetadataURL), 20*time.Minute, StepInboundToken, ResultCodeIssued, Subject(&p), client(FamilyClaudeCode))
+	claude := f.onServer(p, AppOtherMetadataURL)
+	claude.ClientFamily = FamilyClaudeCode
+	f.served(claude, 10*time.Minute)
+	got := f.failing()
+	require.Len(t, got, 1)
+	require.Equal(t, FamilyCodexCLI, got[0].ClientFamily)
+}
+
 func TestFailingNow_ASuccessAndALaterFailureOpenANewRun(t *testing.T) {
 	t.Parallel()
 	f := newFailingFixture(t)
