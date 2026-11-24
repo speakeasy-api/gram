@@ -184,10 +184,16 @@ and reports coverage again at the end. When a run stops early (an error or
 reaches the end of the project prints no cursor: start the next sweep from the
 zero cursor so it covers messages inserted below the prior one.
 
-When `chat.load` reads shadows, a message with no shadow falls back to its
+Reads do not use shadows yet: `chat.load` still serves plaintext. Shadow reads
+depend on #9534. Once they land, a message with no shadow falls back to its
 plaintext body and the read metric counts it under the `plaintext_fallback`
-outcome. The backfill is what drives that count to zero for a project. Confirm
-`waiting=0` before relying on shadow reads for it.
+outcome, and the backfill is what drives that count to zero for a project.
+
+Coverage counts matching fingerprints; it does not authenticate ciphertext.
+Before relying on shadow reads for a project, confirm both `waiting=0` and
+`unattributed=0`. Unattributed messages carry a project that differs from their
+chat's project. The backfill never seals them, so they need ownership repair
+first.
 
 ## Scope that still needs implementation
 

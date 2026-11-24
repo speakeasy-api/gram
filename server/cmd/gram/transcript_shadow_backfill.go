@@ -120,6 +120,11 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 				return nil
 			}
 
+			// Check the sidecar contract the same way capture startup does, so an
+			// incompatible schema stops the run before it creates a key.
+			if err := checkTranscriptShadowSchema(ctx, db); err != nil {
+				return err
+			}
 			if err := orgEncryption.Provisioner.EnsureUseCase(ctx, organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
 				return fmt.Errorf("provision transcript encryption: %w", err)
 			}
