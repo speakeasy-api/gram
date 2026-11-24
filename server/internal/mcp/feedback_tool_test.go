@@ -15,11 +15,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	mcpfeedbackrepo "github.com/speakeasy-api/gram/server/internal/mcpfeedback/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // serveFeedback has the test service answer feedback tools, as the server does.
@@ -349,9 +352,112 @@ func TestServePublic_FeedbackTool_RemoteServerIsNeverOfferedIt(t *testing.T) {
 	require.Empty(t, storedFeedback(t, ctx, ti, mcpServer.ID))
 }
 
-// A gateway in front of several servers lists their tools, not one feedback
-// tool per server.
-func TestGatewayDoesNotListItsMembersFeedbackTools(t *testing.T) {
+// seedFeedbackGateway puts a remote member and a hosted member, both with
+// feedback on, behind a new gateway. The remote member's upstream records the
+// calls it receives.
+func seedFeedbackGateway(t *testing.T, ctx context.Context, ti *testInstance) (gatewayID uuid.UUID, slug string, remoteSlug string, remoteMember uuid.UUID, hosted hostedMemberFixture, upstream *recordingUpstream) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug = "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	gatewayID = gateway.ID
+	upstream = newRecordingUpstream(t, "ping")
+	remoteSlug = "remote-" + uuid.NewString()[:8]
+	remoteMember = seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Remote tools", remoteSlug, 1, upstream.url)
+	hosted = seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 2, mcpservers.VisibilityPublic, "alpha")
+
+	setFeedbackTool(t, ctx, ti, remoteMember, true, "")
+	setFeedbackTool(t, ctx, ti, hosted.serverID, true, "")
+
+	return gatewayID, slug, remoteSlug, remoteMember, hosted, upstream
+}
+
+// toolCalls counts the tools/call requests the upstream received.
+func (u *recordingUpstream) toolCalls() int {
+	calls := 0
+	for _, request := range u.journal() {
+		if request.rpcMethod == "tools/call" {
+			calls++
+		}
+	}
+	return calls
+}
+
+// A gateway lists a first-party member's feedback tool under the member's
+// name, next to the member's own tools, and files a report against that
+// member. A remote member belongs to a third party, so the gateway offers no
+// feedback tool for it even when its stored settings say otherwise, and a
+// call to that name reaches the member like any other.
+func TestGatewayOffersFirstPartyMembersFeedbackTools(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	serveFeedback(t, ti)
+	gatewayID, slug, remoteSlug, remoteMember, hosted, upstream := seedFeedbackGateway(t, ctx, ti)
+	setGatewayMode(t, ctx, ti, gatewayID, "direct")
+
+	names := listDirectGateway(t, ti, slug, map[string]any{}).names()
+	require.Contains(t, names, remoteSlug+"--ping")
+	require.NotContains(t, names, remoteSlug+"--"+mcpfeedback.DefaultToolName)
+	require.Contains(t, names, hosted.slug+"--alpha")
+	require.Contains(t, names, hosted.slug+"--"+mcpfeedback.DefaultToolName)
+
+	local := decodeMetaToolResult(t, callMetaTool(t, t.Context(), ti, slug, hosted.slug+"--"+mcpfeedback.DefaultToolName, map[string]any{"content": "alpha returned nothing."}))
+	require.False(t, local.IsError, string(local.StructuredContent))
+	reports := storedFeedback(t, ctx, ti, hosted.serverID)
+	require.Len(t, reports, 1)
+	require.Equal(t, "alpha returned nothing.", reports[0].Content)
+
+	callMetaTool(t, t.Context(), ti, slug, remoteSlug+"--"+mcpfeedback.DefaultToolName, map[string]any{"content": "ping never answers."})
+	require.Equal(t, 1, upstream.toolCalls(), "the remote member answers the name itself")
+	require.Empty(t, storedFeedback(t, ctx, ti, remoteMember))
+}
+
+// Drill-down gateways reach a member's feedback tool through describe and execute.
+func TestGatewayDrillDownExecutesAMembersFeedbackTool(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	serveFeedback(t, ti)
+	_, slug, _, _, hosted, upstream := seedFeedbackGateway(t, ctx, ti)
+
+	described := callMetaTool(t, t.Context(), ti, slug, "describe_tools", map[string]any{"tools": []string{hosted.slug + "--" + mcpfeedback.DefaultToolName}})
+	require.NotContains(t, described, "error")
+	require.Contains(t, string(described["result"]), mcpfeedback.DefaultToolName)
+
+	executed := decodeMetaToolResult(t, callMetaTool(t, t.Context(), ti, slug, "execute_tool", map[string]any{
+		"name":      hosted.slug + "--" + mcpfeedback.DefaultToolName,
+		"arguments": map[string]any{"content": "alpha returned nothing."},
+	}))
+	require.False(t, executed.IsError)
+	require.Len(t, storedFeedback(t, ctx, ti, hosted.serverID), 1)
+	require.Zero(t, upstream.toolCalls())
+}
+
+// A member with feedback off offers no feedback tool through a gateway.
+func TestGatewayLeavesOutAFeedbackToolThatIsOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	serveFeedback(t, ti)
+	gatewayID, slug, remoteSlug, remoteMember, hosted, _ := seedFeedbackGateway(t, ctx, ti)
+	setGatewayMode(t, ctx, ti, gatewayID, "direct")
+	setFeedbackTool(t, ctx, ti, remoteMember, false, "")
+	setFeedbackTool(t, ctx, ti, hosted.serverID, false, "")
+
+	names := listDirectGateway(t, ti, slug, map[string]any{}).names()
+	require.Contains(t, names, remoteSlug+"--ping")
+	for _, name := range names {
+		require.NotContains(t, name, mcpfeedback.DefaultToolName)
+	}
+}
+
+// A stopped server refuses its feedback tool like any of its own tools: the
+// kill switch is checked before a local tool is answered.
+func TestServePublic_FeedbackTool_StoppedHostedServerRefusesIt(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -359,22 +465,80 @@ func TestGatewayDoesNotListItsMembersFeedbackTools(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	slug := "gateway-" + uuid.NewString()
-	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	upstream := newRecordingUpstream(t, "ping")
-	remoteSlug := "remote-" + uuid.NewString()[:8]
-	remoteMember := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Remote tools", remoteSlug, 1, upstream.url)
-	hostedMember := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 2, mcpservers.VisibilityPublic, "alpha")
-	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "stopped-"+uuid.NewString()[:8])
+	endpointSlug := "stopped-" + uuid.NewString()
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
+	setFeedbackTool(t, ctx, ti, mcpServer.ID, true, "")
+	userToken := mintIssuerBearerForEndpointSubject(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID, urn.NewUserSubject(authCtx.UserID))
+	insertHostedKillswitchPrescription(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, mcpServer.ID, "Tool calls paused for maintenance.")
 
-	setFeedbackTool(t, ctx, ti, remoteMember, true, "")
-	setFeedbackTool(t, ctx, ti, hostedMember.serverID, true, "")
-	setFeedbackTool(t, ctx, ti, hostedMember.toolsetID, true, "")
+	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, feedbackCallBody(t, mcpfeedback.DefaultToolName, map[string]any{"content": "It broke."}), userToken, map[string]string{"Mcp-Session-Id": "stopped-session"})
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), "mcp_tool_calls_paused")
+	require.Empty(t, storedFeedback(t, ctx, ti, mcpServer.ID))
+}
 
-	names := listDirectGateway(t, ti, slug, map[string]any{}).names()
-	require.Contains(t, names, remoteSlug+"--ping")
-	require.Contains(t, names, hostedMember.slug+"--alpha")
-	for _, name := range names {
-		require.NotContains(t, name, mcpfeedback.DefaultToolName)
-	}
+// A connection that approved only some of a member's tools still reaches the
+// member's feedback tool: access to it follows access to the member, not to
+// any one of its tools, so it is not part of what was approved.
+func TestGatewayCachedCatalogOffersAMembersFeedbackTool(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	serveFeedback(t, ti)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "catalog-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Source", 1, mcpservers.VisibilityPublic, "alpha")
+	setFeedbackTool(t, ctx, ti, member.serverID, true, "")
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, []string{member.slug + "--alpha"})
+
+	listed, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
+	require.NoError(t, err)
+	require.Contains(t, listed.Body.String(), member.slug+"--alpha")
+	require.Contains(t, listed.Body.String(), member.slug+"--"+mcpfeedback.DefaultToolName)
+
+	called, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      member.slug + "--" + mcpfeedback.DefaultToolName,
+		"arguments": map[string]any{"content": "alpha returned nothing."},
+	}), connection.token, nil)
+	require.NoError(t, err)
+	require.NotContains(t, called.Body.String(), "not approved", called.Body.String())
+	require.Len(t, storedFeedback(t, ctx, ti, member.serverID), 1)
+}
+
+// Approving a gateway never approves a member's feedback tool, which follows
+// access to the member instead. Once the tool is switched off, a call to its
+// name is refused rather than answered by a tool of the member's own that
+// shares the name, which the approval never covered.
+func TestGatewayCachedCatalogDoesNotApproveAMembersFeedbackTool(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	serveFeedback(t, ti)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "catalog-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	// The member has a tool of its own under the feedback tool's name, which
+	// the feedback tool takes while it is on.
+	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Source", 1, mcpservers.VisibilityPublic, "alpha", mcpfeedback.DefaultToolName)
+	setFeedbackTool(t, ctx, ti, member.serverID, true, "")
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, []string{member.slug + "--alpha", member.slug + "--" + mcpfeedback.DefaultToolName})
+
+	setFeedbackTool(t, ctx, ti, member.serverID, false, "")
+
+	listed, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
+	require.NoError(t, err)
+	require.NotContains(t, listed.Body.String(), member.slug+"--"+mcpfeedback.DefaultToolName)
+
+	called, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      member.slug + "--" + mcpfeedback.DefaultToolName,
+		"arguments": map[string]any{"content": "alpha returned nothing."},
+	}), connection.token, nil)
+	require.NoError(t, err)
+	require.Contains(t, called.Body.String(), "not approved", called.Body.String())
+	require.Empty(t, storedFeedback(t, ctx, ti, member.serverID))
 }
