@@ -578,7 +578,7 @@ function TurnOnAndLink({
 }) {
   const client = useSdkClient();
   const queryClient = useQueryClient();
-  const update = useUpdateMcpServerMutation();
+  const update = useUpdateMcpServerMutation({ onError: () => {} });
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   // The same readiness the server's settings page shows. A check that could

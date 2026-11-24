@@ -21,6 +21,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { TextArea } from "@/components/ui/Textarea";
 import { useProject } from "@/contexts/Auth";
+import { handleError } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import type { ShadowMCPPolicyDisposition } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import {
@@ -95,6 +96,13 @@ function denySublabel(stdio: boolean, narrowed: boolean): string {
   return "Block the server for everyone in the project.";
 }
 
+function submitLabel(decision: AccessDecision, submitting: boolean): string {
+  if (decision === "approved") {
+    return submitting ? "Approving…" : "Approve Server";
+  }
+  return submitting ? "Blocking…" : "Block Server";
+}
+
 /**
  * Who a decision covers, as sent to the API: nothing means everyone. An
  * approval uses the approval audience and a denial its own.
@@ -133,9 +141,13 @@ export function DecideAccessSheet({
 }): JSX.Element | null {
   const project = useProject();
   const queryClient = useQueryClient();
-  const createRequest = useCreateMcpApprovalRequestMutation();
-  const promoteRequest = usePromoteMcpApprovalRequestMutation();
-  const decide = useRecordMcpApprovalDecisionMutation();
+  const createRequest = useCreateMcpApprovalRequestMutation({
+    onError: () => {},
+  });
+  const promoteRequest = usePromoteMcpApprovalRequestMutation({
+    onError: () => {},
+  });
+  const decide = useRecordMcpApprovalDecisionMutation({ onError: () => {} });
   const initialDecision = applicableDecision(
     disposition,
     target?.currentDecision,
@@ -231,8 +243,11 @@ export function DecideAccessSheet({
         });
         requestId = summary.id;
       }
-    } catch {
-      toast.error("Opening the access request failed — nothing was changed");
+    } catch (err) {
+      handleError(err, {
+        title: "Couldn't open the access request. Nothing changed.",
+        customAction: { label: "Retry", onClick: () => void submit() },
+      });
       setSubmitting(false);
       return;
     }
@@ -253,16 +268,18 @@ export function DecideAccessSheet({
           },
         },
       });
-    } catch {
+    } catch (err) {
       // The request row exists (and now sits in the queue); only the
       // decision failed. Saying "nothing changed" here would be a lie — and
       // an existing review that just absorbed a promoted bypass request is
       // not unchanged either.
-      toast.error(
-        target.approvalRequestId && !target.pendingBypassRequestId
-          ? "Recording the decision failed — the request is unchanged"
-          : "The access request was opened or updated, but recording the decision failed — retry to decide it",
-      );
+      handleError(err, {
+        title:
+          target.approvalRequestId && !target.pendingBypassRequestId
+            ? "Couldn't record the decision. The request is unchanged."
+            : "The access request is open, but the decision wasn't recorded. Retry to decide it.",
+        customAction: { label: "Retry", onClick: () => void submit() },
+      });
       if (!target.approvalRequestId || target.pendingBypassRequestId) {
         // This submit changed request state before failing; refresh the
         // affected views so the pending request is visible.
@@ -295,7 +312,15 @@ export function DecideAccessSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        // Closing mid-submit would reset the form under a write that is
+        // still landing, and hide whether it succeeded.
+        if (!next && isSubmitting) return;
+        onOpenChange(next);
+      }}
+    >
       <SheetContent className="sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>{decisionActionLabel(decision)}</SheetTitle>
@@ -454,9 +479,7 @@ export function DecideAccessSheet({
               <Button.LeftIcon>
                 {isSubmitting && <Spinner className="mr-0" />}
               </Button.LeftIcon>
-              <Button.Text>
-                {decision === "approved" ? "Approve Server" : "Block Server"}
-              </Button.Text>
+              <Button.Text>{submitLabel(decision, isSubmitting)}</Button.Text>
             </Button>
           </SheetFooter>
         </RequireScope>

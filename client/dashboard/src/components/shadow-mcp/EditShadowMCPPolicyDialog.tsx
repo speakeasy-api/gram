@@ -143,12 +143,16 @@ export function EditShadowMCPPolicyDialog({
     throwOnError: false,
   });
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
-  const createPolicy = useRiskCreatePolicyMutation();
-  const updatePolicy = useRiskPoliciesUpdateMutation();
-  const removePolicy = useRiskPoliciesDeleteMutation();
-  const createRequest = useCreateMcpApprovalRequestMutation();
-  const promoteRequest = usePromoteMcpApprovalRequestMutation();
-  const decide = useRecordMcpApprovalDecisionMutation();
+  const createPolicy = useRiskCreatePolicyMutation({ onError: () => {} });
+  const updatePolicy = useRiskPoliciesUpdateMutation({ onError: () => {} });
+  const removePolicy = useRiskPoliciesDeleteMutation({ onError: () => {} });
+  const createRequest = useCreateMcpApprovalRequestMutation({
+    onError: () => {},
+  });
+  const promoteRequest = usePromoteMcpApprovalRequestMutation({
+    onError: () => {},
+  });
+  const decide = useRecordMcpApprovalDecisionMutation({ onError: () => {} });
 
   // The policy as it was when the dialog opened. Saving refreshes the live
   // policy before the dialog finishes closing, and comparing against that

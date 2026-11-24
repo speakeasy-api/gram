@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   ensureServerReview: vi.fn(),
   invalidateShadowMCPInventoryServer: vi.fn(),
   toastError: vi.fn(),
+  handleError: vi.fn(),
   toastSuccess: vi.fn(),
   navigate: vi.fn(),
 }));
@@ -369,6 +370,11 @@ vi.mock("@/components/ui/Table", () => ({
 
 vi.mock("@/components/ui/SkeletonTable", () => ({
   SkeletonTable: () => <div>Loading table</div>,
+}));
+
+vi.mock("@/lib/errors", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/errors")>()),
+  handleError: mocks.handleError,
 }));
 
 vi.mock("sonner", () => ({
@@ -751,8 +757,9 @@ describe("ShadowMCPServerDetail", () => {
     fireEvent.blur(input);
 
     await waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledWith(
-        "Unable to update Shadow MCP server name",
+      expect(mocks.handleError).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({ title: "Couldn't rename the server" }),
       );
     });
     expect(
@@ -905,7 +912,7 @@ describe("ShadowMCPServerDetail", () => {
     });
     renderDetailPage();
 
-    expect(screen.getByText("Gathering evidence")).toBeTruthy();
+    expect(screen.getByText("Gathering evidence…")).toBeTruthy();
     expect(mocks.ensureServerReview).toHaveBeenCalledWith({
       request: {
         gramProject: "demo",
@@ -930,7 +937,7 @@ describe("ShadowMCPServerDetail", () => {
     });
     renderDetailPage();
 
-    expect(screen.queryByText("Gathering evidence")).toBeNull();
+    expect(screen.queryByText("Gathering evidence…")).toBeNull();
     const review = screen.getByTestId("approval-review");
     expect(review.getAttribute("data-request-id")).toBe("request-2");
     // The evidence is detail on this page, behind its own disclosure.
@@ -1033,7 +1040,7 @@ describe("ShadowMCPServerDetail", () => {
     await waitFor(() => {
       expect(screen.queryByText("Evidence could not be gathered")).toBeNull();
     });
-    expect(screen.getByText("Gathering evidence")).toBeTruthy();
+    expect(screen.getByText("Gathering evidence…")).toBeTruthy();
   });
 
   it("does not let a stale failure mark a newer server's gather as failed", async () => {
@@ -1088,7 +1095,7 @@ describe("ShadowMCPServerDetail", () => {
     });
 
     expect(screen.queryByText("Evidence could not be gathered")).toBeNull();
-    expect(screen.getByText("Gathering evidence")).toBeTruthy();
+    expect(screen.getByText("Gathering evidence…")).toBeTruthy();
   });
 
   it("renders the refresh evidence control only when a review exists", () => {

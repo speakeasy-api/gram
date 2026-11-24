@@ -4,6 +4,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/InputGroup";
+import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
 import { Check, Pencil } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -105,7 +106,7 @@ export function InlineEditableText({
           }}
           value={draft}
         />
-        {dirty && (
+        {(dirty || submitting) && (
           <InputGroupAddon align="inline-end">
             <InputGroupButton
               aria-label="Save change"
@@ -116,7 +117,11 @@ export function InlineEditableText({
               title="Save change"
               variant="tertiary"
             >
-              <Check />
+              {submitting ? (
+                <Spinner className="mr-0" label="Saving" />
+              ) : (
+                <Check />
+              )}
             </InputGroupButton>
           </InputGroupAddon>
         )}

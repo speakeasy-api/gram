@@ -4,7 +4,7 @@ import {
   type ShadowMCPPolicy,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { Alert, AlertDescription } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
+import { RetryButton } from "@/components/retry-button";
 import { SkeletonTable } from "@/components/ui/SkeletonTable";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
@@ -62,13 +62,10 @@ export function MCPApprovalsTab(): JSX.Element {
               approval recorded now would enforce nothing. The inventory still
               shows.
             </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void policiesQuery.refetch()}
-            >
-              <Button.Text>Retry</Button.Text>
-            </Button>
+            <RetryButton
+              isRetrying={policiesQuery.isFetching}
+              onRetry={() => void policiesQuery.refetch()}
+            />
           </AlertDescription>
         </Alert>
       ) : null}
