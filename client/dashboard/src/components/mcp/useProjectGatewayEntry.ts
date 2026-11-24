@@ -26,14 +26,20 @@ export function useProjectGatewayEntry(): {
   const canReadProject =
     !permissionsLoading && hasScope("project:read", project.id);
   // Keyed by project so switching projects never shows the last one's URL.
-  const { data, isLoading } = useProjectGateway({ gramProject }, undefined, {
-    enabled: canReadProject,
-    throwOnError: false,
-  });
+  const { data, isLoading, isError } = useProjectGateway(
+    { gramProject },
+    undefined,
+    {
+      enabled: canReadProject,
+      throwOnError: false,
+    },
+  );
 
   let status: ProjectGatewayEntryStatus;
   if (isLoading) {
     status = "loading";
+  } else if (isError) {
+    status = "unavailable";
   } else if (data?.available) {
     status = "available";
   } else if (data?.unavailableReason === "turned_off") {
@@ -45,6 +51,6 @@ export function useProjectGatewayEntry(): {
   return {
     show: canReadProject,
     status,
-    url: data?.available ? data.url : undefined,
+    url: !isError && data?.available ? data.url : undefined,
   };
 }

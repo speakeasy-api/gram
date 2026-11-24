@@ -45,10 +45,8 @@ export function ProjectGatewayCard({
         <Text
           variant="subheading"
           as="div"
-          className={cn(
-            "text-md group-hover:text-primary flex-1 truncate transition-colors",
-            isDisabled && "text-muted-foreground",
-          )}
+          muted={isDisabled}
+          className="text-md group-hover:text-primary flex-1 truncate transition-colors"
         >
           Project Gateway
         </Text>

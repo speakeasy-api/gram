@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   orgAdmin: false,
   permissionsLoading: false,
   isLoading: false,
+  isError: false,
   data: undefined as
     | {
         available: boolean;
@@ -45,6 +46,7 @@ vi.mock("@gram/client/react-query/projectGateway.js", () => ({
     return {
       data: state.data,
       isLoading: state.isLoading,
+      isError: state.isError,
     };
   },
 }));
@@ -54,6 +56,7 @@ beforeEach(() => {
   state.orgAdmin = false;
   state.permissionsLoading = false;
   state.isLoading = false;
+  state.isError = false;
   state.data = undefined;
   state.lastOptions = undefined;
 });
@@ -133,6 +136,31 @@ describe("useProjectGatewayEntry", () => {
       status: "loading",
       url: undefined,
     });
+  });
+
+  it("reports unavailable when a background refetch fails even if stale data exists", () => {
+    state.data = {
+      available: true,
+      url: "https://api.example.test/mcp/gateway/acme/projects/sales",
+    };
+    state.isError = true;
+
+    const { result } = renderHook(() => useProjectGatewayEntry());
+
+    expect(result.current).toEqual({
+      show: true,
+      status: "unavailable",
+      url: undefined,
+    });
+  });
+
+  it("hides the entry and disables the query while permissions are loading", () => {
+    state.permissionsLoading = true;
+
+    const { result } = renderHook(() => useProjectGatewayEntry());
+
+    expect(result.current.show).toBe(false);
+    expect(state.lastOptions?.enabled).toBe(false);
   });
 
   it("hides the entry and disables the query without project:read", () => {

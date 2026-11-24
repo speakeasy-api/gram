@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
   orgRead: true,
   projectRead: true,
   permissionsLoading: false,
+  featuresLoading: false,
   gatewayLoading: false,
   available: true,
   unavailableReason: "turned_off" as string | undefined,
@@ -128,7 +129,11 @@ vi.mock("@/hooks/useIsCurrentOrganization", () => ({
 }));
 vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
   useOrganizationGatewaySetting: () => ({
-    features: { data: {}, error: state.error, isLoading: false },
+    features: {
+      data: {},
+      error: state.error,
+      isLoading: state.featuresLoading,
+    },
     gateway: {
       isLoading: state.gatewayLoading,
       data:
@@ -187,6 +192,7 @@ beforeEach(() => {
   state.orgRead = true;
   state.projectRead = true;
   state.permissionsLoading = false;
+  state.featuresLoading = false;
   state.gatewayLoading = false;
   state.available = true;
   state.unavailableReason = "turned_off";
@@ -425,6 +431,18 @@ it("serves a project member without organization access their project's gateway"
   ).toBeNull();
   await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
   expect(screen.getByText("Project gateway activity")).toBeTruthy();
+});
+
+it("shows loading install status while the organization setting is still loading", () => {
+  state.on = undefined;
+  state.featuresLoading = true;
+  state.available = false;
+  state.admin = false;
+  state.orgRead = true;
+  render(<ProjectGatewayPage />);
+  expect(
+    screen.getByText("Loading Project Gateway installation details…"),
+  ).toBeTruthy();
 });
 
 it("shows unavailable install status instead of loading for a project member without org:read when not served", () => {

@@ -39,10 +39,8 @@ function NameCell({
         <Text
           variant="subheading"
           as="div"
-          className={cn(
-            "group-hover:text-primary min-w-0 truncate text-sm transition-colors",
-            muted && "text-muted-foreground",
-          )}
+          muted={muted}
+          className="group-hover:text-primary min-w-0 truncate text-sm transition-colors"
           title={name}
         >
           {name}
