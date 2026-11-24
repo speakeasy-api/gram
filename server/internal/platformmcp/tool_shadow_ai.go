@@ -26,7 +26,7 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListShadowAIInventoryInput) (*mcp.CallToolResult, ListShadowAIInventoryOutput, error) {
 		return principalToolCall(ctx, shadowAIToolResult, func(principal Principal) (ListShadowAIInventoryOutput, error) {
-			return service.ListInventory(ctx, principal, input)
+			return service.ListInventory(ctx, reg.aiCatalogSnapshot(ctx), principal, input)
 		})
 	})
 	addTool(reg, &mcp.Tool{
@@ -36,7 +36,7 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAIScanLibraryInput) (*mcp.CallToolResult, ListAIScanLibraryOutput, error) {
 		return principalToolCall(ctx, shadowAIToolResult, func(principal Principal) (ListAIScanLibraryOutput, error) {
-			return service.ListLibrary(ctx, principal, input)
+			return service.ListLibrary(ctx, reg.aiCatalogSnapshot(ctx), principal, input)
 		})
 	})
 }

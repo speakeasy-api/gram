@@ -3,6 +3,7 @@ import {
   SettingsSection,
 } from "@/components/detail/settings-section";
 import { RequireScope } from "@/components/require-scope";
+import { TechnicalDetails } from "@/components/technical-details";
 import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { useEffect, useState, type ReactNode } from "react";
@@ -16,6 +17,7 @@ export function EditableSourceFieldSection({
   id,
   title,
   description,
+  technicalDetails,
   label,
   placeholder,
   stored,
@@ -29,6 +31,8 @@ export function EditableSourceFieldSection({
   id: string;
   title: string;
   description: ReactNode;
+  // Protocol detail shown closed under "Technical details".
+  technicalDetails?: ReactNode;
   label: string;
   placeholder: string;
   stored: string;
@@ -78,6 +82,9 @@ export function EditableSourceFieldSection({
       <SettingsSection.Header>
         <SettingsSection.Title>{title}</SettingsSection.Title>
         <SettingsSection.Description>{description}</SettingsSection.Description>
+        {technicalDetails ? (
+          <TechnicalDetails>{technicalDetails}</TechnicalDetails>
+        ) : null}
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>

@@ -664,19 +664,18 @@ describe("NetworkAccessSection", () => {
           .getByRole("link", { name: "Talk to our team about upgrading" })
           .getAttribute("href"),
       ).toBe("https://www.speakeasy.com/book-demo");
-      fireEvent.click(
-        screen.getByRole("combobox", { name: "Network access mode" }),
-      );
+      // Public is the only choice, so the picker is locked and the upsell
+      // is the one next step: no organization settings link beside it.
       expect(
         screen
-          .getByRole("option", { name: /Public and private/ })
-          .getAttribute("data-disabled"),
-      ).toBe("");
+          .getByRole("combobox", { name: "Network access mode" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
       expect(
-        screen
-          .getByRole("option", { name: /Private only/ })
-          .getAttribute("data-disabled"),
-      ).toBe("");
+        screen.queryByRole("link", {
+          name: "Configure organization network access",
+        }),
+      ).toBeNull();
     },
   );
 

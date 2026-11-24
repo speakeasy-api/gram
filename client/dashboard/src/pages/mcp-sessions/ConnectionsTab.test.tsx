@@ -41,7 +41,7 @@ vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
 }));
 vi.mock("@/components/sessions/RegisterClientAction", () => ({
   RegisterClientAction: ({ issuerId }: { issuerId: string }) => (
-    <button type="button">Register agent for {issuerId}</button>
+    <button type="button">Register OAuth client for {issuerId}</button>
   ),
 }));
 vi.mock("@/components/connections/ConnectionsList", () => ({
@@ -87,14 +87,14 @@ it("lists only the chosen provider's connections, keeping the query's filters", 
   ).toBeTruthy();
 });
 
-it("offers registering an agent against the chosen provider", () => {
+it("offers registering an OAuth client against the chosen provider", () => {
   render(
     <MemoryRouter>
       <ConnectionsTab providerId="issuer_1" />
     </MemoryRouter>,
   );
   expect(
-    screen.getByRole("button", { name: "Register agent for issuer_1" }),
+    screen.getByRole("button", { name: "Register OAuth client for issuer_1" }),
   ).toBeTruthy();
 });
 
@@ -108,9 +108,7 @@ it("lists a registered agent that has not signed in yet under the agent grouping
   );
 
   // Grouped by person, there is no session to list, and nothing was searched.
-  expect(
-    screen.getByText(/No one has signed in through this provider yet/),
-  ).toBeTruthy();
+  expect(screen.getByText(/No one has signed in here yet/)).toBeTruthy();
   expect(screen.queryByText("No connections match your search")).toBeNull();
 
   fireEvent.click(screen.getByText("Agent"));

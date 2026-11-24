@@ -153,7 +153,7 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 	if !ok || !contextvalues.IsSupportSession(ctx) || ac.ActiveOrganizationID != inventory.OrganizationID || shadow && apply {
 		return report, errors.New("requires an exact-organization support session and one operation")
 	}
-	if err := engine.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := engine.Require(ctx, authz.Org(authz.OrgIDFrom(ac.ActiveOrganizationID)).Admin()); err != nil {
 		return report, err
 	}
 
@@ -333,7 +333,8 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 		return report, errors.New("existing mappings point to missing roles; review stale_mappings before importing, no mappings committed")
 	}
 	writer := &Service{
-		tracer: nil, logger: logger, db: db, chConn: nil, chReadConn: nil, auth: nil,
+		aiCatalog: nil,
+		tracer:    nil, logger: logger, db: db, chConn: nil, chReadConn: nil, auth: nil,
 		authz: engine, roleMgr: nil, audit: auditLogger, email: nil, orgHosts: nil, foldGate: nil, serverURL: nil, features: nil,
 	}
 	for _, group := range groups {

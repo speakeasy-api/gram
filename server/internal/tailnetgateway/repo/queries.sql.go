@@ -264,7 +264,7 @@ func (q *Queries) GetNetworkIngressCertificateState(ctx context.Context, arg Get
 }
 
 const getNetworkIngressGatewayOwner = `-- name: GetNetworkIngressGatewayOwner :one
-SELECT organization_id, hostname, runtime, gateway_service_hostname, gateway_service_hostnames
+SELECT organization_id, hostname, gateway_service_hostname, gateway_service_hostnames
 FROM network_ingresses
 WHERE id = $1
 `
@@ -272,7 +272,6 @@ WHERE id = $1
 type GetNetworkIngressGatewayOwnerRow struct {
 	OrganizationID          string
 	Hostname                string
-	Runtime                 pgtype.Text
 	GatewayServiceHostname  pgtype.Text
 	GatewayServiceHostnames []string
 }
@@ -284,7 +283,6 @@ func (q *Queries) GetNetworkIngressGatewayOwner(ctx context.Context, id uuid.UUI
 	err := row.Scan(
 		&i.OrganizationID,
 		&i.Hostname,
-		&i.Runtime,
 		&i.GatewayServiceHostname,
 		&i.GatewayServiceHostnames,
 	)
@@ -355,25 +353,6 @@ func (q *Queries) GetNetworkIngressNodeState(ctx context.Context, arg GetNetwork
 	var value_encrypted string
 	err := row.Scan(&value_encrypted)
 	return value_encrypted, err
-}
-
-const getNetworkIngressRuntime = `-- name: GetNetworkIngressRuntime :one
-SELECT runtime
-FROM network_ingresses
-WHERE id = $1
-  AND organization_id = $2
-`
-
-type GetNetworkIngressRuntimeParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) GetNetworkIngressRuntime(ctx context.Context, arg GetNetworkIngressRuntimeParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getNetworkIngressRuntime, arg.ID, arg.OrganizationID)
-	var runtime pgtype.Text
-	err := row.Scan(&runtime)
-	return runtime, err
 }
 
 const hasNetworkIngressNodeState = `-- name: HasNetworkIngressNodeState :one

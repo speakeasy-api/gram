@@ -1,4 +1,5 @@
 import { DETAIL_HEADER_NAME } from "@/components/detail/detail-frame";
+import { Combobox } from "@/components/ui/Combobox";
 import {
   Command,
   CommandEmpty,
@@ -12,9 +13,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Info } from "lucide-react";
 import { useState } from "react";
 import { providerScopeLabel } from "./providers";
 
@@ -22,7 +28,7 @@ import { providerScopeLabel } from "./providers";
 const SEARCH_THRESHOLD = 8;
 
 /**
- * The header's name, as a picker: the current MCP Authentication Provider,
+ * The header's name, as a picker: the current MCP sign-in,
  * opening the others this project's servers can use.
  */
 export function ProviderPicker({
@@ -72,7 +78,7 @@ export function ProviderPicker({
           contain phrasing content. */}
       <h1 className={cn(DETAIL_HEADER_NAME, "min-w-0")}>
         <PopoverTrigger
-          aria-label={`MCP Authentication Provider: ${current.slug}. Switch provider`}
+          aria-label={`MCP sign-in: ${current.slug}. Switch to another one`}
           className="hover:text-foreground/80 inline-flex max-w-full min-w-0 items-center gap-2 text-left transition-colors"
         >
           <span className="min-w-0 break-words">{current.slug}</span>
@@ -88,10 +94,10 @@ export function ProviderPicker({
       >
         <Command>
           {providers.length > SEARCH_THRESHOLD ? (
-            <CommandInput placeholder="Find a provider" />
+            <CommandInput placeholder="Find an MCP sign-in" />
           ) : null}
           <CommandList>
-            <CommandEmpty>No provider matches.</CommandEmpty>
+            <CommandEmpty>No matches.</CommandEmpty>
             {organizationWide.length > 0 ? (
               <CommandGroup heading={providerScopeLabel({ projectId: "" })}>
                 {organizationWide.map(item)}
@@ -106,5 +112,65 @@ export function ProviderPicker({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+const SWITCHER_ID = "mcp-provider-switcher";
+
+/**
+ * Switches the page between this project's MCP sign-ins.
+ * Nothing to switch to, nothing shown.
+ */
+export function ProviderSwitcher({
+  current,
+  providers,
+  onSelect,
+}: {
+  current: UserSessionIssuer;
+  providers: UserSessionIssuer[];
+  onSelect: (provider: UserSessionIssuer) => void;
+}): JSX.Element | null {
+  if (providers.length <= 1) return null;
+  const items = providers.map((provider) => ({
+    value: provider.id,
+    label: provider.slug,
+    keywords: [provider.slug],
+    description: providerScopeLabel(provider),
+  }));
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
+        <label htmlFor={SWITCHER_ID} className="sr-only md:not-sr-only">
+          MCP sign-in
+        </label>
+        <Tooltip>
+          <TooltipTrigger
+            aria-label="What is an MCP sign-in?"
+            className="hover:text-foreground inline-flex cursor-help"
+          >
+            <Info className="size-3.5" aria-hidden />
+          </TooltipTrigger>
+          <TooltipContent side="bottom" align="end">
+            What AI apps sign in through to reach your MCP servers. It decides
+            who gets a session and how long it lasts.
+          </TooltipContent>
+        </Tooltip>
+      </span>
+      <Combobox
+        id={SWITCHER_ID}
+        items={items}
+        selected={current.id}
+        onSelectionChange={(item) => {
+          const next = providers.find((p) => p.id === item.value);
+          if (next && next.id !== current.id) onSelect(next);
+        }}
+        searchPlaceholder="Find an MCP sign-in"
+        emptyMessage="No matches."
+        className="h-8 max-w-[240px]"
+        contentClassName="w-[300px]"
+      >
+        {current.slug}
+      </Combobox>
+    </div>
   );
 }

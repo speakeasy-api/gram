@@ -11,6 +11,7 @@ export const SetResourceAudienceEntryDispositions = {
   Destructive: "destructive",
   Idempotent: "idempotent",
   OpenWorld: "open_world",
+  Unannotated: "unannotated",
 } as const;
 export type SetResourceAudienceEntryDispositions = ClosedEnum<
   typeof SetResourceAudienceEntryDispositions

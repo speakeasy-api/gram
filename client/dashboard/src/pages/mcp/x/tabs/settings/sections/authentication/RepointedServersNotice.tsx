@@ -9,16 +9,16 @@ import { mcpServerDisplayName } from "@/pages/security/risk-outcome";
 
 const IMPACT_COPY: Record<SharedIssuerImpact, string> = {
   repoint:
-    "These servers share this user session issuer, and this change moves them to a different upstream authorization server:",
+    "These servers share this MCP sign-in, and this change moves them to a different upstream authorization server:",
   clear:
-    "These servers share this user session issuer, and this change leaves either no authorization servers or multiple authorization servers linked, so they lose their upstream authorization server until exactly one authorization server is linked:",
+    "These servers share this MCP sign-in, and this change leaves either no authorization servers or multiple authorization servers linked, so they lose their upstream authorization server until exactly one authorization server is linked:",
   resignin:
-    "These servers share this user session issuer, and the client is replaced for all of them. Everyone signed in to them will have to sign in again:",
+    "These servers share this MCP sign-in, and the client is replaced for all of them. Everyone signed in to them will have to sign in again:",
   client_removed:
-    "These gateways share this user session issuer and lose a client their members sign in through. Those members stop working until a client for their authorization server is linked again:",
+    "These gateways share this MCP sign-in and lose a client their members sign in through. Those members stop working until a client for their authorization server is linked again:",
 };
 
-/** Names the servers that a change on a shared user session issuer would affect. */
+/** Names the servers that a change on a shared MCP sign-in would affect. */
 export function RepointedServersNotice({
   impact,
   projectId,
@@ -37,8 +37,8 @@ export function RepointedServersNotice({
   if (impact.failed) {
     return (
       <Alert variant="warning" dismissible={false}>
-        Could not check which other servers share this user session issuer. This
-        change may alter the upstream authorization server they use.
+        Could not check which other servers share this MCP sign-in. This change
+        may alter the upstream authorization server they use.
       </Alert>
     );
   }
@@ -71,16 +71,15 @@ export function RepointedServersNotice({
       {impact.hiddenCount > 0 && (
         <Text small className="block">
           {impact.hiddenCount === 1
-            ? "1 more server you don't have access to shares this user session issuer and may be affected."
-            : `${impact.hiddenCount} more servers you don't have access to share this user session issuer and may be affected.`}{" "}
+            ? "1 more server you don't have access to shares this MCP sign-in and may be affected."
+            : `${impact.hiddenCount} more servers you don't have access to share this MCP sign-in and may be affected.`}{" "}
           Ask someone with access to every server on it to make this change.
         </Text>
       )}
       {upstreamMoves && (
         <Text small className="block">
-          One user session issuer serves one upstream. To leave them unchanged,
-          move this server to a dedicated user session issuer under Sessions
-          first.
+          One MCP sign-in serves one upstream. To leave them unchanged, first
+          move this server to its own MCP sign-in.
         </Text>
       )}
     </Alert>

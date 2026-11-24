@@ -57,6 +57,7 @@ func handleToolsList(
 	shadowMCPClient *shadowmcp.Client,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
+	local hostedLocalTools,
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
@@ -177,6 +178,10 @@ func handleToolsList(
 		}
 	}
 
+	if local != nil {
+		tools = withLocalTools(tools, local(ctx, logger, toolset.OrganizationID, payload))
+	}
+
 	// An empty toolset must list [] rather than null: some clients reject a
 	// null tools array during startup.
 	if tools == nil {
@@ -254,20 +259,25 @@ func convertConvAnnotations(c *conv.ToolAnnotations) *externalmcp.ToolAnnotation
 // dispositionFromAnnotations derives a disposition string from tool annotations.
 func dispositionFromAnnotations(a *externalmcp.ToolAnnotations) string {
 	if a == nil {
-		return ""
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
 	}
-	switch {
-	case a.ReadOnlyHint != nil && *a.ReadOnlyHint:
-		return "read_only"
-	case a.DestructiveHint != nil && *a.DestructiveHint:
-		return "destructive"
-	case a.IdempotentHint != nil && *a.IdempotentHint:
-		return "idempotent"
-	case a.OpenWorldHint != nil && *a.OpenWorldHint:
-		return "open_world"
-	default:
-		return ""
+	disposition, _ := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	return disposition
+}
+
+// toolDisposition classifies a tool about to be called and logs a tool that
+// says it is both read-only and destructive.
+func toolDisposition(ctx context.Context, logger *slog.Logger, toolName string, a *types.ToolAnnotations) string {
+	if a == nil {
+		disposition, _ := authz.DispositionFromHints(nil, nil, nil, nil)
+		return disposition
 	}
+	disposition, conflicting := authz.DispositionFromHints(a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint)
+	if conflicting {
+		logger.WarnContext(ctx, "tool says it is both read-only and destructive; treating it as destructive", attr.SlogToolName(toolName))
+	}
+	return disposition
 }
 
 // filterToolsByMCPConnect keeps the tools the caller may connect to and stops
@@ -280,11 +290,7 @@ func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzEngi
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("filter tools by authz: %w", err)
 		}
-		if err := authzEngine.Require(authz.WithoutChallenges(ctx), authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
-			Tool:        t.Name,
-			Disposition: dispositionFromAnnotations(t.Annotations),
-			ProjectID:   projectID,
-		})); err != nil {
+		if err := authzEngine.Require(authz.WithoutChallenges(ctx), authz.MCPServer(authz.MCPServerIDFrom(resourceID), authz.ProjectIDFrom(projectID)).ToolCall(t.Name, dispositionFromAnnotations(t.Annotations))); err != nil {
 			var oopsErr *oops.ShareableError
 			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
 				continue

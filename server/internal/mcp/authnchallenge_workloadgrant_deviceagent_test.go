@@ -162,7 +162,7 @@ func (f deviceAgentGrantFixture) workloadPolicy(t *testing.T) *workloadpolicy.Se
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	return workloadpolicy.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
-		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient), nil)
+		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient))
 }
 
 // assertion signs an assertion as the device, addressed to aud.
@@ -238,7 +238,7 @@ func TestDeviceAgentToken_DeviceWithoutHooksGrantGetsATokenButNoHooks(t *testing
 	admitted, _, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, f.ti.authzEngine)
 	require.NoError(t, err)
 
-	err = f.ti.authzEngine.Require(admitted, authz.HooksIngestCheck(f.fx.orgID, f.fx.target.ProjectID.String()))
+	err = f.ti.authzEngine.Require(admitted, authz.Org(authz.OrgIDFrom(f.fx.orgID)).HooksIngest(authz.ProjectIDOf(f.fx.target.ProjectID)))
 	shareable, ok := errors.AsType[*oops.ShareableError](err)
 	require.True(t, ok, "error: %v", err)
 	require.Equal(t, oops.CodeForbidden, shareable.Code)

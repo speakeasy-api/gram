@@ -34,6 +34,7 @@ export const Disposition = {
   Destructive: "destructive",
   Idempotent: "idempotent",
   OpenWorld: "open_world",
+  Unannotated: "unannotated",
 } as const;
 /**
  * Tool disposition filter (MCP scopes only).

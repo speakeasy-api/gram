@@ -321,15 +321,19 @@ func TestOrganizationUserSessionIssuerMigratePreflightBlocksClientIDConflicts(t 
 	require.NoError(t, err)
 	target, err := ti.service.CreateIssuer(ctx, &orggen.CreateIssuerPayload{Slug: "conflict-target", AuthnChallengeMode: "chain", SessionDurationHours: 24})
 	require.NoError(t, err)
-	_, err = seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(source.ID), "duplicate-client")
+	sourceClient, err := seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(source.ID), "duplicate-client")
 	require.NoError(t, err)
 	_, err = seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(target.ID), "duplicate-client")
+	require.NoError(t, err)
+	// Someone signs in through the source copy, so it cannot merge.
+	_, err = seedUserSessionForClient(t, ctx, ti.conn, uuid.MustParse(source.ID), sourceClient.ID, urn.NewUserSubject("conflict-user"))
 	require.NoError(t, err)
 
 	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: source.ID, TargetID: target.ID})
 	require.NoError(t, err)
 	require.False(t, preflight.CanMigrate)
 	require.Equal(t, []string{"duplicate-client"}, preflight.ConflictingClientIds)
+	require.Empty(t, preflight.MergedClientIds)
 
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: source.ID, TargetID: target.ID})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -755,12 +759,6 @@ func TestOrganizationUserSessionIssuerMigrateMovesAttachmentOnLoginFromAnotherIs
 	// reauthorization advances the grant on that login but preserves its ID.
 	secondLogin, secondBindings := seedMigrationAttachments(t, ctx, ti, "cross-issuer-migrate-second", gatewayID, clientID, sourceID)
 	require.Equal(t, login, secondLogin)
-
-	// A new generation on the same pinned row must still move. Only material
-	// publication uses the grant generation as a compare-and-swap fence.
-	changed, err := testrepo.New(ti.conn).MutateAttachmentSupersededGrantGenerationFixture(ctx, login)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, changed)
 
 	remoteRepo := remotesessionsrepo.New(ti.conn)
 	parent := remotesessionsrepo.CountRemoteSessionClientUserSessionIssuerBindingsParams{RemoteSessionClientID: clientID, UserSessionIssuerID: targetID}

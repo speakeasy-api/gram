@@ -18,6 +18,25 @@ describe("fromGram", () => {
     return client;
   }
 
+  test("resource meta is returned as _meta on list and read", async () => {
+    const meta = {
+      ui: { csp: { connectDomains: ["https://api.example.com"] } },
+    };
+    const g = new Gram().experimental_uiResource({
+      name: "chart",
+      description: "Bar chart",
+      content: "<html>chart</html>",
+      meta,
+    });
+
+    const client = await setup(g);
+    const list = await client.listResources();
+    expect(list.resources[0]?._meta).toEqual(meta);
+
+    const read = await client.readResource({ uri: "ui://chart" });
+    expect(read.contents[0]?._meta).toEqual(meta);
+  });
+
   describe("isError on text responses", () => {
     test("isError is false for a 200 text response", async () => {
       const g = new Gram().tool({

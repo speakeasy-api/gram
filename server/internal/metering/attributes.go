@@ -58,6 +58,10 @@ const (
 	// AttributeCustomDomain identifies the validated custom domain carrying the workload.
 	AttributeCustomDomain = "custom_domain"
 
+	// AttributeNetworkIngressID identifies the private network ingress that
+	// admitted the workload. It is absent for public-edge traffic.
+	AttributeNetworkIngressID = "network_ingress_id"
+
 	// AttributeMCPServerType identifies the resolved MCP server implementation.
 	AttributeMCPServerType = "mcp_server_type"
 

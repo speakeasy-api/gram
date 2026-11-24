@@ -1,5 +1,10 @@
 package mcpconnectionattempts
 
+import (
+	"maps"
+	"slices"
+)
+
 // Outcome is the overall result of an attempt, stored on its final step only.
 type Outcome string
 
@@ -139,6 +144,12 @@ type Meaning struct {
 	// WhatToDo says what to do next in one short sentence.
 	WhatToDo string
 
+	// WhatHappenedForAdmin says what happened for an organization administrator, in the third person.
+	WhatHappenedForAdmin string
+
+	// Technical is a precise technical fact for administrators, empty when the code's causes share none.
+	Technical string
+
 	result Result
 }
 
@@ -147,7 +158,16 @@ var catalog = map[string]Meaning{}
 // MeaningOf returns the meaning of a stored reason.
 func MeaningOf(reason string) (Meaning, bool) {
 	meaning, ok := catalog[reason]
+	if ok {
+		admin := adminMeanings[Code{reason}]
+		meaning.WhatHappenedForAdmin, meaning.Technical = admin.whatHappened, admin.technical
+	}
 	return meaning, ok
+}
+
+// Codes returns every stored reason code, sorted.
+func Codes() []string {
+	return slices.Sorted(maps.Keys(catalog))
 }
 
 func define(name string, outcome Outcome, who WhoFixes, what, todo string) Code {
@@ -158,7 +178,7 @@ func defineResult(name string, result Result, outcome Outcome, who WhoFixes, wha
 	if _, duplicate := catalog[name]; duplicate {
 		panic("duplicate connection attempt code: " + name)
 	}
-	catalog[name] = Meaning{Outcome: outcome, WhoFixes: who, WhatHappened: what, WhatToDo: todo, result: result}
+	catalog[name] = Meaning{Outcome: outcome, WhoFixes: who, WhatHappened: what, WhatToDo: todo, WhatHappenedForAdmin: "", Technical: "", result: result}
 	return Code{name}
 }
 
@@ -264,7 +284,7 @@ var (
 	CodeToolNotApproved            = define("tool_not_approved", OutcomeBlocked, WhoPerson, "This tool was not picked when you connected.", "Connect again and pick this tool.")
 	CodeInvalidBearerToken         = define("invalid_bearer_token", OutcomeFailed, WhoPerson, "Your sign-in for this server is no longer valid.", "Connect to the server again.")
 	CodeAuthCheckUnavailable       = define("auth_check_unavailable", OutcomeFailed, WhoSpeakeasy, "We could not check your sign-in right now.", "Try again in a few minutes. You do not need to sign in again.")
-	CodeInvalidRemoteSession       = define("invalid_remote_session", OutcomeFailed, WhoPerson, "Your connection to this service is missing or has expired.", "Reconnect to the service.")
+	CodeInvalidRemoteSession       = define("invalid_remote_session", OutcomeFailed, WhoPerson, "You don't have a usable connection to this service for this request.", "Connect to the service, or choose another connection if you have one.")
 	CodeCredentialMisconfigured    = define("credential_misconfigured", OutcomeFailed, WhoAdmin, "The connection to this service is not set up correctly.", "Check the connection settings for this server.")
 	CodeRemoteSessionUnavailable   = define("remote_session_unavailable", OutcomeFailed, WhoProvider, "The service's sign-in system is temporarily unavailable.", "Wait a few minutes and try again.")
 	CodeProviderRejected           = define("provider_rejected", OutcomeFailed, WhoPerson, "The service rejected your access.", "Reconnect. If it keeps happening, ask your admin.")

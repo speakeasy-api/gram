@@ -84,7 +84,7 @@ func (s *Service) typedConsentRegistrations(ctx context.Context, endpoint *Resol
 	}
 	projects := map[uuid.UUID]uuid.UUID{}
 	switch {
-	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
+	case endpoint.IsSingleServer():
 		offered, err := s.typedOfferedRegistrations(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
 		if err != nil {
 			return nil, err

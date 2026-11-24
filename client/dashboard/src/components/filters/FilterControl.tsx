@@ -1,4 +1,4 @@
-import { calendarDateRangeValue } from "./filter-schema";
+import { calendarDateRangeValue, withinMaxSelected } from "./filter-schema";
 import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -31,6 +31,10 @@ interface FilterControlProps {
   options?: FilterOptions;
   projectSlug?: string;
   className?: string;
+  /** Ids of text that describes the control, such as a limit hint. */
+  describedBy?: string;
+  /** Called when a pick is refused for being over the dimension's `maxSelected`. */
+  onRefused?: () => void;
 }
 
 /**
@@ -46,6 +50,8 @@ export function FilterControl({
   options,
   projectSlug,
   className,
+  describedBy,
+  onRefused,
 }: FilterControlProps): JSX.Element {
   switch (dim.kind) {
     case "multiselect":
@@ -62,7 +68,16 @@ export function FilterControl({
                 }))
           }
           defaultValue={value as string[]}
-          onValueChange={(values) => onChange(values)}
+          // With a cap the selection is controlled, so a refused pick never shows.
+          value={
+            dim.maxSelected === undefined ? undefined : (value as string[])
+          }
+          onValueChange={(values) => {
+            if (withinMaxSelected(dim.maxSelected, value as string[], values))
+              onChange(values);
+            else onRefused?.();
+          }}
+          aria-describedby={describedBy}
           placeholder={
             dim.placeholder ?? `Filter by ${dim.label.toLowerCase()}`
           }
@@ -174,6 +189,10 @@ function DateRangeControl({
   onChange: (value: DateRangeValue) => void;
   projectSlug?: string;
   className?: string;
+  /** Ids of text that describes the control, such as a limit hint. */
+  describedBy?: string;
+  /** Called when a pick is refused for being over the dimension's `maxSelected`. */
+  onRefused?: () => void;
 }): JSX.Element {
   return (
     <TimeRangePicker

@@ -1,9 +1,10 @@
 # Tailnet gateway
 
 `gram tailnet-gateway` hosts every enabled private network ingress on its
-customer's tailnet using [tsnet](https://tailscale.com/kb/1244/tsnet). It
-replaces the Tailscale Kubernetes operator, its privileged proxy pods and the
-per-ingress attestor pods.
+customer's tailnet using [tsnet](https://tailscale.com/kb/1244/tsnet). It is
+the only runtime for private network ingresses: it replaced the Tailscale
+Kubernetes operator, its privileged proxy pods and the per-ingress attestor
+pods, which have been removed.
 
 ## How it works
 
@@ -32,13 +33,33 @@ per-ingress attestor pods.
   a `tsnet.Server` whose `ipn.StateStore` is backed by
   `network_ingress_node_states`. Restarts reconnect as the same device, so
   customers never see registration churn.
+- Direct connections need a fixed UDP port per node. Kubernetes pod
+  networking rewrites a pod's outbound source port per destination, so a node
+  on a random port reports `MappingVariesByDestIP: true`. A client behind a
+  strict NAT then never gets a direct path and stays on a DERP relay, which
+  is too slow for large responses such as `tools/list`. With
+  `GRAM_TAILNET_GATEWAY_TSNET_PORT_BASE` set, each node in a pod takes its own
+  port from `[base, base+GRAM_TAILNET_GATEWAY_MAX_HOSTS)` and returns it
+  once the node has closed. magicsock then also advertises the STUN-observed
+  address with that local port. The deployment publishes the range as UDP
+  `hostPort`s on nodes with public IPs and opens it in the firewall. Ports are
+  only unique within a pod, since every pod is its own node. The default, 0,
+  lets tsnet pick a random port. With a fixed port, the node's port is
+  logged as `gram.tailnet_gateway.tsnet_port`. tsnet's backend log (`Logf`)
+  goes to a child logger tagged `gram.component=tsnet`: advertised endpoint
+  changes (`magicsock: endpoints changed`) and a peer's UDP path changes
+  (`magicsock: disco: node … now using <addr>`) log at info, the rest at
+  debug. A `now using` line is direct only when its address is a plain
+  `ip:port`; an address with a VNI is a Tailscale peer relay. A peer with no
+  `now using` line is still on DERP. tsnet's user-facing log (`UserLogf`) still goes to the host logger
+  at info.
 - The node advertises the service with `ListenService` in TCP mode: tsnet
   forwards each connection over loopback with a PROXY protocol header naming
   the tailnet peer, and the gateway terminates TLS itself. It resolves the
   peer with `WhoIs`, replaces
   every `Tailscale-*` header with the resolved identity and forwards to the
-  private listener with the pod's projected service-account token, exactly as
-  the attestor did.
+  private listener with the pod's projected service-account token. The
+  listener accepts only the gateway's service account.
 - Certificates are covered in detail in [CERTIFICATES.md](CERTIFICATES.md):
   the Let's Encrypt limits and how slots coordinate issuance and renewal.
 - In Kubernetes, tsnet keeps each node's TLS certificate in the state store.
@@ -121,22 +142,13 @@ bound to its organization and column.
 
 ## Which ingresses use it
 
-The `network_ingresses.runtime` column decides:
-
-- `gateway`: hosted only by this gateway.
-- `NULL` (or anything else): hosted only by the Tailscale Kubernetes operator,
-  as before. Nothing in this package moves an ingress between the two.
-
-A new ingress is created with `gateway` only when its organization has the
-`private-network-gateway` PostHog flag (targeted by organization slug), and
-with `NULL` otherwise, including when the flag cannot be read. The choice is
-fixed at creation, so changing the flag never moves an ingress; the API
-returns it as `runtime`, and the dashboard's setup sheet reads the same flag
-to show matching steps. Local development sets the flag on.
-`GRAM_NETWORK_INGRESS_GATEWAY_ENABLED` tells the reconciler the gateway pods
-are deployed; until it is set, gateway ingresses wait as
-`provider_configuration_unavailable` instead of falling back to the operator,
-so target the flag only once the gateway runs in that environment.
+Every ingress. The management API creates each one with
+`network_ingresses.runtime = 'gateway'`, and the reconciler applies only
+those rows. A row with any other runtime was created for the retired
+Kubernetes operator: nothing hosts it, the reconciler reports it as
+`unsupported_provider`, and deleting it still completes. Apply and rotation
+run only with `GRAM_NETWORK_INGRESS_PROVIDER_MUTATIONS_ENABLED`, which an
+environment sets only where the gateway pods run.
 
 ## Running locally
 

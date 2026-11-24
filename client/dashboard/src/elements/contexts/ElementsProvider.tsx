@@ -12,7 +12,6 @@ import {
   CHAT_ATTACHMENT_MAX_BYTES,
   createChatAttachmentAdapter,
 } from "@/elements/lib/attachmentUpload";
-import { initErrorTracking, trackError } from "@/elements/lib/errorTracking";
 import { DEFAULT_MODEL } from "@/elements/lib/models";
 import {
   clearFrontendToolApprovalConfig,
@@ -189,16 +188,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // approvalHelpersRef below.
   const systemPromptRef = useRef(systemPrompt);
   systemPromptRef.current = systemPrompt;
-
-  // Initialize error tracking on mount
-  useEffect(() => {
-    initErrorTracking({
-      enabled: config.errorTracking?.enabled,
-      projectSlug: config.projectSlug,
-      variant: config.variant,
-    });
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- one-time init at mount; later config changes are intentionally ignored
-  }, []);
 
   // Generate a stable chat ID for server-side persistence (when history is disabled)
   // When history is enabled, the thread adapter manages chat IDs instead
@@ -394,7 +383,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             },
             onStreamError: (error) => {
               console.error("Stream error in onError callback:", error);
-              trackError(error, { source: "streaming" });
 
               // Check if this is a network/connection error
               const isNetworkError =
@@ -419,7 +407,6 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           return stream;
         } catch (error) {
           console.error("Error creating stream:", error);
-          trackError(error, { source: "stream-creation" });
 
           // Check if this is a network/connection error
           const isNetworkError =
@@ -756,10 +743,7 @@ const ElementsProviderWithHistory = ({
     const timeoutId = setTimeout(() => {
       initialThreadSwitched.current = true;
       runtime.threads.switchToThread(initialThreadId).catch((error) => {
-        trackError(error, {
-          source: "custom",
-          operation: "switch-initial-thread",
-        });
+        console.error("Failed to switch to the initial thread:", error);
       });
     }, 100);
     return () => clearTimeout(timeoutId);

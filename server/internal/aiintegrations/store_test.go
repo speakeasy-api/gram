@@ -547,19 +547,17 @@ func insertConfigWithProviderScheduleOnly(t *testing.T, ctx context.Context, con
 	projectID, err := q.GetFirstProjectByOrganization(ctx, orgID)
 	require.NoError(t, err)
 
-	encryptedKey, err := store.encryptAPIKey("legacy-key")
-	require.NoError(t, err)
-
-	row, err := q.InsertConfig(ctx, repo.InsertConfigParams{
+	inserted, err := q.InsertConfig(ctx, repo.InsertConfigParams{
 		OrganizationID:         orgID,
 		Provider:               provider,
 		ProjectID:              projectID,
 		ExternalOrganizationID: pgtype.Text{String: "", Valid: false},
-		ApiKeyEncrypted:        encryptedKey,
 		Enabled:                enabled,
 		BillingMode:            pgtype.Text{String: "", Valid: false},
 		Settings:               []byte("{}"),
 	})
+	require.NoError(t, err)
+	row, err := store.storeAPIKey(ctx, conn, orgID, inserted.ID, []byte("legacy-key"))
 	require.NoError(t, err)
 
 	providerSched := providerSyncSchedule(provider)

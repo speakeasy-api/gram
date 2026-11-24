@@ -21,8 +21,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 const (
@@ -89,14 +89,14 @@ const (
 // AppOtherMetadataURL for any other URL, or AppDCR. An empty client_id is
 // the dashboard. Anyone can serve a metadata document, so only catalog hosts are kept,
 // and only an admitted catalog client_id names a family: anyone can present one.
-func AppOf(clientID string, check ClientIDCheck) App {
+func AppOf(catalog *aivendors.Snapshot, clientID string, check ClientIDCheck) App {
 	if clientID == "" {
 		return AppFirstParty
 	}
 	if !cimd.IsClientIDURL(clientID) {
 		return AppDCR
 	}
-	preset, known := admission.CatalogPreset(clientID)
+	preset, known := catalog.CatalogPreset(clientID)
 	if !known {
 		return AppOtherMetadataURL
 	}
@@ -108,7 +108,7 @@ func AppOf(clientID string, check ClientIDCheck) App {
 	if check != ClientIDAdmitted {
 		return App{host, ""}
 	}
-	return App{host, documentFamilies[preset.URL]}
+	return App{host, productFamilies[preset.ProductID]}
 }
 
 // String is the stored app_key.
