@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { clientServerURLOverride, type SpeakeasyClient } from "./client-host";
 
 const US_HOSTS: [string, ...string[]] = ["app.getgram.ai", "ai.speakeasy.com"];
-const CLIENTS: SpeakeasyClient[] = ["cli", "hooks", "deviceAgent"];
+// Typed as a record so adding a client without covering it here fails
+// type-checking.
+const CLIENTS = Object.keys({
+  cli: true,
+  hooks: true,
+  deviceAgent: true,
+} satisfies Record<SpeakeasyClient, true>) as SpeakeasyClient[];
 
 describe("clientServerURLOverride", () => {
   it.each(
@@ -48,6 +54,17 @@ describe("clientServerURLOverride", () => {
       }),
     ).toBe("https://preview.example.com");
   });
+
+  it.each(["https://app.getgram.ai:8443", "http://app.getgram.ai"])(
+    "names %s, which the default's scheme and port do not reach",
+    (serverURL) => {
+      expect(
+        clientServerURLOverride("hooks", serverURL, {
+          firstPartyHosts: US_HOSTS,
+        }),
+      ).toBe(serverURL);
+    },
+  );
 
   it("leaves the default host alone without runtime configuration", () => {
     expect(

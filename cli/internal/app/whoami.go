@@ -36,7 +36,9 @@ type WhoamiOptions struct {
 type WhoamiResult struct {
 	Profile *profile.Profile
 
-	// APIURL is the Speakeasy host the profile was verified against.
+	// APIURL is the scheme and host the profile was verified against. Any
+	// userinfo, path or query in the configured URL is left out so it is never
+	// echoed back.
 	APIURL string
 
 	Organization       keys.ValidateKeyOrganization
@@ -86,7 +88,7 @@ func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 
 	return &WhoamiResult{
 		Profile:            prof,
-		APIURL:             apiURL.String(),
+		APIURL:             (&url.URL{Scheme: apiURL.Scheme, Host: apiURL.Host}).String(),
 		Organization:       *result.Organization,
 		Scopes:             result.Scopes,
 		CurrentProjectSlug: projectSlug,

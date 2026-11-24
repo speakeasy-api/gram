@@ -22,9 +22,10 @@ export type SpeakeasyClient = keyof typeof CLIENT_DEFAULT_SERVER_URLS;
  * when the client's own default already reaches this deployment.
  *
  * A default reaches this deployment when its host is one of the deployment's
- * first-party hosts, which all serve the same product. So configurations
- * generated on a US host stay unchanged, while those generated on another
- * partition, a dev environment or a local stack name the serving host.
+ * first-party hosts, which all serve the same product, and the serving origin
+ * uses the default's scheme and port. So configurations generated on a US host
+ * stay unchanged, while those generated on another partition, a dev
+ * environment or a local stack name the serving host.
  */
 export function clientServerURLOverride(
   client: SpeakeasyClient,
@@ -32,8 +33,10 @@ export function clientServerURLOverride(
   config: RuntimeConfig = getRuntimeConfig(),
 ): string | null {
   const server = new URL(serverURL, window.location.origin);
-  const defaultHost = new URL(CLIENT_DEFAULT_SERVER_URLS[client]).hostname;
-  return firstPartyHosts(server.href, config).includes(defaultHost)
-    ? null
-    : server.origin;
+  const clientDefault = new URL(CLIENT_DEFAULT_SERVER_URLS[client]);
+  const defaultReachesServer =
+    server.protocol === clientDefault.protocol &&
+    server.port === clientDefault.port &&
+    firstPartyHosts(server.href, config).includes(clientDefault.hostname);
+  return defaultReachesServer ? null : server.origin;
 }
