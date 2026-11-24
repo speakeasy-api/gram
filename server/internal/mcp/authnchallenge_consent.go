@@ -196,6 +196,8 @@ type consentTemplateData struct {
 	ShowCodeMode bool
 	// ShowDiscoveryMode exposes optional gateway connection settings.
 	ShowDiscoveryMode bool
+	// DashboardInspectGateway uses gateway inventory with fixed Progressive discovery.
+	DashboardInspectGateway bool
 	// PrefillDiscoveryMode is the mode this subject chose on its previous
 	// connection; empty selects the gateway default.
 	PrefillDiscoveryMode metamcp.DiscoveryMode
@@ -691,6 +693,25 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	if isDirectHostedValidation(endpoint) {
+		incomplete, err := s.hostedConsentSetupIncomplete(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
+		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnavailable, err, "read hosted authentication setup").LogError(ctx, logger)
+		}
+		if incomplete {
+			t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+			w.Header().Set("X-Frame-Options", "DENY")
+			if _, err := w.Write([]byte("<!doctype html><html lang=\"en\"><title>Authentication setup incomplete</title><main><h1>Authentication setup incomplete</h1><p>" + hostedSetupNotice + "</p></main></html>")); err != nil {
+				return fmt.Errorf("write hosted authentication setup notice: %w", err)
+			}
+			return nil
+		}
+	}
+
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
 	if err := s.connectPendingSignIn(ctx, logger, endpoint, challengeState); err != nil {
@@ -940,6 +961,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	var gatewayInventory string
 	var approvalError *consentApprovalError
 	var consentProblem mcpconnectionattempts.Happened
+	if gateway != nil && gateway.Focus == nil && gateway.onlyIncompleteHostedMembers() {
+		approvalError = &consentApprovalError{Message: "An administrator must finish upstream authentication setup for the gateway's hosted servers.", ActionURL: "", ActionLabel: ""}
+		consentProblem = mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+		showToolsIsland = false
+	}
 	if catalogFallback {
 		approvalError = &consentApprovalError{Message: "Session expired. Please reconnect.", ActionURL: "", ActionLabel: ""}
 		consentProblem = mcpconnectionattempts.CodeConnectionCatalogExpired
@@ -1071,7 +1097,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
 	}
 	inventoryDeferred := gateway == nil && consentInventoryDeferred(cards, prefillAttr != "")
-	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	gatewayModeOffered := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
+	dashboardInspectGateway := gatewayModeOffered && challengeState.ClientID == dashboardInspectClientID
+	showDiscoveryMode := gatewayModeOffered && !dashboardInspectGateway
 	var prefillDiscoveryMode metamcp.DiscoveryMode
 	if showDiscoveryMode {
 		prefillDiscoveryMode = s.consentDiscoveryModePrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
@@ -1083,7 +1111,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if codeModeUnavailable {
 		prefillDiscoveryMode = metamcp.DiscoveryModeProgressive
 	}
-	if (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) && focusServer == "" {
+	if !dashboardInspectGateway && (endpoint.IsOrganizationGateway() || endpoint.MetaMcpServerID.Valid) && focusServer == "" {
 		defaultMode, readErr := s.gatewayDefaultDiscoveryMode(ctx, endpoint)
 		// Display only: an unreadable default leaves the page without it.
 		if readErr != nil {
@@ -1136,6 +1164,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ShowToolsIsland:         showToolsIsland,
 		GatewayInventory:        gatewayInventory,
 		ShowDiscoveryMode:       showDiscoveryMode,
+		DashboardInspectGateway: dashboardInspectGateway,
 		PrefillDiscoveryMode:    prefillDiscoveryMode,
 		ShowCodeMode:            codeModeAvailable,
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
@@ -1358,6 +1387,28 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
+	if isDirectHostedValidation(endpoint) {
+		incomplete, err := s.hostedConsentSetupIncomplete(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID)
+		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnavailable, err, "read hosted authentication setup").LogError(ctx, logger)
+		}
+		if incomplete {
+			t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
+			return oops.E(oops.CodeForbidden, nil, hostedSetupNotice).LogWarn(ctx, logger)
+		}
+	}
+	if (action == "approve" || action == "approve_agent") && endpoint.MetaMcpServerID.Valid {
+		view, _, err := s.gatewayConsent(ctx, endpoint, challengeState, nil, "")
+		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnavailable, err, "read gateway authentication setup").LogError(ctx, logger)
+		}
+		if view.onlyIncompleteHostedMembers() {
+			t.Refuse(ctx, mcpconnectionattempts.CodeUpstreamSignInNotSetUp)
+			return oops.E(oops.CodeForbidden, nil, hostedSetupNotice).LogWarn(ctx, logger)
+		}
+	}
 	selectedAgentID := strings.TrimSpace(r.PostForm.Get("agent_id"))
 	if (action == "approve_agent") != (selectedAgentID != "") {
 		// A distinct action makes mixed-version consent POSTs fail closed: an

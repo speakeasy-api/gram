@@ -74,7 +74,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		if err := upstreamAuthReadiness(ctx, logger, db, spec.OrgID); err != nil {
 			return fmt.Errorf("check demo seed upstream auth: %w", err)
 		}
-		logger.InfoContext(ctx, "demo seed upstream auth migrated")
+		logger.InfoContext(ctx, "demo seed typed upstream auth ready")
 
 		if err := s.runClickHouse(ctx, ch); err != nil {
 			return fmt.Errorf("apply demo seed to clickhouse: %w", err)

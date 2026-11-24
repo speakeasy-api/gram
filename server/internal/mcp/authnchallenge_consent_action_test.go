@@ -491,7 +491,7 @@ func TestServeConsentAction_ConnectDerivationErrorFailsClosed(t *testing.T) {
 	ctx, ti := newTestMCPServiceWithPoolConfig(t, testenv.NewLogger(t), testenv.NewMeterProvider(t),
 		&mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil,
 		func(config *pgxpool.Config) {
-			config.ConnConfig.Tracer = queryFailureTracer("ListOrganizationMcpServersForClients")
+			config.ConnConfig.Tracer = queryFailureTracer{query: "ListOrganizationMcpServersForClients", hits: nil}
 		}, mcp.MetaRuntimeConfig{})
 	_, fx := seedMultiClientConsentEndpointWithService(t, ctx, ti)
 

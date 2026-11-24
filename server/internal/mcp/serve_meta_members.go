@@ -111,6 +111,9 @@ type metaMember struct {
 	typedRegistrations bool
 }
 
+// hostedConsentPresentationKey allows consent rendering to name a blocked member.
+type hostedConsentPresentationKey struct{}
+
 // memberStatus is the list_servers connection state. Hosted members execute
 // in-process, so they are always available. A tunneled member's liveness is
 // one route-store read; a remote member's would be a credentialed network
@@ -666,6 +669,10 @@ func (s *Service) admitMetaMembers(
 			registration, err := assignments[member.serverID].registration(member.projectID)
 			if err != nil {
 				logger.WarnContext(ctx, "hosted member upstream assignment unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+				if ctx.Value(hostedConsentPresentationKey{}) == true {
+					member.upstreamUnavailable = errHostedConsentSetupIncomplete
+					ready = append(ready, member)
+				}
 				continue
 			}
 			member.associatedClients = make(map[uuid.UUID]bool, 1)
@@ -719,7 +726,7 @@ func memberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, projectID u
 	if toolsetID.Valid {
 		resourceID = toolsetID.UUID
 	}
-	return authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String())
+	return authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(projectID)).Connect()
 }
 
 // findNamedMember resolves the server a call names and records the one

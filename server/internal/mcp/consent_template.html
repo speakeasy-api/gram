@@ -759,7 +759,7 @@
             data-csrf-token="{{.CSRFToken}}"
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
-            data-gateway="{{if or .ShowDiscoveryMode .CatalogChanges}}true{{else}}false{{end}}"
+            data-gateway="{{if or .ShowDiscoveryMode .DashboardInspectGateway .CatalogChanges}}true{{else}}false{{end}}"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
             data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
@@ -870,6 +870,11 @@
                 </p>
               </dd>
             </div>
+            {{else if .DashboardInspectGateway}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">Progressive (dashboard Inspect)</dd>
+            </div>
             {{else if .GatewayDefaultMode}}
             <div data-agent-self-only>
               <dt class="text-eyebrow">Tool discovery</dt>
@@ -948,7 +953,8 @@
         {{else if and .Gateway .Gateway.Focus}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">
-            {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
+            {{if .Gateway.Focus.HostedSetupNotice}}{{.Gateway.Focus.HostedSetupNotice}}
+            {{else if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
             {{else if .Gateway.Focus.AddressNotice}}{{.Gateway.Focus.AddressNotice}}
             {{else if .Gateway.Focus.ConnectionUnavailable}}{{.Gateway.Focus.Name}}'s sign-in has expired and hasn't been renewed. Try again shortly.
             {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.

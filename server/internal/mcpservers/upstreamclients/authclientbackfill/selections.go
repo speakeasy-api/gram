@@ -8,8 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
 
 // CredentialClass is the kind of inbound credential a choice belongs to, as
@@ -152,26 +150,13 @@ type liveCredential struct {
 	issuer uuid.UUID
 }
 
-// decideSelection decides one choice's mapping, returning the auth client to
-// name when there is exactly one. issuer is the user session issuer of the
-// choice's credential. A choice the upstream client choice reads as no-auth,
-// explicit or naming the server's headers, holds while the server has no
-// upstream OAuth client association, as GetUpstreamClientSelection reads it,
-// and the server offers no enabled OAuth-backed client, counting an EMA
-// client reached only through the gateways only for a choice whose credential
-// the gateways' issuer issued. A choice already
-// naming an auth client is usable while that client is, as the typed
-// resolver reads it, whatever the legacy issuer binding. An unmapped OAuth
-// choice is never mapped in legacy mode: server association alone does not
-// authorize the credential issuer.
-// For an organization enforcing upstream auth (typedOnly), a server's upstream
-// OAuth client associations make no choice stale or rejected, as issuance reads
-// them there, but an unmapped OAuth choice still needs its registration and
-// that registration's issuer to be live.
-func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID, typedOnly bool) (SelectionOutcome, uuid.UUID) {
+// decideSelection maps a choice to the one typed client that can serve it.
+// The issuer limits whether a gateway's EMA offers make no-auth stale. A
+// live registration alone is not enough: mapping also needs an offered client.
+func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID) (SelectionOutcome, uuid.UUID) {
 	readsNoAuth := row.NoAuth || row.NamesHeaders
-	staleNoAuth := readsNoAuth && ((row.ServerHasAssociations && !typedOnly) || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
-	oauthRejected := !readsNoAuth && (!typedOnly || !row.RegistrationLive)
+	staleNoAuth := readsNoAuth && (row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
+	oauthRejected := !readsNoAuth && !row.RegistrationLive
 	switch {
 	case staleNoAuth:
 		return SelectionStaleNoAuth, uuid.Nil
@@ -260,13 +245,13 @@ func visitSelectionMappings(ctx context.Context, q *Queries, params ListSelectio
 }
 
 func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write bool, credential liveCredential, row ListSelectionMappingsRow, report *Report) error {
-	outcome, clientID := decideSelection(row, credential.issuer, opts.TypedOnly)
+	outcome, clientID := decideSelection(row, credential.issuer)
 	counts := report.selectionClass(credential.class)
 	counts.Selections++
 	if outcome == SelectionMap {
 		report.PendingSelectionMappings++
 		if write {
-			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, opts.TypedOnly, row, clientID)
+			written, final, err := mapSelection(ctx, q, opts.OrganizationID, credential.issuer, row, clientID)
 			if err != nil {
 				return err
 			}
@@ -298,7 +283,7 @@ func decideSelectionRow(ctx context.Context, q *Queries, opts Options, write boo
 // header changed concurrently either commits before the read or waits for
 // this phase to commit. It returns whether it wrote and the choice's outcome.
 // The locks are held until the phase commits.
-func mapSelection(ctx context.Context, q *Queries, organizationID string, issuerID uuid.UUID, typedOnly bool, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
+func mapSelection(ctx context.Context, q *Queries, organizationID string, issuerID uuid.UUID, row ListSelectionMappingsRow, clientID uuid.UUID) (bool, SelectionOutcome, error) {
 	if err := q.LockSelectionRemoteSource(ctx, row.McpServerID); err != nil {
 		return false, "", fmt.Errorf("lock source of selection %s: %w", row.ID, err)
 	}
@@ -318,7 +303,7 @@ func mapSelection(ctx context.Context, q *Queries, organizationID string, issuer
 	if len(fresh) == 0 {
 		return false, SelectionSkippedRace, nil
 	}
-	outcome, decided := decideSelection(fresh[0], issuerID, typedOnly)
+	outcome, decided := decideSelection(fresh[0], issuerID)
 	switch {
 	case outcome != SelectionMap:
 		return false, outcome, nil
@@ -341,36 +326,6 @@ func mapSelection(ctx context.Context, q *Queries, organizationID string, issuer
 	return true, SelectionMap, nil
 }
 
-// ReconcileUserSessionSelectionsInLockedTransaction names uniquely decided typed
-// clients on existing unmapped choices of one issuer's live credentials. It uses
-// the backfill's decision and guarded mapping writer, never replaces a named
-// client, and grants nothing. The caller must hold the EMA writer scope for
-// every reachable or recorded server and preflight its OAuth registration gates
-// before its first mutation. Newly missing choices are recorded separately by
-// the shared issuance writer.
-func ReconcileUserSessionSelectionsInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
-	_, err := ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx, tx, organizationID, issuerID, nil)
-	return err
-}
-
-// ReconcileUserSessionSelectionsForServersInLockedTransaction independently
-// scopes mapping to servers: nil keeps full reach, while an empty array maps
-// nothing. It reports guarded bulk rows skipped because their evidence changed.
-func ReconcileUserSessionSelectionsForServersInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID) (int64, error) {
-	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
-		return 0, errors.New("reconcile user session selections: no transaction or tenant scope")
-	}
-	// Read the feature repository directly to avoid a dependency cycle through
-	// the product feature service, which invokes this backfill.
-	typedOnly, err := productfeaturesrepo.New(tx).IsFeatureEnabled(ctx, productfeaturesrepo.IsFeatureEnabledParams{
-		OrganizationID: organizationID, FeatureName: "upstream_auth_enforced",
-	})
-	if err != nil {
-		return 0, fmt.Errorf("read enforcement for selection reconciliation: %w", err)
-	}
-	return reconcileUserSessionSelectionsForServers(ctx, tx, organizationID, issuerID, serverIDs, typedOnly)
-}
-
 // ReconcileTypedUserSessionSelectionsForServersInLockedTransaction maps existing
 // selections using only current typed offers rather than issuer-client links.
 func ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID) (int64, error) {
@@ -380,10 +335,10 @@ func ReconcileTypedUserSessionSelectionsForServersInLockedTransaction(ctx contex
 	if serverIDs != nil && len(serverIDs) == 0 {
 		return 0, nil
 	}
-	return reconcileUserSessionSelectionsForServers(ctx, tx, organizationID, issuerID, serverIDs, true)
+	return reconcileUserSessionSelectionsForServers(ctx, tx, organizationID, issuerID, serverIDs)
 }
 
-func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID, typedOnly bool) (int64, error) {
+func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID, serverIDs []uuid.UUID) (int64, error) {
 	q := New(tx)
 	confirmed := make(map[selectionMappingGroup]bool)
 	var skipped int64
@@ -394,7 +349,7 @@ func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, or
 		groups := make(map[selectionMappingGroup][]ListSelectionMappingsRow)
 		var ordered []selectionMappingGroup
 		for _, row := range rows {
-			outcome, clientID := decideSelection(row, issuerID, typedOnly)
+			outcome, clientID := decideSelection(row, issuerID)
 			if outcome != SelectionMap {
 				continue
 			}
@@ -413,7 +368,7 @@ func reconcileUserSessionSelectionsForServers(ctx context.Context, tx pgx.Tx, or
 				for len(group) > 0 {
 					representative := group[0]
 					group = group[1:]
-					written, outcome, err := mapSelection(ctx, q, organizationID, issuerID, typedOnly, representative, key.clientID)
+					written, outcome, err := mapSelection(ctx, q, organizationID, issuerID, representative, key.clientID)
 					if err != nil {
 						return err
 					}

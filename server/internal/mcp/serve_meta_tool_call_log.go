@@ -79,6 +79,9 @@ type metaToolCallAttempt struct {
 
 	// message is what the caller was told about that failure.
 	message string
+
+	// succeeded is set when the member's result is not an error.
+	succeeded bool
 }
 
 // newMetaToolCallAttempt starts an attempt for a call received at start.
@@ -92,6 +95,7 @@ func newMetaToolCallAttempt(start time.Time) *metaToolCallAttempt {
 		proxied:     false,
 		status:      0,
 		message:     "",
+		succeeded:   false,
 	}
 }
 
@@ -100,6 +104,13 @@ func newMetaToolCallAttempt(start time.Time) *metaToolCallAttempt {
 func markMetaToolCallProxied(ctx context.Context) {
 	if attempt, ok := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt); ok && attempt != nil {
 		attempt.proxied = true
+	}
+}
+
+// markMetaToolCallSucceeded records that the call on ctx got a result that is not an error.
+func markMetaToolCallSucceeded(ctx context.Context) {
+	if attempt, ok := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt); ok && attempt != nil {
+		attempt.succeeded = true
 	}
 }
 

@@ -59,16 +59,16 @@ func (q *Queries) GetVisitorEMAFixtureParents(ctx context.Context, arg GetVisito
 	return i, err
 }
 
-const hasSeedPersonalOffer = `-- name: HasSeedPersonalOffer :one
-SELECT EXISTS (
- SELECT 1
+const hasExactSeedPersonalOffer = `-- name: HasExactSeedPersonalOffer :one
+SELECT (COUNT(*) = 1 AND COALESCE(bool_and(registration.id = $1::text::uuid), FALSE))::boolean
+
  FROM mcp_server_auth_clients offer
  JOIN mcp_auth_clients client
    ON client.id = offer.auth_client_id
   AND client.organization_id = offer.organization_id
  JOIN remote_session_clients registration ON registration.id = client.remote_session_client_id
- WHERE offer.organization_id = $1::text
-   AND offer.mcp_server_id = $2::text::uuid
+ WHERE offer.organization_id = $2::text
+   AND offer.mcp_server_id = $3::text::uuid
    AND offer.deleted IS FALSE
    AND client.deleted IS FALSE AND client.enabled
    AND registration.credential_owner = 'subject'
@@ -79,22 +79,20 @@ SELECT EXISTS (
               AND details.organization_id = client.organization_id
               AND details.deleted IS FALSE
         )))
-   AND registration.id = $3::text::uuid
    AND registration.deleted IS FALSE
-)
 `
 
-type HasSeedPersonalOfferParams struct {
+type HasExactSeedPersonalOfferParams struct {
+	RegistrationID string
 	OrgID          string
 	ServerID       string
-	RegistrationID string
 }
 
-func (q *Queries) HasSeedPersonalOffer(ctx context.Context, arg HasSeedPersonalOfferParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasSeedPersonalOffer, arg.OrgID, arg.ServerID, arg.RegistrationID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+func (q *Queries) HasExactSeedPersonalOffer(ctx context.Context, arg HasExactSeedPersonalOfferParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasExactSeedPersonalOffer, arg.RegistrationID, arg.OrgID, arg.ServerID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const plantVisitorEMABinding = `-- name: PlantVisitorEMABinding :execrows

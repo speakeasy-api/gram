@@ -26,6 +26,7 @@ import (
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -454,6 +455,32 @@ func TestRemoteSessionRecheck_PrivateOnlyEndpointIsProbedPrivately(t *testing.T)
 	require.Equal(t, 1, checked)
 	requireProbe(t, fx.member.drain(), "token-"+prefix, false, false)
 	require.Equal(t, string(remotesessions.ValidationOutcomeRejectedByMember), storedSession(t, ctx, fx).ValidationStatus.String)
+	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
+}
+
+func TestRemoteSessionRecheck_VerifiesExactHostedAssignment(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedHostedGatewayValidationFixture(t, "hosted-keepalive")
+	makeKeepaliveShaped(t, ctx, fx, "hosted-keepalive")
+	// The exact hosted grant lookup requires a live organization member.
+	_, err := organizationsrepo.New(fx.ti.conn).UpsertOrganizationUserRelationship(ctx, organizationsrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: fx.endpoint.OrganizationID, UserID: conv.ToPGText(fx.subject.ID),
+	})
+	require.NoError(t, err)
+	_, err = mcpendpoints_repo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID:       fx.endpoint.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID: fx.endpoint.MetaMcpServerID,
+		Slug:            fx.endpoint.Slug,
+	})
+	require.NoError(t, err)
+
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked)
+	require.Empty(t, fx.member.drain(), "hosted keepalive must not send its grant to a proxied sibling")
+	require.Equal(t, string(remotesessions.ValidationOutcomeInactive), storedSession(t, ctx, fx).ValidationStatus.String)
 	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
 }
 

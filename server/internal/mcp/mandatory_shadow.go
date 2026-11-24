@@ -76,6 +76,16 @@ func (l *onceLog) first(key string) bool {
 	return true
 }
 
+// forget drops key, so its next occurrence is first again.
+func (l *onceLog) forget(key string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.seen.Remove(key)
+}
+
 // mandatoryShadow evaluates one request's mandatory checks beside today's
 // decisions, admitting the caller once. A nil shadow records nothing.
 type mandatoryShadow struct {

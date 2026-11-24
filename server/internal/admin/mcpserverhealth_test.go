@@ -775,8 +775,7 @@ func TestDescribeMcpServerHealth_ReportsUpstreamAuthClients(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, true)
-	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "upstream-auth", false)
-	serverID := f.seedServerWithIssuer(t, toolsetID, uuid.Nil, "upstream-auth")
+	serverID, _ := f.seedRemoteServer(t, "https://upstream-auth.example.test/mcp", uuid.Nil)
 
 	got, err := f.describe(t, serverID, 14)
 	require.NoError(t, err)

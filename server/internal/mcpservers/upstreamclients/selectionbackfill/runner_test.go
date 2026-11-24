@@ -1285,7 +1285,7 @@ func TestReconcileIssuerScopeEmptyDoesNotRecordOrMap(t *testing.T) {
 	require.NoError(t, authclientbackfill.LockEMAWriterScope(t.Context(), tx, f.orgID, []uuid.UUID{f.projectID}))
 	require.NoError(t, authclientbackfill.PreflightServerAssociations(t.Context(), tx, f.orgID, server))
 	require.NoError(t, authclientbackfill.SyncServerAssociations(t.Context(), tx, f.orgID, server))
-	skipped, err := ReconcileIssuerScopeInLockedTransaction(t.Context(), tx, f.orgID, issuer, []uuid.UUID{}, nil)
+	skipped, err := ReconcileTypedIssuerScopeInLockedTransaction(t.Context(), tx, f.orgID, issuer, []uuid.UUID{}, nil)
 	require.NoError(t, err)
 	require.Zero(t, skipped)
 	require.NoError(t, tx.Commit(t.Context()))

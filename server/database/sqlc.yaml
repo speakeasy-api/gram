@@ -554,6 +554,33 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/chat/transcriptstore/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/chat/transcriptstore/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/chat/transcriptstore/fixtures/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "fixturerepo"
+        out: "../internal/chat/transcriptstore/fixturerepo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+        query_parameter_limit: 20
+        overrides:
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/chat/analysis/queries.sql
     engine: postgresql
     gen:
@@ -738,6 +765,16 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/mcpconnectionhealth/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpconnectionhealth/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/usersessions/queries.sql
     engine: postgresql
     gen:
@@ -905,7 +942,9 @@ sql:
         omit_unused_structs: true
 
   - schema: [schema.sql, sqlc_retired_columns.sql]
-    queries: ../internal/plugins/queries.sql
+    queries:
+      - ../internal/plugins/queries.sql
+      - ../internal/plugins/marketplacetoken_queries.sql
     engine: postgresql
     gen:
       go:
@@ -1114,6 +1153,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/deviceintegrations/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: [schema.sql, sqlc_retired_columns.sql]
+    queries: ../internal/aiproviderkeys/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/aiproviderkeys/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

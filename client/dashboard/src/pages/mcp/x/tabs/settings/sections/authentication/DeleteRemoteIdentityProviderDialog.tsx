@@ -1,3 +1,4 @@
+import { invalidateAllMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { invalidateAllServerClientAssociations } from "@gram/client/react-query/serverClientAssociations.js";
 import { Spinner } from "@/components/ui/Spinner";
 import { Input } from "@/components/ui/Input";
@@ -91,6 +92,7 @@ function DeleteRemoteIdentityProviderDialogBody({
       });
       await Promise.all([
         invalidateAllServerClientAssociations(queryClient),
+        invalidateAllMcpServerAuthentication(queryClient),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
         // Also invalidate MCP server queries so the sidebar readiness bar
@@ -115,7 +117,7 @@ function DeleteRemoteIdentityProviderDialogBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>Unlink Registration</Dialog.Title>
+        <Dialog.Title>Unlink registration</Dialog.Title>
         <Dialog.Description>
           This unlinks the registration <strong>{clientId}</strong> (
           {registrationId}) from this MCP server only. The registration,
@@ -147,7 +149,9 @@ function DeleteRemoteIdentityProviderDialogBody({
 
       <Alert variant="warning" dismissible={false}>
         Users who signed in through this registration may need to authenticate
-        again.
+        again. If this hosted server requires upstream authentication,
+        connecting will stop working until an administrator assigns a
+        replacement or explicitly selects No upstream authentication.
       </Alert>
 
       {error && (

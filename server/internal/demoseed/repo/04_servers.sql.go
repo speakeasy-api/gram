@@ -1001,6 +1001,189 @@ func (q *Queries) ServersInsertHeadlessClient(ctx context.Context, arg ServersIn
 	return err
 }
 
+const serversInsertHealthClient = `-- name: ServersInsertHealthClient :exec
+INSERT INTO user_session_clients
+  (id, project_id, organization_id, user_session_issuer_id, client_id,
+   client_name, redirect_uris, client_id_metadata_uri, client_id_issued_at,
+   token_endpoint_auth_method)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::uuid, $5::text,
+        $6::text, ARRAY['http://127.0.0.1:33418/callback'],
+        $7::text, now() - interval '45 days', 'none')
+`
+
+type ServersInsertHealthClientParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	OrgID       string
+	IssuerID    uuid.UUID
+	ClientID    string
+	ClientName  string
+	MetadataUri pgtype.Text
+}
+
+func (q *Queries) ServersInsertHealthClient(ctx context.Context, arg ServersInsertHealthClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHealthClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ClientID,
+		arg.ClientName,
+		arg.MetadataUri,
+	)
+	return err
+}
+
+const serversInsertHealthGateway = `-- name: ServersInsertHealthGateway :exec
+WITH gateway AS (
+  INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                                user_session_issuer_id, created_at)
+  VALUES ($4::uuid, $5::text, $2::uuid, 'Engineering Tools',
+          $6::uuid, now() - interval '40 days')
+  RETURNING id
+)
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug, created_at)
+SELECT $1::uuid, $2::uuid, gateway.id, NULL, $3::text,
+       now() - interval '40 days'
+FROM gateway
+`
+
+type ServersInsertHealthGatewayParams struct {
+	EndpointID   uuid.UUID
+	ProjectID    uuid.UUID
+	EndpointSlug string
+	ID           uuid.UUID
+	OrgID        string
+	IssuerID     uuid.UUID
+}
+
+func (q *Queries) ServersInsertHealthGateway(ctx context.Context, arg ServersInsertHealthGatewayParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHealthGateway,
+		arg.EndpointID,
+		arg.ProjectID,
+		arg.EndpointSlug,
+		arg.ID,
+		arg.OrgID,
+		arg.IssuerID,
+	)
+	return err
+}
+
+const serversInsertHealthIssuer = `-- name: ServersInsertHealthIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode, created_at) VALUES
+  ($1::uuid, $2::uuid, $3::text, 'acme-sso',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   now() - interval '45 days')
+`
+
+type ServersInsertHealthIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// Connection health (seed_04_connection_health.go): one MCP authentication
+// provider with five servers and a gateway, so the provider's Overview,
+// Connections and server tabs have a month of sign-ins to show.
+func (q *Queries) ServersInsertHealthIssuer(ctx context.Context, arg ServersInsertHealthIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHealthIssuer, arg.ID, arg.ProjectID, arg.OrgID)
+	return err
+}
+
+const serversInsertHealthServer = `-- name: ServersInsertHealthServer :exec
+WITH remote AS (
+  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url, created_at)
+  VALUES ($4::uuid, $2::uuid, $5::text, $6::text,
+          'streamable-http', $7::text, now() - interval '45 days')
+  RETURNING id
+), server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, remote_mcp_server_id,
+                           user_session_issuer_id, visibility, created_at)
+  SELECT $8::uuid, $2::uuid, $5::text, $6::text, remote.id,
+         $9::uuid, 'private', now() - interval '45 days'
+  FROM remote
+  RETURNING id
+)
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug, created_at)
+SELECT $1::uuid, $2::uuid, NULL, server.id, $3::text,
+       now() - interval '45 days'
+FROM server
+`
+
+type ServersInsertHealthServerParams struct {
+	EndpointID   uuid.UUID
+	ProjectID    uuid.UUID
+	EndpointSlug string
+	RemoteID     uuid.UUID
+	Name         string
+	Slug         string
+	Url          string
+	ServerID     uuid.UUID
+	IssuerID     uuid.UUID
+}
+
+func (q *Queries) ServersInsertHealthServer(ctx context.Context, arg ServersInsertHealthServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHealthServer,
+		arg.EndpointID,
+		arg.ProjectID,
+		arg.EndpointSlug,
+		arg.RemoteID,
+		arg.Name,
+		arg.Slug,
+		arg.Url,
+		arg.ServerID,
+		arg.IssuerID,
+	)
+	return err
+}
+
+const serversInsertHealthSession = `-- name: ServersInsertHealthSession :exec
+INSERT INTO user_sessions
+  (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
+   subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at,
+   last_used_at, created_at, updated_at, deleted_at)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::uuid, $5::uuid,
+   'user:' || $6::text, ($1::uuid)::text, 'demo-inert:' || ($1::uuid)::text,
+   $7::timestamptz, $8::timestamptz,
+   $9::timestamptz, $10::timestamptz, $9::timestamptz,
+   $11::timestamptz)
+`
+
+type ServersInsertHealthSessionParams struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	OrgID            string
+	IssuerID         uuid.UUID
+	ClientID         uuid.UUID
+	UserID           string
+	RefreshExpiresAt pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+	LastUsedAt       pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+}
+
+// One MCP sign-in of a person, ended or live, at explicit times.
+func (q *Queries) ServersInsertHealthSession(ctx context.Context, arg ServersInsertHealthSessionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHealthSession,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.IssuerID,
+		arg.ClientID,
+		arg.UserID,
+		arg.RefreshExpiresAt,
+		arg.ExpiresAt,
+		arg.LastUsedAt,
+		arg.CreatedAt,
+		arg.DeletedAt,
+	)
+	return err
+}
+
 const serversInsertHostedToolsetEndpoints = `-- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5($1::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
@@ -1024,8 +1207,8 @@ func (q *Queries) ServersInsertHostedToolsetEndpoints(ctx context.Context, arg S
 
 const serversInsertHostedToolsetMCPServers = `-- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, visibility)
-SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+                         user_session_issuer_id, visibility, requires_upstream_auth)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility, FALSE
 FROM (VALUES
   ($1::uuid, $2::text, NULL::uuid, 'public')
 ) AS v(toolset_id, slug, user_session_issuer_id, visibility)

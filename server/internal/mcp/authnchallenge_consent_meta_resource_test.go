@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -637,10 +638,16 @@ func requireConnectRefused(t *testing.T, fx consentActionFixture, clientID uuid.
 	require.Empty(t, w.Header().Get("Location"), msg)
 }
 
-type queryFailureTracer string
+type queryFailureTracer struct {
+	query string
+	hits  *atomic.Int32
+}
 
-func (query queryFailureTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	if strings.HasPrefix(data.SQL, "-- name: "+string(query)+" ") {
+func (tracer queryFailureTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.HasPrefix(data.SQL, "-- name: "+tracer.query+" ") {
+		if tracer.hits != nil {
+			tracer.hits.Add(1)
+		}
 		canceled, cancel := context.WithCancel(ctx)
 		cancel()
 		return canceled
@@ -656,10 +663,11 @@ func (queryFailureTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQue
 // derivation, which answers for a different reason entirely.
 func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
 	t.Parallel()
+	var hits atomic.Int32
 	ctx, ti := newTestMCPServiceWithPoolConfig(t, testenv.NewLogger(t), testenv.NewMeterProvider(t),
 		&mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil,
 		func(config *pgxpool.Config) {
-			config.ConnConfig.Tracer = queryFailureTracer("ListServableMetaMCPMembers")
+			config.ConnConfig.Tracer = queryFailureTracer{query: "ListServableMetaMCPMembers", hits: &hits}
 		}, mcp.MetaRuntimeConfig{})
 	ctx, fx, metaServerID := seedMetaConsentEndpointWithService(t, ctx, ti, "aim87-lookup-fault-gw")
 
@@ -669,6 +677,7 @@ func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
 	seedAuthorizedMetaConsentOffer(t, ctx, fx, member, clientID)
 
 	_ = requireConnectActionFailsClosed(t, fx, clientID, oops.CodeUnexpected)
+	require.EqualValues(t, 1, hits.Load(), "the injected fault must reach the member lookup")
 }
 
 // A tunneled member with no recorded resource identifier still claims its

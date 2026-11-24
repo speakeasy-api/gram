@@ -2980,22 +2980,6 @@ SELECT sel.id,
            AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
            AND headers_only.client_type IN ('static_credential', 'pass_through')
        )::boolean AS names_headers,
-       EXISTS (
-         SELECT 1
-         FROM mcp_server_remote_session_clients AS a
-         WHERE a.mcp_server_id = sel.mcp_server_id
-           AND a.deleted IS FALSE
-       )::boolean AS server_has_associations,
-       EXISTS (
-         SELECT 1
-         FROM mcp_server_remote_session_clients AS a
-         JOIN remote_session_clients AS c
-           ON c.id = a.remote_session_client_id
-          AND c.deleted IS FALSE
-         WHERE a.mcp_server_id = sel.mcp_server_id
-           AND a.remote_session_client_id = sel.remote_session_client_id
-           AND a.deleted IS FALSE
-       )::boolean AS registration_associated,
        -- The registration and its issuer are live, which the typed resolver
        -- requires of a choice whatever the server's associations.
        EXISTS (
@@ -3258,21 +3242,19 @@ type ListSelectionMappingsParams struct {
 }
 
 type ListSelectionMappingsRow struct {
-	ID                     uuid.UUID
-	ProjectID              uuid.UUID
-	CredentialID           uuid.UUID
-	McpServerID            uuid.UUID
-	RemoteSessionClientID  uuid.NullUUID
-	NoAuth                 bool
-	AuthClientID           uuid.NullUUID
-	MappedUsable           bool
-	NamesHeaders           bool
-	ServerHasAssociations  bool
-	RegistrationAssociated bool
-	RegistrationLive       bool
-	CandidateIds           []uuid.UUID
-	ServerHasOauthClients  bool
-	EmaGatewayIssuerIds    []uuid.UUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	CredentialID          uuid.UUID
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	NoAuth                bool
+	AuthClientID          uuid.NullUUID
+	MappedUsable          bool
+	NamesHeaders          bool
+	RegistrationLive      bool
+	CandidateIds          []uuid.UUID
+	ServerHasOauthClients bool
+	EmaGatewayIssuerIds   []uuid.UUID
 }
 
 // Every live user session choice for a live server in the organization after
@@ -3283,7 +3265,7 @@ type ListSelectionMappingsRow struct {
 //
 // What the upstream client choice reads today (GetUpstreamClientSelection):
 // whether the server has any upstream OAuth client association, whether the
-// chosen registration is live and associated with the server, and whether the choice names
+// chosen registration is live, and whether the choice names
 // the server's headers, which reads as no-auth.
 //
 // The typed auth clients: an OAuth choice can name the live, enabled
@@ -3327,8 +3309,6 @@ func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMa
 			&i.AuthClientID,
 			&i.MappedUsable,
 			&i.NamesHeaders,
-			&i.ServerHasAssociations,
-			&i.RegistrationAssociated,
 			&i.RegistrationLive,
 			&i.CandidateIds,
 			&i.ServerHasOauthClients,

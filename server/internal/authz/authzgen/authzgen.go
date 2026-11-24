@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz/internal/registry"
 )
 
-// File is one generated file, with its path relative to the server directory.
+// File's path is relative to the server directory.
 type File struct {
 	Path    string
 	Content []byte
@@ -36,7 +36,6 @@ func Files() ([]File, error) {
 	return Render(registry.Definitions)
 }
 
-// Render renders every file generated from r.
 func Render(r registry.Registry) ([]File, error) {
 	scopes, err := renderScopeConstants(r)
 	if err != nil {
@@ -67,8 +66,6 @@ func Render(r registry.Registry) ([]File, error) {
 	}...), nil
 }
 
-// identifierAcronyms are scope name parts written in capitals in Go
-// identifiers.
 var identifierAcronyms = map[string]string{"mcp": "MCP"}
 
 var scopeWordSeparator = regexp.MustCompile(`[:_]`)

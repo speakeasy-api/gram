@@ -438,46 +438,22 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 // no-auth choice stale nor rejects an unmapped client choice. The issuer binding,
 // the registration's liveness and the auth clients the server offers still
 // decide.
-func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
+func TestDecideSelectionUsesTypedOffers(t *testing.T) {
 	t.Parallel()
 	issuer, candidate := uuid.New(), uuid.New()
 	for name, tc := range map[string]struct {
-		row       ListSelectionMappingsRow
-		typedOnly bool
-		want      SelectionOutcome
+		row  ListSelectionMappingsRow
+		want SelectionOutcome
 	}{
-		"no-auth beside an association, not enforcing": {
-			row:  ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
-			want: SelectionStaleNoAuth,
-		},
-		"no-auth beside an association, enforcing": {
-			row:       ListSelectionMappingsRow{NoAuth: true, ServerHasAssociations: true},
-			typedOnly: true,
-			want:      SelectionNoAuth,
-		},
-		"no-auth beside an offered OAuth client, enforcing": {
-			row:       ListSelectionMappingsRow{NoAuth: true, ServerHasOauthClients: true},
-			typedOnly: true,
-			want:      SelectionStaleNoAuth,
-		},
-		"unmapped client with only legacy evidence, not enforcing": {
-			row:  ListSelectionMappingsRow{RegistrationLive: true, RegistrationAssociated: true, CandidateIds: []uuid.UUID{candidate}},
-			want: SelectionUnusable,
-		},
-		"unmapped client without an association, enforcing": {
-			row:       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
-			typedOnly: true,
-			want:      SelectionMap,
-		},
-		"unmapped client whose registration was deleted, enforcing": {
-			row:       ListSelectionMappingsRow{CandidateIds: []uuid.UUID{candidate}},
-			typedOnly: true,
-			want:      SelectionUnusable,
-		},
+		"no-auth without an offer":           {row: ListSelectionMappingsRow{NoAuth: true}, want: SelectionNoAuth},
+		"no-auth beside an OAuth offer":      {row: ListSelectionMappingsRow{NoAuth: true, ServerHasOauthClients: true}, want: SelectionStaleNoAuth},
+		"live registration without an offer": {row: ListSelectionMappingsRow{RegistrationLive: true}, want: SelectionNoClient},
+		"live registration with one offer":   {row: ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}}, want: SelectionMap},
+		"registration was deleted":           {row: ListSelectionMappingsRow{CandidateIds: []uuid.UUID{candidate}}, want: SelectionUnusable},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly)
+			got, mapped := decideSelection(tc.row, issuer)
 			require.Equal(t, tc.want, got)
 			if got == SelectionMap {
 				require.Equal(t, candidate, mapped, "the candidate is the client recorded")

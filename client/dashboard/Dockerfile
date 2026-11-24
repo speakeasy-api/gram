@@ -6,21 +6,29 @@ COPY --chown=nginx:nginx dist/index.html /usr/share/nginx/html/index.html
 
 # nginx.conf is an envsubst template: the image entrypoint renders it to
 # /etc/nginx/conf.d/default.conf at startup, substituting ${GRAM_CDN_URL}.
-# The two entrypoint scripts each substitute their own variables in
+# The entrypoint scripts each substitute their own variables in
 # index.html; the nginx entrypoint runs /docker-entrypoint.d/* in `sort -V`
-# order, so both follow the base image's 20-envsubst-on-templates.sh.
+# order, so all follow the base image's 20-envsubst-on-templates.sh.
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --chmod=755 40-admin-server-url.sh /docker-entrypoint.d/
 COPY --chmod=755 41-preview-runtime-values.sh /docker-entrypoint.d/
+COPY --chmod=755 42-dashboard-config.sh /docker-entrypoint.d/
 
-# Defaults: no CDN rewrite, no admin link, no deployment provenance. All must
-# always be defined — envsubst only substitutes variables present in the
-# environment, and unsubstituted values would be parsed by nginx as undefined
-# nginx variables at startup, or left as literal ${...} text in index.html.
-# Both entrypoint scripts also run under `set -u`, so an unset variable would
-# abort them and the container would never serve.
+# Defaults: no CDN rewrite, no admin link, no deployment settings or
+# provenance. All must always be defined — envsubst only substitutes
+# variables present in the environment, and unsubstituted values would be
+# parsed by nginx as undefined nginx variables at startup, or left as literal
+# ${...} text in index.html. The entrypoint scripts also run under `set -u`,
+# so an unset variable would abort them and the container would never serve.
 ENV GRAM_CDN_URL=""
 ENV GRAM_ADMIN_SERVER_URL=""
+
+# Deployment-specific dashboard settings as a JSON object (PostHog, Datadog
+# RUM, tunnel host, custom domain target, Pylon app, first-party hosts), set
+# per deployment by the gram-infra Helm chart. Empty runs the dashboard with
+# telemetry off and hosts derived from the current origin; see
+# src/lib/runtime-config.ts.
+ENV GRAM_DASHBOARD_CONFIG=""
 
 # Deployment provenance, set per environment by the deployment (see the Helm
 # values in gram-infra). The Gutternote widget needs both GRAM_IS_PREVIEW="true"

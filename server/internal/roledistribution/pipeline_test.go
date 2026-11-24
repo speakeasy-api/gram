@@ -16,6 +16,7 @@ import (
 	relay "github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -154,8 +155,9 @@ func TestRoleDistributionPipeline_PublicationRollback(t *testing.T) {
 	ctx := t.Context()
 	f := newPipelineFixture(t)
 	fixtures := testrepo.New(f.db)
-	_, err := pluginsrepo.New(f.db).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{ProjectID: f.project, InstallationID: 12345, RepoOwner: "test-org", RepoName: "test-plugins", MarketplaceToken: pgtype.Text{String: "test-token", Valid: true}, PublishedMcpFingerprints: []byte(`{}`)})
+	_, err := pluginsrepo.New(f.db).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{ProjectID: f.project, InstallationID: 12345, RepoOwner: "test-org", RepoName: "test-plugins", PublishedMcpFingerprints: []byte(`{}`)})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, f.db, f.project, "test-token")
 	require.NoError(t, fixtures.PipelineInstallPublicationFailure(ctx))
 	err = f.handler.HandleRoleDistributionSetupRequested(ctx, f.event, gcp.MessageMetadata{ID: "pipeline-message"})
 	require.ErrorContains(t, err, "injected publication failure")

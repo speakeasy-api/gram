@@ -30,6 +30,16 @@ const mcpServer = {
 afterEach(cleanup);
 
 describe("RemoteMcpSessionsSection", () => {
+  it("offers a downstream sign-in even when an issuer is not attached yet", () => {
+    render(
+      <RemoteMcpSessionsSection
+        mcpServer={{ ...mcpServer, userSessionIssuerId: undefined }}
+      />,
+    );
+
+    expect(screen.getByText("User session issuer")).toBeDefined();
+  });
+
   it("shows only the provider picker; its settings live in MCP Sessions", () => {
     render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
 

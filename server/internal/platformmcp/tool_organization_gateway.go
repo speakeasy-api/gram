@@ -220,7 +220,7 @@ func (s *OrganizationGatewayService) GetProject(ctx context.Context, principal P
 	}
 	// Match ResolveProjectRead's exact project:read check using the live grants
 	// loaded by external admission. Refuse hidden projects like absent projects.
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil})
+	allowed, err := authz.GrantsAuthorize(grants, authz.Project(authz.ProjectIDOf(project.ID)).Read())
 	if err != nil {
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("authorize project gateway discovery: %w", err)
 	}
