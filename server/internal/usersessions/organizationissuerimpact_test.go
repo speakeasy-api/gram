@@ -58,7 +58,7 @@ func impactAssociatedClients(t *testing.T, ctx context.Context, ti *testInstance
 	return ids
 }
 
-func TestOrganizationUserSessionIssuerMigratePreservesOffersWithoutInheritingLinks(t *testing.T) {
+func TestOrganizationUserSessionIssuerMigratePreservesHostedPlacementWithoutCopyingLinks(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
