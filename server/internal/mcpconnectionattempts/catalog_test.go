@@ -290,7 +290,7 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeProviderOAuthInvalidScope, WhoAdmin, []string{"access"}, []string{"permissions"}},
 		{CodeConsentNotApproved, WhoPerson, []string{"needs your approval"}, []string{"have not approved"}},
 		{CodeNeedsSignIn, WhoPerson, []string{"need to sign in"}, []string{"yet"}},
-		{CodeInvalidRemoteSession, WhoPerson, []string{"missing", "connect to the service", "reconnect if the connection expired"}, []string{"reconnect to the service."}},
+		{CodeInvalidRemoteSession, WhoPerson, []string{"usable connection", "connect to the service", "choose another connection"}, []string{"reconnect to the service.", "missing or has expired"}},
 		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list", "your organization"}},
 		{CodeCatalogTooLarge, WhoAdmin, []string{"too large", "if you can"}, []string{"gateway"}},
 		{CodeAssertionInvalid, WhoApp, []string{"the app"}, []string{"sign-in setup"}},

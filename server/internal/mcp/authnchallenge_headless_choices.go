@@ -314,7 +314,7 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 		if !slices.ContainsFunc(auth.Options, func(o consentAuthClientOption) bool {
 			return o.State == consentClientConnect || o.State == consentClientReconnect
 		}) {
-			return nil, setupRequired("Sign-in to the service for this server isn't set up yet. Ask your Speakeasy admin to set it up.", errChoiceNotSetUp)
+			return nil, setupRequired("None of the credentials you can use for this server is set up yet. Ask your Speakeasy admin to check its setup or your access.", errChoiceNotSetUp)
 		}
 		return nil, setupRequired("Your account for this server isn't connected, or its connection has expired. Connect it, then try again.", errChoiceNoneConnected)
 	case 1:
@@ -327,6 +327,7 @@ func decideHeadlessChoice(server consentAuthServer, auth *consentServerAuth, cho
 // the subject's stored connection, which a browserless caller cannot make.
 // Identity-provider clients are judged when used.
 func (s *Service) headlessReadiness(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, server consentAuthServer, auth *consentServerAuth) error {
+	var connects []uuid.UUID
 	for i := range auth.Options {
 		option := &auth.Options[i]
 		switch option.Type {
@@ -348,12 +349,38 @@ func (s *Service) headlessReadiness(ctx context.Context, endpoint *ResolvedMcpEn
 			option.State = consentClientReady
 			if reconnect {
 				option.State = consentClientConnect
+				connects = append(connects, option.registrationID.UUID)
 			}
 		}
+	}
+	if err := s.markSignInsThatCannotStart(ctx, endpoint, server, auth, connects); err != nil {
+		return err
 	}
 	// The consent preselection does not apply without a browser.
 	for i := range auth.Options {
 		auth.Options[i].Selected = false
+	}
+	return nil
+}
+
+// markSignInsThatCannotStart marks a personal option an administrator must fix when its sign-in can't start, as the connect page decides.
+func (s *Service) markSignInsThatCannotStart(ctx context.Context, endpoint *ResolvedMcpEndpoint, server consentAuthServer, auth *consentServerAuth, registrations []uuid.UUID) error {
+	if len(registrations) == 0 {
+		return nil
+	}
+	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, server.projectID, endpoint.OrganizationID, registrations)
+	if err != nil {
+		return fmt.Errorf("check upstream sign-in: %w", err)
+	}
+	startable := make(map[uuid.UUID]bool, len(clients))
+	for _, client := range clients {
+		startable[client.ID] = client.CanStartSignIn()
+	}
+	for i := range auth.Options {
+		option := &auth.Options[i]
+		if option.State == consentClientConnect && option.registrationID.Valid && slices.Contains(registrations, option.registrationID.UUID) && !startable[option.registrationID.UUID] {
+			option.State = consentClientSetup
+		}
 	}
 	return nil
 }
@@ -394,17 +421,18 @@ func withConnectPage(endpoint *ResolvedMcpEndpoint, resource string, err error) 
 	}
 	named, isNamed := errors.AsType[namedCredentialError](err)
 	for _, server := range []string{endpoint.serverDisplayName, endpoint.serverSlug, "this server"} {
-		if !describable(server) {
+		if server != "this server" && !describable(server) {
 			continue
 		}
-		action := "Open " + page + " to connect it, then try again."
+		description := "Your account for " + server + " isn't connected, or its connection has expired. Open " + page + " to connect it, then try again."
 		if isNamed {
-			action = "Open " + page + " and connect the credential chosen for this server, then try again."
+			credential := "The credential chosen for " + server
 			if describable(named.name) {
-				action = "Open " + page + " and connect " + named.name + ", then try again."
+				credential = named.name + " for " + server
 			}
+			description = credential + " isn't connected, or its connection has expired. Open " + page + " and connect it, then try again."
 		}
-		description := "Your account for " + server + " isn't connected, or its connection has expired. " + action + " If this server is in your Speakeasy Device Agent, you can connect it there too."
+		description += " If this server is in your Speakeasy Device Agent, you can connect it there too."
 		if !oautherr.IsDescriptionText(description) {
 			continue
 		}
@@ -415,10 +443,25 @@ func withConnectPage(endpoint *ResolvedMcpEndpoint, resource string, err error) 
 	return err
 }
 
-// describable reports a name a refusal can quote as is: within the RFC 6749 §5.2 character set, short, and not link-like.
+// describable reports a label a refusal can quote as is: ASCII letters, digits, spaces and - _ . ' & + , only, with no dot directly before a letter or digit, so it can't read as markup, an address or a link.
 func describable(name string) bool {
-	return name != "" && len(name) <= maxDescribedNameLength && oautherr.IsDescriptionText(name) &&
-		!strings.Contains(name, "://") && !strings.ContainsAny(name, "[]()")
+	if name == "" || len(name) > maxDescribedNameLength {
+		return false
+	}
+	for i := range len(name) {
+		b := name[i]
+		switch {
+		case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9', b == ' ':
+		case b == '.':
+			if i+1 < len(name) && name[i+1] != ' ' && name[i+1] != '.' && strings.IndexByte("-_'&+,", name[i+1]) < 0 {
+				return false
+			}
+		case strings.IndexByte("-_'&+,", b) >= 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func setupRequired(description string, cause headlessChoiceError) error {

@@ -245,10 +245,21 @@ func classifyEndpointError(stage Stage, err error) Outcome {
 		return newOutcome(stage, ReasonMalformedResponse, ConfidenceVerified, false)
 	}
 	outcome := classifyEndpointFailure(stage, failure)
-	outcome.providerDescription = failure.Description
+	outcome.providerDescription = withoutLinks(failure.Description)
 	// The request may have been processed before it failed.
 	outcome.Submitted = outcome.Reason == ReasonTransientFailure
 	return outcome
+}
+
+// withoutLinks is a provider's error_description with every link replaced, since a link may address a person or carry their state.
+func withoutLinks(description string) string {
+	words := strings.Fields(description)
+	for i, word := range words {
+		if strings.Contains(word, "://") {
+			words[i] = "[link]"
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 func classifyEndpointFailure(stage Stage, failure *remotesessions.TokenEndpointError) Outcome {

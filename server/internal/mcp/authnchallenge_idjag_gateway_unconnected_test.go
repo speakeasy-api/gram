@@ -457,7 +457,7 @@ func TestIDJAGSingleServerRefusalsWithoutConnectLink(t *testing.T) {
 	}
 }
 
-// The refusal names a credential the request chose, and quotes only names safe to echo, else the server's slug.
+// A named refusal is about that credential even when another one is connected; only safe names are quoted, else the slug.
 func TestIDJAGSingleServerConnectLinkWording(t *testing.T) {
 	t.Parallel()
 
@@ -467,7 +467,7 @@ func TestIDJAGSingleServerConnectLinkWording(t *testing.T) {
 		want       func(server mcpserversrepo.McpServer, link string) string
 	}{
 		"named credential": {serverName: "", named: true, want: func(server mcpserversrepo.McpServer, link string) string {
-			return "Your account for " + server.Name.String + " isn't connected, or its connection has expired. Open " + link + " and connect Personal sign-in, then try again. If this server is in your Speakeasy Device Agent, you can connect it there too."
+			return "Personal sign-in for " + server.Name.String + " isn't connected, or its connection has expired. Open " + link + " and connect it, then try again. If this server is in your Speakeasy Device Agent, you can connect it there too."
 		}},
 		"non-ASCII name": {serverName: "Caf\u00e9 tools", named: false, want: func(server mcpserversrepo.McpServer, link string) string {
 			return "Your account for " + server.Slug.String + " isn't connected, or its connection has expired. Open " + link + " to connect it, then try again. If this server is in your Speakeasy Device Agent, you can connect it there too."
@@ -494,8 +494,12 @@ func TestIDJAGSingleServerConnectLinkWording(t *testing.T) {
 				})
 				require.NoError(t, err)
 			}
-			_, clientID := f.personalClient(t, ctx, server.ID, false)
 			var form url.Values
+			if tc.named {
+				connected, _ := f.personalClient(t, ctx, server.ID, false)
+				f.connect(t, ctx, connected, "token-connected", upstream.url)
+			}
+			_, clientID := f.personalClient(t, ctx, server.ID, false)
 			if tc.named {
 				form = url.Values{"upstream_auth_client": {server.ID.String() + ":" + clientID.String()}}
 			}
@@ -513,4 +517,27 @@ func TestIDJAGSingleServerConnectLinkWording(t *testing.T) {
 			require.Equal(t, detail, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInvalidRemoteSession).SubReason)
 		})
 	}
+}
+
+// A personal credential whose sign-in can't start is the administrator's to fix, as the connect page would find.
+func TestIDJAGSingleServerSignInThatCannotStartHasNoLink(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIDJAGGatewayFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+
+	slug := "id-jag-no-authorize-" + uuid.NewString()[:8]
+	upstream := newRecordingUpstream(t, "ping")
+	server, _ := createRemoteMcpEndpoint(t, ctx, f.ti.conn, f.projectID, upstream.url, slug, "public", f.issuerID)
+	registration, _ := f.personalClient(t, ctx, server.ID, false)
+	sessions := remotesessionsrepo.New(f.ti.conn)
+	client, err := sessions.GetRemoteSessionClientByID(ctx, remotesessionsrepo.GetRemoteSessionClientByIDParams{ProjectID: f.projectID, OrganizationID: f.orgID, ID: registration})
+	require.NoError(t, err)
+	_, err = sessions.UpdateRemoteSessionIssuer(ctx, remotesessionsrepo.UpdateRemoteSessionIssuerParams{AuthorizationEndpoint: conv.ToPGText(""), ID: client.RemoteSessionClient.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(f.projectID)})
+	require.NoError(t, err)
+
+	status, body := f.exchange(t, ctx, slug, nil)
+	require.Equal(t, http.StatusBadRequest, status, body)
+	require.JSONEq(t, `{"error":"setup_required","error_description":"None of the credentials you can use for this server is set up yet. Ask your Speakeasy admin to check its setup or your access."}`, body)
+	require.Equal(t, "sign_in_not_set_up", rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeUpstreamSignInNotSetUp).SubReason)
 }
