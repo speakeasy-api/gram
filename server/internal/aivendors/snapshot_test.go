@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSnapshotExactBeforePatternsAndExplicitPatternFlag(t *testing.T) {
+func TestSnapshotSpecificityAndExplicitPatternFlag(t *testing.T) {
 	t.Parallel()
 	products := []Product{
 		{ID: "broad", VendorKey: "shared", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
@@ -17,7 +17,10 @@ func TestSnapshotExactBeforePatternsAndExplicitPatternFlag(t *testing.T) {
 		{ID: "literal-star", VendorKey: "literal", Documents: []Document{{URL: "https://literal.example.com/*/client.json", Enabled: true, Pattern: false}}},
 	}
 	snapshot := NewSnapshot(products)
-	got, ok := snapshot.CatalogPreset("https://example.com/oauth/exact/client.json")
+	got, ok := snapshot.CatalogPreset("https://example.com/oauth/some-client/client.json")
+	require.True(t, ok)
+	require.Equal(t, "specific", got.ProductID)
+	got, ok = snapshot.CatalogPreset("https://example.com/oauth/exact/client.json")
 	require.True(t, ok)
 	require.Equal(t, "exact", got.ProductID)
 	_, ok = snapshot.CatalogPreset("https://literal.example.com/some-client/client.json")
@@ -31,6 +34,23 @@ func TestSnapshotExactBeforePatternsAndExplicitPatternFlag(t *testing.T) {
 	require.Positive(t, snapshot.Version())
 }
 
+func TestSnapshotEqualSpecificityIsStable(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "second", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "first", Documents: []Document{{URL: "https://example.com/*/tenant/client.json", Enabled: true, Pattern: true}}},
+	}
+	first := NewSnapshot(products)
+	slices.Reverse(products)
+	second := NewSnapshot(products)
+	a, ok := first.CatalogPreset("https://example.com/oauth/tenant/client.json")
+	require.True(t, ok)
+	b, ok := second.CatalogPreset("https://example.com/oauth/tenant/client.json")
+	require.True(t, ok)
+	require.Equal(t, "first", a.ProductID)
+	require.Equal(t, a, b)
+}
+
 func TestSnapshotKeepsInputOrder(t *testing.T) {
 	t.Parallel()
 	products := []Product{
@@ -40,7 +60,9 @@ func TestSnapshotKeepsInputOrder(t *testing.T) {
 	forward := NewSnapshot(products)
 	got, ok := forward.CatalogPreset("https://example.com/oauth/some-client/client.json")
 	require.True(t, ok)
-	require.Equal(t, "broad", got.ProductID, "the first matching pattern in input order wins")
+	require.Equal(t, "specific", got.ProductID, "the more specific pattern wins even when listed second")
+	require.Equal(t, "broad", forward.Products()[0].ID)
+	require.Equal(t, "broad", forward.Catalog()[0].ProductID)
 	slices.Reverse(products)
 	reversed := NewSnapshot(products)
 	got, ok = reversed.CatalogPreset("https://example.com/oauth/some-client/client.json")
@@ -48,7 +70,104 @@ func TestSnapshotKeepsInputOrder(t *testing.T) {
 	require.Equal(t, "specific", got.ProductID)
 	require.Equal(t, "specific", reversed.Products()[0].ID)
 	require.Equal(t, "specific", reversed.Catalog()[0].ProductID)
-	require.NotEqual(t, forward.Fingerprint(), reversed.Fingerprint(), "order is content")
+	require.NotEqual(t, forward.Fingerprint(), reversed.Fingerprint(), "listing order is content")
+}
+
+func TestSnapshotPatternPriorityIgnoresInputOrder(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "broad", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "specific", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "exact", Documents: []Document{{URL: "https://example.com/oauth/exact/client.json", Enabled: true}}},
+		{ID: "tenant-b", Documents: []Document{{URL: "https://example.com/*/tenant/client.json", Enabled: true, Pattern: true}}},
+		{ID: "tenant-a", Documents: []Document{{URL: "https://example.com/*/tenant/client.json?v=1", Enabled: true, Pattern: true}}},
+	}
+	want := map[string]string{
+		"https://example.com/oauth/some-client/client.json": "specific",
+		"https://example.com/oauth/exact/client.json":       "exact",
+		"https://example.com/other/some-client/client.json": "broad",
+		"https://example.com/oauth/tenant/client.json":      "tenant-b",
+		"https://example.com/other/tenant/client.json":      "tenant-b",
+		"https://example.com/other/tenant/client.json?v=1":  "tenant-a",
+		"https://example.com/oauth/client.json":             "",
+	}
+	reference := NewSnapshot(products)
+	orders := [][]Product{slices.Clone(products), slices.Clone(products)}
+	slices.Reverse(orders[1])
+	orders = append(orders, append(slices.Clone(products[2:]), products[:2]...))
+	for i, order := range orders {
+		snapshot := NewSnapshot(order)
+		for clientID, productID := range want {
+			got, ok := snapshot.CatalogPreset(clientID)
+			require.Equal(t, productID != "", ok, "order %d: %s", i, clientID)
+			require.Equal(t, productID, got.ProductID, "order %d: %s", i, clientID)
+			ref, _ := reference.CatalogPreset(clientID)
+			require.Equal(t, ref, got, "order %d: %s", i, clientID)
+		}
+	}
+}
+
+func TestSnapshotIdenticalPatternsPreferLowerProductID(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "vendor-b", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "vendor-a", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: true, Pattern: true}}},
+	}
+	for range 2 {
+		got, ok := NewSnapshot(products).CatalogPreset("https://example.com/oauth/some-client/client.json")
+		require.True(t, ok)
+		require.Equal(t, "vendor-a", got.ProductID)
+		slices.Reverse(products)
+	}
+}
+
+func TestSnapshotDisabledDocumentsKeepTheirMatch(t *testing.T) {
+	t.Parallel()
+	products := []Product{
+		{ID: "specific", Documents: []Document{{URL: "https://example.com/oauth/*/client.json", Enabled: false, Pattern: true}}},
+		{ID: "broad", Documents: []Document{{URL: "https://example.com/*/*/client.json", Enabled: true, Pattern: true}}},
+		{ID: "exact", Documents: []Document{{URL: "https://example.com/oauth/exact/client.json", Enabled: false}}},
+		{ID: "peer", Documents: []Document{
+			{URL: "https://example.com/peer/*/a.json", Enabled: false, Pattern: true},
+			{URL: "https://example.com/peer/*/a.json", Enabled: true, Pattern: true},
+			{URL: "https://example.com/peer/exact/b.json", Enabled: false},
+			{URL: "https://example.com/peer/exact/b.json", Enabled: true},
+		}},
+	}
+	snapshot := NewSnapshot(products)
+	require.Len(t, snapshot.Catalog(), 7, "disabled documents are still listed")
+	unknown := []struct {
+		name     string
+		clientID string
+	}{
+		{name: "disabled specific pattern", clientID: "https://example.com/oauth/some-client/client.json"},
+		{name: "disabled exact URL", clientID: "https://example.com/oauth/exact/client.json"},
+	}
+	for _, tc := range unknown {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok := snapshot.CatalogPreset(tc.clientID)
+			require.False(t, ok, "the client is unknown, not the broader pattern's product")
+		})
+	}
+	known := []struct {
+		name     string
+		clientID string
+		product  string
+	}{
+		{name: "broad pattern elsewhere", clientID: "https://example.com/other/some-client/client.json", product: "broad"},
+		{name: "enabled pattern beside a disabled twin", clientID: "https://example.com/peer/x/a.json", product: "peer"},
+		{name: "enabled exact URL beside a disabled twin", clientID: "https://example.com/peer/exact/b.json", product: "peer"},
+	}
+	for _, tc := range known {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := snapshot.CatalogPreset(tc.clientID)
+			require.True(t, ok)
+			require.Equal(t, tc.product, got.ProductID)
+			require.True(t, got.Enabled)
+		})
+	}
 }
 
 func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {

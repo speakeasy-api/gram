@@ -127,9 +127,8 @@ func (p Product) IsScanned() bool {
 	return !p.Signatures.IsZero()
 }
 
-// Products returns the registry in declaration order, which is load-bearing:
-// wildcard documents match in the order they appear, so reordering can change
-// which entry a client_id is attributed to. A golden test pins it.
+// Products returns the registry in declaration order, which is listing order;
+// wildcard priority depends on specificity, not order. A golden test pins it.
 func Products() []Product {
 	out := make([]Product, 0, len(registry))
 	for _, product := range registry {

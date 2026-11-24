@@ -171,6 +171,36 @@ func matchesPattern(pattern, clientID string) bool {
 	return true
 }
 
+// PatternsOverlap reports whether one client ID can match both valid patterns:
+// same scheme and authority, same suffix, same segment count, and no position
+// where both segments are literal and differ.
+func PatternsOverlap(a, b string) bool {
+	aPrefix, aRest, ok := splitAuthorityAndPath(a)
+	if !ok {
+		return false
+	}
+	bPrefix, bRest, ok := splitAuthorityAndPath(b)
+	if !ok || aPrefix != bPrefix {
+		return false
+	}
+	aPath, aSuffix := splitPathAndSuffix(aRest)
+	bPath, bSuffix := splitPathAndSuffix(bRest)
+	if aSuffix != bSuffix {
+		return false
+	}
+	aSegments := strings.Split(aPath, "/")
+	bSegments := strings.Split(bPath, "/")
+	if len(aSegments) != len(bSegments) {
+		return false
+	}
+	for i, segment := range aSegments {
+		if segment != "*" && bSegments[i] != "*" && segment != bSegments[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // splitPathAndSuffix cuts the remainder returned by splitAuthorityAndPath
 // into its path and its query/fragment suffix (the suffix keeps its leading
 // "?" or "#", so an absent one is distinguishable from an empty one).

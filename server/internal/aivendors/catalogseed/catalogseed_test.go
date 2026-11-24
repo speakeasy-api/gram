@@ -415,3 +415,26 @@ func writeGoFields(t *testing.T, out *bytes.Buffer, v reflect.Value) {
 		require.FailNowf(t, "unsupported registry field kind", "%s", v.Kind())
 	}
 }
+
+func TestSeedPatternsDoNotOverlap(t *testing.T) {
+	t.Parallel()
+	data, err := load()
+	require.NoError(t, err)
+	var patterns []string
+	for _, p := range data.Products {
+		for _, d := range p.Documents {
+			if strings.Contains(d.URL, "*") {
+				patterns = append(patterns, d.URL)
+			}
+		}
+	}
+	require.GreaterOrEqual(t, len(patterns), 2)
+	pairs := 0
+	for i := range patterns {
+		for j := i + 1; j < len(patterns); j++ {
+			pairs++
+			require.False(t, aivendors.PatternsOverlap(patterns[i], patterns[j]), "%s overlaps %s", patterns[i], patterns[j])
+		}
+	}
+	t.Logf("%d patterns, %d pairs checked", len(patterns), pairs)
+}
