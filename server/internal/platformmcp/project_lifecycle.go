@@ -385,7 +385,7 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 	// against the id the caller named before anything confirms it exists, so
 	// a real and an invented project get the same answer and this tool cannot
 	// be used to probe for project ids.
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.engine.Require(ctx, authz.Project(authz.ProjectIDOf(projectID)).Write()); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeProjectWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			return ProjectMutationOutput{}, s.unexpected(ctx, err)

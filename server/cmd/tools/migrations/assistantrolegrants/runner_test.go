@@ -20,8 +20,8 @@ import (
 )
 
 var (
-	readCheck  = authz.AssistantCheck(authz.ScopeAssistantRead, "assistant_1", "project_1")
-	writeCheck = authz.AssistantCheck(authz.ScopeAssistantWrite, "assistant_1", "project_1")
+	readCheck  = authz.Assistant(authz.AssistantIDFrom("assistant_1"), authz.ProjectIDFrom("project_1")).Read()
+	writeCheck = authz.Assistant(authz.AssistantIDFrom("assistant_1"), authz.ProjectIDFrom("project_1")).Write()
 )
 
 func TestRunBackfillsLegacySystemRolesOnce(t *testing.T) {

@@ -56,7 +56,7 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 // deliver, matching the endpoint, where mcp:read and mcp:write do not satisfy
 // mcp:connect.
 func allowed(grants []authz.Grant, s server) (bool, error) {
-	allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, s.ResourceID.String(), s.ProjectID.String()))
+	allowed, err := authz.GrantsAuthorize(grants, authz.MCPServer(authz.MCPServerIDOf(s.ResourceID), authz.ProjectIDOf(s.ProjectID)).Connect())
 	if err != nil {
 		return false, fmt.Errorf("evaluate role delivery Use access: %w", err)
 	}

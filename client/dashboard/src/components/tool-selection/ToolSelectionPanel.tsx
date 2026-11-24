@@ -10,7 +10,13 @@ import {
 } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 
-import { ANNOTATION_OPTIONS, type ToolAnnotation } from "./annotations";
+import type { Disposition } from "@gram/client/models/components/selector.js";
+
+import {
+  ANNOTATION_OPTIONS,
+  isToolAnnotation,
+  type ToolAnnotation,
+} from "./annotations";
 
 export type { ToolAnnotation };
 
@@ -18,7 +24,11 @@ export type ToolSelectionMode = "annotations" | "tools";
 
 export interface ToolSelectionTool {
   name: string;
-  annotations: ToolAnnotation[];
+  /**
+   * Undefined for a tool named by a rule on a server with no tool list here.
+   * No kind rule covers such a tool.
+   */
+  disposition: Disposition | undefined;
 }
 
 export interface ToolSelectionServer {
@@ -132,8 +142,9 @@ export function ToolSelectionPanel({
     const counts = new Map<ToolAnnotation, number>();
     for (const server of servers) {
       for (const tool of server.tools) {
-        for (const annotation of tool.annotations) {
-          counts.set(annotation, (counts.get(annotation) ?? 0) + 1);
+        const disposition = tool.disposition;
+        if (isToolAnnotation(disposition)) {
+          counts.set(disposition, (counts.get(disposition) ?? 0) + 1);
         }
       }
     }
@@ -329,8 +340,12 @@ export function ToolSelectionPanel({
                 // Counts come from a deploy-time catalogue. A server that
                 // resolves its tools per caller has none, and hiding every
                 // row would leave the pane empty even though annotations are
-                // exactly what such a server can be narrowed by.
-                if (count === 0 && hasAnnotationCounts) return null;
+                // exactly what such a server can be narrowed by. A selected
+                // row stays, or a choice seeded before the counts arrived
+                // would be submitted with no way to clear it.
+                if (count === 0 && hasAnnotationCounts && !isActive) {
+                  return null;
+                }
                 return (
                   <button
                     key={opt.key}

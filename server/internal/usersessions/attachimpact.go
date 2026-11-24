@@ -103,7 +103,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if server.ToolsetID.Valid {
 			grantID = server.ToolsetID.UUID
 		}
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantID.String(), projectID.String())); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(grantID), authz.ProjectIDOf(projectID)).Write()); err != nil {
 			return none, err
 		}
 		customDomainIDs, err := s.liveEndpointDomains(ctx, logger, organizationID, projectID, server.ID)
@@ -120,7 +120,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err != nil {
 			return none, attachTargetLoadError(ctx, logger, err, "toolset")
 		}
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(toolset.ID), authz.ProjectIDOf(projectID)).Write()); err != nil {
 			return none, err
 		}
 		hosting, wrapper, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
@@ -140,7 +140,7 @@ func (s *Service) loadAttachTarget(ctx context.Context, logger *slog.Logger, pay
 		if err != nil {
 			return none, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogWarn(ctx, logger)
 		}
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, projectID.String(), projectID.String())); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServers(authz.ProjectIDOf(projectID)).Write()); err != nil {
 			return none, err
 		}
 		server, err := metamcprepo.New(s.db).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{ID: id, OrganizationID: organizationID, ProjectID: projectID})

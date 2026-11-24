@@ -15,15 +15,16 @@ Create a Pull Request for the current changes and/or branch:
    - `mig:` - for database migrations and schema changes
    - `chore:` - for maintenance tasks, configuration changes, tooling updates, and generally anything not user-facing
    - Ask user to clarify the change type if unclear, and enforce one of these four prefixes
-4. If there are uncommitted changes, create a single line conventional commit summarizing the changes eg. `feat: add new feature`
-5. **Scrub the branch**: Before pushing, check the branch name and every commit message on the branch against the rules in [Public metadata hygiene](#public-metadata-hygiene) below. Fix anything that fails before continuing — a push publishes both.
-6. Ensure the branch is up-to-date with `origin/main`
-7. Push the branch to `origin`
-8. Draft the PR description in a uniquely named file under `/tmp`, following [Writing style](#writing-style).
-9. **Scrub the PR metadata**: Check the PR title and the drafted description against the same rules. Fix them in place before opening the PR — once created, they are public.
-10. Create PR as a draft with the description file using GitHub CLI (`gh pr create --draft`), ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets `main`. Open it ready for review only when the user asks.
-11. Add appropriate labels based on change type (enhancement, bug, documentation, etc.). Ensure to query for the available labels beforehand.
-12. Provide a clickable link to the PR in the output
+4. **Check the demo seed**: If the change adds or reshapes data a dashboard page renders, the demo seed in `server/internal/demoseed/` must change in the same PR. Follow `.agents/skills/gram-demo-seed/SKILL.md`. If the seed is not needed, say why in the PR description.
+5. If there are uncommitted changes, create a single line conventional commit summarizing the changes eg. `feat: add new feature`
+6. **Scrub the branch**: Before pushing, check the branch name and every commit message on the branch against the rules in [Public metadata hygiene](#public-metadata-hygiene) below. Fix anything that fails before continuing — a push publishes both.
+7. Ensure the branch is up-to-date with `origin/main`
+8. Push the branch to `origin`
+9. Draft the PR description in a uniquely named file under `/tmp`, following [Writing style](#writing-style).
+10. **Scrub the PR metadata**: Check the PR title and the drafted description against the same rules. Fix them in place before opening the PR — once created, they are public.
+11. Create PR as a draft with the description file using GitHub CLI (`gh pr create --draft`), ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets `main`. Open it ready for review only when the user asks.
+12. Add appropriate labels based on change type (enhancement, bug, documentation, etc.). Ensure to query for the available labels beforehand.
+13. Provide a clickable link to the PR in the output
 
 Follow conventional commit standards and keep PR descriptions concise but informative. **IMPORTANT**: All PR titles MUST start with one of the four prefixes: `chore:`, `feat:`, `fix:`, or `mig:`.
 

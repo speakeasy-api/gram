@@ -137,7 +137,9 @@ export function computePanelState(
         s.disposition ? DISPOSITION_TO_ANNOTATION[s.disposition] : undefined,
       )
       .filter((a): a is AnnotationHint => !!a);
-    const count = annotations.length;
+    // A disposition the panel has no annotation for, such as unannotated,
+    // is still a rule the role holds, so it counts.
+    const count = selectors.filter((s) => s.disposition).length;
     return {
       activePanel: "tools",
       tab: "auto-groups",

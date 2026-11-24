@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -110,6 +111,10 @@ type Syncer struct {
 	features feature.Provider
 	metrics  *syncMetrics
 	growth   *growthsignals.Emitter
+
+	// serverURL is this deployment's server URL, handed to providers as
+	// Deps.ServerURL.
+	serverURL *url.URL
 }
 
 func NewSyncer(
@@ -120,17 +125,19 @@ func NewSyncer(
 	guardianPolicy *guardian.Policy,
 	features feature.Provider,
 	growthEmitter *growthsignals.Emitter,
+	serverURL *url.URL,
 ) *Syncer {
 	componentLogger := logger.With(attr.SlogComponent("deviceintegrations.syncer"))
 	return &Syncer{
-		logger:   componentLogger,
-		db:       db,
-		repo:     repo.New(db),
-		store:    NewStore(logger, db, enc),
-		guardian: guardianPolicy,
-		features: features,
-		metrics:  newSyncMetrics(componentLogger, meterProvider),
-		growth:   growthEmitter,
+		logger:    componentLogger,
+		db:        db,
+		repo:      repo.New(db),
+		store:     NewStore(logger, db, enc),
+		guardian:  guardianPolicy,
+		features:  features,
+		metrics:   newSyncMetrics(componentLogger, meterProvider),
+		growth:    growthEmitter,
+		serverURL: serverURL,
 	}
 }
 
@@ -213,7 +220,7 @@ func (s *Syncer) RunSync(ctx context.Context, syncID uuid.UUID) error {
 		}
 	}
 
-	deps := providers.Deps{Client: boundedProviderClient(s.guardian)}
+	deps := providers.Deps{Client: boundedProviderClient(s.guardian), ServerURL: s.serverURL}
 	// The mark-missing cutoff must live on the same clock that stamps
 	// mdm_devices.last_seen_at (Postgres), or host clock skew mis-marks
 	// devices observed by this very pull.

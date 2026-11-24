@@ -24,6 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -233,6 +234,7 @@ func main() {
 	client := openrouter.NewUnifiedClient(
 		logger,
 		guardian.NewDefaultPolicy(tracenoop.NewTracerProvider()),
+		openrouter.EndpointsFor(partition.US),
 		provisioner,
 		&openrouter.PlatformKeyResolver{Provisioner: provisioner},
 		nil,

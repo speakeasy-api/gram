@@ -858,7 +858,7 @@ func (s *MCPToolExposureService) resolveTarget(ctx context.Context, principal Pr
 	}
 	// Checked against the ids the caller named, before anything confirms they
 	// exist, so the answer is the same for a real and an invented target.
-	if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpID.String(), projectID.String())); err != nil {
+	if err := s.engine.Require(ctx, authz.MCPServer(authz.MCPServerIDOf(mcpID), authz.ProjectIDOf(projectID)).Write()); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			// Same reasoning as the admin check: only a denial is safe to
@@ -906,7 +906,7 @@ func (s *MCPToolExposureService) authorizeEveryAffectedServer(ctx context.Contex
 		if id == named {
 			continue
 		}
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), projectID.String()))
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(projectID)).Write())
 	}
 	if len(checks) == 0 {
 		return nil

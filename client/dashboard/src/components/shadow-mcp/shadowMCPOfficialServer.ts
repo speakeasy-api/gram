@@ -60,7 +60,7 @@ export function shadowMCPOfficialServerDescription(
   if (!official) return "";
   const linked = official.automatic
     ? `Official server: “${official.name}”, chosen automatically because it proxies this URL`
-    : `Linked to “${official.name}”`;
+    : `Official server: “${official.name}”`;
   const served = official.gatewayName
     ? `${linked}, served through the gateway “${official.gatewayName}”.`
     : `${linked}.`;
@@ -364,7 +364,7 @@ type CreatedResult = { name: string; linkFailed: boolean };
 export function shadowMCPCreatedTitle(
   created: Pick<CreatedResult, "linkFailed">,
 ): string {
-  return created.linkFailed ? "Server added" : "Official server linked";
+  return created.linkFailed ? "Server added" : "Official server set";
 }
 
 /** What the result means for agents, which depends on the link. */
@@ -373,7 +373,7 @@ export function shadowMCPCreatedDescription(
   shadowName: string,
 ): string {
   if (created.linkFailed) {
-    return `${created.name} is added but not linked, so agents that call ${shadowName} directly are not sent there yet.`;
+    return `${created.name} is added but not official yet, so agents that call ${shadowName} directly are not sent there yet.`;
   }
   return `Agents that call ${shadowName} directly are now sent here.`;
 }

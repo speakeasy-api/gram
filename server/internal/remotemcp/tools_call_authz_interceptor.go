@@ -2,10 +2,12 @@ package remotemcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -72,12 +74,11 @@ func (i *ToolsCallAuthzInterceptor) Name() string {
 // silent-omission semantics are reserved for tools/list parity, which is
 // gated on payload mutation support).
 //
-// [authz.MCPToolCallCheck] names its first parameter `toolsetID` for legacy
-// reasons, but the helper only stores it as the opaque `ResourceID` on the
-// returned [authz.Check]; passing the mcp_servers UUID is semantically
-// correct. It is the same resource id the handler runs the upfront
-// server-level `mcp:connect` check against, so per-tool and server-level
-// enforcement agree on what they are authorizing.
+// The [authz.MCPServerRef] is built from the mcp_servers UUID, which becomes
+// the opaque `ResourceID` on the returned [authz.Check]. It is the same
+// resource id the handler runs the upfront server-level `mcp:connect` check
+// against, so per-tool and server-level enforcement agree on what they are
+// authorizing.
 func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Context, call *proxy.ToolsCallRequest) error {
 	// Defensive: the proxy's typed dispatch (toolsCallRequestFromUserRequest)
 	// only constructs a ToolsCallRequest with non-nil Params, so this branch
@@ -97,11 +98,7 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 		return fmt.Errorf("resolve remote MCP tool disposition: %w", err)
 	}
 
-	err = i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-		Tool:        strings.TrimSpace(call.Params.Name),
-		Disposition: disposition,
-		ProjectID:   i.projectID,
-	}))
+	err = i.authz.Require(ctx, authz.MCPServer(authz.MCPServerIDFrom(i.mcpServerID), authz.ProjectIDFrom(i.projectID)).ToolCall(strings.TrimSpace(call.Params.Name), disposition))
 	if err != nil {
 		return fmt.Errorf("authorize remote MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 	}
@@ -111,7 +108,18 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 
 func (i *ToolsCallAuthzInterceptor) resolveDisposition(ctx context.Context, call *proxy.ToolsCallRequest) (string, error) {
 	if i.catalog != nil {
-		return i.catalog.callDisposition(ctx, call)
+		disposition, err := i.catalog.callDisposition(ctx, call)
+		if errors.Is(err, errToolNotOnUpstream) {
+			// The refusal names no tool, so record which one was asked for and
+			// under which project the catalog was read. The name is caller
+			// supplied, so cap its length.
+			i.logger.WarnContext(ctx, "tools/call refused: tool unavailable on this MCP server",
+				attr.SlogToolName(truncateRefusedToolName(call.Params.Name)),
+				attr.SlogMcpServerID(i.mcpServerID),
+				attr.SlogProjectID(i.projectID),
+			)
+		}
+		return disposition, err
 	}
 
 	dispositions, err := i.resolver.Dispositions(ctx, i.mcpServerID, i.projectID)
@@ -119,4 +127,18 @@ func (i *ToolsCallAuthzInterceptor) resolveDisposition(ctx context.Context, call
 		return "", fmt.Errorf("list dispositions: %w", err)
 	}
 	return dispositions[strings.TrimSpace(call.Params.Name)], nil
+}
+
+// maxRefusedToolNameLogLength bounds a caller-supplied tool name in logs.
+const maxRefusedToolNameLogLength = 128
+
+func truncateRefusedToolName(name string) string {
+	count := 0
+	for i := range name {
+		if count == maxRefusedToolNameLogLength {
+			return name[:i]
+		}
+		count++
+	}
+	return name
 }

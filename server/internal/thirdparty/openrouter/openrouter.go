@@ -21,17 +21,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/constants"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
@@ -288,10 +290,11 @@ func AccountTypeCreditLimit(tier billing.Tier) (limit int, ok bool) {
 }
 
 // DefaultCreditLimit applies the complete mint-time policy after the caller
-// has resolved whether the organization is still trial-tier.
-func DefaultCreditLimit(orgID string, tier billing.Tier, activeTrial bool) (limit int, ok bool) {
-	if IsSpecialLimitOrg(orgID) {
-		return 500, true
+// has resolved whether the organization is still trial-tier. The staff
+// organization bypasses the tier policy.
+func DefaultCreditLimit(staffOrg staff.Organization, orgID string, tier billing.Tier, activeTrial bool) (limit int, ok bool) {
+	if staffOrg.Is(orgID) {
+		return staffOrganizationCreditLimit, true
 	}
 	if activeTrial {
 		return trialCreditLimit, true
@@ -309,11 +312,12 @@ func ResolveDefaultCreditLimit(
 	ctx context.Context,
 	logger *slog.Logger,
 	dbtx trialsRepo.DBTX,
+	staffOrg staff.Organization,
 	orgID string,
 	tier billing.Tier,
 ) (limit int, ok bool) {
-	if IsSpecialLimitOrg(orgID) {
-		return DefaultCreditLimit(orgID, tier, false)
+	if staffOrg.Is(orgID) {
+		return DefaultCreditLimit(staffOrg, orgID, tier, false)
 	}
 
 	trial, err := trialsRepo.New(dbtx).GetTrial(ctx, orgID)
@@ -325,7 +329,7 @@ func ResolveDefaultCreditLimit(
 		)
 	}
 
-	return DefaultCreditLimit(orgID, tier, activeTrial)
+	return DefaultCreditLimit(staffOrg, orgID, tier, activeTrial)
 }
 
 // trialCreditLimit caps each key an organization inside a trial holds, so its
@@ -337,14 +341,9 @@ func ResolveDefaultCreditLimit(
 // AGE-3141 cover the two lifecycle edges that leaves wrong.
 const trialCreditLimit = 50
 
-var specialLimitOrgs = []string{
-	constants.SpeakeasyTeamOrganizationID,
-}
-
-// IsSpecialLimitOrg reports whether the org bypasses standard credit limits.
-func IsSpecialLimitOrg(orgID string) bool {
-	return slices.Contains(specialLimitOrgs, orgID)
-}
+// staffOrganizationCreditLimit caps each key the staff organization holds in
+// place of its tier's limit.
+const staffOrganizationCreditLimit = 500
 
 type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error)
@@ -407,15 +406,28 @@ type DBTX = repo.DBTX
 type OpenRouter struct {
 	provisioningKey string
 	env             string
-	logger          *slog.Logger
-	db              *pgxpool.Pool
-	repo            *repo.Queries
-	orgRepo         *orgRepo.Queries
-	orClient        *guardian.HTTPClient
-	featureClient   *productfeatures.Client
-	enc             *encryption.Client
-	// baseURL is OpenRouterBaseURL outside of tests.
-	baseURL string
+
+	// partition is the partition this process runs in. It selects the
+	// endpoints and is part of upstream key names outside the US.
+	partition partition.Partition
+
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	repo          *repo.Queries
+	orgRepo       *orgRepo.Queries
+	orClient      *guardian.HTTPClient
+	featureClient *productfeatures.Client
+	keys          *aiproviderkeys.Keys
+
+	// staffOrg is the deployment's Speakeasy staff organization, whose keys
+	// bypass the tier credit limits.
+	staffOrg staff.Organization
+
+	// inferenceURL is the partition's Endpoints.Inference outside of tests.
+	inferenceURL string
+
+	// managementURL is the partition's Endpoints.Management outside of tests.
+	managementURL string
 }
 
 var _ Provisioner = (*OpenRouter)(nil)
@@ -423,7 +435,18 @@ var _ Provisioner = (*OpenRouter)(nil)
 // Option customizes an OpenRouter client without changing production defaults.
 type Option func(*OpenRouter)
 
-// WithTestBaseURL points OpenRouter requests at a loopback HTTP test server.
+// WithAIProviderKeys seals and opens stored keys over the process's
+// organization encryption. Without it, keys are handled as in a process
+// without organization encryption: organizations still on the platform key
+// work, and enrolled organizations fail closed.
+func WithAIProviderKeys(keys *aiproviderkeys.Keys) Option {
+	return func(openRouter *OpenRouter) {
+		openRouter.keys = keys
+	}
+}
+
+// WithTestBaseURL points every OpenRouter request, inference and management
+// alike, at a loopback HTTP test server.
 func WithTestBaseURL(baseURL string) (Option, error) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
@@ -441,47 +464,59 @@ func WithTestBaseURL(baseURL string) (Option, error) {
 
 	parsed.Path = ""
 	return func(openRouter *OpenRouter) {
-		openRouter.baseURL = parsed.String()
+		openRouter.inferenceURL = parsed.String()
+		openRouter.managementURL = parsed.String()
 	}, nil
 }
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
+// New constructs the OpenRouter provisioner for a partition. p selects the
+// partition's Endpoints and is part of the upstream key names, so it must be a
+// value accepted by partition.Parse.
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, p partition.Partition, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, staffOrg staff.Organization, options ...Option) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+	endpoints := EndpointsFor(p)
 
 	openRouter := &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
+		partition:       p,
 		logger:          logger.With(attr.SlogComponent("openrouter")),
 		db:              db,
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
 		orClient:        orClient,
 		featureClient:   featureClient,
-		enc:             enc,
-		baseURL:         OpenRouterBaseURL,
+		keys:            nil,
+		staffOrg:        staffOrg,
+		inferenceURL:    endpoints.Inference,
+		managementURL:   endpoints.Management,
 	}
 	for _, option := range options {
 		option(openRouter)
+	}
+	if openRouter.keys == nil {
+		openRouter.keys = aiproviderkeys.WithoutOrganizationEncryption(logger, db, enc)
 	}
 
 	return openRouter
 }
 
-// keyMaterial resolves the usable API key for a row by decrypting the
-// encrypted column, the only place key material lives. A row without a
-// ciphertext is a hard error, as is a decrypt failure, which means this
-// process runs with the wrong encryption key.
-func (o *OpenRouter) keyMaterial(key repo.OpenrouterApiKey) (string, error) {
-	if !key.KeyEncrypted.Valid {
+// keyMaterial resolves the usable API key for a row by opening the copy the
+// organization's transition state reads, the only place key material lives.
+// A row without a ciphertext is a hard error, as is a decrypt failure. db is
+// the caller's transaction, or nil.
+func (o *OpenRouter) keyMaterial(ctx context.Context, db DBTX, key repo.OpenrouterApiKey) (string, error) {
+	stored := aiproviderkeys.Stored(key.KeyEncrypted, key.KeyOrgEncrypted)
+	if !aiproviderkeys.Has(stored) {
 		return "", fmt.Errorf("openrouter key row for organization %s (%s) holds no encrypted key material", key.OrganizationID, key.KeyType)
 	}
 
-	plaintext, err := o.enc.Decrypt(key.KeyEncrypted.String)
+	plaintext, err := o.keys.Open(ctx, db, key.OrganizationID, aiproviderkeys.OpenRouterAPIKeys, stored)
 	if err != nil {
-		return "", fmt.Errorf("decrypt openrouter key for organization %s (%s): %w", key.OrganizationID, key.KeyType, err)
+		return "", fmt.Errorf("open openrouter key for organization %s (%s): %w", key.OrganizationID, key.KeyType, err)
 	}
 
-	return plaintext, nil
+	return string(plaintext), nil
 }
 
 func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
@@ -497,7 +532,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	})
 	switch {
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
-		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		return "", aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 
 	// Only a missing row triggers provisioning. An existing row without a
 	// ciphertext hard-errors in keyMaterial below instead: minting a
@@ -515,9 +550,9 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		if EffectiveDisabled(key.Disabled, key.DisableCauses) {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
-		openrouterKey, err = o.keyMaterial(key)
+		openrouterKey, err = o.keyMaterial(ctx, nil, key)
 		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+			return "", aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 		}
 	}
 
@@ -543,15 +578,15 @@ func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType Key
 	case errors.Is(err, pgx.ErrNoRows):
 		return "", false, nil
 	case err != nil:
-		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		return "", false, aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 	}
 
 	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
 		return "", false, fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 	}
-	plaintext, err := o.keyMaterial(key)
+	plaintext, err := o.keyMaterial(ctx, nil, key)
 	if err != nil {
-		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		return "", false, aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 	}
 	// A row that decrypts to nothing is unusable: ProvisionAPIKey refuses the
 	// same state, so a lookup must not report it as provisioned and hand
@@ -572,6 +607,13 @@ func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType Key
 // is time-boxed below, because the lock and a pooled DB connection are held
 // across it and every waiter pins its own pool connection.
 func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
+	// Check the organization's key before taking a connection and the locks:
+	// a minted upstream key that cannot be stored is orphaned, and this also
+	// loads the organization's key while no pooled connection is held.
+	if err := o.keys.RequireUsable(ctx, nil, orgID); err != nil {
+		return "", aiproviderkeys.Error(err, "error provisioning openrouter key").LogError(ctx, o.logger)
+	}
+
 	dbtx, err := o.db.Begin(ctx)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error provisioning openrouter key").LogError(ctx, o.logger)
@@ -598,7 +640,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	})
 	switch {
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
-		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		return "", aiproviderkeys.Error(err, "error reading open router key data").LogError(ctx, o.logger)
 	case errors.Is(err, pgx.ErrNoRows):
 	default:
 		// The lockdown binds here too: the key may have been disabled between
@@ -608,9 +650,9 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		if EffectiveDisabled(key.Disabled, key.DisableCauses) {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
-		plaintext, keyErr := o.keyMaterial(key)
+		plaintext, keyErr := o.keyMaterial(ctx, dbtx, key)
 		if keyErr != nil {
-			return "", oops.E(oops.CodeUnexpected, keyErr, "error reading open router key data").LogError(ctx, o.logger)
+			return "", aiproviderkeys.Error(keyErr, "error reading open router key data").LogError(ctx, o.logger)
 		}
 		return plaintext, nil
 	}
@@ -636,17 +678,23 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", err
 	}
 
-	keyCiphertext, err := o.enc.Encrypt([]byte(*keyResponse.Key))
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to encrypt openrouter key").LogError(ctx, o.logger)
-	}
-
-	_, err = txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(keyType),
-		KeyEncrypted:   conv.ToPGText(keyCiphertext),
-		KeyHash:        keyResponse.Data.Hash,
-		MonthlyCredits: int64(creditAmount),
+	err = o.keys.Store(ctx, dbtx, orgID, aiproviderkeys.OpenRouterAPIKeys, []byte(*keyResponse.Key), func(ctx context.Context, copies orgencryption.Copies, generation int64) (bool, error) {
+		_, err := txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+			OrganizationID:    orgID,
+			KeyType:           string(keyType),
+			KeyEncrypted:      copies.Platform,
+			KeyOrgEncrypted:   copies.Org,
+			KeyHash:           keyResponse.Data.Hash,
+			MonthlyCredits:    int64(creditAmount),
+			DecidedGeneration: generation,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("create openrouter key row: %w", err)
+		}
+		return true, nil
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
@@ -1189,14 +1237,14 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 	// OpenRouter rejects a disabled key's own credentials with 401, so its
 	// usage is read through the provisioning key instead.
 	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
-		used, _, err := o.fetchKeyUsage(ctx, "/v1/keys/"+url.PathEscape(key.KeyHash), o.provisioningKey)
+		used, _, err := o.fetchKeyUsage(ctx, o.managementURL+"/v1/keys/"+url.PathEscape(key.KeyHash), o.provisioningKey)
 		if err != nil {
 			return 0, limit, fmt.Errorf("read disabled key usage: %w", err)
 		}
 		return used, limit, nil
 	}
 
-	apiKey, err := o.keyMaterial(key)
+	apiKey, err := o.keyMaterial(ctx, nil, key)
 	if err != nil {
 		return 0, limit, fmt.Errorf("resolve openrouter key material: %w", err)
 	}
@@ -1215,16 +1263,18 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 // returned limit is nil when OpenRouter reports an unlimited key. Callers that
 // already have the key (e.g. the credits monitoring activity, which joins
 // openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
-// in GetCreditsUsed.
+// in GetCreditsUsed. The call is authorized by the key itself, so it uses the
+// inference host, which a region-restricted key accepts.
 func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
-	return o.fetchKeyUsage(ctx, "/v1/key", apiKey)
+	return o.fetchKeyUsage(ctx, o.inferenceURL+"/v1/key", apiKey)
 }
 
-// fetchKeyUsage reads a key's monthly usage and limit from path, which is
-// either `/v1/key` authorized by the key itself or `/v1/keys/:hash`
-// authorized by the provisioning key. Both return the same key object.
-func (o *OpenRouter) fetchKeyUsage(ctx context.Context, path string, bearer string) (float64, *int64, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+path, nil)
+// fetchKeyUsage reads a key's monthly usage and limit from endpoint, which is
+// either `/v1/key` on the inference host authorized by the key itself or
+// `/v1/keys/:hash` on the management host authorized by the provisioning key.
+// Both return the same key object.
+func (o *OpenRouter) fetchKeyUsage(ctx context.Context, endpoint string, bearer string) (float64, *int64, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
 		return 0, nil, fmt.Errorf("build key usage request: %w", err)
@@ -1332,7 +1382,7 @@ func (o *OpenRouter) reconcileMonthlyCredits(ctx context.Context, db DBTX, orgID
 // entitled to by policy. It answers what a key would be minted at today, not
 // what an existing key carries: an operator raise leaves the key above this
 // amount, and only the key row records that. The account type is the last
-// resort, after the special-org list and the trial row.
+// resort, after the staff organization and the trial row.
 //
 // dbtx arrives from the caller because the provisioning path runs inside a
 // transaction that already holds an advisory lock and a pool connection, so it
@@ -1342,19 +1392,29 @@ func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBT
 	// cannot tell a trial apart from a paying enterprise customer. A read
 	// failure falls through to the account type rather than capping a paying
 	// customer on a transient database error.
-	limit, _ := ResolveDefaultCreditLimit(ctx, o.logger, dbtx, org.ID, billing.Tier(org.GramAccountType))
+	limit, _ := ResolveDefaultCreditLimit(ctx, o.logger, dbtx, o.staffOrg, org.ID, billing.Tier(org.GramAccountType))
 	return limit
 }
 
-// upstreamKeyIdentity names an org's OpenRouter key. Chat key naming must
-// stay byte-identical to the historical format — the upstream keys already
-// exist under these names — so only internal keys get a suffix.
-func upstreamKeyIdentity(env, orgID, orgSlug string, keyType KeyType) (name, label string) {
-	name = fmt.Sprintf("gram-%s-%s", env, orgID)
-	label = fmt.Sprintf("%s (%s environment)", orgSlug, env)
+// upstreamKeyIdentity names an org's OpenRouter key. US key naming must stay
+// byte-identical to the historical format — the upstream keys already exist
+// under these names — so only internal keys get a suffix there. Every
+// partition runs with the same environment and an organization ID can exist
+// in more than one partition, so other partitions add the partition to the
+// name and label to keep keys in a shared OpenRouter account distinct.
+func upstreamKeyIdentity(env string, p partition.Partition, orgID, orgSlug string, keyType KeyType) (name, label string) {
+	scope := env
+	labelScope := fmt.Sprintf("%s environment", env)
+	if p != partition.US {
+		scope = fmt.Sprintf("%s-%s", env, p)
+		labelScope = fmt.Sprintf("%s environment, %s partition", env, p)
+	}
+
+	name = fmt.Sprintf("gram-%s-%s", scope, orgID)
+	label = fmt.Sprintf("%s (%s)", orgSlug, labelScope)
 	if keyType == KeyTypeInternal {
 		name += "-internal"
-		label = fmt.Sprintf("%s (%s environment, internal)", orgSlug, env)
+		label = fmt.Sprintf("%s (%s, internal)", orgSlug, labelScope)
 	}
 	return name, label
 }
@@ -1385,7 +1445,7 @@ type keyResponse struct {
 
 func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, orgSlug string, keyType KeyType, keyLimit int) (*keyResponse, error) {
 	creditLimit := float64(keyLimit)
-	name, label := upstreamKeyIdentity(o.env, orgID, orgSlug, keyType)
+	name, label := upstreamKeyIdentity(o.env, o.partition, orgID, orgSlug, keyType)
 	requestBody := createKeyRequest{
 		Name:       name,
 		Label:      label,
@@ -1399,7 +1459,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 		return nil, fmt.Errorf("failed to serialize create key request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/v1/keys", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", o.managementURL+"/v1/keys", bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to build create key request: %w", err)
@@ -1443,7 +1503,7 @@ func (o *OpenRouter) patchOpenRouterAPIKey(ctx context.Context, keyHash string, 
 		return nil, fmt.Errorf("failed to serialize update key request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "PATCH", o.baseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "PATCH", o.managementURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to create update openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to create update key request: %w", err)
@@ -1511,12 +1571,12 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
 
-	apiKey, err := o.keyMaterial(key)
+	apiKey, err := o.keyMaterial(ctx, nil, key)
 	if err != nil {
-		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to resolve openrouter API key material").LogError(ctx, o.logger)
+		return nil, 0, aiproviderkeys.Error(err, "failed to resolve openrouter API key material").LogError(ctx, o.logger)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/generation", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", o.inferenceURL+"/v1/generation", nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("create generation request: %w", err)
 	}
