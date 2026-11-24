@@ -13,7 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -33,11 +33,11 @@ type PollCursorUsageMetrics struct {
 func NewPollCursorUsageMetrics(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	encryptionClient *encryption.Client,
+	keys *aiproviderkeys.Keys,
 	telemetryLogger *telemetry.Logger,
 	guardianPolicy *guardian.Policy,
 ) *PollCursorUsageMetrics {
-	store := aiintegrations.NewStore(logger, db, encryptionClient)
+	store := aiintegrations.NewStore(logger, db, keys)
 	return &PollCursorUsageMetrics{
 		integrations:    store,
 		telemetryLogger: telemetryLogger,

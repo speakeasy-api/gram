@@ -1476,23 +1476,9 @@ export function CredentialsWizard({
         user.id,
         agent.id,
       );
-      // As when creating: the editor's usable connection is assigned to every
-      // server that needs one. Valid assignments, someone else's included,
-      // are kept; only ended or unavailable ones are replaced.
-      const missing = await attachOwnerConnections(
-        sdk,
-        agent.id,
-        (allServers
-          ? listedServers
-          : selected.map((entry) => entry.server)
-        ).filter(usesOwnConnection),
-        undefined,
-        true,
-      );
-      if (missing.length)
-        toast.warning(
-          `No connection assigned for: ${missing.join(", ")}. Connect these servers to finish setup.`,
-        );
+      // Unlike creating, a save assigns no connection: the editor's own
+      // reaches an existing agent only when they assign it on its row
+      // (`assignConnection`), never as a side effect of another change.
       await queryClient.invalidateQueries({
         queryKey: ["owner-connections"],
       });
@@ -1567,6 +1553,49 @@ export function CredentialsWizard({
             inventory.servers.find((server) => server.id === entry.server.id) ??
             entry.server,
         );
+
+  // Assigns the editor's own connection to one server of an existing agent,
+  // and nothing else: the one change the editor asked for on that row.
+  const [assigning, setAssigning] = useState<ReadonlySet<string>>(new Set());
+  const assignConnection = async (serverId: string): Promise<void> => {
+    const server = connectionReach().find((entry) => entry.id === serverId);
+    if (!agent || !server || assigning.has(serverId)) return;
+    // A working connection already assigned stays, someone else's included:
+    // replacing it would take the agent's grant away from its owner unasked.
+    // Say so rather than report an assignment that did not happen.
+    const assigned = connections.assignedByServer?.get(serverId);
+    if (assigned?.status === "ready") {
+      const mine = assigned.sessions.every(
+        (session) => session.subjectUrn === `user:${user.id}`,
+      );
+      if (mine) {
+        toast.success(`${agent.name} uses your connection to ${server.name}`);
+        return;
+      }
+      toast.info(
+        `${agent.name} already uses another member's working connection to ${server.name}, so yours was not assigned.`,
+      );
+      return;
+    }
+    setAssigning((current) => new Set(current).add(serverId));
+    try {
+      await attachOwnerConnections(sdk, agent.id, [server]);
+      toast.success(`${agent.name} now uses your connection to ${server.name}`);
+    } catch (failure) {
+      toast.error(
+        failure instanceof Error
+          ? failure.message
+          : `Could not assign your connection to ${server.name}. Try again.`,
+      );
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: ["owner-connections"] });
+      setAssigning((current) => {
+        const next = new Set(current);
+        next.delete(serverId);
+        return next;
+      });
+    }
+  };
 
   const attachSelectedConnections = async (
     targetId: string,
@@ -2140,8 +2169,20 @@ export function CredentialsWizard({
                 setSelected(selected.filter((entry) => entry.server.id !== id));
               if (section) requestSave();
             }}
-            // A new connection is assigned to the agent by a save.
-            onConnected={section ? requestSave : undefined}
+            // A connection made here is for this agent, so it is assigned
+            // as soon as it works; one the editor already had is assigned
+            // only from its row.
+            onConnected={
+              section
+                ? (serverId) => void assignConnection(serverId)
+                : undefined
+            }
+            onAssign={
+              section
+                ? (serverId) => void assignConnection(serverId)
+                : undefined
+            }
+            assigning={assigning}
             // On the tab only servers whose keys wait for the answer ask it:
             // a key's credential is fixed when the server is added to it.
             credentialChoice={

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens/marketplacetokenstest"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -406,12 +407,12 @@ func TestGetPlugins_EmitsFrozenPublishedName(t *testing.T) {
 		InstallationID:           1,
 		RepoOwner:                "speakeasy",
 		RepoName:                 "plugins-frozen",
-		MarketplaceToken:         pgtype.Text{String: "frozen-token", Valid: true},
 		PublishedMcpFingerprints: nil,
 		PublishedHooksVersion:    pgtype.Text{},
 		PublishedHooksConfig:     snapshot,
 	})
 	require.NoError(t, err)
+	marketplacetokenstest.Plant(t, ti.conn, ti.projectID, "frozen-token")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)

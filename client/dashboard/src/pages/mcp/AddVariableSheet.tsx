@@ -217,7 +217,7 @@ export function AddVariableSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            Add Environment Variable
+            Add environment variable
           </SheetTitle>
         </SheetHeader>
 
@@ -342,14 +342,14 @@ export function AddVariableSheet({
             </div>
           ))}
 
-          {/* Add Another button */}
+          {/* Add another button */}
           <button
             type="button"
             onClick={addEntry}
             className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Add Another
+            Add another
           </button>
 
           {error && (

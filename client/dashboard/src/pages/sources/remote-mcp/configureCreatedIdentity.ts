@@ -87,7 +87,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        `Couldn't connect the server to ${serviceAccountClient.issuerName}. Finish the Service Account in Settings > Identity.`,
+        `Couldn't connect the server to ${serviceAccountClient.issuerName}. Finish the service account in Settings > Sign-in.`,
       );
     }
 
@@ -100,7 +100,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Service Account was configured, but the server could not be enabled. Enable it from Settings.",
+        "Service account was configured, but the server could not be enabled. Enable it from Settings.",
       );
     }
   }
@@ -111,7 +111,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "Add a shared credential in Settings > Identity.",
+        "Add a shared credential in Settings > Sign-in.",
       );
     }
     try {
@@ -132,7 +132,7 @@ export async function configureCreatedRemoteMcpIdentity({
       return setupRequired(
         mcpServer,
         identityMode,
-        "The shared credential could not be configured. Add it in Settings > Identity.",
+        "The shared credential could not be configured. Add it in Settings > Sign-in.",
       );
     }
 
@@ -208,8 +208,8 @@ export async function configureCreatedRemoteMcpIdentity({
       mcpServer,
       identityMode,
       isForbiddenError(error)
-        ? "This server shares its sign-in client with other projects. An organization admin can finish setup in Settings > Identity."
-        : "User Identity could not be configured. Open Settings > Identity to finish setup.",
+        ? "This server shares its sign-in client with other projects. An organization admin can finish setup in Settings > Sign-in."
+        : "User identity could not be configured. Open Settings > Sign-in to finish setup.",
     );
   }
 
@@ -229,7 +229,7 @@ export async function configureCreatedRemoteMcpIdentity({
     return setupRequired(
       mcpServer,
       identityMode,
-      "The authorization server needs its client registered by hand. Finish setup in Settings > Identity.",
+      "The authorization server needs its client registered by hand. Finish setup in Settings > Sign-in.",
       result,
     );
   }
@@ -244,7 +244,7 @@ export async function configureCreatedRemoteMcpIdentity({
     return setupRequired(
       mcpServer,
       identityMode,
-      "User Identity was configured, but the server could not be enabled. Enable it from Settings.",
+      "User identity was configured, but the server could not be enabled. Enable it from Settings.",
       result,
     );
   }
@@ -252,17 +252,17 @@ export async function configureCreatedRemoteMcpIdentity({
 
 const DETECTION_FAILURE_MESSAGE: Record<DetectionFailure, string> = {
   no_metadata:
-    "OAuth metadata could not be discovered. Configure User Identity in Settings > Identity.",
+    "OAuth metadata could not be discovered. Configure user identity in Settings > Sign-in.",
   lookup_failed:
-    "Existing authorization servers could not be checked. Configure User Identity in Settings > Identity.",
+    "Existing authorization servers could not be checked. Configure user identity in Settings > Sign-in.",
   existing_incomplete:
     "The matching authorization server is missing OAuth endpoints. Update it in Authorization Servers.",
   metadata_failed:
-    "The authorization server metadata could not be discovered. Configure User Identity in Settings > Identity.",
+    "The authorization server metadata could not be discovered. Configure user identity in Settings > Sign-in.",
   issuer_mismatch:
-    "The authorization server metadata identified a different issuer. Configure User Identity in Settings > Identity.",
+    "The authorization server metadata identified a different issuer. Configure user identity in Settings > Sign-in.",
   missing_endpoints:
-    "OAuth metadata is missing required endpoints. Configure User Identity in Settings > Identity.",
+    "OAuth metadata is missing required endpoints. Configure user identity in Settings > Sign-in.",
 };
 
 function commitFailureMessage(
@@ -273,9 +273,9 @@ function commitFailureMessage(
       result.failure.outcome === "unreachable"
         ? "The authorization server was unreachable"
         : "The authorization server refused registration";
-    return `${outcome}. Configure User Identity in Settings > Identity.`;
+    return `${outcome}. Configure user identity in Settings > Sign-in.`;
   }
-  return "Automatic client registration is unavailable. Configure User Identity in Settings > Identity.";
+  return "Automatic client registration is unavailable. Configure user identity in Settings > Sign-in.";
 }
 
 async function setMcpServerVisibility(

@@ -18,6 +18,7 @@ import { Link } from "react-router";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
 import {
+  selectorsAfterAnnotationToggle,
   selectorsAfterToolBatch,
   selectorsAfterToolToggle,
 } from "./toolSelectionTransition";
@@ -31,6 +32,7 @@ import {
   unrestrictedResourceLabel,
 } from "./types";
 import { computePanelState, isProjectWideSelector } from "./computePanelState";
+import { toolDispositionAnnotations } from "./mcpAccessModel";
 import { type ServerGroup, type ServerTool } from "./serverMerge";
 import { useOrgMcpServers } from "./useOrgMcpServers";
 import { useOrgAssistants } from "./useOrgAssistants";
@@ -944,18 +946,8 @@ function RemoteToolMetadataLoader({
   return null;
 }
 
-function serverToolAnnotations(tool: ServerTool): ToolAnnotation[] {
-  const annotations: ToolAnnotation[] = [];
-  const hints = tool.annotations;
-  if (hints?.readOnlyHint) annotations.push("read_only");
-  if (hints?.destructiveHint) annotations.push("destructive");
-  if (hints?.idempotentHint) annotations.push("idempotent");
-  if (hints?.openWorldHint) annotations.push("open_world");
-  return annotations;
-}
-
 function toSelectionTool(tool: ServerTool): ToolSelectionTool {
-  return { name: tool.name, annotations: serverToolAnnotations(tool) };
+  return { name: tool.name, annotations: toolDispositionAnnotations(tool) };
 }
 
 function remoteServerStatus(
@@ -1131,7 +1123,7 @@ function RoleToolSelectionPanel({
     const counts = new Map<ToolAnnotation, number>();
     for (const server of allServers) {
       for (const tool of server.tools) {
-        for (const annotation of serverToolAnnotations(tool)) {
+        for (const annotation of toolDispositionAnnotations(tool)) {
           counts.set(annotation, (counts.get(annotation) ?? 0) + 1);
         }
       }
@@ -1166,11 +1158,10 @@ function RoleToolSelectionPanel({
         );
         onChangeAnnotations(hints);
         onChangeSelectors(
-          hints.map((hint) => ({
-            resourceKind: "mcp" as const,
-            resourceId: "*",
-            disposition: ANNOTATION_TO_DISPOSITION[hint],
-          })),
+          selectorsAfterAnnotationToggle(
+            selectors,
+            hints.map((hint) => ANNOTATION_TO_DISPOSITION[hint]),
+          ),
         );
         return;
       }

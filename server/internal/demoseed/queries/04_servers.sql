@@ -988,6 +988,71 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
   (@id::uuid, @project_id::uuid, @meta_id::uuid, @mcp_server_id::uuid, @sort_order::integer)
 ON CONFLICT DO NOTHING;
 
+-- Connection health (seed_04_connection_health.go): one MCP authentication
+-- provider with five servers and a gateway, so the provider's Overview,
+-- Connections and server tabs have a month of sign-ins to show.
+-- name: ServersInsertHealthIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode, created_at) VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, 'acme-sso',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   now() - interval '45 days');
+
+-- name: ServersInsertHealthServer :exec
+WITH remote AS (
+  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url, created_at)
+  VALUES (@remote_id::uuid, @project_id::uuid, @name::text, @slug::text,
+          'streamable-http', @url::text, now() - interval '45 days')
+  RETURNING id
+), server AS (
+  INSERT INTO mcp_servers (id, project_id, name, slug, remote_mcp_server_id,
+                           user_session_issuer_id, visibility, created_at)
+  SELECT @server_id::uuid, @project_id::uuid, @name::text, @slug::text, remote.id,
+         @issuer_id::uuid, 'private', now() - interval '45 days'
+  FROM remote
+  RETURNING id
+)
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug, created_at)
+SELECT @endpoint_id::uuid, @project_id::uuid, NULL, server.id, @endpoint_slug::text,
+       now() - interval '45 days'
+FROM server;
+
+-- name: ServersInsertHealthGateway :exec
+WITH gateway AS (
+  INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                                user_session_issuer_id, created_at)
+  VALUES (@id::uuid, @org_id::text, @project_id::uuid, 'Engineering Tools',
+          @issuer_id::uuid, now() - interval '40 days')
+  RETURNING id
+)
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug, created_at)
+SELECT @endpoint_id::uuid, @project_id::uuid, gateway.id, NULL, @endpoint_slug::text,
+       now() - interval '40 days'
+FROM gateway;
+
+-- name: ServersInsertHealthClient :exec
+INSERT INTO user_session_clients
+  (id, project_id, organization_id, user_session_issuer_id, client_id,
+   client_name, redirect_uris, client_id_metadata_uri, client_id_issued_at,
+   token_endpoint_auth_method)
+VALUES (@id::uuid, @project_id::uuid, @org_id::text, @issuer_id::uuid, @client_id::text,
+        @client_name::text, ARRAY['http://127.0.0.1:33418/callback'],
+        sqlc.narg(metadata_uri)::text, now() - interval '45 days', 'none');
+
+-- One MCP sign-in of a person, ended or live, at explicit times.
+-- name: ServersInsertHealthSession :exec
+INSERT INTO user_sessions
+  (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
+   subject_urn, jti, refresh_token_hash, refresh_expires_at, expires_at,
+   last_used_at, created_at, updated_at, deleted_at)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid,
+   'user:' || @user_id::text, (@id::uuid)::text, 'demo-inert:' || (@id::uuid)::text,
+   @refresh_expires_at::timestamptz, @expires_at::timestamptz,
+   @last_used_at::timestamptz, @created_at::timestamptz, @last_used_at::timestamptz,
+   sqlc.narg(deleted_at)::timestamptz);
+
 -- Support Tools: the Speakeasy-served version of the Customer Support server
 -- that people also call directly (the Shadow MCP inventory seeds its URL).
 -- It proxies the same URL, so the Shadow MCP page shows the two linked

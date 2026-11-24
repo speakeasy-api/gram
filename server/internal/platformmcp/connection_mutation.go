@@ -364,11 +364,13 @@ func (s *MCPConnectionMutationService) validateInput(ctx context.Context, princi
 	if err != nil {
 		return fail(fmt.Errorf("resolve live connection mutation project: %w", err))
 	}
-	if err := s.authorizer.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, project.ID.String(), project.ID.String())); err != nil {
-		return fail(connectionMutationAuthorizationError(err, authz.ScopeMCPWrite))
+	writeServers := authz.MCPServers(authz.ProjectIDOf(project.ID)).Write()
+	if err := s.authorizer.Require(ctx, writeServers); err != nil {
+		return fail(connectionMutationAuthorizationError(err, writeServers.Scope))
 	}
-	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: principal.OrganizationID}); err != nil {
-		return fail(connectionMutationAuthorizationError(err, authz.ScopeOrgAdmin))
+	orgAdmin := authz.Org(authz.OrgIDFrom(principal.OrganizationID)).Admin()
+	if err := s.authorizer.Require(ctx, orgAdmin); err != nil {
+		return fail(connectionMutationAuthorizationError(err, orgAdmin.Scope))
 	}
 	settings, err := s.settings.Get(ctx, principal, GetMCPConnectionSettingsInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: parsedTarget.String()})
 	if errors.Is(err, ErrMCPConnectionSettingsNotFound) {

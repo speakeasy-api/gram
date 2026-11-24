@@ -457,7 +457,7 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 				// Cached discovery keeps consented annotations; execution checks the live tool disposition.
 				disposition = dispositionFromAnnotations(entry.Annotations)
 			}
-			checks = append(checks, authz.MCPToolCallCheck(resourceID.String(), authz.MCPToolCallDimensions{Tool: name, Disposition: disposition, ProjectID: member.projectID.String()}))
+			checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(resourceID), authz.ProjectIDOf(member.projectID)).ToolCall(name, disposition))
 		}
 	}
 	if len(checks) > 0 {
@@ -722,7 +722,7 @@ func (s *Service) checkCatalogApproval(ctx context.Context, logger *slog.Logger,
 // refuseCatalogConsentCall records and words a call refused because its approval no longer matches.
 func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
 	message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, named)
-	s.recordMemberFailure(ctx, gate, member, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
+	s.recordMemberFailure(ctx, gate, member, uuid.Nil, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
 	return message, remedy
 }
 

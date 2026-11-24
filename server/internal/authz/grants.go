@@ -101,7 +101,6 @@ func LockRolePrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID, princip
 	return nil
 }
 
-// SeedSystemRoleGrants bootstraps the fixed grant sets for system roles once.
 func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID string) error {
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -120,11 +119,8 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 	return nil
 }
 
-// SeedSystemRoleGrantsTx seeds the fixed grant sets for system roles using the
-// caller's transaction. Use this when seeding must be atomic with other writes
-// in an existing transaction (e.g. provisioning an org from a WorkOS webhook).
-// Callers that only have a pool should use SeedSystemRoleGrants. Idempotent:
-// roles that already hold grants are skipped.
+// SeedSystemRoleGrantsTx is idempotent: roles that already hold grants are
+// skipped.
 func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
 	q := repo.New(dbtx)
 	for roleSlug, grants := range SystemRoleGrants {
@@ -411,7 +407,6 @@ type scopeAgg struct {
 	selectors    []Selector
 }
 
-// GrantsToScopedGrants groups raw grants by scope, collapsing wildcards.
 func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 	grouped := groupGrantsByScope(rows)
 	collapsed := collapseUnrestrictedSelectors(grouped)
@@ -447,7 +442,6 @@ func collapseUnrestrictedSelectors(grouped map[string][]Selector) map[string]sco
 	return collapsed
 }
 
-// sortedScopeKeys gives GrantsToScopedGrants stable output across map iteration.
 func sortedScopeKeys(grouped map[string]scopeAgg) []string {
 	keys := make([]string, 0, len(grouped))
 	for key := range grouped {
@@ -457,8 +451,6 @@ func sortedScopeKeys(grouped map[string]scopeAgg) []string {
 	return keys
 }
 
-// buildScopedGrants converts grouped selectors into the API shape and attaches
-// the transitive sub-scopes for each scope.
 func buildScopedGrants(keys []string, grouped map[string]scopeAgg) []*ScopedGrant {
 	grants := make([]*ScopedGrant, 0, len(keys))
 	for _, key := range keys {
@@ -527,7 +519,6 @@ func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	return nil, nil
 }
 
-// grantMatchingCheck returns the first of checks that grant satisfies, or nil.
 func grantMatchingCheck(grant *Grant, checks []Check) *Check {
 	for j := range checks {
 		check := &checks[j]

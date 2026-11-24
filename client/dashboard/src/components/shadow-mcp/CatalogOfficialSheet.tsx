@@ -343,7 +343,7 @@ export function CatalogOfficialSheet({
                   : canManageCredentials
                     ? `${entryTitle} is added but stays off until people can sign in. Add an upstream credential, then turn the server on.`
                     : `${entryTitle} is added but needs an organization admin to add its upstream credential.`
-                : `Speakeasy adds the catalog version of ${entryTitle} and links it as the official version of ${shadowName}.`}
+                : `Speakeasy adds the catalog version of ${entryTitle} and makes it the official version of ${shadowName}.`}
           </SheetDescription>
         </SheetHeader>
 
@@ -542,7 +542,9 @@ export function CatalogOfficialSheet({
                     <Spinner className="mr-0 size-4" />
                   </Button.LeftIcon>
                 ) : null}
-                <Button.Text>{busy ? "Adding" : "Add and link"}</Button.Text>
+                <Button.Text>
+                  {busy ? "Adding" : "Add and make official"}
+                </Button.Text>
               </Button>
             </>
           ) : null}
@@ -659,7 +661,9 @@ function TurnOnAndLink({
             <Spinner className="mr-0 size-4" />
           </Button.LeftIcon>
         ) : null}
-        <Button.Text>{pending ? "Turning on" : "Turn on and link"}</Button.Text>
+        <Button.Text>
+          {pending ? "Turning on" : "Turn on and make official"}
+        </Button.Text>
       </Button>
     </div>
   );
