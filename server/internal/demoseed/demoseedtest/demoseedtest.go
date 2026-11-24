@@ -22,7 +22,7 @@ import (
 // kept so tests can inspect rows that appear between snapshots.
 type PostgresSnapshot map[string]map[string]int
 
-// SnapshotPostgres fingerprints every row of every public base table. Row
+// SnapshotPostgres fingerprints every row of every base table in the current schema. Row
 // identity is the record's JSON representation, so ANY column change, delete,
 // or insert is visible in the multiset.
 func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, error) {
@@ -72,7 +72,7 @@ func SnapshotPostgres(ctx context.Context, db *pgxpool.Pool) (PostgresSnapshot, 
 
 // ProjectOrganizationMismatchCounts reports seeded project rows whose
 // denormalized organization_id does not match the owning project. It checks
-// every public table that carries both tenant columns so new seeded row types
+// every table in the current schema that carries both tenant columns so new seeded row types
 // are covered automatically.
 func ProjectOrganizationMismatchCounts(
 	ctx context.Context,
