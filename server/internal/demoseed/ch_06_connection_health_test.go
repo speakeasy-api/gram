@@ -7,17 +7,42 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestConnectionHealthRowsTellTheSampleStories(t *testing.T) {
 	t.Parallel()
 	s := &seeder{spec: DefaultSpec(), now: time.Date(2026, 11, 20, 15, 30, 0, 0, time.UTC)}
-	rows, err := s.connectionHealthRows()
+	rows, served, err := s.connectionHealthRows()
 	require.NoError(t, err)
 
-	again, err := s.connectionHealthRows()
+	again, servedAgain, err := s.connectionHealthRows()
 	require.NoError(t, err)
 	require.Equal(t, rows, again, "the dataset is deterministic for one clock")
+	require.Equal(t, served, servedAgain)
+	require.NotEmpty(t, served)
+	for _, r := range served {
+		require.Equal(t, r.ServedAt, r.AnsweredAt, "every seeded served row is an answered request")
+		require.False(t, r.ServedAt.After(s.now))
+	}
+	direct := 0
+	for _, r := range served {
+		if r.ServerKind == "mcp" {
+			direct++
+			require.Empty(t, r.MemberID, "a direct server has no gateway member")
+		}
+	}
+	require.Positive(t, direct)
+	// Renewals and sign-ins are not served requests: the killswitched person only renews, so has none.
+	paused := urn.NewUserSubject(s.userID("amara")).String()
+	renewed := false
+	for _, r := range rows {
+		renewed = renewed || (r.SubjectURN == paused && r.Outcome == string(mcpconnectionattempts.OutcomeConnected))
+	}
+	require.True(t, renewed)
+	for _, r := range served {
+		require.NotEqual(t, paused, r.SubjectURN, "no served row comes from a sign-in or renewal")
+	}
 
 	finals := map[string]int{}
 	attempts := map[string]bool{}
@@ -37,7 +62,7 @@ func TestConnectionHealthRowsTellTheSampleStories(t *testing.T) {
 	for _, outcome := range []string{"connected", "failed", "blocked", "declined"} {
 		require.Positive(t, finals[outcome], outcome)
 	}
-	// The sample problems' counts.
+	// The suspected problems' counts.
 	require.Equal(t, 87, byReason[mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed.String()])
 	require.Equal(t, 16, byReason[mcpconnectionattempts.CodeStaticKeyRejected.String()])
 	require.Equal(t, 1, byReason[mcpconnectionattempts.CodeRemoteSessionUnavailable.String()])

@@ -1,0 +1,537 @@
+{
+  "apps": [
+    {
+      "client_id": "https://claude.ai/oauth/claude-code-client-metadata",
+      "admitted": {
+        "key": "claude.ai",
+        "family": "claude_code",
+        "label": "claude.ai"
+      },
+      "not_admitted": {
+        "key": "claude.ai",
+        "family": "",
+        "label": "claude.ai"
+      }
+    },
+    {
+      "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata",
+      "admitted": {
+        "key": "claude.ai",
+        "family": "claude_ai",
+        "label": "claude.ai"
+      },
+      "not_admitted": {
+        "key": "claude.ai",
+        "family": "",
+        "label": "claude.ai"
+      }
+    },
+    {
+      "client_id": "https://vscode.dev/oauth/client-metadata.json",
+      "admitted": {
+        "key": "vscode.dev",
+        "family": "vscode",
+        "label": "vscode.dev"
+      },
+      "not_admitted": {
+        "key": "vscode.dev",
+        "family": "",
+        "label": "vscode.dev"
+      }
+    },
+    {
+      "client_id": "https://insiders.vscode.dev/oauth/client-metadata.json",
+      "admitted": {
+        "key": "insiders.vscode.dev",
+        "family": "vscode",
+        "label": "insiders.vscode.dev"
+      },
+      "not_admitted": {
+        "key": "insiders.vscode.dev",
+        "family": "",
+        "label": "insiders.vscode.dev"
+      }
+    },
+    {
+      "client_id": "https://zed.dev/oauth/client-metadata.json",
+      "admitted": {
+        "key": "zed.dev",
+        "family": "zed",
+        "label": "zed.dev"
+      },
+      "not_admitted": {
+        "key": "zed.dev",
+        "family": "",
+        "label": "zed.dev"
+      }
+    },
+    {
+      "client_id": "https://goose-docs.ai/oauth/client-metadata.json",
+      "admitted": {
+        "key": "goose-docs.ai",
+        "family": "",
+        "label": "goose-docs.ai"
+      },
+      "not_admitted": {
+        "key": "goose-docs.ai",
+        "family": "",
+        "label": "goose-docs.ai"
+      }
+    },
+    {
+      "client_id": "https://chatgpt.com/oauth/probe/client.json",
+      "admitted": {
+        "key": "chatgpt.com",
+        "family": "openai_connector",
+        "label": "chatgpt.com"
+      },
+      "not_admitted": {
+        "key": "chatgpt.com",
+        "family": "",
+        "label": "chatgpt.com"
+      }
+    },
+    {
+      "client_id": "https://chatgpt.com/oauth/client.json",
+      "admitted": {
+        "key": "chatgpt.com",
+        "family": "openai_connector",
+        "label": "chatgpt.com"
+      },
+      "not_admitted": {
+        "key": "chatgpt.com",
+        "family": "",
+        "label": "chatgpt.com"
+      }
+    },
+    {
+      "client_id": "https://chatgpt.com/oauth/codex/probe/client.json",
+      "admitted": {
+        "key": "chatgpt.com",
+        "family": "codex_cli",
+        "label": "chatgpt.com"
+      },
+      "not_admitted": {
+        "key": "chatgpt.com",
+        "family": "",
+        "label": "chatgpt.com"
+      }
+    },
+    {
+      "client_id": "https://chatgpt.com/oauth/codex/client.json",
+      "admitted": {
+        "key": "chatgpt.com",
+        "family": "codex_cli",
+        "label": "chatgpt.com"
+      },
+      "not_admitted": {
+        "key": "chatgpt.com",
+        "family": "",
+        "label": "chatgpt.com"
+      }
+    },
+    {
+      "client_id": "https://www.notion.so/oauth/mcp-client-metadata.json",
+      "admitted": {
+        "key": "www.notion.so",
+        "family": "notion",
+        "label": "www.notion.so"
+      },
+      "not_admitted": {
+        "key": "www.notion.so",
+        "family": "",
+        "label": "www.notion.so"
+      }
+    },
+    {
+      "client_id": "https://app.notion.com/oauth/mcp-client-metadata.json",
+      "admitted": {
+        "key": "app.notion.com",
+        "family": "notion",
+        "label": "app.notion.com"
+      },
+      "not_admitted": {
+        "key": "app.notion.com",
+        "family": "",
+        "label": "app.notion.com"
+      }
+    },
+    {
+      "client_id": "https://www.mcpjam.com/.well-known/oauth/client-metadata.json",
+      "admitted": {
+        "key": "www.mcpjam.com",
+        "family": "",
+        "label": "www.mcpjam.com"
+      },
+      "not_admitted": {
+        "key": "www.mcpjam.com",
+        "family": "",
+        "label": "www.mcpjam.com"
+      }
+    },
+    {
+      "client_id": "https://api.factory.ai/mcp/oauth-client",
+      "admitted": {
+        "key": "api.factory.ai",
+        "family": "",
+        "label": "api.factory.ai"
+      },
+      "not_admitted": {
+        "key": "api.factory.ai",
+        "family": "",
+        "label": "api.factory.ai"
+      }
+    },
+    {
+      "client_id": "https://toolhive.dev/oauth/client-metadata.json",
+      "admitted": {
+        "key": "toolhive.dev",
+        "family": "",
+        "label": "toolhive.dev"
+      },
+      "not_admitted": {
+        "key": "toolhive.dev",
+        "family": "",
+        "label": "toolhive.dev"
+      }
+    },
+    {
+      "client_id": "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+      "admitted": {
+        "key": "nousresearch.github.io",
+        "family": "",
+        "label": "nousresearch.github.io"
+      },
+      "not_admitted": {
+        "key": "nousresearch.github.io",
+        "family": "",
+        "label": "nousresearch.github.io"
+      }
+    },
+    {
+      "client_id": "https://www.skydive.com/api/v1/external-oauth/client-metadata",
+      "admitted": {
+        "key": "www.skydive.com",
+        "family": "",
+        "label": "www.skydive.com"
+      },
+      "not_admitted": {
+        "key": "www.skydive.com",
+        "family": "",
+        "label": "www.skydive.com"
+      }
+    },
+    {
+      "client_id": "https://opencode.ai/oauth/opencode/client.json",
+      "admitted": {
+        "key": "opencode.ai",
+        "family": "",
+        "label": "opencode.ai"
+      },
+      "not_admitted": {
+        "key": "opencode.ai",
+        "family": "",
+        "label": "opencode.ai"
+      }
+    },
+    {
+      "client_id": "https://github.com/copilot/cli/client-metadata.json",
+      "admitted": {
+        "key": "github.com",
+        "family": "copilot",
+        "label": "github.com"
+      },
+      "not_admitted": {
+        "key": "github.com",
+        "family": "",
+        "label": "github.com"
+      }
+    },
+    {
+      "client_id": "https://api.conductor.build/oauth/client-metadata.json",
+      "admitted": {
+        "key": "api.conductor.build",
+        "family": "",
+        "label": "api.conductor.build"
+      },
+      "not_admitted": {
+        "key": "api.conductor.build",
+        "family": "",
+        "label": "api.conductor.build"
+      }
+    },
+    {
+      "client_id": "https://connect.vercel.com/connectors/probe",
+      "admitted": {
+        "key": "connect.vercel.com",
+        "family": "",
+        "label": "connect.vercel.com"
+      },
+      "not_admitted": {
+        "key": "connect.vercel.com",
+        "family": "",
+        "label": "connect.vercel.com"
+      }
+    },
+    {
+      "client_id": "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+      "admitted": {
+        "key": "linear.app",
+        "family": "",
+        "label": "linear.app"
+      },
+      "not_admitted": {
+        "key": "linear.app",
+        "family": "",
+        "label": "linear.app"
+      }
+    },
+    {
+      "client_id": "https://api.lovable.dev/.well-known/oauth-client",
+      "admitted": {
+        "key": "api.lovable.dev",
+        "family": "",
+        "label": "api.lovable.dev"
+      },
+      "not_admitted": {
+        "key": "api.lovable.dev",
+        "family": "",
+        "label": "api.lovable.dev"
+      }
+    },
+    {
+      "client_id": "https://antigravity.google/oauth/client-metadata.json",
+      "admitted": {
+        "key": "antigravity.google",
+        "family": "",
+        "label": "antigravity.google"
+      },
+      "not_admitted": {
+        "key": "antigravity.google",
+        "family": "",
+        "label": "antigravity.google"
+      }
+    },
+    {
+      "client_id": "https://pi.dev/oauth/client.json",
+      "admitted": {
+        "key": "pi.dev",
+        "family": "",
+        "label": "pi.dev"
+      },
+      "not_admitted": {
+        "key": "pi.dev",
+        "family": "",
+        "label": "pi.dev"
+      }
+    },
+    {
+      "client_id": "https://pi.dev/oauth/probe/client.json",
+      "admitted": {
+        "key": "pi.dev",
+        "family": "",
+        "label": "pi.dev"
+      },
+      "not_admitted": {
+        "key": "pi.dev",
+        "family": "",
+        "label": "pi.dev"
+      }
+    },
+    {
+      "client_id": "",
+      "admitted": {
+        "key": "first_party",
+        "family": "",
+        "label": "first_party"
+      },
+      "not_admitted": {
+        "key": "first_party",
+        "family": "",
+        "label": "first_party"
+      }
+    },
+    {
+      "client_id": "my-client",
+      "admitted": {
+        "key": "dcr",
+        "family": "",
+        "label": "dcr"
+      },
+      "not_admitted": {
+        "key": "dcr",
+        "family": "",
+        "label": "dcr"
+      }
+    },
+    {
+      "client_id": "https://unknown.example.com/client.json",
+      "admitted": {
+        "key": "other_metadata_url",
+        "family": "",
+        "label": "other_metadata_url"
+      },
+      "not_admitted": {
+        "key": "other_metadata_url",
+        "family": "",
+        "label": "other_metadata_url"
+      }
+    },
+    {
+      "client_id": "https://claude.ai/other/client.json",
+      "admitted": {
+        "key": "other_metadata_url",
+        "family": "",
+        "label": "other_metadata_url"
+      },
+      "not_admitted": {
+        "key": "other_metadata_url",
+        "family": "",
+        "label": "other_metadata_url"
+      }
+    },
+    {
+      "client_id": "http://claude.ai/oauth/claude-code-client-metadata",
+      "admitted": {
+        "key": "dcr",
+        "family": "",
+        "label": "dcr"
+      },
+      "not_admitted": {
+        "key": "dcr",
+        "family": "",
+        "label": "dcr"
+      }
+    }
+  ],
+  "labels": [
+    {
+      "app_key": "claude.ai",
+      "label": "claude.ai"
+    },
+    {
+      "app_key": "claude.ai",
+      "label": "claude.ai"
+    },
+    {
+      "app_key": "vscode.dev",
+      "label": "vscode.dev"
+    },
+    {
+      "app_key": "insiders.vscode.dev",
+      "label": "insiders.vscode.dev"
+    },
+    {
+      "app_key": "zed.dev",
+      "label": "zed.dev"
+    },
+    {
+      "app_key": "goose-docs.ai",
+      "label": "goose-docs.ai"
+    },
+    {
+      "app_key": "chatgpt.com",
+      "label": "chatgpt.com"
+    },
+    {
+      "app_key": "chatgpt.com",
+      "label": "chatgpt.com"
+    },
+    {
+      "app_key": "chatgpt.com",
+      "label": "chatgpt.com"
+    },
+    {
+      "app_key": "chatgpt.com",
+      "label": "chatgpt.com"
+    },
+    {
+      "app_key": "www.notion.so",
+      "label": "www.notion.so"
+    },
+    {
+      "app_key": "app.notion.com",
+      "label": "app.notion.com"
+    },
+    {
+      "app_key": "www.mcpjam.com",
+      "label": "www.mcpjam.com"
+    },
+    {
+      "app_key": "api.factory.ai",
+      "label": "api.factory.ai"
+    },
+    {
+      "app_key": "toolhive.dev",
+      "label": "toolhive.dev"
+    },
+    {
+      "app_key": "nousresearch.github.io",
+      "label": "nousresearch.github.io"
+    },
+    {
+      "app_key": "www.skydive.com",
+      "label": "www.skydive.com"
+    },
+    {
+      "app_key": "opencode.ai",
+      "label": "opencode.ai"
+    },
+    {
+      "app_key": "github.com",
+      "label": "github.com"
+    },
+    {
+      "app_key": "api.conductor.build",
+      "label": "api.conductor.build"
+    },
+    {
+      "app_key": "connect.vercel.com",
+      "label": "connect.vercel.com"
+    },
+    {
+      "app_key": "linear.app",
+      "label": "linear.app"
+    },
+    {
+      "app_key": "api.lovable.dev",
+      "label": "api.lovable.dev"
+    },
+    {
+      "app_key": "antigravity.google",
+      "label": "antigravity.google"
+    },
+    {
+      "app_key": "pi.dev",
+      "label": "pi.dev"
+    },
+    {
+      "app_key": "pi.dev",
+      "label": "pi.dev"
+    },
+    {
+      "app_key": "",
+      "label": ""
+    },
+    {
+      "app_key": "unknown.example.com",
+      "label": "other"
+    },
+    {
+      "app_key": "claude.ai.example.com",
+      "label": "other"
+    },
+    {
+      "app_key": "dcr",
+      "label": "dcr"
+    },
+    {
+      "app_key": "first_party",
+      "label": "first_party"
+    },
+    {
+      "app_key": "other_metadata_url",
+      "label": "other_metadata_url"
+    }
+  ]
+}

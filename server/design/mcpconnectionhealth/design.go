@@ -179,6 +179,62 @@ var _ = Service("mcpConnectionHealth", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listDeniedClients")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpDeniedClients"}`)
 	})
+
+	Method("listSuspectedProblems", func() {
+		Description("List suspected problems for a provider: 2 or more people who cannot connect now and failed the same way on one MCP server, one service or one app version, or one person failing for 24 hours. Only failures on the provider's servers, gateways and authorization server count. Empty without log:read.")
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The MCP authentication provider.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("server_id", String, "Keep problems with people on this server, gateway or toolset.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("part", ProblemPart, "Keep problems with this part of the connection.")
+			Required("user_session_issuer_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+		Result(ListSuspectedProblemsResult)
+		HTTP(func() {
+			POST("/rpc/mcpConnectionHealth.listSuspectedProblems")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "listMcpSuspectedProblems")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSuspectedProblems")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpSuspectedProblems"}`)
+	})
+
+	Method("getSuspectedProblem", func() {
+		Description("Get one suspected problem of a provider by id. Not found once it has cleared, or without log:read.")
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The MCP authentication provider.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("id", String, "The problem id from listSuspectedProblems.")
+			Attribute("server_id", String, "Read the problem as listed for this server, gateway or toolset.", func() {
+				Format(FormatUUID)
+			})
+			Required("user_session_issuer_id", "id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+		Result(GetSuspectedProblemResult)
+		HTTP(func() {
+			POST("/rpc/mcpConnectionHealth.getSuspectedProblem")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getMcpSuspectedProblem")
+		Meta("openapi:extension:x-speakeasy-name-override", "getSuspectedProblem")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpSuspectedProblem"}`)
+	})
 })
 
 var RangeQuery = Type("ConnectionHealthRangeQuery", func() {
@@ -393,4 +449,114 @@ var DeniedClientsResult = Type("ConnectionDeniedClientsResult", func() {
 	loggingEnabled()
 	Attribute("clients", ArrayOf(DeniedClient))
 	Required("logging_enabled", "viewer_scope")
+})
+
+var ProblemPart = Type("SuspectedProblemPart", String, func() {
+	Description("speakeasy when the app's sign-in to Speakeasy fails; service when signing in to the service or the server answering fails.")
+	Enum("speakeasy", "service")
+	Meta("openapi:extension:x-speakeasy-name-override", "SuspectedProblemPart")
+})
+
+var ProblemRule = Type("SuspectedProblemRule", String, func() {
+	Description("The rule a problem was listed by.")
+	Enum("same_server", "same_service", "same_app_version", "one_person")
+	Meta("openapi:extension:x-speakeasy-name-override", "SuspectedProblemRule")
+})
+
+var ProblemScope = Type("SuspectedProblemScope", func() {
+	Attribute("kind", String, func() { Enum("server", "service", "app_version", "person") })
+	Attribute("id", String, "The server id, service host, family@version or subject URN.")
+	Attribute("name", String, "The server's name, the service's host, the app's name and version, or the person's name.")
+	Required("kind", "id", "name")
+})
+
+var ProblemFilters = Type("SuspectedProblemFilters", func() {
+	Description("Connection Logs filters that show the problem's failed attempts.")
+	Extend(AttemptFilters)
+	Attribute("from", String, "Inclusive start of attempt start times.", func() { Format(FormatDateTime) })
+	Required("from")
+})
+
+var Problem = Type("SuspectedProblem", func() {
+	Attribute("id", String, "Stable for the same kind of failure on the same scope. It can change when the problem is regrouped.")
+	Attribute("rule", ProblemRule)
+	Attribute("part", ProblemPart)
+	Attribute("scope", ProblemScope)
+	Attribute("since", String, "When its earliest failure ended.", func() { Format(FormatDateTime) })
+	Attribute("last_failed_at", String, func() { Format(FormatDateTime) })
+	Attribute("people_count", Int64)
+	Attribute("people_on_server_count", Int64, "People failing on the server asked for. Only with server_id.")
+	Attribute("headline", String, "Who cannot do what, in plain words.")
+	Attribute("fact", String, "What the data establishes about it, in plain words.")
+	Attribute("filters", ProblemFilters)
+	Required("id", "rule", "part", "scope", "since", "last_failed_at", "people_count", "headline", "fact", "filters")
+})
+
+var ProblemBucket = Type("SuspectedProblemBucket", func() {
+	Attribute("start", String, func() { Format(FormatDateTime) })
+	Attribute("attempts", Int64)
+	Required("start", "attempts")
+})
+
+var ProblemMessage = Type("SuspectedProblemMessage", func() {
+	Attribute("reason", String)
+	Attribute("message", String, "What happened, in one sentence for the person.")
+	Attribute("admin_message", String, "What happened, in one sentence for an administrator.")
+	Attribute("attempts", Int64)
+	Required("reason", "message", "attempts")
+})
+
+var ProblemPlace = Type("SuspectedProblemPlace", func() {
+	Attribute("server", ServerRef)
+	Attribute("member", ServerRef)
+	Required("server")
+})
+
+var ProblemPerson = Type("SuspectedProblemPerson", func() {
+	Description("One person in the problem, with up to 5 of the apps and servers they fail on.")
+	Attribute("person", Person)
+	Attribute("apps", ArrayOf(App), "At most 5.")
+	Attribute("apps_total", Int64, "Apps before the cap.")
+	Attribute("servers", ArrayOf(ProblemPlace), "At most 5.")
+	Attribute("servers_total", Int64, "Servers before the cap.")
+	Attribute("attempts", Int64)
+	Attribute("first_failed_at", String, func() { Format(FormatDateTime) })
+	Required("person", "apps", "apps_total", "servers", "servers_total", "attempts", "first_failed_at")
+})
+
+var ProblemServer = Type("SuspectedProblemServer", func() {
+	Attribute("server", ServerRef)
+	Attribute("member", ServerRef)
+	Attribute("attempts", Int64)
+	Required("server", "attempts")
+})
+
+var ProblemDetail = Type("SuspectedProblemDetail", func() {
+	Extend(Problem)
+	Attribute("source", FailureSource, "Who returned the failures, when all agree.")
+	Attribute("failed_per_10_minutes", ArrayOf(ProblemBucket), "Failed attempts per 10 minutes over at most the last 24 hours.")
+	Attribute("last_connected_at", String, "The latest time any of its people last had the broken part working, when known.", func() { Format(FormatDateTime) })
+	Attribute("other_failures_on_service", Int64, "People failing on the same scope who are not in this problem.")
+	Attribute("messages", ArrayOf(ProblemMessage))
+	Attribute("people", ArrayOf(ProblemPerson), "At most 50 people, earliest failure first.")
+	Attribute("people_total", Int64, "Distinct people in the problem.")
+	Attribute("servers", ArrayOf(ProblemServer), "At most 50, most attempts first.")
+	Attribute("servers_total", Int64, "Servers before the cap.")
+	Attribute("as_of", String, "When the problem was read: the end of the chart, the message counts and the Connection Logs links.", func() { Format(FormatDateTime) })
+	Attribute("counts_widened", Boolean, "True when a filter list was too long to send and was left out, so the chart, messages and filters may include unrelated failures.")
+	Required("failed_per_10_minutes", "other_failures_on_service", "messages", "people", "people_total", "servers", "servers_total", "as_of", "counts_widened")
+})
+
+var ListSuspectedProblemsResult = Type("ListSuspectedProblemsResult", func() {
+	loggingEnabled()
+	Attribute("problems", ArrayOf(Problem), "At most 100, most people first.")
+	Attribute("problems_total", Int64, "Problems before the cap.")
+	Required("logging_enabled", "viewer_scope", "problems", "problems_total")
+})
+
+var GetSuspectedProblemResult = Type("GetSuspectedProblemResult", func() {
+	loggingEnabled()
+	Attribute("found", Boolean)
+	Attribute("problem", ProblemDetail)
+	Required("logging_enabled", "viewer_scope", "found")
 })

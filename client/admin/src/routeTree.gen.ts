@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AssistantsRouteImport } from './routes/assistants'
 import { Route as CustomDomainsRouteImport } from './routes/custom-domains'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
+import { Route as EncryptionTransitionsRouteImport } from './routes/encryption-transitions'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
 import { Route as HooksRolloutRouteImport } from './routes/hooks-rollout'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
@@ -49,6 +50,7 @@ import { Route as OrganizationsIdOrSlugAssistantsRouteImport } from './routes/or
 import { Route as OrganizationsIdOrSlugBillingRouteImport } from './routes/organizations.$idOrSlug.billing'
 import { Route as OrganizationsIdOrSlugCoverageRouteImport } from './routes/organizations.$idOrSlug.coverage'
 import { Route as OrganizationsIdOrSlugCustomDomainRouteImport } from './routes/organizations.$idOrSlug.custom-domain'
+import { Route as OrganizationsIdOrSlugEncryptionRouteImport } from './routes/organizations.$idOrSlug.encryption'
 import { Route as OrganizationsIdOrSlugFeaturesRouteImport } from './routes/organizations.$idOrSlug.features'
 import { Route as OrganizationsIdOrSlugHooksRouteImport } from './routes/organizations.$idOrSlug.hooks'
 import { Route as OrganizationsIdOrSlugMcpServersRouteImport } from './routes/organizations.$idOrSlug.mcp-servers'
@@ -80,6 +82,11 @@ const CustomDomainsRoute = CustomDomainsRouteImport.update({
 const CustomerUsageRoute = CustomerUsageRouteImport.update({
   id: '/customer-usage',
   path: '/customer-usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EncryptionTransitionsRoute = EncryptionTransitionsRouteImport.update({
+  id: '/encryption-transitions',
+  path: '/encryption-transitions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FleetHealthRoute = FleetHealthRouteImport.update({
@@ -272,6 +279,12 @@ const OrganizationsIdOrSlugCustomDomainRoute =
     path: '/custom-domain',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
+const OrganizationsIdOrSlugEncryptionRoute =
+  OrganizationsIdOrSlugEncryptionRouteImport.update({
+    id: '/encryption',
+    path: '/encryption',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 const OrganizationsIdOrSlugFeaturesRoute =
   OrganizationsIdOrSlugFeaturesRouteImport.update({
     id: '/features',
@@ -350,6 +363,7 @@ export interface FileRoutesByFullPath {
   '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
   '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -385,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -404,6 +419,7 @@ export interface FileRoutesByTo {
   '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
   '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -431,6 +447,7 @@ export interface FileRoutesByTo {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -450,6 +467,7 @@ export interface FileRoutesById {
   '/assistants': typeof AssistantsRoute
   '/custom-domains': typeof CustomDomainsRoute
   '/customer-usage': typeof CustomerUsageRoute
+  '/encryption-transitions': typeof EncryptionTransitionsRoute
   '/fleet-health': typeof FleetHealthRoute
   '/hooks-rollout': typeof HooksRolloutRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
@@ -485,6 +503,7 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/custom-domain': typeof OrganizationsIdOrSlugCustomDomainRoute
+  '/organizations/$idOrSlug/encryption': typeof OrganizationsIdOrSlugEncryptionRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/hooks': typeof OrganizationsIdOrSlugHooksRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -506,6 +525,7 @@ export interface FileRouteTypes {
     | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
     | '/hooks-rollout'
     | '/integration-coverage'
@@ -541,6 +561,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
@@ -560,6 +581,7 @@ export interface FileRouteTypes {
     | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
     | '/hooks-rollout'
     | '/integration-coverage'
@@ -587,6 +609,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/members'
@@ -605,6 +628,7 @@ export interface FileRouteTypes {
     | '/assistants'
     | '/custom-domains'
     | '/customer-usage'
+    | '/encryption-transitions'
     | '/fleet-health'
     | '/hooks-rollout'
     | '/integration-coverage'
@@ -640,6 +664,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/custom-domain'
+    | '/organizations/$idOrSlug/encryption'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/hooks'
     | '/organizations/$idOrSlug/mcp-servers'
@@ -660,6 +685,7 @@ export interface RootRouteChildren {
   AssistantsRoute: typeof AssistantsRoute
   CustomDomainsRoute: typeof CustomDomainsRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
+  EncryptionTransitionsRoute: typeof EncryptionTransitionsRoute
   FleetHealthRoute: typeof FleetHealthRoute
   HooksRolloutRoute: typeof HooksRolloutRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
@@ -708,6 +734,13 @@ declare module '@tanstack/react-router' {
       path: '/customer-usage'
       fullPath: '/customer-usage'
       preLoaderRoute: typeof CustomerUsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/encryption-transitions': {
+      id: '/encryption-transitions'
+      path: '/encryption-transitions'
+      fullPath: '/encryption-transitions'
+      preLoaderRoute: typeof EncryptionTransitionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fleet-health': {
@@ -962,6 +995,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizationsIdOrSlugCustomDomainRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
+    '/organizations/$idOrSlug/encryption': {
+      id: '/organizations/$idOrSlug/encryption'
+      path: '/encryption'
+      fullPath: '/organizations/$idOrSlug/encryption'
+      preLoaderRoute: typeof OrganizationsIdOrSlugEncryptionRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
     '/organizations/$idOrSlug/features': {
       id: '/organizations/$idOrSlug/features'
       path: '/features'
@@ -1073,6 +1113,7 @@ interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
   OrganizationsIdOrSlugCoverageRoute: typeof OrganizationsIdOrSlugCoverageRoute
   OrganizationsIdOrSlugCustomDomainRoute: typeof OrganizationsIdOrSlugCustomDomainRoute
+  OrganizationsIdOrSlugEncryptionRoute: typeof OrganizationsIdOrSlugEncryptionRoute
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
   OrganizationsIdOrSlugHooksRoute: typeof OrganizationsIdOrSlugHooksRoute
   OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
@@ -1090,6 +1131,7 @@ const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugCoverageRoute: OrganizationsIdOrSlugCoverageRoute,
   OrganizationsIdOrSlugCustomDomainRoute:
     OrganizationsIdOrSlugCustomDomainRoute,
+  OrganizationsIdOrSlugEncryptionRoute: OrganizationsIdOrSlugEncryptionRoute,
   OrganizationsIdOrSlugFeaturesRoute: OrganizationsIdOrSlugFeaturesRoute,
   OrganizationsIdOrSlugHooksRoute: OrganizationsIdOrSlugHooksRoute,
   OrganizationsIdOrSlugMcpServersRoute:
@@ -1215,6 +1257,7 @@ const rootRouteChildren: RootRouteChildren = {
   AssistantsRoute: AssistantsRoute,
   CustomDomainsRoute: CustomDomainsRoute,
   CustomerUsageRoute: CustomerUsageRoute,
+  EncryptionTransitionsRoute: EncryptionTransitionsRoute,
   FleetHealthRoute: FleetHealthRoute,
   HooksRolloutRoute: HooksRolloutRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,

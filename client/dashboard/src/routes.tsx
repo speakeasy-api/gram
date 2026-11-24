@@ -395,6 +395,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
           },
+          feedback: {
+            title: "MCP Server Agent Feedback",
+            url: "feedback",
+          },
           settings: {
             title: "MCP Server Settings",
             url: "settings",

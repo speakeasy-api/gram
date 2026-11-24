@@ -15,7 +15,6 @@ import (
 	accessserver "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
-	catalogrepo "github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -23,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestService_SetAIToolDecision_RecordsDecisionAndSurfacesItOnTheInventory(t *testing.T) {
@@ -317,7 +317,7 @@ func TestService_SetAIToolDecision_WaitsForDeletedProduct(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 	require.NoError(t, catalogseed.EnsureCatalog(ctx, ti.conn))
-	require.NoError(t, catalogrepo.New(ti.conn).EditProductFixture(ctx, catalogrepo.EditProductFixtureParams{
+	require.NoError(t, testrepo.New(ti.conn).EditProductFixture(ctx, testrepo.EditProductFixtureParams{
 		ID: "claude-code", DisplayName: "Claude Code",
 		DeletedAt: pgtype.Timestamptz{Time: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 	}))

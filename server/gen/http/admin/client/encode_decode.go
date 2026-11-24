@@ -31176,6 +31176,1513 @@ func DecodeRunTailscaleOAuthMigrationStepResponse(decoder func(*http.Response) g
 	}
 }
 
+// BuildGetOrganizationEncryptionRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "getOrganizationEncryption" endpoint
+func (c *Client) BuildGetOrganizationEncryptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationEncryptionAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getOrganizationEncryption", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationEncryptionRequest returns an encoder for requests sent
+// to the admin getOrganizationEncryption server.
+func EncodeGetOrganizationEncryptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetOrganizationEncryptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getOrganizationEncryption", "*admin.GetOrganizationEncryptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetOrganizationEncryptionResponse returns a decoder for responses
+// returned by the admin getOrganizationEncryption endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetOrganizationEncryptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationEncryptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationEncryptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			res := NewGetOrganizationEncryptionAdminOrganizationEncryptionOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body GetOrganizationEncryptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationEncryptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationEncryptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationEncryptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationEncryptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationEncryptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationEncryptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationEncryptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationEncryptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+				}
+				err = ValidateGetOrganizationEncryptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+				}
+				return nil, NewGetOrganizationEncryptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationEncryptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+				}
+				err = ValidateGetOrganizationEncryptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+				}
+				return nil, NewGetOrganizationEncryptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationEncryption", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationEncryptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationEncryption", err)
+			}
+			err = ValidateGetOrganizationEncryptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationEncryption", err)
+			}
+			return nil, NewGetOrganizationEncryptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationEncryption", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListOrganizationEncryptionTransitionsRequest instantiates a HTTP
+// request object with method and path set to call the "admin" service
+// "listOrganizationEncryptionTransitions" endpoint
+func (c *Client) BuildListOrganizationEncryptionTransitionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListOrganizationEncryptionTransitionsAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listOrganizationEncryptionTransitions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListOrganizationEncryptionTransitionsRequest returns an encoder for
+// requests sent to the admin listOrganizationEncryptionTransitions server.
+func EncodeListOrganizationEncryptionTransitionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListOrganizationEncryptionTransitionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listOrganizationEncryptionTransitions", "*admin.ListOrganizationEncryptionTransitionsPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		if p.UseCase != nil {
+			values.Add("use_case", *p.UseCase)
+		}
+		if p.State != nil {
+			values.Add("state", *p.State)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		values.Add("offset", fmt.Sprintf("%v", p.Offset))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListOrganizationEncryptionTransitionsResponse returns a decoder for
+// responses returned by the admin listOrganizationEncryptionTransitions
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeListOrganizationEncryptionTransitionsResponse may return the following
+// errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListOrganizationEncryptionTransitionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListOrganizationEncryptionTransitionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			res := NewListOrganizationEncryptionTransitionsAdminOrganizationEncryptionTransitionListOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListOrganizationEncryptionTransitionsUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body ListOrganizationEncryptionTransitionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListOrganizationEncryptionTransitionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListOrganizationEncryptionTransitionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListOrganizationEncryptionTransitionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListOrganizationEncryptionTransitionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListOrganizationEncryptionTransitionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListOrganizationEncryptionTransitionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListOrganizationEncryptionTransitionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+				}
+				err = ValidateListOrganizationEncryptionTransitionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+				}
+				return nil, NewListOrganizationEncryptionTransitionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListOrganizationEncryptionTransitionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+				}
+				err = ValidateListOrganizationEncryptionTransitionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+				}
+				return nil, NewListOrganizationEncryptionTransitionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listOrganizationEncryptionTransitions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListOrganizationEncryptionTransitionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			err = ValidateListOrganizationEncryptionTransitionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listOrganizationEncryptionTransitions", err)
+			}
+			return nil, NewListOrganizationEncryptionTransitionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listOrganizationEncryptionTransitions", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildEnrollOrganizationEncryptionRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "enrollOrganizationEncryption" endpoint
+func (c *Client) BuildEnrollOrganizationEncryptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EnrollOrganizationEncryptionAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "enrollOrganizationEncryption", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeEnrollOrganizationEncryptionRequest returns an encoder for requests
+// sent to the admin enrollOrganizationEncryption server.
+func EncodeEnrollOrganizationEncryptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.EnrollOrganizationEncryptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "enrollOrganizationEncryption", "*admin.EnrollOrganizationEncryptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewEnrollOrganizationEncryptionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "enrollOrganizationEncryption", err)
+		}
+		return nil
+	}
+}
+
+// DecodeEnrollOrganizationEncryptionResponse returns a decoder for responses
+// returned by the admin enrollOrganizationEncryption endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeEnrollOrganizationEncryptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeEnrollOrganizationEncryptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body EnrollOrganizationEncryptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			res := NewEnrollOrganizationEncryptionAdminOrganizationEncryptionUseCaseOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body EnrollOrganizationEncryptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body EnrollOrganizationEncryptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body EnrollOrganizationEncryptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body EnrollOrganizationEncryptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body EnrollOrganizationEncryptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body EnrollOrganizationEncryptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body EnrollOrganizationEncryptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body EnrollOrganizationEncryptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body EnrollOrganizationEncryptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+				}
+				err = ValidateEnrollOrganizationEncryptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+				}
+				return nil, NewEnrollOrganizationEncryptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body EnrollOrganizationEncryptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+				}
+				err = ValidateEnrollOrganizationEncryptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+				}
+				return nil, NewEnrollOrganizationEncryptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "enrollOrganizationEncryption", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body EnrollOrganizationEncryptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "enrollOrganizationEncryption", err)
+			}
+			err = ValidateEnrollOrganizationEncryptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "enrollOrganizationEncryption", err)
+			}
+			return nil, NewEnrollOrganizationEncryptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "enrollOrganizationEncryption", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRollbackOrganizationEncryptionRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "rollbackOrganizationEncryption" endpoint
+func (c *Client) BuildRollbackOrganizationEncryptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RollbackOrganizationEncryptionAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "rollbackOrganizationEncryption", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRollbackOrganizationEncryptionRequest returns an encoder for requests
+// sent to the admin rollbackOrganizationEncryption server.
+func EncodeRollbackOrganizationEncryptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RollbackOrganizationEncryptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "rollbackOrganizationEncryption", "*admin.RollbackOrganizationEncryptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRollbackOrganizationEncryptionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "rollbackOrganizationEncryption", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRollbackOrganizationEncryptionResponse returns a decoder for responses
+// returned by the admin rollbackOrganizationEncryption endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRollbackOrganizationEncryptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRollbackOrganizationEncryptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RollbackOrganizationEncryptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			res := NewRollbackOrganizationEncryptionAdminOrganizationEncryptionUseCaseOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body RollbackOrganizationEncryptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body RollbackOrganizationEncryptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RollbackOrganizationEncryptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RollbackOrganizationEncryptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RollbackOrganizationEncryptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RollbackOrganizationEncryptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RollbackOrganizationEncryptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RollbackOrganizationEncryptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RollbackOrganizationEncryptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+				}
+				err = ValidateRollbackOrganizationEncryptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+				}
+				return nil, NewRollbackOrganizationEncryptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RollbackOrganizationEncryptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+				}
+				err = ValidateRollbackOrganizationEncryptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+				}
+				return nil, NewRollbackOrganizationEncryptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "rollbackOrganizationEncryption", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RollbackOrganizationEncryptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "rollbackOrganizationEncryption", err)
+			}
+			err = ValidateRollbackOrganizationEncryptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "rollbackOrganizationEncryption", err)
+			}
+			return nil, NewRollbackOrganizationEncryptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "rollbackOrganizationEncryption", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRunOrganizationEncryptionRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "runOrganizationEncryption" endpoint
+func (c *Client) BuildRunOrganizationEncryptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RunOrganizationEncryptionAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "runOrganizationEncryption", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRunOrganizationEncryptionRequest returns an encoder for requests sent
+// to the admin runOrganizationEncryption server.
+func EncodeRunOrganizationEncryptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RunOrganizationEncryptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "runOrganizationEncryption", "*admin.RunOrganizationEncryptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRunOrganizationEncryptionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "runOrganizationEncryption", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRunOrganizationEncryptionResponse returns a decoder for responses
+// returned by the admin runOrganizationEncryption endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRunOrganizationEncryptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRunOrganizationEncryptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RunOrganizationEncryptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			res := NewRunOrganizationEncryptionAdminOrganizationEncryptionUseCaseOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body RunOrganizationEncryptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body RunOrganizationEncryptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RunOrganizationEncryptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RunOrganizationEncryptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RunOrganizationEncryptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RunOrganizationEncryptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RunOrganizationEncryptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RunOrganizationEncryptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RunOrganizationEncryptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+				}
+				err = ValidateRunOrganizationEncryptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+				}
+				return nil, NewRunOrganizationEncryptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RunOrganizationEncryptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+				}
+				err = ValidateRunOrganizationEncryptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+				}
+				return nil, NewRunOrganizationEncryptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "runOrganizationEncryption", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RunOrganizationEncryptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runOrganizationEncryption", err)
+			}
+			err = ValidateRunOrganizationEncryptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runOrganizationEncryption", err)
+			}
+			return nil, NewRunOrganizationEncryptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "runOrganizationEncryption", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildFinalizeOrganizationEncryptionRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "finalizeOrganizationEncryption" endpoint
+func (c *Client) BuildFinalizeOrganizationEncryptionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FinalizeOrganizationEncryptionAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "finalizeOrganizationEncryption", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeFinalizeOrganizationEncryptionRequest returns an encoder for requests
+// sent to the admin finalizeOrganizationEncryption server.
+func EncodeFinalizeOrganizationEncryptionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.FinalizeOrganizationEncryptionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "finalizeOrganizationEncryption", "*admin.FinalizeOrganizationEncryptionPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewFinalizeOrganizationEncryptionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "finalizeOrganizationEncryption", err)
+		}
+		return nil
+	}
+}
+
+// DecodeFinalizeOrganizationEncryptionResponse returns a decoder for responses
+// returned by the admin finalizeOrganizationEncryption endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeFinalizeOrganizationEncryptionResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeFinalizeOrganizationEncryptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body FinalizeOrganizationEncryptionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			res := NewFinalizeOrganizationEncryptionAdminOrganizationEncryptionFinalizeResultOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body FinalizeOrganizationEncryptionUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body FinalizeOrganizationEncryptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body FinalizeOrganizationEncryptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body FinalizeOrganizationEncryptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body FinalizeOrganizationEncryptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body FinalizeOrganizationEncryptionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body FinalizeOrganizationEncryptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body FinalizeOrganizationEncryptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body FinalizeOrganizationEncryptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+				}
+				err = ValidateFinalizeOrganizationEncryptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+				}
+				return nil, NewFinalizeOrganizationEncryptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body FinalizeOrganizationEncryptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+				}
+				err = ValidateFinalizeOrganizationEncryptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+				}
+				return nil, NewFinalizeOrganizationEncryptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "finalizeOrganizationEncryption", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body FinalizeOrganizationEncryptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "finalizeOrganizationEncryption", err)
+			}
+			err = ValidateFinalizeOrganizationEncryptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "finalizeOrganizationEncryption", err)
+			}
+			return nil, NewFinalizeOrganizationEncryptionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "finalizeOrganizationEncryption", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -33464,6 +34971,91 @@ func unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTa
 		LastVerifiedAt:          v.LastVerifiedAt,
 		PlatformCopiesClearedAt: v.PlatformCopiesClearedAt,
 		VerificationFailures:    v.VerificationFailures,
+	}
+
+	return res
+}
+
+// unmarshalAdminOrganizationEncryptionConfigResponseBodyToAdminAdminOrganizationEncryptionConfig
+// builds a value of type *admin.AdminOrganizationEncryptionConfig from a value
+// of type *AdminOrganizationEncryptionConfigResponseBody.
+func unmarshalAdminOrganizationEncryptionConfigResponseBodyToAdminAdminOrganizationEncryptionConfig(v *AdminOrganizationEncryptionConfigResponseBody) *admin.AdminOrganizationEncryptionConfig {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminOrganizationEncryptionConfig{
+		Mode:            *v.Mode,
+		State:           *v.State,
+		SwitchStartedAt: v.SwitchStartedAt,
+		SuspendedAt:     v.SuspendedAt,
+		SuspendedReason: v.SuspendedReason,
+		LastCheckAt:     v.LastCheckAt,
+		LastCheckError:  v.LastCheckError,
+	}
+
+	return res
+}
+
+// unmarshalAdminOrganizationEncryptionUseCaseResponseBodyToAdminAdminOrganizationEncryptionUseCase
+// builds a value of type *admin.AdminOrganizationEncryptionUseCase from a
+// value of type *AdminOrganizationEncryptionUseCaseResponseBody.
+func unmarshalAdminOrganizationEncryptionUseCaseResponseBodyToAdminAdminOrganizationEncryptionUseCase(v *AdminOrganizationEncryptionUseCaseResponseBody) *admin.AdminOrganizationEncryptionUseCase {
+	res := &admin.AdminOrganizationEncryptionUseCase{
+		UseCase:                 *v.UseCase,
+		State:                   *v.State,
+		Generation:              *v.Generation,
+		StateChangedAt:          v.StateChangedAt,
+		PlatformCopiesClearedAt: v.PlatformCopiesClearedAt,
+		WaitingValues:           *v.WaitingValues,
+		UnreadableValues:        *v.UnreadableValues,
+		UnattributedValues:      *v.UnattributedValues,
+		PlatformCopies:          *v.PlatformCopies,
+		LastBackfillStartedAt:   v.LastBackfillStartedAt,
+		LastBackfillCompletedAt: v.LastBackfillCompletedAt,
+		LastBackfillConverted:   v.LastBackfillConverted,
+		LastBackfillRemaining:   v.LastBackfillRemaining,
+		LastBackfillUnreadable:  v.LastBackfillUnreadable,
+		LastBackfillError:       v.LastBackfillError,
+		LastVerifiedAt:          v.LastVerifiedAt,
+	}
+	res.FinalizeBlockers = make([]string, len(v.FinalizeBlockers))
+	for i, val := range v.FinalizeBlockers {
+		res.FinalizeBlockers[i] = val
+	}
+
+	return res
+}
+
+// unmarshalAdminOrganizationEncryptionTransitionRowResponseBodyToAdminAdminOrganizationEncryptionTransitionRow
+// builds a value of type *admin.AdminOrganizationEncryptionTransitionRow from
+// a value of type *AdminOrganizationEncryptionTransitionRowResponseBody.
+func unmarshalAdminOrganizationEncryptionTransitionRowResponseBodyToAdminAdminOrganizationEncryptionTransitionRow(v *AdminOrganizationEncryptionTransitionRowResponseBody) *admin.AdminOrganizationEncryptionTransitionRow {
+	res := &admin.AdminOrganizationEncryptionTransitionRow{
+		OrganizationID:          *v.OrganizationID,
+		Name:                    *v.Name,
+		Slug:                    *v.Slug,
+		Disabled:                *v.Disabled,
+		State:                   *v.State,
+		StateChangedAt:          v.StateChangedAt,
+		PlatformCopiesClearedAt: v.PlatformCopiesClearedAt,
+		LastBackfillStartedAt:   v.LastBackfillStartedAt,
+		LastBackfillCompletedAt: v.LastBackfillCompletedAt,
+		LastBackfillRemaining:   v.LastBackfillRemaining,
+		LastBackfillUnreadable:  v.LastBackfillUnreadable,
+		LastBackfillError:       v.LastBackfillError,
+		LastVerifiedAt:          v.LastVerifiedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminOrganizationEncryptionStateCountResponseBodyToAdminAdminOrganizationEncryptionStateCount
+// builds a value of type *admin.AdminOrganizationEncryptionStateCount from a
+// value of type *AdminOrganizationEncryptionStateCountResponseBody.
+func unmarshalAdminOrganizationEncryptionStateCountResponseBodyToAdminAdminOrganizationEncryptionStateCount(v *AdminOrganizationEncryptionStateCountResponseBody) *admin.AdminOrganizationEncryptionStateCount {
+	res := &admin.AdminOrganizationEncryptionStateCount{
+		State:         *v.State,
+		Organizations: *v.Organizations,
 	}
 
 	return res

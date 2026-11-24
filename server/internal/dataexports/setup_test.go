@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
+	"github.com/speakeasy-api/gram/server/internal/mcpfeedback"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -73,7 +74,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
 	meterProvider := testenv.NewMeterProvider(t)
-	sender, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(logger, meterProvider), otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), "gram-server"))...)
+	sender, err := otelsvc.NewRouteTester(policy, append(otelsvc.NewRouteTestSources(logger, meterProvider),
+		otelsink.NewTestSource(otelsvc.NewConnectionLogTestRequestBuilder(logger, meterProvider), "gram-server"),
+		mcpfeedback.NewTestSource(otelsvc.NewFeedbackLogTestRequestBuilder(logger, meterProvider), "gram-server"),
+	)...)
 	require.NoError(t, err)
 	store := ratelimit.NewRedisStore(redisClient)
 	// Every test shares one organization ID and one Redis, so each gets its own organization bucket.

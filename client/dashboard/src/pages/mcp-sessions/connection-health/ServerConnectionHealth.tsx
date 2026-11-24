@@ -3,11 +3,11 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import {
   connectionHealthNow,
-  useSignInSummary,
+  useKnownViewer,
   useSuspectedProblems,
 } from "./api";
 import { ConnectionLogsView } from "./ConnectionLogsView";
-import { presetWindow, PROBLEM_PARAM, useSetSearchParam } from "./filters";
+import { PROBLEM_PARAM, useSetSearchParam } from "./filters";
 import { SERVICE_DEFINITION } from "./format";
 import { ProblemDetailSheet } from "./ProblemDetailSheet";
 import { SuspectedProblems } from "./SuspectedProblems";
@@ -38,13 +38,9 @@ export function ServerConnectionHealth({
     [providerId, serverId],
   );
   const problems = useSuspectedProblems(scope);
-  // Sample problems show only once logging is known to be on, and only to
-  // viewers who read everyone's attempts.
-  const window = useMemo(() => presetWindow("1h", now), [now]);
-  const summary = useSignInSummary(scope, window, "hour").data;
-  const showProblems =
-    summary?.loggingEnabled === true && summary.viewerScope === "all";
-  const shownProblems = showProblems ? (problems.data?.problems ?? []) : [];
+  const known = useKnownViewer();
+  const shownProblems =
+    problems.data?.viewerScope === "all" ? problems.data.problems : [];
 
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
@@ -52,9 +48,13 @@ export function ServerConnectionHealth({
     <div className="space-y-8">
       <div className="space-y-3 empty:hidden">
         <SuspectedProblems
-          problems={shownProblems}
+          query={problems}
           now={now}
           onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
+          empty="No suspected problems on this server right now."
+          expectVisible={
+            known?.loggingEnabled === true && known.viewerScope === "all"
+          }
         />
         {shownProblems.some((p) => p.part === "service") ? (
           <p className="text-muted-foreground text-sm">{SERVICE_DEFINITION}</p>
@@ -82,8 +82,9 @@ export function ServerConnectionHealth({
         )}
       </div>
       <ProblemDetailSheet
-        id={showProblems ? searchParams.get(PROBLEM_PARAM) : null}
+        id={searchParams.get(PROBLEM_PARAM)}
         providerId={providerId}
+        serverId={serverId}
         now={now}
         onClose={() => setParam(PROBLEM_PARAM, null)}
       />

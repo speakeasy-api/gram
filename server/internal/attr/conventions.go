@@ -721,6 +721,23 @@ const (
 	// not open during verification.
 	OrgEncryptionUnopenableCountKey = attribute.Key("gram.orgencryption.unopenable_count")
 
+	// OrgEncryptionSourceColumnKey is the "table.column" of the platform-key
+	// copy a count or event is about, such as
+	// remote_sessions.access_token_encrypted.
+	OrgEncryptionSourceColumnKey = attribute.Key("gram.orgencryption.source_column")
+
+	// OrgEncryptionStragglerKindKey says whether a platform-key copy found
+	// after clearing stood alone or beside an organization-key copy.
+	OrgEncryptionStragglerKindKey = attribute.Key("gram.orgencryption.straggler_kind")
+
+	// OrgEncryptionPlatformOnlyCountKey counts platform-key copies cleared
+	// with no organization-key copy beside them.
+	OrgEncryptionPlatformOnlyCountKey = attribute.Key("gram.orgencryption.platform_only_count")
+
+	// OrgEncryptionBesideOrgCopyCountKey counts platform-key copies cleared
+	// beside an organization-key copy.
+	OrgEncryptionBesideOrgCopyCountKey = attribute.Key("gram.orgencryption.beside_org_copy_count")
+
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
 	// connect callback, or the idle keepalive re-check. Used as a metric
@@ -883,6 +900,18 @@ const (
 	ExtMcpConnectionSubjectKindKey      = attribute.Key("speakeasy.mcp_connection.subject_kind")
 	ExtMcpConnectionClientNameKey       = attribute.Key("speakeasy.mcp_connection.client_name")
 	ExtMcpConnectionClientVersionKey    = attribute.Key("speakeasy.mcp_connection.client_version")
+
+	// ExtMcpFeedback keys are customer-facing, on exported MCP server feedback.
+	ExtMcpFeedbackIDKey            = attribute.Key("speakeasy.mcp_feedback.id")
+	ExtMcpFeedbackServerIDKey      = attribute.Key("speakeasy.mcp_feedback.server_id")
+	ExtMcpFeedbackSeverityKey      = attribute.Key("speakeasy.mcp_feedback.severity")
+	ExtMcpFeedbackToolNameKey      = attribute.Key("speakeasy.mcp_feedback.tool_name")
+	ExtMcpFeedbackWorkaroundKey    = attribute.Key("speakeasy.mcp_feedback.workaround")
+	ExtMcpFeedbackIntentionKey     = attribute.Key("speakeasy.mcp_feedback.intention")
+	ExtMcpFeedbackModelKey         = attribute.Key("speakeasy.mcp_feedback.model")
+	ExtMcpFeedbackClientNameKey    = attribute.Key("speakeasy.mcp_feedback.client_name")
+	ExtMcpFeedbackClientVersionKey = attribute.Key("speakeasy.mcp_feedback.client_version")
+	ExtMcpFeedbackUserIDKey        = attribute.Key("speakeasy.mcp_feedback.user_id")
 
 	// TestEventKey marks every record a data export test sends, so a destination can filter it out.
 	TestEventKey = attribute.Key("speakeasy.test_event")
@@ -2800,6 +2829,26 @@ func SlogOrgEncryptionUnopenableCount(v int64) slog.Attr {
 	return slog.Int64(string(OrgEncryptionUnopenableCountKey), v)
 }
 
+func OrgEncryptionSourceColumn(v string) attribute.KeyValue {
+	return OrgEncryptionSourceColumnKey.String(v)
+}
+
+func SlogOrgEncryptionSourceColumn(v string) slog.Attr {
+	return slog.String(string(OrgEncryptionSourceColumnKey), v)
+}
+
+func OrgEncryptionStragglerKind[V ~string](v V) attribute.KeyValue {
+	return OrgEncryptionStragglerKindKey.String(string(v))
+}
+
+func SlogOrgEncryptionPlatformOnlyCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionPlatformOnlyCountKey), v)
+}
+
+func SlogOrgEncryptionBesideOrgCopyCount(v int64) slog.Attr {
+	return slog.Int64(string(OrgEncryptionBesideOrgCopyCountKey), v)
+}
+
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
 	return OAuthValidationTriggerKey.String(string(v))
 }
@@ -3420,6 +3469,72 @@ func SlogExtMcpConnectionStepResult(v string) slog.Attr {
 func ExtMcpConnectionFinal(v bool) attribute.KeyValue { return ExtMcpConnectionFinalKey.Bool(v) }
 func SlogExtMcpConnectionFinal(v bool) slog.Attr {
 	return slog.Bool(string(ExtMcpConnectionFinalKey), v)
+}
+
+func ExtMcpFeedbackID(v string) attribute.KeyValue { return ExtMcpFeedbackIDKey.String(v) }
+func SlogExtMcpFeedbackID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackIDKey), v)
+}
+
+func ExtMcpFeedbackServerID(v string) attribute.KeyValue {
+	return ExtMcpFeedbackServerIDKey.String(v)
+}
+func SlogExtMcpFeedbackServerID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackServerIDKey), v)
+}
+
+func ExtMcpFeedbackSeverity(v string) attribute.KeyValue {
+	return ExtMcpFeedbackSeverityKey.String(v)
+}
+func SlogExtMcpFeedbackSeverity(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackSeverityKey), v)
+}
+
+func ExtMcpFeedbackToolName(v string) attribute.KeyValue {
+	return ExtMcpFeedbackToolNameKey.String(v)
+}
+func SlogExtMcpFeedbackToolName(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackToolNameKey), v)
+}
+
+func ExtMcpFeedbackWorkaround(v string) attribute.KeyValue {
+	return ExtMcpFeedbackWorkaroundKey.String(v)
+}
+func SlogExtMcpFeedbackWorkaround(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackWorkaroundKey), v)
+}
+
+func ExtMcpFeedbackIntention(v string) attribute.KeyValue {
+	return ExtMcpFeedbackIntentionKey.String(v)
+}
+func SlogExtMcpFeedbackIntention(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackIntentionKey), v)
+}
+
+func ExtMcpFeedbackModel(v string) attribute.KeyValue { return ExtMcpFeedbackModelKey.String(v) }
+func SlogExtMcpFeedbackModel(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackModelKey), v)
+}
+
+func ExtMcpFeedbackClientName(v string) attribute.KeyValue {
+	return ExtMcpFeedbackClientNameKey.String(v)
+}
+func SlogExtMcpFeedbackClientName(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackClientNameKey), v)
+}
+
+func ExtMcpFeedbackClientVersion(v string) attribute.KeyValue {
+	return ExtMcpFeedbackClientVersionKey.String(v)
+}
+func SlogExtMcpFeedbackClientVersion(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackClientVersionKey), v)
+}
+
+func ExtMcpFeedbackUserID(v string) attribute.KeyValue {
+	return ExtMcpFeedbackUserIDKey.String(v)
+}
+func SlogExtMcpFeedbackUserID(v string) slog.Attr {
+	return slog.String(string(ExtMcpFeedbackUserIDKey), v)
 }
 
 func TestEvent(v bool) attribute.KeyValue { return TestEventKey.Bool(v) }

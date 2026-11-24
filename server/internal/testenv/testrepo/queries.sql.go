@@ -36,6 +36,22 @@ func (q *Queries) AddAttachmentReplacementOwnerMembershipFixture(ctx context.Con
 	return result.RowsAffected(), nil
 }
 
+const addNullArrayElementsToProductFixture = `-- name: AddNullArrayElementsToProductFixture :exec
+UPDATE ai_products
+SET bundle_ids = array_append(bundle_ids, NULL),
+  binaries = array_append(binaries, NULL),
+  config_dirs = array_append(config_dirs, NULL),
+  process_names = array_append(process_names, NULL),
+  client_info_names = array_append(client_info_names, NULL)
+WHERE id = $1
+`
+
+// Appends a NULL to every array column, which the schema allows.
+func (q *Queries) AddNullArrayElementsToProductFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, addNullArrayElementsToProductFixture, id)
+	return err
+}
+
 const agePreparationFixtureClaim = `-- name: AgePreparationFixtureClaim :exec
 UPDATE remote_session_ema_bindings SET state='in_progress', claimed_at=clock_timestamp()-interval '2 minutes' WHERE id = $1 AND project_id = $2
 `
@@ -1688,6 +1704,49 @@ ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit
 
 func (q *Queries) DisableOpenRouterAdminDisableAuditFailureFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, disableOpenRouterAdminDisableAuditFailureFixture)
+	return err
+}
+
+const editDocumentFixture = `-- name: EditDocumentFixture :exec
+UPDATE ai_product_cimd_documents
+SET url = $1, display_name = $2, enabled = $3,
+    deleted_at = $4
+WHERE id = $5
+`
+
+type EditDocumentFixtureParams struct {
+	Url         string
+	DisplayName string
+	Enabled     bool
+	DeletedAt   pgtype.Timestamptz
+	ID          uuid.UUID
+}
+
+func (q *Queries) EditDocumentFixture(ctx context.Context, arg EditDocumentFixtureParams) error {
+	_, err := q.db.Exec(ctx, editDocumentFixture,
+		arg.Url,
+		arg.DisplayName,
+		arg.Enabled,
+		arg.DeletedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const editProductFixture = `-- name: EditProductFixture :exec
+UPDATE ai_products
+SET display_name = $1, deleted_at = $2
+WHERE id = $3
+`
+
+type EditProductFixtureParams struct {
+	DisplayName string
+	DeletedAt   pgtype.Timestamptz
+	ID          string
+}
+
+func (q *Queries) EditProductFixture(ctx context.Context, arg EditProductFixtureParams) error {
+	_, err := q.db.Exec(ctx, editProductFixture, arg.DisplayName, arg.DeletedAt, arg.ID)
 	return err
 }
 
@@ -3648,6 +3707,33 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 	return err
 }
 
+const insertDocumentFixture = `-- name: InsertDocumentFixture :exec
+INSERT INTO ai_product_cimd_documents (id, ai_product_id, url, display_name, enabled, is_pattern)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertDocumentFixtureParams struct {
+	ID          uuid.UUID
+	AiProductID string
+	Url         string
+	DisplayName string
+	Enabled     bool
+	IsPattern   bool
+}
+
+// Inserts even where a soft-deleted row holds the URL, unlike the seed.
+func (q *Queries) InsertDocumentFixture(ctx context.Context, arg InsertDocumentFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertDocumentFixture,
+		arg.ID,
+		arg.AiProductID,
+		arg.Url,
+		arg.DisplayName,
+		arg.Enabled,
+		arg.IsPattern,
+	)
+	return err
+}
+
 const insertFunctionToolDefinitionFixture = `-- name: InsertFunctionToolDefinitionFixture :exec
 INSERT INTO function_tool_definitions (tool_urn, project_id, deployment_id, function_id, runtime, name, description)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -4211,7 +4297,7 @@ func (q *Queries) LatchAttachmentOwnerFixture(ctx context.Context, arg LatchAtta
 const listAgentColumnNamesFixture = `-- name: ListAgentColumnNamesFixture :many
 SELECT column_name::text
 FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'agents'
+WHERE table_schema = current_schema() AND table_name = 'agents'
 ORDER BY ordinal_position
 `
 
@@ -5778,6 +5864,18 @@ func (q *Queries) MutateAttachmentSuspendedAgentFixture(ctx context.Context, arg
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const nestProductBinariesFixture = `-- name: NestProductBinariesFixture :exec
+UPDATE ai_products
+SET binaries = ARRAY[ARRAY['nested-a', 'nested-b']]
+WHERE id = $1
+`
+
+// Stores binaries as a nested array, which the schema allows.
+func (q *Queries) NestProductBinariesFixture(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, nestProductBinariesFixture, id)
+	return err
 }
 
 const orphanDelegationSessionFixture = `-- name: OrphanDelegationSessionFixture :exec

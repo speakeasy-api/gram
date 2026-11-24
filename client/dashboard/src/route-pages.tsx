@@ -380,6 +380,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           teamAccess: {},
           guardrails: {},
           sessions: {},
+          feedback: {},
           settings: {},
           authentication: {},
           performance: {},
