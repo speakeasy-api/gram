@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
 const (
-	defaultAssistantModel = "anthropic/claude-opus-5"
+	defaultAssistantModel = openrouter.DefaultChatModel
 	defaultTurnTimeout    = 300 * time.Second
 	maxTurnTimeout        = 900 * time.Second
 	turnPollInterval      = 2 * time.Second

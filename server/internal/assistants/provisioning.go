@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -66,7 +67,7 @@ func currentAssistantInstructions(stored string) string {
 const (
 	// managedAssistantModel is the default model for the platform-managed
 	// assistant. Kept aligned with the in-app default chat model.
-	managedAssistantModel = "anthropic/claude-opus-5"
+	managedAssistantModel = openrouter.DefaultChatModel
 
 	// Schema defaults for the assistants table, applied explicitly so the
 	// managed assistant's intent is visible at the call site.

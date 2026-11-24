@@ -35,6 +35,12 @@ describe("estimateTokens", () => {
 });
 
 describe("getModelContextLimit", () => {
+  it("returns the context limit for Claude Opus Latest", () => {
+    expect(getModelContextLimit("~anthropic/claude-opus-latest")).toBe(
+      1_000_000,
+    );
+  });
+
   it("returns known mapping for Claude Opus 5", () => {
     expect(getModelContextLimit("anthropic/claude-opus-5")).toBe(1_000_000);
   });

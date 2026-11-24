@@ -46,6 +46,25 @@ func TestContextWindowResolver_FetchMinPicksSmallest(t *testing.T) {
 	require.Equal(t, "/v1/models/anthropic/claude-opus-4.6/endpoints", gotPath)
 }
 
+func TestContextWindowResolver_OpusAliasUsesCatalog(t *testing.T) {
+	t.Parallel()
+
+	r := newTestResolver(t, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/v1/models" {
+			http.NotFound(w, req)
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":"anthropic/claude-opus-5","context_length":200000},
+			{"id":"~anthropic/claude-opus-latest","context_length":1000000}
+		]}`))
+	}))
+
+	got, err := r.Resolve(t.Context(), claudeOpusLatest)
+	require.NoError(t, err)
+	require.Equal(t, 1000000, got)
+}
+
 func TestContextWindowResolver_FetchMinIgnoresZeroOrNegative(t *testing.T) {
 	t.Parallel()
 

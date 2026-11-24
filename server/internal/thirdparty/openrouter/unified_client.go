@@ -38,7 +38,8 @@ type TelemetryLogger interface {
 }
 
 const (
-	DefaultChatModel = "anthropic/claude-opus-5"
+	claudeOpusLatest = "~anthropic/claude-opus-latest"
+	DefaultChatModel = claudeOpusLatest
 
 	openAITextEmbedding3Small     = "openai/text-embedding-3-small"
 	maxOpenAIEmbeddingInputTokens = 8_000
@@ -180,6 +181,8 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	} else {
 		return nil, fmt.Errorf("model %s is not allowed and no fallback is available for its provider", model)
 	}
+
+	model = modelForInferenceHost(c.inferenceURL, model)
 
 	outboundMessages := req.Messages
 	if req.NormalizeOutboundMessages {

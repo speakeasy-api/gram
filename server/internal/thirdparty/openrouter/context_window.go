@@ -15,12 +15,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/modelcatalog"
 )
 
-// ContextWindowResolver returns the smallest context_length advertised by any
-// OpenRouter endpoint for a model. The minimum is used so callers can rely on
-// the value as a safe upper bound regardless of which provider OpenRouter
-// routes the request to.
+// ContextWindowResolver uses the smallest context length advertised by a
+// model's OpenRouter endpoints. Rolling aliases have no endpoint metadata,
+// so it uses their advertised catalog context length instead.
 type ContextWindowResolver struct {
 	logger     *slog.Logger
 	httpClient *guardian.HTTPClient
@@ -70,6 +70,10 @@ type endpointsResponse struct {
 }
 
 func (r *ContextWindowResolver) fetchMin(ctx context.Context, modelID string) (int, error) {
+	modelID = modelForInferenceHost(r.baseURL, modelID)
+	if modelID == claudeOpusLatest {
+		return r.fetchAliasContextWindow(ctx, modelID)
+	}
 	author, slug, ok := strings.Cut(modelID, "/")
 	if !ok || author == "" || slug == "" {
 		return 0, fmt.Errorf("invalid model id %q: expected <author>/<slug>", modelID)
@@ -116,4 +120,21 @@ func (r *ContextWindowResolver) fetchMin(ctx context.Context, modelID string) (i
 	}
 
 	return minTokens, nil
+}
+
+func (r *ContextWindowResolver) fetchAliasContextWindow(ctx context.Context, modelID string) (int, error) {
+	catalog, err := modelcatalog.Fetch(ctx, r.httpClient, r.baseURL, func(id string) bool { return id == modelID })
+	if err != nil {
+		return 0, fmt.Errorf("fetch context window for %s: %w", modelID, err)
+	}
+	var models []struct {
+		ContextLength int `json:"context_length"`
+	}
+	if err := json.Unmarshal(catalog["data"], &models); err != nil {
+		return 0, fmt.Errorf("decode catalog context window for %s: %w", modelID, err)
+	}
+	if len(models) != 1 || models[0].ContextLength <= 0 {
+		return 0, fmt.Errorf("no catalog context window for %s", modelID)
+	}
+	return models[0].ContextLength, nil
 }

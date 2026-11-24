@@ -12,6 +12,15 @@ import (
 // provider serves the model.
 const EUBaseURL = "https://eu.openrouter.ai/api"
 
+// OpenRouter's EU host does not list the rolling Opus alias. Keep its prior
+// in-region model rather than sending EU traffic to the global host.
+func modelForInferenceHost(baseURL, model string) string {
+	if baseURL == EUBaseURL && model == claudeOpusLatest {
+		return "anthropic/claude-opus-5"
+	}
+	return model
+}
+
 // Endpoints are the OpenRouter hosts and capabilities a partition uses.
 type Endpoints struct {
 	// Inference is the base URL for requests that carry prompts or that are

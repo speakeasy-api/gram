@@ -1641,9 +1641,14 @@ func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 	require.Equal(t, "anthropic/claude-sonnet-5.5", ResolveModel("anthropic/claude-sonnet-5.5"))
 }
 
-func TestDefaultChatModel_UsesClaudeOpus5(t *testing.T) {
+func TestDefaultChatModel_UsesClaudeOpusLatest(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "anthropic/claude-opus-5", DefaultChatModel)
+	const alias = "~anthropic/claude-opus-latest"
+	require.Equal(t, alias, DefaultChatModel)
+	require.Equal(t, alias, ResolveModel(alias))
+	require.Equal(t, alias, modelForInferenceHost(OpenRouterBaseURL, alias))
+	require.Equal(t, "anthropic/claude-opus-5", modelForInferenceHost(EUBaseURL, alias))
+	require.Equal(t, "anthropic/claude-opus-5.5", modelForInferenceHost(EUBaseURL, "anthropic/claude-opus-5.5"))
 }
 
 func TestResolveModel_Gemini35FlashLiteReturnedAsIs(t *testing.T) {
@@ -1661,6 +1666,7 @@ func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {
 func TestResolveModel_UnsupportedAnthropicFallback(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "anthropic/claude-sonnet-5", ResolveModel("anthropic/claude-2"))
+	require.Equal(t, "anthropic/claude-sonnet-5", ResolveModel("~anthropic/retired-alias"))
 }
 
 func TestResolveModel_FallbacksAreAllowlisted(t *testing.T) {
@@ -1677,7 +1683,7 @@ func TestResolveModel_EveryProviderHasPinnedFallback(t *testing.T) {
 	// de-listing a model can never silently route callers to whichever model
 	// sorts first alphabetically (e.g. a premium-priced one).
 	for m := range allowList {
-		provider, _, ok := strings.Cut(m, "/")
+		provider, _, ok := strings.Cut(strings.TrimPrefix(m, "~"), "/")
 		require.True(t, ok, "allowlist entry %q has no provider prefix", m)
 		require.NotEmpty(t, providerFallbacks[provider],
 			"provider %q (from allowlist entry %q) has no pinned fallback", provider, m)
