@@ -477,7 +477,7 @@ func (p headlessChoiceError) personConnects() bool {
 	switch p {
 	case errChoiceNotConnected, errChoiceNoneConnected:
 		return true
-	case errChoiceNotAccepted, errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential, errChoiceNotSetUp, errChoiceChosenNotSetUp, errChoiceDenied, errChoiceNoneAllowed, errChoiceNotNamed:
+	case errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential, errChoiceNotSetUp, errChoiceChosenNotSetUp, errChoiceDenied, errChoiceNoneAllowed, errChoiceNotNamed:
 	}
 	return false
 }
