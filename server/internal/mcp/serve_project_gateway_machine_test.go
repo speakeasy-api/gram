@@ -78,6 +78,13 @@ func TestServeProjectGateway_WorkloadMachineAccess(t *testing.T) {
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
 	require.Contains(t, listed.Body.String(), fixture.open)
 	require.Contains(t, listed.Body.String(), fixture.granted)
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'meta_discovery'
+		   AND tool_name = 'list_servers'
+		   AND toString(attributes.gram.authorization.actor.type) = 'agent'
+		   AND toString(attributes.gram.authorization.actor.id) = ?
+		   AND toString(attributes.gram.workload.subject) != ''`,
+		1, authCtx.ProjectID.String(), f.agentID.String())
 
 	_, err = serveOrganizationGatewayHTTP(t, f.ctx, f.ti, fixture.organizationSlug, bearer, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)
@@ -121,6 +128,12 @@ func TestServeProjectGateway_AgentMachineAccess(t *testing.T) {
 	require.Contains(t, listed.Body.String(), fixture.granted)
 	require.NotContains(t, listed.Body.String(), fixture.denied)
 	require.Contains(t, listed.Body.String(), fixture.open)
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'meta_discovery'
+		   AND tool_name = 'list_servers'
+		   AND toString(attributes.gram.authorization.actor.type) = 'agent'
+		   AND toString(attributes.gram.authorization.actor.id) = ?`,
+		1, authCtx.ProjectID.String(), agent.ID.String())
 
 	_, err = serveOrganizationGatewayHTTP(t, ctx, ti, fixture.organizationSlug, token, makeInitializeBody())
 	requireOopsCode(t, err, oops.CodeUnauthorized)
