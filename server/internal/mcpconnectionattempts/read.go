@@ -92,13 +92,16 @@ type AttemptFilter struct {
 	// PeopleFailingBefore is the exclusive end of PeopleFailingFrom's range.
 	PeopleFailingBefore time.Time
 
-	// IssuerID, when set, keeps the provider's attempts as Connection Logs does: on one of
-	// IssuerServerIDs or the provider itself, or with a row stamped with it, and never with
-	// rows stamped only with another provider.
-	IssuerID uuid.UUID
+	// PeopleProjectID, PeopleIssuerID and PeopleIssuerServerIDs, when set, narrow the people
+	// to those failing in one project and on one provider's servers, the provider itself, or
+	// rows stamped with it. Their other attempts are still read: they can show a part working.
+	PeopleProjectID uuid.UUID
 
-	// IssuerServerIDs are the servers and gateways attached to IssuerID now.
-	IssuerServerIDs []string
+	// PeopleIssuerID is the provider the people must have failed on, or any when nil.
+	PeopleIssuerID uuid.UUID
+
+	// PeopleIssuerServerIDs are the servers and gateways attached to PeopleIssuerID now.
+	PeopleIssuerServerIDs []string
 
 	// FixCandidatesOnly keeps only attempts that ended connected or carry a reason: the
 	// successes that can fix a failure and the failures that show it was not fixed yet.
@@ -128,30 +131,27 @@ func (f AttemptFilter) where() (string, []any, error) {
 	if f.ServerID != "" {
 		conds, args = append(conds, "server_id = ?"), append(args, f.ServerID)
 	}
-	if f.IssuerID != uuid.Nil {
-		window := strings.Join(conds, " AND ")
-		windowArgs := slices.Clone(args)
-		issuer := f.IssuerID.String()
-		conds = append(conds,
-			`(has(?, server_id) OR server_id = ? OR attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+window+` AND user_session_issuer_id = ?))`,
-			`attempt_id NOT IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+window+` AND user_session_issuer_id != '' GROUP BY attempt_id HAVING countIf(user_session_issuer_id = ?) = 0)`)
-		args = append(append(append(args, nonNilStrings(f.IssuerServerIDs), issuer), windowArgs...), issuer)
-		args = append(append(args, windowArgs...), issuer)
-	}
 	if !f.PeopleFailingFrom.IsZero() {
 		from, before := f.PeopleFailingFrom.UnixNano(), f.PeopleFailingBefore.UnixNano()
 		window, windowArgs := "attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)", []any{from, before}
 		if f.OrganizationID != "" {
 			window, windowArgs = window+" AND organization_id = ?", append(windowArgs, f.OrganizationID)
 		}
-		if f.ProjectID != uuid.Nil {
-			window, windowArgs = window+" AND project_id = ?", append(windowArgs, f.ProjectID)
+		failing, failingArgs := window, slices.Clone(windowArgs)
+		if f.PeopleProjectID != uuid.Nil {
+			failing, failingArgs = failing+" AND project_id = ?", append(failingArgs, f.PeopleProjectID)
+		}
+		failingAttempts, failingAttemptArgs := failing+" AND reason != ''", slices.Clone(failingArgs)
+		if f.PeopleIssuerID != uuid.Nil {
+			issuer := f.PeopleIssuerID.String()
+			failingAttempts += ` AND attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + failing + ` AND (has(?, server_id) OR server_id = ? OR user_session_issuer_id = ?))`
+			failingAttemptArgs = append(append(failingAttemptArgs, failingArgs...), nonNilStrings(f.PeopleIssuerServerIDs), issuer, issuer)
 		}
 		conds = append(conds, `(organization_id, subject_urn) IN (
 		SELECT organization_id, subject_urn FROM `+EventsTable+`
 		WHERE `+window+` AND subject_urn != ''
-			AND attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+window+` AND reason != ''))`)
-		args = append(append(args, windowArgs...), windowArgs...)
+			AND attempt_id IN (SELECT attempt_id FROM `+EventsTable+` WHERE `+failingAttempts+`))`)
+		args = append(append(args, windowArgs...), failingAttemptArgs...)
 		// A row without the person still belongs to the attempt, so select whole attempts.
 		inner := strings.Join(conds, " AND ")
 		return `attempt_id IN (SELECT attempt_id FROM ` + EventsTable + ` WHERE ` + inner + `) AND ` + strings.Join(conds[:2], " AND "), append(args, f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()), nil

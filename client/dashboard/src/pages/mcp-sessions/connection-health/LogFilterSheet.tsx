@@ -63,6 +63,8 @@ export function LogFilterSheet({
   onChange: (id: string, value: FilterValue) => void;
   onReset: () => void;
 }): JSX.Element {
+  // The dimension whose last pick was refused for being over its limit.
+  const [refused, setRefused] = useState<string | null>(null);
   const keepOpenOnPopover = (
     event: { detail?: { originalEvent?: Event } } & Event,
   ) => {
@@ -97,18 +99,33 @@ export function LogFilterSheet({
       );
     }
     const max = dim.kind === "multiselect" ? dim.maxSelected : undefined;
+    const hintId = `log-filter-${dim.id}-limit`;
     return (
       <>
         <FilterControl
           dim={dim}
           value={value}
-          onChange={(next) => onChange(dim.id, next)}
+          onChange={(next) => {
+            setRefused(null);
+            onChange(dim.id, next);
+          }}
+          onRefused={() => setRefused(dim.id)}
+          describedBy={max !== undefined ? hintId : undefined}
           options={optionsById[dim.id]}
           className="w-full"
         />
-        {max !== undefined && (value as string[]).length >= max ? (
-          <span className="text-muted-foreground text-xs">
-            You can pick up to {max}.
+        {max !== undefined ? (
+          // A live region, so reaching the limit and a refused pick are announced.
+          <span
+            id={hintId}
+            role="status"
+            className="text-muted-foreground text-xs empty:hidden"
+          >
+            {refused === dim.id
+              ? `You can pick up to ${max}. That one was not added.`
+              : (value as string[]).length >= max
+                ? `You can pick up to ${max}.`
+                : ""}
           </span>
         ) : null}
       </>

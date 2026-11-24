@@ -221,8 +221,9 @@ export function ConnectionLogsView({
   );
   const beforeRetention = startsBeforeRetention(window, now);
   // The API takes at most 50 servers and 50 people; a longer link is not sent.
+  // A server's own tab does not apply the server filter, so only people count there.
   const tooMany =
-    filters.values.server.length > MAX_FILTER_VALUES ||
+    (!serverId && filters.values.server.length > MAX_FILTER_VALUES) ||
     filters.values.person.length > MAX_FILTER_VALUES;
   // A preset these logs don't offer would label a range that is not queried.
   const unsupportedPreset =

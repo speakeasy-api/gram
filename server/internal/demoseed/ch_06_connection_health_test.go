@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestConnectionHealthRowsTellTheSampleStories(t *testing.T) {
@@ -32,6 +33,16 @@ func TestConnectionHealthRowsTellTheSampleStories(t *testing.T) {
 		}
 	}
 	require.Positive(t, direct)
+	// Renewals and sign-ins are not served requests: the killswitched person only renews, so has none.
+	paused := urn.NewUserSubject(s.userID("amara")).String()
+	renewed := false
+	for _, r := range rows {
+		renewed = renewed || (r.SubjectURN == paused && r.Outcome == string(mcpconnectionattempts.OutcomeConnected))
+	}
+	require.True(t, renewed)
+	for _, r := range served {
+		require.NotEqual(t, paused, r.SubjectURN, "no served row comes from a sign-in or renewal")
+	}
 
 	finals := map[string]int{}
 	attempts := map[string]bool{}

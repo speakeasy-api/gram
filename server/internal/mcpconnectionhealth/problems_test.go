@@ -638,3 +638,28 @@ func TestSuspectedProblems_AnAppVersionQualifiedElsewhereIsNotListed(t *testing.
 	require.Equal(t, problems.RuleSameAppVersion, projectWide[0].Rule)
 	require.Empty(t, ti.listFor(t, ctx, ti.issuer), "this provider's two people have no other app working on their servers")
 }
+
+// A stalled name lookup, after every read before it finished, answers temporarily unavailable.
+func TestSuspectedProblems_AStalledNameLookupIsUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withProjectGrants(t, ctx, authz.ScopeProjectRead, authz.ScopeLogRead)
+	me := urn.NewUserSubject(ti.userID)
+	ti.failOn(t, ti.org, ti.project, ti.server, me, 30*time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	ti.failOn(t, ti.org, ti.project, ti.server, me, time.Hour, mcpconnectionattempts.CodeStaticKeyRejected)
+	mcpconnectionhealth.SetProblemsDeadline(ti.service, 5*time.Second)
+	require.Len(t, ti.listProblems(t, ctx, nil, nil).Problems, 1, "inside the budget the one-person problem is named")
+
+	// Only the people lookup reads users: hold it until the budget runs out.
+	tx, err := ti.conn.Begin(t.Context()) //nolint:glint // notestingrawsql: the table lock that stalls the name lookup is the behaviour under test.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) }()
+	_, err = tx.Exec(t.Context(), "LOCK TABLE users IN ACCESS EXCLUSIVE MODE") //nolint:glint // notestingrawsql: a table lock has no SQLc form.
+	require.NoError(t, err)
+
+	_, err = ti.service.ListSuspectedProblems(ctx, &gen.ListSuspectedProblemsPayload{UserSessionIssuerID: ti.issuer.String(), ServerID: nil, Part: nil})
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnavailable, shareable.Code)
+	require.Equal(t, http.StatusServiceUnavailable, shareable.HTTPStatus(ctx))
+}

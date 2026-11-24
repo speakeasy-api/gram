@@ -41,10 +41,10 @@ type FailingNowFilter struct {
 	// OrganizationID is the organization. Required.
 	OrganizationID string
 
-	// ProjectID keeps one project, or every one when nil. A project leaves out organization gateways.
+	// ProjectID keeps one project's failures, or every one when nil. A project leaves out organization gateways.
 	ProjectID uuid.UUID
 
-	// IssuerID keeps one MCP authentication provider's attempts, as Connection Logs attributes them, or every one when nil.
+	// IssuerID keeps one MCP authentication provider's failures, as Connection Logs attributes them, or every one when nil.
 	IssuerID uuid.UUID
 
 	// IssuerServerIDs are the servers and gateways attached to IssuerID now.
@@ -97,7 +97,8 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 	if err != nil {
 		return nil, err
 	}
-	failures := triedSince(failuresOf(attempts, now), since)
+	// The read keeps the failing people's other attempts as evidence; only their failures here count.
+	failures := triedSince(slices.DeleteFunc(failuresOf(attempts, now), func(f failure) bool { return !filter.keeps(f.a) }), since)
 	if len(failures) == 0 {
 		return nil, nil
 	}
@@ -121,6 +122,24 @@ func ReadFailingNow(ctx context.Context, ch driver.Conn, logsEnabled func(contex
 		return cmp.Or(a.OpenedAt.Compare(b.OpenedAt), cmp.Compare(a.SubjectURN, b.SubjectURN), cmp.Compare(a.ServerID, b.ServerID), cmp.Compare(a.MemberID, b.MemberID), cmp.Compare(a.AppKey, b.AppKey), cmp.Compare(a.Part, b.Part), cmp.Compare(a.ClientFamily, b.ClientFamily), cmp.Compare(a.Reason, b.Reason))
 	})
 	return out, nil
+}
+
+// keeps reports whether a failed attempt is in the filter's project and, as Connection
+// Logs attributes it, the filter's provider: on its servers or the provider itself, or
+// stamped with it, and never stamped only with another provider.
+func (filter FailingNowFilter) keeps(a attemptFacts) bool {
+	if filter.ProjectID != uuid.Nil && a.ProjectID != filter.ProjectID {
+		return false
+	}
+	if filter.IssuerID == uuid.Nil {
+		return true
+	}
+	issuer := filter.IssuerID.String()
+	stamped := slices.Contains(a.Issuers, issuer)
+	if len(a.Issuers) > 0 && !stamped {
+		return false
+	}
+	return stamped || a.ServerID == issuer || slices.Contains(filter.IssuerServerIDs, a.ServerID)
 }
 
 // triedSince keeps the failures of the connections whose latest failure became known

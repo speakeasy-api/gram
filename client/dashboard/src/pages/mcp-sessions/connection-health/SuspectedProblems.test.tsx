@@ -156,6 +156,7 @@ describe("SuspectedProblems", () => {
         now={NOW}
         onOpen={noop}
         empty={EMPTY}
+        expectVisible
       />,
     );
     expect(
@@ -172,6 +173,7 @@ describe("SuspectedProblems", () => {
         now={NOW}
         onOpen={noop}
         empty={EMPTY}
+        expectVisible
       />,
     );
     expect(screen.getByText("Suspected problems · 140")).toBeTruthy();
@@ -185,6 +187,7 @@ describe("SuspectedProblems", () => {
         now={NOW}
         onOpen={noop}
         empty={EMPTY}
+        expectVisible
       />,
     );
     expect(screen.getByText(/1 on this server · 2 in all/)).toBeTruthy();
@@ -197,6 +200,7 @@ describe("SuspectedProblems", () => {
         now={NOW}
         onOpen={noop}
         empty={EMPTY}
+        expectVisible
       />,
     );
     expect(screen.getByText(EMPTY)).toBeTruthy();
@@ -213,11 +217,42 @@ describe("SuspectedProblems", () => {
           now={NOW}
           onOpen={noop}
           empty={EMPTY}
+          expectVisible
         />,
       );
       expect(container.textContent).toBe("");
       cleanup();
     }
+  });
+
+  it("reserves space while loading only when the page knows the panel will show", () => {
+    const pending = {
+      data: undefined,
+      isPending: true,
+      isError: false,
+      error: null,
+    };
+    const { container } = render(
+      <SuspectedProblems
+        query={pending}
+        now={NOW}
+        onOpen={noop}
+        empty={EMPTY}
+        expectVisible={false}
+      />,
+    );
+    expect(container.innerHTML).toBe("");
+    cleanup();
+    const shown = render(
+      <SuspectedProblems
+        query={pending}
+        now={NOW}
+        onOpen={noop}
+        empty={EMPTY}
+        expectVisible
+      />,
+    );
+    expect(shown.container.innerHTML).not.toBe("");
   });
 
   it("says when it could not load", () => {
@@ -232,6 +267,7 @@ describe("SuspectedProblems", () => {
         now={NOW}
         onOpen={noop}
         empty={EMPTY}
+        expectVisible
       />,
     );
     expect(screen.getByText("Couldn't load suspected problems")).toBeTruthy();
@@ -254,9 +290,8 @@ describe("ProblemDetailSheet", () => {
       },
     };
     renderSheet();
-    expect(
-      screen.getByText("Claude Code 2.1.4, Cursor 2.0.1 · Linear, GitHub +1"),
-    ).toBeTruthy();
+    expect(screen.getByTitle("Linear, GitHub and 1 more")).toBeTruthy();
+    expect(screen.getByText("+1")).toBeTruthy();
     expect(screen.getByText("2 people can't connect to Linear")).toBeTruthy();
     expect(screen.getByText(/Showing the first 50 of 51/)).toBeTruthy();
     expect(
@@ -269,7 +304,10 @@ describe("ProblemDetailSheet", () => {
     expect(url.pathname).toBe("/providers/prov_1/logs");
     expect(url.searchParams.get("from")).toBe("2026-11-20T09:45:00.000Z");
     expect(url.searchParams.get("to")).toBe("2026-11-20T12:30:00.000Z");
-    expect(screen.getByText(/Failed attempts by these people/)).toBeTruthy();
+    expect(
+      screen.getByText(/The chart, messages and Connection Logs links count/),
+    ).toBeTruthy();
+    expect(screen.getByText(/Failed attempts since/)).toBeTruthy();
     expect(url.searchParams.get("outcome")).toBe("failed");
     expect(url.searchParams.get("server")).toBe("srv_1,gw_1");
     expect(url.searchParams.get("person")).toBe("user:a,user:b");
@@ -294,7 +332,19 @@ describe("ProblemDetailSheet", () => {
       data: { loggingEnabled: true, viewerScope: "all", found: false },
     };
     renderSheet();
-    expect(screen.getByText("This problem is no longer listed.")).toBeTruthy();
+    expect(screen.getByText("This problem is no longer listed")).toBeTruthy();
+  });
+
+  it("says why someone who reads only their own logs sees no problem", () => {
+    state.query = {
+      data: { loggingEnabled: true, viewerScope: "own", found: false },
+    };
+    renderSheet();
+    expect(
+      screen.getByText(
+        "Suspected problems name other people. You need permission to read every log in this project to see them.",
+      ),
+    ).toBeTruthy();
   });
 
   it("says logging is off", () => {

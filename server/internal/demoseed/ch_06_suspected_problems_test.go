@@ -60,13 +60,29 @@ func seededProblems(t *testing.T, seeded, now time.Time) {
 	db, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 	// Other tenants' rows must not land while the safety test fingerprints them.
-	otherTenantWrites.RLock()
-	require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), ch, rows))
-	require.NoError(t, mcpconnectionattempts.AppendServed(t.Context(), ch, served))
-	otherTenantWrites.RUnlock()
+	func() {
+		otherTenantWrites.RLock()
+		defer otherTenantWrites.RUnlock()
+		require.NoError(t, mcpconnectionattempts.AppendRows(t.Context(), ch, rows))
+		require.NoError(t, mcpconnectionattempts.AppendServed(t.Context(), ch, served))
+	}()
 
-	got, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false}, time.Time{}, now)
+	// Read as the provider's page does: its project, its servers and gateway.
+	servers := []string{s.healthGateway().String()}
+	for _, id := range s.healthServerIDs() {
+		servers = append(servers, id.String())
+	}
+	got, err := problems.Read(t.Context(), ch, db, mcpconnectionattemptstest.LogsOn, problems.ReadScope{
+		OrganizationID: s.orgID(), ProjectID: s.projectID(), WholeOrganization: false, IssuerID: s.healthIssuer(), IssuerServerIDs: servers,
+	}, time.Time{}, now)
 	require.NoError(t, err)
+	signIn := 0
+	for _, p := range got {
+		if p.Part == mcpconnectionattempts.PartAppSignIn {
+			signIn++
+		}
+	}
+	require.Equal(t, 2, signIn, "the provider Overview lists two problems signing in, as the review steps say")
 
 	subject := func(key string) string {
 		for _, p := range healthPeople {

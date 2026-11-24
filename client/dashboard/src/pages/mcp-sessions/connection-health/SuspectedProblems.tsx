@@ -27,6 +27,7 @@ export function SuspectedProblems({
   onOpen,
   rule,
   empty,
+  expectVisible,
 }: {
   query: Pick<
     UseQueryResult<ListSuspectedProblemsResponse>,
@@ -38,10 +39,13 @@ export function SuspectedProblems({
   rule?: string;
   /** Said when there are no problems. */
   empty: string;
+  /** Whether the page already knows this viewer sees the panel; only then is space reserved while it loads. */
+  expectVisible: boolean;
 }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   // Loading and empty share one height, so the page does not jump.
-  if (query.isPending) return <Skeleton className="h-28 w-full" />;
+  if (query.isPending)
+    return expectVisible ? <Skeleton className="h-28 w-full" /> : null;
   if (query.isError)
     return (
       <InlineEmptyState

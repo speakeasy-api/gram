@@ -3,6 +3,7 @@ package attemptlog_test
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"os"
 	"slices"
@@ -646,4 +647,30 @@ func TestList_AScriptWinsOverAnUnrecognizedAppInEitherOrder(t *testing.T) {
 	for _, row := range rows {
 		require.Equal(t, mcpconnectionattempts.FamilyScript, row.App)
 	}
+}
+
+// A filtered reason with few attempts is counted even when more than a facet's worth of
+// other reasons have more: counting all reasons first and filtering after would drop it.
+func TestCountByReason_AppliesTheFiltersBeforeCounting(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	for i := range attemptlog.MaxFacetValues + 1 {
+		a := f.attempt(f.org, f.project, f.server, f.now.Add(-time.Duration(i+2)*time.Minute))
+		r := f.row(a, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError, true, time.Second, person("u1"))
+		r.Reason, r.Repeats = fmt.Sprintf("noise_%03d", i), 1
+	}
+	ours := f.attempt(f.org, f.project, f.server, f.now.Add(-3*time.Hour))
+	f.row(ours, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected, true, time.Second, person("u2"))
+	other := f.attempt(f.org, f.project, f.server, f.now.Add(-4*time.Hour))
+	f.row(other, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected, true, time.Second, person("u3"))
+	f.insert()
+
+	filters := attemptlog.Filters{People: []string{urn.NewUserSubject("u2").String()}, Reasons: []string{mcpconnectionattempts.CodeStaticKeyRejected.String()}}
+	counts, err := attemptlog.Count(t.Context(), f.ch, f.scope(), attemptlog.Filters{}, f.now)
+	require.NoError(t, err)
+	require.NotContains(t, counts.Facets[attemptlog.FacetReasons], attemptlog.FacetValue{Value: mcpconnectionattempts.CodeStaticKeyRejected.String(), Attempts: 2}, "the facet keeps only the reasons with the most attempts")
+
+	got, err := attemptlog.CountByReason(t.Context(), f.ch, f.scope(), filters, f.now)
+	require.NoError(t, err)
+	require.Equal(t, []attemptlog.FacetValue{{Value: mcpconnectionattempts.CodeStaticKeyRejected.String(), Attempts: 1}}, got)
 }

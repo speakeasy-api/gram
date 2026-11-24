@@ -32,8 +32,9 @@ type servedKey struct{ kind, server, member, subject, app, family string }
 
 // servedRequest is a request of the person's app that the server answered. It has no event row.
 func (g *healthGen) servedRequest(p healthPerson, server, member string, at time.Time) {
+	// Moved back rather than dropped, so whether the row exists never depends on the seed's second.
 	if latest := g.clk.now.Add(-5 * time.Second); at.After(latest) {
-		return
+		at = latest
 	}
 	kind, id := "mcp", g.s.healthServerID(server).String()
 	if server == healthGatewayKey {
@@ -354,6 +355,16 @@ func (g *healthGen) busy(p healthPerson, server string, t time.Time) bool {
 	return false
 }
 
+// busyLater is busy for a row that follows one at a time busy has already allowed: the
+// stories' fixed windows apply, the quiet days counted back from the seed's clock only
+// through the first row, so the pair never splits on the second the seed ran.
+func (g *healthGen) busyLater(p healthPerson, server string, t time.Time) bool {
+	if p.key == "hugo" || p.key == "rosa" {
+		return false
+	}
+	return g.busy(p, server, t)
+}
+
 func (g *healthGen) baseline() {
 	totalWeight := 0
 	for _, p := range healthPeople {
@@ -406,14 +417,19 @@ func (g *healthGen) baseline() {
 				continue
 			}
 			// A baseline failure is a blip the person gets past, so it never shows as a problem.
+			// The recovery follows its failure: one near the cutoff recovers sooner instead of
+			// being dropped, so the pair is in or out with the failure's own time.
 			recoverAt := when.Add(g.r.span(3*time.Minute, 25*time.Minute))
-			if healthBlips[kind] && (recoverAt.After(g.clk.now.Add(-2*time.Minute)) || g.busy(p, server, recoverAt)) {
+			if healthBlips[kind] && g.busyLater(p, server, recoverAt) {
 				continue
+			}
+			if cutoff := g.clk.now.Add(-2 * time.Minute); recoverAt.After(cutoff) {
+				recoverAt = when.Add(cutoff.Sub(when) / 2)
 			}
 			g.emit(kind, p, server, when, recoverAt)
 			// After a sign-in or renewal the app usually makes requests the server answers.
 			if requestAt := when.Add(g.r.span(time.Minute, 20*time.Minute)); (kind == "renewal" || kind == "service_renewal" || kind == "sign_in") &&
-				g.r.float() < .6 && !g.busy(p, server, requestAt) {
+				g.r.float() < .6 && !g.busyLater(p, server, requestAt) {
 				g.servedRequest(p, server, "", requestAt)
 			}
 		}
@@ -587,20 +603,22 @@ func (g *healthGen) storyCursor() {
 	}{{"lena", 38}, {"felix", 22}, {"lars", 27}} {
 		p := g.personByKey(who.key)
 		start := at(-2, 10, 20+i, 15)
-		end := g.stillTrying(at(0, 10, 5+g.r.intn(34), 0), time.Duration(3+2*i)*time.Minute)
+		storyEnd, ago := at(0, 10, 5+g.r.intn(34), 0), time.Duration(6+2*i)*time.Minute
 		if who.key == "lena" {
-			end = g.stillTrying(at(0, 10, 41, 26), 2*time.Minute)
+			storyEnd, ago = at(0, 10, 41, 26), 5*time.Minute
 		}
+		end := g.stillTrying(storyEnd, ago)
 		// The app retries a few times minutes apart during working hours, then gives up for a while.
+		// Retries are placed on the story's fixed clock, so the draws never depend on the seed's second.
 		times := []time.Time{start, end}
 		for len(times) < who.count {
-			burst := start.Add(time.Duration(g.r.float() * float64(end.Sub(start))))
+			burst := start.Add(time.Duration(g.r.float() * float64(storyEnd.Sub(start))))
 			if h := burst.In(time.Local).Hour(); h < 8 || h > 17 {
 				continue
 			}
 			for k := range g.r.between(3, 6) {
 				t := burst.Add(time.Duration(float64(k) * float64(g.r.span(5*time.Minute, 11*time.Minute))))
-				if t.After(start) && t.Before(end) && len(times) < who.count {
+				if t.After(start) && t.Before(storyEnd) && len(times) < who.count {
 					times = append(times, t)
 				}
 			}
@@ -625,10 +643,10 @@ func (g *healthGen) storyWiki() {
 		count       int
 		first, last time.Time
 	}{
-		{"ken", 4, at(0, 10, 41, 30), g.stillTrying(at(0, 10, 50, 10), 4*time.Minute)},
-		{"ivy", 3, at(-1, 16, 5, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 8*time.Minute)},
-		{"theo", 4, at(-1, 16, 6, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 6*time.Minute)},
-		{"amara", 5, at(-1, 16, 7, 40), g.stillTrying(at(0, 10, 52, 8), 3*time.Minute)},
+		{"ken", 4, at(0, 10, 41, 30), g.stillTrying(at(0, 10, 50, 10), 7*time.Minute)},
+		{"ivy", 3, at(-1, 16, 5, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 11*time.Minute)},
+		{"theo", 4, at(-1, 16, 6, 40), g.stillTrying(at(0, 10, 42+g.r.intn(8), 0), 9*time.Minute)},
+		{"amara", 5, at(-1, 16, 7, 40), g.stillTrying(at(0, 10, 52, 8), 6*time.Minute)},
 	} {
 		for _, t := range g.spread(who.first, who.last, who.count) {
 			g.request(g.personByKey(who.key), "wiki", "", t, mcpconnectionattempts.CodeStaticKeyRejected, 0)
@@ -639,7 +657,7 @@ func (g *healthGen) storyWiki() {
 // storyDana: Dana's MCP sign-in reached its time limit two days ago; her app still retries.
 func (g *healthGen) storyDana() {
 	p := g.personByKey("dana")
-	for _, t := range g.spread(g.clk.danaFrom().Add(44*time.Second), g.clk.now.Add(-5*time.Minute), 41) {
+	for _, t := range g.spread(g.clk.danaFrom().Add(44*time.Second), g.clk.now.Add(-8*time.Minute), 41) {
 		g.renewal(p, "linear", t, mcpconnectionattempts.CodeRefreshTokenExpired)
 	}
 	g.renewal(p, "linear", g.clk.at(-3, 17, 20, 0), mcpconnectionattempts.ResultRefreshed)

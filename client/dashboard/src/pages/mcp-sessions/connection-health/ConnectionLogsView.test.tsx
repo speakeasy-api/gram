@@ -3,17 +3,31 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectionLogsView } from "./ConnectionLogsView";
 
+const enabled = vi.hoisted(() => ({ calls: [] as (boolean | undefined)[] }));
+
 vi.mock("./api", async (original) => ({
   ...(await original<object>()),
   useRangeClock: () => [new Date("2026-11-20T12:00:00Z"), vi.fn()],
-  useAttemptCounts: () => ({
+  useAttemptCounts: (
+    _scope: unknown,
+    _window: unknown,
+    _filters: unknown,
+    options?: { enabled?: boolean },
+  ) => ({
+    _: enabled.calls.push(options?.enabled),
     data: { totalAttempts: 0, loggingEnabled: true, viewerScope: "all" },
     isPlaceholderData: false,
     isFetching: false,
     isError: false,
     refetch: vi.fn(),
   }),
-  useConnectionAttempts: () => ({
+  useConnectionAttempts: (
+    _scope: unknown,
+    _window: unknown,
+    _filters: unknown,
+    options?: { enabled?: boolean },
+  ) => ({
+    _: enabled.calls.push(options?.enabled),
     data: { pages: [{ attempts: [] }] },
     isPending: false,
     isError: false,
@@ -85,10 +99,21 @@ describe("ConnectionLogsView on a server's tab", () => {
   });
 
   it("does not send a link with more than 50 people", () => {
+    enabled.calls = [];
     const people = Array.from({ length: 51 }, (_, i) => `user:u${i}`).join(",");
     renderLogs(`/?person=${encodeURIComponent(people)}`);
     expect(
       screen.getByText("Too many servers or people in this link"),
     ).toBeTruthy();
+    expect(enabled.calls.length).toBeGreaterThan(0);
+    expect(enabled.calls.every((e) => e === false)).toBe(true);
+  });
+
+  it("ignores the server filter on a server's own tab, where it is not applied", () => {
+    const servers = Array.from({ length: 51 }, (_, i) => `srv_${i}`).join(",");
+    renderLogs(`/?server=${encodeURIComponent(servers)}`, "srv_1");
+    expect(
+      screen.queryByText("Too many servers or people in this link"),
+    ).toBeNull();
   });
 });

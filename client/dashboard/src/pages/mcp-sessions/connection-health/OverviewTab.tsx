@@ -23,6 +23,7 @@ import {
   useConnectionAttempts,
   useDeniedClients,
   useRangeClock,
+  useKnownViewer,
   useSuspectedProblems,
 } from "./api";
 import { AttemptDetailSheet } from "./AttemptDetailSheet";
@@ -99,6 +100,7 @@ export function OverviewTab({
   const setParam = useSetSearchParam(SHEET_PARAMS);
 
   const problems = useSuspectedProblems(scope, "speakeasy");
+  const known = useKnownViewer();
   const killswitches = useActiveKillswitches();
   const denied = useDeniedClients(scope, window);
   const activity = useConnectionAttempts(
@@ -124,6 +126,9 @@ export function OverviewTab({
           onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
           rule={SIGN_IN_PROBLEMS_RULE}
           empty="No suspected problems signing in right now."
+          expectVisible={
+            known?.loggingEnabled === true && known.viewerScope === "all"
+          }
         />
 
         <p className="text-muted-foreground text-sm">

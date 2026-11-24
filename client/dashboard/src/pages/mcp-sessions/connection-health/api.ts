@@ -9,6 +9,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useQuery,
+  useQueryClient,
   type InfiniteData,
   type UseInfiniteQueryResult,
   type UseQueryResult,
@@ -31,6 +32,7 @@ import type {
   SignInSummaryResponse,
   StepGroup,
   SummaryBucket,
+  ViewerScope,
 } from "./types";
 
 export const connectionHealthNow = (): Date => new Date();
@@ -305,6 +307,36 @@ const PROBLEM_QUERY = {
 
 export function isUnavailable(error: unknown): boolean {
   return error instanceof GramError && error.statusCode === 503;
+}
+
+/**
+ * The logging state and viewer scope any connection health read of this project already
+ * returned, from the cache; undefined while none has.
+ */
+export function useKnownViewer():
+  | { loggingEnabled: boolean; viewerScope: ViewerScope }
+  | undefined {
+  const queryClient = useQueryClient();
+  const { projectId } = useClient();
+  for (const [, data] of queryClient.getQueriesData<unknown>({
+    queryKey: [ROOT, projectId],
+  })) {
+    const first: unknown =
+      data && typeof data === "object" && "pages" in data
+        ? (data as { pages: unknown[] }).pages[0]
+        : data;
+    if (!first || typeof first !== "object") continue;
+    const { loggingEnabled, viewerScope } = first as {
+      loggingEnabled?: unknown;
+      viewerScope?: unknown;
+    };
+    if (
+      typeof loggingEnabled === "boolean" &&
+      (viewerScope === "all" || viewerScope === "own")
+    )
+      return { loggingEnabled, viewerScope };
+  }
+  return undefined;
 }
 
 export function useSuspectedProblems(

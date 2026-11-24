@@ -17,7 +17,8 @@ import { ArrowRight } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { isUnavailable, useSuspectedProblem } from "./api";
-import { AskAiButton, type Investigation } from "./AskAiButton";
+import { AskAiButton } from "./AskAiButton";
+import type { Investigation } from "./investigation";
 import { logsSearch } from "./filters";
 import {
   appLabel,
@@ -99,12 +100,12 @@ export function ProblemDetailSheet({
                 <InlineEmptyState
                   icon="lock"
                   heading="You can't see suspected problems"
-                  description="They name other people, so they need permission to read every log in this project."
+                  description="Suspected problems name other people. You need permission to read every log in this project to see them."
                 />
               ) : (
                 <InlineEmptyState
                   icon="circle-check"
-                  heading="This problem is no longer listed."
+                  heading="This problem is no longer listed"
                 />
               )}
             </div>
@@ -190,7 +191,9 @@ function ProblemBody({
   );
   // One snapshot: the chart, the messages and both links end when the problem was read.
   const asOf = new Date(problem.asOf);
-  const sinceFrom = formatSince(problem.filters.from, now);
+  // The chart shows at most the last 24 hours; the messages and links cover the whole problem.
+  const chartIsCut =
+    asOf.getTime() - Date.parse(problem.since) > 24 * 60 * 60 * 1000;
   const logsHref = `${routes.mcpSessions.provider.connectionLogs.href(providerId)}${logsSearch(problem.filters, asOf)}`;
   const peopleCount = problem.peopleCount;
   const sinceLabel = formatSince(problem.since, now);
@@ -236,22 +239,23 @@ function ProblemBody({
               {sourceName(problem) ? ` (${sourceName(problem)})` : ""}.
             </p>
           ) : null}
-        </div>
-
-        <Block
-          title={`Failed attempts by these people · ${formatCount(failed)}`}
-          aside="10-minute intervals, last 24 hours"
-        >
-          <div className="border p-3">
-            <FailureBars buckets={problem.failedPer10Minutes} now={asOf} />
-          </div>
-          <p className="text-muted-foreground text-sm">
-            Every failed attempt by these people on these servers with these
-            messages since {sinceFrom}, including any they got past in between.
+          <p className="text-muted-foreground">
+            The chart, messages and Connection Logs links count every failed
+            attempt by these people on these servers with these messages since{" "}
+            {sinceLabel}, including failures they later recovered from.
             {problem.countsWidened
               ? " Some filters could not be applied, so unrelated failures may be included."
               : ""}
           </p>
+        </div>
+
+        <Block
+          title={`Failed attempts ${chartIsCut ? "in the last 24 hours" : `since ${sinceLabel}`} · ${formatCount(failed)}`}
+          aside="10-minute intervals"
+        >
+          <div className="border p-3">
+            <FailureBars buckets={problem.failedPer10Minutes} now={asOf} />
+          </div>
         </Block>
 
         <Block title={`People · ${peopleCount}`} aside="Attempts">
@@ -268,11 +272,20 @@ function ProblemBody({
                   <IdentityAvatar label={personLabel(p)} />
                   <div className="min-w-0">
                     <div className="truncate text-sm">{personLabel(p)}</div>
-                    <div className="text-muted-foreground truncate text-xs">
-                      {foldedLabel(p.apps.map(appLabel), p.appsTotal)}
-                      {p.servers.length > 0
-                        ? ` · ${foldedLabel(p.servers.map(serverLabel), p.serversTotal)}`
-                        : ""}
+                    <div className="text-muted-foreground flex min-w-0 gap-1 text-xs">
+                      <Folded
+                        labels={p.apps.map(appLabel)}
+                        total={p.appsTotal}
+                      />
+                      {p.servers.length > 0 ? (
+                        <>
+                          <span aria-hidden>·</span>
+                          <Folded
+                            labels={p.servers.map(serverLabel)}
+                            total={p.serversTotal}
+                          />
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -316,7 +329,7 @@ function ProblemBody({
 
         <Block
           title={`Messages · ${problem.messages.length}`}
-          aside={`Attempts since ${sinceFrom}`}
+          aside={`Attempts since ${sinceLabel}`}
         >
           <div className="divide-y border">
             {problem.messages.map((m) => (
@@ -360,10 +373,25 @@ function ProblemBody({
   );
 }
 
-/** "Linear, GitHub +3" when more were folded than shown. */
-function foldedLabel(labels: string[], total: number): string {
+/** "Linear, GitHub +3": the list truncates, the count never does, and the title has them all. */
+function Folded({
+  labels,
+  total,
+}: {
+  labels: string[];
+  total: number;
+}): JSX.Element {
   const more = total - labels.length;
-  return more > 0 ? `${labels.join(", ")} +${more}` : labels.join(", ");
+  const list = labels.join(", ");
+  return (
+    <span
+      className="flex min-w-0 gap-1"
+      title={more > 0 ? `${list} and ${more} more` : list}
+    >
+      <span className="min-w-0 truncate">{list}</span>
+      {more > 0 ? <span className="shrink-0">+{more}</span> : null}
+    </span>
+  );
 }
 
 const PERSON_ROW =

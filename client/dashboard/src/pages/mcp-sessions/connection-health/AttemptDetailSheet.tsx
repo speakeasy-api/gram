@@ -23,7 +23,8 @@ import { ArrowRight, ChevronDown, Globe, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { connectionHealthNow, useAttemptHere } from "./api";
-import { AskAiButton, type Investigation } from "./AskAiButton";
+import { AskAiButton } from "./AskAiButton";
+import type { Investigation } from "./investigation";
 import { OutcomeLabel } from "./AttemptsTable";
 import { logsSearch, RETENTION_MS } from "./filters";
 import {

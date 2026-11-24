@@ -24,12 +24,12 @@ const (
 	factOn            = "On {servers}."
 	factAppSignIn     = "The app's sign-in to Speakeasy fails."
 	factServiceSignIn = "Signing in to {service} fails."
-	factSavedSignIn   = "The saved sign-in for {service} is not accepted."
+	factSavedSignIn   = "Requests with the saved sign-in for {service} are failing."
 	factRequestsFail  = "Requests to {server} are failing."
 	factAllUse        = "All use {app}."
 	factUses          = "Uses {app}."
-	factOtherApp      = "Another app worked on this server in this time."
-	factOtherAppSome  = "Another app worked on at least one of these servers in this time."
+	factOtherApp      = "Another app worked on {server} in this time."
+	factOtherAppSome  = "Another app worked on at least one of {servers} in this time."
 )
 
 // savedCredentialReasons fail a saved key or shared credential: nobody signs in.
@@ -55,19 +55,30 @@ func headline(p problems.Problem, scope string) string {
 func fact(n names, p problems.Problem) string {
 	var out []string
 	servers := problemServers(p)
+	// Whether the headline or the fact has named the server or servers.
+	named := p.Rule == problems.RuleSameServer
 	if p.Rule == problems.RuleOnePerson || p.Rule == problems.RuleSameAppVersion {
 		if where := serversPhrase(n, p); where != "" {
 			out = append(out, fill(factOn, "{servers}", where))
+			named = true
 		}
 	}
-	service, server := "the service", "the server"
-	if p.Rule == problems.RuleSameService {
+	service, server, several := "the service", "the server", "these servers"
+	switch {
+	case p.Rule == problems.RuleSameService:
 		service = hostOf(p.Scope.Key)
-		server = "servers using " + service
+		server, several = "servers using "+service, "the servers using "+service
+	case servers > 1 && named:
+		server = "these servers"
+	case servers > 1:
+		server, several = "the servers", "the servers"
+	case named:
+		server = "this server"
 	}
+	// The catalog's administrator sentence is about one attempt on one server. Its
+	// person-facing sentence speaks to the person, so the fact line never uses it.
 	reason := sharedReason(p)
 	meaning, _ := mcpconnectionattempts.MeaningOf(reason)
-	// The catalog's administrator sentence is about one attempt on one server.
 	adminSentence := ""
 	if reason != "" && servers == 1 {
 		adminSentence = meaning.WhatHappenedForAdmin
@@ -80,8 +91,6 @@ func fact(n names, p problems.Problem) string {
 		case adminSentence != "":
 			out = append(out, adminSentence)
 			adminSentence = ""
-		case reason != "" && meaning.WhatHappened != "":
-			out = append(out, meaning.WhatHappened)
 		default:
 			out = append(out, fill(factSavedSignIn, "{service}", service))
 		}
@@ -91,8 +100,6 @@ func fact(n names, p problems.Problem) string {
 	case adminSentence != "":
 		out = append(out, adminSentence)
 		adminSentence = ""
-	case reason != "" && meaning.WhatHappened != "":
-		out = append(out, meaning.WhatHappened)
 	default:
 		out = append(out, fill(factRequestsFail, "{server}", server))
 	}
@@ -109,9 +116,9 @@ func fact(n names, p problems.Problem) string {
 	}
 	if p.OtherAppsServed {
 		if servers == 1 {
-			out = append(out, factOtherApp)
+			out = append(out, fill(factOtherApp, "{server}", server))
 		} else {
-			out = append(out, factOtherAppSome)
+			out = append(out, fill(factOtherAppSome, "{servers}", several))
 		}
 	}
 	return strings.Join(out, " ")

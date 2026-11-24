@@ -114,6 +114,9 @@ type attemptFacts struct {
 	SignInMembers []string    `ch:"sign_in_members"`
 	SignInClients []string    `ch:"sign_in_clients"`
 	SignInTimes   []time.Time `ch:"sign_in_times"`
+
+	// Issuers are the providers recorded on the attempt's rows.
+	Issuers []string `ch:"issuers"`
 }
 
 // serviceSignInRows selects the rows where a person's sign-in to a service worked: they
@@ -137,7 +140,8 @@ var episodeColumns = attemptColumns + `,
 	groupArrayIf((member_id, remote_session_client_id, event_time), ` + serviceSignInRows + `) AS sign_ins,
 	arrayMap(x -> toString(x.1), sign_ins) AS sign_in_members,
 	arrayMap(x -> toString(x.2), sign_ins) AS sign_in_clients,
-	arrayMap(x -> x.3, sign_ins) AS sign_in_times`
+	arrayMap(x -> x.3, sign_ins) AS sign_in_times,
+	groupUniqArrayIf(user_session_issuer_id, user_session_issuer_id != '') AS issuers`
 
 // episodeHaving keeps the attempts that can be a failure or show a part working: ones
 // that connected, carry a reason, or hold a service sign-in.
@@ -150,9 +154,9 @@ func readEpisodeAttempts(ctx context.Context, ch driver.Conn, filter FailingNowF
 	organizationID := filter.OrganizationID
 	until := now.Add(time.Nanosecond)
 	where, args, err := AttemptFilter{
-		StartedFrom: from, StartedBefore: until, OrganizationID: organizationID, ExcludeOrganizationIDs: nil, ProjectID: filter.ProjectID, ServerID: "",
+		StartedFrom: from, StartedBefore: until, OrganizationID: organizationID, ExcludeOrganizationIDs: nil, ProjectID: uuid.Nil, ServerID: "",
 		PeopleFailingFrom: later(from, since.Add(-AttemptLiveWindow)), PeopleFailingBefore: until,
-		IssuerID: filter.IssuerID, IssuerServerIDs: filter.IssuerServerIDs, FixCandidatesOnly: false,
+		PeopleProjectID: filter.ProjectID, PeopleIssuerID: filter.IssuerID, PeopleIssuerServerIDs: filter.IssuerServerIDs, FixCandidatesOnly: false,
 	}.where()
 	if err != nil {
 		return nil, err

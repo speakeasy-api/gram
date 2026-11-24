@@ -73,14 +73,14 @@ func TestProblemText_EachRule(t *testing.T) {
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: server, WhoFixes: mcpconnectionattempts.WhoProvider, People: 1,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, server, mcpconnectionattempts.CodeProviderServerError), ep("user:dana", github, server, mcpconnectionattempts.CodeProviderServerError)}},
 			headline: "Dana Reyes can't connect",
-			fact:     "On Linear and GitHub. The service had an error.",
+			fact:     "On Linear and GitHub. Requests to these servers are failing.",
 		},
 		{
 			name: "requests Speakeasy has to fix",
 			problem: problems.Problem{Rule: problems.RuleSameServer, Scope: problems.Scope{Kind: problems.ScopeServer, Key: linear.String()}, Part: server, WhoFixes: mcpconnectionattempts.WhoSpeakeasy, People: 2,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:a", linear, server, mcpconnectionattempts.CodeAuthCheckUnavailable), ep("user:b", linear, server, mcpconnectionattempts.CodeTunnelUnavailable)}},
 			headline: "2 people can't connect to Linear",
-			fact:     "Requests to the server are failing.",
+			fact:     "Requests to this server are failing.",
 		},
 		{
 			name: "a service sign-in",
@@ -109,7 +109,28 @@ func TestProblemText_EachRule(t *testing.T) {
 			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: service, People: 1,
 				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, service, mcpconnectionattempts.CodeStaticKeyRejected), ep("user:dana", github, service, mcpconnectionattempts.CodeStaticKeyRejected)}},
 			headline: "Dana Reyes can't connect",
-			fact:     "On Linear and GitHub. The server rejected the saved key.",
+			fact:     "On Linear and GitHub. Requests with the saved sign-in for the service are failing.",
+		},
+		{
+			name: "a sign-in check that failed on two servers",
+			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: server, WhoFixes: mcpconnectionattempts.WhoSpeakeasy, People: 1,
+				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, server, mcpconnectionattempts.CodeAuthCheckUnavailable), ep("user:dana", github, server, mcpconnectionattempts.CodeAuthCheckUnavailable)}},
+			headline: "Dana Reyes can't connect",
+			fact:     "On Linear and GitHub. Requests to these servers are failing.",
+		},
+		{
+			name: "same service where another app worked",
+			problem: problems.Problem{Rule: problems.RuleSameService, Scope: problems.Scope{Kind: problems.ScopeService, Key: "mcp.linear.app"}, Part: server, WhoFixes: mcpconnectionattempts.WhoProvider, People: 2, OtherAppsServed: true,
+				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:a", linear, server, mcpconnectionattempts.CodeProviderServerError), ep("user:b", github, server, mcpconnectionattempts.CodeProviderServerError)}},
+			headline: "2 people can't connect to mcp.linear.app",
+			fact:     "Requests to servers using mcp.linear.app are failing. Another app worked on at least one of the servers using mcp.linear.app in this time.",
+		},
+		{
+			name: "mixed saved credentials including a misconfiguration",
+			problem: problems.Problem{Rule: problems.RuleOnePerson, Scope: problems.Scope{Kind: problems.ScopePerson, Key: "user:dana"}, Part: service, People: 1,
+				Episodes: []mcpconnectionattempts.FailingPerson{ep("user:dana", linear, service, mcpconnectionattempts.CodeStaticKeyRejected), ep("user:dana", linear, service, mcpconnectionattempts.CodeCredentialMisconfigured)}},
+			headline: "Dana Reyes can't connect",
+			fact:     "On Linear. Requests with the saved sign-in for the service are failing.",
 		},
 	}
 	for _, tc := range cases {
@@ -123,6 +144,10 @@ func TestProblemText_EachRule(t *testing.T) {
 				require.NotContains(t, strings.Fields(view.Headline), code, "no reason codes in headlines")
 			}
 			require.NotContains(t, view.Fact, "not answering", "a recorded failure is not proof the server is down")
+			for _, second := range []string{"your", "Your", "We ", "You "} {
+				require.NotContains(t, view.Fact, second, "the fact line never speaks to the person")
+			}
+			require.NotContains(t, view.Fact, "not accepted")
 			if allSavedCredential(tc.problem) {
 				require.NotContains(t, view.Fact, "Signing in", "nobody signs in with a saved key")
 			}

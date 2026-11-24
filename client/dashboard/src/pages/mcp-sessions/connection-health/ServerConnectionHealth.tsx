@@ -1,7 +1,11 @@
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { connectionHealthNow, useSuspectedProblems } from "./api";
+import {
+  connectionHealthNow,
+  useKnownViewer,
+  useSuspectedProblems,
+} from "./api";
 import { ConnectionLogsView } from "./ConnectionLogsView";
 import { PROBLEM_PARAM, useSetSearchParam } from "./filters";
 import { SERVICE_DEFINITION } from "./format";
@@ -34,6 +38,7 @@ export function ServerConnectionHealth({
     [providerId, serverId],
   );
   const problems = useSuspectedProblems(scope);
+  const known = useKnownViewer();
   const shownProblems =
     problems.data?.viewerScope === "all" ? problems.data.problems : [];
 
@@ -47,6 +52,9 @@ export function ServerConnectionHealth({
           now={now}
           onOpen={(problem) => setParam(PROBLEM_PARAM, problem.id)}
           empty="No suspected problems on this server right now."
+          expectVisible={
+            known?.loggingEnabled === true && known.viewerScope === "all"
+          }
         />
         {shownProblems.some((p) => p.part === "service") ? (
           <p className="text-muted-foreground text-sm">{SERVICE_DEFINITION}</p>

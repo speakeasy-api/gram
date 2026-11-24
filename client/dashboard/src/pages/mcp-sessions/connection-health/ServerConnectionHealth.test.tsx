@@ -23,6 +23,7 @@ vi.mock("./api", async (original) => ({
     isPending: false,
     isError: state.problemsError,
   }),
+  useKnownViewer: () => undefined,
 }));
 
 vi.mock("./ConnectionLogsView", () => ({

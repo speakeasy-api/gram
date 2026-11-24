@@ -31,6 +31,10 @@ interface FilterControlProps {
   options?: FilterOptions;
   projectSlug?: string;
   className?: string;
+  /** Ids of text that describes the control, such as a limit hint. */
+  describedBy?: string;
+  /** Called when a pick is refused for being over the dimension's `maxSelected`. */
+  onRefused?: () => void;
 }
 
 /**
@@ -46,6 +50,8 @@ export function FilterControl({
   options,
   projectSlug,
   className,
+  describedBy,
+  onRefused,
 }: FilterControlProps): JSX.Element {
   switch (dim.kind) {
     case "multiselect":
@@ -69,7 +75,9 @@ export function FilterControl({
           onValueChange={(values) => {
             if (withinMaxSelected(dim.maxSelected, value as string[], values))
               onChange(values);
+            else onRefused?.();
           }}
+          aria-describedby={describedBy}
           placeholder={
             dim.placeholder ?? `Filter by ${dim.label.toLowerCase()}`
           }
@@ -181,6 +189,10 @@ function DateRangeControl({
   onChange: (value: DateRangeValue) => void;
   projectSlug?: string;
   className?: string;
+  /** Ids of text that describes the control, such as a limit hint. */
+  describedBy?: string;
+  /** Called when a pick is refused for being over the dimension's `maxSelected`. */
+  onRefused?: () => void;
 }): JSX.Element {
   return (
     <TimeRangePicker
