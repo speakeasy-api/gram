@@ -20,14 +20,6 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagPrivateNetworkGateway chooses which runtime hosts an organization's
-	// new private network connection: the tsnet tailnet gateway when enabled,
-	// the Tailscale Kubernetes operator otherwise. Evaluated server-side when a
-	// connection is created, and by the dashboard to show the matching setup
-	// steps until one exists. Targeted by PostHog organization group (org
-	// slug). Fails closed to the operator. Existing connections keep the
-	// runtime they were created with. Removed once the gateway is the default.
-	FlagPrivateNetworkGateway Flag = "private-network-gateway"
 	// FlagAccessRequests gates stored access requests: requestAccess records
 	// a request an admin can approve as a temporary grant or deny, from the
 	// dashboard or a Slack DM, and refuses scopes that cannot be given
