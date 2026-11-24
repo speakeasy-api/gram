@@ -433,6 +433,9 @@ type memberCatalog struct {
 	incomplete bool
 	// From a live upstream handshake. Cached catalogs do not probe upstream.
 	instructions string
+	// description is the member's own one-line description of itself, when
+	// it gave one. It is third-party text: memberDescription bounds it.
+	description string
 }
 
 // describeMemberToolset loads the member's catalog via the same model view
@@ -463,7 +466,7 @@ func (s *Service) describeMemberToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: ""}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false, instructions: "", description: memberDescription(conv.PtrValOr(described.Description, ""))}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		entry := toolToListEntry(tool)

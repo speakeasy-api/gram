@@ -914,7 +914,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	if handshake := session.InitializeResult(); handshake != nil {
 		instructions = handshake.Instructions
 	}
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, instructions: instructions}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, instructions: instructions, description: upstreamDescription(session.InitializeResult())}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)

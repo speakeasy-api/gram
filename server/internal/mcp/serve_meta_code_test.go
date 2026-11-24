@@ -401,10 +401,17 @@ func TestCodeModeDescriptionOmitsMembersWithNoPermittedTools(t *testing.T) {
 	body := list(connection.token)
 	require.Contains(t, body, `approved--`)
 	require.NotContains(t, body, `other--`)
+	// A frozen connection names the tools it approved, without contacting the
+	// member, and the list comes before the usage text.
+	require.Contains(t, body, `- \"approved--\" \"Approved tools\": ping\n`)
+	require.Less(t, strings.Index(body, `approved--`), strings.Index(body, `tools.search`))
+	require.Contains(t, body, `"_meta":{"anthropic/alwaysLoad":true}`)
 
+	// Without a frozen catalogue a proxied member is named but not sampled:
+	// listing must not contact it.
 	body = list(mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer.ID, slug, metamcp.DiscoveryModeCode))
-	require.Contains(t, body, `approved--`)
-	require.Contains(t, body, `other--`)
+	require.Contains(t, body, `- \"approved--\" \"Approved tools\"\n`)
+	require.Contains(t, body, `- \"other--\" \"Other tools\"\n`)
 }
 
 // mintGatewayTestSession stores a gateway session with an explicit discovery
