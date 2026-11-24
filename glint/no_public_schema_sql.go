@@ -13,8 +13,15 @@ import (
 
 const (
 	noPublicSchemaSqlAnalyzer       = "nopublicschemasql"
-	noPublicSchemaSqlDefaultMessage = "drop the public. schema prefix and let search_path resolve the table; deployed databases keep tables in the gram schema"
+	noPublicSchemaSqlDefaultMessage = "drop the public. schema prefix and let search_path resolve the table: deployed databases keep tables in the gram schema, so a public. name finds nothing in production"
 )
+
+// noPublicSchemaSql guards against SQL that names a table as public.<table>.
+// Every deployed database keeps application tables in the gram schema and
+// connects with search_path=gram, while local dev uses public. A public.
+// name therefore works locally and in older test setups but finds no table in
+// production: a startup check written that way crash-looped prod. Unqualified
+// names resolve through search_path in every environment.
 
 // publicSchemaRef matches a public.<identifier> reference that is not part of
 // a longer dotted or hyphenated name such as a host name or URL. The schema
@@ -48,7 +55,7 @@ func newNoPublicSchemaSqlAnalyzer(_ noPublicSchemaSqlSettings) *analysis.Analyze
 				if match == nil {
 					return
 				}
-				pass.ReportRangef(lit, "drop the public. schema prefix from %q and let search_path resolve it; deployed databases keep tables in the gram schema", "public."+match[1])
+				pass.ReportRangef(lit, "drop the public. schema prefix from %q and let search_path resolve it: deployed databases keep tables in the gram schema, so a public. name finds nothing in production", "public."+match[1])
 			})
 
 			return nil, nil
