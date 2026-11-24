@@ -63,7 +63,8 @@ type metaGateContext struct {
 	metaServerID uuid.UUID
 	// agentID is the machine caller's effective agent. On the legacy agent
 	// gateway it also identifies the source of derived membership.
-	agentID uuid.UUID
+	agentID        uuid.UUID
+	agentProjectID uuid.NullUUID
 	// agentMembership selects the legacy agent gateway's derived members.
 	// Machine callers on stored gateways keep the operator's member rows.
 	agentMembership bool
@@ -149,6 +150,9 @@ type metaMembership struct {
 	// agentID is set for an agent gateway: its members are what the agent's
 	// delegated policy reaches.
 	agentID uuid.UUID
+	// agentProjectID is the boundary shadow mode compares with each admitted
+	// non-public member. Legacy agents may have no project.
+	agentProjectID uuid.NullUUID
 
 	// organization is set for an organization gateway: its members are what
 	// the signed-in user can reach across the organization.
@@ -266,7 +270,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if gate.discoveryMode == metamcp.DiscoveryModeCode {
 		endpoint := *mcpEndpoint
 		refresh := metaCodeGateRefresher(func(callbackCtx context.Context, current *metamcprepo.MetaMcpServer) (context.Context, *metaGateContext, error) {
-			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, r, logger, &endpoint, current, metaMembership{agentID: uuid.Nil, organization: false}, nil, admission)
+			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, r, logger, &endpoint, current, metaMembership{agentID: uuid.Nil, agentProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, organization: false}, nil, admission)
 		})
 		if membership.organization {
 			// The organization gateway has no stored rows to re-read: reloading
@@ -952,6 +956,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		metaServerID:     metaServer.ID,
 		// Machine callers use their effective agent's upstream credentials.
 		agentID:             gateAgentID,
+		agentProjectID:      membership.agentProjectID,
 		agentMembership:     membership.agentID != uuid.Nil,
 		organizationGateway: membership.organization,
 		organizationID:      metaServer.OrganizationID,

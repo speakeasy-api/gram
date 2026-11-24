@@ -182,6 +182,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 
 	gate := &metaGateContext{
+		agentProjectID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		agentMembership:  false,
 		caller:           emptyGatewayCaller(),
 		fromRequest:      mcpconnectionattempts.FromRequest(r),

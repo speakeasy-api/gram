@@ -836,6 +836,42 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 	return items, nil
 }
 
+const listAgentMCPProjectBoundaryShadowCounts = `-- name: ListAgentMCPProjectBoundaryShadowCounts :many
+SELECT organization_id, agent_id, agent_project_id, server_id, server_project_id, request_count, first_observed_at, last_observed_at
+FROM agent_mcp_project_boundary_shadow_counts
+WHERE organization_id = $1
+ORDER BY request_count DESC, agent_id, server_id
+`
+
+func (q *Queries) ListAgentMCPProjectBoundaryShadowCounts(ctx context.Context, organizationID string) ([]AgentMcpProjectBoundaryShadowCount, error) {
+	rows, err := q.db.Query(ctx, listAgentMCPProjectBoundaryShadowCounts, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AgentMcpProjectBoundaryShadowCount
+	for rows.Next() {
+		var i AgentMcpProjectBoundaryShadowCount
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.AgentID,
+			&i.AgentProjectID,
+			&i.ServerID,
+			&i.ServerProjectID,
+			&i.RequestCount,
+			&i.FirstObservedAt,
+			&i.LastObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAgentNamesIncludingDeleted = `-- name: ListAgentNamesIncludingDeleted :many
 SELECT id, name, deleted, owner_user_id, owner_reassignment_required_at
 FROM agents
@@ -1451,6 +1487,58 @@ func (q *Queries) ReassignAgent(ctx context.Context, arg ReassignAgentParams) (A
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const recordAgentMCPProjectBoundaryShadow = `-- name: RecordAgentMCPProjectBoundaryShadow :one
+INSERT INTO agent_mcp_project_boundary_shadow_counts (
+  organization_id,
+  agent_id,
+  agent_project_id,
+  server_id,
+  server_project_id
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5
+)
+ON CONFLICT (organization_id, agent_id, server_id) DO UPDATE SET
+  agent_project_id = EXCLUDED.agent_project_id,
+  server_project_id = EXCLUDED.server_project_id,
+  request_count = agent_mcp_project_boundary_shadow_counts.request_count + 1,
+  last_observed_at = clock_timestamp()
+RETURNING organization_id, agent_id, agent_project_id, server_id, server_project_id, request_count, first_observed_at, last_observed_at
+`
+
+type RecordAgentMCPProjectBoundaryShadowParams struct {
+	OrganizationID  string
+	AgentID         uuid.UUID
+	AgentProjectID  uuid.NullUUID
+	ServerID        uuid.UUID
+	ServerProjectID uuid.UUID
+}
+
+func (q *Queries) RecordAgentMCPProjectBoundaryShadow(ctx context.Context, arg RecordAgentMCPProjectBoundaryShadowParams) (AgentMcpProjectBoundaryShadowCount, error) {
+	row := q.db.QueryRow(ctx, recordAgentMCPProjectBoundaryShadow,
+		arg.OrganizationID,
+		arg.AgentID,
+		arg.AgentProjectID,
+		arg.ServerID,
+		arg.ServerProjectID,
+	)
+	var i AgentMcpProjectBoundaryShadowCount
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.AgentID,
+		&i.AgentProjectID,
+		&i.ServerID,
+		&i.ServerProjectID,
+		&i.RequestCount,
+		&i.FirstObservedAt,
+		&i.LastObservedAt,
 	)
 	return i, err
 }

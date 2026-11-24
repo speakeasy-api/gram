@@ -94,7 +94,7 @@ func (s *Service) ServeOrganizationGateway(w http.ResponseWriter, r *http.Reques
 		attr.SlogMetaMcpServerID(gateway.metaServer.ID.String()),
 	)
 
-	membership := metaMembership{agentID: uuid.Nil, organization: true}
+	membership := metaMembership{agentID: uuid.Nil, agentProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, organization: true}
 	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, gateway.endpoint, gateway.metaServer, membership, gateway.resolved); err != nil {
 		return fmt.Errorf("serve organization gateway: %w", err)
 	}

@@ -94,6 +94,7 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Name:           "Gateway agent " + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)
@@ -347,6 +348,56 @@ func TestServeAgentGateway_QualifiesMemberSlugsByProject(t *testing.T) {
 	body := w.Body.String()
 	require.Contains(t, body, second.Slug+"."+fx.granted)
 	require.Contains(t, body, fx.grantedProject+"."+fx.granted)
+}
+
+func TestServeAgentGateway_RecordsCrossProjectPrivateMembersWithoutRefusing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	second, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "shadow boundary",
+		Slug:           "shadow-boundary-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, second.ID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	privateSlug := "private-shadow-" + uuid.NewString()[:8]
+	publicSlug := "public-shadow-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, second.ID, meta.ID, "private shadow member", privateSlug, 0, mcpservers.VisibilityPrivate)
+	seedMetaMember(t, ctx, ti.conn, second.ID, meta.ID, "public shadow member", publicSlug, 1, mcpservers.VisibilityPublic)
+	privateServerID := mcpServerBySlug(t, ctx, ti, second.ID, privateSlug)
+
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, privateServerID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), privateServerID)
+	token := mintAgentGatewayKeyForProject(t, ctx, ti, fx.agent.ID, second.ID, privateServerID)
+
+	for range 2 {
+		w, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), token, makeMetaRPCBody(t, "tools/call", map[string]any{
+			"name":      "list_servers",
+			"arguments": map[string]any{},
+		}))
+		require.NoError(t, err)
+		require.Contains(t, w.Body.String(), privateSlug, "shadow mode must continue serving the private member")
+		require.Contains(t, w.Body.String(), publicSlug)
+	}
+
+	counts, err := agentsrepo.New(ti.conn).ListAgentMCPProjectBoundaryShadowCounts(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	matching := make([]agentsrepo.AgentMcpProjectBoundaryShadowCount, 0, 1)
+	for _, count := range counts {
+		if count.AgentID == fx.agent.ID {
+			matching = append(matching, count)
+		}
+	}
+	require.Len(t, matching, 1, "public and same-project members are not affected")
+	require.Equal(t, fx.agent.ProjectID, matching[0].AgentProjectID)
+	require.Equal(t, privateServerID, matching[0].ServerID)
+	require.Equal(t, second.ID, matching[0].ServerProjectID)
+	require.Equal(t, int64(2), matching[0].RequestCount)
 }
 
 func TestServePublic_GatewayAdmissionPreservesAnonymousSession(t *testing.T) {

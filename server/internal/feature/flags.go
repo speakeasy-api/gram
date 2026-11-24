@@ -234,6 +234,12 @@ const (
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
+	// FlagAgentMCPProjectBoundaryEnforcement turns on, per organization, the
+	// project boundary for agent MCP gateways. AIM-1060 records the shadow
+	// impact unconditionally; a later rollout uses this switch to enforce it.
+	// Targeted the same way as FlagAuthClientResolver.
+	FlagAgentMCPProjectBoundaryEnforcement Flag = "agent-mcp-project-boundary-enforcement"
+
 	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
 	// clients the source of its upstream issuer for an organization: the one
 	// provider among the server's live client associations routes its

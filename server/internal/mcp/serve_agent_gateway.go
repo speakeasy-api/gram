@@ -14,6 +14,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -22,6 +23,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/agentgateway"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -45,6 +47,23 @@ import (
 // AgentGatewayRoute is the gateway's path, addressed by agent rather than by
 // slug so it can never be shadowed by a server whose slug is "agent".
 const AgentGatewayRoute = "/agent-mcp/{agentID}"
+
+type agentProjectBoundaryShadowKey struct{}
+
+type agentProjectBoundaryShadowState struct {
+	mu       sync.Mutex
+	recorded map[uuid.UUID]struct{}
+}
+
+func (s *agentProjectBoundaryShadowState) first(serverID uuid.UUID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.recorded[serverID]; ok {
+		return false
+	}
+	s.recorded[serverID] = struct{}{}
+	return true
+}
 
 // ServeAgentGateway terminates MCP for /agent-mcp/{agentID}. Only the agent
 // whose key is presented may reach its own gateway: the key is authenticated
@@ -104,7 +123,16 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		ProjectID: uuid.Nil,
 	}
 
-	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, metaMembership{agentID: agentID, organization: false}, nil); err != nil {
+	agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ID:             agentID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load agent project boundary").LogError(ctx, logger)
+	}
+	ctx = context.WithValue(ctx, agentProjectBoundaryShadowKey{}, &agentProjectBoundaryShadowState{mu: sync.Mutex{}, recorded: make(map[uuid.UUID]struct{})})
+	r = r.WithContext(ctx)
+	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, metaMembership{agentID: agentID, agentProjectID: agent.ProjectID, organization: false}, nil); err != nil {
 		return fmt.Errorf("serve agent gateway: %w", err)
 	}
 	return nil

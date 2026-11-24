@@ -1317,7 +1317,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if metaServer != nil {
-			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, agentProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, organization: false}, nil)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, mcproute.MCP)
 	case mcpendpoints.IsAddressMiss(err), mcpendpoints.IsPolicyDenied(err):

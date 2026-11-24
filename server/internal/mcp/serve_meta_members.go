@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -272,6 +273,9 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 			}
 		}
 		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway && gate.caller.kind == gatewayCallerPerson, issuer, scopeProjectID)
+	}
+	if err == nil && gate.agentMembership {
+		s.recordAgentMCPProjectBoundaryShadow(ctx, logger, gate, members)
 	}
 	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
@@ -602,6 +606,38 @@ func (s *Service) admitMetaMembers(
 	}
 
 	return ctx, members, denied, nil
+}
+
+// recordAgentMCPProjectBoundaryShadow counts admitted private members outside
+// the agent's project. A failed observation never changes the request: this is
+// deliberately shadow-only until the per-organization enforcement switch is
+// consumed by the enforcement rollout.
+func (s *Service) recordAgentMCPProjectBoundaryShadow(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) {
+	repo := agentsrepo.New(s.db)
+	for _, member := range members {
+		if member.visibility == mcpservers.VisibilityPublic || (gate.agentProjectID.Valid && member.projectID == gate.agentProjectID.UUID) {
+			continue
+		}
+		state, ok := ctx.Value(agentProjectBoundaryShadowKey{}).(*agentProjectBoundaryShadowState)
+		if !ok || !state.first(member.serverID) {
+			continue
+		}
+		_, err := repo.RecordAgentMCPProjectBoundaryShadow(ctx, agentsrepo.RecordAgentMCPProjectBoundaryShadowParams{
+			OrganizationID:  gate.organizationID,
+			AgentID:         gate.agentID,
+			AgentProjectID:  gate.agentProjectID,
+			ServerID:        member.serverID,
+			ServerProjectID: member.projectID,
+		})
+		if err != nil {
+			logger.WarnContext(ctx, "record agent MCP project boundary shadow",
+				attr.SlogOrganizationID(gate.organizationID),
+				attr.SlogMandatoryAuthzPrincipalID(gate.agentID.String()),
+				attr.SlogResourceID(member.serverID.String()),
+				attr.SlogError(err),
+			)
+		}
+	}
 }
 
 // memberConnectDecision is the one connect decision for a server a caller

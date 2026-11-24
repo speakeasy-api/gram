@@ -39,6 +39,33 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
+-- name: RecordAgentMCPProjectBoundaryShadow :one
+INSERT INTO agent_mcp_project_boundary_shadow_counts (
+  organization_id,
+  agent_id,
+  agent_project_id,
+  server_id,
+  server_project_id
+) VALUES (
+  @organization_id,
+  @agent_id,
+  sqlc.narg('agent_project_id'),
+  @server_id,
+  @server_project_id
+)
+ON CONFLICT (organization_id, agent_id, server_id) DO UPDATE SET
+  agent_project_id = EXCLUDED.agent_project_id,
+  server_project_id = EXCLUDED.server_project_id,
+  request_count = agent_mcp_project_boundary_shadow_counts.request_count + 1,
+  last_observed_at = clock_timestamp()
+RETURNING *;
+
+-- name: ListAgentMCPProjectBoundaryShadowCounts :many
+SELECT *
+FROM agent_mcp_project_boundary_shadow_counts
+WHERE organization_id = @organization_id
+ORDER BY request_count DESC, agent_id, server_id;
+
 -- name: GetAgentNameIncludingDeleted :one
 -- Reads an agent's name even after it is deleted, for records written about
 -- it afterwards, such as its runtime's withdrawal in the audit log.

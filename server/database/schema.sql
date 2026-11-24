@@ -10681,6 +10681,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_builtin_backend_key
 ON mcp_servers (project_id, builtin_backend)
 WHERE builtin_backend IS NOT NULL AND deleted IS FALSE;
 
+-- Counts agent MCP requests that would lose a currently admitted private
+-- server when the agent's project boundary is enforced. Shadow mode keeps
+-- serving the member; this table supports organization-level impact review.
+CREATE TABLE IF NOT EXISTS agent_mcp_project_boundary_shadow_counts (
+  organization_id TEXT NOT NULL,
+  agent_id UUID NOT NULL,
+  agent_project_id UUID,
+  server_id UUID NOT NULL,
+  server_project_id UUID NOT NULL,
+  request_count BIGINT NOT NULL DEFAULT 1,
+  first_observed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_observed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT agent_mcp_project_boundary_shadow_counts_pkey PRIMARY KEY (organization_id, agent_id, server_id),
+  CONSTRAINT agent_mcp_project_boundary_shadow_counts_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT agent_mcp_project_boundary_shadow_counts_agent_project_fkey FOREIGN KEY (organization_id, agent_project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT agent_mcp_project_boundary_shadow_counts_server_project_fkey FOREIGN KEY (organization_id, server_project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT agent_mcp_project_boundary_shadow_counts_server_fkey FOREIGN KEY (server_project_id, server_id) REFERENCES mcp_servers (project_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN agent_mcp_project_boundary_shadow_counts.organization_id IS '@access: confidential';
+COMMENT ON COLUMN agent_mcp_project_boundary_shadow_counts.agent_id IS '@access: confidential';
+COMMENT ON COLUMN agent_mcp_project_boundary_shadow_counts.agent_project_id IS '@access: confidential';
+COMMENT ON COLUMN agent_mcp_project_boundary_shadow_counts.server_id IS '@access: confidential';
+COMMENT ON COLUMN agent_mcp_project_boundary_shadow_counts.server_project_id IS '@access: confidential';
+COMMENT ON COLUMN agent_mcp_project_boundary_shadow_counts.request_count IS '@access: confidential';
+COMMENT ON COLUMN agent_mcp_project_boundary_shadow_counts.first_observed_at IS '@access: confidential';
+COMMENT ON COLUMN agent_mcp_project_boundary_shadow_counts.last_observed_at IS '@access: confidential';
+
+CREATE INDEX IF NOT EXISTS agent_mcp_project_boundary_shadow_counts_org_agent_idx
+ON agent_mcp_project_boundary_shadow_counts (organization_id, agent_id);
+
 -- Upstream OAuth clients an MCP server is configured to use. Many-to-many:
 -- one client can serve several servers, and one server can offer several
 -- clients. Each client keeps its single remote session issuer, so the

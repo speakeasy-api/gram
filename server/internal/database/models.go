@@ -389,6 +389,25 @@ type AgentExecution struct {
 	Deleted bool
 }
 
+type AgentMcpProjectBoundaryShadowCount struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	AgentID uuid.UUID
+	// @access: confidential
+	AgentProjectID uuid.NullUUID
+	// @access: confidential
+	ServerID uuid.UUID
+	// @access: confidential
+	ServerProjectID uuid.UUID
+	// @access: confidential
+	RequestCount int64
+	// @access: confidential
+	FirstObservedAt pgtype.Timestamptz
+	// @access: confidential
+	LastObservedAt pgtype.Timestamptz
+}
+
 type AgentRoleAssignment struct {
 	// @access: confidential
 	ID uuid.UUID
