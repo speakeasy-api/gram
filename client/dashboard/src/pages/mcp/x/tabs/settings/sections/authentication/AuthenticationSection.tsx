@@ -429,13 +429,14 @@ function HostedNoUpstreamAction({
   const noUpstream =
     mutation.isSuccess || authentication.data?.status === "no_auth_required";
   return (
-    <Field>
-      <FieldLabel>Upstream authentication</FieldLabel>
-      <FieldDescription>
-        {noUpstream
+    <AuthRow
+      label="Upstream authentication"
+      hint={
+        noUpstream
           ? "No upstream authentication required. The server’s user sign-in settings are unchanged."
-          : "Assign an authorization server above, or confirm that this server does not need upstream authentication. This does not turn off user sign-in."}
-      </FieldDescription>
+          : "Assign an authorization server above, or confirm that this server does not need upstream authentication. This does not turn off user sign-in."
+      }
+    >
       {!noUpstream && (
         <Button
           type="button"
@@ -461,6 +462,6 @@ function HostedNoUpstreamAction({
           assigned to this server.
         </FieldError>
       )}
-    </Field>
+    </AuthRow>
   );
 }
