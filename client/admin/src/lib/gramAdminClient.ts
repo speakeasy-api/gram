@@ -37,6 +37,11 @@ import { buildAdminDisableUpstreamAuthEnforcementMutation } from "@gram/admin-cl
 import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
 import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
 import type { AdminUpstreamOAuthMigrationStatus } from "@gram/admin-client/models/components/adminupstreamoauthmigrationstatus";
+import { buildAdminListTailscaleOAuthMigrationQuery } from "@gram/admin-client/react-query/adminListTailscaleOAuthMigration.core";
+import { buildAdminRunTailscaleOAuthMigrationStepMutation } from "@gram/admin-client/react-query/adminRunTailscaleOAuthMigrationStep";
+import type { AdminTailscaleOAuthMigrationOrganization } from "@gram/admin-client/models/components/admintailscaleoauthmigrationorganization";
+import type { AdminTailscaleOAuthMigrationOrganizations } from "@gram/admin-client/models/components/admintailscaleoauthmigrationorganizations";
+import type { Step as TailscaleOAuthMigrationStep } from "@gram/admin-client/models/components/runtailscaleoauthmigrationsteprequestbody";
 import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
 import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
 import { buildAdminRepairInferenceKeyMutation } from "@gram/admin-client/react-query/adminRepairInferenceKey";
@@ -1116,6 +1121,34 @@ export function upstreamOAuthMigrationStatusQuery(
     queryFn: (context) => redirecting(generated.queryFn(context)),
     retry: false,
   });
+}
+
+export function tailscaleOAuthMigrationQuery(): UseQueryOptions<AdminTailscaleOAuthMigrationOrganizations> {
+  const generated = buildAdminListTailscaleOAuthMigrationQuery(
+    redirectingClient,
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+const generatedRunTailscaleOAuthMigrationStepMutation =
+  buildAdminRunTailscaleOAuthMigrationStepMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function runTailscaleOAuthMigrationStep(
+  organizationID: string,
+  step: TailscaleOAuthMigrationStep,
+): Promise<AdminTailscaleOAuthMigrationOrganization> {
+  return redirecting(
+    generatedRunTailscaleOAuthMigrationStepMutation.mutationFn({
+      request: { organizationId: organizationID, step },
+    }),
+  );
 }
 
 const generatedRunUpstreamOAuthMigrationMutation =

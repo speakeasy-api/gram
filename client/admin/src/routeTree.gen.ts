@@ -28,6 +28,7 @@ import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
 import { Route as SignupOffersRouteImport } from './routes/signup-offers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
+import { Route as TailscaleOauthMigrationRouteImport } from './routes/tailscale-oauth-migration'
 import { Route as UpstreamOauthMigrationRouteImport } from './routes/upstream-oauth-migration'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
@@ -154,6 +155,11 @@ const SignupOffersRoute = SignupOffersRouteImport.update({
 const StokenCalculatorRoute = StokenCalculatorRouteImport.update({
   id: '/stoken-calculator',
   path: '/stoken-calculator',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TailscaleOauthMigrationRoute = TailscaleOauthMigrationRouteImport.update({
+  id: '/tailscale-oauth-migration',
+  path: '/tailscale-oauth-migration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UpstreamOauthMigrationRoute = UpstreamOauthMigrationRouteImport.update({
@@ -359,6 +365,7 @@ export interface FileRoutesByFullPath {
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -407,6 +414,7 @@ export interface FileRoutesByTo {
   '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/platform-credentials/$credentialId': typeof PlatformCredentialsCredentialIdRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
@@ -457,6 +465,7 @@ export interface FileRoutesById {
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
+  '/tailscale-oauth-migration': typeof TailscaleOauthMigrationRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -512,6 +521,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
@@ -560,6 +570,7 @@ export interface FileRouteTypes {
     | '/platform-mcp-feedback'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/platform-credentials/$credentialId'
     | '/projects/$idOrSlug'
@@ -609,6 +620,7 @@ export interface FileRouteTypes {
     | '/remote-session-issuers'
     | '/signup-offers'
     | '/stoken-calculator'
+    | '/tailscale-oauth-migration'
     | '/upstream-oauth-migration'
     | '/users'
     | '/organizations/$idOrSlug'
@@ -663,6 +675,7 @@ export interface RootRouteChildren {
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   SignupOffersRoute: typeof SignupOffersRoute
   StokenCalculatorRoute: typeof StokenCalculatorRoute
+  TailscaleOauthMigrationRoute: typeof TailscaleOauthMigrationRoute
   UpstreamOauthMigrationRoute: typeof UpstreamOauthMigrationRoute
   UsersRoute: typeof UsersRouteWithChildren
 }
@@ -800,6 +813,13 @@ declare module '@tanstack/react-router' {
       path: '/stoken-calculator'
       fullPath: '/stoken-calculator'
       preLoaderRoute: typeof StokenCalculatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tailscale-oauth-migration': {
+      id: '/tailscale-oauth-migration'
+      path: '/tailscale-oauth-migration'
+      fullPath: '/tailscale-oauth-migration'
+      preLoaderRoute: typeof TailscaleOauthMigrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/upstream-oauth-migration': {
@@ -1210,6 +1230,7 @@ const rootRouteChildren: RootRouteChildren = {
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   SignupOffersRoute: SignupOffersRoute,
   StokenCalculatorRoute: StokenCalculatorRoute,
+  TailscaleOauthMigrationRoute: TailscaleOauthMigrationRoute,
   UpstreamOauthMigrationRoute: UpstreamOauthMigrationRoute,
   UsersRoute: UsersRouteWithChildren,
 }

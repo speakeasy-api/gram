@@ -464,6 +464,18 @@ type Service interface {
 	// Removes an organization's hooks version override so it follows the default
 	// pin again.
 	ClearOrganizationHooksRollout(context.Context, *ClearOrganizationHooksRolloutPayload) (res *AdminOrganizationHooksRollout, err error)
+	// Lists every organization with saved Tailscale OAuth credentials and where it
+	// stands in moving them to its organization key.
+	ListTailscaleOAuthMigration(context.Context, *ListTailscaleOAuthMigrationPayload) (res *AdminTailscaleOAuthMigrationOrganizations, err error)
+	// Runs one step of moving an organization's saved Tailscale OAuth credentials
+	// to its organization key. enroll provisions the organization key and starts
+	// dual_write; backfill seals every waiting credential with the organization
+	// key and verifies both copies; finalize moves to org_kms once the backfill
+	// and verification are clean and the minimum time in dual_write has passed;
+	// clear_platform_copies then destroys the platform-key copies; rollback
+	// returns a dual_write organization to platform_key. Each step is safe to run
+	// again.
+	RunTailscaleOAuthMigrationStep(context.Context, *RunTailscaleOAuthMigrationStepPayload) (res *AdminTailscaleOAuthMigrationOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -486,7 +498,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [128]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout"}
+var MethodNames = [130]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getHookClients", "getOrganizationHookFleet", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "listPlatformMcpFeedback", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants", "getProjectRedeployPreview", "redeployProject", "listCustomDomains", "listPlatformExternalCredentials", "getGcpIamPlatformCredential", "createGcpIamPlatformCredential", "updateGcpIamPlatformCredential", "verifyGcpIamPlatformCredential", "deleteGcpIamPlatformCredential", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "listAssistantOrganizations", "repairOrganizationAssistantAgentNames", "listOrganizationAssistants", "migrateOrganizationAssistantIdentities", "migrateOrganizationAssistantsToKit", "getHooksRollout", "setHooksRolloutDefault", "getOrganizationHooksRollout", "setOrganizationHooksRollout", "clearOrganizationHooksRollout", "listTailscaleOAuthMigration", "runTailscaleOAuthMigrationStep"}
 
 type AdminAssistantAgentNameRepairResult struct {
 	AssistantID string
@@ -2170,6 +2182,57 @@ type AdminStripeSubscriptionCandidate struct {
 	Status string
 }
 
+// AdminTailscaleOAuthMigrationOrganization is the result type of the admin
+// service runTailscaleOAuthMigrationStep method.
+type AdminTailscaleOAuthMigrationOrganization struct {
+	// The organization ID.
+	OrganizationID string
+	// The organization name.
+	Name string
+	// The organization slug.
+	Slug string
+	// The transition state.
+	State string
+	// The transition generation; 0 before the organization is enrolled.
+	Generation int64
+	// When the current state was entered. Absent before the organization is
+	// enrolled.
+	StateChangedAt *string
+	// Saved credentials with only a platform-key copy, which the backfill still
+	// has to seal with the organization key.
+	Waiting int64
+	// Saved credentials whose platform-key copy does not decrypt. They do not
+	// block finalize; clearing the platform-key copies destroys them.
+	Unreadable int64
+	// Saved credentials that still hold a platform-key copy.
+	PlatformCopies int64
+	// When the last backfill started.
+	LastBackfillStartedAt *string
+	// When the last backfill ended.
+	LastBackfillCompletedAt *string
+	// Why the last backfill stopped early. Never carries values or key material.
+	LastBackfillError *string
+	// When the last clean verification pass started.
+	LastVerifiedAt *string
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string
+	// Only returned by the backfill step: credentials whose two copies did not
+	// match, whose platform-key copy no longer decrypts beside an organization-key
+	// copy, or whose organization-key copy did not open, in the verification that
+	// step just ran. Above zero means no clean verification was recorded, so
+	// finalize stays blocked.
+	VerificationFailures *int64
+}
+
+// AdminTailscaleOAuthMigrationOrganizations is the result type of the admin
+// service listTailscaleOAuthMigration method.
+type AdminTailscaleOAuthMigrationOrganizations struct {
+	// Every organization with saved Tailscale OAuth credentials, by name.
+	Organizations []*AdminTailscaleOAuthMigrationOrganization
+	// How long an organization must stay in dual_write before it can be finalized.
+	MinimumDualWriteSeconds int64
+}
+
 // AdminUploadImageResult is the result type of the admin service
 // uploadPlatformImage method.
 type AdminUploadImageResult struct {
@@ -3610,6 +3673,12 @@ type ListSignupOffersResult struct {
 	Offers []*AdminSignupOffer
 }
 
+// ListTailscaleOAuthMigrationPayload is the payload type of the admin service
+// listTailscaleOAuthMigration method.
+type ListTailscaleOAuthMigrationPayload struct {
+	AdminSessionToken *string
+}
+
 // ListUpstreamOAuthMigrationOrganizationsPayload is the payload type of the
 // admin service listUpstreamOAuthMigrationOrganizations method.
 type ListUpstreamOAuthMigrationOrganizationsPayload struct {
@@ -3897,6 +3966,16 @@ type RetryRegistryPromotionDocsPayload struct {
 	PromotionID       string
 	DocsRevision      string
 	RetryKey          string
+}
+
+// RunTailscaleOAuthMigrationStepPayload is the payload type of the admin
+// service runTailscaleOAuthMigrationStep method.
+type RunTailscaleOAuthMigrationStepPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+	// The step to run.
+	Step string
 }
 
 // RunUpstreamOAuthMigrationPayload is the payload type of the admin service
