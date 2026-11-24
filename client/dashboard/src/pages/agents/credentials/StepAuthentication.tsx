@@ -105,7 +105,8 @@ export function StepAuthentication({
   // exactly as creating does.
   const displayed = displayedConnections(connections);
   // The server whose connection status is being refreshed, and then the one
-  // whose refreshed status is told once it is read.
+  // whose refreshed status is told once it is read. One refresh re-reads
+  // every row, so only one runs at a time.
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [refreshed, setRefreshed] = useState<string | null>(null);
   const refreshedConnection =
@@ -122,10 +123,15 @@ export function StepAuthentication({
     );
     toast[tone](message);
   }, [refreshed, refreshedConnection, refreshedName]);
-  const refresh = async (serverId: string) => {
+  const refresh = async (serverId: string, serverName: string) => {
     setRefreshing(serverId);
     try {
       await connections.refetch();
+    } catch {
+      toast.error(
+        `Could not check the connection to ${serverName}. Try again.`,
+      );
+      return;
     } finally {
       setRefreshing(null);
     }
@@ -408,9 +414,9 @@ export function StepAuthentication({
                       aria-label={`Refresh ${server.name} connection status`}
                       title="Refresh connection status"
                       aria-busy={refreshing === server.id}
-                      disabled={refreshing === server.id}
+                      disabled={refreshing !== null}
                       onClick={() => {
-                        void refresh(server.id);
+                        void refresh(server.id, server.name);
                       }}
                     >
                       <RefreshCw

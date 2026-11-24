@@ -526,7 +526,13 @@ describe("refreshing a connection's status", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
     expect(refreshButton().hasAttribute("disabled")).toBe(true);
     expect(refreshButton().getAttribute("aria-busy")).toBe("true");
+    expect(
+      refreshButton().querySelector("svg")?.classList.contains("animate-spin"),
+    ).toBe(true);
     await act(async () => finish());
+    expect(
+      refreshButton().querySelector("svg")?.classList.contains("animate-spin"),
+    ).toBe(false);
     expect(refreshButton().hasAttribute("disabled")).toBe(false);
   });
 
@@ -559,5 +565,55 @@ describe("refreshing a connection's status", () => {
       ),
     );
     expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("says the check failed when the re-read is rejected", async () => {
+    const refetch = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValue(new Error("network"));
+    render(row("ended", refetch), { wrapper: MemoryRouter });
+    fireEvent.click(screen.getByText("Example server"));
+    await act(async () => fireEvent.click(refreshButton()));
+    expect(toast.error).toHaveBeenCalledWith(
+      "Could not check the connection to Example server. Try again.",
+    );
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(refreshButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  it("holds every row's refresh until the running one lands", async () => {
+    const other = { ...connectable, id: "server_two", name: "Other server" };
+    let finish: () => void = () => {};
+    const refetch = vi.fn<() => Promise<void>>().mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(
+      <StepAuthentication
+        servers={[connectable, other]}
+        allServers={false}
+        onRemove={vi.fn<(id: string) => void>()}
+        connections={{
+          byServer: new Map([
+            [connectable.id, { status: "ended", sessions: [ownExpired] }],
+            [other.id, { status: "ended", sessions: [ownExpired] }],
+          ]),
+          refetch,
+        }}
+      />,
+      { wrapper: MemoryRouter },
+    );
+    fireEvent.click(screen.getByText("Example server"));
+    fireEvent.click(screen.getByText("Other server"));
+    fireEvent.click(refreshButton());
+    const otherRefresh = screen.getByRole("button", {
+      name: "Refresh Other server connection status",
+    });
+    expect(otherRefresh.hasAttribute("disabled")).toBe(true);
+    expect(otherRefresh.getAttribute("aria-busy")).toBe("false");
+    await act(async () => finish());
+    expect(otherRefresh.hasAttribute("disabled")).toBe(false);
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

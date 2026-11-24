@@ -138,6 +138,16 @@ export function refreshOutcome(
       tone: "warning",
       message: `The connection to ${serverName} is still expired. Reauthenticate to sign in again.`,
     };
+  // Some of its sign-ins may already be connected: say what is left, not
+  // that nothing is there.
+  if (connection.status === "missing" && (connection.connected ?? 0) > 0)
+    return {
+      tone: "info",
+      message: `Checked ${serverName}. ${
+        missingSignInsSentence({ name: serverName }, connection) ??
+        "It still needs another sign-in."
+      }`,
+    };
   if (connection.status === "missing")
     return {
       tone: "info",
