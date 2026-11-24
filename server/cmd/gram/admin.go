@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -429,7 +428,7 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("failed to create observers: %w", err)
 			}
 
-			redisClient, err := newRedisClient(ctx, redisClientOptions{
+			stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
 				enableTracing: false,
@@ -437,8 +436,7 @@ func newAdminCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
-
-			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, stores.Ops)
 			if err != nil {
 				return err
 			}
@@ -504,8 +502,8 @@ func newAdminCommand() *cli.Command {
 			mux.Use(admin.SessionMiddleware)
 
 			adminWorkOSClient := newAdminWorkOSOrganizationCreator(ctx, logger, guardianPolicy, c)
-			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, redisClient, c, staffOrg)
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			adminOpenRouter := newAdminOpenRouter(ctx, logger, tracerProvider, guardianPolicy, db, stores, c, staffOrg)
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, stores.EvictableCache)
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			authz.SetUpstreamSelectorWriteGate(newAdminUpstreamSelectorWriteGate(ctx, c, logger, posthogClient))
 			mcpServerURL := siteURL
@@ -544,7 +542,7 @@ func newAdminCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService, staffOrg)
+			adminService := admin.NewService(logger, tracerProvider, db, stores.AuthCache, stores.EvictableCache, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chReadDB), telemetry.NewMCPServerHealth(db, chReadDB), siteURL, registryService, staffOrg)
 			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(logger, chDB))
 			var projectRedeployer admin.ProjectRedeployer
 			if temporalEnv != nil {
@@ -560,7 +558,7 @@ func newAdminCommand() *cli.Command {
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chReadDB))
-			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
+			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(stores.Ops))
 			hooksVersionPolicy, err := plugins.HooksVersionPolicy()
 			if err != nil {
 				return fmt.Errorf("hooks version policy: %w", err)
@@ -617,7 +615,7 @@ func newAdminCommand() *cli.Command {
 				}
 				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled")}
 				signer := sessiontokens.NewSigner(key)
-				staffCache := cache.NewRedisCacheAdapter(redisClient)
+				staffCache := stores.AuthCache
 				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, staffCache, adminService.Verifier(), adminEncryption, signer, writes, logger)
 				if err != nil {
 					return fmt.Errorf("initialize staff Admin MCP OAuth: %w", err)
@@ -703,7 +701,7 @@ func newAdminCommand() *cli.Command {
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{{Name: "api", Resource: healthzEndpoint}},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "default", Resource: db}},
-					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
+					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: stores.Auth}},
 					temporalHealth,
 				))
 				if err != nil {

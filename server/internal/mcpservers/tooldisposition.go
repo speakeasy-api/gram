@@ -13,6 +13,6 @@ import (
 type ToolDispositionCache = tooldisposition.Cache
 
 // NewToolDispositionCache creates a shared tool annotation cache.
-func NewToolDispositionCache(logger *slog.Logger, db *pgxpool.Pool, c cache.Cache) *ToolDispositionCache {
+func NewToolDispositionCache(logger *slog.Logger, db *pgxpool.Pool, c cache.EvictableCache) *ToolDispositionCache {
 	return tooldisposition.New(logger, db, c)
 }

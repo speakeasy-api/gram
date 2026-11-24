@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ func TestRegistrySurvivesLocalReseed(t *testing.T) {
 	// A fresh deployment needs no starter import, and tenant seeding leaves it empty.
 	seedLocalPostgres(ctx, t, db, LocalSpec())
 	blob := assetstest.NewTestBlobStore(t)
-	require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, nil, LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}))
+	require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, LocalCaches{}, LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}))
 	page, err := s.List(ctx, mcpregistry.ListOptions{})
 	require.NoError(t, err)
 	require.Empty(t, page.Entries)
@@ -40,7 +41,7 @@ func TestRegistrySurvivesLocalReseed(t *testing.T) {
 	require.NoError(t, err)
 	for range 2 {
 		seedLocalPostgres(ctx, t, db, LocalSpec())
-		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, nil, LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}))
+		require.NoError(t, RunLocalFixtures(ctx, testenv.NewLogger(t), db, blob, LocalCaches{}, LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}))
 		got, err := s.Get(ctx, first.ID)
 		require.NoError(t, err)
 		require.Equal(t, first, got)

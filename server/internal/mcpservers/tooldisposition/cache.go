@@ -109,7 +109,7 @@ type Cache struct {
 }
 
 // New creates a tool annotation cache.
-func New(logger *slog.Logger, db *pgxpool.Pool, c cache.Cache) *Cache {
+func New(logger *slog.Logger, db *pgxpool.Pool, c cache.EvictableCache) *Cache {
 	logger = logger.With(attr.SlogComponent("tool-disposition"))
 	return &Cache{
 		logger:      logger,

@@ -19,7 +19,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -49,7 +48,8 @@ type mcpRemoteSessionDependencies struct {
 // calls (token exchange, refresh, revocation, dynamic client registration) for
 // remote session issuers bound to a tunneled MCP server, instead of dialing
 // them from cloud egress.
-func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisClient *redis.Client) (*tunnelrouting.HTTPClient, error) {
+// The route store is the tunnel gateway's, on the ops role.
+func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, opsClient *redis.Client) (*tunnelrouting.HTTPClient, error) {
 	// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a typo
 	// here would strand tunnels fail-closed with no signal. Reject
 	// misconfiguration at startup instead.
@@ -59,22 +59,21 @@ func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisC
 			return nil, fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
 		}
 	}
-	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
+	return tunnelrouting.NewHTTPClient(route.NewRedis(opsClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
 }
 
-func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner, protectedResources *protectedresource.Prober, features feature.Provider, connections *mcpconnectionattempts.Recorder, orgEncryption orgEncryptionDeps) (*mcpRemoteSessionDependencies, error) {
-	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
+func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, stores *redisStores, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner, protectedResources *protectedresource.Prober, features feature.Provider, connections *mcpconnectionattempts.Recorder, orgEncryption orgEncryptionDeps) (*mcpRemoteSessionDependencies, error) {
+	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(stores.Auth))
 	if err != nil {
 		return nil, fmt.Errorf("initialize remote session id token key resolver: %w", err)
 	}
 	verifier := remotesessions.NewIDTokenVerifier(idTokenKeys)
 	refresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnels, auditLogger)
 	enricher := remotesessions.NewSessionEnricher(logger, enc, guardianPolicy, idTokenKeys,
-		ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), tunnels, refresher)
-	sharedCache := cache.NewRedisCacheAdapter(redisClient)
-	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, sharedCache, serverURL,
+		ratelimit.New(ratelimit.NewRedisStore(stores.Auth), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), tunnels, refresher)
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, stores.AuthCache, serverURL,
 		remotesessions.WithClientCredentialSource(func(m *remotesessions.ChallengeManager) remotesessions.ClientCredentialSource {
-			return clientcredentials.New(logger, db, enc, m, sharedCache)
+			return clientcredentials.New(logger, db, enc, m, stores.AuthCache)
 		}),
 		remotesessions.WithPrivateAuthorityValidator(func(ctx context.Context, state remotesessions.RemoteLoginState) error {
 			return mcp.ValidateRemoteLoginPrivateAuthority(ctx, db, logger, state)

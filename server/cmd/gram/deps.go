@@ -82,6 +82,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/lake"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
@@ -91,6 +92,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/marketplacetokens"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientsecrets"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/upstreamtokens"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -475,35 +477,186 @@ type redisClientOptions struct {
 	enableTracing bool
 }
 
-func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client, error) {
+// redisStores holds one Redis client and one cache adapter per role (see
+// redisrole for which key families each role holds). Every process builds it
+// once and hands each component the role of the families it stores.
+type redisStores struct {
+	// Auth is the client for authentication and session state. It is also
+	// the client for every health check: a process that cannot reach it cannot
+	// authenticate anyone.
+	Auth *redis.Client
+
+	// AuthCache is the cache adapter over Auth. It checks every key against
+	// the auth families.
+	AuthCache *cache.RoleRedisAdapter
+
+	// Ops is the client for operational state: queues, routes, hooks, dedupe,
+	// locks and the rate limits that are not on auth paths.
+	Ops *redis.Client
+
+	// OpsSwitchRole is the role of the instance switch the Ops client follows,
+	// so a client cloned from its options (the reply inbox) follows the same
+	// one.
+	OpsSwitchRole string
+
+	// OpsCache is the cache adapter over Ops. It checks every key against the
+	// ops families.
+	OpsCache *cache.RoleRedisAdapter
+
+	// Evictable is the client for key families that rebuild on a miss.
+	Evictable redisrole.EvictableClient
+
+	// EvictableCache is the cache adapter over Evictable. It checks every key
+	// against the evictable families.
+	EvictableCache *cache.EvictableRedisAdapter
+}
+
+// mcpRoles is the MCP service's view of the stores.
+func (s *redisStores) mcpRoles() mcp.RedisRoles {
+	return mcp.RedisRoles{
+		Auth:            s.AuthCache,
+		AuthClient:      s.Auth,
+		Ops:             s.OpsCache,
+		OpsClient:       s.Ops,
+		Evictable:       s.EvictableCache,
+		EvictableClient: s.Evictable,
+	}
+}
+
+// Close closes every distinct client once.
+func (s *redisStores) Close() error {
+	var errs []error
+	closed := map[*redis.Client]bool{}
+	for _, client := range []*redis.Client{s.Auth, s.Ops, s.Evictable.Client} {
+		if client == nil || closed[client] {
+			continue
+		}
+		closed[client] = true
+		errs = append(errs, client.Close())
+	}
+	return errors.Join(errs...)
+}
+
+// newRedisStores builds the three roles. Roles without an endpoint or
+// an armed switch share the client configured by the cache flags.
+func newRedisStores(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, opts redisClientOptions) (*redisStores, error) {
+	type roleBinding struct {
+		prefix string
+		role   string
+	}
+	bindings := []roleBinding{
+		{prefix: "GRAM_REDIS_AUTH_", role: redisswitch.RoleAuth},
+		{prefix: "GRAM_REDIS_OPS_", role: redisswitch.RoleOps},
+		{prefix: "GRAM_REDIS_EVICTABLE_", role: ""},
+	}
+	environment := os.Getenv("GRAM_ENVIRONMENT")
+	modeName := os.Getenv("GRAM_REDIS_ROLE_GUARD")
+	if modeName == "" && environment == "dev" {
+		modeName = "enforce"
+	}
+	mode, err := redisrole.ParseGuardMode(modeName)
+	if err != nil {
+		return nil, err
+	}
+	guard := redisrole.NewGuard(logger, meterProvider, mode)
+	stores := &redisStores{}
+	destinations := []**redis.Client{&stores.Auth, &stores.Ops, &stores.Evictable.Client}
+	fallback := redisconn.PasswordEndpoint(strings.TrimSpace(opts.redisAddr), opts.redisPassword)
+	fallbackNext := redisswitch.NextFromEnv()
+	requiresExplicitAddress := environment == "dev" || environment == "prod"
+	for _, binding := range bindings {
+		requiresExplicitAddress = requiresExplicitAddress || redisconn.EndpointFromEnv(binding.prefix).Addr != ""
+	}
+	var shared *redis.Client
+	var tokens oauth2.TokenSource
+	for i, binding := range bindings {
+		current := redisconn.EndpointFromEnv(binding.prefix)
+		if current.Addr == fallback.Addr {
+			current = redisconn.Endpoint{}
+		}
+		var next redisconn.Endpoint
+		if binding.role != "" {
+			next = redisconn.EndpointFromEnv(binding.prefix + "NEXT_")
+		}
+		effectiveAddr := current.Addr
+		if effectiveAddr == "" {
+			effectiveAddr = fallback.Addr
+		}
+		if next.Addr == effectiveAddr {
+			next = redisconn.Endpoint{}
+		}
+		role := binding.role
+		if current.Addr == "" && next.Addr == "" {
+			if fallback.Addr == "" && requiresExplicitAddress {
+				return nil, errors.Join(fmt.Errorf("%sADDR is required without a Sessions fallback", binding.prefix), stores.Close())
+			}
+			role = redisswitch.DefaultRole
+			next = fallbackNext
+			if shared == nil {
+				var err error
+				shared, err = newRedisClient(ctx, opts.enableTracing, redisswitch.Binding{
+					Role: role, Current: fallback, Next: next, Tokens: nil,
+				})
+				if err != nil {
+					return nil, errors.Join(err, stores.Close())
+				}
+			}
+			*destinations[i] = shared
+		} else {
+			if current.Addr == "" {
+				current = fallback
+			}
+			if err := current.Validate(); err != nil {
+				return nil, errors.Join(fmt.Errorf("configure %s endpoint: %w", binding.prefix, err), stores.Close())
+			}
+			if tokens == nil && (current.Auth == redisconn.AuthIAM || (next.Addr != "" && next.Auth == redisconn.AuthIAM)) {
+				var err error
+				tokens, err = redisconn.NewIAMTokenSource(ctx)
+				if err != nil {
+					return nil, errors.Join(fmt.Errorf("initialize Redis credentials: %w", err), stores.Close())
+				}
+			}
+			client, err := newRedisClient(ctx, opts.enableTracing, redisswitch.Binding{
+				Role: role, Current: current, Next: next, Tokens: tokens,
+			})
+			if err != nil {
+				return nil, errors.Join(fmt.Errorf("initialize %s endpoint: %w", binding.prefix, err), stores.Close())
+			}
+			*destinations[i] = client
+		}
+		if binding.role == redisswitch.RoleOps && next.Addr != "" && next.Addr != effectiveAddr {
+			stores.OpsSwitchRole = role
+		}
+	}
+	if err := stores.Auth.Ping(ctx).Err(); err != nil {
+		return nil, errors.Join(fmt.Errorf("connect to Auth Redis: %w", err), stores.Close())
+	}
+	stores.AuthCache = cache.NewRoleRedisAdapter(stores.Auth, redisrole.RoleAuth, guard)
+	stores.OpsCache = cache.NewRoleRedisAdapter(stores.Ops, redisrole.RoleOps, guard)
+	stores.EvictableCache = cache.NewEvictableRedisAdapter(stores.Evictable, guard)
+	return stores, nil
+}
+
+func newRedisClient(ctx context.Context, enableTracing bool, binding redisswitch.Binding) (*redis.Client, error) {
 	db := 0
 	redisClient, err := redisswitch.NewClient(ctx, slog.Default(), &redis.Options{
 		DB:              db,
-		DialTimeout:     1 * time.Second,
+		DialTimeout:     3 * time.Second,
 		ReadTimeout:     300 * time.Millisecond,
 		WriteTimeout:    1 * time.Second,
 		DisableIdentity: true,
-	}, redisswitch.Binding{
-		Role:    redisswitch.DefaultRole,
-		Current: redisconn.PasswordEndpoint(opts.redisAddr, opts.redisPassword),
-		Next:    redisswitch.NextFromEnv(),
-		Tokens:  nil,
-	})
+	}, binding)
 	if err != nil {
 		return nil, fmt.Errorf("create redis client: %w", err)
 	}
 
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("redis connection failed: %w", err)
-	}
-
-	if opts.enableTracing {
+	if enableTracing {
 		attrs := redisotel.WithAttributes(
 			semconv.DBSystemNameRedis,
 			semconv.DBNamespace(fmt.Sprintf("%d", db)),
 		)
 		if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
-			return nil, fmt.Errorf("failed to instrument redis client: %w", err)
+			return nil, errors.Join(fmt.Errorf("instrument redis client: %w", err), redisClient.Close())
 		}
 	}
 
@@ -659,7 +812,7 @@ func newBillingProvider(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	guardianPolicy *guardian.Policy,
-	redisClient *redis.Client,
+	stores *redisStores,
 	posthogClient *posthog.Posthog,
 	stripeClient stripeclient.Client,
 	db *pgxpool.Pool,
@@ -696,7 +849,7 @@ func newBillingProvider(
 			}),
 		)
 
-		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
+		pclient := polar.NewClient(guardianPolicy, polarsdk, polarAPIKey, logger, tracerProvider, stores.OpsCache, stores.EvictableCache, catalog, c.String("polar-webhook-secret"))
 		tracker := tracking.New(pclient, posthogClient, logger)
 		return pclient, tracker, nil
 	case c.String("environment") == "local":
@@ -958,7 +1111,7 @@ func newAdminOpenRouter(
 	tracerProvider trace.TracerProvider,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
-	redisClient *redis.Client,
+	stores *redisStores,
 	c *cli.Context,
 	staffOrg staff.Organization,
 ) admin.AdminOpenRouter {
@@ -986,7 +1139,7 @@ func newAdminOpenRouter(
 		db,
 		env,
 		provisioningKey,
-		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
+		productfeatures.NewClient(logger, tracerProvider, db, stores.EvictableCache),
 		nil,
 		encryptionClient,
 		staffOrg,
@@ -1209,7 +1362,7 @@ func newTelemetryLogger(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
-	cacheImpl cache.Cache,
+	cacheImpl cache.EvictableCache,
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
@@ -1239,7 +1392,7 @@ func newTriggersApp(
 	siteURL *url.URL,
 	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
-	cacheImpl cache.Cache,
+	cacheImpl cache.EvictableCache,
 	identities *assistantidentity.Service,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)

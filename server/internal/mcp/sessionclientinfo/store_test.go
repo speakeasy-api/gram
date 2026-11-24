@@ -5,13 +5,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/redisrole"
 )
 
 func newTestStore(t *testing.T, recordCap int) *Store {
 	t.Helper()
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	return NewStore(client, recordCap)
+	return NewStore(redisrole.EvictableClient{Client: client}, recordCap)
 }
 
 func TestStoreLoadRoundTrip(t *testing.T) {
@@ -177,7 +179,7 @@ func TestCapBoundsRecordsPerMCPServer(t *testing.T) {
 func TestStoreWithoutRedisIsInert(t *testing.T) {
 	t.Parallel()
 
-	store := NewStore(nil, 0)
+	store := NewStore(redisrole.EvictableClient{Client: nil}, 0)
 
 	require.NoError(t, store.Store(t.Context(), uuid.New(), "widgets", "session-1", Info{
 		Name:    "claude-code",

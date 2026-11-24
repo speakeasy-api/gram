@@ -513,7 +513,7 @@ func newTestMinter(t *testing.T, ti *testInstance) *clientcredentials.Minter {
 
 	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), ti.conn, enc, policy, nil, ti.redisCache, serverURL)
 
-	return clientcredentials.New(logger, ti.conn, enc, challenges, ti.redisCache)
+	return clientcredentials.New(logger, ti.conn, enc, challenges, ti.evictableCache)
 }
 
 func TestCreateClient_EmptyCredentialOwnerIsSubject(t *testing.T) {

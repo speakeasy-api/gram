@@ -254,13 +254,13 @@ func (s *Service) recordConsentPage(
 
 // recordConsentProblem folds reloads of an expired-catalog page into one row per attempt; a cache failure records it.
 func (s *Service) recordConsentProblem(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, problem mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
-	if problem != mcpconnectionattempts.CodeConnectionCatalogExpired || s.userSessionRefreshReplayCoordination == nil || attempt.IsZero() {
+	if problem != mcpconnectionattempts.CodeConnectionCatalogExpired || s.connectionAttemptCache == nil || attempt.IsZero() {
 		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, opts...)
 		return
 	}
 	key := "connectionAttemptCatalogExpired:" + attempt.ID().String()
 	cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
-	won, err := s.userSessionRefreshReplayCoordination.Add(cacheCtx, key, connectionAttemptEndTTL)
+	won, err := s.connectionAttemptCache.Add(cacheCtx, key, connectionAttemptEndTTL)
 	cancel()
 	switch {
 	case err != nil:
@@ -276,7 +276,7 @@ func (s *Service) recordConsentProblem(ctx context.Context, logger *slog.Logger,
 	// Not accepted, so the next render offers it again.
 	cacheCtx, cancel = context.WithTimeout(ctx, memberStatusTimeout)
 	defer cancel()
-	if err := s.userSessionRefreshReplayCoordination.Delete(cacheCtx, key); err != nil {
+	if err := s.connectionAttemptCache.Delete(cacheCtx, key); err != nil {
 		logger.WarnContext(ctx, "forget expired catalog row", attr.SlogError(err))
 	}
 }
@@ -349,7 +349,7 @@ func (s *Service) recordMemberStatuses(ctx context.Context, logger *slog.Logger,
 // forgetMemberStatuses clears rows the recorder did not accept, so the next render records them again.
 // Rows accepted but lost later in the writer are not retried.
 func (s *Service) forgetMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, dropped []memberStatus) {
-	store, ok := s.userSessionRefreshReplayCoordination.(memberStatusCache)
+	store, ok := s.connectionAttemptCache.(memberStatusCache)
 	if !ok || len(dropped) == 0 {
 		return
 	}
@@ -373,7 +373,7 @@ func (s *Service) forgetMemberStatuses(ctx context.Context, logger *slog.Logger,
 
 // changedMemberStatuses keeps members whose status changed this attempt; a cache failure keeps all.
 func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, statuses []memberStatus) []memberStatus {
-	store, ok := s.userSessionRefreshReplayCoordination.(memberStatusCache)
+	store, ok := s.connectionAttemptCache.(memberStatusCache)
 	if !ok || attempt.IsZero() || len(statuses) == 0 {
 		return statuses
 	}
@@ -441,9 +441,9 @@ func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger,
 	}
 	key := refusedConsentKey(attempt, clientID, signInID, code)
 	marked := false
-	if s.userSessionRefreshReplayCoordination != nil {
+	if s.connectionAttemptCache != nil {
 		cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
-		won, err := s.userSessionRefreshReplayCoordination.Add(cacheCtx, key, connectionAttemptEndTTL)
+		won, err := s.connectionAttemptCache.Add(cacheCtx, key, connectionAttemptEndTTL)
 		cancel()
 		switch {
 		case err != nil:
@@ -460,7 +460,7 @@ func (s *Service) recordRefusedConsent(ctx context.Context, logger *slog.Logger,
 	// Not accepted, so the next render offers it again.
 	cacheCtx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
 	defer cancel()
-	if err := s.userSessionRefreshReplayCoordination.Delete(cacheCtx, key); err != nil {
+	if err := s.connectionAttemptCache.Delete(cacheCtx, key); err != nil {
 		logger.WarnContext(ctx, "forget ineligible consent row", attr.SlogError(err))
 	}
 }

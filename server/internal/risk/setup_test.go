@@ -138,6 +138,9 @@ type countingCache struct {
 	deletes []string
 }
 
+// EvictableRole lets the fake stand in for the evictable cache.
+func (*countingCache) EvictableRole() {}
+
 func (c *countingCache) Delete(ctx context.Context, key string) error {
 	c.mu.Lock()
 	c.deletes = append(c.deletes, key)
@@ -303,7 +306,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	if ti.riskPublisher == nil {
 		ti.riskPublisher = gcp.NewNoopPublisher[*meteringv1.MeterReading]()
 	}
-	ti.service = risk.NewService(logger, tracerProvider, ti.conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
+	ti.service = risk.NewService(logger, tracerProvider, ti.conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, testenv.NewEvictableCache(t, redisClient), "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)

@@ -18,7 +18,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -251,7 +250,8 @@ func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
-	redisClient *redis.Client,
+	authCache AuthCache,
+	evictableCache cache.EvictableCache,
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
@@ -274,7 +274,7 @@ func NewService(
 		trialNotifier = trialemails.NoopNotifier{}
 	}
 
-	adminCache := cache.NewRedisCacheAdapter(redisClient)
+	adminCache := authCache
 	sessionStore := NewSessionStore(
 		cache.NewTypedObjectCache[Session](
 			logger.With(attr.SlogCacheNamespace("admin_session")),
@@ -315,7 +315,7 @@ func NewService(
 		billing:                  billing,
 		supportCoverage:          supportCoverage,
 		mcpServerHealth:          mcpServerHealth,
-		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		HookClientsCache:         NewHookClientsCache(logger, evictableCache, nil, nil),
 		hookFleet:                nil,
 		hookFleetVersions:        hookversions.Policy{Latest: nil, Minimum: nil},
 		customDomainTargetSuffix: "",

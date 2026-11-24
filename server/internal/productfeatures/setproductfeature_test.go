@@ -440,7 +440,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		isEnabled, err := client.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureLogs)
@@ -471,7 +471,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		isEnabled, err := client.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureLogs)
@@ -495,7 +495,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		// First call should hit database and cache the result
@@ -521,7 +521,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		// This client should also get the cached false value
@@ -545,7 +545,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 			testenv.NewLogger(t),
 			testenv.NewTracerProvider(t),
 			ti.conn,
-			redisClient,
+			testenv.NewEvictableCache(t, redisClient),
 		)
 
 		// Enable the feature
@@ -588,7 +588,7 @@ func TestProductFeaturesClient_IsFeatureEnabledUncachedReturnsCancellation(t *te
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		ti.conn,
-		redisClient,
+		testenv.NewEvictableCache(t, redisClient),
 	)
 
 	canceled, cancel := context.WithCancel(ctx)
@@ -611,7 +611,7 @@ func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		ti.conn,
-		redisClient,
+		testenv.NewEvictableCache(t, redisClient),
 	)
 	client.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills, false)
 

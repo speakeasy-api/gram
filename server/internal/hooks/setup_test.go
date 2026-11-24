@@ -194,7 +194,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	spendGateCache := &namespacedSpendGateCache{
 		Cache:     cacheAdapter,
-		namespace: "hooks-spend-gate-test:" + uuid.NewString(),
+		namespace: testenv.TestRedisKeyPrefix + "hooks-spend-gate:" + uuid.NewString(),
 	}
 	t.Cleanup(func() {
 		require.NoError(t, spendGateCache.DeleteByPrefix(context.Background(), ""))
@@ -214,7 +214,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	efficacySignals := &recordingEfficacySignaler{mu: sync.Mutex{}, err: nil, signals: nil}
 	identitySignals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, testenv.NewEvictableCache(t, redisClient), serverURL)
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	spendCelEngine, err := spendcelenv.New()
 	require.NoError(t, err)

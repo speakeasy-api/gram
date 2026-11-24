@@ -31,7 +31,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.sessionManager,
 		testInstance.serverURL,
 		testInstance.siteURL,
-		testInstance.cacheAdapter,
+		testInstance.evictableCache,
 		authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient()),
 		testInstance.audit,
 		nil,

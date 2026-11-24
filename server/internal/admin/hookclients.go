@@ -144,7 +144,7 @@ type HookClientsCache struct {
 }
 
 // NewHookClientsCache uses the same cache keys for HTTP reads and scheduled refreshes.
-func NewHookClientsCache(logger *slog.Logger, storage cache.Cache, reader HookClientsReader, devices DeviceAgentVersionsReader) *HookClientsCache {
+func NewHookClientsCache(logger *slog.Logger, storage cache.EvictableCache, reader HookClientsReader, devices DeviceAgentVersionsReader) *HookClientsCache {
 	return &HookClientsCache{
 		logger:                logger,
 		hookClients:           reader,

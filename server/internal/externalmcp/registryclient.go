@@ -45,7 +45,7 @@ type RegistryClient struct {
 }
 
 // NewRegistryClient creates a new registry client.
-func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, cacheImpl cache.Cache) *RegistryClient {
+func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, cacheImpl cache.EvictableCache) *RegistryClient {
 	return &RegistryClient{
 		policy:     guardianPolicy,
 		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),

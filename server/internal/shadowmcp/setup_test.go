@@ -12,7 +12,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -60,7 +59,7 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, err)
 
 	logger := testenv.NewLogger(t)
-	cacheImpl := cache.NewRedisCacheAdapter(redisClient)
+	cacheImpl := testenv.NewEvictableCache(t, redisClient)
 	client := shadowmcp.NewClient(logger, conn, cacheImpl, nil)
 
 	orgID := "test-org-" + uuid.NewString()[:8]

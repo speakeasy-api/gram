@@ -162,7 +162,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 		ti.sessionManager,
 		ti.serverURL,
 		ti.siteURL,
-		ti.cacheAdapter,
+		ti.evictableCache,
 		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
 		ti.audit,
 		nil,

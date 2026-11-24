@@ -99,7 +99,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	fixture := orgencryptiontest.New(t, conn)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient))
 
 	service := orgencryptionapi.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, audit.NewLogger(), fixture.Provisioner, features, ratelimit.NewRedisStore(redisClient))
 

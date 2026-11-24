@@ -28,7 +28,7 @@ type ContextWindowResolver struct {
 	baseURL    string
 }
 
-func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.Cache) *ContextWindowResolver {
+func NewContextWindowResolver(logger *slog.Logger, guardianPolicy *guardian.Policy, cacheImpl cache.EvictableCache) *ContextWindowResolver {
 	component := logger.With(attr.SlogComponent("openrouter_context_window"))
 	return &ContextWindowResolver{
 		logger:     component,

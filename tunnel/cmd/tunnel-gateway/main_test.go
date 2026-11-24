@@ -1,10 +1,47 @@
 package main
 
 import (
+	"log/slog"
 	"testing"
+	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRouteStoreUsesPinnedOperationsEndpoint(t *testing.T) {
+	ops := miniredis.RunT(t)
+	t.Setenv("TUNNEL_REDIS_ADDR", "")
+	t.Setenv("GRAM_REDIS_OPS_ADDR", ops.Addr())
+	t.Setenv("GRAM_REDIS_OPS_NEXT_ADDR", ops.Addr())
+	t.Setenv("GRAM_REDIS_OPS_PASSWORD", "")
+	t.Setenv("GRAM_REDIS_OPS_AUTH_MODE", "none")
+	t.Setenv("GRAM_REDIS_OPS_CA_CERT", "")
+
+	store, err := buildRouteStore(t.Context(), slog.Default())
+	require.NoError(t, err)
+	require.NoError(t, store.Publish(t.Context(), "test-tunnel", "gateway:8091", time.Minute))
+
+	addresses, err := store.Candidates(t.Context(), "test-tunnel")
+	require.NoError(t, err)
+	require.Equal(t, []string{"gateway:8091"}, addresses)
+}
+
+func TestRouteStoreUsesSessionsCredentialsWhenRepointed(t *testing.T) {
+	sessions := miniredis.RunT(t)
+	sessions.RequireAuth("sessions-password")
+	t.Setenv("TUNNEL_REDIS_ADDR", sessions.Addr())
+	t.Setenv("TUNNEL_REDIS_PASSWORD", "sessions-password")
+	t.Setenv("GRAM_REDIS_OPS_ADDR", sessions.Addr())
+	t.Setenv("GRAM_REDIS_OPS_AUTH_MODE", "iam")
+	t.Setenv("GRAM_REDIS_OPS_CA_CERT", "stale Valkey CA")
+	t.Setenv("GRAM_REDIS_OPS_NEXT_ADDR", sessions.Addr())
+	t.Setenv("GRAM_REDIS_OPS_NEXT_AUTH_MODE", "iam")
+
+	store, err := buildRouteStore(t.Context(), slog.Default())
+	require.NoError(t, err)
+	require.NoError(t, store.Publish(t.Context(), "test-tunnel", "gateway:8091", time.Minute))
+}
 
 func TestParseMaxSessionsDefaultsOnEmptyOrZero(t *testing.T) {
 	empty, err := parseMaxSessions("")

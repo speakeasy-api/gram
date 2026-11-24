@@ -19,7 +19,7 @@ func TestAccountTypeCacheFailureReturnsCommittedResult(t *testing.T) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	redisClient.AddHook(failAccountTypeCacheSetHook{})
-	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, redisClient)
+	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), db, testenv.NewEvictableCache(t, redisClient))
 	updated, err := svc.changeAccountTypes(ctx, []string{id}, "enterprise", nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{id}, updated)

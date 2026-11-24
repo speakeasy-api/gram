@@ -785,7 +785,7 @@ func TestLogRelayHandlerDoesNotDeliverForgedConnectionLogs(t *testing.T) {
 		require.True(t, ok)
 		normalized = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	transform := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, db, cache.NoopCache)
+	transform := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, db, cache.NoopEvictableCache)
 	require.NoError(t, transform.Handle(t.Context(), inbound[0], gcp.MessageMetadata{}))
 	require.NotNil(t, normalized)
 

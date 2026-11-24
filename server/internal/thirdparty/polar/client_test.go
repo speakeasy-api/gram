@@ -24,6 +24,7 @@ func TestNewClient_HTTPTimeoutAccommodatesSlowMeterQueries(t *testing.T) {
 		testenv.NewLogger(t),
 		tracerProvider,
 		nil,
+		nil,
 		&Catalog{
 			ProductIDBase:       "prod_base",
 			ProductIDPro:        "prod_pro",

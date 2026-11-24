@@ -12,7 +12,6 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -202,7 +201,7 @@ func TestUserInfoResolver_HydratesAndCachesUntilExpiry(t *testing.T) {
 	suffix := "cache_" + uuid.New().String()[:8]
 	seed := seedDirectorySnapshotData(t, ctx, conn, suffix)
 
-	resolver := telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+	resolver := telemetry.NewUserInfoResolver(logger, conn, testenv.NewEvictableCache(t, redisClient))
 
 	info, snapshot := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfoByID(seed.userID))
 	require.Equal(t, seed.userID, info.UserID())
@@ -247,7 +246,7 @@ func TestUserInfoResolver_EmptySnapshotForUnknownUser(t *testing.T) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	resolver := telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+	resolver := telemetry.NewUserInfoResolver(logger, conn, testenv.NewEvictableCache(t, redisClient))
 
 	info, snapshot := resolver.Hydrate(ctx, "org_unknown", telemetry.UserInfoByID("user_unknown"))
 	require.Equal(t, "user_unknown", info.UserID())

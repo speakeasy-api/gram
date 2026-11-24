@@ -55,7 +55,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -453,7 +452,7 @@ func newStreamsCommand() *cli.Command {
 			}
 			defer replicaDB.Close()
 
-			redisClient, err := newRedisClient(ctx, redisClientOptions{
+			stores, err := newRedisStores(ctx, logger, meterProvider, redisClientOptions{
 				redisAddr:     c.String("redis-cache-addr"),
 				redisPassword: c.String("redis-cache-password"),
 				enableTracing: false,
@@ -462,14 +461,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
 
-			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, stores.Ops)
 			if err != nil {
 				return err
 			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 
-			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, stores.EvictableCache)
 			assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{assetsBackend: c.String("assets-backend"), assetsURI: c.String("assets-uri")})
 			if err != nil {
 				return fmt.Errorf("initialize evaluation asset storage: %w", err)
@@ -487,7 +486,7 @@ func newStreamsCommand() *cli.Command {
 			}
 			stripeCatalog := newStripeCatalog(c)
 
-			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
+			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, stores, posthogClient, stripeClient, db, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -514,7 +513,7 @@ func newStreamsCommand() *cli.Command {
 				nil,
 				nil,
 			)
-			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(stores.Ops))
 
 			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {
@@ -580,7 +579,7 @@ func newStreamsCommand() *cli.Command {
 					return fmt.Errorf("parse server url: %w", err)
 				}
 			}
-			shadowMCPClient := shadowmcp.NewClient(logger, replicaDB, cache.NewRedisCacheAdapter(redisClient), serverURL)
+			shadowMCPClient := shadowmcp.NewClient(logger, replicaDB, stores.EvictableCache, serverURL)
 			toolCallHandler := toolcall.NewHandler(
 				logger,
 				shadowmcpscan.NewScanner(
@@ -623,7 +622,7 @@ func newStreamsCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, lakeShutdown)
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
-			replyWriter := enforcereply.NewWriter(redisClient)
+			replyWriter := enforcereply.NewWriter(stores.Ops)
 			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
 				logger,
 				meterProvider,
@@ -711,7 +710,7 @@ func newStreamsCommand() *cli.Command {
 				shutdown, err := controlServer.Start(c.Context, o11y.NewHealthCheckHandler(
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "read-replica", Resource: replicaDB}},
-					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
+					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: stores.Auth}},
 					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalEnv.Client()}},
 				))
 				if err != nil {
@@ -857,7 +856,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create session telemetry publisher: %w", err)
 			}
-			sessionLogger, stopSessionLogger := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chConn,
+			sessionLogger, stopSessionLogger := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, stores.EvictableCache, chConn,
 				newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs),
 				newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs),
 				telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, sessionLogPub))
@@ -947,7 +946,7 @@ func newStreamsCommand() *cli.Command {
 					meterProvider,
 					logPub,
 					replicaDB,
-					cache.NewRedisCacheAdapter(redisClient),
+					stores.EvictableCache,
 				))
 				mustReceive(rg, &otelv1.InboundMetric{}, &otelv1.InboundMetricTransformer{}, otelsvc.NewMetricTransformHandler(
 					logger,
@@ -959,7 +958,7 @@ func newStreamsCommand() *cli.Command {
 					meterProvider,
 					spanPub,
 					replicaDB,
-					cache.NewRedisCacheAdapter(redisClient),
+					stores.EvictableCache,
 				))
 				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatchWithResult(rg, &otelv1.Metric{}, &otelv1.MetricRelay{}, metricRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})

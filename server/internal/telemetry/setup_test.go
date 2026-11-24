@@ -131,7 +131,7 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, testenv.NewEvictableCache(t, redisClient)), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	coverage := telemetry.NewSupportCoverage(conn, chConn)
 	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)

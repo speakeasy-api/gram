@@ -99,7 +99,7 @@ func newTestMCPMetadataServiceWithAdmission(t *testing.T, admission func(context
 	siteURL, err := url.Parse("http://0.0.0.0")
 	require.NoError(t, err)
 
-	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+	cacheAdapter := testenv.NewEvictableCache(t, redisClient)
 
 	auditLogger := audit.NewLogger()
 

@@ -35,7 +35,7 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	logger := testenv.NewLogger(t)
 	logsEnabled := func(context.Context, string) (bool, error) { return true, nil }
 	toolIOLogsDisabled := func(context.Context, string) (bool, error) { return false, nil }
-	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, logsEnabled, toolIOLogsDisabled, telemetry.NewUserInfoResolver(logger, ti.conn, cache.NoopCache), telemetry.NewNoopLogPublisher(logger))
+	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, logsEnabled, toolIOLogsDisabled, telemetry.NewUserInfoResolver(logger, ti.conn, cache.NoopEvictableCache), telemetry.NewNoopLogPublisher(logger))
 	authzEngine := authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	telemService := telemetry.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.chConn, ti.chConn, nil, nil, logsEnabled, logsEnabled, nil, authzEngine)
 	chClient := repo.New(ti.chConn)

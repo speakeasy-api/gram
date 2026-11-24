@@ -115,7 +115,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		nil,
-		cache.NoopCache,
+		cache.NoopEvictableCache,
 		assistantidentity.New("https://platform.example.invalid", auditLogger),
 	)
 

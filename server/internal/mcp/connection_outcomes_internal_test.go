@@ -121,7 +121,7 @@ func memberStatusService(t *testing.T) (*Service, *mcpconnectionattemptstest.Rec
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: cache.NewRedisCacheAdapter(client)}
+	service := &Service{connections: rec.Recorder, connectionAttemptCache: cache.NewRedisCacheAdapter(client)}
 	return service, rec, mr
 }
 
@@ -632,7 +632,7 @@ func TestRecordConsentPage_ExpiredCatalogReloadsExportOnce(t *testing.T) {
 	sink := &verdictExportSink{mu: sync.Mutex{}, records: nil}
 	logsOn := func(context.Context, string) (bool, error) { return true, nil }
 	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, logsOn, mcpconnectionattempts.WithExport(sink))
-	service := &Service{connections: recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	service := &Service{connections: recorder, connectionAttemptCache: &addOnlyCache{}}
 	endpoint, state := directEndpoint(), openState()
 
 	for range 4 {
@@ -652,7 +652,7 @@ func TestRecordConsentPage_ExpiredCatalogRejectedRowIsOfferedAgain(t *testing.T)
 
 	stopped := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), storingConn{}, func(context.Context, string) (bool, error) { return true, nil })
 	require.NoError(t, stopped.Shutdown(t.Context()))
-	service := &Service{connections: stopped, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	service := &Service{connections: stopped, connectionAttemptCache: &addOnlyCache{}}
 	endpoint, state := directEndpoint(), openState()
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeConnectionCatalogExpired)
 
@@ -667,7 +667,7 @@ func TestRecordConsentPage_OtherProblemsRecordEachRender(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}}
+	service := &Service{connections: rec.Recorder, connectionAttemptCache: &addOnlyCache{}}
 	endpoint, state := directEndpoint(), openState()
 
 	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), endpoint, state, nil, nil, mcpconnectionattempts.CodeCatalogTooLarge)

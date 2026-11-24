@@ -80,7 +80,7 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
 	catalog := externalmcp.NewCatalogService(conn, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, validator)))
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, cache.NoopCache, catalog, authzEngine, serverURL)
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, cache.NoopEvictableCache, catalog, authzEngine, serverURL)
 
 	return ctx, &testInstance{
 		service:        svc,

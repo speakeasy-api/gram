@@ -74,7 +74,7 @@ func newIdentityFixture(t *testing.T) identityFixture {
 	fixture.assistantID = fixture.createAssistant(t, true)
 	baseURL, err := url.Parse("https://example.invalid")
 	require.NoError(t, err)
-	fixture.app = triggers.NewApp(testenv.NewLogger(t), db, nil, identityEnvironmentLoader{}, nil, nil, baseURL, baseURL, nil, nil, cache.NoopCache, testIdentityService)
+	fixture.app = triggers.NewApp(testenv.NewLogger(t), db, nil, identityEnvironmentLoader{}, nil, nil, baseURL, baseURL, nil, nil, cache.NoopEvictableCache, testIdentityService)
 	return fixture
 }
 

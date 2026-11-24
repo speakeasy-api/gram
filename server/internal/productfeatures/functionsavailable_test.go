@@ -28,7 +28,7 @@ func TestProductFeaturesService_GetProductFeatures_FunctionsAvailable(t *testing
 	require.True(t, *res.FunctionsAvailable)
 
 	logger := testenv.NewLogger(t)
-	disabled := productfeatures.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, ti.redisClient,
+	disabled := productfeatures.NewService(logger, testenv.NewTracerProvider(t), ti.conn, ti.sessionManager, testenv.NewEvictableCache(t, ti.redisClient),
 		authz.NewEngine(logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		audit.NewLogger(),
 		productfeatures.DeploymentCapabilities{AssistantsAvailable: true, FunctionsAvailable: false},

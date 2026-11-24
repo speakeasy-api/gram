@@ -33,7 +33,7 @@ from redis.asyncio.retry import Retry as RedisRetry
 from redis.backoff import NoBackoff
 
 from pystreams import attr
-from pystreams.deps import logging, otel
+from pystreams.deps import logging, otel, redisconn
 from pystreams.deps.blocking import activate_blocking_detection
 from pystreams.deps.loop_lag import monitor_event_loop_lag
 from pystreams.deps.scanner import build_presidio_scanner
@@ -43,7 +43,7 @@ from pystreams.risk.fingerprint import parse_pepper_keyring
 from pystreams.risk.handler import PresidioHandler
 from pystreams.risk.metering import METER_PUBLISH_TIMEOUT_SECONDS
 from pystreams.risk.presidio_enforce_handler import PresidioEnforceHandler
-from pystreams.risk.redisswitch import RedisSwitch
+from pystreams.risk.redisswitch import DEFAULT_ROLE, ROLE_OPS, RedisSwitch
 from pystreams.risk.replywriter import ReplyWriter
 
 from . import (
@@ -127,6 +127,18 @@ async def multi(
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+    redis_addr = (redis_addr or "").strip() or None
+    redis_next_addr = (redis_next_addr or "").strip() or None
+    ops_addr = os.getenv("GRAM_REDIS_OPS_ADDR", "").strip()
+    ops_next_addr = os.getenv("GRAM_REDIS_OPS_NEXT_ADDR", "").strip()
+    if ops_addr == redis_addr:
+        ops_addr = ""
+    switch_role = ROLE_OPS if ops_addr or ops_next_addr else DEFAULT_ROLE
+    if ops_addr:
+        redis_addr = ops_addr
+    if switch_role == ROLE_OPS:
+        redis_next_addr = ops_next_addr or None
+
     # A next instance equal to the current one means the move is over: the
     # client is an ordinary one.
     if redis_next_addr and redis_next_addr == redis_addr:
@@ -205,20 +217,32 @@ async def multi(
                 redis_addr and risk_fingerprint_pepper_keyring
             ):
                 armed = bool(redis_next_addr)
-                enforce_redis = _enforce_redis_client(
-                    redis_addr, redis_password, armed=armed
-                )
+                if ops_addr:
+                    enforce_redis = await _ops_redis_client(
+                        "GRAM_REDIS_OPS_", ops_addr, armed=armed
+                    )
+                else:
+                    enforce_redis = _enforce_redis_client(
+                        redis_addr, redis_password, armed=armed
+                    )
                 stack.push_async_callback(enforce_redis.aclose)
                 # Fail startup, not per-message: consuming without a reachable
                 # reply store would ACK requests while losing their replies.
                 await enforce_redis.ping()
                 if redis_next_addr:
-                    next_redis = _enforce_redis_client(
-                        redis_next_addr, redis_next_password, armed=True
-                    )
+                    if ops_next_addr:
+                        next_redis = await _ops_redis_client(
+                            "GRAM_REDIS_OPS_NEXT_", ops_next_addr, armed=True
+                        )
+                    else:
+                        next_redis = _enforce_redis_client(
+                            redis_next_addr, redis_next_password, armed=True
+                        )
                     stack.push_async_callback(next_redis.aclose)
                     await next_redis.ping()
-                    enforce_switch = RedisSwitch(enforce_redis, next_redis, logger)
+                    enforce_switch = RedisSwitch(
+                        enforce_redis, next_redis, logger, role=switch_role
+                    )
                     await enforce_switch.start()
                 enforce_fingerprinter = parse_pepper_keyring(
                     risk_fingerprint_pepper_keyring
@@ -305,6 +329,36 @@ async def multi(
                 )
 
                 health_state.set_ready()
+
+
+async def _ops_redis_client(
+    prefix: str, addr: str, *, armed: bool
+) -> redis_asyncio.Redis:
+    password = os.getenv(prefix + "PASSWORD", "")
+    auth = redisconn.AuthMode(
+        os.getenv(prefix + "AUTH_MODE", "").strip()
+        or (redisconn.AuthMode.PASSWORD if password else redisconn.AuthMode.NONE)
+    )
+    endpoint = redisconn.Endpoint(
+        addr=addr,
+        auth=auth,
+        password=password,
+        ca_cert_pem=os.getenv(prefix + "CA_CERT", ""),
+    )
+    endpoint.validate()
+    credentials = (
+        await redisconn.default_iam_credential_provider()
+        if auth is redisconn.AuthMode.IAM
+        else None
+    )
+    kwargs = {"retry": RedisRetry(NoBackoff(), 0)} if armed else {}
+    return redisconn.client(
+        endpoint,
+        credential_provider=credentials,
+        socket_connect_timeout=1.0,
+        socket_timeout=2.0,
+        **kwargs,
+    )
 
 
 def _enforce_redis_client(

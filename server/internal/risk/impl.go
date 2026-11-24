@@ -228,6 +228,7 @@ func NewService(
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	cacheImpl cache.Cache,
+	evictableCache cache.EvictableCache,
 	jwtSecret string,
 	approvalIntake ShadowMCPApprovalIntake,
 	piiScanner ra.PIIScanner,
@@ -257,7 +258,7 @@ func NewService(
 		logger: logger,
 		db:     db,
 		repo:   repo.New(db),
-		policies: policycore.NewWithToolAnnotations(db, tooldisposition.New(logger, db, cacheImpl), policycore.MutationDependencies{
+		policies: policycore.NewWithToolAnnotations(db, tooldisposition.New(logger, db, evictableCache), policycore.MutationDependencies{
 			Transactor:       db,
 			Auditor:          policyMutationAuditor{logger: auditLogger},
 			Approvals:        approvalIntake,

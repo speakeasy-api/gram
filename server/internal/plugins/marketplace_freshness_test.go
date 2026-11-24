@@ -24,6 +24,9 @@ type ttlRecordingCache struct {
 	ttls []time.Duration
 }
 
+// EvictableRole lets the fake stand in for the evictable cache.
+func (*ttlRecordingCache) EvictableRole() {}
+
 func (c *ttlRecordingCache) Get(context.Context, string, any) error {
 	return redisCache.ErrCacheMiss
 }

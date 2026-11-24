@@ -205,7 +205,7 @@ func TestMarkEnterpriseTrialConverted_CancellationDuringPostCommitCacheRefreshDo
 	requestCtx, cancelRequest := context.WithCancel(ctx)
 	hook := &cancelOnRedisSetHook{cancel: cancelRequest, called: make(chan struct{})}
 	redisClient.AddHook(hook)
-	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
+	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testenv.NewEvictableCache(t, redisClient))
 
 	converted := make(chan error, 1)
 	go func() {
@@ -259,7 +259,7 @@ func TestMarkEnterpriseTrialConverted_RetryCancellationDuringCacheRefreshDoesNot
 	requestCtx, cancelRequest := context.WithCancel(ctx)
 	hook := &cancelOnRedisSetHook{cancel: cancelRequest, called: make(chan struct{})}
 	redisClient.AddHook(hook)
-	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
+	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, testenv.NewEvictableCache(t, redisClient))
 
 	retried := make(chan error, 1)
 	go func() {

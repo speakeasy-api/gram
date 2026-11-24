@@ -128,11 +128,11 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 	ctx = authztest.WithAdminGrants(ctx)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, audit.NewLogger(), productfeatures.DeploymentCapabilities{AssistantsAvailable: true, FunctionsAvailable: true})
+	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, testenv.NewEvictableCache(t, redisClient), authzEngine, audit.NewLogger(), productfeatures.DeploymentCapabilities{AssistantsAvailable: true, FunctionsAvailable: true})
 
 	return ctx, &testInstance{
 		service:        svc,
-		client:         productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
+		client:         productfeatures.NewClient(logger, tracerProvider, conn, testenv.NewEvictableCache(t, redisClient)),
 		conn:           conn,
 		redisClient:    redisClient,
 		sessionManager: sessionManager,

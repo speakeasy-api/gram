@@ -118,7 +118,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger, true)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
 	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), clientsecretstest.New(t, conn, testenv.NewEncryptionClient(t)), nil, guardianPolicy, nil)
-	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, nil, false, revoker)
+	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, testenv.NewEvictableCache(t, redisClient), authzEngine, auditLogger, nil, false, revoker)
 	templatesSvc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, authzEngine, auditLogger)
 
 	return ctx, &testInstance{

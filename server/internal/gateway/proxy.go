@@ -135,7 +135,7 @@ type ToolProxy struct {
 	tracer        trace.Tracer
 	metrics       *metrics
 	encryption    *encryption.Client
-	cache         cache.Cache
+	cache         cache.EvictableCache
 	policy        *guardian.Policy
 	functions     functions.ToolCaller
 	platformTools PlatformExecutor
@@ -148,7 +148,7 @@ func NewToolProxy(
 	meterProvider metric.MeterProvider,
 	source ToolCallSource,
 	enc *encryption.Client,
-	cache cache.Cache,
+	cache cache.EvictableCache,
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	platformTools PlatformExecutor,

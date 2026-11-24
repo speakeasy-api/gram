@@ -243,7 +243,8 @@ func NewActivities(
 	meterReadConn clickhouse.Conn,
 	telemetryRepo *telemetryrepo.Queries,
 	triggerApp *bgtriggers.App,
-	cacheAdapter cache.Cache,
+	authCache cache.Cache,
+	opsCache cache.Cache,
 	emailService *email.Service,
 	assistantsCore *assistants.ServiceCore,
 	piScanner *promptinjection.Scanner,
@@ -333,11 +334,11 @@ func NewActivities(
 	// deployment-processing test workers) get a nil activity and the wrapper
 	// fails loudly if the sweep is ever scheduled there.
 	var remoteSessionRefresh *activities.RemoteSessionRefresh
-	if cacheAdapter != nil {
+	if authCache != nil {
 		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
 			logger,
 			db,
-			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, tunnelHTTPClient, cacheAdapter,
+			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, tunnelHTTPClient, authCache,
 				remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier),
 				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
 				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
@@ -407,7 +408,7 @@ func NewActivities(
 
 	conversionPolicyReconciler, _ := openrouterProvisioner.(activities.ConversionPolicyReconciler)
 
-	processWorkOSOrganizationEvents := activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh)
+	processWorkOSOrganizationEvents := activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, authCache, identityMapRefresh)
 	processWorkOSOrganizationEvents.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 	processWorkOSOrganizationEvents.SetSignInEnforcement(features, meterProvider, signInEpochs)
 
@@ -441,11 +442,11 @@ func NewActivities(
 		customDomainIngress:              activities.NewCustomDomainIngress(logger, db, k8sClient),
 		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, customDomainTargetSuffix, emailService, orgHosts),
 		fireOpenRouterCreditsMetrics:     activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
-		sendOpenRouterCreditsAlerts:      activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
+		sendOpenRouterCreditsAlerts:      activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, opsCache, emailService, meterProvider),
 		firePlatformUsageMetrics:         activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		syncIdentityMap:                  activities.NewSyncIdentityMap(logger, db, chConn, cacheAdapter),
-		syncTenantDimensions:             activities.NewSyncTenantDimensions(logger, db, chConn, cacheAdapter),
-		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
+		syncIdentityMap:                  activities.NewSyncIdentityMap(logger, db, chConn, opsCache),
+		syncTenantDimensions:             activities.NewSyncTenantDimensions(logger, db, chConn, opsCache),
+		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, opsCache, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		mcpConnectionOutcomesDaily:       activities.NewMCPConnectionOutcomesDaily(logger, meterProvider, db, chConn, staffOrg),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
@@ -457,7 +458,7 @@ func NewActivities(
 		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts),
 		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
-		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
+		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, opsCache),
 		reconcilePaygOpenRouterChatKey:   activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
 		reconcileTrialConversionKeys:     activities.NewReconcileEnterpriseTrialConversionKeys(logger, conversionPolicyReconciler),
 		transitionDeployment:             activities.NewTransitionDeployment(logger, db),
@@ -496,7 +497,7 @@ func NewActivities(
 		killswitchMaintenance:            killswitches.NewMaintenanceService(db, auditLogger),
 		publishOutbox:                    publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                  activities.NewPluginPublisher(logger, db, pluginPublisher),
-		sessionQuarantineReassert:        activities.NewSessionQuarantineReassert(logger, db, cacheAdapter),
+		sessionQuarantineReassert:        activities.NewSessionQuarantineReassert(logger, db, opsCache),
 		listSpendRuleOrgs:                spend_rules.NewListOrgs(logger, db),
 		demoteExpiredTrials: activities.NewDemoteExpiredTrials(
 			logger,
@@ -507,7 +508,7 @@ func NewActivities(
 			productFeatures,
 			trialFixtureHandler,
 		),
-		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
+		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, opsCache, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
 		// cannot outspend the org's key behind their backs.
