@@ -19,7 +19,6 @@ import (
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	endpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -188,7 +187,8 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.NoError(t, err)
 	_, err = seedUserSession(t, ctx, ti.conn, issuer, urn.NewUserSubject("no-accounts"))
 	require.NoError(t, err)
-	client := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*auth.ProjectID), issuer, subject, "provider.example.test")
+	provenance := seedIssuerInProject(t, ctx, ti.conn, *auth.ProjectID, "association-origin")
+	client := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*auth.ProjectID), provenance, subject, "provider.example.test")
 	toolset := attachIssuerToolset(t, ctx, ti, *auth.ProjectID, issuer, "associated-toolset")
 	member, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: uuid.New(), ProjectID: *auth.ProjectID, ToolsetID: conv.ToNullUUID(toolset.ID), Name: conv.ToPGText("Example member"), Slug: conv.ToPGText("example-member"), Visibility: "private",
@@ -196,15 +196,7 @@ func TestGatewaySessionAssociationFilters(t *testing.T) {
 	require.NoError(t, err)
 	_, err = metarepo.New(ti.conn).CreateMetaMCPMember(ctx, metarepo.CreateMetaMCPMemberParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gateway, McpServerID: member.ID})
 	require.NoError(t, err)
-	typed := authclientbackfill.New(ti.conn)
-	authClient, err := typed.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
-		OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID),
-		ClientType: authclientbackfill.TypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client),
-	})
-	require.NoError(t, err)
-	require.NoError(t, typed.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
-		OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, McpServerID: member.ID, AuthClientID: authClient, Source: "admin",
-	}))
+	seedInventoryOAuthOffer(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, member.ID, client)
 	facets, err := ti.service.ListGatewaySessionFacets(ctx, &gen.ListGatewaySessionFacetsPayload{GatewayID: new(gateway.String())})
 	require.NoError(t, err)
 	require.Len(t, facets.Servers, 1)
