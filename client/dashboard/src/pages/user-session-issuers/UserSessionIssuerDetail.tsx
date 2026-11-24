@@ -21,11 +21,14 @@ import { DotTable } from "@/components/ui/DotTable";
 import { Heading } from "@/components/ui/Heading";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { ScopeBadge } from "@/lib/remote-identity";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import type { UserSessionIssuerMcpServer } from "@gram/client/models/components/usersessionissuermcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useOrganizationUserSessionIssuer } from "@gram/client/react-query/organizationUserSessionIssuer.js";
 import { useOrganizationUserSessionIssuerMcpServersInfinite } from "@gram/client/react-query/organizationUserSessionIssuerMcpServers.js";
@@ -274,10 +277,13 @@ export function AdvancedSection({
 export function McpServersSection({
   issuer,
   titled = true,
+  linkRows = false,
 }: {
   issuer: UserSessionIssuer;
   /** Off where a tab already names the list. */
   titled?: boolean;
+  /** Each row opens its server's Clients and Sessions tab. */
+  linkRows?: boolean;
 }): JSX.Element {
   const query = useOrganizationUserSessionIssuerMcpServersInfinite(
     { userSessionIssuerId: issuer.id },
@@ -322,25 +328,13 @@ export function McpServersSection({
         <DotTable
           headers={[{ label: "Name" }, { label: "Project" }, { label: "Type" }]}
         >
-          {servers.map((server) => (
-            <DotRow key={server.id}>
-              <td className="px-3 py-3">
-                <Text small as="div" className="truncate">
-                  {server.name}
-                </Text>
-              </td>
-              <td className="px-3 py-3">
-                <Text small muted>
-                  {server.projectName}
-                </Text>
-              </td>
-              <td className="px-3 py-3">
-                <Text small muted>
-                  {server.kind === "meta_mcp_server" ? "Gateway" : "MCP server"}
-                </Text>
-              </td>
-            </DotRow>
-          ))}
+          {servers.map((server) =>
+            linkRows ? (
+              <LinkedMcpServerRow key={server.id} server={server} />
+            ) : (
+              <McpServerRow key={server.id} server={server} />
+            ),
+          )}
         </DotTable>
         {query.hasNextPage ? (
           <Stack direction="horizontal" justify="center" className="py-3">
@@ -374,6 +368,71 @@ export function McpServersSection({
       {body}
     </InfoSection>
   );
+}
+
+function McpServerRow({
+  server,
+  href,
+}: {
+  server: UserSessionIssuerMcpServer;
+  href?: string;
+}): JSX.Element {
+  const gateway = server.kind === "meta_mcp_server";
+  return (
+    <DotRow
+      href={href}
+      ariaLabel={
+        href
+          ? `Open ${gateway ? "gateway" : "MCP server"} ${server.name}`
+          : undefined
+      }
+    >
+      <td className="px-3 py-3">
+        <Text small as="div" className="truncate">
+          {server.name}
+        </Text>
+      </td>
+      <td className="px-3 py-3">
+        <Text small muted>
+          {server.projectName}
+        </Text>
+      </td>
+      <td className="px-3 py-3">
+        <Text small muted>
+          {gateway ? "Gateway" : "MCP server"}
+        </Text>
+      </td>
+    </DotRow>
+  );
+}
+
+/** Links through the server's own project, which need not be this one. */
+function LinkedMcpServerRow({
+  server,
+}: {
+  server: UserSessionIssuerMcpServer;
+}): JSX.Element {
+  const organization = useOrganization();
+  const projectSlug = organization.projects.find(
+    (project) => project.id === server.projectId,
+  )?.slug;
+  const routes = useRoutes({ projectSlug });
+  return (
+    <McpServerRow
+      server={server}
+      href={projectSlug ? mcpServerSessionsHref(routes, server) : undefined}
+    />
+  );
+}
+
+// A toolset's slug resolves on the server page too (ToolsetRedirectPage).
+function mcpServerSessionsHref(
+  routes: ReturnType<typeof useRoutes>,
+  server: UserSessionIssuerMcpServer,
+): string {
+  return server.kind === "meta_mcp_server"
+    ? routes.mcp.gateway.sessions.href(server.id)
+    : routes.mcp.details.sessions.href(mcpServerRouteParam(server));
 }
 
 export function ActionsSection({

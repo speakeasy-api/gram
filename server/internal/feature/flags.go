@@ -20,14 +20,6 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagPrivateNetworkGateway chooses which runtime hosts an organization's
-	// new private network connection: the tsnet tailnet gateway when enabled,
-	// the Tailscale Kubernetes operator otherwise. Evaluated server-side when a
-	// connection is created, and by the dashboard to show the matching setup
-	// steps until one exists. Targeted by PostHog organization group (org
-	// slug). Fails closed to the operator. Existing connections keep the
-	// runtime they were created with. Removed once the gateway is the default.
-	FlagPrivateNetworkGateway Flag = "private-network-gateway"
 	// FlagAccessRequests gates stored access requests: requestAccess records
 	// a request an admin can approve as a temporary grant or deny, from the
 	// dashboard or a Slack DM, and refuses scopes that cannot be given
@@ -100,6 +92,26 @@ const (
 	// both surfaces; targeted by organization group (org slug), like
 	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
+	// FlagMCPConnectionHealth gates the MCP connection health reads (Connection
+	// Logs, sign-in summary, session activity, denied clients). Evaluated
+	// server-side, where every mcpConnectionHealth method answers not found
+	// without it, and by the dashboard under the same key. Target by
+	// organization group (org slug) or by person "email" (lowercase); API keys
+	// never match a person, and on the server nobody does without local
+	// evaluation (PostHog personal API key). Switch to people only after this server is fully
+	// deployed, and back before rolling it back; servers follow within about a
+	// minute, so check a listed person and an unlisted member of a previously
+	// enabled organization. Fails closed. A rollout gate, not authorization.
+	// Removed once the pages are GA.
+	FlagMCPConnectionHealth Flag = "mcp-connection-health"
+	// FlagIntentPolicies gates the Intent-based policies page and its
+	// intentPolicies endpoints (guardrail, analyze, upload). Evaluated on the
+	// server and in the dashboard under the same key; targeted per person by
+	// "email" (lowercase). Only signed-in sessions match, and the server only
+	// with local evaluation (PostHog personal API key). Fails closed. A rollout gate on top of the
+	// endpoints' chat and project RBAC checks, not authorization. Removed once
+	// the feature is GA.
+	FlagIntentPolicies Flag = "intent-policies"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:
@@ -257,14 +269,6 @@ const (
 	// full catalogue, because the ChatGPT app directory rejects tools that run
 	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
-
-	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the
-	// person's own MCP servers through list_my_servers, search_my_tools,
-	// describe_tools and execute_tool, which run the organization gateway's
-	// tools as that person, and names those servers in the connection's
-	// instructions. Evaluated server-side on every call with the organization
-	// ID as distinct ID. Off, unavailable or failing, the tools refuse.
-	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an

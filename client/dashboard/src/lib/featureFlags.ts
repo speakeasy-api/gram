@@ -12,10 +12,15 @@ export const FEATURE_FLAGS = {
   // Gates saving a service's enabled identity provider list; Speakeasy vouching follows its issuer state.
   emaProviders: "ema-providers",
   explore: "gram-explore",
+  // Org-targeted, read server-side under the same key: the Intent-based
+  // policies page and its intentPolicies endpoints.
+  intentPolicies: "intent-policies",
   // UI-only rollout gate for the Intune package download on the Windows
   // device agent setup step.
   intunePackageDownload: "intune-package-download",
   killswitches: "gram-killswitches",
+  // Gates MCP Sessions connection health (Overview, Connection Logs); the server checks the same key.
+  mcpConnectionHealth: "mcp-connection-health",
   // UI-only rollout gate for the MCP scope picker in the risk policy editor;
   // not enforced server-side.
   mcpScopedPolicies: "gram-mcp-scoped-policies",
@@ -26,10 +31,6 @@ export const FEATURE_FLAGS = {
   // MCP server is linked automatically to the project server that proxies its
   // URL. Here it only picks the official server panel's actions.
   shadowMCPAutoLink: "shadow-mcp-auto-link",
-  // Org-targeted, read server-side under the same key when a private network
-  // connection is created: the tailnet gateway when enabled, the Tailscale
-  // operator otherwise. The setup sheet shows the matching steps.
-  privateNetworkGateway: "private-network-gateway",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine
   // the organization runs. Read through `useFeatureFlagVariant`; the boolean
   // read is true for every variant, `off` included. `useDetectorMode` maps it

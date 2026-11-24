@@ -93,8 +93,14 @@ vi.mock("@/components/page-layout", async () => {
   }
   Header.Breadcrumbs = PageHeader.Breadcrumbs;
 
-  function Body({ children }: { children: ReactNode }) {
-    return <main>{children}</main>;
+  function Body({
+    children,
+    isLoading,
+  }: {
+    children: ReactNode;
+    isLoading?: boolean;
+  }) {
+    return <main>{isLoading ? <div>Loading page</div> : children}</main>;
   }
 
   function Section({ children }: { children: ReactNode }) {
@@ -606,6 +612,20 @@ describe("ShadowMCPServerDetail", () => {
     });
     expect(input).toBe(document.activeElement);
     expect(input.getAttribute("maxlength")).toBe("255");
+  });
+
+  it("shows the page loader, not an empty shell, while the server loads", () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: undefined,
+      error: null,
+      isLoading: true,
+    });
+
+    renderDetailPage();
+
+    expect(screen.getByText("Loading page")).toBeTruthy();
+    expect(screen.queryByText("Shadow MCP Server")).toBeNull();
+    expect(screen.queryByText("Loading table")).toBeNull();
   });
 
   it.each([

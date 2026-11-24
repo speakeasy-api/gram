@@ -1,9 +1,11 @@
 package openrouter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -126,6 +128,49 @@ func TestCascadeJevFailureIsUnavailable(t *testing.T) {
 	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
 	require.False(t, results[0].Completed)
 	require.Zero(t, client.calls.Load())
+}
+
+func TestCascadeUnconfiguredJevDoesNotWarnPerMessage(t *testing.T) {
+	t.Parallel()
+	cascade, _ := testCascade(t, 0.99, safeVerdictJSON)
+	cascade.jev = typesafe.Unavailable{}
+	var logs bytes.Buffer
+	cascade.confirmer.logger = slog.New(slog.NewTextHandler(&logs, nil))
+	results, err := cascade.Classify(t.Context(), req("candidate"))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
+	require.NotContains(t, logs.String(), "PI prefilter unavailable")
+}
+
+func TestCascadeJevErrorWarns(t *testing.T) {
+	t.Parallel()
+	cascade, _ := testCascade(t, 0.99, safeVerdictJSON)
+	jev := &mockPrefilter{}
+	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).Return(typesafe.Result{}, errors.New("upstream status 503"))
+	cascade.jev = jev
+	var logs bytes.Buffer
+	cascade.confirmer.logger = slog.New(slog.NewTextHandler(&logs, nil))
+	results, err := cascade.Classify(t.Context(), req("candidate"))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
+	require.Contains(t, logs.String(), "PI prefilter unavailable")
+}
+
+// A configured client reports a missing key as ErrUnavailable; unlike a
+// process built without Jev, that still warns per message.
+func TestCascadeJevMissingKeyWarns(t *testing.T) {
+	t.Parallel()
+	cascade, _ := testCascade(t, 0.99, safeVerdictJSON)
+	jev := &mockPrefilter{}
+	jev.On("Evaluate", mock.Anything, "org-a", mock.Anything, mock.Anything).Return(typesafe.Result{}, typesafe.ErrUnavailable)
+	cascade.jev = jev
+	var logs bytes.Buffer
+	cascade.confirmer.logger = slog.New(slog.NewTextHandler(&logs, nil))
+	results, err := cascade.Classify(t.Context(), req("candidate"))
+	require.NoError(t, err)
+	require.Equal(t, promptinjection.LabelUnavailable, results[0].Label)
+	require.Contains(t, logs.String(), "PI prefilter unavailable")
+	jev.AssertNumberOfCalls(t, "Evaluate", 1)
 }
 
 func TestCascadeContextFailureDoesNotConfirm(t *testing.T) {
