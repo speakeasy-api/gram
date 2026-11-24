@@ -117389,6 +117389,10 @@ components:
                     description: End time in ISO 8601 format
                     example: "2025-12-19T11:00:00Z"
                     format: date-time
+                tool_calls_only:
+                    type: boolean
+                    description: 'Whether only tool call figures are needed (default: false). When true, chat, token, cost and session duration fields are returned as 0.'
+                    default: false
                 toolset_slug:
                     type: string
                     description: Optional toolset/MCP server slug filter

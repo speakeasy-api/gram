@@ -188,6 +188,9 @@ type GetObservabilityOverviewRequestBody struct {
 	ExternalOrgID *string `form:"external_org_id,omitempty" json:"external_org_id,omitempty" xml:"external_org_id,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries bool `form:"include_time_series" json:"include_time_series" xml:"include_time_series"`
+	// Whether only tool call figures are needed (default: false). When true, chat,
+	// token, cost and session duration fields are returned as 0.
+	ToolCallsOnly bool `form:"tool_calls_only" json:"tool_calls_only" xml:"tool_calls_only"`
 }
 
 // GetMcpNetworkTrafficRequestBody is the type of the "telemetry" service
@@ -10235,11 +10238,18 @@ func NewGetObservabilityOverviewRequestBody(p *telemetry.GetObservabilityOvervie
 		AccountType:       p.AccountType,
 		ExternalOrgID:     p.ExternalOrgID,
 		IncludeTimeSeries: p.IncludeTimeSeries,
+		ToolCallsOnly:     p.ToolCallsOnly,
 	}
 	{
 		var zero bool
 		if body.IncludeTimeSeries == zero {
 			body.IncludeTimeSeries = true
+		}
+	}
+	{
+		var zero bool
+		if body.ToolCallsOnly == zero {
+			body.ToolCallsOnly = false
 		}
 	}
 	return body

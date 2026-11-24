@@ -97,6 +97,8 @@ func (s *GetObservabilityOverview) Call(ctx context.Context, _ toolconfig.ToolCa
 		AccountType:       nil,
 		ExternalOrgID:     nil,
 		IncludeTimeSeries: input.IncludeTimeSeries,
+		// The tool reports chat, token and cost totals too.
+		ToolCallsOnly: false,
 	})
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {

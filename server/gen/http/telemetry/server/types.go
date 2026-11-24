@@ -188,6 +188,9 @@ type GetObservabilityOverviewRequestBody struct {
 	ExternalOrgID *string `form:"external_org_id,omitempty" json:"external_org_id,omitempty" xml:"external_org_id,omitempty"`
 	// Whether to include time series data (default: true)
 	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
+	// Whether only tool call figures are needed (default: false). When true, chat,
+	// token, cost and session duration fields are returned as 0.
+	ToolCallsOnly *bool `form:"tool_calls_only,omitempty" json:"tool_calls_only,omitempty" xml:"tool_calls_only,omitempty"`
 }
 
 // GetMcpNetworkTrafficRequestBody is the type of the "telemetry" service
@@ -17069,8 +17072,14 @@ func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBod
 	if body.IncludeTimeSeries != nil {
 		v.IncludeTimeSeries = *body.IncludeTimeSeries
 	}
+	if body.ToolCallsOnly != nil {
+		v.ToolCallsOnly = *body.ToolCallsOnly
+	}
 	if body.IncludeTimeSeries == nil {
 		v.IncludeTimeSeries = true
+	}
+	if body.ToolCallsOnly == nil {
+		v.ToolCallsOnly = false
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

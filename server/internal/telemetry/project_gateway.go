@@ -80,7 +80,7 @@ func (s *Service) GetProjectGatewayOverview(ctx context.Context, payload *telem_
 		HookSource:          "",
 		AccountType:         "",
 		ExternalOrgID:       "",
-	}, true)
+	}, true, false)
 }
 
 // GetProjectGatewayUsage is GetMetaMcpServerUsage for the selected project's

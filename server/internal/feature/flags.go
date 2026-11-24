@@ -269,6 +269,15 @@ const (
 	// full catalogue, because the ChatGPT app directory rejects tools that run
 	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
+
+	// FlagMCPOverviewSummaryTable lets tool-calls-only observability overviews
+	// read mcp_tool_call_summaries instead of scanning telemetry_logs. Turn it
+	// on only after the operator backfill of that table, which otherwise holds
+	// no history before its view's cutoff. Evaluated server-side in
+	// getObservabilityOverview; targeted by PostHog organization group (org
+	// slug) or project slug group. Fails closed to the telemetry_logs scan.
+	// Removed once the table serves every organization.
+	FlagMCPOverviewSummaryTable Flag = "mcp-overview-summary-table"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an
