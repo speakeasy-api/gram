@@ -54,7 +54,7 @@ func TestHostedConsentSetupPresentation(t *testing.T) {
 				if i == 0 {
 					baseURL = assignedIssuerURL
 				}
-				client := createConsentRemoteClient(t, ctx, ti.conn, project, org, "hosted-"+uuid.NewString()[:8], baseURL, nil)
+				client := createConsentRemoteClient(t, ctx, ti.conn, project, org, "hosted-"+uuid.NewString()[:8], baseURL)
 				assignHostedOAuth(t, ctx, ti.conn, org, project, toolset.ID, client)
 				if tc.invalidClient {
 					require.NoError(t, q.SoftDeleteIssuerOfClientFixture(ctx, client))

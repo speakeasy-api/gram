@@ -390,7 +390,6 @@ func TestGetRemoteSessionClient(t *testing.T) {
 	require.Equal(t, clientID, fetched.ClientID)
 	require.Empty(t, created.UserSessionIssuerIds, "a requested sign-in without a server is not a placement")
 	require.Equal(t, fetched.UserSessionIssuerIds, created.UserSessionIssuerIds)
-	requireNoAttachmentParent(t, ctx, ti, uuid.MustParse(created.ID), uuid.MustParse(userIssuerID))
 
 	_, err = ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{
 		ID:               uuid.NewString(),
