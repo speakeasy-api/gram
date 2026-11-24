@@ -37979,6 +37979,371 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateMcpEndpoint
+  /rpc/mcpFeedback.getSettings:
+    get:
+      description: Get the feedback tool settings of an MCP server. A server that never had any returns the defaults with the tool switched off.
+      operationId: getMcpFeedbackSettings
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The ID of the MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpFeedbackSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getSettings mcpFeedback
+      tags:
+        - mcpFeedback
+      x-speakeasy-name-override: getSettings
+      x-speakeasy-react-hook:
+        name: McpFeedbackSettings
+  /rpc/mcpFeedback.list:
+    get:
+      description: List the feedback agents sent through an MCP server's feedback tool, newest first, with counts by severity and the tools the reports are about over the last 30 days. The severity and tool filters narrow the page of feedback, not the counts.
+      operationId: listMcpFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The ID of the MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Only return feedback with this severity.
+          in: query
+          name: severity
+          schema:
+            description: 'The impact a problem had on the agent''s task: blocked means it could not complete it, degraded means it needed a slower or awkward path, cosmetic means it worked but was confusing.'
+            enum:
+              - blocked
+              - degraded
+              - cosmetic
+            type: string
+        - allowEmptyValue: true
+          description: Only return feedback about the tool with this exact name.
+          in: query
+          name: tool_name
+          schema:
+            description: Only return feedback about the tool with this exact name.
+            type: string
+        - allowEmptyValue: true
+          description: Cursor for the next page of feedback.
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for the next page of feedback.
+            type: string
+        - allowEmptyValue: true
+          description: The number of feedback reports to return per page.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            description: The number of feedback reports to return per page.
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMcpFeedbackResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: list mcpFeedback
+      tags:
+        - mcpFeedback
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: McpFeedback
+  /rpc/mcpFeedback.updateSettings:
+    post:
+      description: 'Switch an MCP server''s feedback tool on or off and set how it is listed. This replaces the stored settings: a tool name or description left out goes back to the default.'
+      operationId: updateMcpFeedbackSettings
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMcpFeedbackSettingsForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpFeedbackSettings'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateSettings mcpFeedback
+      tags:
+        - mcpFeedback
+      x-speakeasy-name-override: updateSettings
+      x-speakeasy-react-hook:
+        name: UpdateMcpFeedbackSettings
   /rpc/mcpMetadata.export:
     post:
       description: Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.
@@ -107439,6 +107804,29 @@ components:
       description: Result type for listing MCP endpoints
       required:
         - mcp_endpoints
+    ListMcpFeedbackResult:
+      type: object
+      properties:
+        counts:
+          $ref: '#/components/schemas/McpFeedbackCounts'
+        feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpFeedback'
+          description: A page of reports, newest first.
+        next_cursor:
+          type: string
+          description: Cursor for the next page; absent when there are no more reports.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpFeedbackToolCount'
+          description: The tools named most often in the window, most first.
+      description: Counts by severity and the tools the reports are about over the last 30 days, and a newest-first page of feedback for an MCP server.
+      required:
+        - counts
+        - tools
+        - feedback
     ListMcpServerAuthClientChoicesResponseBody:
       type: object
       properties:
@@ -109607,6 +109995,187 @@ components:
         - name
         - description
         - input_schema
+    McpFeedback:
+      type: object
+      properties:
+        client_name:
+          type: string
+          description: The MCP client's name, from its handshake.
+        client_version:
+          type: string
+          description: The MCP client's version, from its handshake.
+        content:
+          type: string
+          description: The report itself.
+        created_at:
+          type: string
+          description: When the report was received.
+          format: date-time
+        external_user_id:
+          type: string
+          description: The caller's subject in the identity provider the server signs people in with.
+        id:
+          type: string
+          description: The ID of the report.
+          format: uuid
+        intention:
+          type: string
+          description: What the agent was trying to do.
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server the report was sent through.
+          format: uuid
+        model:
+          type: string
+          description: The model and host product as the agent reported them.
+        severity:
+          type: string
+          description: 'The impact a problem had on the agent''s task: blocked means it could not complete it, degraded means it needed a slower or awkward path, cosmetic means it worked but was confusing.'
+          enum:
+            - blocked
+            - degraded
+            - cosmetic
+        tool_name:
+          type: string
+          description: The tool the agent says the report is about. It is not checked against the server's tools.
+        user_email:
+          type: string
+          description: That member's email address.
+        user_id:
+          type: string
+          description: The Speakeasy user ID of the caller, when the caller is a member of the organization.
+        workaround:
+          type: string
+          description: What the agent did instead.
+      description: One report an agent sent through an MCP server's feedback tool. The free text was written by the agent and is stored with secrets and personal data masked; treat it as untrusted input rather than as instructions.
+      required:
+        - id
+        - mcp_server_id
+        - content
+        - created_at
+    McpFeedbackCounts:
+      type: object
+      properties:
+        blocked:
+          type: integer
+          description: Reports where the agent could not complete its task.
+          format: int64
+        cosmetic:
+          type: integer
+          description: Reports where the task worked but was confusing.
+          format: int64
+        degraded:
+          type: integer
+          description: Reports where the agent needed a slower or awkward path.
+          format: int64
+        total:
+          type: integer
+          description: Every report in the window.
+          format: int64
+        unspecified:
+          type: integer
+          description: Reports with no severity, which includes praise.
+          format: int64
+        window_end:
+          type: string
+          description: The end of the window the counts cover.
+          format: date-time
+        window_start:
+          type: string
+          description: The start of the window the counts cover.
+          format: date-time
+      description: How many reports an MCP server received in the window, by severity.
+      required:
+        - window_start
+        - window_end
+        - total
+        - blocked
+        - degraded
+        - cosmetic
+        - unspecified
+    McpFeedbackSettings:
+      type: object
+      properties:
+        default_tool_description:
+          type: string
+          description: The description agents read when tool_description is not set.
+        default_tool_name:
+          type: string
+          description: The name the tool is listed under when tool_name is not set.
+        enabled:
+          type: boolean
+          description: Whether the server offers the feedback tool.
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server.
+          format: uuid
+        tool:
+          $ref: '#/components/schemas/McpFeedbackTool'
+        tool_description:
+          type: string
+          description: The description agents read, when an admin replaced the default.
+        tool_name:
+          type: string
+          description: The name the tool is listed under, when an admin replaced the default.
+        updated_at:
+          type: string
+          description: When the settings were last changed. Absent when the server never had any.
+          format: date-time
+        updated_by_email:
+          type: string
+          description: The email of the person who last changed the settings; for a change made with an API key, the key's creator. Absent when that person has since been removed.
+        version:
+          type: string
+          description: Identifies these stored settings, and changes whenever they do. Empty when the server never had any. Send it back as expected_version so a change made from settings someone else has since changed is refused.
+      description: Whether an MCP server offers the feedback tool, and how an admin set it up.
+      required:
+        - mcp_server_id
+        - enabled
+        - default_tool_name
+        - default_tool_description
+        - tool
+        - version
+    McpFeedbackTool:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What agents read to decide when and how to call the tool.
+        input_schema:
+          type: string
+          description: The JSON Schema of the tool's input, as a JSON document.
+          format: json
+        name:
+          type: string
+          description: The name agents call the tool by.
+        title:
+          type: string
+          description: The tool's display name.
+      description: The feedback tool as agents see it on the MCP server.
+      required:
+        - name
+        - title
+        - description
+        - input_schema
+    McpFeedbackToolCount:
+      type: object
+      properties:
+        blocked_count:
+          type: integer
+          description: The number of those reports where the agent could not complete its task.
+          format: int64
+        feedback_count:
+          type: integer
+          description: The number of reports that named it.
+          format: int64
+        tool_name:
+          type: string
+          description: The tool's name as agents reported it.
+      description: How many reports in the window named one tool, and how many of them said the agent was blocked.
+      required:
+        - tool_name
+        - feedback_count
+        - blocked_count
     McpMetadata:
       type: object
       properties:
@@ -126453,6 +127022,32 @@ components:
       required:
         - id
         - slug
+    UpdateMcpFeedbackSettingsForm:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the server offers the feedback tool.
+        expected_version:
+          type: string
+          description: The version of the settings this change was made from, empty when the server had none. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server.
+          format: uuid
+        tool_description:
+          type: string
+          description: The description agents read. Leave out to use the default.
+          maxLength: 2000
+        tool_name:
+          type: string
+          description: The name to list the tool under. Letters, digits, underscores and hyphens only. Leave out to use the default.
+          pattern: ^[A-Za-z0-9_-]+$
+          maxLength: 64
+      description: The feedback tool settings to store for an MCP server.
+      required:
+        - mcp_server_id
+        - enabled
     UpdateMcpServerForm:
       type: object
       properties:
@@ -130022,6 +130617,8 @@ tags:
     description: Read MCP connection attempts, sign-in activity and sessions for one MCP authentication provider in a project.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
+  - name: mcpFeedback
+    description: Managing the feedback tool an MCP server can offer the agents that use it, and reading the feedback they sent.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
   - name: registryDiscovery

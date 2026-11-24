@@ -62,6 +62,7 @@ import (
 	mcpapprovalc "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/client"
 	mcpconnectionhealthc "github.com/speakeasy-api/gram/server/gen/http/mcp_connection_health/client"
 	mcpendpointsc "github.com/speakeasy-api/gram/server/gen/http/mcp_endpoints/client"
+	mcpfeedbackc "github.com/speakeasy-api/gram/server/gen/http/mcp_feedback/client"
 	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	mcpregistriesc "github.com/speakeasy-api/gram/server/gen/http/mcp_registries/client"
 	mcpserversc "github.com/speakeasy-api/gram/server/gen/http/mcp_servers/client"
@@ -164,6 +165,7 @@ func UsageCommands() []string {
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
 		"mcp-connection-health (list-attempts|get-attempt-counts|get-attempt|get-sign-in-summary|get-session-activity|list-denied-clients)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
+		"mcp-feedback (get-settings|update-settings|list)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"registry-discovery (discover-servers|discover-versions|discover-version)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|set-setup-guide-completed|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server|get-mcp-server-usage-impact)",
@@ -1959,6 +1961,30 @@ func ParseEndpoint(
 		mcpEndpointsDeleteMcpEndpointSessionTokenFlag     = mcpEndpointsDeleteMcpEndpointFlags.String("session-token", "", "")
 		mcpEndpointsDeleteMcpEndpointApikeyTokenFlag      = mcpEndpointsDeleteMcpEndpointFlags.String("apikey-token", "", "")
 		mcpEndpointsDeleteMcpEndpointProjectSlugInputFlag = mcpEndpointsDeleteMcpEndpointFlags.String("project-slug-input", "", "")
+
+		mcpFeedbackFlags = flag.NewFlagSet("mcp-feedback", flag.ContinueOnError)
+
+		mcpFeedbackGetSettingsFlags                = flag.NewFlagSet("get-settings", flag.ExitOnError)
+		mcpFeedbackGetSettingsMcpServerIDFlag      = mcpFeedbackGetSettingsFlags.String("mcp-server-id", "REQUIRED", "")
+		mcpFeedbackGetSettingsSessionTokenFlag     = mcpFeedbackGetSettingsFlags.String("session-token", "", "")
+		mcpFeedbackGetSettingsApikeyTokenFlag      = mcpFeedbackGetSettingsFlags.String("apikey-token", "", "")
+		mcpFeedbackGetSettingsProjectSlugInputFlag = mcpFeedbackGetSettingsFlags.String("project-slug-input", "", "")
+
+		mcpFeedbackUpdateSettingsFlags                = flag.NewFlagSet("update-settings", flag.ExitOnError)
+		mcpFeedbackUpdateSettingsBodyFlag             = mcpFeedbackUpdateSettingsFlags.String("body", "REQUIRED", "")
+		mcpFeedbackUpdateSettingsSessionTokenFlag     = mcpFeedbackUpdateSettingsFlags.String("session-token", "", "")
+		mcpFeedbackUpdateSettingsApikeyTokenFlag      = mcpFeedbackUpdateSettingsFlags.String("apikey-token", "", "")
+		mcpFeedbackUpdateSettingsProjectSlugInputFlag = mcpFeedbackUpdateSettingsFlags.String("project-slug-input", "", "")
+
+		mcpFeedbackListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		mcpFeedbackListMcpServerIDFlag      = mcpFeedbackListFlags.String("mcp-server-id", "REQUIRED", "")
+		mcpFeedbackListSeverityFlag         = mcpFeedbackListFlags.String("severity", "", "")
+		mcpFeedbackListToolNameFlag         = mcpFeedbackListFlags.String("tool-name", "", "")
+		mcpFeedbackListCursorFlag           = mcpFeedbackListFlags.String("cursor", "", "")
+		mcpFeedbackListLimitFlag            = mcpFeedbackListFlags.String("limit", "20", "")
+		mcpFeedbackListSessionTokenFlag     = mcpFeedbackListFlags.String("session-token", "", "")
+		mcpFeedbackListApikeyTokenFlag      = mcpFeedbackListFlags.String("apikey-token", "", "")
+		mcpFeedbackListProjectSlugInputFlag = mcpFeedbackListFlags.String("project-slug-input", "", "")
 
 		mcpMetadataFlags = flag.NewFlagSet("mcp-metadata", flag.ContinueOnError)
 
@@ -6208,6 +6234,11 @@ func ParseEndpoint(
 	mcpEndpointsCheckMcpEndpointSlugAvailabilityFlags.Usage = mcpEndpointsCheckMcpEndpointSlugAvailabilityUsage
 	mcpEndpointsDeleteMcpEndpointFlags.Usage = mcpEndpointsDeleteMcpEndpointUsage
 
+	mcpFeedbackFlags.Usage = mcpFeedbackUsage
+	mcpFeedbackGetSettingsFlags.Usage = mcpFeedbackGetSettingsUsage
+	mcpFeedbackUpdateSettingsFlags.Usage = mcpFeedbackUpdateSettingsUsage
+	mcpFeedbackListFlags.Usage = mcpFeedbackListUsage
+
 	mcpMetadataFlags.Usage = mcpMetadataUsage
 	mcpMetadataGetMcpMetadataFlags.Usage = mcpMetadataGetMcpMetadataUsage
 	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
@@ -7135,6 +7166,8 @@ func ParseEndpoint(
 			svcf = mcpConnectionHealthFlags
 		case "mcp-endpoints":
 			svcf = mcpEndpointsFlags
+		case "mcp-feedback":
+			svcf = mcpFeedbackFlags
 		case "mcp-metadata":
 			svcf = mcpMetadataFlags
 		case "registry-discovery":
@@ -8376,6 +8409,19 @@ func ParseEndpoint(
 
 			case "delete-mcp-endpoint":
 				epf = mcpEndpointsDeleteMcpEndpointFlags
+
+			}
+
+		case "mcp-feedback":
+			switch epn {
+			case "get-settings":
+				epf = mcpFeedbackGetSettingsFlags
+
+			case "update-settings":
+				epf = mcpFeedbackUpdateSettingsFlags
+
+			case "list":
+				epf = mcpFeedbackListFlags
 
 			}
 
@@ -11898,6 +11944,19 @@ func ParseEndpoint(
 			case "delete-mcp-endpoint":
 				endpoint = c.DeleteMcpEndpoint()
 				data, err = mcpendpointsc.BuildDeleteMcpEndpointPayload(*mcpEndpointsDeleteMcpEndpointIDFlag, *mcpEndpointsDeleteMcpEndpointSessionTokenFlag, *mcpEndpointsDeleteMcpEndpointApikeyTokenFlag, *mcpEndpointsDeleteMcpEndpointProjectSlugInputFlag)
+			}
+		case "mcp-feedback":
+			c := mcpfeedbackc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-settings":
+				endpoint = c.GetSettings()
+				data, err = mcpfeedbackc.BuildGetSettingsPayload(*mcpFeedbackGetSettingsMcpServerIDFlag, *mcpFeedbackGetSettingsSessionTokenFlag, *mcpFeedbackGetSettingsApikeyTokenFlag, *mcpFeedbackGetSettingsProjectSlugInputFlag)
+			case "update-settings":
+				endpoint = c.UpdateSettings()
+				data, err = mcpfeedbackc.BuildUpdateSettingsPayload(*mcpFeedbackUpdateSettingsBodyFlag, *mcpFeedbackUpdateSettingsSessionTokenFlag, *mcpFeedbackUpdateSettingsApikeyTokenFlag, *mcpFeedbackUpdateSettingsProjectSlugInputFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = mcpfeedbackc.BuildListPayload(*mcpFeedbackListMcpServerIDFlag, *mcpFeedbackListSeverityFlag, *mcpFeedbackListToolNameFlag, *mcpFeedbackListCursorFlag, *mcpFeedbackListLimitFlag, *mcpFeedbackListSessionTokenFlag, *mcpFeedbackListApikeyTokenFlag, *mcpFeedbackListProjectSlugInputFlag)
 			}
 		case "mcp-metadata":
 			c := mcpmetadatac.NewClient(scheme, host, doer, enc, dec, restore)
@@ -22064,6 +22123,99 @@ func mcpEndpointsDeleteMcpEndpointUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-endpoints delete-mcp-endpoint --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// mcpFeedbackUsage displays the usage of the mcp-feedback command and its
+// subcommands.
+func mcpFeedbackUsage() {
+	fmt.Fprintln(os.Stderr, `Managing the feedback tool an MCP server can offer the agents that use it, and reading the feedback they sent.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-feedback COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-settings: Get the feedback tool settings of an MCP server. A server that never had any returns the defaults with the tool switched off.`)
+	fmt.Fprintln(os.Stderr, `    update-settings: Switch an MCP server's feedback tool on or off and set how it is listed. This replaces the stored settings: a tool name or description left out goes back to the default.`)
+	fmt.Fprintln(os.Stderr, `    list: List the feedback agents sent through an MCP server's feedback tool, newest first, with counts by severity and the tools the reports are about over the last 30 days. The severity and tool filters narrow the page of feedback, not the counts.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s mcp-feedback COMMAND --help\n", os.Args[0])
+}
+func mcpFeedbackGetSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-feedback get-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the feedback tool settings of an MCP server. A server that never had any returns the defaults with the tool switched off.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-feedback get-settings --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpFeedbackUpdateSettingsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-feedback update-settings", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Switch an MCP server's feedback tool on or off and set how it is listed. This replaces the stored settings: a tool name or description left out goes back to the default.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-feedback update-settings --body '{\n      \"enabled\": false,\n      \"expected_version\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_description\": \"aaa\",\n      \"tool_name\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpFeedbackListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-feedback list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -severity STRING")
+	fmt.Fprint(os.Stderr, " -tool-name STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the feedback agents sent through an MCP server's feedback tool, newest first, with counts by severity and the tools the reports are about over the last 30 days. The severity and tool filters narrow the page of feedback, not the counts.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -severity STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tool-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-feedback list --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --severity \"degraded\" --tool-name \"abc123\" --cursor \"abc123\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpMetadataUsage displays the usage of the mcp-metadata command and its
