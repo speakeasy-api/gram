@@ -144,7 +144,7 @@ func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
 	var allowAnonymous atomic.Bool
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authorization := r.Header.Get("Authorization")
-		if authorization != "Bearer usable-offer-token" && !(authorization == "" && allowAnonymous.Load()) {
+		if authorization != "Bearer usable-offer-token" && (authorization != "" || !allowAnonymous.Load()) {
 			http.Error(w, "authorization required", http.StatusUnauthorized)
 			return
 		}
