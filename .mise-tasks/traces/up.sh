@@ -19,6 +19,15 @@ otlp_grpc_port=14317
 ui_port=16686
 endpoint="http://localhost:${otlp_grpc_port}"
 
+# Leave a collector the developer configured on their own alone: overwriting
+# it here would lose it, and `traces:down` could not restore it.
+current="$(mise config get --file mise.local.toml env.OTEL_EXPORTER_OTLP_ENDPOINT 2> /dev/null || true)"
+if [ -n "$current" ] && [ "$current" != "$endpoint" ]; then
+  echo "mise.local.toml already sets OTEL_EXPORTER_OTLP_ENDPOINT to another collector; leaving it unchanged." >&2
+  echo "Remove that setting first to use the local Jaeger UI." >&2
+  exit 1
+fi
+
 if [ -z "$(docker ps -q --filter "name=^${container}$")" ]; then
   docker rm -f "$container" > /dev/null 2>&1 || true
   docker run -d --name "$container" --restart unless-stopped \
