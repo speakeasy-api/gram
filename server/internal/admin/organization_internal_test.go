@@ -65,13 +65,18 @@ func TestUpdateOrganization_InternalCannotBeCombined(t *testing.T) {
 	ctx, svc, conn := newTestAdminService(t)
 	seedOrg(t, ctx, conn, orgFixture{id: "org_internal_combo", name: "Combo Co", slug: "combo-co", accountType: "free", whitelisted: false})
 
-	for _, payload := range []*gen.UpdateOrganizationPayload{
-		{ID: "org_internal_combo", Internal: new(true), AccountType: new("enterprise")},
-		{ID: "org_internal_combo", Internal: new(true), Whitelisted: new(true)},
+	for _, tc := range []struct {
+		name    string
+		payload *gen.UpdateOrganizationPayload
+	}{
+		{"account_type", &gen.UpdateOrganizationPayload{ID: "org_internal_combo", Internal: new(true), AccountType: new("enterprise")}},
+		{"whitelisted", &gen.UpdateOrganizationPayload{ID: "org_internal_combo", Internal: new(true), Whitelisted: new(true)}},
 	} {
-		_, err := svc.UpdateOrganization(ctx, payload)
-		requireOopsCode(t, err, oops.CodeBadRequest)
-		require.ErrorContains(t, err, "internal cannot be combined with account_type or whitelisted")
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.UpdateOrganization(ctx, tc.payload)
+			requireOopsCode(t, err, oops.CodeBadRequest)
+			require.ErrorContains(t, err, "internal cannot be combined with account_type or whitelisted")
+		})
 	}
 
 	got, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_internal_combo"})

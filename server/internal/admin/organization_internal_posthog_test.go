@@ -80,12 +80,16 @@ func TestUpdateOrganization_InternalSurvivesPostHogFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
-	svc.SetOrganizationGroupIdentifier(&recordingGroupIdentifier{err: errors.New("posthog unreachable")})
+	identifier := &recordingGroupIdentifier{err: errors.New("posthog unreachable")}
+	svc.SetOrganizationGroupIdentifier(identifier)
 	seedOrg(t, ctx, conn, orgFixture{id: "org_ph_down", name: "Down Co", slug: "down-co"})
 
 	res, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: "org_ph_down", Internal: new(true)})
 	require.NoError(t, err)
 	require.True(t, res.Internal)
+	// The failing call has to have been made, or this proves nothing about
+	// how a failure is handled.
+	require.Len(t, identifier.recorded(), 1)
 }
 
 func TestUpdateOrganization_InternalWithoutPostHog(t *testing.T) {

@@ -285,7 +285,10 @@ export type AdminOrganization = {
   whitelisted: boolean;
   // Staff-set label for organizations owned by Speakeasy employees for testing
   // and dogfooding. It grants nothing; analytics use it to leave them out.
-  internal: boolean;
+  // Optional because the list and record reads return the server's JSON
+  // unvalidated, and a server that predates the label leaves it out. Absent
+  // reads as not internal.
+  internal?: boolean;
   disabled_at?: string;
   trial_state?: TrialState;
   trial_ends_at?: string;

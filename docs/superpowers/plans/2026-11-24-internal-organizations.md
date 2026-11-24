@@ -176,8 +176,8 @@ Expected: compile failure (`Internal` undefined).
 
 - [ ] **Step 3: Edit the Goa design**
 
-`AdminOrganization`: add `"internal"` to `Required(...)` and
-`Attribute("internal", Boolean, "Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.")`.
+`AdminOrganization`: add the attribute with a default of false and leave it out of `Required(...)`. The admin dashboard ships separately and validates responses, so a required field would make it reject organizations returned by a server that predates the label.
+`Attribute("internal", Boolean, "Whether staff have marked this organization as internal: owned by Speakeasy employees for testing or dogfooding. A label for analytics; it grants nothing.", func() { Default(false) })`.
 
 `updateOrganization`: description becomes "Updates admin-managed fields on an organization. At least one of account_type, whitelisted or internal must be supplied. internal must be sent on its own." Add
 `Attribute("internal", Boolean, "New internal flag. Cannot be combined with account_type or whitelisted.")`.

@@ -56,7 +56,9 @@ databases, or through an agent using the Admin MCP.
 **Storage.** `organization_metadata.internal boolean NOT NULL DEFAULT FALSE`.
 
 **Admin API.** `updateOrganization` gains an optional `internal` field next to
-`whitelisted`; the "at least one field" rule extends to it. `internal` must be
+`whitelisted`; the "at least one field" rule extends to it. In the result the
+field defaults to false and is not required, so an admin client that validates
+responses still accepts one from a server that predates the label. `internal` must be
 sent on its own: combining it with `account_type` or `whitelisted` is
 rejected, so a write is never half-applied. `AdminOrganization`
 returns `internal`. `listOrganizations` returns it on each row and accepts an
@@ -80,8 +82,10 @@ set, it shows as a removable chip in the toolbar like the other filters. The
 list still shows every organization by default.
 
 **Admin MCP.** `find_organizations` returns the flag and accepts the filter,
-and the filter alone counts as an explicit filter so "list every internal
-organization" is one call. `get_organization_summary` returns the flag. Both
+and the filter alone counts as an explicit filter, so listing internal
+organizations needs no search term. A page holds at most 20 results, so the
+tool description tells the caller to compare the total with the results and
+keep paging before treating the list as complete. `get_organization_summary` returns the flag. Both
 descriptions say that internal organizations are employee test and
 dogfooding organizations and should normally be excluded from customer
 analysis. No write tool: marking happens in the dashboard.
