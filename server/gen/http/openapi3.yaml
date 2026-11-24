@@ -9675,6 +9675,168 @@ paths:
             x-speakeasy-name-override: updateSupportMatrix
             x-speakeasy-react-hook:
                 name: AdminUpdateSupportMatrix
+    /admin/tailscaleOAuthMigration.organizations:
+        get:
+            description: Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.
+            operationId: adminListTailscaleOAuthMigration
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminTailscaleOAuthMigrationOrganizations'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listTailscaleOAuthMigration admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listTailscaleOAuthMigration
+    /admin/tailscaleOAuthMigration.run:
+        post:
+            description: Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.
+            operationId: adminRunTailscaleOAuthMigrationStep
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RunTailscaleOAuthMigrationStepRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminTailscaleOAuthMigrationOrganization'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: runTailscaleOAuthMigrationStep admin
+            tags:
+                - admin
+            x-speakeasy-name-override: runTailscaleOAuthMigrationStep
+            x-speakeasy-react-hook:
+                name: AdminRunTailscaleOAuthMigrationStep
     /admin/trial.changeEndDate:
         post:
             tags:
@@ -10057,7 +10219,7 @@ paths:
                 - admin_auth_header_Authorization: []
     /admin/upstreamOAuthMigration.disableEnforcement:
         post:
-            description: 'Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.'
+            description: Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.
             operationId: adminDisableUpstreamAuthEnforcement
             requestBody:
                 content:
@@ -104229,6 +104391,93 @@ components:
                 - id
                 - customer_id
                 - status
+        AdminTailscaleOAuthMigrationOrganization:
+            type: object
+            properties:
+                generation:
+                    type: integer
+                    description: The transition generation; 0 before the organization is enrolled.
+                    format: int64
+                last_backfill_completed_at:
+                    type: string
+                    description: When the last backfill ended.
+                    format: date-time
+                last_backfill_error:
+                    type: string
+                    description: Why the last backfill stopped early. Never carries values or key material.
+                last_backfill_started_at:
+                    type: string
+                    description: When the last backfill started.
+                    format: date-time
+                last_verified_at:
+                    type: string
+                    description: When the last clean verification pass started.
+                    format: date-time
+                name:
+                    type: string
+                    description: The organization name.
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                platform_copies:
+                    type: integer
+                    description: Saved credentials that still hold a platform-key copy.
+                    format: int64
+                platform_copies_cleared_at:
+                    type: string
+                    description: When the platform-key copies were destroyed after finalize.
+                    format: date-time
+                slug:
+                    type: string
+                    description: The organization slug.
+                state:
+                    type: string
+                    description: The transition state.
+                    enum:
+                        - platform_key
+                        - dual_write
+                        - org_kms
+                state_changed_at:
+                    type: string
+                    description: When the current state was entered. Absent before the organization is enrolled.
+                    format: date-time
+                unreadable:
+                    type: integer
+                    description: Saved credentials whose platform-key copy does not decrypt. They do not block finalize; clearing the platform-key copies destroys them.
+                    format: int64
+                verification_failures:
+                    type: integer
+                    description: 'Only returned by the backfill step: credentials whose two copies did not match, whose platform-key copy no longer decrypts beside an organization-key copy, or whose organization-key copy did not open, in the verification that step just ran. Above zero means no clean verification was recorded, so finalize stays blocked.'
+                    format: int64
+                waiting:
+                    type: integer
+                    description: Saved credentials with only a platform-key copy, which the backfill still has to seal with the organization key.
+                    format: int64
+            description: Where one organization stands in moving its saved Tailscale OAuth clients from the platform key to its own organization key (the tailscale-oauth-clients use case).
+            required:
+                - organization_id
+                - name
+                - slug
+                - state
+                - generation
+                - waiting
+                - unreadable
+                - platform_copies
+        AdminTailscaleOAuthMigrationOrganizations:
+            type: object
+            properties:
+                minimum_dual_write_seconds:
+                    type: integer
+                    description: How long an organization must stay in dual_write before it can be finalized.
+                    format: int64
+                organizations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminTailscaleOAuthMigrationOrganization'
+                    description: Every organization with saved Tailscale OAuth credentials, by name.
+            required:
+                - organizations
+                - minimum_dual_write_seconds
         AdminUploadImageResult:
             type: object
             properties:
@@ -132979,6 +133228,24 @@ components:
                 - id
                 - name
                 - key_prefix
+        RunTailscaleOAuthMigrationStepRequestBody:
+            type: object
+            properties:
+                organization_id:
+                    type: string
+                    description: The organization ID.
+                step:
+                    type: string
+                    description: The step to run.
+                    enum:
+                        - enroll
+                        - backfill
+                        - finalize
+                        - clear_platform_copies
+                        - rollback
+            required:
+                - organization_id
+                - step
         RunUpstreamOAuthMigrationRequestBody:
             type: object
             properties:

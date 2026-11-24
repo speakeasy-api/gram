@@ -29,7 +29,6 @@ import { errorMessage } from "@/lib/gramAdminApi";
 import { needsMigrationRun } from "@/lib/upstreamOAuthMigration";
 import {
   backfillMcpAuthGrants,
-  disableUpstreamAuthEnforcement,
   enableUpstreamAuthEnforcement,
   runUpstreamOAuthMigration,
   upstreamOAuthMigrationOrganizationsQuery,
@@ -125,42 +124,24 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
     }
   }
 
-  async function toggleEnforcement(
-    org: AdminUpstreamOAuthMigrationOrganization,
-    enable: boolean,
-  ) {
-    const ok = await confirm(
-      enable
-        ? {
-            title: `Enforce upstream auth for ${org.name}?`,
-            description:
-              "Its servers and assistant turns are served by the auth client each credential chose, and using it requires permission. Confirm that its mandatory authorization shadow shows no unexplained new denial, and that it was told valid credentials from another organization are refused on its public servers instead of served anonymously. Credentials with an ambiguous choice are asked to reconnect.",
-            confirmLabel: "Enforce",
-          }
-        : {
-            title: `Stop enforcing upstream auth for ${org.name}?`,
-            description:
-              "Requests go back to the upstream client choice within a minute. Choices keep being recorded, so enforcement can be turned on again later.",
-            confirmLabel: "Stop enforcing",
-          },
-    );
+  async function enforce(org: AdminUpstreamOAuthMigrationOrganization) {
+    const ok = await confirm({
+      title: `Enforce upstream auth for ${org.name}?`,
+      description:
+        "Its servers and assistant turns are served by the auth client each credential chose, and using it requires permission. Confirm that its mandatory authorization shadow shows no unexplained new denial, and that it was told valid credentials from another organization are refused on its public servers instead of served anonymously. Credentials with an ambiguous choice are asked to reconnect. Staff cannot turn enforcement off.",
+      confirmLabel: "Enforce",
+    });
     if (!ok) return;
     setRunning((current) =>
       new Map(current).set(org.id, "Updating enforcement"),
     );
     try {
-      const status = enable
-        ? await enableUpstreamAuthEnforcement(org.id)
-        : await disableUpstreamAuthEnforcement(org.id);
+      const status = await enableUpstreamAuthEnforcement(org.id);
       client.setQueryData(
         upstreamOAuthMigrationStatusQuery(org.id).queryKey,
         status,
       );
-      toast.success(
-        enable
-          ? `Enforcing upstream auth for ${org.name}`
-          : `Stopped enforcing upstream auth for ${org.name}`,
-      );
+      toast.success(`Enforcing upstream auth for ${org.name}`);
     } catch (e) {
       toast.error(`${org.name}: ${errorMessage(e)}`);
     } finally {
@@ -349,20 +330,12 @@ export function UpstreamOAuthMigrationPage(): JSX.Element {
                         >
                           {status?.data?.migrated ? "Run again" : "Migrate"}
                         </Button>
-                        {status?.data?.enforcement?.enabled ? (
+                        {status?.data?.enforcement?.ready &&
+                        !status.data.enforcement.enabled ? (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => void toggleEnforcement(org, false)}
-                            disabled={busy || bulk !== null}
-                          >
-                            Stop enforcing
-                          </Button>
-                        ) : status?.data?.enforcement?.ready ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => void toggleEnforcement(org, true)}
+                            onClick={() => void enforce(org)}
                             disabled={busy || bulk !== null}
                           >
                             Enforce
