@@ -326,7 +326,7 @@ func (s *Service) previewOfferReplacement(ctx context.Context, logger *slog.Logg
 	result.HiddenServerCount = len(moved) - len(servers)
 	checks := make([]authz.Check, 0, len(servers))
 	for _, server := range servers {
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(server.ID, server.ToolsetID), projectID.String()))
+		checks = append(checks, authz.MCPServer(authz.MCPServerIDOf(mcpGrantResourceID(server.ID, server.ToolsetID)), authz.ProjectIDOf(projectID)).Read())
 	}
 	readable, err := s.authz.FindMatched(ctx, checks)
 	if err != nil {
