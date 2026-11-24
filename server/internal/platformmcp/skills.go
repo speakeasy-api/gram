@@ -3,6 +3,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
@@ -57,6 +58,12 @@ var (
 	ErrSkillTargetAmbiguous = errors.New("platform mcp skill distribution target ambiguous")
 	// ErrSkillContentTooLarge is a manifest over the reviewed ceiling.
 	ErrSkillContentTooLarge = errors.New("platform mcp skill content too large")
+	// ErrSkillFileContentAmbiguous is a supporting file that sets both its
+	// text and its base64 bytes.
+	ErrSkillFileContentAmbiguous = errors.New("platform mcp skill file sets both content and content_base64")
+	// ErrSkillFileContentInvalid is a supporting file whose content_base64 is
+	// not valid standard base64.
+	ErrSkillFileContentInvalid = errors.New("platform mcp skill file content_base64 is not valid base64")
 )
 
 // SkillsManagement is the subset of the skills management service this surface
@@ -171,6 +178,25 @@ type SkillVersionSummary struct {
 	CreatedAt        string   `json:"created_at"`
 	Content          string   `json:"content,omitempty"`
 	ContentTruncated bool     `json:"content_truncated,omitempty"`
+
+	// Files lists the version's supporting files besides SKILL.md.
+	Files []SkillFileSummary `json:"files,omitempty" jsonschema:"the version's supporting files besides SKILL.md, such as scripts/, references/ and assets/ entries; absent when the skill is SKILL.md alone"`
+}
+
+// SkillFileSummary describes one supporting file of a skill version without
+// its content.
+type SkillFileSummary struct {
+	// Path is the file's path relative to the skill root.
+	Path string `json:"path"`
+
+	// SHA256 is the lowercase hex SHA-256 of the file bytes.
+	SHA256 string `json:"sha256"`
+
+	// SizeBytes is the file size in bytes.
+	SizeBytes int64 `json:"size_bytes"`
+
+	// ContentType is the file's media type.
+	ContentType string `json:"content_type"`
 }
 
 // SkillAuthoringResult is what create and version writes return.
@@ -469,6 +495,9 @@ func (s *SkillsService) ListSkillVersions(ctx context.Context, principal Princip
 type CreateSkillInput struct {
 	ProjectSlug string
 	Content     string
+
+	// Files are the supporting files stored with SKILL.md; nil means none.
+	Files []SkillFileToolInput
 }
 
 func (s *SkillsService) CreateSkill(ctx context.Context, principal Principal, input CreateSkillInput) (SkillAuthoringResult, error) {
@@ -479,8 +508,13 @@ func (s *SkillsService) CreateSkill(ctx context.Context, principal Principal, in
 	if err := checkSkillContent(input.Content); err != nil {
 		return SkillAuthoringResult{}, err
 	}
+	files, err := skillFileInputs(input.Files)
+	if err != nil {
+		return SkillAuthoringResult{}, err
+	}
 	result, err := s.skills.Create(ctx, &genskills.CreatePayload{
 		Content:          input.Content,
+		Files:            files,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -499,6 +533,10 @@ type AddSkillVersionInput struct {
 	SkillID                 string
 	Content                 string
 	ExpectedLatestVersionID string
+
+	// Files are the supporting files of the new version. Nil keeps the
+	// current version's files; an empty list removes them.
+	Files []SkillFileToolInput
 }
 
 func (s *SkillsService) AddSkillVersion(ctx context.Context, principal Principal, input AddSkillVersionInput) (SkillAuthoringResult, error) {
@@ -512,9 +550,14 @@ func (s *SkillsService) AddSkillVersion(ctx context.Context, principal Principal
 	if err := checkSkillContent(input.Content); err != nil {
 		return SkillAuthoringResult{}, err
 	}
+	files, err := skillFileInputs(input.Files)
+	if err != nil {
+		return SkillAuthoringResult{}, err
+	}
 	result, err := s.skills.AddVersion(ctx, &genskills.AddVersionPayload{
 		ID:                      input.SkillID,
 		Content:                 input.Content,
+		Files:                   files,
 		DerivedFromVersionID:    optionalString(strings.TrimSpace(input.ExpectedLatestVersionID)),
 		ExpectedLatestVersionID: optionalString(strings.TrimSpace(input.ExpectedLatestVersionID)),
 		SessionToken:            nil,
@@ -814,6 +857,10 @@ type ApproveSkillSuggestionInput struct {
 	// Content is a complete edited SKILL.md recorded in place of the proposed
 	// changes, for a reviewer who corrected the suggestion before taking it.
 	Content string
+
+	// Files are the supporting files of the new version. Nil keeps the files
+	// of the suggestion's base version; an empty list removes them.
+	Files []SkillFileToolInput
 }
 
 type ApproveSkillSuggestionOutput struct {
@@ -847,10 +894,15 @@ func (s *SkillsService) ApproveSkillSuggestion(ctx context.Context, principal Pr
 			return ApproveSkillSuggestionOutput{}, ErrRegistrationInvalid
 		}
 	}
+	files, err := skillFileInputs(input.Files)
+	if err != nil {
+		return ApproveSkillSuggestionOutput{}, err
+	}
 	payload := &genskills.ApproveSuggestionPayload{
 		ID:               input.SuggestionID,
 		Content:          nil,
 		ChangeIds:        input.ChangeIDs,
+		Files:            files,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -1329,6 +1381,18 @@ func buildSkillVersionSummary(version *types.SkillVersion, includeContent bool) 
 		CreatedAt:        version.CreatedAt,
 		Content:          "",
 		ContentTruncated: false,
+		Files:            nil,
+	}
+	for _, file := range version.Files {
+		if file == nil {
+			continue
+		}
+		summary.Files = append(summary.Files, SkillFileSummary{
+			Path:        file.Path,
+			SHA256:      file.Sha256,
+			SizeBytes:   file.SizeBytes,
+			ContentType: file.ContentType,
+		})
 	}
 	if version.SpecValid && version.RawSha256 != "" {
 		summary.ServedDigest = mcpskills.Digest(version.RawSha256)
@@ -1350,6 +1414,35 @@ func buildSkillVersionSummary(version *types.SkillVersion, includeContent bool) 
 		summary.Content = content
 	}
 	return summary
+}
+
+// skillFileInputs converts tool-supplied supporting files to the management
+// API shape, preserving nil so an omitted list still means "keep the base
+// version's files". Path and size rules are enforced by the skills service.
+func skillFileInputs(files []SkillFileToolInput) ([]*types.SkillFileInput, error) {
+	if files == nil {
+		return nil, nil
+	}
+	inputs := make([]*types.SkillFileInput, 0, len(files))
+	for _, file := range files {
+		content := []byte(file.Content)
+		if file.ContentBase64 != "" {
+			if file.Content != "" {
+				return nil, ErrSkillFileContentAmbiguous
+			}
+			decoded, err := base64.StdEncoding.DecodeString(file.ContentBase64)
+			if err != nil {
+				return nil, ErrSkillFileContentInvalid
+			}
+			content = decoded
+		}
+		inputs = append(inputs, &types.SkillFileInput{
+			Path:        file.Path,
+			Content:     content,
+			ContentType: optionalString(strings.TrimSpace(file.ContentType)),
+		})
+	}
+	return inputs, nil
 }
 
 func checkSkillContent(content string) error {

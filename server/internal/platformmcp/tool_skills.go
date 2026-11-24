@@ -54,11 +54,12 @@ type ListSkillSuggestionFeedbackToolInput struct {
 }
 
 type ApproveSkillSuggestionToolInput struct {
-	ProjectSlug  string   `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
-	SuggestionID string   `json:"suggestion_id" jsonschema:"suggestion ID returned by list_skill_suggestions"`
-	ChangeIDs    []string `json:"change_ids,omitempty" jsonschema:"IDs of the reviewed changes to take, from list_skill_suggestions; name every change to take the whole suggestion. Exactly one of change_ids or content is required"`
-	Content      string   `json:"content,omitempty" jsonschema:"complete edited SKILL.md to record instead of the proposed changes, at most 65536 UTF-8 bytes; use when the user corrected the suggestion. Exactly one of change_ids or content is required"`
-	Confirmed    bool     `json:"confirmed" jsonschema:"set true only after the user explicitly confirms recording this new version of this exact skill"`
+	ProjectSlug  string               `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	SuggestionID string               `json:"suggestion_id" jsonschema:"suggestion ID returned by list_skill_suggestions"`
+	ChangeIDs    []string             `json:"change_ids,omitempty" jsonschema:"IDs of the reviewed changes to take, from list_skill_suggestions; name every change to take the whole suggestion. Exactly one of change_ids or content is required"`
+	Content      string               `json:"content,omitempty" jsonschema:"complete edited SKILL.md to record instead of the proposed changes, at most 65536 UTF-8 bytes; use when the user corrected the suggestion. Exactly one of change_ids or content is required"`
+	Files        []SkillFileToolInput `json:"files,omitempty" jsonschema:"supporting files of the new version besides SKILL.md. Omit to keep the files of the version the suggestion was written against, pass an empty list to remove them all, or pass the complete new set"`
+	Confirmed    bool                 `json:"confirmed" jsonschema:"set true only after the user explicitly confirms recording this new version of this exact skill"`
 }
 
 type DismissSkillSuggestionToolInput struct {
@@ -67,16 +68,27 @@ type DismissSkillSuggestionToolInput struct {
 	Confirmed    bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms discarding this suggestion"`
 }
 
+// SkillFileToolInput is one supporting file of a skill directory. Text files
+// pass content; binary files pass content_base64.
+type SkillFileToolInput struct {
+	Path          string `json:"path" jsonschema:"slash-separated path relative to the skill root, for example references/REFERENCE.md or scripts/run.py; at most 512 bytes, no leading slash, no . or .. segments, and never SKILL.md"`
+	Content       string `json:"content,omitempty" jsonschema:"the file's text, for text files such as Markdown, scripts, and YAML. Set content or content_base64, not both"`
+	ContentBase64 string `json:"content_base64,omitempty" jsonschema:"the file's bytes, standard base64-encoded, for binary files such as images. Set content or content_base64, not both"`
+	ContentType   string `json:"content_type,omitempty" jsonschema:"optional media type; inferred from the path extension when omitted"`
+}
+
 type CreateSkillToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
-	Content     string `json:"content" jsonschema:"the complete SKILL.md, including YAML frontmatter and instructions; at most 65536 UTF-8 bytes"`
+	ProjectSlug string               `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	Content     string               `json:"content" jsonschema:"the complete SKILL.md, including YAML frontmatter and instructions; at most 65536 UTF-8 bytes"`
+	Files       []SkillFileToolInput `json:"files,omitempty" jsonschema:"optional supporting files stored with SKILL.md, such as scripts/, references/ and assets/ entries; at most 100 files, 5 MiB each and 10 MiB in total"`
 }
 
 type AddSkillVersionToolInput struct {
-	ProjectSlug             string `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
-	SkillID                 string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
-	Content                 string `json:"content" jsonschema:"the complete replacement SKILL.md; versions are immutable, so a correction is a new version rather than an edit"`
-	ExpectedLatestVersionID string `json:"expected_latest_version_id" jsonschema:"the version the caller read before writing, from get_skill; the write is refused as a conflict if the skill has moved on"`
+	ProjectSlug             string               `json:"project_slug" jsonschema:"the project's slug, as list_projects returns it"`
+	SkillID                 string               `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
+	Content                 string               `json:"content" jsonschema:"the complete replacement SKILL.md; versions are immutable, so a correction is a new version rather than an edit"`
+	ExpectedLatestVersionID string               `json:"expected_latest_version_id" jsonschema:"the version the caller read before writing, from get_skill; the write is refused as a conflict if the skill has moved on"`
+	Files                   []SkillFileToolInput `json:"files,omitempty" jsonschema:"supporting files of the new version besides SKILL.md. Omit to keep the current version's files, pass an empty list to remove them all, or pass the complete new set; at most 100 files, 5 MiB each and 10 MiB in total"`
 }
 
 type UpdateSkillMetadataToolInput struct {
@@ -328,7 +340,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "approve_skill_suggestion",
 		Title:       "Approve a Skill Suggestion",
-		Description: "Take a proposed improvement from list_skill_suggestions: record it as the skill's new version and close the suggestion, exactly as approving it in the dashboard does. Name the reviewed changes in change_ids (every change to take the whole suggestion, or some to take only those and leave the rest proposed), or pass content to record a corrected SKILL.md instead. Tell the user which skill changes and what each taken change does, ask them to confirm out loud, then call this with confirmed: true. Constraints: a change proposed after your review is never taken, because it is not in change_ids. If the skill has moved on since the suggestion was written, nothing is recorded and the suggestion is closed as superseded. The new version reaches the plugins, assistants, and MCP servers or gateways that already carry the skill and track its latest version; nobody new receives it.",
+		Description: "Take a proposed improvement from list_skill_suggestions: record it as the skill's new version and close the suggestion, exactly as approving it in the dashboard does. Name the reviewed changes in change_ids (every change to take the whole suggestion, or some to take only those and leave the rest proposed), or pass content to record a corrected SKILL.md instead. The new version keeps the supporting files of the version the suggestion was written against unless files is passed. Tell the user which skill changes and what each taken change does, ask them to confirm out loud, then call this with confirmed: true. Constraints: a change proposed after your review is never taken, because it is not in change_ids. If the skill has moved on since the suggestion was written, nothing is recorded and the suggestion is closed as superseded. The new version reaches the plugins, assistants, and MCP servers or gateways that already carry the skill and track its latest version; nobody new receives it.",
 		Annotations: approveSkillSuggestionAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input ApproveSkillSuggestionToolInput) (*mcp.CallToolResult, ApproveSkillSuggestionOutput, error) {
 		if !input.Confirmed {
@@ -340,6 +352,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 				SuggestionID: input.SuggestionID,
 				ChangeIDs:    input.ChangeIDs,
 				Content:      input.Content,
+				Files:        input.Files,
 			})
 		})
 	})
@@ -364,7 +377,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "create_skill",
 		Title:       "Create a Skill",
-		Description: "Write a new skill in a named project — a set of instructions an agent loads when it applies — from complete SKILL.md content. Writing it alone does nothing: no agent loads it until distribute_skill gives it to a plugin or an assistant, or link_skill_to_mcp serves it from an MCP server or gateway. Constraints: an existing active skill with the same normalized name records a new version instead, and identical content returns the existing version unchanged.",
+		Description: "Write a new skill in a named project — a set of instructions an agent loads when it applies — from complete SKILL.md content, plus optional supporting files such as scripts/, references/ and assets/ entries. Writing it alone does nothing: no agent loads it until distribute_skill gives it to a plugin or an assistant, or link_skill_to_mcp serves it from an MCP server or gateway. Constraints: an existing active skill with the same normalized name records a new version instead, and identical content and files return the existing version unchanged.",
 		Annotations: skillWriteAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateSkillToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
@@ -375,7 +388,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "add_skill_version",
 		Title:       "Record a New Skill Version",
-		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content returns the existing version unchanged. Recording a version gives it to nobody new; the plugins, assistants, and MCP servers or gateways that already carry the skill and track its latest version pick it up. To take a change proposed by list_skill_suggestions, use approve_skill_suggestion where it is offered, or have the user approve it in the AI Control Plane dashboard; either closes the suggestion, which a new version recorded here does not.",
+		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Supporting files (scripts/, references/, assets/) carry over from the current version unless files is passed; an empty files list removes them. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content and files return the existing version unchanged. Recording a version gives it to nobody new; the plugins, assistants, and MCP servers or gateways that already carry the skill and track its latest version pick it up. To take a change proposed by list_skill_suggestions, use approve_skill_suggestion where it is offered, or have the user approve it in the AI Control Plane dashboard; either closes the suggestion, which a new version recorded here does not.",
 		Annotations: skillWriteAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoverySkillWrite}, func(ctx context.Context, _ *mcp.CallToolRequest, input AddSkillVersionToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
@@ -580,7 +593,11 @@ func skillsToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrSkillTargetAmbiguous):
 		result = skillsRefusalResult{Code: "ambiguous_target", Message: "More than one plugin or assistant in this project has that name. Name it by its ID instead."}
 	case errors.Is(err, ErrSkillContentTooLarge):
-		result = skillsRefusalResult{Code: "invalid_request", Message: "A SKILL.md may be at most 65536 UTF-8 bytes. Shorten the instructions rather than splitting them across versions."}
+		result = skillsRefusalResult{Code: "invalid_request", Message: "A SKILL.md may be at most 65536 UTF-8 bytes. Shorten the instructions, or move detailed material into a supporting file such as references/REFERENCE.md, rather than splitting them across versions."}
+	case errors.Is(err, ErrSkillFileContentAmbiguous):
+		result = skillsRefusalResult{Code: "invalid_request", Message: "A supporting file sets both content and content_base64. Pass text files as content and binary files as content_base64, never both."}
+	case errors.Is(err, ErrSkillFileContentInvalid):
+		result = skillsRefusalResult{Code: "invalid_request", Message: "A supporting file's content_base64 is not valid standard base64. Encode the exact file bytes, or pass a text file as content."}
 	default:
 		if budgetResult, ok := operationBudgetToolResult(err); ok {
 			return budgetResult, true

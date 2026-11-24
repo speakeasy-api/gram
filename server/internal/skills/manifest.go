@@ -70,6 +70,26 @@ type parsedSkillManifest struct {
 	files []skilltree.Entry
 }
 
+// CanonicalTreeSHA256 returns the canonical_sha256 the skills service records
+// for a version made of content as SKILL.md plus files, along with the
+// validated files. Writers that insert skill versions directly, such as the
+// demo seed, use it to keep version identity consistent with the service.
+func CanonicalTreeSHA256(content string, files []skilltree.File) (string, []skilltree.Entry, error) {
+	manifest, err := parseSkillManifest(content)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse skill manifest: %w", err)
+	}
+	entries, err := skilltree.Validate(files)
+	if err != nil {
+		return "", nil, fmt.Errorf("validate skill files: %w", err)
+	}
+	withFiles, err := manifest.withSupportingFiles(entries)
+	if err != nil {
+		return "", nil, err
+	}
+	return withFiles.CanonicalSHA256, entries, nil
+}
+
 // withSupportingFiles returns the manifest with files attached and its
 // canonical digest recomputed over the whole skill tree.
 func (m parsedSkillManifest) withSupportingFiles(files []skilltree.Entry) (parsedSkillManifest, error) {

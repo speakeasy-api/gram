@@ -9,10 +9,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/skills"
+	"github.com/speakeasy-api/gram/server/internal/skills/skilltree"
 )
 
 // skillContentRunbookV2 is the runbook's v2 content: v1 plus a paging step.
 const skillContentRunbookV2 = skillContentRunbook + "- page the on-call before any manual failover.\n"
+
+// skillRunbookV2Files are the supporting files of the runbook's v2, so the
+// demo shows a multi-file skill: a reference document and a script.
+var skillRunbookV2Files = []skilltree.File{
+	{
+		Path:        "references/escalation.md",
+		Content:     []byte("# Escalation\n\n1. Page the on-call engineer.\n2. Open an incident channel.\n3. Post status updates every 30 minutes.\n"),
+		ContentType: "",
+	},
+	{
+		Path:        "scripts/failover-check.sh",
+		Content:     []byte("#!/bin/sh\n# Confirms the standby region is healthy before a manual failover.\nset -eu\necho \"checking standby health\"\n"),
+		ContentType: "",
+	},
+}
 
 // skillsRunbookV2 is the runbook's second version, which the drift split and
 // the recent runbook activations point at.
@@ -109,13 +126,32 @@ func (s *seeder) seedSkills(ctx context.Context) error {
 	// then a fresh latest-observation per machine splits the fleet into
 	// on-target / drifted / indeterminate.
 	runbookV2 := s.skillsRunbookV2()
+	runbookV2Digest, runbookV2Files, err := skills.CanonicalTreeSHA256(skillContentRunbookV2, skillRunbookV2Files)
+	if err != nil {
+		return fmt.Errorf("digest demo runbook v2: %w", err)
+	}
 	if err := s.q.SkillsInsertRunbookV2(ctx, repo.SkillsInsertRunbookV2Params{
 		ID:              runbookV2,
 		SkillID:         s.skillID(3),
+		CanonicalSha256: runbookV2Digest,
 		CreatedByUserID: lucas,
 		Content:         skillContentRunbookV2,
 	}); err != nil {
 		return fmt.Errorf("insert demo runbook v2: %w", err)
+	}
+	for _, file := range runbookV2Files {
+		if err := s.q.SkillsInsertVersionFile(ctx, repo.SkillsInsertVersionFileParams{
+			SkillVersionID: runbookV2,
+			SkillID:        s.skillID(3),
+			ProjectID:      proj,
+			Path:           file.Path,
+			Content:        file.Content,
+			Sha256:         file.SHA256,
+			SizeBytes:      file.Size,
+			ContentType:    file.ContentType,
+		}); err != nil {
+			return fmt.Errorf("insert demo runbook v2 file %q: %w", file.Path, err)
+		}
 	}
 
 	if err := s.q.SkillsInsertVersionLineage(ctx, repo.SkillsInsertVersionLineageParams{

@@ -52,16 +52,25 @@ VALUES
 E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Verify the order id and amount with the customer.\n+1a. If the customer pastes a card number, stop and ask them to remove it.\n 2. Use the process_refund tool with the confirmed amount.',
    'Make the PCI guardrail the first checkpoint instead of a trailing note.', 1);
 
--- Runbook v2: the base runbook content plus an on-call paging step.
+-- Runbook v2: the base runbook content plus an on-call paging step, with
+-- supporting files. Its canonical_sha256 is the tree digest computed in Go,
+-- since a multi-file version's identity covers its files.
 -- name: SkillsInsertRunbookV2 :exec
 INSERT INTO skill_versions (id, skill_id, content, canonical_sha256, raw_sha256,
                             description, spec_valid, created_by_user_id, created_at, promoted_at)
 SELECT @id::uuid, @skill_id::uuid, c,
-       encode(sha256(convert_to(c, 'UTF8')), 'hex'),
+       @canonical_sha256::text,
        encode(sha256(convert_to(c, 'UTF8')), 'hex'),
        'Add on-call paging step', TRUE, @created_by_user_id::text,
        now() - interval '3 days', now() - interval '3 days'
 FROM (SELECT @content::text AS c) s;
+
+-- name: SkillsInsertVersionFile :exec
+INSERT INTO skill_version_files (skill_version_id, skill_id, project_id, path,
+                                 content, sha256, size_bytes, content_type, created_at)
+VALUES (@skill_version_id::uuid, @skill_id::uuid, @project_id::uuid, @path::text,
+        @content::bytea, @sha256::text, @size_bytes::bigint, @content_type::text,
+        now() - interval '3 days');
 
 -- name: SkillsInsertVersionLineage :exec
 INSERT INTO skill_version_lineages (skill_version_id, skill_id, derived_from_version_id)

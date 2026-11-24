@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -59,8 +60,9 @@ const (
 	// maxSkillFilesRequestBodyBytes bounds request bodies of methods that
 	// accept supporting files: skilltree.MaxTotalBytes (10 MiB) of file bytes
 	// grow by 4/3 under base64 to about 13.4 MiB, plus a SKILL.md of up to
-	// 64 KiB that JSON escaping can expand several times. 16 MiB covers both.
-	maxSkillFilesRequestBodyBytes = 16 * 1024 * 1024 // 16 MiB
+	// 64 KiB that JSON escaping can expand to at most 384 KiB. That fits the
+	// server-wide request body ceiling, which applies anyway.
+	maxSkillFilesRequestBodyBytes = constants.MaxRequestBodyBytes // 15 MiB
 
 	maxSkillDisplayNameRunes = 256
 	maxSkillSummaryRunes     = 1024

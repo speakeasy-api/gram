@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -1354,4 +1355,94 @@ func TestSkillVersionSummaryReportsTheDigestAgentsSeeOnlyForServableVersions(t *
 	encoded, err := json.Marshal(invalid)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "served_digest")
+}
+
+func TestCreateSkillForwardsTextAndBase64Files(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{
+		skill:         testSkill(),
+		latestVersion: testSkillVersion("---\nname: add-mcp\n---\n"),
+		recordResult: &genskills.RecordSkillResult{
+			Skill:          testSkill(),
+			Version:        testSkillVersion("---\nname: add-mcp\n---\n"),
+			CreatedSkill:   true,
+			CreatedVersion: true,
+		},
+	}
+	skills.recordResult.Version.Files = []*types.SkillFile{{Path: "references/a.md", Sha256: "def456", SizeBytes: 5, ContentType: "text/markdown; charset=utf-8"}}
+	service := testSkillsService(t, skills)
+
+	result, err := service.CreateSkill(t.Context(), testPrincipal(), CreateSkillInput{
+		ProjectSlug: testSkillProjectSlug,
+		Content:     "---\nname: add-mcp\n---\n",
+		Files: []SkillFileToolInput{
+			{Path: "references/a.md", Content: "hello", ContentBase64: "", ContentType: ""},
+			{Path: "assets/logo.png", Content: "", ContentBase64: base64.StdEncoding.EncodeToString([]byte{0x89, 'P', 'N', 'G'}), ContentType: "image/png"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, skills.created)
+	require.Len(t, skills.created.Files, 2)
+	require.Equal(t, []byte("hello"), skills.created.Files[0].Content)
+	require.Nil(t, skills.created.Files[0].ContentType)
+	require.Equal(t, []byte{0x89, 'P', 'N', 'G'}, skills.created.Files[1].Content)
+	require.Equal(t, "image/png", *skills.created.Files[1].ContentType)
+	require.Equal(t, []SkillFileSummary{{Path: "references/a.md", SHA256: "def456", SizeBytes: 5, ContentType: "text/markdown; charset=utf-8"}}, result.Version.Files)
+}
+
+func TestCreateSkillRefusesAmbiguousOrInvalidFileContent(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{}
+	service := testSkillsService(t, skills)
+
+	_, err := service.CreateSkill(t.Context(), testPrincipal(), CreateSkillInput{
+		ProjectSlug: testSkillProjectSlug,
+		Content:     "---\nname: add-mcp\n---\n",
+		Files:       []SkillFileToolInput{{Path: "a.md", Content: "x", ContentBase64: "eA==", ContentType: ""}},
+	})
+	require.ErrorIs(t, err, ErrSkillFileContentAmbiguous)
+
+	_, err = service.CreateSkill(t.Context(), testPrincipal(), CreateSkillInput{
+		ProjectSlug: testSkillProjectSlug,
+		Content:     "---\nname: add-mcp\n---\n",
+		Files:       []SkillFileToolInput{{Path: "a.bin", Content: "", ContentBase64: "not base64!", ContentType: ""}},
+	})
+	require.ErrorIs(t, err, ErrSkillFileContentInvalid)
+	require.Nil(t, skills.created, "a malformed file never reaches the skills service")
+}
+
+func TestAddSkillVersionKeepsOmittedFilesDistinctFromEmpty(t *testing.T) {
+	t.Parallel()
+
+	skills := &recordingSkillsManagement{
+		skill:         testSkill(),
+		latestVersion: testSkillVersion("---\nname: add-mcp\n---\n"),
+		recordResult: &genskills.RecordSkillResult{
+			Skill:          testSkill(),
+			Version:        testSkillVersion("---\nname: add-mcp\n---\n"),
+			CreatedSkill:   false,
+			CreatedVersion: true,
+		},
+	}
+	service := testSkillsService(t, skills)
+	input := AddSkillVersionInput{
+		ProjectSlug:             testSkillProjectSlug,
+		SkillID:                 testSkillID,
+		Content:                 "---\nname: add-mcp\n---\n",
+		ExpectedLatestVersionID: testSkillVersionID,
+		Files:                   nil,
+	}
+
+	_, err := service.AddSkillVersion(t.Context(), testPrincipal(), input)
+	require.NoError(t, err)
+	require.Nil(t, skills.addedVersion.Files, "omitted files keep the current version's files")
+
+	input.Files = []SkillFileToolInput{}
+	_, err = service.AddSkillVersion(t.Context(), testPrincipal(), input)
+	require.NoError(t, err)
+	require.NotNil(t, skills.addedVersion.Files, "an empty list removes every supporting file")
+	require.Empty(t, skills.addedVersion.Files)
 }

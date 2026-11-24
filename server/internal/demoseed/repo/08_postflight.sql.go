@@ -1070,6 +1070,19 @@ func (q *Queries) PostflightCountShadowPolicyGrants(ctx context.Context, arg Pos
 	return count, err
 }
 
+const postflightCountSkillVersionFiles = `-- name: PostflightCountSkillVersionFiles :one
+SELECT count(*)
+FROM skill_version_files
+WHERE project_id = $1::uuid
+`
+
+func (q *Queries) PostflightCountSkillVersionFiles(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightCountSkillVersionFiles, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightCountToolMetadata = `-- name: PostflightCountToolMetadata :one
 SELECT count(*) FROM mcp_server_tool_metadata
 WHERE project_id = $1::uuid AND deleted IS FALSE
