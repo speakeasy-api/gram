@@ -1003,7 +1003,9 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, encryptionClient)
+			runnerKeys := orgEncryption.RunnerKeys(logger, encryptionClient)
+
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, guardianPolicy, db, assetStorage, tigrisStore, runnerKeys)
 			if err != nil {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
@@ -1918,7 +1920,7 @@ func newStartCommand() *cli.Command {
 				networkIngressClient.Client = temporalEnv.Client()
 			}
 			ingressPublicationRequester := plugins.PublicationRequests{Enabled: publicationEmit}
-			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient)
+			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, orgEncryption.NetworkIngressCredentials(logger, encryptionClient), auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient)
 			networkIngressService.UseGateway(networkIngressConfig.Gateway)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).
@@ -2194,7 +2196,7 @@ func newStartCommand() *cli.Command {
 			widgets.Attach(mux, widgetsSvc)
 			dashboards.Attach(mux, dashboardsSvc)
 			workloadpolicy.Attach(mux, workloadPolicySvc)
-			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
+			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, runnerKeys, tigrisStore))
 			otelService := otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics)
 			// Exports accepted on /otel/v1/* also run the hooks telemetry
 			// writers, so usage and cost attribution do not depend on which
@@ -2366,6 +2368,7 @@ func newStartCommand() *cli.Command {
 						ClientSecrets:                  clientSecrets,
 						UpstreamTokens:                 upstreamTokens,
 						AIProviderKeys:                 aiProviderKeys,
+						RunnerKeys:                     runnerKeys,
 						FeatureProvider:                featureFlags,
 						AssetStorage:                   assetStorage,
 						SlackClient:                    slackClient,
@@ -2425,7 +2428,7 @@ func newStartCommand() *cli.Command {
 						return
 					}
 					defer lockDB.Close()
-					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, encryptionClient, orgEncryption.Service, orgEncryption.Provisioner, networkIngressConfig, ingressPublicationRequester)
+					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, lockDB, orgEncryption.NetworkIngressCredentials(logger, encryptionClient), orgEncryption.Service, orgEncryption.Provisioner, networkIngressConfig, ingressPublicationRequester)
 					if err != nil {
 						logger.ErrorContext(ctx, "configure network ingress worker", attr.SlogError(err))
 						return

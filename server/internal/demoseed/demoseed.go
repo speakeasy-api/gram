@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/fixture/fixtureauth"
@@ -63,6 +64,11 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	// upstream auth backfills acquire another while it is held.
 	if db.Config().MaxConns < 2 {
 		return fmt.Errorf("demo seed needs a postgres pool of at least 2 connections, got %d", db.Config().MaxConns)
+	}
+
+	// Reference data only; the decision backfill would touch other organizations.
+	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
+		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
 	}
 
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
