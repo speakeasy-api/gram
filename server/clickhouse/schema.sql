@@ -1811,7 +1811,10 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS mcp_tool_call_summaries_mv TO mcp_tool_ca
 WITH
     -- Cutoff separates live MV ingestion from the one-time historical
     -- backfill, which an operator runs outside migrations, in chunks, for
-    -- event times before it. Must be a whole 15-minute boundary.
+    -- event times before it. Must be a whole 15-minute boundary. If the
+    -- deploy misses the cutoff, do NOT edit this value in place: the backfill
+    -- must take its boundary from the view's actual creation time and repair
+    -- the partial buckets below it.
     toUnixTimestamp64Nano(toDateTime64('2026-12-02 00:00:00', 9, 'UTC')) AS mcp_tool_call_summaries_cutoff_unix_nano
 SELECT
     gram_project_id,
