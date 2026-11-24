@@ -2,10 +2,13 @@ package platformmcp
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -241,6 +244,18 @@ func TestGatewayConnectionSettingsReportsReadableProxiedMemberSignIn(t *testing.
 	require.Empty(t, *empty.GatewayMemberSignIn)
 	require.Equal(t, got.Version, empty.Version)
 
+	for _, query := range []string{"ListServableMetaMCPMembers", "ListOrganizationMCPServersByID"} {
+		cause := errors.New("gateway test query failed")
+		failing := NewMCPConnectionSettingsService(gatewaySettingsQueryFailure{DBTX: f.conn, query: query, cause: cause})
+		_, err := failing.gatewayMemberSignIn(ctx, f.principal, f.project.ID, gateway.ID)
+		require.ErrorIs(t, err, cause, query)
+		require.ErrorIs(t, err, ErrUnavailable, query)
+		result, handled := mcpConnectionSettingsToolResult(err)
+		require.True(t, handled, query)
+		require.True(t, result.IsError, query)
+		require.Contains(t, result.Content[0].(*mcp.TextContent).Text, "temporarily unavailable", query)
+	}
+
 	other := input
 	other.ProjectID = uuid.NewString()
 	_, err = service.readWithGatewayMemberSignIn(ctx, f.principal, other)
@@ -249,4 +264,17 @@ func TestGatewayConnectionSettingsReportsReadableProxiedMemberSignIn(t *testing.
 	foreign.OrganizationID = "other-org"
 	_, err = service.readWithGatewayMemberSignIn(authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, foreign.OrganizationID)}), foreign, input)
 	require.ErrorIs(t, err, ErrMCPConnectionSettingsNotFound)
+}
+
+type gatewaySettingsQueryFailure struct {
+	platformrepo.DBTX
+	query string
+	cause error
+}
+
+func (f gatewaySettingsQueryFailure) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	if strings.HasPrefix(sql, "-- name: "+f.query+" ") {
+		return nil, f.cause
+	}
+	return f.DBTX.Query(ctx, sql, args...)
 }
