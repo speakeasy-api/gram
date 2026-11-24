@@ -250,8 +250,7 @@ func servePrivateIngress(
 			return fmt.Errorf("configure tailnet gateway principal: %w", err)
 		}
 	}
-	mux := newPrivateIngressHandler(deps.Logger, telemetry, verifier, deps.MeterReadings, func(mux goahttp.MiddlewareMuxer) {
-		mux.Use(deps.Runtime.AICatalog.Middleware)
+	mux := newPrivateIngressHandler(deps.Logger, telemetry, verifier, deps.MeterReadings, deps.Runtime.AICatalog, func(mux goahttp.Muxer) {
 		mcp.AttachPrivate(mux, deps.Runtime.MCP, deps.Runtime.Metadata)
 	})
 
@@ -305,7 +304,8 @@ func newPrivateIngressHandler(
 	telemetry *netingress.Telemetry,
 	verifier netingress.WorkloadVerifier,
 	meterReadings gcp.Publisher[*meteringv1.MeterReading],
-	attach func(goahttp.MiddlewareMuxer),
+	aiCatalog *aivendors.Store,
+	attach func(goahttp.Muxer),
 ) goahttp.Muxer {
 	mux := goahttp.NewMuxer()
 	mux.Use(middleware.NetworkServingPolicyVersion)
@@ -332,6 +332,7 @@ func newPrivateIngressHandler(
 	// rewrites successful responses.
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, meterReadings))
 	mux.Use(middleware.SessionMiddleware)
+	mux.Use(aiCatalog.Middleware)
 	attach(mux)
 	return mux
 }
