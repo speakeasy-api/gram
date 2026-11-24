@@ -103,7 +103,7 @@ function ProgressBody({
             label="Installs running it"
             value={fleet.installs_on_current}
             total={fleet.installs}
-            note={`Installs on exactly this binary that sent a hook in the last ${fleet.window_days} full days.`}
+            note={`Installs reporting this exact binary version that sent a hook in the last ${fleet.window_days} full days.`}
           />
         ) : (
           <p className="text-muted-foreground text-sm">
