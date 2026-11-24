@@ -69,7 +69,7 @@ export function FeedbackTab({
           updateMcpFeedbackSettingsForm: {
             mcpServerId: mcpServer.id,
             ...next,
-            expectedUpdatedAt: settings?.updatedAt,
+            expectedVersion: settings?.version,
           },
         },
       });

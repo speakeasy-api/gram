@@ -99,6 +99,8 @@ const INPUT_SCHEMA = JSON.stringify({
   required: ["content"],
 });
 
+const STORED_VERSION = "2026-11-16T09:00:00.123456Z";
+
 function settings(
   overrides: Partial<McpFeedbackSettings> = {},
 ): McpFeedbackSettings {
@@ -115,6 +117,8 @@ function settings(
       description: toolDescription,
       inputSchema: INPUT_SCHEMA,
     },
+    // Stored settings carry a version finer than a Date can hold.
+    version: overrides.updatedAt ? STORED_VERSION : "",
     ...overrides,
   };
 }
@@ -243,7 +247,7 @@ describe("a server feedback was never set up on", () => {
           enabled: true,
           toolName: undefined,
           toolDescription: undefined,
-          expectedUpdatedAt: undefined,
+          expectedVersion: "",
         },
       },
     });
@@ -298,7 +302,7 @@ describe("a server with feedback on", () => {
           enabled: false,
           toolName: "report_a_problem",
           toolDescription: "Tell the platform team what went wrong.",
-          expectedUpdatedAt: new Date("2026-11-16T09:00:00Z"),
+          expectedVersion: STORED_VERSION,
         },
       },
     });
@@ -609,7 +613,7 @@ describe("customizing the feedback tool", () => {
           enabled: true,
           toolName: "report_a_problem",
           toolDescription: undefined,
-          expectedUpdatedAt: new Date("2026-11-16T09:00:00Z"),
+          expectedVersion: STORED_VERSION,
         },
       },
     });
