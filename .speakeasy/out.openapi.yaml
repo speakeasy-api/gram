@@ -109426,6 +109426,9 @@ components:
         updated_by_email:
           type: string
           description: The email of the person who last changed the settings; for a change made with an API key, the key's creator. Absent when that person has since been removed.
+        version:
+          type: string
+          description: Identifies these stored settings, and changes whenever they do. Empty when the server never had any. Send it back as expected_version so a change made from settings someone else has since changed is refused.
       description: Whether an MCP server offers the feedback tool, and how an admin set it up.
       required:
         - mcp_server_id
@@ -109433,6 +109436,7 @@ components:
         - default_tool_name
         - default_tool_description
         - tool
+        - version
     McpFeedbackTool:
       type: object
       properties:
@@ -126326,10 +126330,9 @@ components:
         enabled:
           type: boolean
           description: Whether the server offers the feedback tool.
-        expected_updated_at:
+        expected_version:
           type: string
-          description: The updated_at of the settings this change was made from. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.
-          format: date-time
+          description: The version of the settings this change was made from, empty when the server had none. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.
         mcp_server_id:
           type: string
           description: The ID of the MCP server.

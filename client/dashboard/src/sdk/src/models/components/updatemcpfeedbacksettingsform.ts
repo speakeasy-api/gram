@@ -14,9 +14,9 @@ export type UpdateMcpFeedbackSettingsForm = {
    */
   enabled: boolean;
   /**
-   * The updated_at of the settings this change was made from. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.
+   * The version of the settings this change was made from, empty when the server had none. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.
    */
-  expectedUpdatedAt?: Date | undefined;
+  expectedVersion?: string | undefined;
   /**
    * The ID of the MCP server.
    */
@@ -34,7 +34,7 @@ export type UpdateMcpFeedbackSettingsForm = {
 /** @internal */
 export type UpdateMcpFeedbackSettingsForm$Outbound = {
   enabled: boolean;
-  expected_updated_at?: string | undefined;
+  expected_version?: string | undefined;
   mcp_server_id: string;
   tool_description?: string | undefined;
   tool_name?: string | undefined;
@@ -47,16 +47,14 @@ export const UpdateMcpFeedbackSettingsForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     enabled: z.boolean(),
-    expectedUpdatedAt: z.optional(
-      z.pipe(z.date(), z.transform(v => v.toISOString())),
-    ),
+    expectedVersion: z.optional(z.string()),
     mcpServerId: z.string(),
     toolDescription: z.optional(z.string()),
     toolName: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      expectedUpdatedAt: "expected_updated_at",
+      expectedVersion: "expected_version",
       mcpServerId: "mcp_server_id",
       toolDescription: "tool_description",
       toolName: "tool_name",

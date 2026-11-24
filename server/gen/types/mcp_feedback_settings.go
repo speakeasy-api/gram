@@ -31,4 +31,8 @@ type McpFeedbackSettings struct {
 	// with an API key, the key's creator. Absent when that person has since been
 	// removed.
 	UpdatedByEmail *string
+	// Identifies these stored settings, and changes whenever they do. Empty when
+	// the server never had any. Send it back as expected_version so a change made
+	// from settings someone else has since changed is refused.
+	Version string
 }

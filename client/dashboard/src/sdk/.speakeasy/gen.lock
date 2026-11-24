@@ -8207,7 +8207,7 @@ examples:
           mcp_server_id: "fd41f744-ed75-4d0d-8231-dcd5629b63db"
       responses:
         "200":
-          application/json: {"default_tool_description": "<value>", "default_tool_name": "<value>", "enabled": false, "mcp_server_id": "3b93be06-4aca-44b8-96d7-376f59a52eb2", "tool": {"description": "pfft shrilly fooey useless uselessly", "input_schema": "{key: 4572659462938067, key1: null, key2: \"<value>\"}", "name": "<value>", "title": "<value>"}}
+          application/json: {"default_tool_description": "<value>", "default_tool_name": "<value>", "enabled": false, "mcp_server_id": "3b93be06-4aca-44b8-96d7-376f59a52eb2", "tool": {"description": "pfft shrilly fooey useless uselessly", "input_schema": "{key: 4572659462938067, key1: null, key2: \"<value>\"}", "name": "<value>", "title": "<value>"}, "version": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -14641,7 +14641,7 @@ examples:
         application/json: {"enabled": true, "mcp_server_id": "2fbc0c99-6977-48dd-8802-a2f82889951f"}
       responses:
         "200":
-          application/json: {"default_tool_description": "<value>", "default_tool_name": "<value>", "enabled": true, "mcp_server_id": "f224ec1d-83ac-4e6e-b74d-87e9db1c1597", "tool": {"description": "badly that aboard tousle", "input_schema": "{key: 5150263157313882, key1: null, key2: \"<value>\"}", "name": "<value>", "title": "<value>"}}
+          application/json: {"default_tool_description": "<value>", "default_tool_name": "<value>", "enabled": true, "mcp_server_id": "f224ec1d-83ac-4e6e-b74d-87e9db1c1597", "tool": {"description": "badly that aboard tousle", "input_schema": "{key: 5150263157313882, key1: null, key2: \"<value>\"}", "name": "<value>", "title": "<value>"}, "version": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

@@ -25,10 +25,10 @@ type UpdateSettingsRequestBody struct {
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// The description agents read. Leave out to use the default.
 	ToolDescription *string `form:"tool_description,omitempty" json:"tool_description,omitempty" xml:"tool_description,omitempty"`
-	// The updated_at of the settings this change was made from. When set, the
-	// change is refused with a conflict if the settings were changed since, so one
-	// admin's change does not silently undo another's.
-	ExpectedUpdatedAt *string `form:"expected_updated_at,omitempty" json:"expected_updated_at,omitempty" xml:"expected_updated_at,omitempty"`
+	// The version of the settings this change was made from, empty when the server
+	// had none. When set, the change is refused with a conflict if the settings
+	// were changed since, so one admin's change does not silently undo another's.
+	ExpectedVersion *string `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
 }
 
 // GetSettingsResponseBody is the type of the "mcpFeedback" service
@@ -55,6 +55,10 @@ type GetSettingsResponseBody struct {
 	// with an API key, the key's creator. Absent when that person has since been
 	// removed.
 	UpdatedByEmail *string `form:"updated_by_email,omitempty" json:"updated_by_email,omitempty" xml:"updated_by_email,omitempty"`
+	// Identifies these stored settings, and changes whenever they do. Empty when
+	// the server never had any. Send it back as expected_version so a change made
+	// from settings someone else has since changed is refused.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // UpdateSettingsResponseBody is the type of the "mcpFeedback" service
@@ -81,6 +85,10 @@ type UpdateSettingsResponseBody struct {
 	// with an API key, the key's creator. Absent when that person has since been
 	// removed.
 	UpdatedByEmail *string `form:"updated_by_email,omitempty" json:"updated_by_email,omitempty" xml:"updated_by_email,omitempty"`
+	// Identifies these stored settings, and changes whenever they do. Empty when
+	// the server never had any. Send it back as expected_version so a change made
+	// from settings someone else has since changed is refused.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // ListResponseBody is the type of the "mcpFeedback" service "list" endpoint
@@ -724,11 +732,11 @@ type McpFeedbackResponseBody struct {
 // of the "updateSettings" endpoint of the "mcpFeedback" service.
 func NewUpdateSettingsRequestBody(p *mcpfeedback.UpdateSettingsPayload) *UpdateSettingsRequestBody {
 	body := &UpdateSettingsRequestBody{
-		McpServerID:       p.McpServerID,
-		Enabled:           p.Enabled,
-		ToolName:          p.ToolName,
-		ToolDescription:   p.ToolDescription,
-		ExpectedUpdatedAt: p.ExpectedUpdatedAt,
+		McpServerID:     p.McpServerID,
+		Enabled:         p.Enabled,
+		ToolName:        p.ToolName,
+		ToolDescription: p.ToolDescription,
+		ExpectedVersion: p.ExpectedVersion,
 	}
 	return body
 }
@@ -745,6 +753,7 @@ func NewGetSettingsMcpFeedbackSettingsOK(body *GetSettingsResponseBody) *types.M
 		DefaultToolDescription: *body.DefaultToolDescription,
 		UpdatedAt:              body.UpdatedAt,
 		UpdatedByEmail:         body.UpdatedByEmail,
+		Version:                *body.Version,
 	}
 	v.Tool = unmarshalMcpFeedbackToolResponseBodyToTypesMcpFeedbackTool(body.Tool)
 
@@ -913,6 +922,7 @@ func NewUpdateSettingsMcpFeedbackSettingsOK(body *UpdateSettingsResponseBody) *t
 		DefaultToolDescription: *body.DefaultToolDescription,
 		UpdatedAt:              body.UpdatedAt,
 		UpdatedByEmail:         body.UpdatedByEmail,
+		Version:                *body.Version,
 	}
 	v.Tool = unmarshalMcpFeedbackToolResponseBodyToTypesMcpFeedbackTool(body.Tool)
 
@@ -1260,6 +1270,9 @@ func ValidateGetSettingsResponseBody(body *GetSettingsResponseBody) (err error) 
 	if body.Tool == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool", "body"))
 	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
@@ -1291,6 +1304,9 @@ func ValidateUpdateSettingsResponseBody(body *UpdateSettingsResponseBody) (err e
 	}
 	if body.Tool == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))

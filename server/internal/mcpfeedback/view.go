@@ -39,7 +39,19 @@ func buildSettingsView(mcpServerID uuid.UUID, settings Settings, updatedAt *time
 		},
 		UpdatedAt:      updatedAtText,
 		UpdatedByEmail: updatedByEmail,
+		Version:        settingsVersion(updatedAt),
 	}
+}
+
+// settingsVersion identifies a server's stored settings: the time they were
+// last changed, to the microsecond the database keeps, or empty when there
+// are none. Callers treat it as opaque and send it back unchanged.
+func settingsVersion(updatedAt *time.Time) string {
+	if updatedAt == nil {
+		return ""
+	}
+
+	return updatedAt.UTC().Format(time.RFC3339Nano)
 }
 
 // buildFeedbackView describes one stored report.

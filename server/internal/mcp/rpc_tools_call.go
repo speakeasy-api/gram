@@ -157,7 +157,7 @@ func handleToolsCall(
 			ToolName:        params.Name,
 			ResourceURI:     "",
 			PromptName:      "",
-			ChatID:          "",
+			ChatID:          payload.chatID,
 			ToolAnnotations: nil,
 		}, mcpriskscan.BorrowPayload(params.Arguments)))
 		if decision.HeldForApproval() {

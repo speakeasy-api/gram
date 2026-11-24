@@ -150,8 +150,9 @@ var McpFeedbackSettings = Type("McpFeedbackSettings", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("updated_by_email", String, "The email of the person who last changed the settings; for a change made with an API key, the key's creator. Absent when that person has since been removed.")
+	Attribute("version", String, "Identifies these stored settings, and changes whenever they do. Empty when the server never had any. Send it back as expected_version so a change made from settings someone else has since changed is refused.")
 
-	Required("mcp_server_id", "enabled", "default_tool_name", "default_tool_description", "tool")
+	Required("mcp_server_id", "enabled", "default_tool_name", "default_tool_description", "tool", "version")
 })
 
 var UpdateMcpFeedbackSettingsForm = Type("UpdateMcpFeedbackSettingsForm", func() {
@@ -167,9 +168,7 @@ var UpdateMcpFeedbackSettingsForm = Type("UpdateMcpFeedbackSettingsForm", func()
 	Attribute("tool_description", String, "The description agents read. Leave out to use the default.", func() {
 		MaxLength(2000)
 	})
-	Attribute("expected_updated_at", String, "The updated_at of the settings this change was made from. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.", func() {
-		Format(FormatDateTime)
-	})
+	Attribute("expected_version", String, "The version of the settings this change was made from, empty when the server had none. When set, the change is refused with a conflict if the settings were changed since, so one admin's change does not silently undo another's.")
 
 	Required("mcp_server_id", "enabled")
 })

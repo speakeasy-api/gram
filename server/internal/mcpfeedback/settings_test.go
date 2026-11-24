@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -33,14 +32,14 @@ func getSettings(ctx context.Context, ti *testInstance, serverID string) (*types
 
 func updateSettings(ctx context.Context, ti *testInstance, serverID string, enabled bool, toolName, toolDescription *string) (*types.McpFeedbackSettings, error) {
 	settings, err := ti.service.UpdateSettings(ctx, &gen.UpdateSettingsPayload{
-		SessionToken:      nil,
-		ApikeyToken:       nil,
-		ProjectSlugInput:  nil,
-		McpServerID:       serverID,
-		Enabled:           enabled,
-		ToolName:          toolName,
-		ToolDescription:   toolDescription,
-		ExpectedUpdatedAt: nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		McpServerID:      serverID,
+		Enabled:          enabled,
+		ToolName:         toolName,
+		ToolDescription:  toolDescription,
+		ExpectedVersion:  nil,
 	})
 	return settings, err //nolint:wrapcheck // returned for oops-code assertions on the chain
 }
@@ -281,38 +280,43 @@ func TestUpdateSettingsRefusesAChangeMadeFromStaleSettings(t *testing.T) {
 
 	update := func(expected *string, toolName string) (*types.McpFeedbackSettings, error) {
 		settings, err := ti.service.UpdateSettings(ctx, &gen.UpdateSettingsPayload{
-			SessionToken:      nil,
-			ApikeyToken:       nil,
-			ProjectSlugInput:  nil,
-			McpServerID:       server.ID.String(),
-			Enabled:           true,
-			ToolName:          &toolName,
-			ToolDescription:   nil,
-			ExpectedUpdatedAt: expected,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			McpServerID:      server.ID.String(),
+			Enabled:          true,
+			ToolName:         &toolName,
+			ToolDescription:  nil,
+			ExpectedVersion:  expected,
 		})
 		return settings, err //nolint:wrapcheck // returned for oops-code assertions on the chain
 	}
 
-	never := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := update(&never, "acme_feedback")
+	unopened, err := getSettings(ctx, ti, server.ID.String())
+	require.NoError(t, err)
+	require.Empty(t, unopened.Version, "a server that never had settings has no version")
+
+	// Two admins open the server before either saves: the first save is
+	// stored, and the second, made from the same empty settings, is refused.
+	first, err := update(&unopened.Version, "acme_feedback")
+	require.NoError(t, err)
+	require.NotEmpty(t, first.Version)
+	_, err = update(&unopened.Version, "acme_notes")
 	requireOopsCode(t, err, oops.CodeConflict)
 
-	opened, err := update(nil, "acme_feedback")
+	changed, err := update(&first.Version, "acme_report")
 	require.NoError(t, err)
-	require.NotNil(t, opened.UpdatedAt)
+	require.NotEqual(t, first.Version, changed.Version)
 
-	// A client that keeps the time only to the millisecond still matches.
-	openedAt, err := time.Parse(time.RFC3339Nano, *opened.UpdatedAt)
-	require.NoError(t, err)
-	asTheDashboardSendsIt := openedAt.Truncate(time.Millisecond).Format(time.RFC3339Nano)
-	changed, err := update(&asTheDashboardSendsIt, "acme_report")
-	require.NoError(t, err)
-
-	_, err = update(opened.UpdatedAt, "acme_notes")
+	_, err = update(&first.Version, "acme_notes")
 	requireOopsCode(t, err, oops.CodeConflict)
 
 	current, err := getSettings(ctx, ti, server.ID.String())
 	require.NoError(t, err)
-	require.Equal(t, "acme_report", *current.ToolName, "the refused change stored nothing")
-	require.Equal(t, changed.UpdatedAt, current.UpdatedAt)
+	require.Equal(t, "acme_report", *current.ToolName, "the refused changes stored nothing")
+	require.Equal(t, changed.Version, current.Version)
+
+	// A change that names no version is stored whatever came before.
+	_, err = update(nil, "acme_feedback")
+	require.NoError(t, err)
 }
