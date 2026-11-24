@@ -815,14 +815,6 @@ func (r *Resolver) HasAccessToOrganization(ctx context.Context, organizationID, 
 	return nil, userInfo.Email, false
 }
 
-// IsAdmin returns whether the user is an admin. Cache miss returns false (safe default).
-func (r *Resolver) IsAdmin(ctx context.Context, userID string) bool {
-	if userInfo, err := r.userInfoCache.Get(ctx, sessions.UserInfoCacheKey(userID)); err == nil {
-		return userInfo.Admin
-	}
-	return false
-}
-
 // InvalidateUserInfoCache removes cached user info so the next GetUserInfo
 // call rebuilds it from the database.
 func (r *Resolver) InvalidateUserInfoCache(ctx context.Context, userID string) error {

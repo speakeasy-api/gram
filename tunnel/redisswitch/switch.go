@@ -137,6 +137,10 @@ var ErrNotArmed = errors.New("redis switch state key is not set on the current i
 // options came from. Use WrapRole.
 var ErrAmbiguousRole = errors.New("redis switch follows several roles on this instance; name the role")
 
+// ErrUnknownRole is returned when an instance has switches but none for the
+// role supplied to WrapRole.
+var ErrUnknownRole = errors.New("redis switch does not follow the named role on this instance")
+
 // StateKey names the key that says which instance is authoritative for a role.
 // On the current instance its value is "current" until the move, then
 // "moved:<run id>". It never expires.
@@ -280,18 +284,14 @@ func NewClient(ctx context.Context, logger *slog.Logger, opts *redis.Options, bi
 }
 
 // ordinaryClient returns a client of the current instance that follows no
-// switch. A plaintext instance's address and password go to go-redis as given,
-// so an unconfigured address keeps go-redis's default; an instance that needs
-// TLS or an IAM token is checked and connected through redisconn.
+// switch. An unconfigured plaintext address uses go-redis's default.
 func ordinaryClient(opts *redis.Options, binding Binding) (*redis.Client, error) {
-	if !binding.Current.TLS() && binding.Current.Auth != redisconn.AuthIAM {
-		plain := *opts
-		plain.Addr = binding.Current.Addr
-		plain.Password = binding.Current.Password
-		return redis.NewClient(&plain), nil
+	endpoint := binding.Current
+	if endpoint.Addr == "" && !endpoint.TLS() && endpoint.Auth != redisconn.AuthIAM {
+		endpoint.Addr = "localhost:6379"
 	}
 
-	current, err := redisconn.NewConnector(binding.Current, binding.Tokens)
+	current, err := redisconn.NewConnector(endpoint, binding.Tokens)
 	if err != nil {
 		return nil, fmt.Errorf("current redis instance: %w", err)
 	}
@@ -360,11 +360,20 @@ func Wrap(opts *redis.Options) *redis.Client {
 func WrapRole(opts *redis.Options, role string) *redis.Client {
 	found, ok := switches.Load(registryKey{addr: opts.Addr, role: role})
 	if !ok {
+		managed := false
+		switches.Range(func(key, _ any) bool {
+			candidate, ok := key.(registryKey)
+			managed = ok && candidate.addr == opts.Addr
+			return !managed
+		})
+		if managed {
+			return refusedClient(opts, ErrUnknownRole)
+		}
 		return redis.NewClient(opts)
 	}
 	reserved, ok := found.(*entry)
 	if !ok {
-		return redis.NewClient(opts)
+		return refusedClient(opts, ErrNotStarted)
 	}
 	return wrapEntry(opts, reserved)
 }

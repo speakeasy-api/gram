@@ -1,8 +1,10 @@
 package deviceagentversions_test
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,6 +70,65 @@ func TestStore_CountsEachMachineOncePerDayByLatestVersion(t *testing.T) {
 		"device_agent_versions:2026-10-19:org-a",
 		"device_agent_versions:2026-10-19:orgs",
 	} {
+		require.Equal(t, deviceagentversions.Retention, server.TTL(key), key)
+	}
+}
+
+// pipelineRecorder records the command names of every pipeline a client sends,
+// leaving out the connection handshake (CLIENT SETINFO).
+type pipelineRecorder struct {
+	mu        sync.Mutex
+	pipelines [][]string
+}
+
+func (h *pipelineRecorder) DialHook(next redis.DialHook) redis.DialHook {
+	return next
+}
+
+func (h *pipelineRecorder) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return next
+}
+
+func (h *pipelineRecorder) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		names := make([]string, 0, len(cmds))
+		for _, cmd := range cmds {
+			if cmd.Name() != "client" && cmd.Name() != "hello" {
+				names = append(names, cmd.Name())
+			}
+		}
+		if len(names) == 0 {
+			return next(ctx, cmds)
+		}
+		h.mu.Lock()
+		h.pipelines = append(h.pipelines, names)
+		h.mu.Unlock()
+		return next(ctx, cmds)
+	}
+}
+
+func TestStore_RecordWritesAndExpiresInOneTransaction(t *testing.T) {
+	t.Parallel()
+
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	recorder := &pipelineRecorder{mu: sync.Mutex{}, pipelines: nil}
+	client.AddHook(recorder)
+	store := deviceagentversions.NewStore(client)
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+
+	// A hash left behind without an expiry gets one on the next write.
+	server.HSet("device_agent_versions:2026-10-20:org-a", "m-0", "0.3.30")
+	require.Zero(t, server.TTL("device_agent_versions:2026-10-20:org-a"))
+
+	require.NoError(t, store.Record(t.Context(), "org-a", "m-1", "0.3.31", now))
+
+	recorder.mu.Lock()
+	pipelines := recorder.pipelines
+	recorder.mu.Unlock()
+	require.Equal(t, [][]string{{"multi", "hset", "expire", "sadd", "expire", "exec"}}, pipelines, "the writes and their expiries are one transaction")
+	for _, key := range []string{"device_agent_versions:2026-10-20:org-a", "device_agent_versions:2026-10-20:orgs"} {
 		require.Equal(t, deviceagentversions.Retention, server.TTL(key), key)
 	}
 }

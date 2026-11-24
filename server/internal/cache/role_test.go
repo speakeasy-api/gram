@@ -50,6 +50,25 @@ func (a roleAdapters) of(role redisrole.Role) roleCache {
 	}
 }
 
+func TestOpsPrefixScanAndDeletePreserveNestedAuthKeys(t *testing.T) {
+	t.Parallel()
+
+	adapters := newRoleAdapters(t, redisrole.GuardEnforce)
+	ctx := t.Context()
+	opsKey := "rate:ratelimit:unrelated:example"
+	authKey := "rate:ratelimit:remote_session_validate:example"
+	require.NoError(t, adapters.ops.Set(ctx, opsKey, "ops", time.Minute))
+	require.NoError(t, adapters.auth.Set(ctx, authKey, "auth", time.Minute))
+
+	keys, err := adapters.ops.ScanKeys(ctx, "rate:ratelimit:")
+	require.NoError(t, err)
+	require.Equal(t, []string{opsKey}, keys)
+	require.NoError(t, adapters.ops.DeleteByPrefix(ctx, "rate:ratelimit:"))
+	keys, err = adapters.plain.ScanKeys(ctx, "rate:ratelimit:")
+	require.NoError(t, err)
+	require.Equal(t, []string{authKey}, keys)
+}
+
 // roleCache is the method set every role adapter offers.
 type roleCache interface {
 	cache.Cache

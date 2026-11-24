@@ -3,6 +3,7 @@ package tooldisposition
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log/slog"
@@ -41,6 +42,10 @@ const (
 	// holds up the request.
 	invalidateTimeout = 5 * time.Second
 )
+
+// errCatalogNotEvicted marks a catalog write that committed but whose cached
+// view could not be evicted afterwards.
+var errCatalogNotEvicted = errors.New("invalidate tool catalog")
 
 // ToolRecord is a tool to add to the catalog as the upstream described it. The
 // json tags name the keys AddMissingMCPServerToolMetadata reads from its jsonb
@@ -123,16 +128,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, c cache.EvictableCache) *Cache {
 // Dispositions returns the disposition token for every tool on a server,
 // unannotated for a tool with no hint set.
 func (c *Cache) Dispositions(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
-	serverUUID, err := uuid.Parse(mcpServerID)
-	if err != nil {
-		return nil, fmt.Errorf("parse mcp server id: %w", err)
-	}
-	projectUUID, err := uuid.Parse(projectID)
-	if err != nil {
-		return nil, fmt.Errorf("parse project id: %w", err)
-	}
-
-	resolved, err := c.resolve(ctx, serverUUID, projectUUID)
+	resolved, err := resolveByID(ctx, c.resolve, mcpServerID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -143,25 +139,85 @@ func (c *Cache) Dispositions(ctx context.Context, mcpServerID, projectID string)
 // is unannotated for a recorded tool with no hint set. A missing key means the
 // tool has never been recorded.
 func (c *Cache) ToolCatalog(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
-	serverUUID, err := uuid.Parse(mcpServerID)
-	if err != nil {
-		return nil, fmt.Errorf("parse mcp server id: %w", err)
-	}
-	projectUUID, err := uuid.Parse(projectID)
-	if err != nil {
-		return nil, fmt.Errorf("parse project id: %w", err)
-	}
-
-	resolved, err := c.resolve(ctx, serverUUID, projectUUID)
+	resolved, err := resolveByID(ctx, c.resolve, mcpServerID, projectID)
 	if err != nil {
 		return nil, err
 	}
+	return resolved.catalog(), nil
+}
 
-	catalog := make(map[string]string, len(resolved.Annotations))
-	for name := range resolved.Annotations {
-		catalog[name] = resolved.Dispositions[name]
+// Uncached returns a view of c that reads the catalog from Postgres on every
+// call and never reads or fills the cache. Sign-in and consent steps use it so
+// an evicting or unreachable cache can neither slow nor fail them.
+func (c *Cache) Uncached() *Uncached {
+	return &Uncached{cache: c}
+}
+
+// Uncached is a [Cache] view that reads from Postgres only. Its writes go
+// through the Cache, so cached readers still see them.
+type Uncached struct {
+	// cache owns the database and the cached view that writes evict.
+	cache *Cache
+}
+
+// Dispositions is [Cache.Dispositions] read from Postgres.
+func (u *Uncached) Dispositions(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
+	resolved, err := resolveByID(ctx, u.cache.load, mcpServerID, projectID)
+	if err != nil {
+		return nil, err
 	}
-	return catalog, nil
+	return resolved.Dispositions, nil
+}
+
+// ToolCatalog is [Cache.ToolCatalog] read from Postgres.
+func (u *Uncached) ToolCatalog(ctx context.Context, mcpServerID, projectID string) (map[string]string, error) {
+	resolved, err := resolveByID(ctx, u.cache.load, mcpServerID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return resolved.catalog(), nil
+}
+
+// RecordMissingTools is [Cache.RecordMissingTools], except that a committed
+// write whose cached view could not be evicted is logged rather than returned:
+// this view reads Postgres, so it already sees the write, and a stale cached
+// view is evicted by the next cached write or expires after its TTL.
+func (u *Uncached) RecordMissingTools(ctx context.Context, organizationID, mcpServerID, projectID string, tools []ToolRecord) error {
+	err := u.cache.RecordMissingTools(ctx, organizationID, mcpServerID, projectID, tools)
+	if errors.Is(err, errCatalogNotEvicted) {
+		u.cache.logger.WarnContext(ctx, "recorded missing tools but could not evict the cached catalog",
+			attr.SlogError(err),
+			attr.SlogMcpServerID(mcpServerID),
+		)
+		return nil
+	}
+	return err
+}
+
+// resolveByID parses the ids and resolves the server's tools with resolve.
+func resolveByID(
+	ctx context.Context,
+	resolve func(ctx context.Context, mcpServerID, projectID uuid.UUID) (serverTools, error),
+	mcpServerID, projectID string,
+) (serverTools, error) {
+	serverUUID, err := uuid.Parse(mcpServerID)
+	if err != nil {
+		return serverTools{}, fmt.Errorf("parse mcp server id: %w", err)
+	}
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		return serverTools{}, fmt.Errorf("parse project id: %w", err)
+	}
+	return resolve(ctx, serverUUID, projectUUID)
+}
+
+// catalog maps every recorded tool to its disposition token.
+func (s serverTools) catalog() map[string]string {
+	catalog := make(map[string]string, len(s.Annotations))
+	for name := range s.Annotations {
+		catalog[name] = s.Dispositions[name]
+	}
+	return catalog
 }
 
 // RecordMissingTools adds tools with no catalog entry and audits the change as a
@@ -277,7 +333,7 @@ func (c *Cache) invalidateAfterWrite(ctx context.Context, projectID, mcpServerID
 	defer cancel()
 
 	if err := c.Invalidate(invalidateCtx, projectID, mcpServerID); err != nil {
-		return fmt.Errorf("invalidate tool catalog: %w", err)
+		return fmt.Errorf("%w: %w", errCatalogNotEvicted, err)
 	}
 	return nil
 }
@@ -292,9 +348,7 @@ func (c *Cache) ToolAnnotations(ctx context.Context, mcpServerID, projectID uuid
 }
 
 func (c *Cache) resolve(ctx context.Context, mcpServerID, projectID uuid.UUID) (serverTools, error) {
-	serverID := mcpServerID.String()
-	projectIDString := projectID.String()
-	key := cacheKey(projectIDString, serverID)
+	key := cacheKey(projectID.String(), mcpServerID.String())
 	generation := c.generationFor(key)
 
 	generation.mu.Lock()
@@ -305,6 +359,20 @@ func (c *Cache) resolve(ctx context.Context, mcpServerID, projectID uuid.UUID) (
 	resolveGeneration := generation.value
 	generation.mu.Unlock()
 
+	resolved, err := c.load(ctx, mcpServerID, projectID)
+	if err != nil {
+		return serverTools{}, err
+	}
+
+	c.storeResolved(ctx, generation, resolveGeneration, resolved)
+
+	return resolved, nil
+}
+
+// load reads a server's effective tool annotations from Postgres.
+func (c *Cache) load(ctx context.Context, mcpServerID, projectID uuid.UUID) (serverTools, error) {
+	serverID := mcpServerID.String()
+
 	rows, err := repo.New(c.db).ListEffectiveMCPServerToolAnnotations(ctx, repo.ListEffectiveMCPServerToolAnnotationsParams{
 		McpServerID: mcpServerID,
 		ProjectID:   projectID,
@@ -314,7 +382,7 @@ func (c *Cache) resolve(ctx context.Context, mcpServerID, projectID uuid.UUID) (
 	}
 
 	resolved := serverTools{
-		ProjectID:    projectIDString,
+		ProjectID:    projectID.String(),
 		MCPServerID:  serverID,
 		Dispositions: make(map[string]string, len(rows)),
 		Annotations:  make(map[string]*types.ToolAnnotations, len(rows)),
@@ -340,10 +408,9 @@ func (c *Cache) resolve(ctx context.Context, mcpServerID, projectID uuid.UUID) (
 		resolved.Dispositions[row.ToolName] = disposition
 	}
 
-	c.storeResolved(ctx, generation, resolveGeneration, resolved)
-
 	return resolved, nil
 }
+
 func (c *Cache) storeResolved(
 	ctx context.Context,
 	generation *cacheGeneration,

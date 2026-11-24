@@ -6,11 +6,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	authRepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func TestIsPlatformAdminReadsCurrentDurableEntitlement(t *testing.T) {
@@ -121,7 +129,6 @@ func TestAuthenticate_SupportAdminCanAccessNonMemberOrg(t *testing.T) {
 	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
 
 	// No manual cache priming — Authenticate must handle a cold cache.
-	// HasAccessToOrganization populates the cache, and IsAdmin is checked after.
 	ctx, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
 	require.NoError(t, err, "admin must be able to authenticate into a non-member org")
 
@@ -131,6 +138,43 @@ func TestAuthenticate_SupportAdminCanAccessNonMemberOrg(t *testing.T) {
 	require.True(t, authCtx.IsAdmin)
 	require.True(t, contextvalues.HasValidatedGramSession(ctx))
 	require.True(t, contextvalues.IsSupportSession(ctx))
+}
+
+// The admin flag comes from the user info resolved for the request, so a user
+// info cache that keeps nothing (evicted, or unreachable) still reads it from
+// Postgres instead of reporting a non-admin.
+func TestAuthenticate_AdminFlagSurvivesAUserInfoCacheThatKeepsNothing(t *testing.T) {
+	t.Parallel()
+
+	userInfo := adminMockUserInfo()
+	userInfo.UserID = "admin-without-user-info-cache"
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	pylonClient, err := pylon.NewPylon(logger, "")
+	require.NoError(t, err)
+	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("admin-flag"))
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NoopCache, instance.mockAuthServer.URL, "test-client-id", nil, nil, orgRepo.New(instance.conn), userRepo.New(instance.conn), pylonClient, posthog.New(ctx, logger, "", "", ""), nil, cacheSuffix)
+	manager := sessions.NewManager(logger, tracerProvider, instance.conn, redisClient, cacheSuffix, nil, billing.NewStubClient(logger, tracerProvider), resolver)
+
+	session := sessions.Session{
+		SessionID:            "admin-without-user-info-cache",
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: userInfo.Organizations[0].ID,
+	}
+	require.NoError(t, manager.StoreSession(ctx, session))
+
+	authenticated, err := manager.Authenticate(ctx, session.SessionID)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(authenticated)
+	require.True(t, ok)
+	require.True(t, authCtx.IsAdmin)
+	require.Equal(t, userInfo.Email, *authCtx.Email)
 }
 
 func TestAuthenticate_BareAdminCannotAccessNonMemberOrg(t *testing.T) {

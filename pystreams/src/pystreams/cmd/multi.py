@@ -217,10 +217,20 @@ async def multi(
                 redis_addr and risk_fingerprint_pepper_keyring
             ):
                 armed = bool(redis_next_addr)
-                if ops_addr:
-                    enforce_redis = await _ops_redis_client(
-                        "GRAM_REDIS_OPS_", ops_addr, armed=armed
-                    )
+                ops = _ops_endpoint("GRAM_REDIS_OPS_", ops_addr) if ops_addr else None
+                next_ops = (
+                    _ops_endpoint("GRAM_REDIS_OPS_NEXT_", ops_next_addr)
+                    if redis_next_addr and ops_next_addr
+                    else None
+                )
+                credentials = None
+                if any(
+                    endpoint and endpoint.auth is redisconn.AuthMode.IAM
+                    for endpoint in (ops, next_ops)
+                ):
+                    credentials = await redisconn.default_iam_credential_provider()
+                if ops:
+                    enforce_redis = _ops_redis_client(ops, credentials, armed=armed)
                 else:
                     enforce_redis = _enforce_redis_client(
                         redis_addr, redis_password, armed=armed
@@ -230,9 +240,9 @@ async def multi(
                 # reply store would ACK requests while losing their replies.
                 await enforce_redis.ping()
                 if redis_next_addr:
-                    if ops_next_addr:
-                        next_redis = await _ops_redis_client(
-                            "GRAM_REDIS_OPS_NEXT_", ops_next_addr, armed=True
+                    if next_ops:
+                        next_redis = _ops_redis_client(
+                            next_ops, credentials, armed=True
                         )
                     else:
                         next_redis = _enforce_redis_client(
@@ -331,9 +341,7 @@ async def multi(
                 health_state.set_ready()
 
 
-async def _ops_redis_client(
-    prefix: str, addr: str, *, armed: bool
-) -> redis_asyncio.Redis:
+def _ops_endpoint(prefix: str, addr: str) -> redisconn.Endpoint:
     password = os.getenv(prefix + "PASSWORD", "")
     auth = redisconn.AuthMode(
         os.getenv(prefix + "AUTH_MODE", "").strip()
@@ -346,16 +354,20 @@ async def _ops_redis_client(
         ca_cert_pem=os.getenv(prefix + "CA_CERT", ""),
     )
     endpoint.validate()
-    credentials = (
-        await redisconn.default_iam_credential_provider()
-        if auth is redisconn.AuthMode.IAM
-        else None
-    )
+    return endpoint
+
+
+def _ops_redis_client(
+    endpoint: redisconn.Endpoint,
+    credentials: redisconn.GoogleIAMCredentialProvider | None,
+    *,
+    armed: bool,
+) -> redis_asyncio.Redis:
     kwargs = {"retry": RedisRetry(NoBackoff(), 0)} if armed else {}
     return redisconn.client(
         endpoint,
         credential_provider=credentials,
-        socket_connect_timeout=1.0,
+        socket_connect_timeout=3.0,
         socket_timeout=2.0,
         **kwargs,
     )

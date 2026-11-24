@@ -1305,7 +1305,7 @@ func newStartCommand() *cli.Command {
 				ToolCallLogs: newToolCallLogs(publishers.OTELLogs),
 				RAG:          ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
 				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
-				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
+				PlatformFeatureChecker: platformFeatureChecker, AuthFeatureChecker: productFeatures.PlatformFeatureCheckUncached, PlatformToolsets: platformToolsets,
 				Identity: identityResolver, Challenges: remoteChallengeManager, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
 				ProtectedResources: protectedResources,
 			})

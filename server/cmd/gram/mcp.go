@@ -409,7 +409,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		ToolCallLogs: newToolCallLogs(publishers.OTELLogs),
 		RAG:          ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
-		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
+		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck, AuthFeatureChecker: productFeatures.PlatformFeatureCheckUncached,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
 		ProtectedResources: protectedResources,
 	})

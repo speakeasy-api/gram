@@ -783,7 +783,8 @@ func (s *Service) standaloneValidationTarget(
 
 	if server.RemoteMcpServerID.Valid {
 		// The backend rows load here, outside the probe budget.
-		build, berr := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, endpoint.OrganizationID, &server, token, "", nil, remotemcp.WithoutToolsCallIdentityCoverage())
+		// Validation is a consent step: the probe reads tool permissions from Postgres.
+		build, berr := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, endpoint.OrganizationID, &server, token, "", nil, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithUncachedToolCatalog())
 		if berr != nil {
 			return ctx, none, fmt.Errorf("build remote backend proxy for validation: %w", berr)
 		}
@@ -802,7 +803,7 @@ func (s *Service) standaloneValidationTarget(
 			WWWAuthenticate:    "",
 			Selection:          nil,
 			Request:            nil,
-		}, remotemcp.WithoutToolsCallIdentityCoverage())
+		}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithUncachedToolCatalog())
 		if berr != nil {
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 		}

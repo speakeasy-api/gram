@@ -509,7 +509,8 @@ func (s *Service) serveConsentProxiedMCP(
 		if herr != nil {
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
-		var options []remotemcp.BuildOption
+		// Consent is a sign-in step: it reads tool permissions from Postgres.
+		options := []remotemcp.BuildOption{remotemcp.WithUncachedToolCatalog()}
 		if auth != nil && (auth.outcome != authClientLegacy || auth.sendsClientHeaders()) {
 			options = append(options, remotemcp.WithAuthClientHeaders(auth.headers))
 		}
@@ -528,7 +529,7 @@ func (s *Service) serveConsentProxiedMCP(
 			WWWAuthenticate:    "",
 			Selection:          nil,
 			Request:            nil,
-		})
+		}, remotemcp.WithUncachedToolCatalog())
 		if err != nil {
 			tagTunnelOutage(w, err)
 			return err

@@ -1,6 +1,8 @@
 package cache_test
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -85,6 +87,132 @@ func TestTypedCacheObjectGetAndDeleteMarking(t *testing.T) {
 	won, err := adapter.Add(t.Context(), "marker", time.Minute)
 	require.NoError(t, err)
 	require.False(t, won, "the marker was set with the consume")
+}
+
+// listEntry is a list element shaped like the structs real callers append.
+type listEntry struct {
+	Value string
+}
+
+// commandRecorder records the name of every command a client sends, with the
+// commands of a pipeline or transaction recorded one by one. The connection
+// handshake (HELLO, CLIENT SETINFO) is not recorded.
+type commandRecorder struct {
+	mu    sync.Mutex
+	names []string
+}
+
+func (h *commandRecorder) DialHook(next redis.DialHook) redis.DialHook {
+	return next
+}
+
+func (h *commandRecorder) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		h.record(cmd)
+		return next(ctx, cmd)
+	}
+}
+
+func (h *commandRecorder) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		for _, cmd := range cmds {
+			h.record(cmd)
+		}
+		return next(ctx, cmds)
+	}
+}
+
+func (h *commandRecorder) record(cmd redis.Cmder) {
+	if cmd.Name() == "hello" || cmd.Name() == "client" {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.names = append(h.names, cmd.Name())
+}
+
+func (h *commandRecorder) sent() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.names...)
+}
+
+func newListAppendAdapter(t *testing.T) (*cache.RedisCacheAdapter, *miniredis.Miniredis, *commandRecorder) {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	recorder := &commandRecorder{mu: sync.Mutex{}, names: nil}
+	client.AddHook(recorder)
+	return cache.NewRedisCacheAdapter(client), mr, recorder
+}
+
+func TestListAppendSetsExpiryInTheSameCommand(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, recorder := newListAppendAdapter(t)
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", listEntry{Value: "first"}, time.Hour))
+
+	require.Equal(t, time.Hour, mr.TTL("list"), "a new list gets its expiry")
+	sent := recorder.sent()
+	require.NotEmpty(t, sent)
+	for _, name := range sent {
+		require.Contains(t, []string{"evalsha", "eval"}, name, "the append and its expiry go to Redis as one script")
+	}
+
+	var got []listEntry
+	require.NoError(t, adapter.ListRange(t.Context(), "list", 0, -1, &got))
+	require.Equal(t, []listEntry{{Value: "first"}}, got)
+}
+
+func TestListAppendKeepsAnExistingExpiry(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, _ := newListAppendAdapter(t)
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", listEntry{Value: "first"}, 10*time.Minute))
+	mr.FastForward(4 * time.Minute)
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", listEntry{Value: "second"}, time.Hour))
+
+	require.Equal(t, 6*time.Minute, mr.TTL("list"), "appending does not extend the list's life")
+
+	var got []listEntry
+	require.NoError(t, adapter.ListRange(t.Context(), "list", 0, -1, &got))
+	require.Equal(t, []listEntry{{Value: "first"}, {Value: "second"}}, got)
+}
+
+func TestListAppendGivesAListWithoutExpiryOne(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, _ := newListAppendAdapter(t)
+
+	_, err := mr.Push("list", "written-without-expiry")
+	require.NoError(t, err)
+	require.Zero(t, mr.TTL("list"))
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", "next", time.Hour))
+	require.Equal(t, time.Hour, mr.TTL("list"))
+}
+
+func TestListAppendWithoutTTLSetsNoExpiry(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, _ := newListAppendAdapter(t)
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", "first", 0))
+	require.True(t, mr.Exists("list"))
+	require.Zero(t, mr.TTL("list"))
+}
+
+func TestListAppendRoundsASubMillisecondTTLUp(t *testing.T) {
+	t.Parallel()
+
+	adapter, mr, _ := newListAppendAdapter(t)
+
+	require.NoError(t, adapter.ListAppend(t.Context(), "list", "first", time.Microsecond))
+	require.True(t, mr.Exists("list"), "a tiny lifetime must not delete the list it was meant to expire")
+	require.Equal(t, time.Millisecond, mr.TTL("list"))
 }
 
 func TestTypedCacheObjectInvalidMarkerLifetimePreservesValue(t *testing.T) {
