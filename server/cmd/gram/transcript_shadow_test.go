@@ -20,8 +20,16 @@ func newTranscriptShadowCLIContext(t *testing.T, values map[string]string) *cli.
 	t.Helper()
 	c := newOrgEncryptionCLIContext(t, nil)
 	set := flag.NewFlagSet("transcript-shadow", flag.ContinueOnError)
-	require.NoError(t, transcriptShadowFlag().Apply(set))
-	require.NoError(t, transcriptShadowReadFlag().Apply(set))
+	// Apply the flags without their environment variables, so a developer's
+	// shell cannot change what these tests see. Parallel tests cannot use
+	// t.Setenv, so the isolation lives here.
+	for _, f := range []cli.Flag{transcriptShadowFlag(), transcriptShadowReadFlag()} {
+		sliceFlag, ok := f.(*cli.StringSliceFlag)
+		require.True(t, ok)
+		withoutEnv := *sliceFlag
+		withoutEnv.EnvVars = nil
+		require.NoError(t, withoutEnv.Apply(set))
+	}
 	for key, value := range values {
 		require.NoError(t, set.Set(key, value))
 	}
