@@ -30,9 +30,12 @@ func TestBackfillTranscriptShadowsSealsEveryPageAndResumes(t *testing.T) {
 	_, err = fixtures.CreateChat(t.Context(), chatID, projectID, org)
 	require.NoError(t, err)
 	const messages = 5
+	ids := make([]uuid.UUID, 0, messages)
 	for range messages {
-		_, err = fixtures.CreateMessage(t.Context(), uuid.New(), chatID, uuid.NullUUID{UUID: projectID, Valid: true})
+		id := uuid.New()
+		_, err = fixtures.CreateMessage(t.Context(), id, chatID, uuid.NullUUID{UUID: projectID, Valid: true})
 		require.NoError(t, err)
+		ids = append(ids, id)
 	}
 
 	keys := orgencryptiontest.New(t, db)
@@ -41,14 +44,21 @@ func TestBackfillTranscriptShadowsSealsEveryPageAndResumes(t *testing.T) {
 	require.NoError(t, err)
 
 	// One page of two, then resume from its cursor until the project is covered.
-	sealed, cursor, err := backfillTranscriptShadows(t.Context(), store, org, projectID, uuid.Nil, 2, 1)
+	run, err := backfillTranscriptShadows(t.Context(), store, org, projectID, uuid.Nil, 2, 1)
 	require.NoError(t, err)
-	require.Equal(t, 2, sealed)
-	require.NotEqual(t, uuid.Nil, cursor)
+	require.Equal(t, 2, run.Sealed)
+	require.False(t, run.Complete)
+	require.NotEqual(t, uuid.Nil, run.After)
 
-	sealed, _, err = backfillTranscriptShadows(t.Context(), store, org, projectID, cursor, 2, 0)
+	run, err = backfillTranscriptShadows(t.Context(), store, org, projectID, run.After, 2, 0)
 	require.NoError(t, err)
-	require.Equal(t, messages-2, sealed)
+	require.Equal(t, messages-2, run.Sealed)
+	require.True(t, run.Complete)
+
+	// Coverage counts fingerprints; opening every shadow proves they decrypt.
+	opened, err := store.LoadMany(t.Context(), org, projectID, ids)
+	require.NoError(t, err)
+	require.Len(t, opened, messages)
 
 	progress, err := store.Progress(t.Context(), org, projectID)
 	require.NoError(t, err)

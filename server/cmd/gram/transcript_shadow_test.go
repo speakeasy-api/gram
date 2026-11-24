@@ -31,6 +31,8 @@ func newTranscriptShadowCLIContext(t *testing.T, values map[string]string) *cli.
 func TestTranscriptShadowDisabled(t *testing.T) {
 	t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS", "")
 	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_PROJECT_IDS"))
+	t.Setenv("GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS", "")
+	require.NoError(t, os.Unsetenv("GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS"))
 	c := newTranscriptShadowCLIContext(t, nil)
 	require.Empty(t, c.StringSlice(chatTranscriptShadowProjectIDsFlag))
 	shadow, err := configureTranscriptShadow(t.Context(), c, nil, nil, orgEncryptionDeps{}, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t))
@@ -53,7 +55,7 @@ func TestTranscriptShadowReadProjectsMustCapture(t *testing.T) {
 	require.Empty(t, ids)
 
 	_, err = transcriptShadowReadProjects([]uuid.UUID{first}, []string{second.String()})
-	require.EqualError(t, err, "chat transcript shadow read project at position 1 does not capture shadows")
+	require.EqualError(t, err, "a chat transcript shadow read project does not capture shadows")
 	require.NotContains(t, err.Error(), second.String())
 
 	_, err = transcriptShadowReadProjects([]uuid.UUID{first}, []string{"not-a-uuid"})

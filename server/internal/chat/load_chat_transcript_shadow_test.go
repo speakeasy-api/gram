@@ -76,7 +76,8 @@ func TestLoadChat_ReadEnabledProjectFailsWithoutAShadow(t *testing.T) {
 	ti.service.WithTranscriptShadowReads(store, ti.projectID)
 
 	_, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
-	require.Error(t, err)
+	require.ErrorIs(t, err, transcriptstore.ErrNotFound)
+	// The failure must not fall back to, or echo, the plaintext body.
 	require.NotContains(t, err.Error(), "message written before capture began")
 }
 

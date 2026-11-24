@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/urfave/cli/v2"
@@ -45,6 +46,7 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 		&cli.IntFlag{Name: "max-pages", Value: 0, Usage: "Stop after this many pages; 0 runs until the project is covered"},
 		&cli.BoolFlag{Name: "apply", Usage: "Seal shadows. Without it the command only reports coverage"},
 		&cli.StringFlag{Name: "confirm-environment", Usage: "Must equal --environment when --apply is set"},
+		transcriptShadowFlag(),
 	}
 	flags = append(flags, orgEncryptionFlags()...)
 
@@ -69,6 +71,15 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			maxPages := c.Int("max-pages")
 			if maxPages < 0 {
 				return errors.New("max-pages must not be negative")
+			}
+			// Sealing copies for a project that does not capture would leave
+			// shadows that go stale on its next write and encrypt data nobody opted in.
+			captureProjectIDs, err := parseTranscriptShadowProjectIDs(c.StringSlice(chatTranscriptShadowProjectIDsFlag))
+			if err != nil {
+				return err
+			}
+			if !slices.Contains(captureProjectIDs, projectID) {
+				return fmt.Errorf("project must be listed in --%s", chatTranscriptShadowProjectIDsFlag)
 			}
 			apply := c.Bool("apply")
 			if apply && c.String("confirm-environment") != c.String("environment") {
@@ -112,9 +123,9 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 			if err := orgEncryption.Provisioner.EnsureUseCase(ctx, organizationID, orgencryption.UseCaseChatTranscripts, orgencryption.SystemActor()); err != nil {
 				return fmt.Errorf("provision transcript encryption: %w", err)
 			}
-			sealed, cursor, err := backfillTranscriptShadows(ctx, store, organizationID, projectID, after, int32(pageSize), maxPages)
-			if _, writeErr := fmt.Fprintf(out, "Sealed %d messages; resume with --after %s.\n", sealed, cursor); writeErr != nil {
-				return fmt.Errorf("write backfill cursor: %w", writeErr)
+			run, err := backfillTranscriptShadows(ctx, store, organizationID, projectID, after, int32(pageSize), maxPages)
+			if writeErr := writeTranscriptShadowBackfillResult(out, run, err); writeErr != nil {
+				return writeErr
 			}
 			if err != nil {
 				return err
@@ -124,23 +135,53 @@ func newTranscriptShadowBackfillCommand() *cli.Command {
 	}
 }
 
+// transcriptShadowBackfillRun is the result of one backfill run.
+type transcriptShadowBackfillRun struct {
+	// Sealed is how many messages the run sealed.
+	Sealed int
+
+	// After is the last message ID the run covered, the cursor to resume from.
+	After uuid.UUID
+
+	// Complete is true when the sweep reached the end of the project. A
+	// complete sweep's cursor is not a resume point: messages inserted below
+	// it since the sweep began would be skipped.
+	Complete bool
+}
+
 // backfillTranscriptShadows seals pages until the project is covered or
-// maxPages pages are sealed (0 means no limit). It returns the messages sealed
-// and the cursor to resume from, including when it fails.
-func backfillTranscriptShadows(ctx context.Context, store *transcriptstore.Store, organizationID string, projectID, after uuid.UUID, pageSize int32, maxPages int) (int, uuid.UUID, error) {
-	sealed := 0
+// maxPages pages are sealed (0 means no limit). It returns the run, including
+// the cursor to resume from when it fails or stops early.
+func backfillTranscriptShadows(ctx context.Context, store *transcriptstore.Store, organizationID string, projectID, after uuid.UUID, pageSize int32, maxPages int) (transcriptShadowBackfillRun, error) {
+	run := transcriptShadowBackfillRun{Sealed: 0, After: after, Complete: false}
 	for pages := 0; maxPages == 0 || pages < maxPages; pages++ {
-		page, err := backfillTranscriptShadowPage(ctx, store, organizationID, projectID, after, pageSize)
+		page, err := backfillTranscriptShadowPage(ctx, store, organizationID, projectID, run.After, pageSize)
 		if err != nil {
-			return sealed, after, err
+			return run, err
 		}
-		sealed += page.Count
-		after = page.After
+		run.Sealed += page.Count
+		run.After = page.After
 		if !page.More {
-			break
+			run.Complete = true
+			return run, nil
 		}
 	}
-	return sealed, after, nil
+	return run, nil
+}
+
+// writeTranscriptShadowBackfillResult prints the resume hint only for a run
+// that stopped early, since a complete sweep's cursor would skip messages.
+func writeTranscriptShadowBackfillResult(out io.Writer, run transcriptShadowBackfillRun, runErr error) error {
+	if run.Complete && runErr == nil {
+		if _, err := fmt.Fprintf(out, "Sealed %d messages; the sweep reached the end of the project.\n", run.Sealed); err != nil {
+			return fmt.Errorf("write backfill result: %w", err)
+		}
+		return nil
+	}
+	if _, err := fmt.Fprintf(out, "Sealed %d messages; resume with --after %s.\n", run.Sealed, run.After); err != nil {
+		return fmt.Errorf("write backfill cursor: %w", err)
+	}
+	return nil
 }
 
 func backfillTranscriptShadowPage(ctx context.Context, store *transcriptstore.Store, organizationID string, projectID, after uuid.UUID, pageSize int32) (transcriptstore.Page, error) {

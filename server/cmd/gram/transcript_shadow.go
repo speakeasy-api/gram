@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -128,9 +129,9 @@ func transcriptShadowReadProjects(captureProjectIDs []uuid.UUID, values []string
 	if err != nil {
 		return nil, fmt.Errorf("chat transcript shadow reads: %w", err)
 	}
-	for i, id := range readProjectIDs {
+	for _, id := range readProjectIDs {
 		if !slices.Contains(captureProjectIDs, id) {
-			return nil, fmt.Errorf("chat transcript shadow read project at position %d does not capture shadows", i+1)
+			return nil, errors.New("a chat transcript shadow read project does not capture shadows")
 		}
 	}
 	return readProjectIDs, nil

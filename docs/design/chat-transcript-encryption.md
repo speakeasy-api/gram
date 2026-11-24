@@ -123,8 +123,16 @@ gram transcript-shadow-backfill --project-id <PROJECT_ID> --apply --confirm-envi
 
 The first command only reports coverage. The second seals pages of up to 500
 messages, one transaction each, and prints a `--after` cursor to resume from.
-Messages written after a sweep are covered by capture; start another sweep from
-the zero cursor to cover messages inserted below a prior cursor.
+Messages written after a sweep are covered by capture only when they go through
+the shared `ChatMessageWriter` paths. Direct SQL writers (see the scope table
+below) do not seal yet, so a message they write has no current shadow and fails
+the read until another sweep covers it. Start another sweep from the zero
+cursor to cover messages inserted below a prior cursor.
+
+Messages whose body exceeds the inline limit keep it in a raw content asset.
+The shadow covers only the inline columns, so `chat.load` still reads those
+bodies from the plaintext asset; encrypting assets is tracked under "Raw content
+assets" below.
 
 Capture and reads emit `chat.transcript_shadow.capture.*` and
 `chat.transcript_shadow.read.*` (duration and message count, by project and
