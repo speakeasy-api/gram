@@ -49,9 +49,6 @@ type xaaReadinessService struct {
 	// describe: orgs without one, and servers Speakeasy may vouch for.
 	emaEnabled FeatureChecker
 	servers    xaaServerReader
-
-	// flags decides per organization whether identity chaining resource
-	// ownership comes from client associations; nil keeps issuer bindings.
 }
 
 // xaaServer is one eligible server and whether Speakeasy vouches for it.
@@ -470,9 +467,6 @@ type postgresXAAIdentityInspector struct {
 	db       *pgxpool.Pool
 	governor IdentityChainingGovernor
 	origins  remotesessions.CallbackOrigins
-
-	// flags decides per organization whether resource ownership comes from
-	// client associations; nil keeps issuer bindings.
 }
 
 type identityChainingResourceResolver interface {
