@@ -276,11 +276,11 @@ func RecordTypedIssuerScopeInLockedTransaction(ctx context.Context, tx pgx.Tx, o
 	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
 		return errors.New("reconcile issuer credentials: no transaction or tenant scope")
 	}
-	if serverIDs != nil && len(serverIDs) == 0 && len(fullReachCredentialIDs) == 0 {
+	if serverIDs != nil && len(serverIDs) == 0 && len(movedCredentialIDs) == 0 {
 		return nil
 	}
-	fullReach := make(map[uuid.UUID]bool, len(fullReachCredentialIDs))
-	for _, id := range fullReachCredentialIDs {
+	fullReach := make(map[uuid.UUID]bool, len(movedCredentialIDs))
+	for _, id := range movedCredentialIDs {
 		fullReach[id] = true
 	}
 	q, sessions := New(tx), usersessionsrepo.New(tx)
