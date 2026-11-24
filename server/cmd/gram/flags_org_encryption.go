@@ -73,12 +73,13 @@ func transcriptShadowFlag() cli.Flag {
 	}
 }
 
-// transcriptShadowReadFlag routes chat reads through encrypted shadows. Only the
-// server command serves chat reads, so only it registers this flag.
+// transcriptShadowReadFlag routes chat reads through encrypted shadows. The
+// server registers it for chat loads and its in-process worker, and the worker
+// for risk batch scans.
 func transcriptShadowReadFlag() cli.Flag {
 	return &cli.StringSliceFlag{
 		Name:    chatTranscriptShadowReadProjectsFlag,
-		Usage:   "Explicit project UUIDs whose chat reads open encrypted transcript shadows instead of plaintext. Each must also be in --" + chatTranscriptShadowProjectIDsFlag + ". Messages without a shadow are served from plaintext; a stale or unauthentic shadow fails the read. Disabled by default.",
+		Usage:   "Explicit project UUIDs whose chat reads and risk batch scans open encrypted transcript shadows instead of plaintext. Each must also be in --" + chatTranscriptShadowProjectIDsFlag + ". Messages without a shadow are served from plaintext; a stale or unauthentic shadow fails the read. Disabled by default.",
 		EnvVars: []string{"GRAM_CHAT_TRANSCRIPT_SHADOW_READ_PROJECT_IDS"},
 	}
 }

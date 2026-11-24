@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
@@ -40,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -126,11 +128,16 @@ type WorkerOptions struct {
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
-	ChatClient                   *chat.Client
-	OpenRouter                   openrouter.Provisioner
-	OpenRouterSpend              openrouter.SpendClient
-	K8sClient                    *k8s.KubernetesClients
-	ExpectedTargetCNAME          string
+	// TranscriptShadowStore opens encrypted chat transcript shadows for risk
+	// batch scans in TranscriptShadowReadProjectIDs. Nil keeps every project
+	// on plaintext.
+	TranscriptShadowStore          *transcriptstore.Store
+	TranscriptShadowReadProjectIDs []uuid.UUID
+	ChatClient                     *chat.Client
+	OpenRouter                     openrouter.Provisioner
+	OpenRouterSpend                openrouter.SpendClient
+	K8sClient                      *k8s.KubernetesClients
+	ExpectedTargetCNAME            string
 	// ExpectedARecords are the static ingress IPs apex custom domains point A
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
@@ -619,6 +626,9 @@ func NewTemporalWorker(
 		opts.StaffOrganization,
 	)
 	activities.memoryEvalRunner = opts.MemoryEvals
+	if activities.analyzeBatch != nil {
+		activities.analyzeBatch.WithTranscriptShadowReads(opts.TranscriptShadowStore, opts.TranscriptShadowReadProjectIDs...)
+	}
 
 	if opts.FleetHealthCache != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat/transcriptstore"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -61,6 +62,10 @@ type AnalyzeBatch struct {
 	llmFallbackOnce    sync.Once
 	celEng             *celenv.Engine
 	recommended        RecommendedSet
+	// transcriptShadow opens encrypted message bodies for the projects in
+	// transcriptShadowReadProjects. Nil leaves every project on plaintext.
+	transcriptShadow             *transcriptstore.Store
+	transcriptShadowReadProjects map[uuid.UUID]struct{}
 }
 
 type contentPartAssetReader = blobio.Reader
@@ -116,6 +121,9 @@ func NewAnalyzeBatch(
 		llmFallbackOnce:    sync.Once{},
 		celEng:             celEng,
 		recommended:        recommended,
+		// Shadow reads are opt-in through WithTranscriptShadowReads.
+		transcriptShadow:             nil,
+		transcriptShadowReadProjects: map[uuid.UUID]struct{}{},
 	}, nil
 }
 
@@ -316,6 +324,10 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 		if err != nil {
 			fetchSpan.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("get message content batch: %w", err)
+		}
+		if err := a.openShadowRows(ctx, args.OrganizationID, args.ProjectID, rows); err != nil {
+			fetchSpan.SetStatus(codes.Error, err.Error())
+			return nil, err
 		}
 		messages = append(messages, newBatchMessages(ctx, a.logger, rows)...)
 	}

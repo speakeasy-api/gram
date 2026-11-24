@@ -851,6 +851,11 @@ WHERE id = ANY(@content_part_ids::uuid[])
 -- metric to it, which is the one attribution available when the call resolved
 -- to no telemetry row at all — precisely the population that metric exists to
 -- measure.
+-- The context messages' ids (the nil UUID when there is none) ride along so a
+-- project that reads through encrypted transcript shadows can open them in the
+-- same LoadMany call as the batch itself; batchContextMaxRunes in
+-- batch_messages.go mirrors LEFT here.
+--
 -- Both message queries validate their chat against the row's project before
 -- returning linkage. Content-part parents additionally must belong to the
 -- content part's chat, so corrupt cross-tenant or cross-chat ids never leave
@@ -858,12 +863,14 @@ WHERE id = ANY(@content_part_ids::uuid[])
 SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id,
   COALESCE(prior_user_request.content, '')::TEXT AS prior_user_request,
-  COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content
+  COALESCE(recent_tool.content, '')::TEXT AS recent_untrusted_content,
+  COALESCE(prior_user_request.id, '00000000-0000-0000-0000-000000000000')::UUID AS prior_user_request_id,
+  COALESCE(recent_tool.id, '00000000-0000-0000-0000-000000000000')::UUID AS recent_untrusted_content_id
 FROM chat_messages cm
 JOIN chats c ON c.id = cm.chat_id
   AND c.project_id = cm.project_id
 LEFT JOIN LATERAL (
-  SELECT LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
+  SELECT prev.id, LEFT(prev.content, 4000) AS content, prev.created_at, prev.seq
   FROM chat_messages prev
   WHERE prev.chat_id = cm.chat_id
     AND prev.project_id = cm.project_id
@@ -873,7 +880,7 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) prior_user_request ON TRUE
 LEFT JOIN LATERAL (
-  SELECT LEFT(prev.content, 4000) AS content
+  SELECT prev.id, LEFT(prev.content, 4000) AS content
   FROM chat_messages prev
   WHERE prev.chat_id = cm.chat_id
     AND prev.project_id = cm.project_id

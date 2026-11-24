@@ -365,7 +365,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, orgEncryptionFlags()...)
-	flags = append(flags, transcriptShadowFlag())
+	flags = append(flags, transcriptShadowFlag(), transcriptShadowReadFlag())
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
@@ -873,7 +873,8 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
-			if _, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider); err != nil {
+			transcriptShadow, err := configureTranscriptShadow(ctx, c, db, chatWriter, orgEncryption, tracerProvider, meterProvider)
+			if err != nil {
 				return err
 			}
 			// Issuer URLs are pinned to the outbound origin, as on the server.
@@ -920,6 +921,8 @@ func newWorkerCommand() *cli.Command {
 				SlackClient:                    slackClient,
 				SlackDirectoryTokenRefresher:   slackDirectoryRefresher,
 				ChatMessageWriter:              chatWriter,
+				TranscriptShadowStore:          transcriptShadow.Store,
+				TranscriptShadowReadProjectIDs: transcriptShadow.ReadProjectIDs,
 				ChatClient:                     chatClient,
 				OpenRouter:                     openRouter,
 				OpenRouterSpend:                openRouter,

@@ -7,9 +7,11 @@ payloads through the existing organization-scoped KMS/envelope-encryption servic
 `server/internal/chat/transcriptstore` persists encrypted shadow copies, verifies
 reads, and backfills a bounded project-scoped page at a time. Shared message writers
 can capture these copies atomically with the original message and outbox events.
-**Only the dashboard chat load (`chat.load`) can read through shadows, and only
-for projects on the read allowlist; messages without a shadow fall back to
-plaintext. Every other reader still uses legacy data.
+**Only the dashboard chat load (`chat.load`) and risk batch scans
+(`risk_analysis.AnalyzeBatch`, which opens each batch and its context messages
+in one `LoadMany` call) can read through shadows, and only for projects on the
+read allowlist; messages without a shadow fall back to plaintext. Every other
+reader, including risk reveals and exclusion reconciles, still uses legacy data.
 Plaintext and existing assets are not removed.** The `chat-transcripts` use case has an independent DEK per
 organization; it does not reuse OAuth or gateway-state keys.
 
