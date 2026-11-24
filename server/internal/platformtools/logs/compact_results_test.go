@@ -44,10 +44,14 @@ func TestObservabilityOverviewOmitsTimeSeriesUnlessAsked(t *testing.T) {
 		`{}`:                           false,
 		`{"include_time_series":true}`: true,
 	} {
-		svc := &recordingTelemetry{}
-		var out bytes.Buffer
-		require.NoError(t, NewGetObservabilityOverviewTool(svc).Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(input), &out))
-		require.Equal(t, want, svc.overviewPayload.IncludeTimeSeries, input)
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &recordingTelemetry{}
+			var out bytes.Buffer
+			require.NoError(t, NewGetObservabilityOverviewTool(svc).Call(t.Context(), toolconfig.ToolCallEnv{}, strings.NewReader(input), &out))
+			require.Equal(t, want, svc.overviewPayload.IncludeTimeSeries, input)
+		})
 	}
 }
 

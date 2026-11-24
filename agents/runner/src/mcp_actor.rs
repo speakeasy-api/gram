@@ -37,12 +37,12 @@ const MCP_CMD_CAPACITY: usize = 32;
 const MCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Floor between connect retries against a hard-failing server, and between
-/// implicit reconnects of the same server. Every MCP call failure surfaces
-/// as `ToolError::ExecutionFailed` (agentkit folds JSON-RPC application
-/// errors and transport errors into one variant), so without a cooldown a
-/// model looping on bad arguments would pay a full disconnect + handshake
-/// per failed call, and every tool_search would re-pay the handshake
-/// timeout for a server that is down.
+/// implicit reconnects of the same server. JSON-RPC error responses reach the
+/// model as error tool results (see [`ErrorResponseAsToolError`]), so only
+/// transport failures surface as `ToolError::ExecutionFailed` and trigger a
+/// reconnect. Without a cooldown a server that keeps dropping connections
+/// would cost a full disconnect + handshake per failed call, and every
+/// tool_search would re-pay the handshake timeout for a server that is down.
 const MCP_RETRY_COOLDOWN: Duration = Duration::from_secs(30);
 
 /// Age past which a stored auth flow URL is re-minted on the next
@@ -833,7 +833,7 @@ impl McpErrorResponder for ErrorResponseAsToolError {
 fn invocation_error_text(error: &McpInvocationError) -> String {
     if error.code() == MCP_PERMISSION_DENIED {
         return format!(
-            "permission denied: this assistant cannot use this tool, so do not retry it ({error})"
+            "permission denied: this assistant cannot use this tool now, so do not retry it in this turn ({error})"
         );
     }
     error.to_string()
@@ -1172,7 +1172,7 @@ mod tests {
         for (name, expected) in [
             (
                 "mcp_srv_denied",
-                "permission denied: this assistant cannot use this tool, so do not retry it",
+                "permission denied: this assistant cannot use this tool now, so do not retry it in this turn",
             ),
             ("mcp_srv_picky", "invalid params: missing field `from`"),
         ] {

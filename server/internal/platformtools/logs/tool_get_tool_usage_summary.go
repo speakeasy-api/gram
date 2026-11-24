@@ -45,7 +45,7 @@ func (s *GetToolUsageSummary) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "logs",
 		HandlerName: "get_tool_usage_summary",
 		Name:        "platform_get_tool_usage_summary",
-		Description: "Summarize target-aware tool usage for hosted MCP, tunneled MCP, gateways, shadow MCP, local tools, and skills in the current project over a time window (default: the last 7 days). Returns a compact summary: totals, the top targets, users and MCP clients, and the 25 per-target tool rows with the most failures, with success and failure counts — use it for which-tools-or-MCP-servers-are-failing questions. Use target_types=[\"tunneled_mcp_server\"] for questions like which tunneled MCPs the team uses. Time series and cross breakdowns are omitted unless include_time_series or include_breakdowns is true.",
+		Description: "Summarize target-aware tool usage for hosted MCP, tunneled MCP, gateways, shadow MCP, local tools, and skills in the current project over a time window (default: the last 7 days). Returns a compact summary: totals, the top targets, users and MCP clients, and the 25 per-target tool rows with the most failures, with success and failure counts — use it for which-tools-or-MCP-servers-are-failing questions. Use target_types=[\"tunneled_mcp_server\"] for questions like which tunneled MCPs the team uses. Set include_time_series=true for the time series, and include_breakdowns=true for the users-by-target and client tool breakdowns and every per-target tool row instead of the top 25.",
 		InputSchema: core.BuildInputSchema[getToolUsageSummaryInput](
 			core.WithPropertyFormat("from", "date-time"),
 			core.WithPropertyFormat("to", "date-time"),

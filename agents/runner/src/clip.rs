@@ -366,7 +366,8 @@ fn compose_envelope(
             "hint".into(),
             Value::String(
                 "The preview is the start of the result. Read or grep saved_to for the rest \
-                 instead of repeating the call."
+                 instead of repeating the call. saved_to holds at most the first 4 MiB, so \
+                 when saved_bytes is less than original_bytes, use a narrower call for the remainder."
                     .into(),
             ),
         );

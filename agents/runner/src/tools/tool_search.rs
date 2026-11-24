@@ -125,7 +125,7 @@ fn search_body(specs: &[ToolSpec], query: &str, servers: &[McpServerStatus]) -> 
     let matches = rank(specs, query);
     let matched_tools: Vec<Value> = matches.iter().map(|spec| full_entry(spec)).collect();
 
-    if let Some(wanted) = selection(query) {
+    if let Some(wanted) = selection(query).filter(|wanted| !wanted.is_empty()) {
         let mut body = serde_json::Map::new();
         body.insert("matched_tools".into(), Value::Array(matched_tools));
         let not_found: Vec<&str> = wanted
@@ -359,6 +359,19 @@ mod tests {
         )];
         let body = search_body(&specs, "weather", &servers);
         assert_eq!(body["matched_tools"][0]["name"], "mcp_srv_get_weather");
+        assert_eq!(body["catalog"][0]["name"], "mcp_srv_get_weather");
+        assert_eq!(body["servers"][0]["id"], "srv");
+    }
+
+    #[test]
+    fn bare_select_falls_back_to_the_catalog_index() {
+        let specs = vec![spec("mcp_srv_get_weather", "Reads a forecast.")];
+        let servers = vec![status(
+            "srv",
+            McpServerConnectionStatus::Connected,
+            &["mcp_srv_get_weather"],
+        )];
+        let body = search_body(&specs, "select:", &servers);
         assert_eq!(body["catalog"][0]["name"], "mcp_srv_get_weather");
         assert_eq!(body["servers"][0]["id"], "srv");
     }
