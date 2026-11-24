@@ -556,9 +556,10 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 			Annotations: nil,
 			Meta:        nil,
 		})
-		// Only inspection tools are read-only; execute_tool can dispatch writes.
+		// execute_tool can dispatch writes; execute_read_only_tool refuses any
+		// member tool not annotated read-only, so it is read-only too.
 		switch tool.Name {
-		case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolConnectionStatus:
+		case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteReadOnlyTool, metamcp.ToolConnectionStatus:
 			tools[len(tools)-1].Annotations = &externalmcp.ToolAnnotations{
 				Title:           "",
 				ReadOnlyHint:    new(true),
@@ -590,7 +591,7 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 }
 
 // progressiveGatewayTools are the fixed tools Progressive discovery serves.
-var progressiveGatewayTools = []string{metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool, metamcp.ToolConnectionStatus}
+var progressiveGatewayTools = []string{metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool, metamcp.ToolExecuteReadOnlyTool, metamcp.ToolConnectionStatus}
 
 func (s *Service) callMetaServerTool(
 	ctx context.Context,
@@ -628,7 +629,8 @@ func (s *Service) callMetaServerTool(
 	}
 	// Status and describe read the live choice so they agree with a call, and write nothing.
 	liveRead := params.Name == metamcp.ToolConnectionStatus || params.Name == metamcp.ToolDescribeServer || params.Name == metamcp.ToolDescribeTools
-	gate.execute = gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool || liveRead
+	progressiveExecute := params.Name == metamcp.ToolExecuteTool || params.Name == metamcp.ToolExecuteReadOnlyTool
+	gate.execute = gate.discoveryMode == metamcp.DiscoveryModeDirect || progressiveExecute || liveRead
 	if liveRead && gate.memberChoices != nil {
 		gate.memberChoices.readOnly = true
 	}
@@ -643,7 +645,7 @@ func (s *Service) callMetaServerTool(
 	if err != nil {
 		// A tool call that never reached a member still failed as one. Live
 		// discovery reads also resolve credentials but stay discovery.
-		if gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool {
+		if gate.discoveryMode == metamcp.DiscoveryModeDirect || progressiveExecute {
 			s.logMetaToolCallFailure(ctx, gate, params.Name, params.Arguments, newMetaToolCallAttempt(start), err)
 			return nil, err
 		}
@@ -652,7 +654,7 @@ func (s *Service) callMetaServerTool(
 	}
 
 	if gate.discoveryMode == metamcp.DiscoveryModeDirect {
-		return s.executeMetaMemberTool(ctx, logger, gate, members, req, params.Name, params.Arguments, params.Meta)
+		return s.executeMetaMemberTool(ctx, logger, gate, members, req, params.Name, params.Arguments, params.Meta, memberToolAnyDisposition)
 	}
 	if gate.discoveryMode == metamcp.DiscoveryModeCode {
 		return s.executeMetaCode(ctx, logger, mcpEndpoint, metaServer, gate, members, req, params)
@@ -675,11 +677,14 @@ func (s *Service) callMetaServerTool(
 		body, memberFailures, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolConnectionStatus:
 		body, err = s.handleMetaConnectionStatusCall(authz.WithoutChallenges(ctx), logger, gate, members, req)
+	case metamcp.ToolExecuteReadOnlyTool:
+		// Logged like execute_tool, below.
+		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Name, params.Arguments, params.Meta, memberToolReadOnly)
 	default:
 		// execute_tool is deliberately not logged here: it writes a single
 		// tool_call row stamped with this gateway's id, the member dispatch's
 		// or, when it fails before one, its own.
-		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
+		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Name, params.Arguments, params.Meta, memberToolAnyDisposition)
 	}
 	s.logMetaDiscovery(ctx, gate, params.Name, start, err, callFailure)
 	for _, failure := range memberFailures {
