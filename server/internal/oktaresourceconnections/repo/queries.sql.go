@@ -408,7 +408,7 @@ type GetEligibleServerRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
-	UsesTypedOffers                   bool
+	UsesTypedOffers                     bool
 	OfferedClientIds                    []uuid.UUID
 	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
@@ -831,7 +831,7 @@ type ListEligibleServersRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
-	UsesTypedOffers                   bool
+	UsesTypedOffers                     bool
 	OfferedClientIds                    []uuid.UUID
 	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
