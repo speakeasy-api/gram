@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -182,4 +183,92 @@ func TestOrganizationReadsUnavailableWithoutService(t *testing.T) {
 		require.Equal(t, http.StatusOK, status)
 		require.Contains(t, body, `"isError":true`)
 	}
+}
+
+func TestFindOrganizationsInternalStatus(t *testing.T) {
+	t.Parallel()
+	reads := &recordingOrganizationReader{list: &gen.AdminListOrganizationsResult{
+		Organizations: []*gen.AdminOrganization{
+			{ID: "org-a", Name: "Example One", Slug: "example-one", AccountType: "payg", Internal: true},
+			{ID: "org-b", Name: "Example Two", Slug: "example-two", AccountType: "free"},
+		},
+		Total: 2,
+	}}
+
+	// The internal filter alone is enough to browse: "list every internal
+	// organization" must be one call with no search term.
+	status, body, data := callStaffReadTool(t, reads, "find_organizations", `{"internal_status":"internal"}`)
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, `"isError":true`)
+	require.NotNil(t, reads.listInput)
+	require.Equal(t, new("internal"), reads.listInput.InternalStatus)
+
+	var output FindOrganizationsOutput
+	require.NoError(t, json.Unmarshal(data, &output))
+	require.Len(t, output.Organizations, 2)
+	require.True(t, output.Organizations[0].Internal)
+	require.False(t, output.Organizations[1].Internal)
+
+	// Always present, so an agent never has to guess what an absent field means.
+	var raw struct {
+		Organizations []map[string]json.RawMessage `json:"organizations"`
+	}
+	require.NoError(t, json.Unmarshal(data, &raw))
+	require.JSONEq(t, `false`, string(raw.Organizations[1]["internal"]))
+
+	omitted := &recordingOrganizationReader{list: &gen.AdminListOrganizationsResult{}}
+	status, _, _ = callStaffReadTool(t, omitted, "find_organizations", `{"query":"example"}`)
+	require.Equal(t, http.StatusOK, status)
+	require.Nil(t, omitted.listInput.InternalStatus, "an omitted filter is left to the API default")
+
+	for _, args := range []string{`{"internal_status":"maybe"}`, `{"internal_status":""}`} {
+		other := &recordingOrganizationReader{}
+		_, body, _ := callStaffReadTool(t, other, "find_organizations", args)
+		require.Contains(t, body, `"isError":true`)
+		require.Contains(t, body, "internal_status must be all, internal or external")
+		require.Nil(t, other.listInput)
+	}
+}
+
+func TestOrganizationSummaryInternal(t *testing.T) {
+	t.Parallel()
+	for _, internal := range []bool{true, false} {
+		reads := &recordingOrganizationReader{org: &gen.AdminOrganization{
+			ID: "org-a", Name: "Example One", Slug: "example-one", AccountType: "payg", Internal: internal,
+		}}
+		status, _, data := callStaffReadTool(t, reads, "get_organization_summary", `{"organization_id":"org-a"}`)
+		require.Equal(t, http.StatusOK, status)
+		var fields map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(data, &fields))
+		require.JSONEq(t, strconv.FormatBool(internal), string(fields["internal"]))
+	}
+}
+
+func TestOrganizationToolsExplainInternal(t *testing.T) {
+	t.Parallel()
+	// An agent starting a data project learns what the label is for from the
+	// tool descriptions, without a person having to say so.
+	descriptions := staffToolDescriptions(t)
+	require.Contains(t, descriptions["find_organizations"], "exclude internal organizations from customer analysis")
+	require.Contains(t, descriptions["find_organizations"], "internal_status")
+	// A page holds at most 20 results and there can be more internal
+	// organizations than that, so the description has to say the list is not
+	// complete until every page is read.
+	require.Contains(t, descriptions["find_organizations"], "compare total with the number of results and keep paging")
+	require.Contains(t, descriptions["get_organization_summary"], "marked internal")
+}
+
+// staffToolDescriptions maps each listed tool name to its description.
+func staffToolDescriptions(t *testing.T) map[string]string {
+	t.Helper()
+	descriptions := map[string]string{}
+	for _, raw := range listAllAdminTools(t) {
+		var tool struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &tool))
+		descriptions[tool.Name] = tool.Description
+	}
+	return descriptions
 }
