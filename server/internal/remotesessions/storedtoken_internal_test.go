@@ -45,7 +45,7 @@ func TestRefresh_UnreadableSnapshotRereadStoreFailure(t *testing.T) {
 	sess.UpdatedAt.Time, sess.UpdatedAt.Valid = time.Now(), true
 	attempted := sess
 
-	_, _, _, err = s.refresh(t.Context(), remotesessions_repo.New(pool), sess, "", &attempted)
+	_, _, _, err = s.refresh(t.Context(), remotesessions_repo.New(pool), sess, "", refreshGate{kind: RefreshOutageProvider, honorCooldown: true}, &attempted, &refreshPacing{})
 	require.Error(t, err)
 	require.False(t, StoredTokenUnreadable(err), "a store outage is not a decrypt failure")
 	require.True(t, oops.IsInfrastructureFailure(err), "error: %v", err)
