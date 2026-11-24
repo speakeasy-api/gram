@@ -6,11 +6,6 @@ import { enumPresentation } from "@/lib/enum";
 
 import type { Disposition } from "@gram/client/models/components/selector.js";
 
-import {
-  TOOL_ANNOTATIONS,
-  type ToolAnnotation,
-} from "@/components/tool-selection/annotations";
-
 import type { Server, ServerGroup, ServerTool } from "./serverMerge";
 
 /** The four tool annotations the backend checks, in the order shown. */
@@ -65,23 +60,11 @@ export type ToolLimit =
 export type ToolLimitKind = ToolLimit["kind"];
 
 interface ToolHints {
-  readOnlyHint?: boolean | null;
-  destructiveHint?: boolean | null;
-  idempotentHint?: boolean | null;
-  openWorldHint?: boolean | null;
+  readOnlyHint?: boolean | null | undefined;
+  destructiveHint?: boolean | null | undefined;
+  idempotentHint?: boolean | null | undefined;
+  openWorldHint?: boolean | null | undefined;
 }
-
-/**
- * The order the backend picks a tool's one disposition in when it carries
- * several (DispositionFromAnnotations in server/internal/conv/tools.go). A
- * tool that is both read-only and idempotent counts as read-only.
- */
-export const DISPOSITION_PRECEDENCE = [
-  "read_only",
-  "destructive",
-  "idempotent",
-  "open_world",
-] as const satisfies readonly Disposition[];
 
 /**
  * The one disposition the server assigns a tool (authz.DispositionFromHints):
@@ -91,7 +74,7 @@ export const DISPOSITION_PRECEDENCE = [
  * the tests check this function against them.
  */
 export function toolDisposition(tool: {
-  annotations?: ToolHints | null;
+  annotations?: ToolHints | null | undefined;
 }): Disposition {
   const hints = tool.annotations;
   if (hints?.readOnlyHint && hints.destructiveHint) return "destructive";
@@ -144,17 +127,6 @@ export function limitAfterToggle(
     return { ...limit, tools: named.filter((other) => other !== name) };
   }
   return { kind: "tools", tools: next };
-}
-
-/**
- * The server matches a tool by one disposition only, so a tool with several
- * hints must not count under the others.
- */
-export function toolDispositionAnnotations(tool: {
-  annotations?: ToolHints | null;
-}): ToolAnnotation[] {
-  const disposition = toolDisposition(tool);
-  return TOOL_ANNOTATIONS.filter((annotation) => annotation === disposition);
 }
 
 /**
