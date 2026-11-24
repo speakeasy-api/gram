@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -208,6 +209,91 @@ func queryServed(ctx context.Context, ch driver.Conn, query string, args ...any)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read served connection rows: %w", err)
+	}
+	return out, nil
+}
+
+// servedByFamilyBatch bounds the server ids in one served-by-family query, keeping its text small.
+const servedByFamilyBatch = 1000
+
+// ServedByFamily is when one client family was last served and last answered on one server, gateway member or toolset.
+type ServedByFamily struct {
+	// ServerKind is the kind of server.
+	ServerKind string `ch:"server_kind"`
+
+	// ServerID is the server, gateway or toolset.
+	ServerID string `ch:"server_id"`
+
+	// MemberID is the gateway member, empty for none.
+	MemberID string `ch:"member_id"`
+
+	// ClientFamily is the client family served.
+	ClientFamily string `ch:"client_family"`
+
+	// LastServedAt is when a request was last served, whoever answered it.
+	LastServedAt time.Time `ch:"served_at"`
+
+	// LastAnsweredAt is when the server itself last answered, zero for never.
+	LastAnsweredAt time.Time `ch:"answered_at"`
+}
+
+// OnGatewayMember reports whether the row is a gateway member's.
+func (s ServedByFamily) OnGatewayMember() bool {
+	return s.ServerKind == serverKindMeta && s.MemberID != ""
+}
+
+// servedByFamilyQuery takes organization, server kinds and server ids.
+const servedByFamilyQuery = `
+SELECT server_kind, server_id, member_id, client_family,
+	max(last_served_at) AS served_at, max(last_answered_at) AS answered_at
+FROM ` + lastServedTable + `
+WHERE organization_id = ? AND server_kind IN ? AND server_id IN ?
+GROUP BY server_kind, server_id, member_id, client_family`
+
+// ReadServedByFamily reads when each client family was last served and answered on the failing people's servers.
+func ReadServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, failing []FailingPerson) ([]ServedByFamily, error) {
+	kindSet, idSet := map[string]bool{}, map[string]bool{}
+	for _, f := range failing {
+		if !f.OnMCPServer() {
+			continue
+		}
+		kindSet[f.ServerKind] = true
+		idSet[f.ServerID] = true
+	}
+	kinds, ids := slices.Sorted(maps.Keys(kindSet)), slices.Sorted(maps.Keys(idSet))
+
+	var out []ServedByFamily
+	for batch := range slices.Chunk(ids, servedByFamilyBatch) {
+		rows, err := queryServedByFamily(ctx, ch, organizationID, kinds, batch)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+	}
+	return out, nil
+}
+
+func queryServedByFamily(ctx context.Context, ch driver.Conn, organizationID string, kinds, ids []string) ([]ServedByFamily, error) {
+	rows, err := ch.Query(failingReadContext(ctx), servedByFamilyQuery, organizationID, kinds, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query served by family: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+
+	var out []ServedByFamily
+	for rows.Next() {
+		var s ServedByFamily
+		if err := rows.ScanStruct(&s); err != nil {
+			return nil, fmt.Errorf("scan served by family: %w", err)
+		}
+		// The epoch is the column's "never".
+		if s.LastAnsweredAt.Unix() <= 0 {
+			s.LastAnsweredAt = time.Time{}
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read served by family rows: %w", err)
 	}
 	return out, nil
 }
