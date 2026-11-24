@@ -9574,6 +9574,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       summary: listTailscaleOAuthMigration admin
       tags:
         - admin
@@ -9649,6 +9655,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
       summary: runTailscaleOAuthMigrationStep admin
       tags:
         - admin
@@ -13864,7 +13876,11 @@ components:
           description: The organization slug.
         state:
           type: string
-          description: 'The transition state: platform_key, dual_write or org_kms.'
+          description: The transition state.
+          enum:
+            - platform_key
+            - dual_write
+            - org_kms
         state_changed_at:
           type: string
           description: When the current state was entered. Absent before the organization is enrolled.

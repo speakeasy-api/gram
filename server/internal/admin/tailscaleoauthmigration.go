@@ -18,10 +18,10 @@ import (
 
 // tailscaleOAuthMinimumDualWrite is how long an organization's Tailscale OAuth
 // credentials stay in dual_write before finalize is allowed. The reconciler
-// reopens every ingress's credentials at least hourly, so an hour proves the
-// organization key serves real reads while the platform-key copies still
-// exist. Finalize raises anything shorter to orgencryption's own floor.
-const tailscaleOAuthMinimumDualWrite = time.Hour
+// reopens an ingress's credentials only after its last health check is an
+// hour stale, on an hourly sweep with jitter, so a day is sure to cover real
+// reads through the organization key while the platform-key copies still exist.
+const tailscaleOAuthMinimumDualWrite = orgencryption.DefaultMinimumDualWrite
 
 // tailscaleOAuthStepTimeout bounds one migration step, which outlives the
 // request so a closed tab does not cut a backfill or clear short. Each step
@@ -127,7 +127,9 @@ func (s *Service) RunTailscaleOAuthMigrationStep(ctx context.Context, payload *g
 		attr.SlogAdminOIDCSubject(principal.ID),
 	)
 
-	result, err := migration.status(ctx, organization.ID, organization.Name, organization.Slug)
+	// Read on the step's context: a closed tab must not turn a finished step
+	// into an error.
+	result, err := migration.status(stepCtx, organization.ID, organization.Name, organization.Slug)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read Tailscale OAuth migration status").LogError(ctx, logger)
 	}

@@ -1483,7 +1483,6 @@ var _ = Service("admin", func() {
 
 	upstreamOAuthMigrationMethods()
 	mcpAuthBackfillMethods()
-	tailscaleOAuthMigrationMethods()
 	mcpConnectBackfillMethods()
 	projectRedeployMethods()
 	customDomainMethods()
@@ -1491,4 +1490,5 @@ var _ = Service("admin", func() {
 	memoryEvalMethods()
 	assistantMethods()
 	hooksRolloutMethods()
+	tailscaleOAuthMigrationMethods()
 })

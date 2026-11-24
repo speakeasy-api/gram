@@ -24940,472 +24940,6 @@ func DecodeBackfillMcpAuthGrantsResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
-// BuildListTailscaleOAuthMigrationRequest instantiates a HTTP request object
-// with method and path set to call the "admin" service
-// "listTailscaleOAuthMigration" endpoint
-func (c *Client) BuildListTailscaleOAuthMigrationRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTailscaleOAuthMigrationAdminPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("admin", "listTailscaleOAuthMigration", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeListTailscaleOAuthMigrationRequest returns an encoder for requests
-// sent to the admin listTailscaleOAuthMigration server.
-func EncodeListTailscaleOAuthMigrationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*admin.ListTailscaleOAuthMigrationPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("admin", "listTailscaleOAuthMigration", "*admin.ListTailscaleOAuthMigrationPayload", v)
-		}
-		if p.AdminSessionToken != nil {
-			head := *p.AdminSessionToken
-			req.Header.Set("Authorization", head)
-		}
-		return nil
-	}
-}
-
-// DecodeListTailscaleOAuthMigrationResponse returns a decoder for responses
-// returned by the admin listTailscaleOAuthMigration endpoint. restoreBody
-// controls whether the response body should be restored after having been read.
-// DecodeListTailscaleOAuthMigrationResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeListTailscaleOAuthMigrationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body ListTailscaleOAuthMigrationResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			res := NewListTailscaleOAuthMigrationAdminTailscaleOAuthMigrationOrganizationsOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body ListTailscaleOAuthMigrationUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			return nil, NewListTailscaleOAuthMigrationUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body ListTailscaleOAuthMigrationForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			return nil, NewListTailscaleOAuthMigrationForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body ListTailscaleOAuthMigrationBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			return nil, NewListTailscaleOAuthMigrationBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body ListTailscaleOAuthMigrationNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			return nil, NewListTailscaleOAuthMigrationNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body ListTailscaleOAuthMigrationConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			return nil, NewListTailscaleOAuthMigrationConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body ListTailscaleOAuthMigrationUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			return nil, NewListTailscaleOAuthMigrationUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body ListTailscaleOAuthMigrationInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			return nil, NewListTailscaleOAuthMigrationInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body ListTailscaleOAuthMigrationInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-				}
-				err = ValidateListTailscaleOAuthMigrationInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-				}
-				return nil, NewListTailscaleOAuthMigrationInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body ListTailscaleOAuthMigrationUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-				}
-				err = ValidateListTailscaleOAuthMigrationUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-				}
-				return nil, NewListTailscaleOAuthMigrationUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("admin", "listTailscaleOAuthMigration", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body ListTailscaleOAuthMigrationGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
-			}
-			err = ValidateListTailscaleOAuthMigrationGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
-			}
-			return nil, NewListTailscaleOAuthMigrationGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("admin", "listTailscaleOAuthMigration", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// BuildRunTailscaleOAuthMigrationStepRequest instantiates a HTTP request
-// object with method and path set to call the "admin" service
-// "runTailscaleOAuthMigrationStep" endpoint
-func (c *Client) BuildRunTailscaleOAuthMigrationStepRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RunTailscaleOAuthMigrationStepAdminPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("admin", "runTailscaleOAuthMigrationStep", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeRunTailscaleOAuthMigrationStepRequest returns an encoder for requests
-// sent to the admin runTailscaleOAuthMigrationStep server.
-func EncodeRunTailscaleOAuthMigrationStepRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*admin.RunTailscaleOAuthMigrationStepPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("admin", "runTailscaleOAuthMigrationStep", "*admin.RunTailscaleOAuthMigrationStepPayload", v)
-		}
-		if p.AdminSessionToken != nil {
-			head := *p.AdminSessionToken
-			req.Header.Set("Authorization", head)
-		}
-		body := NewRunTailscaleOAuthMigrationStepRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("admin", "runTailscaleOAuthMigrationStep", err)
-		}
-		return nil
-	}
-}
-
-// DecodeRunTailscaleOAuthMigrationStepResponse returns a decoder for responses
-// returned by the admin runTailscaleOAuthMigrationStep endpoint. restoreBody
-// controls whether the response body should be restored after having been read.
-// DecodeRunTailscaleOAuthMigrationStepResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeRunTailscaleOAuthMigrationStepResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var (
-				body RunTailscaleOAuthMigrationStepResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			res := NewRunTailscaleOAuthMigrationStepAdminTailscaleOAuthMigrationOrganizationOK(&body)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body RunTailscaleOAuthMigrationStepUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			return nil, NewRunTailscaleOAuthMigrationStepUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body RunTailscaleOAuthMigrationStepForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			return nil, NewRunTailscaleOAuthMigrationStepForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body RunTailscaleOAuthMigrationStepBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			return nil, NewRunTailscaleOAuthMigrationStepBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body RunTailscaleOAuthMigrationStepNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			return nil, NewRunTailscaleOAuthMigrationStepNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body RunTailscaleOAuthMigrationStepConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			return nil, NewRunTailscaleOAuthMigrationStepConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			return nil, NewRunTailscaleOAuthMigrationStepUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body RunTailscaleOAuthMigrationStepInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			return nil, NewRunTailscaleOAuthMigrationStepInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body RunTailscaleOAuthMigrationStepInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-				}
-				err = ValidateRunTailscaleOAuthMigrationStepInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-				}
-				return nil, NewRunTailscaleOAuthMigrationStepInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body RunTailscaleOAuthMigrationStepUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-				}
-				err = ValidateRunTailscaleOAuthMigrationStepUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-				}
-				return nil, NewRunTailscaleOAuthMigrationStepUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("admin", "runTailscaleOAuthMigrationStep", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body RunTailscaleOAuthMigrationStepGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			err = ValidateRunTailscaleOAuthMigrationStepGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
-			}
-			return nil, NewRunTailscaleOAuthMigrationStepGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("admin", "runTailscaleOAuthMigrationStep", resp.StatusCode, string(body))
-		}
-	}
-}
-
 // BuildBackfillMcpConnectGrantsRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "backfillMcpConnectGrants"
 // endpoint
@@ -31146,6 +30680,502 @@ func DecodeClearOrganizationHooksRolloutResponse(decoder func(*http.Response) go
 	}
 }
 
+// BuildListTailscaleOAuthMigrationRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "listTailscaleOAuthMigration" endpoint
+func (c *Client) BuildListTailscaleOAuthMigrationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTailscaleOAuthMigrationAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listTailscaleOAuthMigration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTailscaleOAuthMigrationRequest returns an encoder for requests
+// sent to the admin listTailscaleOAuthMigration server.
+func EncodeListTailscaleOAuthMigrationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListTailscaleOAuthMigrationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listTailscaleOAuthMigration", "*admin.ListTailscaleOAuthMigrationPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListTailscaleOAuthMigrationResponse returns a decoder for responses
+// returned by the admin listTailscaleOAuthMigration endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListTailscaleOAuthMigrationResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTailscaleOAuthMigrationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTailscaleOAuthMigrationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			res := NewListTailscaleOAuthMigrationAdminTailscaleOAuthMigrationOrganizationsOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListTailscaleOAuthMigrationUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body ListTailscaleOAuthMigrationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTailscaleOAuthMigrationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTailscaleOAuthMigrationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTailscaleOAuthMigrationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTailscaleOAuthMigrationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTailscaleOAuthMigrationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTailscaleOAuthMigrationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTailscaleOAuthMigrationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+				}
+				err = ValidateListTailscaleOAuthMigrationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+				}
+				return nil, NewListTailscaleOAuthMigrationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTailscaleOAuthMigrationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+				}
+				err = ValidateListTailscaleOAuthMigrationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+				}
+				return nil, NewListTailscaleOAuthMigrationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listTailscaleOAuthMigration", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTailscaleOAuthMigrationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listTailscaleOAuthMigration", err)
+			}
+			err = ValidateListTailscaleOAuthMigrationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listTailscaleOAuthMigration", err)
+			}
+			return nil, NewListTailscaleOAuthMigrationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listTailscaleOAuthMigration", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRunTailscaleOAuthMigrationStepRequest instantiates a HTTP request
+// object with method and path set to call the "admin" service
+// "runTailscaleOAuthMigrationStep" endpoint
+func (c *Client) BuildRunTailscaleOAuthMigrationStepRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RunTailscaleOAuthMigrationStepAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "runTailscaleOAuthMigrationStep", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRunTailscaleOAuthMigrationStepRequest returns an encoder for requests
+// sent to the admin runTailscaleOAuthMigrationStep server.
+func EncodeRunTailscaleOAuthMigrationStepRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RunTailscaleOAuthMigrationStepPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "runTailscaleOAuthMigrationStep", "*admin.RunTailscaleOAuthMigrationStepPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRunTailscaleOAuthMigrationStepRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "runTailscaleOAuthMigrationStep", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRunTailscaleOAuthMigrationStepResponse returns a decoder for responses
+// returned by the admin runTailscaleOAuthMigrationStep endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeRunTailscaleOAuthMigrationStepResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRunTailscaleOAuthMigrationStepResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RunTailscaleOAuthMigrationStepResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			res := NewRunTailscaleOAuthMigrationStepAdminTailscaleOAuthMigrationOrganizationOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body RunTailscaleOAuthMigrationStepUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body RunTailscaleOAuthMigrationStepUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RunTailscaleOAuthMigrationStepForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RunTailscaleOAuthMigrationStepBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RunTailscaleOAuthMigrationStepNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RunTailscaleOAuthMigrationStepConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RunTailscaleOAuthMigrationStepInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RunTailscaleOAuthMigrationStepInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+				}
+				err = ValidateRunTailscaleOAuthMigrationStepInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+				}
+				return nil, NewRunTailscaleOAuthMigrationStepInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RunTailscaleOAuthMigrationStepUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+				}
+				err = ValidateRunTailscaleOAuthMigrationStepUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+				}
+				return nil, NewRunTailscaleOAuthMigrationStepUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "runTailscaleOAuthMigrationStep", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RunTailscaleOAuthMigrationStepGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			err = ValidateRunTailscaleOAuthMigrationStepGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "runTailscaleOAuthMigrationStep", err)
+			}
+			return nil, NewRunTailscaleOAuthMigrationStepGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "runTailscaleOAuthMigrationStep", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -33164,30 +33194,6 @@ func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamO
 	return res
 }
 
-// unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTailscaleOAuthMigrationOrganization
-// builds a value of type *admin.AdminTailscaleOAuthMigrationOrganization from
-// a value of type *AdminTailscaleOAuthMigrationOrganizationResponseBody.
-func unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTailscaleOAuthMigrationOrganization(v *AdminTailscaleOAuthMigrationOrganizationResponseBody) *admin.AdminTailscaleOAuthMigrationOrganization {
-	res := &admin.AdminTailscaleOAuthMigrationOrganization{
-		OrganizationID:          *v.OrganizationID,
-		Name:                    *v.Name,
-		Slug:                    *v.Slug,
-		State:                   *v.State,
-		Generation:              *v.Generation,
-		StateChangedAt:          v.StateChangedAt,
-		Waiting:                 *v.Waiting,
-		Unreadable:              *v.Unreadable,
-		PlatformCopies:          *v.PlatformCopies,
-		LastBackfillStartedAt:   v.LastBackfillStartedAt,
-		LastBackfillCompletedAt: v.LastBackfillCompletedAt,
-		LastBackfillError:       v.LastBackfillError,
-		LastVerifiedAt:          v.LastVerifiedAt,
-		PlatformCopiesClearedAt: v.PlatformCopiesClearedAt,
-	}
-
-	return res
-}
-
 // unmarshalAdminCustomDomainResponseBodyToAdminAdminCustomDomain builds a
 // value of type *admin.AdminCustomDomain from a value of type
 // *AdminCustomDomainResponseBody.
@@ -33433,6 +33439,30 @@ func unmarshalAdminHooksRolloutChangeResponseBodyToAdminAdminHooksRolloutChange(
 		Version:          v.Version,
 		SetBy:            *v.SetBy,
 		SetAt:            *v.SetAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTailscaleOAuthMigrationOrganization
+// builds a value of type *admin.AdminTailscaleOAuthMigrationOrganization from
+// a value of type *AdminTailscaleOAuthMigrationOrganizationResponseBody.
+func unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTailscaleOAuthMigrationOrganization(v *AdminTailscaleOAuthMigrationOrganizationResponseBody) *admin.AdminTailscaleOAuthMigrationOrganization {
+	res := &admin.AdminTailscaleOAuthMigrationOrganization{
+		OrganizationID:          *v.OrganizationID,
+		Name:                    *v.Name,
+		Slug:                    *v.Slug,
+		State:                   *v.State,
+		Generation:              *v.Generation,
+		StateChangedAt:          v.StateChangedAt,
+		Waiting:                 *v.Waiting,
+		Unreadable:              *v.Unreadable,
+		PlatformCopies:          *v.PlatformCopies,
+		LastBackfillStartedAt:   v.LastBackfillStartedAt,
+		LastBackfillCompletedAt: v.LastBackfillCompletedAt,
+		LastBackfillError:       v.LastBackfillError,
+		LastVerifiedAt:          v.LastVerifiedAt,
+		PlatformCopiesClearedAt: v.PlatformCopiesClearedAt,
 	}
 
 	return res

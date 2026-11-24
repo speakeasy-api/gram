@@ -13,7 +13,9 @@ var AdminTailscaleOAuthMigrationOrganization = Type("AdminTailscaleOAuthMigratio
 	Attribute("organization_id", String, "The organization ID.")
 	Attribute("name", String, "The organization name.")
 	Attribute("slug", String, "The organization slug.")
-	Attribute("state", String, "The transition state: platform_key, dual_write or org_kms.")
+	Attribute("state", String, "The transition state.", func() {
+		Enum("platform_key", "dual_write", "org_kms")
+	})
 	Attribute("generation", Int64, "The transition generation; 0 before the organization is enrolled.")
 	Attribute("state_changed_at", String, "When the current state was entered. Absent before the organization is enrolled.", func() { Format(FormatDateTime) })
 	Attribute("waiting", Int64, "Saved credentials with only a platform-key copy, which the backfill still has to seal with the organization key.")
@@ -45,10 +47,12 @@ func tailscaleOAuthMigrationMethods() {
 		})
 
 		Result(AdminTailscaleOAuthMigrationOrganizations)
+		declareUnavailable()
 
 		HTTP(func() {
 			GET("/admin/tailscaleOAuthMigration.organizations")
 			Response(StatusOK)
+			declareUnavailableResponse()
 		})
 
 		Meta("openapi:operationId", "adminListTailscaleOAuthMigration")
@@ -74,10 +78,12 @@ func tailscaleOAuthMigrationMethods() {
 		})
 
 		Result(AdminTailscaleOAuthMigrationOrganization)
+		declareUnavailable()
 
 		HTTP(func() {
 			POST("/admin/tailscaleOAuthMigration.run")
 			Response(StatusOK)
+			declareUnavailableResponse()
 		})
 
 		Meta("openapi:operationId", "adminRunTailscaleOAuthMigrationStep")

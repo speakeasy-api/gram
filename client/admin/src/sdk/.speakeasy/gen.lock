@@ -1723,7 +1723,7 @@ examples:
     speakeasy-default-admin-list-tailscale-O-auth-migration:
       responses:
         "200":
-          application/json: {"minimum_dual_write_seconds": 392784, "organizations": [{"generation": 790904, "name": "<value>", "organization_id": "<id>", "platform_copies": 403494, "slug": "<value>", "state": "Colorado", "unreadable": 792041, "waiting": 919754}]}
+          application/json: {"minimum_dual_write_seconds": 392784, "organizations": [{"generation": 790904, "name": "<value>", "organization_id": "<id>", "platform_copies": 403494, "slug": "<value>", "state": "dual_write", "unreadable": 792041, "waiting": 919754}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1947,7 +1947,7 @@ examples:
         application/json: {"organization_id": "<id>", "step": "clear_platform_copies"}
       responses:
         "200":
-          application/json: {"generation": 24710, "name": "<value>", "organization_id": "<id>", "platform_copies": 940618, "slug": "<value>", "state": "Missouri", "unreadable": 65865, "waiting": 591008}
+          application/json: {"generation": 24710, "name": "<value>", "organization_id": "<id>", "platform_copies": 940618, "slug": "<value>", "state": "dual_write", "unreadable": 65865, "waiting": 591008}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

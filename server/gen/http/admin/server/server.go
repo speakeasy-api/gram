@@ -125,8 +125,6 @@ type Server struct {
 	EnableUpstreamAuthEnforcement           http.Handler
 	DisableUpstreamAuthEnforcement          http.Handler
 	BackfillMcpAuthGrants                   http.Handler
-	ListTailscaleOAuthMigration             http.Handler
-	RunTailscaleOAuthMigrationStep          http.Handler
 	BackfillMcpConnectGrants                http.Handler
 	GetProjectRedeployPreview               http.Handler
 	RedeployProject                         http.Handler
@@ -151,6 +149,8 @@ type Server struct {
 	GetOrganizationHooksRollout             http.Handler
 	SetOrganizationHooksRollout             http.Handler
 	ClearOrganizationHooksRollout           http.Handler
+	ListTailscaleOAuthMigration             http.Handler
+	RunTailscaleOAuthMigrationStep          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -284,8 +284,6 @@ func New(
 			{"EnableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.enableEnforcement"},
 			{"DisableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.disableEnforcement"},
 			{"BackfillMcpAuthGrants", "POST", "/admin/mcpAuthGrants.backfill"},
-			{"ListTailscaleOAuthMigration", "GET", "/admin/tailscaleOAuthMigration.organizations"},
-			{"RunTailscaleOAuthMigrationStep", "POST", "/admin/tailscaleOAuthMigration.run"},
 			{"BackfillMcpConnectGrants", "POST", "/admin/mcpConnectGrants.backfill"},
 			{"GetProjectRedeployPreview", "GET", "/admin/project.redeployPreview"},
 			{"RedeployProject", "POST", "/admin/project.redeploy"},
@@ -310,6 +308,8 @@ func New(
 			{"GetOrganizationHooksRollout", "GET", "/admin/organization.hooksRollout"},
 			{"SetOrganizationHooksRollout", "POST", "/admin/organization.setHooksRollout"},
 			{"ClearOrganizationHooksRollout", "POST", "/admin/organization.clearHooksRollout"},
+			{"ListTailscaleOAuthMigration", "GET", "/admin/tailscaleOAuthMigration.organizations"},
+			{"RunTailscaleOAuthMigrationStep", "POST", "/admin/tailscaleOAuthMigration.run"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -415,8 +415,6 @@ func New(
 		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementHandler(e.EnableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
-		ListTailscaleOAuthMigration:             NewListTailscaleOAuthMigrationHandler(e.ListTailscaleOAuthMigration, mux, decoder, encoder, errhandler, formatter),
-		RunTailscaleOAuthMigrationStep:          NewRunTailscaleOAuthMigrationStepHandler(e.RunTailscaleOAuthMigrationStep, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsHandler(e.BackfillMcpConnectGrants, mux, decoder, encoder, errhandler, formatter),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewHandler(e.GetProjectRedeployPreview, mux, decoder, encoder, errhandler, formatter),
 		RedeployProject:                         NewRedeployProjectHandler(e.RedeployProject, mux, decoder, encoder, errhandler, formatter),
@@ -441,6 +439,8 @@ func New(
 		GetOrganizationHooksRollout:             NewGetOrganizationHooksRolloutHandler(e.GetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
 		SetOrganizationHooksRollout:             NewSetOrganizationHooksRolloutHandler(e.SetOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
 		ClearOrganizationHooksRollout:           NewClearOrganizationHooksRolloutHandler(e.ClearOrganizationHooksRollout, mux, decoder, encoder, errhandler, formatter),
+		ListTailscaleOAuthMigration:             NewListTailscaleOAuthMigrationHandler(e.ListTailscaleOAuthMigration, mux, decoder, encoder, errhandler, formatter),
+		RunTailscaleOAuthMigrationStep:          NewRunTailscaleOAuthMigrationStepHandler(e.RunTailscaleOAuthMigrationStep, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -553,8 +553,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.EnableUpstreamAuthEnforcement = m(s.EnableUpstreamAuthEnforcement)
 	s.DisableUpstreamAuthEnforcement = m(s.DisableUpstreamAuthEnforcement)
 	s.BackfillMcpAuthGrants = m(s.BackfillMcpAuthGrants)
-	s.ListTailscaleOAuthMigration = m(s.ListTailscaleOAuthMigration)
-	s.RunTailscaleOAuthMigrationStep = m(s.RunTailscaleOAuthMigrationStep)
 	s.BackfillMcpConnectGrants = m(s.BackfillMcpConnectGrants)
 	s.GetProjectRedeployPreview = m(s.GetProjectRedeployPreview)
 	s.RedeployProject = m(s.RedeployProject)
@@ -579,6 +577,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetOrganizationHooksRollout = m(s.GetOrganizationHooksRollout)
 	s.SetOrganizationHooksRollout = m(s.SetOrganizationHooksRollout)
 	s.ClearOrganizationHooksRollout = m(s.ClearOrganizationHooksRollout)
+	s.ListTailscaleOAuthMigration = m(s.ListTailscaleOAuthMigration)
+	s.RunTailscaleOAuthMigrationStep = m(s.RunTailscaleOAuthMigrationStep)
 }
 
 // MethodNames returns the methods served.
@@ -690,8 +690,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountEnableUpstreamAuthEnforcementHandler(mux, h.EnableUpstreamAuthEnforcement)
 	MountDisableUpstreamAuthEnforcementHandler(mux, h.DisableUpstreamAuthEnforcement)
 	MountBackfillMcpAuthGrantsHandler(mux, h.BackfillMcpAuthGrants)
-	MountListTailscaleOAuthMigrationHandler(mux, h.ListTailscaleOAuthMigration)
-	MountRunTailscaleOAuthMigrationStepHandler(mux, h.RunTailscaleOAuthMigrationStep)
 	MountBackfillMcpConnectGrantsHandler(mux, h.BackfillMcpConnectGrants)
 	MountGetProjectRedeployPreviewHandler(mux, h.GetProjectRedeployPreview)
 	MountRedeployProjectHandler(mux, h.RedeployProject)
@@ -716,6 +714,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetOrganizationHooksRolloutHandler(mux, h.GetOrganizationHooksRollout)
 	MountSetOrganizationHooksRolloutHandler(mux, h.SetOrganizationHooksRollout)
 	MountClearOrganizationHooksRolloutHandler(mux, h.ClearOrganizationHooksRollout)
+	MountListTailscaleOAuthMigrationHandler(mux, h.ListTailscaleOAuthMigration)
+	MountRunTailscaleOAuthMigrationStepHandler(mux, h.RunTailscaleOAuthMigrationStep)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -6320,114 +6320,6 @@ func NewBackfillMcpAuthGrantsHandler(
 	})
 }
 
-// MountListTailscaleOAuthMigrationHandler configures the mux to serve the
-// "admin" service "listTailscaleOAuthMigration" endpoint.
-func MountListTailscaleOAuthMigrationHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/admin/tailscaleOAuthMigration.organizations", f)
-}
-
-// NewListTailscaleOAuthMigrationHandler creates a HTTP handler which loads the
-// HTTP request and calls the "admin" service "listTailscaleOAuthMigration"
-// endpoint.
-func NewListTailscaleOAuthMigrationHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeListTailscaleOAuthMigrationRequest(mux, decoder)
-		encodeResponse = EncodeListTailscaleOAuthMigrationResponse(encoder)
-		encodeError    = EncodeListTailscaleOAuthMigrationError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listTailscaleOAuthMigration")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountRunTailscaleOAuthMigrationStepHandler configures the mux to serve the
-// "admin" service "runTailscaleOAuthMigrationStep" endpoint.
-func MountRunTailscaleOAuthMigrationStepHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/admin/tailscaleOAuthMigration.run", f)
-}
-
-// NewRunTailscaleOAuthMigrationStepHandler creates a HTTP handler which loads
-// the HTTP request and calls the "admin" service
-// "runTailscaleOAuthMigrationStep" endpoint.
-func NewRunTailscaleOAuthMigrationStepHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeRunTailscaleOAuthMigrationStepRequest(mux, decoder)
-		encodeResponse = EncodeRunTailscaleOAuthMigrationStepResponse(encoder)
-		encodeError    = EncodeRunTailscaleOAuthMigrationStepError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "runTailscaleOAuthMigrationStep")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
 // MountBackfillMcpConnectGrantsHandler configures the mux to serve the "admin"
 // service "backfillMcpConnectGrants" endpoint.
 func MountBackfillMcpConnectGrantsHandler(mux goahttp.Muxer, h http.Handler) {
@@ -7693,6 +7585,114 @@ func NewClearOrganizationHooksRolloutHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "clearOrganizationHooksRollout")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListTailscaleOAuthMigrationHandler configures the mux to serve the
+// "admin" service "listTailscaleOAuthMigration" endpoint.
+func MountListTailscaleOAuthMigrationHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/tailscaleOAuthMigration.organizations", f)
+}
+
+// NewListTailscaleOAuthMigrationHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "listTailscaleOAuthMigration"
+// endpoint.
+func NewListTailscaleOAuthMigrationHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListTailscaleOAuthMigrationRequest(mux, decoder)
+		encodeResponse = EncodeListTailscaleOAuthMigrationResponse(encoder)
+		encodeError    = EncodeListTailscaleOAuthMigrationError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listTailscaleOAuthMigration")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRunTailscaleOAuthMigrationStepHandler configures the mux to serve the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint.
+func MountRunTailscaleOAuthMigrationStepHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/tailscaleOAuthMigration.run", f)
+}
+
+// NewRunTailscaleOAuthMigrationStepHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "runTailscaleOAuthMigrationStep" endpoint.
+func NewRunTailscaleOAuthMigrationStepHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRunTailscaleOAuthMigrationStepRequest(mux, decoder)
+		encodeResponse = EncodeRunTailscaleOAuthMigrationStepResponse(encoder)
+		encodeError    = EncodeRunTailscaleOAuthMigrationStepError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "runTailscaleOAuthMigrationStep")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

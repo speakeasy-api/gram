@@ -93,7 +93,7 @@ func TestTailscaleOAuthMigrationMovesAnOrganizationToItsKey(t *testing.T) {
 	require.Equal(t, oops.CodeConflict, blocked.Code, "finalize waits out the minimum time in dual_write")
 
 	err = orgencryptionrepo.New(db).SetEncryptionTransitionStateChangedAt(ctx, orgencryptionrepo.SetEncryptionTransitionStateChangedAtParams{
-		StateChangedAt: pgtype.Timestamptz{Time: time.Now().Add(-2 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		StateChangedAt: pgtype.Timestamptz{Time: time.Now().Add(-25 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 		OrganizationID: orgID,
 		UseCase:        string(ingresscredentials.UseCase),
 	})

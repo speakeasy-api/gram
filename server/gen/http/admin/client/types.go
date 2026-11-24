@@ -643,15 +643,6 @@ type DisableUpstreamAuthEnforcementRequestBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 }
 
-// RunTailscaleOAuthMigrationStepRequestBody is the type of the "admin" service
-// "runTailscaleOAuthMigrationStep" endpoint HTTP request body.
-type RunTailscaleOAuthMigrationStepRequestBody struct {
-	// The organization ID.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The step to run.
-	Step string `form:"step" json:"step" xml:"step"`
-}
-
 // BackfillMcpConnectGrantsRequestBody is the type of the "admin" service
 // "backfillMcpConnectGrants" endpoint HTTP request body.
 type BackfillMcpConnectGrantsRequestBody struct {
@@ -775,6 +766,15 @@ type SetOrganizationHooksRolloutRequestBody struct {
 // "clearOrganizationHooksRollout" endpoint HTTP request body.
 type ClearOrganizationHooksRolloutRequestBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+}
+
+// RunTailscaleOAuthMigrationStepRequestBody is the type of the "admin" service
+// "runTailscaleOAuthMigrationStep" endpoint HTTP request body.
+type RunTailscaleOAuthMigrationStepRequestBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The step to run.
+	Step string `form:"step" json:"step" xml:"step"`
 }
 
 // GetSessionResponseBody is the type of the "admin" service "getSession"
@@ -3111,51 +3111,6 @@ type BackfillMcpAuthGrantsResponseBody struct {
 	Granted *int64 `form:"granted,omitempty" json:"granted,omitempty" xml:"granted,omitempty"`
 }
 
-// ListTailscaleOAuthMigrationResponseBody is the type of the "admin" service
-// "listTailscaleOAuthMigration" endpoint HTTP response body.
-type ListTailscaleOAuthMigrationResponseBody struct {
-	// Every organization with saved Tailscale OAuth credentials, by name.
-	Organizations []*AdminTailscaleOAuthMigrationOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
-	// How long an organization must stay in dual_write before it can be finalized.
-	MinimumDualWriteSeconds *int64 `form:"minimum_dual_write_seconds,omitempty" json:"minimum_dual_write_seconds,omitempty" xml:"minimum_dual_write_seconds,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepResponseBody is the type of the "admin"
-// service "runTailscaleOAuthMigrationStep" endpoint HTTP response body.
-type RunTailscaleOAuthMigrationStepResponseBody struct {
-	// The organization ID.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The organization name.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The organization slug.
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The transition state: platform_key, dual_write or org_kms.
-	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// The transition generation; 0 before the organization is enrolled.
-	Generation *int64 `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
-	// When the current state was entered. Absent before the organization is
-	// enrolled.
-	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
-	// Saved credentials with only a platform-key copy, which the backfill still
-	// has to seal with the organization key.
-	Waiting *int64 `form:"waiting,omitempty" json:"waiting,omitempty" xml:"waiting,omitempty"`
-	// Saved credentials whose platform-key copy does not decrypt. They do not
-	// block finalize; clearing the platform-key copies destroys them.
-	Unreadable *int64 `form:"unreadable,omitempty" json:"unreadable,omitempty" xml:"unreadable,omitempty"`
-	// Saved credentials that still hold a platform-key copy.
-	PlatformCopies *int64 `form:"platform_copies,omitempty" json:"platform_copies,omitempty" xml:"platform_copies,omitempty"`
-	// When the last backfill started.
-	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
-	// When the last backfill ended.
-	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
-	// Why the last backfill stopped early. Never carries values or key material.
-	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
-	// When the last clean verification pass started.
-	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
-	// When the platform-key copies were destroyed after finalize.
-	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
-}
-
 // BackfillMcpConnectGrantsResponseBody is the type of the "admin" service
 // "backfillMcpConnectGrants" endpoint HTTP response body.
 type BackfillMcpConnectGrantsResponseBody struct {
@@ -3529,6 +3484,51 @@ type ClearOrganizationHooksRolloutResponseBody struct {
 	// Whether the organization's next publish moves its hooks plugin to
 	// current_version. Absent for legacy_flag, which the admin server cannot read.
 	Eligible *bool `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationResponseBody is the type of the "admin" service
+// "listTailscaleOAuthMigration" endpoint HTTP response body.
+type ListTailscaleOAuthMigrationResponseBody struct {
+	// Every organization with saved Tailscale OAuth credentials, by name.
+	Organizations []*AdminTailscaleOAuthMigrationOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	// How long an organization must stay in dual_write before it can be finalized.
+	MinimumDualWriteSeconds *int64 `form:"minimum_dual_write_seconds,omitempty" json:"minimum_dual_write_seconds,omitempty" xml:"minimum_dual_write_seconds,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepResponseBody is the type of the "admin"
+// service "runTailscaleOAuthMigrationStep" endpoint HTTP response body.
+type RunTailscaleOAuthMigrationStepResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The organization name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The organization slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The transition state.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// The transition generation; 0 before the organization is enrolled.
+	Generation *int64 `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// When the current state was entered. Absent before the organization is
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// Saved credentials with only a platform-key copy, which the backfill still
+	// has to seal with the organization key.
+	Waiting *int64 `form:"waiting,omitempty" json:"waiting,omitempty" xml:"waiting,omitempty"`
+	// Saved credentials whose platform-key copy does not decrypt. They do not
+	// block finalize; clearing the platform-key copies destroys them.
+	Unreadable *int64 `form:"unreadable,omitempty" json:"unreadable,omitempty" xml:"unreadable,omitempty"`
+	// Saved credentials that still hold a platform-key copy.
+	PlatformCopies *int64 `form:"platform_copies,omitempty" json:"platform_copies,omitempty" xml:"platform_copies,omitempty"`
+	// When the last backfill started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill ended.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Why the last backfill stopped early. Never carries values or key material.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -23398,386 +23398,6 @@ type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListTailscaleOAuthMigrationUnauthorizedResponseBody is the type of the
-// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
-// for the "unauthorized" error.
-type ListTailscaleOAuthMigrationUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationForbiddenResponseBody is the type of the "admin"
-// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
-// "forbidden" error.
-type ListTailscaleOAuthMigrationForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationBadRequestResponseBody is the type of the "admin"
-// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
-// "bad_request" error.
-type ListTailscaleOAuthMigrationBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationNotFoundResponseBody is the type of the "admin"
-// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
-// "not_found" error.
-type ListTailscaleOAuthMigrationNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationConflictResponseBody is the type of the "admin"
-// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
-// "conflict" error.
-type ListTailscaleOAuthMigrationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationUnsupportedMediaResponseBody is the type of the
-// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
-// for the "unsupported_media" error.
-type ListTailscaleOAuthMigrationUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationInvalidResponseBody is the type of the "admin"
-// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
-// "invalid" error.
-type ListTailscaleOAuthMigrationInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationInvariantViolationResponseBody is the type of the
-// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
-// for the "invariant_violation" error.
-type ListTailscaleOAuthMigrationInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationUnexpectedResponseBody is the type of the "admin"
-// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
-// "unexpected" error.
-type ListTailscaleOAuthMigrationUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListTailscaleOAuthMigrationGatewayErrorResponseBody is the type of the
-// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
-// for the "gateway_error" error.
-type ListTailscaleOAuthMigrationGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepUnauthorizedResponseBody is the type of the
-// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
-// for the "unauthorized" error.
-type RunTailscaleOAuthMigrationStepUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepForbiddenResponseBody is the type of the
-// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
-// for the "forbidden" error.
-type RunTailscaleOAuthMigrationStepForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepBadRequestResponseBody is the type of the
-// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
-// for the "bad_request" error.
-type RunTailscaleOAuthMigrationStepBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepNotFoundResponseBody is the type of the
-// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
-// for the "not_found" error.
-type RunTailscaleOAuthMigrationStepNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepConflictResponseBody is the type of the
-// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
-// for the "conflict" error.
-type RunTailscaleOAuthMigrationStepConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody is the type of
-// the "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response
-// body for the "unsupported_media" error.
-type RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepInvalidResponseBody is the type of the "admin"
-// service "runTailscaleOAuthMigrationStep" endpoint HTTP response body for the
-// "invalid" error.
-type RunTailscaleOAuthMigrationStepInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepInvariantViolationResponseBody is the type of
-// the "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response
-// body for the "invariant_violation" error.
-type RunTailscaleOAuthMigrationStepInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepUnexpectedResponseBody is the type of the
-// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
-// for the "unexpected" error.
-type RunTailscaleOAuthMigrationStepUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// RunTailscaleOAuthMigrationStepGatewayErrorResponseBody is the type of the
-// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
-// for the "gateway_error" error.
-type RunTailscaleOAuthMigrationStepGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // BackfillMcpConnectGrantsUnauthorizedResponseBody is the type of the "admin"
 // service "backfillMcpConnectGrants" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -28442,6 +28062,424 @@ type ClearOrganizationHooksRolloutGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListTailscaleOAuthMigrationUnavailableResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unavailable" error.
+type ListTailscaleOAuthMigrationUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationUnauthorizedResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListTailscaleOAuthMigrationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationForbiddenResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "forbidden" error.
+type ListTailscaleOAuthMigrationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationBadRequestResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "bad_request" error.
+type ListTailscaleOAuthMigrationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationNotFoundResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "not_found" error.
+type ListTailscaleOAuthMigrationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationConflictResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "conflict" error.
+type ListTailscaleOAuthMigrationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationUnsupportedMediaResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListTailscaleOAuthMigrationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationInvalidResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "invalid" error.
+type ListTailscaleOAuthMigrationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationInvariantViolationResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListTailscaleOAuthMigrationInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationUnexpectedResponseBody is the type of the "admin"
+// service "listTailscaleOAuthMigration" endpoint HTTP response body for the
+// "unexpected" error.
+type ListTailscaleOAuthMigrationUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTailscaleOAuthMigrationGatewayErrorResponseBody is the type of the
+// "admin" service "listTailscaleOAuthMigration" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListTailscaleOAuthMigrationGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepUnavailableResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unavailable" error.
+type RunTailscaleOAuthMigrationStepUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepUnauthorizedResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unauthorized" error.
+type RunTailscaleOAuthMigrationStepUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepForbiddenResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "forbidden" error.
+type RunTailscaleOAuthMigrationStepForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepBadRequestResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "bad_request" error.
+type RunTailscaleOAuthMigrationStepBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepNotFoundResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "not_found" error.
+type RunTailscaleOAuthMigrationStepNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepConflictResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "conflict" error.
+type RunTailscaleOAuthMigrationStepConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody is the type of
+// the "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response
+// body for the "unsupported_media" error.
+type RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepInvalidResponseBody is the type of the "admin"
+// service "runTailscaleOAuthMigrationStep" endpoint HTTP response body for the
+// "invalid" error.
+type RunTailscaleOAuthMigrationStepInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepInvariantViolationResponseBody is the type of
+// the "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response
+// body for the "invariant_violation" error.
+type RunTailscaleOAuthMigrationStepInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepUnexpectedResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "unexpected" error.
+type RunTailscaleOAuthMigrationStepUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RunTailscaleOAuthMigrationStepGatewayErrorResponseBody is the type of the
+// "admin" service "runTailscaleOAuthMigrationStep" endpoint HTTP response body
+// for the "gateway_error" error.
+type RunTailscaleOAuthMigrationStepGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -30039,42 +30077,6 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
-// AdminTailscaleOAuthMigrationOrganizationResponseBody is used to define
-// fields on response body types.
-type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
-	// The organization ID.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The organization name.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The organization slug.
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The transition state: platform_key, dual_write or org_kms.
-	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// The transition generation; 0 before the organization is enrolled.
-	Generation *int64 `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
-	// When the current state was entered. Absent before the organization is
-	// enrolled.
-	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
-	// Saved credentials with only a platform-key copy, which the backfill still
-	// has to seal with the organization key.
-	Waiting *int64 `form:"waiting,omitempty" json:"waiting,omitempty" xml:"waiting,omitempty"`
-	// Saved credentials whose platform-key copy does not decrypt. They do not
-	// block finalize; clearing the platform-key copies destroys them.
-	Unreadable *int64 `form:"unreadable,omitempty" json:"unreadable,omitempty" xml:"unreadable,omitempty"`
-	// Saved credentials that still hold a platform-key copy.
-	PlatformCopies *int64 `form:"platform_copies,omitempty" json:"platform_copies,omitempty" xml:"platform_copies,omitempty"`
-	// When the last backfill started.
-	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
-	// When the last backfill ended.
-	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
-	// Why the last backfill stopped early. Never carries values or key material.
-	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
-	// When the last clean verification pass started.
-	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
-	// When the platform-key copies were destroyed after finalize.
-	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
-}
-
 // AdminCustomDomainResponseBody is used to define fields on response body
 // types.
 type AdminCustomDomainResponseBody struct {
@@ -30315,6 +30317,42 @@ type AdminHooksRolloutChangeResponseBody struct {
 	SetBy *string `form:"set_by,omitempty" json:"set_by,omitempty" xml:"set_by,omitempty"`
 	// When the change was made.
 	SetAt *string `form:"set_at,omitempty" json:"set_at,omitempty" xml:"set_at,omitempty"`
+}
+
+// AdminTailscaleOAuthMigrationOrganizationResponseBody is used to define
+// fields on response body types.
+type AdminTailscaleOAuthMigrationOrganizationResponseBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The organization name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The organization slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The transition state.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// The transition generation; 0 before the organization is enrolled.
+	Generation *int64 `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// When the current state was entered. Absent before the organization is
+	// enrolled.
+	StateChangedAt *string `form:"state_changed_at,omitempty" json:"state_changed_at,omitempty" xml:"state_changed_at,omitempty"`
+	// Saved credentials with only a platform-key copy, which the backfill still
+	// has to seal with the organization key.
+	Waiting *int64 `form:"waiting,omitempty" json:"waiting,omitempty" xml:"waiting,omitempty"`
+	// Saved credentials whose platform-key copy does not decrypt. They do not
+	// block finalize; clearing the platform-key copies destroys them.
+	Unreadable *int64 `form:"unreadable,omitempty" json:"unreadable,omitempty" xml:"unreadable,omitempty"`
+	// Saved credentials that still hold a platform-key copy.
+	PlatformCopies *int64 `form:"platform_copies,omitempty" json:"platform_copies,omitempty" xml:"platform_copies,omitempty"`
+	// When the last backfill started.
+	LastBackfillStartedAt *string `form:"last_backfill_started_at,omitempty" json:"last_backfill_started_at,omitempty" xml:"last_backfill_started_at,omitempty"`
+	// When the last backfill ended.
+	LastBackfillCompletedAt *string `form:"last_backfill_completed_at,omitempty" json:"last_backfill_completed_at,omitempty" xml:"last_backfill_completed_at,omitempty"`
+	// Why the last backfill stopped early. Never carries values or key material.
+	LastBackfillError *string `form:"last_backfill_error,omitempty" json:"last_backfill_error,omitempty" xml:"last_backfill_error,omitempty"`
+	// When the last clean verification pass started.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// When the platform-key copies were destroyed after finalize.
+	PlatformCopiesClearedAt *string `form:"platform_copies_cleared_at,omitempty" json:"platform_copies_cleared_at,omitempty" xml:"platform_copies_cleared_at,omitempty"`
 }
 
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
@@ -31067,17 +31105,6 @@ func NewDisableUpstreamAuthEnforcementRequestBody(p *admin.DisableUpstreamAuthEn
 	return body
 }
 
-// NewRunTailscaleOAuthMigrationStepRequestBody builds the HTTP request body
-// from the payload of the "runTailscaleOAuthMigrationStep" endpoint of the
-// "admin" service.
-func NewRunTailscaleOAuthMigrationStepRequestBody(p *admin.RunTailscaleOAuthMigrationStepPayload) *RunTailscaleOAuthMigrationStepRequestBody {
-	body := &RunTailscaleOAuthMigrationStepRequestBody{
-		OrganizationID: p.OrganizationID,
-		Step:           p.Step,
-	}
-	return body
-}
-
 // NewBackfillMcpConnectGrantsRequestBody builds the HTTP request body from the
 // payload of the "backfillMcpConnectGrants" endpoint of the "admin" service.
 func NewBackfillMcpConnectGrantsRequestBody(p *admin.BackfillMcpConnectGrantsPayload) *BackfillMcpConnectGrantsRequestBody {
@@ -31219,6 +31246,17 @@ func NewSetOrganizationHooksRolloutRequestBody(p *admin.SetOrganizationHooksRoll
 func NewClearOrganizationHooksRolloutRequestBody(p *admin.ClearOrganizationHooksRolloutPayload) *ClearOrganizationHooksRolloutRequestBody {
 	body := &ClearOrganizationHooksRolloutRequestBody{
 		OrganizationID: p.OrganizationID,
+	}
+	return body
+}
+
+// NewRunTailscaleOAuthMigrationStepRequestBody builds the HTTP request body
+// from the payload of the "runTailscaleOAuthMigrationStep" endpoint of the
+// "admin" service.
+func NewRunTailscaleOAuthMigrationStepRequestBody(p *admin.RunTailscaleOAuthMigrationStepPayload) *RunTailscaleOAuthMigrationStepRequestBody {
+	body := &RunTailscaleOAuthMigrationStepRequestBody{
+		OrganizationID: p.OrganizationID,
+		Step:           p.Step,
 	}
 	return body
 }
@@ -49756,349 +49794,6 @@ func NewBackfillMcpAuthGrantsGatewayError(body *BackfillMcpAuthGrantsGatewayErro
 	return v
 }
 
-// NewListTailscaleOAuthMigrationAdminTailscaleOAuthMigrationOrganizationsOK
-// builds a "admin" service "listTailscaleOAuthMigration" endpoint result from
-// a HTTP "OK" response.
-func NewListTailscaleOAuthMigrationAdminTailscaleOAuthMigrationOrganizationsOK(body *ListTailscaleOAuthMigrationResponseBody) *admin.AdminTailscaleOAuthMigrationOrganizations {
-	v := &admin.AdminTailscaleOAuthMigrationOrganizations{
-		MinimumDualWriteSeconds: *body.MinimumDualWriteSeconds,
-	}
-	v.Organizations = make([]*admin.AdminTailscaleOAuthMigrationOrganization, len(body.Organizations))
-	for i, val := range body.Organizations {
-		if val == nil {
-			v.Organizations[i] = nil
-			continue
-		}
-		v.Organizations[i] = unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTailscaleOAuthMigrationOrganization(val)
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationUnauthorized builds a admin service
-// listTailscaleOAuthMigration endpoint unauthorized error.
-func NewListTailscaleOAuthMigrationUnauthorized(body *ListTailscaleOAuthMigrationUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationForbidden builds a admin service
-// listTailscaleOAuthMigration endpoint forbidden error.
-func NewListTailscaleOAuthMigrationForbidden(body *ListTailscaleOAuthMigrationForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationBadRequest builds a admin service
-// listTailscaleOAuthMigration endpoint bad_request error.
-func NewListTailscaleOAuthMigrationBadRequest(body *ListTailscaleOAuthMigrationBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationNotFound builds a admin service
-// listTailscaleOAuthMigration endpoint not_found error.
-func NewListTailscaleOAuthMigrationNotFound(body *ListTailscaleOAuthMigrationNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationConflict builds a admin service
-// listTailscaleOAuthMigration endpoint conflict error.
-func NewListTailscaleOAuthMigrationConflict(body *ListTailscaleOAuthMigrationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationUnsupportedMedia builds a admin service
-// listTailscaleOAuthMigration endpoint unsupported_media error.
-func NewListTailscaleOAuthMigrationUnsupportedMedia(body *ListTailscaleOAuthMigrationUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationInvalid builds a admin service
-// listTailscaleOAuthMigration endpoint invalid error.
-func NewListTailscaleOAuthMigrationInvalid(body *ListTailscaleOAuthMigrationInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationInvariantViolation builds a admin service
-// listTailscaleOAuthMigration endpoint invariant_violation error.
-func NewListTailscaleOAuthMigrationInvariantViolation(body *ListTailscaleOAuthMigrationInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationUnexpected builds a admin service
-// listTailscaleOAuthMigration endpoint unexpected error.
-func NewListTailscaleOAuthMigrationUnexpected(body *ListTailscaleOAuthMigrationUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListTailscaleOAuthMigrationGatewayError builds a admin service
-// listTailscaleOAuthMigration endpoint gateway_error error.
-func NewListTailscaleOAuthMigrationGatewayError(body *ListTailscaleOAuthMigrationGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepAdminTailscaleOAuthMigrationOrganizationOK
-// builds a "admin" service "runTailscaleOAuthMigrationStep" endpoint result
-// from a HTTP "OK" response.
-func NewRunTailscaleOAuthMigrationStepAdminTailscaleOAuthMigrationOrganizationOK(body *RunTailscaleOAuthMigrationStepResponseBody) *admin.AdminTailscaleOAuthMigrationOrganization {
-	v := &admin.AdminTailscaleOAuthMigrationOrganization{
-		OrganizationID:          *body.OrganizationID,
-		Name:                    *body.Name,
-		Slug:                    *body.Slug,
-		State:                   *body.State,
-		Generation:              *body.Generation,
-		StateChangedAt:          body.StateChangedAt,
-		Waiting:                 *body.Waiting,
-		Unreadable:              *body.Unreadable,
-		PlatformCopies:          *body.PlatformCopies,
-		LastBackfillStartedAt:   body.LastBackfillStartedAt,
-		LastBackfillCompletedAt: body.LastBackfillCompletedAt,
-		LastBackfillError:       body.LastBackfillError,
-		LastVerifiedAt:          body.LastVerifiedAt,
-		PlatformCopiesClearedAt: body.PlatformCopiesClearedAt,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepUnauthorized builds a admin service
-// runTailscaleOAuthMigrationStep endpoint unauthorized error.
-func NewRunTailscaleOAuthMigrationStepUnauthorized(body *RunTailscaleOAuthMigrationStepUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepForbidden builds a admin service
-// runTailscaleOAuthMigrationStep endpoint forbidden error.
-func NewRunTailscaleOAuthMigrationStepForbidden(body *RunTailscaleOAuthMigrationStepForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepBadRequest builds a admin service
-// runTailscaleOAuthMigrationStep endpoint bad_request error.
-func NewRunTailscaleOAuthMigrationStepBadRequest(body *RunTailscaleOAuthMigrationStepBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepNotFound builds a admin service
-// runTailscaleOAuthMigrationStep endpoint not_found error.
-func NewRunTailscaleOAuthMigrationStepNotFound(body *RunTailscaleOAuthMigrationStepNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepConflict builds a admin service
-// runTailscaleOAuthMigrationStep endpoint conflict error.
-func NewRunTailscaleOAuthMigrationStepConflict(body *RunTailscaleOAuthMigrationStepConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepUnsupportedMedia builds a admin service
-// runTailscaleOAuthMigrationStep endpoint unsupported_media error.
-func NewRunTailscaleOAuthMigrationStepUnsupportedMedia(body *RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepInvalid builds a admin service
-// runTailscaleOAuthMigrationStep endpoint invalid error.
-func NewRunTailscaleOAuthMigrationStepInvalid(body *RunTailscaleOAuthMigrationStepInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepInvariantViolation builds a admin service
-// runTailscaleOAuthMigrationStep endpoint invariant_violation error.
-func NewRunTailscaleOAuthMigrationStepInvariantViolation(body *RunTailscaleOAuthMigrationStepInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepUnexpected builds a admin service
-// runTailscaleOAuthMigrationStep endpoint unexpected error.
-func NewRunTailscaleOAuthMigrationStepUnexpected(body *RunTailscaleOAuthMigrationStepUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewRunTailscaleOAuthMigrationStepGatewayError builds a admin service
-// runTailscaleOAuthMigrationStep endpoint gateway_error error.
-func NewRunTailscaleOAuthMigrationStepGatewayError(body *RunTailscaleOAuthMigrationStepGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewBackfillMcpConnectGrantsAdminBackfillMCPConnectGrantsResultOK builds a
 // "admin" service "backfillMcpConnectGrants" endpoint result from a HTTP "OK"
 // response.
@@ -54277,6 +53972,379 @@ func NewClearOrganizationHooksRolloutGatewayError(body *ClearOrganizationHooksRo
 	return v
 }
 
+// NewListTailscaleOAuthMigrationAdminTailscaleOAuthMigrationOrganizationsOK
+// builds a "admin" service "listTailscaleOAuthMigration" endpoint result from
+// a HTTP "OK" response.
+func NewListTailscaleOAuthMigrationAdminTailscaleOAuthMigrationOrganizationsOK(body *ListTailscaleOAuthMigrationResponseBody) *admin.AdminTailscaleOAuthMigrationOrganizations {
+	v := &admin.AdminTailscaleOAuthMigrationOrganizations{
+		MinimumDualWriteSeconds: *body.MinimumDualWriteSeconds,
+	}
+	v.Organizations = make([]*admin.AdminTailscaleOAuthMigrationOrganization, len(body.Organizations))
+	for i, val := range body.Organizations {
+		if val == nil {
+			v.Organizations[i] = nil
+			continue
+		}
+		v.Organizations[i] = unmarshalAdminTailscaleOAuthMigrationOrganizationResponseBodyToAdminAdminTailscaleOAuthMigrationOrganization(val)
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationUnavailable builds a admin service
+// listTailscaleOAuthMigration endpoint unavailable error.
+func NewListTailscaleOAuthMigrationUnavailable(body *ListTailscaleOAuthMigrationUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationUnauthorized builds a admin service
+// listTailscaleOAuthMigration endpoint unauthorized error.
+func NewListTailscaleOAuthMigrationUnauthorized(body *ListTailscaleOAuthMigrationUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationForbidden builds a admin service
+// listTailscaleOAuthMigration endpoint forbidden error.
+func NewListTailscaleOAuthMigrationForbidden(body *ListTailscaleOAuthMigrationForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationBadRequest builds a admin service
+// listTailscaleOAuthMigration endpoint bad_request error.
+func NewListTailscaleOAuthMigrationBadRequest(body *ListTailscaleOAuthMigrationBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationNotFound builds a admin service
+// listTailscaleOAuthMigration endpoint not_found error.
+func NewListTailscaleOAuthMigrationNotFound(body *ListTailscaleOAuthMigrationNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationConflict builds a admin service
+// listTailscaleOAuthMigration endpoint conflict error.
+func NewListTailscaleOAuthMigrationConflict(body *ListTailscaleOAuthMigrationConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationUnsupportedMedia builds a admin service
+// listTailscaleOAuthMigration endpoint unsupported_media error.
+func NewListTailscaleOAuthMigrationUnsupportedMedia(body *ListTailscaleOAuthMigrationUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationInvalid builds a admin service
+// listTailscaleOAuthMigration endpoint invalid error.
+func NewListTailscaleOAuthMigrationInvalid(body *ListTailscaleOAuthMigrationInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationInvariantViolation builds a admin service
+// listTailscaleOAuthMigration endpoint invariant_violation error.
+func NewListTailscaleOAuthMigrationInvariantViolation(body *ListTailscaleOAuthMigrationInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationUnexpected builds a admin service
+// listTailscaleOAuthMigration endpoint unexpected error.
+func NewListTailscaleOAuthMigrationUnexpected(body *ListTailscaleOAuthMigrationUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTailscaleOAuthMigrationGatewayError builds a admin service
+// listTailscaleOAuthMigration endpoint gateway_error error.
+func NewListTailscaleOAuthMigrationGatewayError(body *ListTailscaleOAuthMigrationGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepAdminTailscaleOAuthMigrationOrganizationOK
+// builds a "admin" service "runTailscaleOAuthMigrationStep" endpoint result
+// from a HTTP "OK" response.
+func NewRunTailscaleOAuthMigrationStepAdminTailscaleOAuthMigrationOrganizationOK(body *RunTailscaleOAuthMigrationStepResponseBody) *admin.AdminTailscaleOAuthMigrationOrganization {
+	v := &admin.AdminTailscaleOAuthMigrationOrganization{
+		OrganizationID:          *body.OrganizationID,
+		Name:                    *body.Name,
+		Slug:                    *body.Slug,
+		State:                   *body.State,
+		Generation:              *body.Generation,
+		StateChangedAt:          body.StateChangedAt,
+		Waiting:                 *body.Waiting,
+		Unreadable:              *body.Unreadable,
+		PlatformCopies:          *body.PlatformCopies,
+		LastBackfillStartedAt:   body.LastBackfillStartedAt,
+		LastBackfillCompletedAt: body.LastBackfillCompletedAt,
+		LastBackfillError:       body.LastBackfillError,
+		LastVerifiedAt:          body.LastVerifiedAt,
+		PlatformCopiesClearedAt: body.PlatformCopiesClearedAt,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepUnavailable builds a admin service
+// runTailscaleOAuthMigrationStep endpoint unavailable error.
+func NewRunTailscaleOAuthMigrationStepUnavailable(body *RunTailscaleOAuthMigrationStepUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepUnauthorized builds a admin service
+// runTailscaleOAuthMigrationStep endpoint unauthorized error.
+func NewRunTailscaleOAuthMigrationStepUnauthorized(body *RunTailscaleOAuthMigrationStepUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepForbidden builds a admin service
+// runTailscaleOAuthMigrationStep endpoint forbidden error.
+func NewRunTailscaleOAuthMigrationStepForbidden(body *RunTailscaleOAuthMigrationStepForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepBadRequest builds a admin service
+// runTailscaleOAuthMigrationStep endpoint bad_request error.
+func NewRunTailscaleOAuthMigrationStepBadRequest(body *RunTailscaleOAuthMigrationStepBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepNotFound builds a admin service
+// runTailscaleOAuthMigrationStep endpoint not_found error.
+func NewRunTailscaleOAuthMigrationStepNotFound(body *RunTailscaleOAuthMigrationStepNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepConflict builds a admin service
+// runTailscaleOAuthMigrationStep endpoint conflict error.
+func NewRunTailscaleOAuthMigrationStepConflict(body *RunTailscaleOAuthMigrationStepConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepUnsupportedMedia builds a admin service
+// runTailscaleOAuthMigrationStep endpoint unsupported_media error.
+func NewRunTailscaleOAuthMigrationStepUnsupportedMedia(body *RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepInvalid builds a admin service
+// runTailscaleOAuthMigrationStep endpoint invalid error.
+func NewRunTailscaleOAuthMigrationStepInvalid(body *RunTailscaleOAuthMigrationStepInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepInvariantViolation builds a admin service
+// runTailscaleOAuthMigrationStep endpoint invariant_violation error.
+func NewRunTailscaleOAuthMigrationStepInvariantViolation(body *RunTailscaleOAuthMigrationStepInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepUnexpected builds a admin service
+// runTailscaleOAuthMigrationStep endpoint unexpected error.
+func NewRunTailscaleOAuthMigrationStepUnexpected(body *RunTailscaleOAuthMigrationStepUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRunTailscaleOAuthMigrationStepGatewayError builds a admin service
+// runTailscaleOAuthMigrationStep endpoint gateway_error error.
+func NewRunTailscaleOAuthMigrationStepGatewayError(body *RunTailscaleOAuthMigrationStepGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -57651,70 +57719,6 @@ func ValidateBackfillMcpAuthGrantsResponseBody(body *BackfillMcpAuthGrantsRespon
 	return
 }
 
-// ValidateListTailscaleOAuthMigrationResponseBody runs the validations defined
-// on ListTailscaleOAuthMigrationResponseBody
-func ValidateListTailscaleOAuthMigrationResponseBody(body *ListTailscaleOAuthMigrationResponseBody) (err error) {
-	if body.Organizations == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
-	}
-	if body.MinimumDualWriteSeconds == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("minimum_dual_write_seconds", "body"))
-	}
-	for _, e := range body.Organizations {
-		if e != nil {
-			if err2 := ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepResponseBody runs the validations
-// defined on RunTailscaleOAuthMigrationStepResponseBody
-func ValidateRunTailscaleOAuthMigrationStepResponseBody(body *RunTailscaleOAuthMigrationStepResponseBody) (err error) {
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.State == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
-	}
-	if body.Generation == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
-	}
-	if body.Waiting == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("waiting", "body"))
-	}
-	if body.Unreadable == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("unreadable", "body"))
-	}
-	if body.PlatformCopies == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("platform_copies", "body"))
-	}
-	if body.StateChangedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.state_changed_at", *body.StateChangedAt, goa.FormatDateTime))
-	}
-	if body.LastBackfillStartedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_backfill_started_at", *body.LastBackfillStartedAt, goa.FormatDateTime))
-	}
-	if body.LastBackfillCompletedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_backfill_completed_at", *body.LastBackfillCompletedAt, goa.FormatDateTime))
-	}
-	if body.LastVerifiedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
-	}
-	if body.PlatformCopiesClearedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.platform_copies_cleared_at", *body.PlatformCopiesClearedAt, goa.FormatDateTime))
-	}
-	return
-}
-
 // ValidateBackfillMcpConnectGrantsResponseBody runs the validations defined on
 // BackfillMcpConnectGrantsResponseBody
 func ValidateBackfillMcpConnectGrantsResponseBody(body *BackfillMcpConnectGrantsResponseBody) (err error) {
@@ -58348,6 +58352,75 @@ func ValidateClearOrganizationHooksRolloutResponseBody(body *ClearOrganizationHo
 		if !(*body.Source == "canary" || *body.Source == "organization" || *body.Source == "default" || *body.Source == "legacy_flag") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source", *body.Source, []any{"canary", "organization", "default", "legacy_flag"}))
 		}
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationResponseBody runs the validations defined
+// on ListTailscaleOAuthMigrationResponseBody
+func ValidateListTailscaleOAuthMigrationResponseBody(body *ListTailscaleOAuthMigrationResponseBody) (err error) {
+	if body.Organizations == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organizations", "body"))
+	}
+	if body.MinimumDualWriteSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("minimum_dual_write_seconds", "body"))
+	}
+	for _, e := range body.Organizations {
+		if e != nil {
+			if err2 := ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepResponseBody runs the validations
+// defined on RunTailscaleOAuthMigrationStepResponseBody
+func ValidateRunTailscaleOAuthMigrationStepResponseBody(body *RunTailscaleOAuthMigrationStepResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.Waiting == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("waiting", "body"))
+	}
+	if body.Unreadable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unreadable", "body"))
+	}
+	if body.PlatformCopies == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform_copies", "body"))
+	}
+	if body.State != nil {
+		if !(*body.State == "platform_key" || *body.State == "dual_write" || *body.State == "org_kms") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"platform_key", "dual_write", "org_kms"}))
+		}
+	}
+	if body.StateChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.state_changed_at", *body.StateChangedAt, goa.FormatDateTime))
+	}
+	if body.LastBackfillStartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_backfill_started_at", *body.LastBackfillStartedAt, goa.FormatDateTime))
+	}
+	if body.LastBackfillCompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_backfill_completed_at", *body.LastBackfillCompletedAt, goa.FormatDateTime))
+	}
+	if body.LastVerifiedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
+	}
+	if body.PlatformCopiesClearedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.platform_copies_cleared_at", *body.PlatformCopiesClearedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -84115,495 +84188,6 @@ func ValidateBackfillMcpAuthGrantsGatewayErrorResponseBody(body *BackfillMcpAuth
 	return
 }
 
-// ValidateListTailscaleOAuthMigrationUnauthorizedResponseBody runs the
-// validations defined on listTailscaleOAuthMigration_unauthorized_response_body
-func ValidateListTailscaleOAuthMigrationUnauthorizedResponseBody(body *ListTailscaleOAuthMigrationUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationForbiddenResponseBody runs the
-// validations defined on listTailscaleOAuthMigration_forbidden_response_body
-func ValidateListTailscaleOAuthMigrationForbiddenResponseBody(body *ListTailscaleOAuthMigrationForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationBadRequestResponseBody runs the
-// validations defined on listTailscaleOAuthMigration_bad_request_response_body
-func ValidateListTailscaleOAuthMigrationBadRequestResponseBody(body *ListTailscaleOAuthMigrationBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationNotFoundResponseBody runs the validations
-// defined on listTailscaleOAuthMigration_not_found_response_body
-func ValidateListTailscaleOAuthMigrationNotFoundResponseBody(body *ListTailscaleOAuthMigrationNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationConflictResponseBody runs the validations
-// defined on listTailscaleOAuthMigration_conflict_response_body
-func ValidateListTailscaleOAuthMigrationConflictResponseBody(body *ListTailscaleOAuthMigrationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationUnsupportedMediaResponseBody runs the
-// validations defined on
-// listTailscaleOAuthMigration_unsupported_media_response_body
-func ValidateListTailscaleOAuthMigrationUnsupportedMediaResponseBody(body *ListTailscaleOAuthMigrationUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationInvalidResponseBody runs the validations
-// defined on listTailscaleOAuthMigration_invalid_response_body
-func ValidateListTailscaleOAuthMigrationInvalidResponseBody(body *ListTailscaleOAuthMigrationInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationInvariantViolationResponseBody runs the
-// validations defined on
-// listTailscaleOAuthMigration_invariant_violation_response_body
-func ValidateListTailscaleOAuthMigrationInvariantViolationResponseBody(body *ListTailscaleOAuthMigrationInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationUnexpectedResponseBody runs the
-// validations defined on listTailscaleOAuthMigration_unexpected_response_body
-func ValidateListTailscaleOAuthMigrationUnexpectedResponseBody(body *ListTailscaleOAuthMigrationUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListTailscaleOAuthMigrationGatewayErrorResponseBody runs the
-// validations defined on
-// listTailscaleOAuthMigration_gateway_error_response_body
-func ValidateListTailscaleOAuthMigrationGatewayErrorResponseBody(body *ListTailscaleOAuthMigrationGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepUnauthorizedResponseBody runs the
-// validations defined on
-// runTailscaleOAuthMigrationStep_unauthorized_response_body
-func ValidateRunTailscaleOAuthMigrationStepUnauthorizedResponseBody(body *RunTailscaleOAuthMigrationStepUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepForbiddenResponseBody runs the
-// validations defined on runTailscaleOAuthMigrationStep_forbidden_response_body
-func ValidateRunTailscaleOAuthMigrationStepForbiddenResponseBody(body *RunTailscaleOAuthMigrationStepForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepBadRequestResponseBody runs the
-// validations defined on
-// runTailscaleOAuthMigrationStep_bad_request_response_body
-func ValidateRunTailscaleOAuthMigrationStepBadRequestResponseBody(body *RunTailscaleOAuthMigrationStepBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepNotFoundResponseBody runs the
-// validations defined on runTailscaleOAuthMigrationStep_not_found_response_body
-func ValidateRunTailscaleOAuthMigrationStepNotFoundResponseBody(body *RunTailscaleOAuthMigrationStepNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepConflictResponseBody runs the
-// validations defined on runTailscaleOAuthMigrationStep_conflict_response_body
-func ValidateRunTailscaleOAuthMigrationStepConflictResponseBody(body *RunTailscaleOAuthMigrationStepConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody runs the
-// validations defined on
-// runTailscaleOAuthMigrationStep_unsupported_media_response_body
-func ValidateRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody(body *RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepInvalidResponseBody runs the
-// validations defined on runTailscaleOAuthMigrationStep_invalid_response_body
-func ValidateRunTailscaleOAuthMigrationStepInvalidResponseBody(body *RunTailscaleOAuthMigrationStepInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepInvariantViolationResponseBody runs
-// the validations defined on
-// runTailscaleOAuthMigrationStep_invariant_violation_response_body
-func ValidateRunTailscaleOAuthMigrationStepInvariantViolationResponseBody(body *RunTailscaleOAuthMigrationStepInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepUnexpectedResponseBody runs the
-// validations defined on
-// runTailscaleOAuthMigrationStep_unexpected_response_body
-func ValidateRunTailscaleOAuthMigrationStepUnexpectedResponseBody(body *RunTailscaleOAuthMigrationStepUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateRunTailscaleOAuthMigrationStepGatewayErrorResponseBody runs the
-// validations defined on
-// runTailscaleOAuthMigrationStep_gateway_error_response_body
-func ValidateRunTailscaleOAuthMigrationStepGatewayErrorResponseBody(body *RunTailscaleOAuthMigrationStepGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateBackfillMcpConnectGrantsUnauthorizedResponseBody runs the
 // validations defined on backfillMcpConnectGrants_unauthorized_response_body
 func ValidateBackfillMcpConnectGrantsUnauthorizedResponseBody(body *BackfillMcpConnectGrantsUnauthorizedResponseBody) (err error) {
@@ -90647,6 +90231,544 @@ func ValidateClearOrganizationHooksRolloutGatewayErrorResponseBody(body *ClearOr
 	return
 }
 
+// ValidateListTailscaleOAuthMigrationUnavailableResponseBody runs the
+// validations defined on listTailscaleOAuthMigration_unavailable_response_body
+func ValidateListTailscaleOAuthMigrationUnavailableResponseBody(body *ListTailscaleOAuthMigrationUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationUnauthorizedResponseBody runs the
+// validations defined on listTailscaleOAuthMigration_unauthorized_response_body
+func ValidateListTailscaleOAuthMigrationUnauthorizedResponseBody(body *ListTailscaleOAuthMigrationUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationForbiddenResponseBody runs the
+// validations defined on listTailscaleOAuthMigration_forbidden_response_body
+func ValidateListTailscaleOAuthMigrationForbiddenResponseBody(body *ListTailscaleOAuthMigrationForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationBadRequestResponseBody runs the
+// validations defined on listTailscaleOAuthMigration_bad_request_response_body
+func ValidateListTailscaleOAuthMigrationBadRequestResponseBody(body *ListTailscaleOAuthMigrationBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationNotFoundResponseBody runs the validations
+// defined on listTailscaleOAuthMigration_not_found_response_body
+func ValidateListTailscaleOAuthMigrationNotFoundResponseBody(body *ListTailscaleOAuthMigrationNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationConflictResponseBody runs the validations
+// defined on listTailscaleOAuthMigration_conflict_response_body
+func ValidateListTailscaleOAuthMigrationConflictResponseBody(body *ListTailscaleOAuthMigrationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationUnsupportedMediaResponseBody runs the
+// validations defined on
+// listTailscaleOAuthMigration_unsupported_media_response_body
+func ValidateListTailscaleOAuthMigrationUnsupportedMediaResponseBody(body *ListTailscaleOAuthMigrationUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationInvalidResponseBody runs the validations
+// defined on listTailscaleOAuthMigration_invalid_response_body
+func ValidateListTailscaleOAuthMigrationInvalidResponseBody(body *ListTailscaleOAuthMigrationInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationInvariantViolationResponseBody runs the
+// validations defined on
+// listTailscaleOAuthMigration_invariant_violation_response_body
+func ValidateListTailscaleOAuthMigrationInvariantViolationResponseBody(body *ListTailscaleOAuthMigrationInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationUnexpectedResponseBody runs the
+// validations defined on listTailscaleOAuthMigration_unexpected_response_body
+func ValidateListTailscaleOAuthMigrationUnexpectedResponseBody(body *ListTailscaleOAuthMigrationUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTailscaleOAuthMigrationGatewayErrorResponseBody runs the
+// validations defined on
+// listTailscaleOAuthMigration_gateway_error_response_body
+func ValidateListTailscaleOAuthMigrationGatewayErrorResponseBody(body *ListTailscaleOAuthMigrationGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepUnavailableResponseBody runs the
+// validations defined on
+// runTailscaleOAuthMigrationStep_unavailable_response_body
+func ValidateRunTailscaleOAuthMigrationStepUnavailableResponseBody(body *RunTailscaleOAuthMigrationStepUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepUnauthorizedResponseBody runs the
+// validations defined on
+// runTailscaleOAuthMigrationStep_unauthorized_response_body
+func ValidateRunTailscaleOAuthMigrationStepUnauthorizedResponseBody(body *RunTailscaleOAuthMigrationStepUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepForbiddenResponseBody runs the
+// validations defined on runTailscaleOAuthMigrationStep_forbidden_response_body
+func ValidateRunTailscaleOAuthMigrationStepForbiddenResponseBody(body *RunTailscaleOAuthMigrationStepForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepBadRequestResponseBody runs the
+// validations defined on
+// runTailscaleOAuthMigrationStep_bad_request_response_body
+func ValidateRunTailscaleOAuthMigrationStepBadRequestResponseBody(body *RunTailscaleOAuthMigrationStepBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepNotFoundResponseBody runs the
+// validations defined on runTailscaleOAuthMigrationStep_not_found_response_body
+func ValidateRunTailscaleOAuthMigrationStepNotFoundResponseBody(body *RunTailscaleOAuthMigrationStepNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepConflictResponseBody runs the
+// validations defined on runTailscaleOAuthMigrationStep_conflict_response_body
+func ValidateRunTailscaleOAuthMigrationStepConflictResponseBody(body *RunTailscaleOAuthMigrationStepConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody runs the
+// validations defined on
+// runTailscaleOAuthMigrationStep_unsupported_media_response_body
+func ValidateRunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody(body *RunTailscaleOAuthMigrationStepUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepInvalidResponseBody runs the
+// validations defined on runTailscaleOAuthMigrationStep_invalid_response_body
+func ValidateRunTailscaleOAuthMigrationStepInvalidResponseBody(body *RunTailscaleOAuthMigrationStepInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepInvariantViolationResponseBody runs
+// the validations defined on
+// runTailscaleOAuthMigrationStep_invariant_violation_response_body
+func ValidateRunTailscaleOAuthMigrationStepInvariantViolationResponseBody(body *RunTailscaleOAuthMigrationStepInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepUnexpectedResponseBody runs the
+// validations defined on
+// runTailscaleOAuthMigrationStep_unexpected_response_body
+func ValidateRunTailscaleOAuthMigrationStepUnexpectedResponseBody(body *RunTailscaleOAuthMigrationStepUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRunTailscaleOAuthMigrationStepGatewayErrorResponseBody runs the
+// validations defined on
+// runTailscaleOAuthMigrationStep_gateway_error_response_body
+func ValidateRunTailscaleOAuthMigrationStepGatewayErrorResponseBody(body *RunTailscaleOAuthMigrationStepGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -93262,51 +93384,6 @@ func ValidateAdminUpstreamOAuthMigrationStatusResponseBody(body *AdminUpstreamOA
 	return
 }
 
-// ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody runs the
-// validations defined on AdminTailscaleOAuthMigrationOrganizationResponseBody
-func ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody(body *AdminTailscaleOAuthMigrationOrganizationResponseBody) (err error) {
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.State == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
-	}
-	if body.Generation == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
-	}
-	if body.Waiting == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("waiting", "body"))
-	}
-	if body.Unreadable == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("unreadable", "body"))
-	}
-	if body.PlatformCopies == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("platform_copies", "body"))
-	}
-	if body.StateChangedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.state_changed_at", *body.StateChangedAt, goa.FormatDateTime))
-	}
-	if body.LastBackfillStartedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_backfill_started_at", *body.LastBackfillStartedAt, goa.FormatDateTime))
-	}
-	if body.LastBackfillCompletedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_backfill_completed_at", *body.LastBackfillCompletedAt, goa.FormatDateTime))
-	}
-	if body.LastVerifiedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
-	}
-	if body.PlatformCopiesClearedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.platform_copies_cleared_at", *body.PlatformCopiesClearedAt, goa.FormatDateTime))
-	}
-	return
-}
-
 // ValidateAdminCustomDomainResponseBody runs the validations defined on
 // AdminCustomDomainResponseBody
 func ValidateAdminCustomDomainResponseBody(body *AdminCustomDomainResponseBody) (err error) {
@@ -93700,6 +93777,56 @@ func ValidateAdminHooksRolloutChangeResponseBody(body *AdminHooksRolloutChangeRe
 	}
 	if body.SetAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.set_at", *body.SetAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody runs the
+// validations defined on AdminTailscaleOAuthMigrationOrganizationResponseBody
+func ValidateAdminTailscaleOAuthMigrationOrganizationResponseBody(body *AdminTailscaleOAuthMigrationOrganizationResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.Waiting == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("waiting", "body"))
+	}
+	if body.Unreadable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unreadable", "body"))
+	}
+	if body.PlatformCopies == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform_copies", "body"))
+	}
+	if body.State != nil {
+		if !(*body.State == "platform_key" || *body.State == "dual_write" || *body.State == "org_kms") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"platform_key", "dual_write", "org_kms"}))
+		}
+	}
+	if body.StateChangedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.state_changed_at", *body.StateChangedAt, goa.FormatDateTime))
+	}
+	if body.LastBackfillStartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_backfill_started_at", *body.LastBackfillStartedAt, goa.FormatDateTime))
+	}
+	if body.LastBackfillCompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_backfill_completed_at", *body.LastBackfillCompletedAt, goa.FormatDateTime))
+	}
+	if body.LastVerifiedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
+	}
+	if body.PlatformCopiesClearedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.platform_copies_cleared_at", *body.PlatformCopiesClearedAt, goa.FormatDateTime))
 	}
 	return
 }

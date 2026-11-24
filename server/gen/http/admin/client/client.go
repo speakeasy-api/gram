@@ -432,14 +432,6 @@ type Client struct {
 	// backfillMcpAuthGrants endpoint.
 	BackfillMcpAuthGrantsDoer goahttp.Doer
 
-	// ListTailscaleOAuthMigration Doer is the HTTP client used to make requests to
-	// the listTailscaleOAuthMigration endpoint.
-	ListTailscaleOAuthMigrationDoer goahttp.Doer
-
-	// RunTailscaleOAuthMigrationStep Doer is the HTTP client used to make requests
-	// to the runTailscaleOAuthMigrationStep endpoint.
-	RunTailscaleOAuthMigrationStepDoer goahttp.Doer
-
 	// BackfillMcpConnectGrants Doer is the HTTP client used to make requests to
 	// the backfillMcpConnectGrants endpoint.
 	BackfillMcpConnectGrantsDoer goahttp.Doer
@@ -535,6 +527,14 @@ type Client struct {
 	// ClearOrganizationHooksRollout Doer is the HTTP client used to make requests
 	// to the clearOrganizationHooksRollout endpoint.
 	ClearOrganizationHooksRolloutDoer goahttp.Doer
+
+	// ListTailscaleOAuthMigration Doer is the HTTP client used to make requests to
+	// the listTailscaleOAuthMigration endpoint.
+	ListTailscaleOAuthMigrationDoer goahttp.Doer
+
+	// RunTailscaleOAuthMigrationStep Doer is the HTTP client used to make requests
+	// to the runTailscaleOAuthMigrationStep endpoint.
+	RunTailscaleOAuthMigrationStepDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -660,8 +660,6 @@ func NewClient(
 		EnableUpstreamAuthEnforcementDoer:           doer,
 		DisableUpstreamAuthEnforcementDoer:          doer,
 		BackfillMcpAuthGrantsDoer:                   doer,
-		ListTailscaleOAuthMigrationDoer:             doer,
-		RunTailscaleOAuthMigrationStepDoer:          doer,
 		BackfillMcpConnectGrantsDoer:                doer,
 		GetProjectRedeployPreviewDoer:               doer,
 		RedeployProjectDoer:                         doer,
@@ -686,6 +684,8 @@ func NewClient(
 		GetOrganizationHooksRolloutDoer:             doer,
 		SetOrganizationHooksRolloutDoer:             doer,
 		ClearOrganizationHooksRolloutDoer:           doer,
+		ListTailscaleOAuthMigrationDoer:             doer,
+		RunTailscaleOAuthMigrationStepDoer:          doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -3195,54 +3195,6 @@ func (c *Client) BackfillMcpAuthGrants() goa.Endpoint {
 	}
 }
 
-// ListTailscaleOAuthMigration returns an endpoint that makes HTTP requests to
-// the admin service listTailscaleOAuthMigration server.
-func (c *Client) ListTailscaleOAuthMigration() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListTailscaleOAuthMigrationRequest(c.encoder)
-		decodeResponse = DecodeListTailscaleOAuthMigrationResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListTailscaleOAuthMigrationRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListTailscaleOAuthMigrationDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "listTailscaleOAuthMigration", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// RunTailscaleOAuthMigrationStep returns an endpoint that makes HTTP requests
-// to the admin service runTailscaleOAuthMigrationStep server.
-func (c *Client) RunTailscaleOAuthMigrationStep() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeRunTailscaleOAuthMigrationStepRequest(c.encoder)
-		decodeResponse = DecodeRunTailscaleOAuthMigrationStepResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRunTailscaleOAuthMigrationStepRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.RunTailscaleOAuthMigrationStepDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "runTailscaleOAuthMigrationStep", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
 // BackfillMcpConnectGrants returns an endpoint that makes HTTP requests to the
 // admin service backfillMcpConnectGrants server.
 func (c *Client) BackfillMcpConnectGrants() goa.Endpoint {
@@ -3814,6 +3766,54 @@ func (c *Client) ClearOrganizationHooksRollout() goa.Endpoint {
 		resp, err := c.ClearOrganizationHooksRolloutDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "clearOrganizationHooksRollout", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTailscaleOAuthMigration returns an endpoint that makes HTTP requests to
+// the admin service listTailscaleOAuthMigration server.
+func (c *Client) ListTailscaleOAuthMigration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListTailscaleOAuthMigrationRequest(c.encoder)
+		decodeResponse = DecodeListTailscaleOAuthMigrationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTailscaleOAuthMigrationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTailscaleOAuthMigrationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listTailscaleOAuthMigration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RunTailscaleOAuthMigrationStep returns an endpoint that makes HTTP requests
+// to the admin service runTailscaleOAuthMigrationStep server.
+func (c *Client) RunTailscaleOAuthMigrationStep() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRunTailscaleOAuthMigrationStepRequest(c.encoder)
+		decodeResponse = DecodeRunTailscaleOAuthMigrationStepResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRunTailscaleOAuthMigrationStepRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RunTailscaleOAuthMigrationStepDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "runTailscaleOAuthMigrationStep", err)
 		}
 		return decodeResponse(resp)
 	}

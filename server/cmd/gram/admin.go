@@ -586,8 +586,9 @@ func newAdminCommand() *cli.Command {
 				// service, so organization encryption is built, and required,
 				// alongside it. Building it here stops admin at startup when it
 				// is misconfigured.
-				// TODO(AIM-1007): pass it to the admin service for organization
-				// encryption counts, backfills and finalization.
+				// TODO(AIM-1007): pass it to the admin service for the OAuth use
+				// cases' counts, backfills and finalization. Tailscale OAuth
+				// clients are wired below.
 				orgEncryption, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, audit.NewLogger())
 				if err != nil {
 					return err

@@ -114,6 +114,7 @@ export function TailscaleOAuthMigrationPage(): JSX.Element {
       title: copy.title(org.name),
       description: copy.description,
       confirmLabel: copy.label,
+      destructive: copy.variant === "destructive",
     });
     if (!ok) return;
     setRunning((current) => new Map(current).set(org.organizationId, step));
@@ -132,13 +133,17 @@ export function TailscaleOAuthMigrationPage(): JSX.Element {
             ),
           },
       );
-      if (updated.lastBackfillError) {
+      if (step === "backfill" && updated.lastBackfillError) {
         toast.warning(`${org.name}: ${updated.lastBackfillError}`);
       } else {
         toast.success(`${org.name}: ${copy.label.toLowerCase()} done`);
       }
     } catch (e) {
       toast.error(`${org.name}: ${errorMessage(e)}`);
+      // A failed step may still have changed state on the server.
+      void client.invalidateQueries({
+        queryKey: tailscaleOAuthMigrationQuery().queryKey,
+      });
     } finally {
       setRunning((current) => {
         const next = new Map(current);
