@@ -83,7 +83,7 @@ func approveDirectScope(ctx context.Context, fx consentActionFixture, id uuid.UU
 
 func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testing.T) {
 	t.Parallel()
-	ctx, fx, member := seedDirectScopeConsentFixture(t, true)
+	ctx, fx, member := seedDirectScopeConsentFixture(t, false)
 	// An expired unrelated registration must not be refreshed to preview the selected client.
 	var refreshes atomic.Int32
 	legacyAS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -126,9 +126,11 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 		ProjectID: fx.projectID, McpServerID: conv.ToNullUUID(fx.endpoint.McpServerID.UUID), Slug: fx.endpoint.Slug,
 	})
 	require.NoError(t, err)
-	// The retained legacy issuer binding cannot replace the detached typed
+	// The retained legacy association cannot replace the detached typed
 	// offer, and the client must not be sent through a reconnect loop.
 	serverID := fx.endpoint.McpServerID.UUID
+	fixture := selectionFixture{ti: fx.ti, projectID: fx.projectID, orgID: fx.orgID}
+	fixture.associate(t, ctx, serverID, legacy)
 	stale := mintMetaIssuerBearer(t, fx.ti, fx.endpoint.Slug, fx.shared, fx.subject, metaServingChoice{organizationID: fx.orgID, serverID: serverID, clientID: id})
 	clients := authclientsrepo.New(fx.ti.conn)
 	_, err = clients.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: id})
@@ -139,6 +141,9 @@ func TestConsentDirectScope_PersonalSessionIgnoresUnrelatedLegacyClient(t *testi
 	require.Zero(t, refreshes.Load(), "setup failure must not refresh a legacy grant")
 	_, err = clients.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{OrganizationID: fx.orgID, McpServerID: serverID, AuthClientID: id})
 	require.NoError(t, err)
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	mcp.ResetAuthEnforcementForTest(fx.ti.service.Service)
 	attempt := previewDirectScope(t, ctx, fx, id)
 	requests := member.drain()
 	require.NotEmpty(t, requests)

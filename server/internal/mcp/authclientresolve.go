@@ -848,16 +848,11 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 		return res.choice, nil
 	case authClientGap:
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: auth client unusable: "+res.reason, issuerGateReasonUpstreamSelectionUnavailable, authClientGapHappened(res.reason))
-		endpoint := authentication.endpoint
-		// Reconnecting cannot repair a missing typed offer. The consent
-		// rollout may still see legacy associations, but serving cannot use
-		// them or tell the client to keep replacing a valid session.
-		offers, err := s.configuredAuthOffers(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
+		needsSetup, err := s.directOAuthReconnectNeedsSetup(ctx, authentication)
 		if err != nil {
 			return none, oops.E(oops.CodeUnexpected, err, "check server sign-in setup").LogError(ctx, s.logger)
 		}
-		if offer, known := offers[endpoint.McpServerID.UUID]; known && len(offer.clients) == 0 &&
-			(offer.pending || res.clientID != uuid.Nil || res.reason == authClientReasonUnmapped) {
+		if needsSetup {
 			return none, oops.E(oops.CodeFailedPrecondition, nil, "This MCP server has no authentication client available. Ask your administrator to finish setting up its sign-in, then reconnect.")
 		}
 		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
@@ -883,6 +878,35 @@ func (s *Service) serveAuthClient(ctx context.Context, w http.ResponseWriter, au
 	authentication.chosenClient = res.choice.clientID
 	authentication.chosenNoAuth = false
 	return res.choice, nil
+}
+
+// directOAuthReconnectNeedsSetup detects a legacy OAuth connection that a
+// new consent cannot turn into a typed serving choice. It inspects only
+// configuration; it never resolves credentials. Once typed consent supports
+// explicit no-auth for a detached offer, reconnect remains valid.
+func (s *Service) directOAuthReconnectNeedsSetup(ctx context.Context, authentication *issuerGateAuthentication) (bool, error) {
+	endpoint := authentication.endpoint
+	if endpoint.UserSessionIssuerID == uuid.Nil ||
+		(authentication.subject.Kind != urn.SessionSubjectKindUser && authentication.subject.Kind != urn.SessionSubjectKindAnonymous) {
+		return false, nil
+	}
+	serverID := endpoint.McpServerID.UUID
+	offers, err := s.configuredAuthOffers(ctx, endpoint.OrganizationID, []uuid.UUID{serverID})
+	if err != nil {
+		return false, err
+	}
+	offer, known := offers[serverID]
+	if !known || len(offer.clients) != 0 {
+		return false, nil
+	}
+	if !offer.pending {
+		typedConsent, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil || typedConsent {
+			return false, err
+		}
+	}
+	associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{serverID})
+	return len(associated[serverID]) > 0, err
 }
 
 // authClientNoAccessError refuses a caller the chosen client, with a link to

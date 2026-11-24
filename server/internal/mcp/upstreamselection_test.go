@@ -194,7 +194,7 @@ func TestUpstreamClientSelection_DirectServersSharingAnIssuer(t *testing.T) {
 	_, err = authclientsrepo.New(f.ti.conn).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{AuthClientID: linearAuthClient, McpServerID: mirror.ID, OrganizationID: f.orgID})
 	require.NoError(t, err)
 	resp, err = callTool(t, f.ti, mirrorSlug, mirrorBearer, "ping")
-	requireAuthClientSetup(t, resp, err)
+	requireReconnect(t, resp, err, mirrorSlug)
 	resp, err = callTool(t, f.ti, linearSlug, linearBearer, "ping")
 	require.NoError(t, err, "the other server keeps the shared client")
 	require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
