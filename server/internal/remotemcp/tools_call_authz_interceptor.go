@@ -113,7 +113,7 @@ func (i *ToolsCallAuthzInterceptor) resolveDisposition(ctx context.Context, call
 			// The refusal names no tool, so record which one was asked for and
 			// under which project the catalog was read. The name is caller
 			// supplied, so cap its length.
-			i.logger.WarnContext(ctx, "tools/call refused: tool not in catalog or upstream listing",
+			i.logger.WarnContext(ctx, "tools/call refused: tool unavailable on this MCP server",
 				attr.SlogToolName(truncateRefusedToolName(call.Params.Name)),
 				attr.SlogMcpServerID(i.mcpServerID),
 				attr.SlogProjectID(i.projectID),
@@ -133,9 +133,12 @@ func (i *ToolsCallAuthzInterceptor) resolveDisposition(ctx context.Context, call
 const maxRefusedToolNameLogLength = 128
 
 func truncateRefusedToolName(name string) string {
-	runes := []rune(name)
-	if len(runes) <= maxRefusedToolNameLogLength {
-		return name
+	count := 0
+	for i := range name {
+		if count == maxRefusedToolNameLogLength {
+			return name[:i]
+		}
+		count++
 	}
-	return string(runes[:maxRefusedToolNameLogLength])
+	return name
 }
