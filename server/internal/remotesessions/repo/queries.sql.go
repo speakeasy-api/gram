@@ -5436,6 +5436,7 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
+          AND usi.deleted IS FALSE
           AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
@@ -12758,6 +12759,7 @@ SELECT link.user_session_issuer_id
 FROM remote_session_client_user_session_issuers AS link
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.remote_session_client_id = $1::uuid
+  AND usi.deleted IS FALSE
   AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
 ORDER BY link.user_session_issuer_id
 `
@@ -12770,7 +12772,7 @@ type ListVisibleUserSessionIssuerIDsForRemoteSessionClientParams struct {
 
 // The caller must already have selected a client visible in this scope.
 // A platform-global client can be offered in multiple tenants, so only
-// return the issuer links visible in this project or its organization.
+// return live issuer links visible in this project or its organization.
 func (q *Queries) ListVisibleUserSessionIssuerIDsForRemoteSessionClient(ctx context.Context, arg ListVisibleUserSessionIssuerIDsForRemoteSessionClientParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listVisibleUserSessionIssuerIDsForRemoteSessionClient, arg.RemoteSessionClientID, arg.ProjectID, arg.OrganizationID)
 	if err != nil {

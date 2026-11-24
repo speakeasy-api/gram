@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // The tests below skip Preflight, which refuses the same plans with plain
@@ -118,21 +119,37 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 			t.Cleanup(registrationServer.Close)
 			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-reuse-issuer")
 			providerID := createServerIdentityProvider(t, ctx, ti, "identity-commit-reuse-provider", registrationServer.URL, false, []string{"client_secret_basic"})
-			clientID := createServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, false)
+			var clientID uuid.UUID
 			if global {
-				_, err := ti.conn.Exec(ctx, `UPDATE remote_session_clients SET project_id = NULL, organization_id = NULL WHERE id = $1`, clientID)
+				client, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+					RemoteSessionIssuerID: providerID,
+					ClientID:              "identity-commit-reuse-global-client",
+				})
 				require.NoError(t, err)
+				clientID = client.ID
 				otherProject := createProject(t, ctx, ti.conn, "identity-commit-reuse-other")
 				otherIssuer := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProject, "identity-commit-reuse-hidden")
 				require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
 					RemoteSessionClientID: clientID,
 					UserSessionIssuerID:   otherIssuer,
 				}))
+			} else {
+				clientID = createServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, false)
 			}
 			require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
 				RemoteSessionClientID: clientID,
 				UserSessionIssuerID:   userIssuerID,
 			}))
+			deletedIssuer := createUserSessionIssuer(t, ctx, ti.conn, "identity-commit-reuse-deleted")
+			require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: clientID,
+				UserSessionIssuerID:   deletedIssuer,
+			}))
+			_, err := usersessionsrepo.New(ti.conn).DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
+				ID:        deletedIssuer,
+				ProjectID: projectIDFromContext(t, ctx),
+			})
+			require.NoError(t, err)
 
 			plan := linkPlan(t, ctx, ti, userIssuerID, providerID, uuid.Nil)
 			associate(t, ctx, ti.conn, activeOrganizationID(t, ctx), projectIDFromContext(t, ctx), plan.MCPServerID, clientID)
