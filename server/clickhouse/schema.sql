@@ -1811,7 +1811,8 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS mcp_tool_call_summaries_mv TO mcp_tool_ca
 WITH
     -- Cutoff separates live MV ingestion from the one-time historical
     -- backfill, which an operator runs outside migrations, in chunks, for
-    -- event times before it. Must be a whole 15-minute boundary. If the
+    -- event times before it. Set days ahead, not hours, to leave room for the
+    -- deploy over a holiday week. Must be a whole 15-minute boundary. If the
     -- deploy misses the cutoff, do NOT edit this value in place: the backfill
     -- must take its boundary from the view's actual creation time and repair
     -- the partial buckets below it.
