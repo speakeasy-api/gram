@@ -1154,6 +1154,7 @@ mod tests {
         cmd.send(McpCmd::ConnectForTool {
             tool_name: "mcp_srv_denied".into(),
             reply,
+            parent: tracing::Span::none(),
         })
         .await
         .unwrap();

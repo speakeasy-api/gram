@@ -469,7 +469,10 @@ mod tests {
         let (cmd_tx, mut cmd_rx) = mpsc::channel(4);
         tokio::spawn(async move {
             while let Some(cmd) = cmd_rx.recv().await {
-                if let McpCmd::ConnectForTool { tool_name, reply } = cmd {
+                if let McpCmd::ConnectForTool {
+                    tool_name, reply, ..
+                } = cmd
+                {
                     assert_eq!(tool_name, "mcp_srv_echo");
                     writer.upsert(echo());
                     let _ = reply.send(Ok(()));
