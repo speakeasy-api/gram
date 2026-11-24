@@ -1,0 +1,33 @@
+server/internal/intentpolicies/intentpolicies_test.go
+  s_7f7b161a4d59e4::t_fe36b71038678a 40-54
+  s_7f7b161a4d59e4::t_c635937717234a 4
+  s_7f7b161a4d59e4::t_879e07cf500333 55-56
+server/internal/intentpolicies/impl.go
+  s_7f7b161a4d59e4::t_5d2af9839dd63d 15,110-111,119-128,132
+.changeset/intent-based-policies-analysis.md
+  s_7f7b161a4d59e4::t_03efb8ce7038d3 6
+server/design/intentpolicies/design.go
+  s_7f7b161a4d59e4::t_03efb8ce7038d3 17,39,79
+server/flags.csv
+  s_7f7b161a4d59e4::t_03efb8ce7038d3 13
+server/internal/feature/flags.go
+  s_7f7b161a4d59e4::t_03efb8ce7038d3 117-119
+client/dashboard/src/hooks/useProjectNavRoutes.ts
+  s_7f7b161a4d59e4::t_03efb8ce7038d3 123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d6edc1e2edf9f14d0f19f2dccf9a36a83161de9b",
+  "prompts": {},
+  "sessions": {
+    "s_7f7b161a4d59e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5f8a32ee-f004-438b-97f5-eb7c5a009f3f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
