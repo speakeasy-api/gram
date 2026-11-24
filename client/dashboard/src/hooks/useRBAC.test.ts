@@ -793,10 +793,16 @@ describe("canInGrants", () => {
     expect(canInGrants(everything, authz.mcpServer("*", "p").write())).toBe(
       false,
     );
+    expect(
+      canInGrants(everything, authz.mcpServer("$marker", "p").write()),
+    ).toBe(false);
+    expect(
+      canInGrants(everything, authz.mcpServer("has space", "p").write()),
+    ).toBe(false);
     expect(canInGrants(everything, authz.mcpServer("s", "p").write())).toBe(
       true,
     );
-    expect(consoleError).toHaveBeenCalledTimes(2);
+    expect(consoleError).toHaveBeenCalledTimes(4);
     consoleError.mockRestore();
   });
 });
