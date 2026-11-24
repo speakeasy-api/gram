@@ -80,28 +80,6 @@ func Availability(ctx context.Context, db usersessionsrepo.DBTX, organization or
 	return availability(ctx, db, organization, featuresrepo.New(db).IsFeatureEnabled)
 }
 
-// PlatformAvailability is Availability for Platform MCP, which uses the
-// gateway on its caller's behalf: there the gateway is on unless an
-// administrator turned it off explicitly, rather than off until one turns it
-// on. Every other unavailability applies unchanged.
-func PlatformAvailability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (uuid.UUID, Unavailability, error) {
-	return availability(ctx, db, organization, isExplicitlyTurnedOff(db))
-}
-
-// PlatformServed is why Platform MCP may not serve an organization's gateway
-// to a caller it has already signed in, or UnavailabilityNone. It reads no
-// issuer: the organization issuer only signs people in to the gateway's own
-// URL.
-func PlatformServed(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (Unavailability, error) {
-	return served(ctx, db, organization, isExplicitlyTurnedOff(db))
-}
-
-func isExplicitlyTurnedOff(db usersessionsrepo.DBTX) func(context.Context, featuresrepo.IsFeatureEnabledParams) (bool, error) {
-	return func(ctx context.Context, arg featuresrepo.IsFeatureEnabledParams) (bool, error) {
-		return featuresrepo.New(db).IsFeatureExplicitlyEnabled(ctx, featuresrepo.IsFeatureExplicitlyEnabledParams(arg))
-	}
-}
-
 func availability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum, isTurnedOff func(context.Context, featuresrepo.IsFeatureEnabledParams) (bool, error)) (uuid.UUID, Unavailability, error) {
 	unavailable, err := served(ctx, db, organization, isTurnedOff)
 	if err != nil || unavailable != UnavailabilityNone {

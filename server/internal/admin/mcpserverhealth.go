@@ -345,7 +345,7 @@ func (s *Service) readUserSessionIssuer(ctx context.Context, queries *repo.Queri
 		return nil, fmt.Errorf("read user session stats: %w", err)
 	}
 
-	clients, err := s.readRemoteSessionClients(ctx, queries, issuerID)
+	clients, err := s.readRemoteSessionClients(ctx, queries, organizationID, projectID, issuerID)
 	if err != nil {
 		return nil, err
 	}
@@ -375,8 +375,12 @@ func (s *Service) readUserSessionIssuer(ctx context.Context, queries *repo.Queri
 	}, nil
 }
 
-func (s *Service) readRemoteSessionClients(ctx context.Context, queries *repo.Queries, issuerID uuid.UUID) ([]*gen.AdminMcpServerHealthRemoteSessionClient, error) {
-	rows, err := queries.AdminListIssuerRemoteSessionClients(ctx, issuerID)
+func (s *Service) readRemoteSessionClients(ctx context.Context, queries *repo.Queries, organizationID string, projectID, issuerID uuid.UUID) ([]*gen.AdminMcpServerHealthRemoteSessionClient, error) {
+	rows, err := queries.AdminListIssuerRemoteSessionClients(ctx, repo.AdminListIssuerRemoteSessionClientsParams{
+		UserSessionIssuerID: issuerID,
+		ProjectID:           projectID,
+		OrganizationID:      organizationID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -388,11 +392,17 @@ func (s *Service) readRemoteSessionClients(ctx context.Context, queries *repo.Qu
 	for _, row := range rows {
 		clientIDs = append(clientIDs, row.ID)
 	}
-	stats, err := queries.AdminRemoteSessionStats(ctx, clientIDs)
+	stats, err := queries.AdminRemoteSessionStats(ctx, repo.AdminRemoteSessionStatsParams{
+		RemoteSessionClientIds: clientIDs,
+		UserSessionIssuerID:    issuerID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("read remote session stats: %w", err)
 	}
-	counts, err := queries.AdminRemoteSessionValidationCounts(ctx, clientIDs)
+	counts, err := queries.AdminRemoteSessionValidationCounts(ctx, repo.AdminRemoteSessionValidationCountsParams{
+		RemoteSessionClientIds: clientIDs,
+		UserSessionIssuerID:    issuerID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("read remote session validation counts: %w", err)
 	}

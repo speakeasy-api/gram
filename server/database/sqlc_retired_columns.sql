@@ -5,9 +5,6 @@
 -- columns are dropped. Remove each statement in the migration that drops its
 -- column.
 
--- No longer read since Anthropic inference hooks evaluate only the latest exchange (DNO-1390). GetChat selects c.*.
-ALTER TABLE chats DROP COLUMN inference_accepted_checkpoint;
-
 -- No longer read or written since Shadow MCP official server links lost their on/off switch (AIS-929).
 ALTER TABLE shadow_mcp_official_servers DROP COLUMN allow_direct_access;
 

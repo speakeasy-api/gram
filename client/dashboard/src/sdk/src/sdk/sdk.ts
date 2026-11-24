@@ -40,6 +40,7 @@ import { HooksServerNames } from "./hooksservernames.js";
 import { Identity } from "./identity.js";
 import { IdentityProviderConnections } from "./identityproviderconnections.js";
 import { Integrations } from "./integrations.js";
+import { IntentPolicies } from "./intentpolicies.js";
 import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
@@ -48,6 +49,7 @@ import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpConnectionHealth } from "./mcpconnectionhealth.js";
 import { McpEndpoints } from "./mcpendpoints.js";
+import { McpFeedback } from "./mcpfeedback.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
@@ -292,6 +294,11 @@ export class Gram extends ClientSDK {
     return (this._integrations ??= new Integrations(this._options));
   }
 
+  private _intentPolicies?: IntentPolicies;
+  get intentPolicies(): IntentPolicies {
+    return (this._intentPolicies ??= new IntentPolicies(this._options));
+  }
+
   private _internalSessionIssuers?: InternalSessionIssuers;
   get internalSessionIssuers(): InternalSessionIssuers {
     return (this._internalSessionIssuers ??= new InternalSessionIssuers(
@@ -334,6 +341,11 @@ export class Gram extends ClientSDK {
   private _mcpEndpoints?: McpEndpoints;
   get mcpEndpoints(): McpEndpoints {
     return (this._mcpEndpoints ??= new McpEndpoints(this._options));
+  }
+
+  private _mcpFeedback?: McpFeedback;
+  get mcpFeedback(): McpFeedback {
+    return (this._mcpFeedback ??= new McpFeedback(this._options));
   }
 
   private _mcpMetadata?: McpMetadata;

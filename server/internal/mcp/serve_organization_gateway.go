@@ -607,7 +607,7 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 	// those of the members the subject reaches. A hosted server keeps serving
 	// from every client its issuer binds.
 	switch {
-	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
+	case endpoint.IsSingleServer():
 		associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})
 		if err != nil {
 			return nil, err
