@@ -43,7 +43,7 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_readiness",
 		Title:       "Check If an MCP Server Is Working",
-		Description: "Say whether one MCP server added through setup is ready to use, by mcp_id, from its last stored check. With no current check it checks once on read; a refused or failed check reads as stale or unchecked. Without a project it reads the default project, named by project_slug in the result. Checks are limited to three a minute per server; assistants read only the stored check. Not for the caller's own access (list_my_mcp_access), Cross-App Access (get_xaa_readiness), failing calls (get_mcp_diagnostics), or usage and project health (get_project_overview).",
+		Description: "Say whether one MCP server added through setup is ready to use, by mcp_id, from its last stored check. With no current check it checks once on read; a refused or failed check reads as stale or unchecked. Without a project it reads the default project, named by project_slug in the result. Checks are limited to three a minute per server; assistants read only the stored check. Not for Cross-App Access (get_xaa_readiness), failing calls (get_mcp_diagnostics), or usage and project health (get_project_overview).",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
