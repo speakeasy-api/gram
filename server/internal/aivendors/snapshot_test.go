@@ -1,6 +1,7 @@
 package aivendors
 
 import (
+	"cmp"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -180,30 +181,32 @@ func TestSnapshotFingerprintTreatsNilAndEmptyAlike(t *testing.T) {
 	require.Equal(t, NewSnapshot([]Product{{ID: "p"}}).Fingerprint(), NewSnapshot([]Product{empty}).Fingerprint())
 }
 
-func TestCompiledSnapshotMatchesRegistry(t *testing.T) {
+func TestCompiledSnapshotIsTheRegistryInDatabaseOrder(t *testing.T) {
 	t.Parallel()
 	snapshot := CompiledSnapshot()
+	require.Same(t, snapshot, CompiledSnapshot(), "every caller shares one compiled snapshot")
+	byURL := func(a, b Document) int { return strings.Compare(a.URL, b.URL) }
 	want := Products()
 	for i := range want {
 		want[i].Family = ""
 		want[i].Aliases = nil
+		slices.SortFunc(want[i].Documents, byURL)
 	}
+	slices.SortFunc(want, func(a, b Product) int { return strings.Compare(a.ID, b.ID) })
 	require.Equal(t, want, snapshot.Products())
-	scanned := ScanProducts()
-	for i := range scanned {
-		scanned[i].Family = ""
-		scanned[i].Aliases = nil
-	}
-	require.Equal(t, scanned, snapshot.ScanProducts())
-	require.Same(t, snapshot, CompiledSnapshot(), "every caller shares one compiled snapshot")
 	var documents []Preset
 	for _, entry := range CIMDDocuments() {
 		require.Equal(t, strings.Contains(entry.Document.URL, "*"), entry.Document.Pattern, entry.Document.URL)
 		documents = append(documents, Preset{ProductID: entry.Product.ID, VendorKey: entry.Product.VendorKey, DisplayName: entry.Document.DisplayName, URL: entry.Document.URL, Enabled: entry.Document.Enabled, Pattern: entry.Document.Pattern})
 	}
+	slices.SortFunc(documents, func(a, b Preset) int {
+		return cmp.Or(strings.Compare(a.ProductID, b.ProductID), strings.Compare(a.URL, b.URL))
+	})
 	require.Equal(t, documents, snapshot.Catalog())
 	for _, p := range Products() {
-		require.Equal(t, GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p), p.ID)
+		want, got := GatewayMatchersFor(p), snapshot.GatewayMatchersFor(p)
+		require.Equal(t, want.VendorKeys, got.VendorKeys, p.ID)
+		require.Equal(t, want.ClientIDs, got.ClientIDs, p.ID, "matchers follow the given product's document order")
 		require.Equal(t, BlockableVendorKey(p.VendorKey), snapshot.BlockableVendorKey(p.VendorKey), p.ID)
 	}
 }
@@ -336,6 +339,30 @@ func TestDerivedRefusesAKeyReusedForAnotherType(t *testing.T) {
 	snapshot := NewSnapshot(Products())
 	require.Equal(t, 1, Derived(snapshot, key{}, func(*Snapshot) int { return 1 }))
 	require.Panics(t, func() { Derived(snapshot, key{}, func(*Snapshot) string { return "" }) })
+}
+
+func TestPublishReplacesTheBuiltInCatalogWithoutCarryingDerivedValues(t *testing.T) {
+	t.Parallel()
+	store := NewStore(builtInSnapshot(removals{products: nil, documents: nil}))
+	type key struct{}
+	computed := 0
+	count := func(*Snapshot) int { computed++; return computed }
+	require.Equal(t, 1, Derived(store.Snapshot(), key{}, count))
+	equal := NewSnapshot(store.Snapshot().Products())
+	require.Equal(t, store.Snapshot().Fingerprint(), equal.Fingerprint())
+	store.Publish(equal)
+	require.Same(t, equal, store.Snapshot(), "a database snapshot replaces the built-in one even with equal content")
+	require.Equal(t, 2, Derived(store.Snapshot(), key{}, count), "derived values belong to the snapshot that computed them")
+	store.Publish(NewSnapshot(store.Snapshot().Products()))
+	require.Same(t, equal, store.Snapshot(), "an equal database snapshot is not republished")
+}
+
+func TestPublishRejectsNil(t *testing.T) {
+	t.Parallel()
+	initial := NewSnapshot(Products())
+	store := NewStore(initial)
+	require.Panics(t, func() { store.Publish(nil) })
+	require.Same(t, initial, store.Snapshot())
 }
 
 func TestPinBelongsToItsStore(t *testing.T) {

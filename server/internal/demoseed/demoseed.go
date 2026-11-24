@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/aivendors/catalogseed"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -71,9 +72,13 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	if err := catalogseed.EnsureCatalog(ctx, db); err != nil {
 		return fmt.Errorf("ensure AI catalog before demo seed: %w", err)
 	}
+	catalog, err := aivendors.Load(ctx, db, logger, aitargets.ValidateCatalog)
+	if err != nil {
+		return fmt.Errorf("load AI catalog before demo seed: %w", err)
+	}
 
 	return withSeedLock(ctx, logger, db, func(conn *pgxpool.Conn) error {
-		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec)
+		s, err := seedPostgres(ctx, logger, conn, blob, enc, assistantIssuerURL, serverURL, spec, catalog)
 		if err != nil {
 			return err
 		}
@@ -150,7 +155,7 @@ type txBeginner interface {
 // seedPostgres runs the Postgres seed for spec in one transaction on db, so a
 // failed run leaves the previous data in place. It returns the seeder, whose
 // clock the ClickHouse seed reuses.
-func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec) (*seeder, error) {
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, assistantIssuerURL, serverURL string, spec Spec, catalog *aivendors.Snapshot) (*seeder, error) {
 	if enc == nil {
 		return nil, errors.New("demo seed needs the environment's encryption key")
 	}
@@ -162,7 +167,7 @@ func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob 
 	if err != nil {
 		return nil, err
 	}
-	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot(), enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+	s := &seeder{spec: spec, catalog: catalog, enc: enc, assistantIssuer: assistantIssuer, serverURL: server, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {

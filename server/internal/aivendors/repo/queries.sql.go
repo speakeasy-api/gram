@@ -57,8 +57,13 @@ func (q *Queries) ListCatalogDocuments(ctx context.Context) ([]ListCatalogDocume
 }
 
 const listCatalogProducts = `-- name: ListCatalogProducts :many
-SELECT id, vendor_key, display_name, category, bundle_ids, binaries, config_dirs,
-  process_names, version_plist_key, client_info_names
+SELECT id, vendor_key, display_name, category,
+  ARRAY(SELECT e FROM unnest(bundle_ids) AS e WHERE e IS NOT NULL)::text[] AS bundle_ids,
+  ARRAY(SELECT e FROM unnest(binaries) AS e WHERE e IS NOT NULL)::text[] AS binaries,
+  ARRAY(SELECT e FROM unnest(config_dirs) AS e WHERE e IS NOT NULL)::text[] AS config_dirs,
+  ARRAY(SELECT e FROM unnest(process_names) AS e WHERE e IS NOT NULL)::text[] AS process_names,
+  version_plist_key,
+  ARRAY(SELECT e FROM unnest(client_info_names) AS e WHERE e IS NOT NULL)::text[] AS client_info_names
 FROM ai_products
 WHERE deleted IS FALSE
 ORDER BY id COLLATE "C"
@@ -79,6 +84,7 @@ type ListCatalogProductsRow struct {
 
 // Catalog products and documents are global reference data.
 // Byte-order sorting by id, then url, makes database snapshots deterministic.
+// NULL array elements are dropped and nested arrays flattened so one bad row cannot fail the read.
 func (q *Queries) ListCatalogProducts(ctx context.Context) ([]ListCatalogProductsRow, error) {
 	rows, err := q.db.Query(ctx, listCatalogProducts)
 	if err != nil {
@@ -100,6 +106,66 @@ func (q *Queries) ListCatalogProducts(ctx context.Context) ([]ListCatalogProduct
 			&i.VersionPlistKey,
 			&i.ClientInfoNames,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeletedProductIDs = `-- name: ListDeletedProductIDs :many
+SELECT id FROM ai_products WHERE deleted IS TRUE ORDER BY id COLLATE "C"
+`
+
+// Removals the built-in fallback honours when the live catalog is rejected.
+func (q *Queries) ListDeletedProductIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDeletedProductIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemovedDocumentURLs = `-- name: ListRemovedDocumentURLs :many
+SELECT d.url, COALESCE(bool_or(d.deleted IS FALSE AND p.deleted IS FALSE), FALSE)::boolean AS live
+FROM ai_product_cimd_documents d
+JOIN ai_products p ON p.id = d.ai_product_id
+GROUP BY d.url
+HAVING NOT COALESCE(bool_or(d.deleted IS FALSE AND p.deleted IS FALSE AND d.enabled), FALSE)
+ORDER BY d.url COLLATE "C"
+`
+
+type ListRemovedDocumentURLsRow struct {
+	Url  string
+	Live bool
+}
+
+// A URL with no enabled live row is removed; live reports whether a disabled live row still holds it.
+func (q *Queries) ListRemovedDocumentURLs(ctx context.Context) ([]ListRemovedDocumentURLsRow, error) {
+	rows, err := q.db.Query(ctx, listRemovedDocumentURLs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemovedDocumentURLsRow
+	for rows.Next() {
+		var i ListRemovedDocumentURLsRow
+		if err := rows.Scan(&i.Url, &i.Live); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -53,7 +53,7 @@ func testFixtureServersPointAtHostedFixture(t *testing.T, spec Spec) {
 	s := &seeder{spec: spec, catalog: aivendors.CompiledSnapshot()}
 	q := testrepo.New(db)
 	for range 2 {
-		_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), enc, testAssistantIssuerURL, testServerURL, spec)
+		_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), enc, testAssistantIssuerURL, testServerURL, spec, aivendors.CompiledSnapshot())
 		require.NoError(t, err)
 
 		oauth, err := q.GetRemoteMCPServerURLFixture(ctx, s.det("remotemcp-linear"))

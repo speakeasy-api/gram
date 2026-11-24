@@ -41,7 +41,8 @@ func TestCompiledSnapshotNamesAppsAsTheRegistryDid(t *testing.T) {
 	catalog := aivendors.CompiledSnapshot()
 	hosts := CatalogAppHosts(catalog)
 	var ids, keys []string
-	for _, preset := range catalog.Catalog() {
+	// Probe IDs follow registry order so only answers, not case order, can move the golden.
+	for _, preset := range aivendors.NewSnapshot(aivendors.Products()).Catalog() {
 		ids = append(ids, strings.ReplaceAll(preset.URL, "*", "probe"))
 		keys = append(keys, NormalizeProviderHost(preset.URL))
 	}

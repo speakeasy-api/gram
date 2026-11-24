@@ -305,8 +305,7 @@ VALUES (@organization_id, @email, NULLIF(@serial_number::text, ''), @hostname::t
 -- name: RolesDeleteAIScanTargets :exec
 DELETE FROM ai_scan_targets WHERE organization_id = @organization_id;
 
--- The decided built-ins carry only a decision and a catalog product link, so the
--- catalog definition stays authoritative for this org.
+-- Decided built-ins carry only decisions, so catalog edits still reach this org.
 -- name: RolesInsertAIScanTargets :exec
 INSERT INTO ai_scan_targets (organization_id, id, ai_product_id, status, rationale)
 VALUES
