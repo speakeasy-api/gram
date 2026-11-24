@@ -2315,8 +2315,20 @@ CREATE TABLE IF NOT EXISTS functions_access (
   project_id uuid NOT NULL,
   deployment_id uuid NOT NULL,
   function_id uuid NOT NULL,
+  -- The organization that owns the project, stored on the row so the
+  -- organization encryption fence of the runner key copies compares against
+  -- the row's own organization. Nullable so rows stored before this column
+  -- stay valid until the function runner key backfill fills it in.
+  organization_id TEXT,
 
+  -- The function runner key sealed under the platform key. Written while the
+  -- organization's function-runner-keys use case is in platform_key or
+  -- dual_write.
   encryption_key BYTEA,
+  -- The function runner key sealed under the organization's key. Written
+  -- while the organization's function-runner-keys use case is in dual_write
+  -- or org_kms.
+  encryption_key_org_encrypted TEXT,
   bearer_format TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2326,7 +2338,11 @@ CREATE TABLE IF NOT EXISTS functions_access (
 
   CONSTRAINT functions_access_pkey PRIMARY KEY (id),
   CONSTRAINT functions_access_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
-  CONSTRAINT functions_access_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE
+  CONSTRAINT functions_access_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE,
+  CONSTRAINT functions_access_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  -- organization_id must be the project's own organization: the encryption
+  -- fence reads it, and runner key copies are sealed for it.
+  CONSTRAINT functions_access_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
 );
 
 COMMENT ON COLUMN functions_access.id IS '@access: confidential';
@@ -2334,7 +2350,9 @@ COMMENT ON COLUMN functions_access.seq IS '@access: confidential';
 COMMENT ON COLUMN functions_access.project_id IS '@access: confidential';
 COMMENT ON COLUMN functions_access.deployment_id IS '@access: confidential';
 COMMENT ON COLUMN functions_access.function_id IS '@access: confidential';
+COMMENT ON COLUMN functions_access.organization_id IS '@access: confidential';
 COMMENT ON COLUMN functions_access.encryption_key IS '@access: secret-restricted';
+COMMENT ON COLUMN functions_access.encryption_key_org_encrypted IS '@access: secret-restricted';
 COMMENT ON COLUMN functions_access.bearer_format IS '@access: confidential';
 COMMENT ON COLUMN functions_access.created_at IS '@access: confidential';
 COMMENT ON COLUMN functions_access.updated_at IS '@access: confidential';
@@ -2342,6 +2360,22 @@ COMMENT ON COLUMN functions_access.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN functions_access.deleted IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS functions_access_project_deployment_function_seq_key ON functions_access (project_id, deployment_id, function_id, seq DESC) WHERE deleted IS FALSE;
+
+-- The organization encryption backfill, verification, count and clear of
+-- platform-key copies page through one organization's runner keys that still
+-- hold a platform-key copy, by id. Clearing a copy drops its row from the
+-- index, so each clear batch starts at the next row still to clear.
+CREATE INDEX IF NOT EXISTS functions_access_organization_id_id_idx
+  ON functions_access (organization_id, id)
+  WHERE encryption_key IS NOT NULL;
+
+-- Finds an organization's runner keys stored before organization_id existed,
+-- which keep it from finalizing. After the function runner key organization
+-- backfill, it holds only keys whose project's organization has no metadata
+-- row.
+CREATE INDEX IF NOT EXISTS functions_access_project_id_unattributed_idx
+  ON functions_access (project_id)
+  WHERE organization_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS function_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
