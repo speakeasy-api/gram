@@ -84,28 +84,14 @@ func (r *Runtime) WithDiscovery(config DiscoveryConfig) *Runtime {
 	return r
 }
 
-// harnessProducts maps each CIMD document URL in the aivendors registry to its
-// product ID, resolved once because the registry is static.
-var harnessProducts = sync.OnceValue(func() map[string]string {
-	products := make(map[string]string)
-	for _, product := range aivendors.Products() {
-		for _, clientID := range aivendors.GatewayMatchersFor(product).ClientIDs {
-			products[clientID] = product.ID
-		}
-	}
-	return products
-})
-
 // harnessForClient names the harness behind a verified OAuth client_id: the
-// aivendors product whose CIMD document admitted it, or "unknown". It
-// resolves through the CIMD admission catalog the same way the MCP gateway
-// does, never through the client's self-reported clientInfo. A dynamically
-// registered client has an opaque client_id that matches no entry.
-func harnessForClient(clientID string) string {
-	if preset, ok := aivendors.CompiledSnapshot().CatalogPreset(clientID); ok {
-		if product, ok := harnessProducts()[preset.URL]; ok {
-			return product
-		}
+// catalog product whose CIMD document admitted it, or "unknown". It resolves
+// through the CIMD admission catalog the same way the MCP gateway does, never
+// through the client's self-reported clientInfo. A dynamically registered
+// client has an opaque client_id that matches no entry.
+func harnessForClient(catalog *aivendors.Snapshot, clientID string) string {
+	if preset, ok := catalog.CatalogPreset(clientID); ok {
+		return preset.ProductID
 	}
 	return "unknown"
 }
@@ -122,7 +108,7 @@ func (r *Runtime) discoveryModeFor(ctx context.Context, logger *slog.Logger, pri
 	if r.discovery.Flags == nil || principal.OrganizationID == "" {
 		return discoveryFull
 	}
-	harness := harnessForClient(principal.ClientID)
+	harness := harnessForClient(r.registrar.aiCatalogSnapshot(ctx), principal.ClientID)
 	if harness == chatGPTProductID {
 		return discoveryFull
 	}
@@ -172,6 +158,7 @@ func discoveryMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			principal := mustPrincipal(ctx)
+			ctx = runtime.registrar.withAICatalogSnapshot(ctx)
 			mode := runtime.discoveryModeFor(ctx, logger, principal)
 			ctx = context.WithValue(ctx, discoveryModeKey{}, mode)
 			if mode == discoveryFull {

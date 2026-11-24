@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/aivendors/aivendorstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -88,7 +89,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		WithToolExposure(toolExposure).
 		WithProjectLifecycle(projectLifecycle).
 		WithShadowInventory(shadowInventory).
-		WithShadowAI(NewShadowAIService(&stubDetectionReader{}, NewPostgresShadowAILibrary(agentrepo.New(pool)), authorizer, budget)).
+		WithShadowAI(NewShadowAIService(&stubDetectionReader{}, NewPostgresShadowAILibrary(aivendorstest.NewStore(), agentrepo.New(pool)), authorizer, budget)).
 		WithDeviceCoverage(NewDeviceCoverageService(&stubDeviceCoverageReader{}, engine, budget)).
 		WithOrganizationGatewayActivity(NewOrganizationGatewayActivityService(pool, &stubGatewayActivityReader{}, engine, budget))
 	// The risk policy and exclusion reads hang off the cursor key, which the
@@ -175,6 +176,7 @@ func composeToolEvalRegistry(t *testing.T, logger *slog.Logger, pool *pgxpool.Po
 		distributions, skills, diagnostics, NewWorkflowRunService(logger, &captureWorkflowRunEmitter{}), pluginInventory, sessionRecall, riskMutations,
 		CatalogDescriptor{}, accessReads, accessRoleMutations, nil, signalAuthoring)
 	registrar.withLogger(logger)
+	registrar.withAICatalog(aivendorstest.NewStore())
 	return registrar
 }
 

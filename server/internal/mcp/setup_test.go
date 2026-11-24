@@ -712,7 +712,7 @@ func buildTestMCPService(
 				logger, nil, nil, platformMCPAuthorizer, "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
-			).AssistantTools(),
+			).WithAICatalog(aivendorstest.NewStore()).AssistantTools(),
 			platformMCPAuthorizer,
 		)
 		platformMCPReadActingContext = assistant_platform_mcp_adapter.ActingContext(platformMCPAuthorizer)
