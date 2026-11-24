@@ -87,11 +87,9 @@ type platformMCPConfig struct {
 	// AgentAuthorizationChecks is the dashboard's authorization check listing
 	// the agent identity reads use.
 	AgentAuthorizationChecks platformmcp.AgentAuthorizationChecks
-	// GatewayProxy serves the caller's own MCP servers through their organization gateway.
-	GatewayProxy           platformmcp.GatewayProxy
-	DeploymentRedeploy     platformmcp.DeploymentRedeployManagement
-	AssistantIdentity      platformmcp.AssistantIdentityManagement
-	WorkloadAssertionReuse platformmcp.WorkloadAssertionReuseManagement
+	DeploymentRedeploy       platformmcp.DeploymentRedeployManagement
+	AssistantIdentity        platformmcp.AssistantIdentityManagement
+	WorkloadAssertionReuse   platformmcp.WorkloadAssertionReuseManagement
 	// InboundEMAUserIssuers and InboundEMARemoteIssuers are the organization
 	// issuer management APIs the inbound EMA trust tools act through.
 	InboundEMAUserIssuers   platformmcp.InboundEMAUserIssuerManagement
@@ -604,7 +602,6 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
 		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.UpstreamTokens, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
-		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
@@ -1400,7 +1397,6 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
 		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.UpstreamTokens, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
-		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithChannelsAccess(config.ChannelsAccess).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).

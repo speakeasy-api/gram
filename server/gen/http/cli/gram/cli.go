@@ -53,6 +53,7 @@ import (
 	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
 	identityproviderconnectionsc "github.com/speakeasy-api/gram/server/gen/http/identity_provider_connections/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
+	intentpoliciesc "github.com/speakeasy-api/gram/server/gen/http/intent_policies/client"
 	internalsessionissuersc "github.com/speakeasy-api/gram/server/gen/http/internal_session_issuers/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
@@ -155,6 +156,7 @@ func UsageCommands() []string {
 		"identity resolve",
 		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"integrations (get|list)",
+		"intent-policies (get-guardrail|analyze-session|upload-transcript)",
 		"internal-session-issuers (get|set-enabled|rotate)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|rotate-key|extend-agent-keys|list-keys|revoke-key|update-key-policy|verify-key)",
@@ -206,7 +208,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|get-organization-hook-fleet|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project|list-custom-domains|list-platform-external-credentials|get-gcp-iam-platform-credential|create-gcp-iam-platform-credential|update-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential|get-memory-eval-options|list-memory-eval-runs|get-memory-eval-run|start-memory-eval-run|list-assistant-organizations|repair-organization-assistant-agent-names|list-organization-assistants|migrate-organization-assistant-identities|migrate-organization-assistants-to-kit|get-hooks-rollout|set-hooks-rollout-default|get-organization-hooks-rollout|set-organization-hooks-rollout|clear-organization-hooks-rollout|list-tailscaleoauth-migration|run-tailscaleoauth-migration-step)",
 		"user-session-clients (create-user-session-client|update-user-session-client-redirect-ur-is|list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -1687,6 +1689,22 @@ func ParseEndpoint(
 		integrationsListKeywordsFlag         = integrationsListFlags.String("keywords", "", "")
 		integrationsListSessionTokenFlag     = integrationsListFlags.String("session-token", "", "")
 		integrationsListProjectSlugInputFlag = integrationsListFlags.String("project-slug-input", "", "")
+
+		intentPoliciesFlags = flag.NewFlagSet("intent-policies", flag.ContinueOnError)
+
+		intentPoliciesGetGuardrailFlags                = flag.NewFlagSet("get-guardrail", flag.ExitOnError)
+		intentPoliciesGetGuardrailSessionTokenFlag     = intentPoliciesGetGuardrailFlags.String("session-token", "", "")
+		intentPoliciesGetGuardrailProjectSlugInputFlag = intentPoliciesGetGuardrailFlags.String("project-slug-input", "", "")
+
+		intentPoliciesAnalyzeSessionFlags                = flag.NewFlagSet("analyze-session", flag.ExitOnError)
+		intentPoliciesAnalyzeSessionBodyFlag             = intentPoliciesAnalyzeSessionFlags.String("body", "REQUIRED", "")
+		intentPoliciesAnalyzeSessionSessionTokenFlag     = intentPoliciesAnalyzeSessionFlags.String("session-token", "", "")
+		intentPoliciesAnalyzeSessionProjectSlugInputFlag = intentPoliciesAnalyzeSessionFlags.String("project-slug-input", "", "")
+
+		intentPoliciesUploadTranscriptFlags                = flag.NewFlagSet("upload-transcript", flag.ExitOnError)
+		intentPoliciesUploadTranscriptBodyFlag             = intentPoliciesUploadTranscriptFlags.String("body", "REQUIRED", "")
+		intentPoliciesUploadTranscriptSessionTokenFlag     = intentPoliciesUploadTranscriptFlags.String("session-token", "", "")
+		intentPoliciesUploadTranscriptProjectSlugInputFlag = intentPoliciesUploadTranscriptFlags.String("project-slug-input", "", "")
 
 		internalSessionIssuersFlags = flag.NewFlagSet("internal-session-issuers", flag.ContinueOnError)
 
@@ -5105,6 +5123,13 @@ func ParseEndpoint(
 		adminClearOrganizationHooksRolloutBodyFlag              = adminClearOrganizationHooksRolloutFlags.String("body", "REQUIRED", "")
 		adminClearOrganizationHooksRolloutAdminSessionTokenFlag = adminClearOrganizationHooksRolloutFlags.String("admin-session-token", "", "")
 
+		adminListTailscaleOAuthMigrationFlags                 = flag.NewFlagSet("list-tailscaleoauth-migration", flag.ExitOnError)
+		adminListTailscaleOAuthMigrationAdminSessionTokenFlag = adminListTailscaleOAuthMigrationFlags.String("admin-session-token", "", "")
+
+		adminRunTailscaleOAuthMigrationStepFlags                 = flag.NewFlagSet("run-tailscaleoauth-migration-step", flag.ExitOnError)
+		adminRunTailscaleOAuthMigrationStepBodyFlag              = adminRunTailscaleOAuthMigrationStepFlags.String("body", "REQUIRED", "")
+		adminRunTailscaleOAuthMigrationStepAdminSessionTokenFlag = adminRunTailscaleOAuthMigrationStepFlags.String("admin-session-token", "", "")
+
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
 		userSessionClientsCreateUserSessionClientFlags                = flag.NewFlagSet("create-user-session-client", flag.ExitOnError)
@@ -6090,6 +6115,11 @@ func ParseEndpoint(
 	integrationsGetFlags.Usage = integrationsGetUsage
 	integrationsListFlags.Usage = integrationsListUsage
 
+	intentPoliciesFlags.Usage = intentPoliciesUsage
+	intentPoliciesGetGuardrailFlags.Usage = intentPoliciesGetGuardrailUsage
+	intentPoliciesAnalyzeSessionFlags.Usage = intentPoliciesAnalyzeSessionUsage
+	intentPoliciesUploadTranscriptFlags.Usage = intentPoliciesUploadTranscriptUsage
+
 	internalSessionIssuersFlags.Usage = internalSessionIssuersUsage
 	internalSessionIssuersGetFlags.Usage = internalSessionIssuersGetUsage
 	internalSessionIssuersSetEnabledFlags.Usage = internalSessionIssuersSetEnabledUsage
@@ -6830,6 +6860,8 @@ func ParseEndpoint(
 	adminGetOrganizationHooksRolloutFlags.Usage = adminGetOrganizationHooksRolloutUsage
 	adminSetOrganizationHooksRolloutFlags.Usage = adminSetOrganizationHooksRolloutUsage
 	adminClearOrganizationHooksRolloutFlags.Usage = adminClearOrganizationHooksRolloutUsage
+	adminListTailscaleOAuthMigrationFlags.Usage = adminListTailscaleOAuthMigrationUsage
+	adminRunTailscaleOAuthMigrationStepFlags.Usage = adminRunTailscaleOAuthMigrationStepUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsCreateUserSessionClientFlags.Usage = userSessionClientsCreateUserSessionClientUsage
@@ -7054,6 +7086,8 @@ func ParseEndpoint(
 			svcf = identityProviderConnectionsFlags
 		case "integrations":
 			svcf = integrationsFlags
+		case "intent-policies":
+			svcf = intentPoliciesFlags
 		case "internal-session-issuers":
 			svcf = internalSessionIssuersFlags
 		case "json-web-key-sets":
@@ -8127,6 +8161,19 @@ func ParseEndpoint(
 
 			case "list":
 				epf = integrationsListFlags
+
+			}
+
+		case "intent-policies":
+			switch epn {
+			case "get-guardrail":
+				epf = intentPoliciesGetGuardrailFlags
+
+			case "analyze-session":
+				epf = intentPoliciesAnalyzeSessionFlags
+
+			case "upload-transcript":
+				epf = intentPoliciesUploadTranscriptFlags
 
 			}
 
@@ -10247,6 +10294,12 @@ func ParseEndpoint(
 			case "clear-organization-hooks-rollout":
 				epf = adminClearOrganizationHooksRolloutFlags
 
+			case "list-tailscaleoauth-migration":
+				epf = adminListTailscaleOAuthMigrationFlags
+
+			case "run-tailscaleoauth-migration-step":
+				epf = adminRunTailscaleOAuthMigrationStepFlags
+
 			}
 
 		case "user-session-clients":
@@ -11612,6 +11665,19 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = integrationsc.BuildListPayload(*integrationsListKeywordsFlag, *integrationsListSessionTokenFlag, *integrationsListProjectSlugInputFlag)
+			}
+		case "intent-policies":
+			c := intentpoliciesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-guardrail":
+				endpoint = c.GetGuardrail()
+				data, err = intentpoliciesc.BuildGetGuardrailPayload(*intentPoliciesGetGuardrailSessionTokenFlag, *intentPoliciesGetGuardrailProjectSlugInputFlag)
+			case "analyze-session":
+				endpoint = c.AnalyzeSession()
+				data, err = intentpoliciesc.BuildAnalyzeSessionPayload(*intentPoliciesAnalyzeSessionBodyFlag, *intentPoliciesAnalyzeSessionSessionTokenFlag, *intentPoliciesAnalyzeSessionProjectSlugInputFlag)
+			case "upload-transcript":
+				endpoint = c.UploadTranscript()
+				data, err = intentpoliciesc.BuildUploadTranscriptPayload(*intentPoliciesUploadTranscriptBodyFlag, *intentPoliciesUploadTranscriptSessionTokenFlag, *intentPoliciesUploadTranscriptProjectSlugInputFlag)
 			}
 		case "internal-session-issuers":
 			c := internalsessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13745,6 +13811,12 @@ func ParseEndpoint(
 			case "clear-organization-hooks-rollout":
 				endpoint = c.ClearOrganizationHooksRollout()
 				data, err = adminc.BuildClearOrganizationHooksRolloutPayload(*adminClearOrganizationHooksRolloutBodyFlag, *adminClearOrganizationHooksRolloutAdminSessionTokenFlag)
+			case "list-tailscaleoauth-migration":
+				endpoint = c.ListTailscaleOAuthMigration()
+				data, err = adminc.BuildListTailscaleOAuthMigrationPayload(*adminListTailscaleOAuthMigrationAdminSessionTokenFlag)
+			case "run-tailscaleoauth-migration-step":
+				endpoint = c.RunTailscaleOAuthMigrationStep()
+				data, err = adminc.BuildRunTailscaleOAuthMigrationStepPayload(*adminRunTailscaleOAuthMigrationStepBodyFlag, *adminRunTailscaleOAuthMigrationStepAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -20687,6 +20759,83 @@ func integrationsListUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations list --keywords '[\n      \"aaa\",\n      \"aaa\",\n      \"aaa\"\n   ]' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// intentPoliciesUsage displays the usage of the intent-policies command and
+// its subcommands.
+func intentPoliciesUsage() {
+	fmt.Fprintln(os.Stderr, `Staff-only retroactive analysis of recorded tool calls against the intent-based guardrail. Read-only apart from storing uploaded transcripts; nothing is enforced.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] intent-policies COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-guardrail: Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr, `    analyze-session: Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr, `    upload-transcript: Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s intent-policies COMMAND --help\n", os.Args[0])
+}
+func intentPoliciesGetGuardrailUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies get-guardrail", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the built-in intent guardrail: grounding statements, label questions, and contracts. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies get-guardrail --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func intentPoliciesAnalyzeSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies analyze-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Label every tool call of one chat session and evaluate the guardrail contracts. Synchronous, judges at most the first 200 calls of the latest generation by default, and persists nothing. Use offset and limit to analyze in batches. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies analyze-session --body '{\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"evaluator\": \"gemini\",\n      \"generation\": 1,\n      \"limit\": 2,\n      \"offset\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func intentPoliciesUploadTranscriptUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] intent-policies upload-transcript", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Store an agent transcript (messages JSON, Claude Code JSONL, or Pi JSONL) as a chat session in the current project so it can be analyzed. Requires the caller to be in the intent-policies rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "intent-policies upload-transcript --body '{\n      \"content\": \"aa\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // internalSessionIssuersUsage displays the usage of the
@@ -33476,7 +33625,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-upstreamoauth-migration-status: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.`)
 	fmt.Fprintln(os.Stderr, `    run-upstreamoauth-migration: Migrates one organization's upstream OAuth configuration: records the server to client associations its configuration proves, then each live credential's client choice. Idempotent, so it is safe to run again; a server the configuration does not prove is reported and never guessed.`)
 	fmt.Fprintln(os.Stderr, `    enable-upstream-auth-enforcement: Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.`)
-	fmt.Fprintln(os.Stderr, `    disable-upstream-auth-enforcement: Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.`)
+	fmt.Fprintln(os.Stderr, `    disable-upstream-auth-enforcement: Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-auth-grants: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-connect-grants: Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    get-project-redeploy-preview: Returns what redeploying a project would act on, for review before redeployProject.`)
@@ -33502,6 +33651,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-organization-hooks-rollout: Returns the hooks version rollout state for one organization.`)
 	fmt.Fprintln(os.Stderr, `    set-organization-hooks-rollout: Pins one organization to its own hooks version, regardless of the default pin.`)
 	fmt.Fprintln(os.Stderr, `    clear-organization-hooks-rollout: Removes an organization's hooks version override so it follows the default pin again.`)
+	fmt.Fprintln(os.Stderr, `    list-tailscaleoauth-migration: Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
+	fmt.Fprintln(os.Stderr, `    run-tailscaleoauth-migration-step: Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -35635,7 +35786,7 @@ func adminDisableUpstreamAuthEnforcementUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.`)
+	fmt.Fprintln(os.Stderr, `Retired. Older staff clients can still reach this endpoint, but requests are rejected. Upstream auth enforcement cannot be turned off.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -36142,6 +36293,44 @@ func adminClearOrganizationHooksRolloutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin clear-organization-hooks-rollout --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminListTailscaleOAuthMigrationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-tailscaleoauth-migration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists every organization with saved Tailscale OAuth credentials and where it stands in moving them to its organization key.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-tailscaleoauth-migration --admin-session-token \"abc123\"")
+}
+
+func adminRunTailscaleOAuthMigrationStepUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin run-tailscaleoauth-migration-step", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Runs one step of moving an organization's saved Tailscale OAuth credentials to its organization key. enroll provisions the organization key and starts dual_write; backfill seals every waiting credential with the organization key and verifies both copies; finalize moves to org_kms once the backfill and verification are clean and the minimum time in dual_write has passed; clear_platform_copies then destroys the platform-key copies; rollback returns a dual_write organization to platform_key. Each step is safe to run again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin run-tailscaleoauth-migration-step --body '{\n      \"organization_id\": \"abc123\",\n      \"step\": \"backfill\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients

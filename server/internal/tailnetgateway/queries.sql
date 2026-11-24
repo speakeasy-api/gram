@@ -175,15 +175,9 @@ WHERE id = @id
   AND deleted IS FALSE
   AND runtime IS DISTINCT FROM @runtime;
 
--- name: GetNetworkIngressRuntime :one
-SELECT runtime
-FROM network_ingresses
-WHERE id = @id
-  AND organization_id = @organization_id;
-
 -- name: GetNetworkIngressGatewayOwner :one
 -- Tombstones are included: teardown needs the owner and labels after soft delete.
-SELECT organization_id, hostname, runtime, gateway_service_hostname, gateway_service_hostnames
+SELECT organization_id, hostname, gateway_service_hostname, gateway_service_hostnames
 FROM network_ingresses
 WHERE id = @id;
 

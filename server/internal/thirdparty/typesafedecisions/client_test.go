@@ -202,10 +202,25 @@ func TestEvaluateResolvesOrganizationKey(t *testing.T) {
 	require.False(t, called.Load())
 }
 
-func TestNewUsesOpenRouter(t *testing.T) {
+func TestNewUsesBaseURL(t *testing.T) {
 	t.Parallel()
-	client := New(http.DefaultClient, nil)
-	require.Equal(t, "https://openrouter.ai/api/alpha/decisions", client.endpoint)
+
+	for _, tc := range []struct {
+		name     string
+		baseURL  string
+		endpoint string
+	}{
+		{name: "global", baseURL: "https://openrouter.ai/api", endpoint: "https://openrouter.ai/api/alpha/decisions"},
+		{name: "eu", baseURL: "https://eu.openrouter.ai/api", endpoint: "https://eu.openrouter.ai/api/alpha/decisions"},
+		{name: "trailing slash", baseURL: "https://openrouter.ai/api/", endpoint: "https://openrouter.ai/api/alpha/decisions"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := New(http.DefaultClient, nil, tc.baseURL)
+			require.Equal(t, tc.endpoint, client.endpoint)
+		})
+	}
 }
 
 func TestEvaluateRejectsMissingCost(t *testing.T) {
@@ -273,7 +288,7 @@ func TestEvaluateRejectsNullProbability(t *testing.T) {
 
 func TestEvaluateMissingDependencies(t *testing.T) {
 	t.Parallel()
-	client := New(nil, nil)
+	client := New(nil, nil, "https://openrouter.ai/api")
 	_, err := client.Evaluate(t.Context(), "org", json.RawMessage(`{}`), testQuestions())
 	require.ErrorIs(t, err, ErrUnavailable)
 	client.resolveKey = func(context.Context, string) (string, error) {

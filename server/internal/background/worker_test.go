@@ -235,6 +235,7 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		fmt.Sprintf("v1:directory-review-emails:%s", queue),
 		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
 		fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", queue),
+		fmt.Sprintf("v1:plugin-api-key-reaper:%s", queue),
 		fmt.Sprintf("v1:channels-retention:%s", queue),
 		indexToolsetSweepScheduleID(queue),
 	}, "the shared queue registers both the fleet-wide and the per-queue schedules")

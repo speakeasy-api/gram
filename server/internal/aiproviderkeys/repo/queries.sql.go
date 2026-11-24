@@ -12,22 +12,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const clearAIIntegrationConfigAPIKeyPlatformCopies = `-- name: ClearAIIntegrationConfigAPIKeyPlatformCopies :execrows
-UPDATE ai_integration_configs AS c
-SET api_key_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM ai_integration_configs AS target
-    WHERE target.organization_id = $1::text
-      AND target.api_key_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND c.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = $3
+const clearAIIntegrationConfigAPIKeyPlatformCopies = `-- name: ClearAIIntegrationConfigAPIKeyPlatformCopies :one
+WITH cleared AS (
+    UPDATE ai_integration_configs AS c
+    SET api_key_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM ai_integration_configs AS target
+        WHERE target.organization_id = $1::text
+          AND target.api_key_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND c.organization_id = $1::text
+      AND c.api_key_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (c.api_key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearAIIntegrationConfigAPIKeyPlatformCopiesParams struct {
@@ -36,30 +44,46 @@ type ClearAIIntegrationConfigAPIKeyPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
-func (q *Queries) ClearAIIntegrationConfigAPIKeyPlatformCopies(ctx context.Context, arg ClearAIIntegrationConfigAPIKeyPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearAIIntegrationConfigAPIKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type ClearAIIntegrationConfigAPIKeyPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
 }
 
-const clearModelProviderKeyPlatformCopies = `-- name: ClearModelProviderKeyPlatformCopies :execrows
-UPDATE model_provider_keys AS c
-SET api_key_encrypted = NULL
-WHERE c.id IN (
-    SELECT target.id FROM model_provider_keys AS target
-    WHERE target.organization_id = $1::text
-      AND target.api_key_encrypted IS NOT NULL
-    ORDER BY target.id
-    LIMIT $2
-  )
-  AND c.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = $3
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
+func (q *Queries) ClearAIIntegrationConfigAPIKeyPlatformCopies(ctx context.Context, arg ClearAIIntegrationConfigAPIKeyPlatformCopiesParams) (ClearAIIntegrationConfigAPIKeyPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearAIIntegrationConfigAPIKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearAIIntegrationConfigAPIKeyPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
+}
+
+const clearModelProviderKeyPlatformCopies = `-- name: ClearModelProviderKeyPlatformCopies :one
+WITH cleared AS (
+    UPDATE model_provider_keys AS c
+    SET api_key_encrypted = NULL
+    WHERE c.id IN (
+        SELECT target.id FROM model_provider_keys AS target
+        WHERE target.organization_id = $1::text
+          AND target.api_key_encrypted IS NOT NULL
+        ORDER BY target.id
+        LIMIT $2
+      )
+      AND c.organization_id = $1::text
+      AND c.api_key_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (c.api_key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearModelProviderKeyPlatformCopiesParams struct {
@@ -68,30 +92,46 @@ type ClearModelProviderKeyPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
-func (q *Queries) ClearModelProviderKeyPlatformCopies(ctx context.Context, arg ClearModelProviderKeyPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearModelProviderKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type ClearModelProviderKeyPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
 }
 
-const clearOpenRouterAPIKeyPlatformCopies = `-- name: ClearOpenRouterAPIKeyPlatformCopies :execrows
-UPDATE openrouter_api_keys AS c
-SET key_encrypted = NULL
-WHERE c.key_type IN (
-    SELECT target.key_type FROM openrouter_api_keys AS target
-    WHERE target.organization_id = $1::text
-      AND target.key_encrypted IS NOT NULL
-    ORDER BY target.key_type
-    LIMIT $2
-  )
-  AND c.organization_id = $1::text
-  AND COALESCE((
-    SELECT t.generation FROM organization_encryption_transitions AS t
-    WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
-    FOR KEY SHARE
-  ), 0) = $3
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
+func (q *Queries) ClearModelProviderKeyPlatformCopies(ctx context.Context, arg ClearModelProviderKeyPlatformCopiesParams) (ClearModelProviderKeyPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearModelProviderKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearModelProviderKeyPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
+}
+
+const clearOpenRouterAPIKeyPlatformCopies = `-- name: ClearOpenRouterAPIKeyPlatformCopies :one
+WITH cleared AS (
+    UPDATE openrouter_api_keys AS c
+    SET key_encrypted = NULL
+    WHERE c.key_type IN (
+        SELECT target.key_type FROM openrouter_api_keys AS target
+        WHERE target.organization_id = $1::text
+          AND target.key_encrypted IS NOT NULL
+        ORDER BY target.key_type
+        LIMIT $2
+      )
+      AND c.organization_id = $1::text
+      AND c.key_encrypted IS NOT NULL
+      AND COALESCE((
+        SELECT t.generation FROM organization_encryption_transitions AS t
+        WHERE t.organization_id = c.organization_id AND t.use_case = 'ai-provider-keys'
+        FOR KEY SHARE
+      ), 0) = $3
+    RETURNING (c.key_org_encrypted IS NULL) AS platform_only
+)
+SELECT
+    COUNT(*) FILTER (WHERE cleared.platform_only)::bigint AS platform_only,
+    COUNT(*) FILTER (WHERE NOT cleared.platform_only)::bigint AS beside_org_copy
+FROM cleared
 `
 
 type ClearOpenRouterAPIKeyPlatformCopiesParams struct {
@@ -100,12 +140,20 @@ type ClearOpenRouterAPIKeyPlatformCopiesParams struct {
 	DecidedGeneration int64
 }
 
-func (q *Queries) ClearOpenRouterAPIKeyPlatformCopies(ctx context.Context, arg ClearOpenRouterAPIKeyPlatformCopiesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, clearOpenRouterAPIKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type ClearOpenRouterAPIKeyPlatformCopiesRow struct {
+	PlatformOnly  int64
+	BesideOrgCopy int64
+}
+
+// Returns how many cleared copies stood alone and how many stood beside an
+// organization-key copy. The outer statement rechecks that the platform-key
+// copy is still set, so a row a concurrent clear already emptied is neither
+// updated nor counted.
+func (q *Queries) ClearOpenRouterAPIKeyPlatformCopies(ctx context.Context, arg ClearOpenRouterAPIKeyPlatformCopiesParams) (ClearOpenRouterAPIKeyPlatformCopiesRow, error) {
+	row := q.db.QueryRow(ctx, clearOpenRouterAPIKeyPlatformCopies, arg.OrganizationID, arg.LimitValue, arg.DecidedGeneration)
+	var i ClearOpenRouterAPIKeyPlatformCopiesRow
+	err := row.Scan(&i.PlatformOnly, &i.BesideOrgCopy)
+	return i, err
 }
 
 const countAIIntegrationConfigAPIKeyCopies = `-- name: CountAIIntegrationConfigAPIKeyCopies :one

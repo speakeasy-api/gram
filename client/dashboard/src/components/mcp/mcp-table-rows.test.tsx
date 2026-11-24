@@ -27,7 +27,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
-import { GatewayTableRow } from "./mcp-table-rows";
+import { GatewayTableRow, ProjectGatewayTableRow } from "./mcp-table-rows";
 
 afterEach(cleanup);
 
@@ -91,4 +91,63 @@ it("does not invent a Speakeasy address for a custom-domain-only endpoint", () =
 
   expect(screen.getByText("—")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Copy MCP URL" })).toBeNull();
+});
+
+function renderProjectGatewayRow(
+  status: Parameters<typeof ProjectGatewayTableRow>[0]["status"],
+  url?: string,
+) {
+  return render(
+    <MemoryRouter>
+      <TooltipProvider>
+        <table>
+          <tbody>
+            <ProjectGatewayTableRow status={status} url={url} />
+          </tbody>
+        </table>
+      </TooltipProvider>
+    </MemoryRouter>,
+  );
+}
+
+it("renders the Project Gateway row with its URL when available", () => {
+  renderProjectGatewayRow(
+    "available",
+    "https://gram.example/mcp/gateway/org/projects/project",
+  );
+
+  expect(
+    screen
+      .getByRole("link", { name: "Open Project Gateway" })
+      .getAttribute("href"),
+  ).toBe("/org/projects/project/mcp/project-gateway");
+  expect(
+    screen.getByText("gram.example/mcp/gateway/org/projects/project"),
+  ).toBeTruthy();
+  expect(screen.queryByText("Off")).toBeNull();
+  expect(screen.queryByText("Unavailable")).toBeNull();
+});
+
+it("renders the Project Gateway row in a disabled state when off", () => {
+  renderProjectGatewayRow("off");
+
+  expect(
+    screen
+      .getByRole("link", { name: "Open Project Gateway" })
+      .getAttribute("href"),
+  ).toBe("/org/projects/project/mcp/project-gateway");
+  expect(screen.getByText("Off")).toBeTruthy();
+  expect(screen.getByText("—")).toBeTruthy();
+});
+
+it("renders the Project Gateway row in a disabled state when unavailable", () => {
+  renderProjectGatewayRow("unavailable");
+
+  expect(
+    screen
+      .getByRole("link", { name: "Open Project Gateway" })
+      .getAttribute("href"),
+  ).toBe("/org/projects/project/mcp/project-gateway");
+  expect(screen.getByText("Unavailable")).toBeTruthy();
+  expect(screen.getByText("—")).toBeTruthy();
 });
