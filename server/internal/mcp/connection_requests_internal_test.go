@@ -490,7 +490,7 @@ func TestCallerSubjectNamesASessionAPIKey(t *testing.T) {
 
 	session := contextvalues.WithLegacyAPIKeyAuthorization(t.Context(), &contextvalues.AuthContext{APIKeyID: key.String()})
 	rec := mcpconnectionattemptstest.New(t)
-	(&Service{connections: rec.Recorder}).recordHostedServed(session, toolset, &hostedServing{}, &mcpInputs{resultSucceeded: true, backendAnswered: true}, "tools/call")
+	(&Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}).recordHostedServed(session, toolset, &hostedServing{}, &mcpInputs{resultSucceeded: true, backendAnswered: true}, "tools/call")
 	require.Equal(t, urn.NewAPIKeySubject(key).String(), rec.RequireServed(true).SubjectURN)
 
 	failed := mcpconnectionattemptstest.New(t)
@@ -922,7 +922,7 @@ func TestListingFailureReadsAsACall(t *testing.T) {
 			err := memberClientFailure(t.Context(), testenv.NewLogger(t), tc.outcome, tc.dial, member, errors.New("list failed"))
 			rec := mcpconnectionattemptstest.New(t)
 			gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
-			(&Service{connections: rec.Recorder}).recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: err}})
+			(&Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}).recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: err}})
 			if tc.want == (mcpconnectionattempts.Code{}) {
 				rec.RequireNothing()
 				return
@@ -1018,7 +1018,7 @@ func TestListingFailureRecordsAnAgentsMissingConnection(t *testing.T) {
 	err := memberConnectionError{agentServerCredentialError(member.slug), mcpconnectionattempts.CodeInvalidRemoteSession}
 	rec := mcpconnectionattemptstest.New(t)
 	gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
-	(&Service{connections: rec.Recorder}).recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: err}})
+	(&Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}).recordListingFailures(t.Context(), gate, []unavailableMember{{member: member, err: err}})
 	require.Empty(t, rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeInvalidRemoteSession).ProviderHost)
 }
 
@@ -1043,7 +1043,7 @@ func TestGatewayMemberStatusCarriesTheListingFailure(t *testing.T) {
 		require.Equal(t, tc.cause, status.what)
 
 		rec := mcpconnectionattemptstest.New(t)
-		(&Service{connections: rec.Recorder}).recordMemberStatuses(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.Begin(mcpconnectionattempts.GatewayScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified)), []memberStatus{status})
+		(&Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}).recordMemberStatuses(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.Begin(mcpconnectionattempts.GatewayScope("org-test", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified)), []memberStatus{status})
 		require.Equal(t, tc.host, rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, tc.cause).ProviderHost, tc.cause.String())
 	}
 }
@@ -1116,7 +1116,7 @@ func TestRecordHostedServed(t *testing.T) {
 	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), OrganizationID: "org", ProjectID: uuid.New(), Slug: "toolset"}
 	record := func(cfg *hostedServing, method string, succeeded, answered bool) *mcpconnectionattemptstest.Recording {
 		rec := mcpconnectionattemptstest.New(t)
-		(&Service{connections: rec.Recorder}).recordHostedServed(signedIn, toolset, cfg, &mcpInputs{resultSucceeded: succeeded, backendAnswered: answered}, method)
+		(&Service{aiCatalog: aivendorstest.NewStore(), connections: rec.Recorder}).recordHostedServed(signedIn, toolset, cfg, &mcpInputs{resultSucceeded: succeeded, backendAnswered: answered}, method)
 		return rec
 	}
 
