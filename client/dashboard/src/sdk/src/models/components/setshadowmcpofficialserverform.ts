@@ -7,11 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SetShadowMCPOfficialServerForm = {
   /**
-   * Keep using the Shadow MCP server directly: no official server is linked, not even automatically. Cannot be combined with mcp_server_id.
+   * Keep using the Shadow MCP server directly: no server is made official, not even automatically. Cannot be combined with mcp_server_id.
    */
   keepShadow?: boolean | undefined;
   /**
-   * The MCP server to link as the official version. Omit it, with keep_shadow unset, to go back to the automatic link.
+   * The MCP server to make the official version. Omit it, with keep_shadow unset, to go back to the automatic choice.
    */
   mcpServerId?: string | undefined;
   projectId: string;

@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/speakeasy-api/gram/server/internal/aiproviderkeys"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -46,6 +47,14 @@ func NewEncryptionClient(t *testing.T) *encryption.Client {
 	enc, err := encryption.New("dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=")
 	require.NoError(t, err)
 	return enc
+}
+
+// NewAIProviderKeys returns AI provider keys over NewEncryptionClient's key,
+// as in a process without organization encryption.
+func NewAIProviderKeys(t *testing.T, db *pgxpool.Pool) *aiproviderkeys.Keys {
+	t.Helper()
+
+	return aiproviderkeys.WithoutOrganizationEncryption(NewLogger(t), db, NewEncryptionClient(t))
 }
 
 func NewLogger(*testing.T) *slog.Logger {

@@ -13,6 +13,17 @@ vi.mock("./authentication/useSelectableUserSessionIssuers", () => ({
     isError: false,
   }),
 }));
+const readiness = vi.hoisted(() => ({
+  value: {
+    upstreamAuth: "legacy",
+    isLoadingRemoteIdentity: false,
+    identityUnavailable: false,
+    remoteIdentityMode: "user",
+  },
+}));
+vi.mock("@/hooks/useMcpServerAuthenticationReadiness", () => ({
+  useMcpServerAuthenticationReadiness: () => readiness.value,
+}));
 vi.mock("./authentication/UserSessionIssuerField", () => ({
   UserSessionIssuerField: () => <span>User session issuer</span>,
 }));
@@ -27,7 +38,15 @@ const mcpServer = {
   updatedAt: new Date(0),
 } as McpServer;
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  readiness.value = {
+    upstreamAuth: "legacy",
+    isLoadingRemoteIdentity: false,
+    identityUnavailable: false,
+    remoteIdentityMode: "user",
+  };
+});
 
 describe("RemoteMcpSessionsSection", () => {
   it("shows only the provider picker; its settings live in MCP Sessions", () => {
@@ -38,5 +57,28 @@ describe("RemoteMcpSessionsSection", () => {
     expect(screen.queryByText("Shared authorization server")).toBeNull();
     expect(screen.queryByText("Session length")).toBeNull();
     expect(screen.queryByText("Client access")).toBeNull();
+  });
+
+  it.each(["none", "agent"])(
+    "hides when people do not sign in as themselves (%s)",
+    (mode) => {
+      readiness.value = { ...readiness.value, remoteIdentityMode: mode };
+      render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
+      expect(screen.queryByText("Sessions")).toBeNull();
+    },
+  );
+
+  it.each([
+    ["loading", { isLoadingRemoteIdentity: true }],
+    ["unavailable", { identityUnavailable: true }],
+    ["enforced", { upstreamAuth: "enforced" }],
+  ])("stays while the mode is not known (%s)", (_, override) => {
+    readiness.value = {
+      ...readiness.value,
+      remoteIdentityMode: "none",
+      ...override,
+    };
+    render(<RemoteMcpSessionsSection mcpServer={mcpServer} />);
+    expect(screen.getByText("Sessions")).toBeDefined();
   });
 });

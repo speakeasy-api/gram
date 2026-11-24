@@ -12,12 +12,6 @@ import { unrecognized } from "@gram/client/types/unrecognized.js";
 import { PrivateNetworkSection } from "./PrivateNetworkSection";
 
 const state = vi.hoisted(() => ({
-  gatewayFlag: "enabled" as
-    | "enabled"
-    | "disabled"
-    | "missing"
-    | "error"
-    | "loading",
   isAdmin: true,
   entitled: true,
   productTier: "enterprise" as "enterprise" | "payg" | "base",
@@ -61,13 +55,6 @@ const state = vi.hoisted(() => ({
         updatedAt: Date;
       }
     | undefined,
-}));
-
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: (flag: string) =>
-    flag === "private-network-gateway"
-      ? { status: state.gatewayFlag }
-      : { status: "disabled" },
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -163,7 +150,6 @@ vi.mock("sonner", () => ({
 }));
 
 beforeEach(() => {
-  state.gatewayFlag = "enabled";
   state.isAdmin = true;
   state.entitled = true;
   state.productTier = "enterprise";
@@ -355,41 +341,6 @@ describe("PrivateNetworkSection", () => {
     expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
   });
 
-  it.each(["disabled", "missing", "error"] as const)(
-    "shows the operator setup steps when the gateway flag is %s",
-    (flag) => {
-      state.gatewayFlag = flag;
-      render(<PrivateNetworkSection />);
-      fireEvent.click(
-        screen.getByRole("button", { name: "Connect Tailscale" }),
-      );
-
-      expect(
-        screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
-      ).toBeTruthy();
-      expect(screen.getByText("tag:k8s-operator")).toBeTruthy();
-      expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
-      expect(
-        screen.queryByRole("button", { name: "Limit access to a group" }),
-      ).toBeNull();
-    },
-  );
-
-  it("waits for the gateway flag before showing setup steps", () => {
-    state.gatewayFlag = "loading";
-    render(<PrivateNetworkSection />);
-    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
-
-    expect(
-      screen.getByText("Loading the setup steps for your organization..."),
-    ).toBeTruthy();
-    expect(screen.queryByText(/"tagOwners"/)).toBeNull();
-    const submit = screen
-      .getAllByRole("button", { name: "Connect Tailscale" })
-      .at(-1)!;
-    expect((submit as HTMLButtonElement).disabled).toBe(true);
-  });
-
   it("offers a group-restricted policy behind a collapsed section", () => {
     render(<PrivateNetworkSection />);
     fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
@@ -522,35 +473,7 @@ describe("PrivateNetworkSection", () => {
     ).toBeTruthy();
   });
 
-  it("keeps the sheet open on the created connection's steps when they differ", async () => {
-    render(<PrivateNetworkSection />);
-    fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
-    expect(
-      screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
-    ).toBeTruthy();
-
-    // The browser saw the gateway flag on, but the server created the
-    // connection on the operator.
-    await act(async () => {
-      await state.createOptions?.onSuccess?.({
-        ...configuredIngress({ hostname: "speakeasy", status: "pending" }),
-        runtime: "operator",
-      });
-    });
-
-    expect(screen.getByText("Tailscale setup steps")).toBeTruthy();
-    expect(screen.getByText(/needs different Tailscale steps/)).toBeTruthy();
-    expect(
-      screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
-    ).toBeTruthy();
-    expect(screen.queryByText(/"tag:speakeasy"/)).toBeNull();
-    expect(screen.queryByLabelText("OAuth client ID")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(screen.queryByText("Tailscale setup steps")).toBeNull();
-  });
-
-  it("closes the sheet when the created connection matches the steps shown", async () => {
+  it("closes the sheet once the connection is created", async () => {
     render(<PrivateNetworkSection />);
     fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
 
@@ -567,22 +490,7 @@ describe("PrivateNetworkSection", () => {
     expect(screen.queryByText("Tailscale setup steps")).toBeNull();
   });
 
-  it("reopens an existing connection's steps from its runtime, not the flag", () => {
-    state.gatewayFlag = "enabled";
-    state.ingress = configuredIngress({ runtime: "operator" });
-    render(<PrivateNetworkSection />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Setup steps" }));
-
-    expect(screen.getByText("Tailscale setup steps")).toBeTruthy();
-    expect(
-      screen.getByText(/"tag:gram-proxy": \["tag:k8s-operator"\]/),
-    ).toBeTruthy();
-    expect(screen.queryByText(/needs different Tailscale steps/)).toBeNull();
-  });
-
   it("shows a gateway connection's steps for its real hostname", () => {
-    state.gatewayFlag = "disabled";
     state.ingress = configuredIngress({
       runtime: "gateway",
       hostname: "local-ab12-private",

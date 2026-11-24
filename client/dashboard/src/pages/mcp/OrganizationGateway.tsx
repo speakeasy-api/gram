@@ -181,13 +181,14 @@ function ProjectGatewayContent({
       ? selectedTab
       : undefined) ?? (isOn === false && canManage ? "assignments" : "install");
 
+  const isSettingLoading = canReadOrganization && setting.features.isLoading;
   let installStatus =
     "Project Gateway installation is unavailable. Check the gateway status above.";
   if (isOn === false) {
     installStatus = canManage
       ? "Turn on gateways to get your Project Gateway endpoint and installation steps."
       : "An organization admin must turn on gateways before Project Gateway installation details are available.";
-  } else if (gateway.isLoading || isOn === undefined) {
+  } else if (gateway.isLoading || (isSettingLoading && isOn === undefined)) {
     installStatus = "Loading Project Gateway installation details…";
   }
 
@@ -313,34 +314,36 @@ function GatewayHero({
         className="border-border flex min-w-0 flex-col gap-4 bg-card text-black dark:text-foreground border px-5 py-4 sm:flex-row sm:items-center"
       >
         <div className="min-w-0 flex-1">{status}</div>
-        <div className="flex shrink-0 items-stretch self-end divide-black/10 border-black/10 bg-black/5 dark:divide-border dark:border-border dark:bg-muted divide-x border sm:self-auto">
-          {showSwitch ? (
-            // Not a <label>: label activation would forward clicks on the text
-            // to the switch past RequireScope's pointer-events guard.
-            <div className="flex items-center gap-3 px-4 py-2">
-              <Text
-                small
-                as="span"
-                className="text-black/60 dark:text-muted-foreground"
-              >
-                {setting.on ? "Enabled" : "Disabled"}
-              </Text>
-              <OrganizationGatewaySwitch
-                on={!!setting.on}
-                setOn={setting.setOn}
-                isPending={setting.isPending}
+        {(showSwitch || endpointUrl) && (
+          <div className="flex shrink-0 items-stretch self-end divide-black/10 border-black/10 bg-black/5 dark:divide-border dark:border-border dark:bg-muted divide-x border sm:self-auto">
+            {showSwitch ? (
+              // Not a <label>: label activation would forward clicks on the text
+              // to the switch past RequireScope's pointer-events guard.
+              <div className="flex items-center gap-3 px-4 py-2">
+                <Text
+                  small
+                  as="span"
+                  className="text-black/60 dark:text-muted-foreground"
+                >
+                  {setting.on ? "Enabled" : "Disabled"}
+                </Text>
+                <OrganizationGatewaySwitch
+                  on={!!setting.on}
+                  setOn={setting.setOn}
+                  isPending={setting.isPending}
+                />
+              </div>
+            ) : undefined}
+            {endpointUrl && (
+              <CopyButton
+                text={endpointUrl}
+                size="lg"
+                tooltip="Copy endpoint"
+                className="h-auto shrink-0 text-black hover:bg-black/5 hover:text-black dark:text-foreground dark:hover:bg-accent dark:hover:text-foreground rounded-none"
               />
-            </div>
-          ) : undefined}
-          {endpointUrl && (
-            <CopyButton
-              text={endpointUrl}
-              size="lg"
-              tooltip="Copy endpoint"
-              className="h-auto shrink-0 text-black hover:bg-black/5 hover:text-black dark:text-foreground dark:hover:bg-accent dark:hover:text-foreground rounded-none"
-            />
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </section>
     </section>
   );

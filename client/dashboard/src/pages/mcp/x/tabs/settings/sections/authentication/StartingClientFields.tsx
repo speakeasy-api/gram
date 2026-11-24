@@ -45,7 +45,7 @@ export function StartingClientFields({
         clientId={clientId}
         clientSecret={clientSecret}
         tokenEndpointAuthMethod={tokenEndpointAuthMethod}
-        clientSecretLabel="Client Secret"
+        clientSecretLabel="Client secret"
         clientSecretPlaceholder={
           sameRegistration
             ? "Leave blank to copy the stored secret"

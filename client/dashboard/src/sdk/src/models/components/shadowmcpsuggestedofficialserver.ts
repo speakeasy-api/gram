@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+ * A project MCP server that already serves a Shadow MCP server's upstream URL and can be made its official version.
  */
 export type ShadowMCPSuggestedOfficialServer = {
   mcpServerId: string;

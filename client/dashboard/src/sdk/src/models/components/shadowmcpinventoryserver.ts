@@ -89,14 +89,14 @@ export type ShadowMCPInventoryServer = {
    */
   officialServer?: ShadowMCPOfficialServer | undefined;
   /**
-   * True when an administrator chose to keep using the Shadow MCP server directly, so no official server is linked automatically.
+   * True when an administrator chose to keep using the Shadow MCP server directly, so no official server is chosen automatically.
    */
   officialServerDeclined?: boolean | undefined;
   requestCount: number;
   serverName?: string | undefined;
   serverSlug: string;
   /**
-   * A project MCP server that already serves a Shadow MCP server's upstream URL and can be linked as its official version.
+   * A project MCP server that already serves a Shadow MCP server's upstream URL and can be made its official version.
    */
   suggestedOfficialServer?: ShadowMCPSuggestedOfficialServer | undefined;
   /**

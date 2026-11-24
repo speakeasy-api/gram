@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -21,6 +22,8 @@ import (
 // adversarial tenant.
 type seeder struct {
 	spec Spec
+	// catalog is the AI client catalog snapshot that names seeded connection apps.
+	catalog *aivendors.Snapshot
 	// enc is the environment's key, which seals the inert sessions' dummy token.
 	enc *encryption.Client
 	// assistantIssuer is the deployment's signing issuer origin, without a
@@ -93,6 +96,8 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 		{"roles and directory", s.seedRoles},
 		{"deployment and connections", s.seedDeployment},
 		{"mcp servers", s.seedServers},
+		{"connection health", s.seedConnectionHealth},
+		{"mcp server feedback", s.seedServerFeedback},
 		{"prompts and skills", s.seedSkills},
 		{"risk and chats", s.seedRiskAndChats},
 		{"team memory eval corpus", s.seedMemoryEval},

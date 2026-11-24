@@ -26,6 +26,26 @@ verify those as an ordinary human in the local organization, not through imperso
 
 ## Checks
 
+### MCP server agent feedback
+
+Open the OpenAPI Server under **MCP** and choose **Agent Feedback**. Confirm
+**Feedback is on** names the tool `submit_feedback` and who changed it, the
+**Last 30 days** tiles read 20 reports, 6 blocked, 7 degraded and 5 cosmetic,
+with the total's caption saying 2 gave no severity, and the ranking lists five
+tools with `process_refund` first and its blocked share in red. The report list
+holds 21 rows, newest first. Open a report and confirm what the agent was
+trying to do, what it did instead, who sent it and the model read in full, and
+that **Technical details** stays closed until opened. Choose a tool in the
+ranking and confirm the list narrows to it and scrolls into view, then clear
+the filter. Open Example OAuth and Example Shared Credential and confirm
+neither has an **Agent Feedback** tab: both belong to third parties, and only
+servers built from an API or functions offer the feedback tool. Turn feedback
+off and on again on the OpenAPI Server and confirm the state and its
+**Changed by** line follow; in the demo org the next daily reseed puts it back.
+To check the read-only state, sign in as a member without `mcp:write` on the
+server in the local org and confirm the tab shows no **Customize** or switch
+control and says who can change it. Check the console for errors.
+
 ### Signals Intelligence
 
 Open `/signals-intelligence` in the seeded project with the organization's

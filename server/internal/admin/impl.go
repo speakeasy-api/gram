@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -74,8 +75,12 @@ type Service struct {
 	providerHealth   *mcpconnectionattempts.ProviderHealth
 	registry         *mcpregistry.Service
 	remoteSessions   *remotesessions.Service
-	assets           *assets.Service
-	mcpSourceStorage blobio.Reader
+
+	// tailscaleOAuthMigration serves the temporary Tailscale OAuth client
+	// migration to organization keys; nil without organization encryption.
+	tailscaleOAuthMigration *TailscaleOAuthMigration
+	assets                  *assets.Service
+	mcpSourceStorage        blobio.Reader
 
 	// gcpIdentity screens and verifies platform external credentials. Nil
 	// leaves those methods unavailable.
@@ -102,6 +107,10 @@ type Service struct {
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations staff create. Null records none.
 	newOrganizationDefaultHost pgtype.Text
+
+	// staffOrg is the deployment's Speakeasy staff organization, whose
+	// OpenRouter keys bypass the tier credit limits.
+	staffOrg staff.Organization
 
 	// stripeDashboardBase roots Stripe dashboard links in the API key's mode.
 	// Empty leaves them out.
@@ -148,6 +157,10 @@ type Service struct {
 	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
 	// CNAME targets. Empty leaves targets out of listCustomDomains.
 	customDomainTargetSuffix string
+
+	// orgEncryption reports and changes organization encryption transitions.
+	// Nil leaves those methods unavailable.
+	orgEncryption *OrganizationEncryption
 }
 
 type BillingOperations interface {
@@ -261,6 +274,7 @@ func NewService(
 	mcpServerHealth MCPServerHealthReader,
 	dashboardURL *url.URL,
 	registry *mcpregistry.Service,
+	staffOrg staff.Organization,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
 
@@ -278,7 +292,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{orgEncryption: nil, mcpSourceStorage: nil, catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, assistantIdentities: nil, remoteSessions: nil, tailscaleOAuthMigration: nil, assets: nil, gcpIdentity: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -313,6 +327,7 @@ func NewService(
 		hookFleet:                nil,
 		hookFleetVersions:        hookversions.Policy{Latest: nil, Minimum: nil},
 		customDomainTargetSuffix: "",
+		staffOrg:                 staffOrg,
 	}
 }
 
@@ -559,6 +574,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListOrganizationAssistants = service.preauthorizeAdmin(server.ListOrganizationAssistants)
 	server.MigrateOrganizationAssistantIdentities = service.strictAdminJSON(server.MigrateOrganizationAssistantIdentities, func() any { return new(adminserver.MigrateOrganizationAssistantIdentitiesRequestBody) })
 	server.MigrateOrganizationAssistantsToKit = service.strictAdminJSON(server.MigrateOrganizationAssistantsToKit, func() any { return new(adminserver.MigrateOrganizationAssistantsToKitRequestBody) })
+	server.GetOrganizationEncryption = service.preauthorizeAdmin(server.GetOrganizationEncryption)
+	server.ListOrganizationEncryptionTransitions = service.preauthorizeAdmin(server.ListOrganizationEncryptionTransitions)
+	server.EnrollOrganizationEncryption = service.strictAdminJSON(server.EnrollOrganizationEncryption, func() any { return new(adminserver.EnrollOrganizationEncryptionRequestBody) })
+	server.RollbackOrganizationEncryption = service.strictAdminJSON(server.RollbackOrganizationEncryption, func() any { return new(adminserver.RollbackOrganizationEncryptionRequestBody) })
+	server.RunOrganizationEncryption = service.strictAdminJSON(server.RunOrganizationEncryption, func() any { return new(adminserver.RunOrganizationEncryptionRequestBody) })
+	server.FinalizeOrganizationEncryption = service.strictAdminJSON(server.FinalizeOrganizationEncryption, func() any { return new(adminserver.FinalizeOrganizationEncryptionRequestBody) })
 	adminserver.Mount(mux, server)
 	mux.Handle(http.MethodGet, "/admin/mcpServerSources", service.mcpServerSourcesHandler(false).ServeHTTP)
 	mux.Handle(http.MethodGet, "/admin/mcpServerSourceDownload", service.mcpServerSourcesHandler(true).ServeHTTP)
@@ -1845,7 +1866,7 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "re-arm locked trial").LogError(ctx, logger)
 	}
 
-	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(rearmed.Tier), true)
+	desiredLimit, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.Tier(rearmed.Tier), true)
 	if !ok || desiredLimit <= 0 {
 		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", rearmed.Tier).LogError(ctx, logger)
 	}
@@ -1965,7 +1986,7 @@ func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "start trial").LogError(ctx, logger)
 	}
 
-	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(started.Tier), true)
+	desiredLimit, ok := openrouter.DefaultCreditLimit(s.staffOrg, payload.ID, billing.Tier(started.Tier), true)
 	if !ok || desiredLimit <= 0 {
 		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", started.Tier).LogError(ctx, logger)
 	}

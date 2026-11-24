@@ -317,7 +317,7 @@ func reachesServer(grant authz.Grant, use ListSharedAuthClientServersRow) bool {
 		ids = append(ids, use.ToolsetID.UUID)
 	}
 	return slices.ContainsFunc(ids, func(id uuid.UUID) bool {
-		return authz.GrantAllows(grant, authz.MCPCheck(authz.ScopeMCPConnect, id.String(), use.ProjectID.String()))
+		return authz.GrantAllows(grant, authz.MCPServer(authz.MCPServerIDOf(id), authz.ProjectIDOf(use.ProjectID)).Connect())
 	})
 }
 

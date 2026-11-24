@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/functions"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/functions/runnerkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -295,7 +296,7 @@ func TestService_GetSignedAssetURL_FunctionsDisabled(t *testing.T) {
 	require.NotEmpty(t, dep.Deployment.FunctionsAssets, "expected functions assets in deployment")
 	funcAsset := dep.Deployment.FunctionsAssets[0]
 
-	disabled := functions.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, testenv.NewEncryptionClient(t), nil)
+	disabled := functions.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), ti.conn, runnerkeys.WithoutOrganizationEncryption(testenv.NewLogger(t), ti.conn, testenv.NewEncryptionClient(t)), nil)
 	payload := &gen.GetSignedAssetURLPayload{AssetID: funcAsset.AssetID}
 
 	_, err := disabled.GetSignedAssetURL(t.Context(), payload)

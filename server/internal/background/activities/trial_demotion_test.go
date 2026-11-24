@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/partition"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/staff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -398,7 +400,7 @@ func TestDemoteExpiredTrials_ProductionOpenRouterPatchesOnlyChangedKeys(t *testi
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, ti.conn, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, ti.conn, "test", partition.US, "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), staff.Organization{}, option,
 	)
 	ti.activity = activities.NewDemoteExpiredTrials(
 		testenv.NewLogger(t), ti.conn, production, audit.NewLogger(), ti.notifier, ti.productFeatures, nil,
