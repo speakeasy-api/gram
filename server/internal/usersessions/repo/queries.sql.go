@@ -3940,7 +3940,8 @@ JOIN (
                   AND gateway.project_id = member.project_id AND gateway.deleted IS FALSE
                 WHERE member.project_id = p.id AND member.mcp_server_id = ms.id AND member.deleted IS FALSE
                   AND gateway.user_session_issuer_id = target.id
-                  AND (gateway.id = $5 OR NOT $6::boolean)
+                  AND (gateway.id = $5
+                       OR ($5::uuid IS NULL AND NOT $6::boolean))
               )
             )
         )

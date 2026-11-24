@@ -29,6 +29,9 @@ import (
 // Distinct pairs are collected first because a subject commonly holds several
 // sessions against the same issuer — one per MCP client — and every one of them
 // shares the same upstream tokens.
+// A gateway ID always limits reach to that gateway. Without an ID,
+// gatewayInventory distinguishes the organization/project gateway from the
+// general session list, which can also see direct and stored gateway offers.
 func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectIDs []uuid.UUID, organizationID string, gatewayID uuid.NullUUID, gatewayInventory bool, rows []repo.ListUserSessionsByProjectIDRow) (map[mv.UpstreamKey][]*types.UserSessionUpstream, error) {
 	if len(rows) == 0 {
 		return map[mv.UpstreamKey][]*types.UserSessionUpstream{}, nil

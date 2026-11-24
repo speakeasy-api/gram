@@ -70,7 +70,7 @@ type GatewaySessionSummary struct {
 	AccessExpiresAt string `json:"access_expires_at"`
 	// RevokedAt marks an explicitly revoked authorization.
 	RevokedAt *string `json:"revoked_at,omitempty"`
-	// UpstreamAccounts counts grants attributed to this sign-in or pinned agent, not usage.
+	// UpstreamAccounts counts grants from this sign-in, through live typed offers in scope, or pinned to the agent; not usage.
 	UpstreamAccounts int `json:"upstream_accounts"`
 }
 
@@ -132,7 +132,7 @@ func registerGatewaySessionTool(reg *Registrar, service GatewaySessionManagement
 	// organization-admin identity, so only external administrators are admitted.
 	addTool(reg, &mcp.Tool{ //nolint:exhaustruct_v5 // Optional SDK fields use documented defaults.
 		Name: listGatewaySessionsToolName, Title: "List Gateway Sessions",
-		Description: "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, an exact gateway ID, or a project_slug to list that project's Project Gateway (the Organization Gateway limited to the project's servers). Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. Association does not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
+		Description: "Inspect a bounded page of inbound gateway authorizations. Choose organization scope explicitly, an exact gateway ID, or a project_slug to list that project's Project Gateway (the Organization Gateway limited to the project's servers). Filter by caller-supplied identity search (at most 200 Unicode characters), member server association, provider, status, and creation timestamps; order by creation, last use, or authorization expiry. Reuse next_cursor only with identical filters. Results omit identities, client names, JWT identifiers, workload claims, and secrets. For users, upstream_accounts counts grants recorded under this sign-in or reachable through live typed OAuth offers in scope; for agents, it counts exact pinned attachments. These counts do not prove historical use. An unexpired authorization deadline does not guarantee a refresh grant exists. Read-only; use the dashboard to review identities or revoke sessions.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: gatewaySessionInputSchema(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListGatewaySessionsInput) (*mcp.CallToolResult, ListGatewaySessionsOutput, error) {

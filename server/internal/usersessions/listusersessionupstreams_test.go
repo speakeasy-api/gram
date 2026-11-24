@@ -332,6 +332,12 @@ func TestListUserSessionsAttributesSiblingGrantOnlyThroughTypedReach(t *testing.
 	})
 	require.NoError(t, err)
 	offerClientID := seedInventoryOAuthOffer(t, ctx, ti, authCtx.ActiveOrganizationID, projectID, server.ID, clientID)
+	// Neither the grant's source issuer nor the target issuer needs a legacy
+	// link. The recorded consent is tenant-scoped, and the offer proves reach.
+	for _, issuerID := range []uuid.UUID{provenanceID, siblingID} {
+		_, err := testrepo.New(ti.conn).UnlinkAttachmentClientFixture(ctx, testrepo.UnlinkAttachmentClientFixtureParams{RemoteSessionClientID: clientID, UserSessionIssuerID: issuerID})
+		require.NoError(t, err)
+	}
 
 	res, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
 	require.NoError(t, err)
@@ -343,7 +349,7 @@ func TestListUserSessionsAttributesSiblingGrantOnlyThroughTypedReach(t *testing.
 	res, err = ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
 	require.NoError(t, err)
 	require.Len(t, res.Items, 1)
-	require.Empty(t, res.Items[0].Upstreams, "disabling the offer removes sibling reach without consulting the legacy link")
+	require.Empty(t, res.Items[0].Upstreams, "disabling the offer removes sibling reach")
 }
 
 func seedInventoryOAuthOffer(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID, clientID uuid.UUID) uuid.UUID {

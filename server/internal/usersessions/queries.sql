@@ -2820,7 +2820,8 @@ JOIN (
                   AND gateway.project_id = member.project_id AND gateway.deleted IS FALSE
                 WHERE member.project_id = p.id AND member.mcp_server_id = ms.id AND member.deleted IS FALSE
                   AND gateway.user_session_issuer_id = target.id
-                  AND (gateway.id = sqlc.narg('gateway_id') OR NOT @gateway_inventory::boolean)
+                  AND (gateway.id = sqlc.narg('gateway_id')
+                       OR (sqlc.narg('gateway_id')::uuid IS NULL AND NOT @gateway_inventory::boolean))
               )
             )
         )
