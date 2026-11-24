@@ -92,6 +92,7 @@ impl ReconnectingTool {
             .send(McpCmd::ReconnectTool {
                 tool_name: self.inner.spec().name.0.clone(),
                 reply: reply_tx,
+                parent: tracing::Span::current(),
             })
             .await
             .map_err(|_| "mcp actor unavailable".to_string())?;
@@ -177,6 +178,7 @@ impl DeferredMcpTool {
             .send(McpCmd::ConnectForTool {
                 tool_name: self.spec.name.0.clone(),
                 reply: reply_tx,
+                parent: tracing::Span::current(),
             })
             .await
             .map_err(|_| "mcp actor unavailable".to_string())?;
@@ -203,7 +205,8 @@ impl Tool for DeferredMcpTool {
     ) -> Result<ToolResult, ToolError> {
         match self.invoke_outcome(request, ctx).await {
             ToolExecutionOutcome::Completed(result) => Ok(result),
-            ToolExecutionOutcome::Failed(error) => Err(error),
+            ToolExecutionOutcome::Failed(error)
+            | ToolExecutionOutcome::FailedBeforeInvocation(error) => Err(error),
             ToolExecutionOutcome::Interrupted(ToolInterruption::ApprovalRequired(req)) => Err(
                 ToolError::Unavailable(format!("tool requires approval: {}", req.summary)),
             ),
@@ -230,13 +233,15 @@ impl Tool for DeferredMcpTool {
         };
         let requests = match tool.proposed_requests(&request) {
             Ok(requests) => requests,
-            Err(error) => return ToolExecutionOutcome::Failed(error),
+            Err(error) => return ToolExecutionOutcome::FailedBeforeInvocation(error),
         };
         for permission in requests {
             match ctx.permissions.evaluate(permission.as_ref()) {
                 PermissionDecision::Allow => {}
                 PermissionDecision::Deny(denial) => {
-                    return ToolExecutionOutcome::Failed(ToolError::PermissionDenied(denial));
+                    return ToolExecutionOutcome::FailedBeforeInvocation(
+                        ToolError::PermissionDenied(denial),
+                    );
                 }
                 PermissionDecision::RequireApproval(mut req) => {
                     req.call_id = Some(request.call_id.clone());
@@ -253,9 +258,17 @@ impl Tool for DeferredMcpTool {
 }
 
 fn placeholder_spec(name: &ToolName) -> ToolSpec {
+    placeholder_spec_described(name, "Unknown tool placeholder.")
+}
+
+/// Spec description of [`UnknownToolSource`] tools. Never advertised; it lets
+/// the tool span tell an unresolved name apart from a deferred MCP tool.
+pub const UNRESOLVED_TOOL_DESCRIPTION: &str = "Unresolved tool name placeholder.";
+
+fn placeholder_spec_described(name: &ToolName, description: &str) -> ToolSpec {
     ToolSpec::new(
         name.clone(),
-        "Unknown tool placeholder.",
+        description,
         json!({"type": "object", "additionalProperties": true}),
     )
 }
@@ -273,7 +286,7 @@ impl ToolSource for UnknownToolSource {
 
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
         Some(Arc::new(UnknownTool {
-            spec: placeholder_spec(name),
+            spec: placeholder_spec_described(name, UNRESOLVED_TOOL_DESCRIPTION),
         }))
     }
 }

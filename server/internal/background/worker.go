@@ -726,6 +726,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	temporalWorker.RegisterActivity(activities.CleanupChannelsHistory)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
+	temporalWorker.RegisterActivity(activities.ReapStalePluginAPIKeys)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
 	// Publish outbox relay activities
@@ -897,6 +898,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(ChannelsRetentionWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(PluginAPIKeyReapWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
@@ -1106,6 +1108,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
+	}
+
+	if err := AddPluginAPIKeyReapSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add plugin API key reaper schedule", attr.SlogError(err))
 	}
 
 	if err := AddDirectoryReviewSweepSchedule(ctx, env); err != nil {

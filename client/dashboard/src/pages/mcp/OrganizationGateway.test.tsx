@@ -24,8 +24,10 @@ const state = vi.hoisted(() => ({
   orgRead: true,
   projectRead: true,
   permissionsLoading: false,
+  featuresLoading: false,
   gatewayLoading: false,
   available: true,
+  unavailableReason: "turned_off" as string | undefined,
   on: false as boolean | undefined,
 }));
 vi.mock("@/components/sessions/ClientsAndSessionsTab", () => ({
@@ -127,7 +129,11 @@ vi.mock("@/hooks/useIsCurrentOrganization", () => ({
 }));
 vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
   useOrganizationGatewaySetting: () => ({
-    features: { data: {}, error: state.error },
+    features: {
+      data: {},
+      error: state.error,
+      isLoading: state.featuresLoading,
+    },
     gateway: {
       isLoading: state.gatewayLoading,
       data:
@@ -136,7 +142,7 @@ vi.mock("@/components/mcp/useOrganizationGatewaySetting", () => ({
               available: true,
               url: "https://api.example.test/mcp/gateway/test",
             }
-          : { available: false, unavailableReason: "turned_off" },
+          : { available: false, unavailableReason: state.unavailableReason },
     },
     on: state.on,
     setOn: state.setOn,
@@ -155,7 +161,7 @@ vi.mock("@gram/client/react-query/projectGateway.js", () => ({
             available: true,
             url: "https://api.example.test/mcp/gateway/test/projects/sales",
           }
-        : { available: false, unavailableReason: "turned_off" },
+        : { available: false, unavailableReason: state.unavailableReason },
   }),
 }));
 vi.mock(
@@ -186,8 +192,10 @@ beforeEach(() => {
   state.orgRead = true;
   state.projectRead = true;
   state.permissionsLoading = false;
+  state.featuresLoading = false;
   state.gatewayLoading = false;
   state.available = true;
+  state.unavailableReason = "turned_off";
   state.on = false;
   vi.clearAllMocks();
 });
@@ -423,6 +431,33 @@ it("serves a project member without organization access their project's gateway"
   ).toBeNull();
   await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
   expect(screen.getByText("Project gateway activity")).toBeTruthy();
+});
+
+it("shows loading install status while the organization setting is still loading", () => {
+  state.on = undefined;
+  state.featuresLoading = true;
+  state.available = false;
+  state.admin = false;
+  state.orgRead = true;
+  render(<ProjectGatewayPage />);
+  expect(
+    screen.getByText("Loading Project Gateway installation details…"),
+  ).toBeTruthy();
+});
+
+it("shows unavailable install status instead of loading for a project member without org:read when not served", () => {
+  state.on = true;
+  state.available = false;
+  state.unavailableReason = "no_organization_issuer";
+  state.admin = false;
+  state.orgRead = false;
+  render(<ProjectGatewayPage />);
+  expect(
+    screen.getByText(
+      "Project Gateway installation is unavailable. Check the gateway status above.",
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText(/Loading Project Gateway installation/)).toBeNull();
 });
 
 it("keeps a project's gateway from people without access to the project", () => {
